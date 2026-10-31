@@ -87,6 +87,30 @@ State on master when this feature starts (the gen-3 record's Result):
   show get the map verdict `recorded`. The attack-declaration tap is no `turn_action` subkind; it
   becomes `tapped_by_attack` on a real declaration's attackers record, supervising the existing
   `tap_state` output on the anchor (FR-036, FR-037, FR-053, FR-059).
+- Q: Where does a directed fork judge that the live board meets a rule's base variant, given
+  detectors are Python functions over finished records? → A: In the Java worker, through a
+  hand-written board precondition per rule in `forge-connector`, looked up by rule id and kept
+  apart from the Python record detector, which tags the fork's records afterwards like any other
+  record; `match-outcomes` exits 1 when an enabled rule has no precondition (FR-010, FR-014,
+  FR-014a).
+- Q: How does a record show it came from a directed fork or from collection aimed at a rule? → A:
+  Through a new gen-3 envelope metadata field `aimed_at`, the list of rule ids the record was
+  collected for: a directed-fork record sets it to its rule and carries `fork = true`,
+  `interventional = false`, `directed = {variant, operation}` and `mirror_of` its live twin; every
+  record of a `collect-coverage` or `collect-variants` run sets it, empty where the run names no
+  rule; absent means natural; never a model input (FR-009, FR-009a, FR-018).
+- Q: Which matching phase boundaries get a directed fork when matches outnumber the per-game
+  budget? → A: Each rule forks at most once per game; a matching boundary forks with probability
+  `--directed-fork-probability`, drawn from a per-game seed; when several rules match at one
+  boundary, the rule with the fewest directed forks so far goes first (FR-010a, FR-012).
+- Q: When and from where is "the outputs the map names for a rule" read? → A: Once, by
+  `build-corpus`, which resolves every tagged rule's verdict and output list from `rules/heads/`
+  into the manifest with the map's content hash; budgets, the rule mask, the rule-test freeze and
+  evaluation read only the manifest, and the checkpoint records the hash (FR-060a).
+- Q: Do `rule-counts` and the manifest count aimed records apart from natural ones? → A: Yes:
+  per rule and polarity, three sources — natural random-seat games, natural Forge-AI games, and
+  aimed records (carrying `aimed_at`) — in `rule-counts` and in the manifest's per-class counts
+  (FR-008, FR-060).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -101,7 +125,8 @@ training run and needs no gen-3 data. Stories 5 to 8 consume the gen-3 corpus.
 An operator runs `python -m effects rule-counts --records-dir <gen-2 records>`. Every scenario of
 the catalogue has a detector, or a declared reason it has none. The command tags each record with
 the rules it shows and prints, per rule, how many records show the rule's effect happening and how
-many show its near miss, split between random-seat games and games between two Forge AIs. A
+many show its near miss, split between natural records of random-seat games, natural records of
+games between two Forge AIs, and aimed records (directed forks and coverage or variant runs). A
 record whose outcome contradicts its scenario's expected outcome is listed for review against
 Forge, and a confirmed Forge departure is recorded on its scenario.
 
@@ -120,7 +145,8 @@ hand-built near-miss record, and that the counts file and the printed table agre
    `rule-counts` runs, **Then** a resolution record whose effect half moves a 0-toughness creature
    to the graveyard during the state-based check is tagged `704.5f` with polarity `fires`, a
    resolution that leaves a creature at toughness 1 is tagged with polarity `does_not_fire`, and the
-   rule's line reports both counts split by random-seat and Forge-AI games.
+   rule's line reports both counts split by natural random-seat games, natural Forge-AI games and
+   aimed records.
 2. **Given** rule 702.2 (deathtouch), **When** `rule-counts` runs, **Then** combat records with a
    deathtouch creature and the probe forks that strip deathtouch are tagged 702.2 through the combat
    family and the probe keyword.
@@ -196,8 +222,8 @@ only if the collector writes them. The corpus is collected from scratch and cann
 ### User Story 3 - Directed forks fill the rules self-play rarely shows (Priority: P3)
 
 An operator names rules in `--directed-fork-rules`. During live games, at each phase boundary,
-the collector runs each named rule's detector against the board. When the board meets the
-scenario's base variant, it forks, applies the one-fact change of a contrasting variant through a
+the Java collector evaluates each named rule's board precondition against the live board. When
+the board meets the scenario's base variant, it forks, applies the one-fact change of a contrasting variant through a
 fork operation, plays the fork on and records it. The real record and the fork form a minimal
 pair from a real game.
 
@@ -210,12 +236,13 @@ score-checked before the change, and counts against `--directed-forks-per-game`.
 
 **Acceptance Scenarios**:
 
-1. **Given** `--directed-fork-rules 704.5f` and a live board with a 2/2 creature about to be
+1. **Given** `--directed-fork-rules 704.5f`, `--directed-fork-probability 1` and a live board with a 2/2 creature about to be
    dealt 2 damage, **When** the phase boundary is reached, **Then** the collector forks, raises
    the creature's toughness to 3 through "change a creature's power or toughness", plays the fork
    to the end of the turn, writes the fork's records and discards the fork.
 2. **Given** a rule in `--directed-fork-rules` whose every contrasting variant is marked
-   unclassifiable, **When** `match-outcomes` starts, **Then** it exits 1 naming the rule.
+   unclassifiable, or which has no board precondition in `forge-connector`, **When**
+   `match-outcomes` starts, **Then** it exits 1 naming the rule.
 3. **Given** one scenario variant per fork operation, **When** each is enabled in turn, **Then**
    each of the seven operations produces a fork that differs from its real twin by that one fact.
 4. **Given** a fork whose copy already disagrees with the live game's score, **When** it is
@@ -455,6 +482,8 @@ and that the reporting half never enters the control score.
   output is trained on its outcome (FR-054, FR-073).
 - A directed fork rule whose precondition never occurs in a game. No fork is taken; the budget is
   unused.
+- A rule's precondition holds at many boundaries of one game. The rule forks at most once in that
+  game, at a boundary chosen by the per-game draw, or not at all if every draw misses (FR-010a).
 
 ## Requirements *(mandatory)*
 
@@ -492,17 +521,30 @@ and that the reporting half never enters the control score.
   record's generation lacks MUST report the rule as not countable on that generation, never as
   zero.
 - **FR-008**: `python -m effects rule-counts --records-dir DIR [--output PATH]` MUST count, per
-  rule, the records of each polarity, split between random-seat games and games between two Forge
-  AIs, write them to `--output` (default `output/effects/rule-counts.json`) and print them. It
-  reads gen-2 and gen-3 records.
+  rule, the records of each polarity, split into three sources: natural records of random-seat
+  games, natural records of games between two Forge AIs, and aimed records (those carrying
+  `aimed_at`, FR-009a, whatever their game). It MUST write them to `--output` (default
+  `output/effects/rule-counts.json`) and print them. It reads gen-2 and gen-3 records; a gen-2
+  record carries no `aimed_at` and counts as natural.
 - **FR-009**: Records from directed forks and from collection aimed at a rule MUST be identifiable
-  as such in every downstream reader, so they never become rule-test records wherever their game is
-  placed.
+  as such in every downstream reader, from the record alone, so they never become rule-test records
+  wherever their game is placed. A record is aimed when it carries the envelope field `aimed_at`
+  (FR-009a), whatever its value; a record without it is natural.
+- **FR-009a**: `aimed_at` is a gen-3 envelope field holding the list of rule ids a record was
+  collected for. Collection aimed at a rule is every record of a `collect-coverage` or
+  `collect-variants` run, and every directed-fork record. A `collect-coverage` or
+  `collect-variants` record MUST carry `aimed_at`, listing the rules its run names through
+  `--directed-fork-rules` and empty where it names none. A directed-fork record MUST carry
+  `aimed_at` set to its rule, `fork = true`, `interventional = false`, `directed =
+  {variant, operation}` (the scenario variant label and the fork operation applied), and
+  `mirror_of` set to the live record it was forked beside, where one exists. A
+  `match-outcomes` record outside a directed fork MUST NOT carry `aimed_at`. `aimed_at` and
+  `directed` are collection metadata and never reach the model.
 
 #### Directed forks (root § 6)
 
 - **FR-010**: A directed fork MUST wait for a live board that meets an enabled rule's base variant,
-  as the rule's detector judges it on the board, at a phase boundary; fork the game; apply one
+  as the rule's board precondition (FR-014a) judges it, at a phase boundary; fork the game; apply one
   contrasting variant's change through its classified operation; and play the fork on to the end
   of the current turn, recording it. The decisions that produced the forked board are the live
   game's. From the fork on, each seat keeps its live controller (Forge AI or random seat) and
@@ -510,18 +552,33 @@ and that the reporting half never enters the control score.
   the ones the live game goes on to make; its records carry the decisions it made and are tagged
   by detectors like any other record. The fork is then discarded and the live game continues
   unchanged.
+- **FR-010a**: Each enabled rule MUST take at most one directed fork per game. At a phase boundary
+  where a rule's board precondition holds and the rule has not forked in this game, the fork MUST
+  be taken with probability `--directed-fork-probability`, drawn from a generator seeded per game.
+  When several such rules match at one boundary, they MUST be tried in ascending order of the
+  directed forks each has taken so far in the worker JVM's lifetime, ties broken by their order in
+  `--directed-fork-rules`; each fork taken, kept or discarded, counts against
+  `--directed-forks-per-game`, and no rule is tried once the budget is spent.
 - **FR-011**: The fork operations are: change a creature's power or toughness; add or remove a
   keyword; change a colour or type; add or remove counters; tap or untap a permanent; change a life
   total; replace one card with another. The existing damage-step probe is the "remove a keyword"
   operation. This feature MUST build all seven operations, the existing one reused, so every
   classified variant has its operation; a variant marked unclassifiable (FR-003) has none.
 - **FR-012**: `match-outcomes`, and `collect-variants`, MUST take `--directed-fork-rules LIST`
-  (default none) and `--directed-forks-per-game N` (default 2), a budget of its own beside the
-  existing fork budgets. A discarded fork still counts against it.
+  (default none), `--directed-forks-per-game N` (default 2), a budget of its own beside the
+  existing fork budgets, and `--directed-fork-probability P` (default 0.25, in (0, 1]), the chance
+  that a matching boundary forks (FR-010a). A discarded fork still counts against the budget.
 - **FR-013**: Every directed fork MUST be score-checked against the live game before any change, as
   the base spec's forks are.
 - **FR-014**: `match-outcomes` MUST exit 1 at startup when a rule in `--directed-fork-rules` has no
-  detector, or none of its contrasting variants is classified into an operation.
+  detector, no board precondition, or none of its contrasting variants is classified into an
+  operation.
+- **FR-014a**: A rule's board precondition MUST be a hand-written Java predicate over the live
+  game state in `forge-connector`, registered by rule id, judging whether the board meets the
+  scenario's base variant. It is separate from the rule's Python record detector (FR-006) and
+  exists only for rules enabled for directed forks. It decides only when to fork: the fork's
+  records are tagged afterwards by the Python detectors like any other record, so counts, budgets,
+  the mask and rule tests read detector tags alone. The JVM makes no call to Python during a game.
 
 #### Rules-to-fields map (root § 7)
 
@@ -537,7 +594,9 @@ and that the reporting half never enters the control score.
 #### Collection: schema version and envelope (root § 8.1, § 8.13)
 
 - **FR-018**: Every gen-3 record MUST carry the envelope field `generation` with the value `3`.
-  `generation` is collection metadata and never reaches the model. A record without it is gen-1 or
+  `generation` is collection metadata and never reaches the model. The gen-3 envelope also adds
+  `aimed_at` and `directed` (FR-009a), and the flag-signature table gains the row "directed fork:
+  any kind, `interventional = false`, `fork = true`, `directed` set". A record without it is gen-1 or
   gen-2, told apart as feature 024 specifies.
 - **FR-019**: The frozen-schema rule MUST hold within gen-3 only. A field may change meaning or go
   away relative to gen-2. The schema-compatibility tests MUST be re-pinned to the gen-3 schema, and
@@ -741,15 +800,22 @@ and that the reporting half never enters the control score.
   whose candidate's key is unjoinable MUST be refused as `unjoinable-key`. A `turn_action` record
   MUST NOT be written to the training or either validation stratum; the manifest counts the
   records left out by subkind.
-- **FR-060**: The manifest MUST add the per-rule counts (FR-008's shape), per class and rule the
-  records available, share, written and shortfall, each split by polarity, the one-sided conditions
+- **FR-060**: The manifest MUST add the per-rule counts (FR-008's shape, three sources), per class
+  and rule the records available, share, written and shortfall, each split by polarity and by the
+  same three sources, the one-sided conditions
   and one-sided rules (FR-054a), the unbudgeted rules with their counts (FR-054), and the closed subtype
   and keyword lists of FR-052/FR-053.
-
+- **FR-060a**: `build-corpus` MUST read the rules-to-fields map (`rules/heads/`) once, and write
+  into the manifest, for every tagged rule, its map verdict and the outputs the map names for it,
+  with the map's content hash. Rule budgets (FR-054), the rule mask (FR-061), the rule-test freeze
+  (FR-071, FR-073) and `evaluate-effect-model` MUST take a rule's verdict and outputs from the
+  manifest only and never read `rules/heads/`. A checkpoint MUST record the manifest's map hash. A
+  rerun of the map (FR-016) reaches training only through a new `build-corpus`.
 #### Training (root § 13)
 
 - **FR-061**: With n a record's natural share and d its copies written: under `--rule-mask hard`
-  (default) an added copy MUST train only the outputs the map names for its drawn rule and the
+  (default) an added copy MUST train only the outputs the map names for its drawn rule, as the
+  manifest records them (FR-060a), and the
   affected gate on the rule's own entities where the record supervises the gate, every other output
   masked, while a natural copy trains every output; under `--rule-mask soft` every copy trains every
   output, outputs other than those of the record's drawn rules weighing n / d on each copy. Under
@@ -757,8 +823,8 @@ and that the reporting half never enters the control score.
   weight on each copy. A gen-2 lethality copy trains every output at full weight. A record from a
   directed fork or from collection aimed at a rule is a natural record like any other: it carries
   no rule tag of its own, its natural copies train every output at full weight under both masks,
-  and only the copies rule budgets add to it carry a rule. Its aim marks it only for exclusion from
-  the rule tests (FR-009, FR-072).
+  and only the copies rule budgets add to it carry a rule. Its `aimed_at` marks it only for
+  exclusion from the rule tests (FR-009, FR-072).
 - **FR-062**: Each output field's loss MUST be divided by the loss of its constant prediction on the
   same records under the same distribution, clamped below at `--deviance-floor` (default 0.04 nats).
 - **FR-063**: Count and amount fields MUST be scored by a negative binomial likelihood in place of
@@ -838,8 +904,8 @@ and that the reporting half never enters the control score.
   nor accepted (FR-005), and every rule the map does not mark `trained` (FR-054). Neither kind
   constrains game placement under FR-068a.
 - **FR-072**: Records from probe forks, interventional resolutions, directed forks and collection
-  aimed at a rule, and records matching a variant of polarity `other`, MUST NOT be rule-test
-  records.
+  aimed at a rule (every record carrying `aimed_at`, FR-009a), and records matching a variant of
+  polarity `other`, MUST NOT be rule-test records.
 - **FR-073**: For each output the map names for a rule, a rule test MUST read the model's prediction
   at the entity the scenario's outcome names, or at the record for an acting-ability output: the
   probability of the scenario's outcome for a binary or categorical output, the expected value for a
@@ -860,21 +926,23 @@ and that the reporting half never enters the control score.
 - **FR-076**: The commands and flags of root § 15 MUST exist with the defaults given there; defaults
   live only in the operator surface. Startup validation: every record carries `generation: 3`
   (`build-corpus`, `train-effect-model`, `evaluate-effect-model`, the knowledge probes); the corpus
-  manifest carries per-rule counts (`train-effect-model`); every directed-fork rule has a detector
-  and a built operation (`match-outcomes`). A failed startup check MUST exit 1. Gates still exit 0
+  manifest carries per-rule counts (`train-effect-model`); every directed-fork rule has a detector,
+  a board precondition and a built operation (`match-outcomes`). A failed startup check MUST exit 1. Gates still exit 0
   after any verdict.
 
 #### Records and artifacts (root § 16)
 
 - **FR-077**: A checkpoint MUST add the relation tables, the averaged weights, `--rule-mask`,
-  `--deviance-floor`, `--ema-epochs`, `--stratum-weight` and `--relation-values`. The frozen rule
+  `--deviance-floor`, `--ema-epochs`, `--stratum-weight`, `--relation-values` and the manifest's
+  map content hash (FR-060a). The frozen rule
   tests MUST be written with the knowledge-probe set, holding the rule tests' records and their
   halves with a content digest.
 
 #### Boundaries
 
 - **FR-078**: The import-direction test of feature 023 MUST keep passing. The new detector and
-  rule-test code lives in `effects`; the catalogue scripts stay under `scripts/`.
+  rule-test code lives in `effects`; the board preconditions of directed forks live in
+  `forge-connector`; the catalogue scripts stay under `scripts/`.
 - **FR-079**: Everything root § 2 lists as reused unchanged MUST stay as features 023 and 024 built
   it: the collectors, hooks, fork budgets and shard format except where FR-018 to FR-042 change
   them; the gen-2 encoding text, script tokenization and keyword expansion; the masked-template
@@ -896,8 +964,12 @@ and that the reporting half never enters the control score.
 - **Detector**: a function from one record to the rules it shows, each with polarity and the
   entities the outcome names. Its tags drive counts, budgets, the mask and rule tests.
 - **Fork operation**: one of seven one-fact changes a directed fork applies to a live board.
+- **Board precondition**: a Java predicate per directed-fork rule, judging on the live game
+  whether the board meets the scenario's base variant; it decides when to fork and tags nothing.
 - **Directed fork**: a fork taken when a live board meets a rule's base variant, applying one
-  variant's change; its records never become rule-test records.
+  variant's change; its records carry `aimed_at` and `directed` and never become rule-test records.
+- **Aimed record**: a record carrying `aimed_at`, from a directed fork or a `collect-coverage` or
+  `collect-variants` run; natural in training, excluded from the rule tests.
 - **Rule tag**: the rule an added copy was drawn for; absent on natural copies.
 - **Natural share / added copy**: the copies gen-2's budgets give a record, and the copies beyond
   them that rule budgets add.
@@ -918,7 +990,8 @@ and that the reporting half never enters the control score.
 - **SC-001**: Every scenario in the catalogue declares a detector or a reason for none, and every
   non-base variant is classified into a fork operation or marked unclassifiable; `validate` passes.
 - **SC-002**: `rule-counts` over gen-2's corpus reports, for every rule with a detector, its counts
-  per polarity split by random-seat and Forge-AI games, or "not countable on gen-2".
+  per polarity split by natural random-seat games, natural Forge-AI games and aimed records (none
+  on gen-2), or "not countable on gen-2".
 - **SC-003**: In a gen-3 pilot, every record carries `generation: 3`, every field of root § 8.13
   appears with a non-constant value in `field-coverage` wherever the pilot's games can produce it,
   and the dropped-event report is printed.
