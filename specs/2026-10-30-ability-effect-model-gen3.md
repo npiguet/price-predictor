@@ -580,6 +580,8 @@ This section replaces the gen-2 spec's rule that no other positional scheme is a
   from j to i apply, which are types of their own (§ 10.3).
 - The rest of the layer is gen-2's: pre-norm, the feed-forward block and dropout, as
   `nn.TransformerEncoderLayer` with `norm_first=True` computes them.
+- Attention dropout applies to `a(i, j)` before it multiplies the values. The relation
+  value term reads the same dropped-out weights as `v_j`.
 - The trunk's layer replaces `nn.TransformerEncoderLayer`. With both relation tables at
   zero it computes what the stock layer computes.
 - Every gen-3 checkpoint is trained with this trunk.
@@ -589,6 +591,8 @@ This section replaces the gen-2 spec's rule that no other positional scheme is a
 - Each layer and each head has its own key table and value table, one vector per relation
   type, each one head wide.
 - The tables start at zero.
+- The tables belong to the `head` parameter group. They share its learning rate, weight
+  decay and gradient clip.
 - Under `--relation-values off`, the value tables stay at zero and are not trained.
 - The layer never builds a vector per pair of slots. The relation terms are computed per
   relation type, so their cost grows with batch × slots × relation types:
@@ -985,6 +989,9 @@ Printed output
   split by random-seat games and games between two Forge AIs.
 - Each training epoch line carries each stratum's score and its components, and the
   control score.
+- Each training shard's line carries the pre-clip gradient norm of the key tables and of
+  the value tables, beside the parameter groups' norms, read on the shard's last step as
+  they are. The `head` group's norm still includes the tables.
 
 # 16. Records and artifacts
 

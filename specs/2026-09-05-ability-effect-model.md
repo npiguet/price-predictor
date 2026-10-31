@@ -439,6 +439,7 @@ Hardcoded (mirroring the sealed encoder's conventions):
 | `ff_dim` | 4 × d_model |
 | dropout | 0.1 |
 | optimizer | AdamW |
+| weight decay | 0.01, on every parameter |
 | learning rate | 1e-4, constant after warmup |
 | warmup | linear over the first 5% of scheduled steps (`--epochs` × `--steps-per-epoch`) |
 | gradient clip | per-parameter-group max-norm 1.0 |
