@@ -50,6 +50,21 @@ State on master when this feature starts (the gen-3 record's Result):
   replace one card with another, the damage-step probe's keyword removal reused. Every classified
   variant then has its operation, and `match-outcomes` refuses only a rule with no detector or no
   classified variant (FR-014).
+- Q: Root § 6 says a directed fork "plays on". How far does it play before it stops? → A: To the
+  end of the current turn, then the fork is discarded, as interventional forks play the turn on
+  (FR-010).
+- Q: How does a rule's share divide between its `fires` records and its near misses? → A:
+  Equally. Each polarity draws half the rule's share, a short side repeats up to the reuse cap, the
+  manifest names a rule left one-sided, and `other` records count toward the rule without a half
+  of their own (FR-054a).
+- Q: What happens to a rule whose confirmed Forge departure is accepted? → A: The scenario's
+  expected outcome is rewritten to Forge's behaviour, and the rule returns to the rule tests,
+  scored against Forge's outcome. A patched departure returns the rule unchanged. Only a confirmed
+  departure that is neither patched nor accepted excludes the rule (FR-005, FR-071).
+- Q: What does a stratum score do when one of its four components has nothing to score? → A: That
+  never happens by design: the validation strata are curated so every component of both strata
+  has something to score, and curation fails when it cannot. Training does not check for it on
+  each run; if it meets an empty component anyway, it fails (FR-068a).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -96,8 +111,11 @@ hand-built near-miss record, and that the counts file and the printed table agre
 5. **Given** a record its detector tags with a polarity whose observed outcome differs from the
    scenario's expected outcome, **When** `rule-counts` runs, **Then** the record is listed for
    review, by record id and scenario id.
-6. **Given** a scenario carrying a confirmed Forge departure, **When** rule tests are frozen
-   (story 8), **Then** that rule has no rule-test records.
+6. **Given** a scenario carrying a confirmed Forge departure, neither patched nor accepted,
+   **When** rule tests are frozen (story 8), **Then** that rule has no rule-test records.
+7. **Given** a scenario whose confirmed departure is accepted, **When** rule tests are frozen,
+   **Then** its expected outcome reads Forge's behaviour and the rule has rule-test records scored
+   against it.
 
 ---
 
@@ -171,8 +189,8 @@ score-checked before the change, and counts against `--directed-forks-per-game`.
 
 1. **Given** `--directed-fork-rules 704.5f` and a live board with a 2/2 creature about to be
    dealt 2 damage, **When** the phase boundary is reached, **Then** the collector forks, raises
-   the creature's toughness to 3 through "change a creature's power or toughness", plays on, and
-   writes the fork's records.
+   the creature's toughness to 3 through "change a creature's power or toughness", plays the fork
+   to the end of the turn, writes the fork's records and discards the fork.
 2. **Given** a rule in `--directed-fork-rules` whose every contrasting variant is marked
    unclassifiable, **When** `match-outcomes` starts, **Then** it exits 1 naming the rule.
 3. **Given** one scenario variant per fork operation, **When** each is enabled in turn, **Then**
@@ -258,11 +276,12 @@ previous run.
 ### User Story 6 - Curate a corpus balanced rule by rule (Priority: P6)
 
 An operator runs `build-corpus` over the gen-3 records. Within each sampling class, each rule
-tagged on the class's records gets a share, and the build adds copies of a rule's records until
-it reaches its share, within the reuse cap and the text cap. Each added copy carries the rule it
-was drawn for. Turn and step conditions are balanced met against unmet. Rare protection qualities
-get examples from rule-labelled copies, variant scripts and interventional forks. The manifest
-records per-rule counts, budgets, shortfalls and one-sided conditions.
+tagged on the class's records gets a share, half for the records where it fires and half for its
+near misses, and the build adds copies of a rule's records until each half is reached, within the
+reuse cap and the text cap. Each added copy carries the rule it was drawn for. Turn and step
+conditions are balanced met against unmet. Rare protection qualities get examples from
+rule-labelled copies, variant scripts and interventional forks. The manifest records per-rule
+counts, budgets, shortfalls per polarity, and one-sided conditions and rules.
 
 **Why this priority**: The rule balance is gen-3's goal, and the trainer refuses a corpus without
 per-rule counts.
@@ -275,8 +294,8 @@ copies carry none.
 
 1. **Given** a class whose records carry 40 tagged rules and a class budget of 400,000, **When**
    `build-corpus` runs, **Then** each rule's share is 10,000 records in that class, and a rule with
-   2,000 natural records and a reuse cap of 4 is written up to 8,000 times with a shortfall of
-   2,000.
+   2,000 natural records, 1,000 of each polarity, and a reuse cap of 4 is written up to 8,000 times
+   with a shortfall of 2,000.
 2. **Given** a record tagged with two rules, **When** an added copy is drawn, **Then** it is drawn
    for the rule further below its share and carries that rule.
 3. **Given** a record acting through a line with "activate only during your turn", **When**
@@ -288,6 +307,10 @@ copies carry none.
    **Then** it is refused as `unjoinable-key`.
 6. **Given** a records set holding a gen-2 record, **When** `build-corpus` starts, **Then** it
    exits 1.
+7. **Given** the class of scenario 1 and a rule with 1,600 `fires` and 400 `does_not_fire` records
+   and a reuse cap of 4, **When** `build-corpus` runs, **Then** each polarity's half is 5,000,
+   `fires` is written 5,000 times, `does_not_fire` 1,600 times, the shortfall is 3,400, and the
+   manifest names the rule as one-sided in that class.
 
 ---
 
@@ -354,6 +377,9 @@ and that the reporting half never enters the control score.
    of one record are dropped, the probe is reported, and it feeds no stratum score.
 6. **Given** the selected checkpoint, **When** the scorecard is written, **Then** probes and rule
    tests are reported per half.
+7. **Given** a curated corpus whose game-disjoint selection half holds no rule with test records of
+   both polarities, **When** the probe set and rule tests are frozen, **Then** the freeze exits 1
+   naming the stratum, the half and the rule-test component.
 
 ---
 
@@ -418,7 +444,10 @@ and that the reporting half never enters the control score.
 - **FR-005**: A disagreement that survives review MUST be recordable on the scenario as a suspected
   Forge departure, and a confirmed one as a confirmed departure, accepted or awaiting a patch on the
   `effect-record-hooks` branch. A rule with a confirmed, unpatched, unaccepted departure MUST have
-  no rule-test records (FR-071).
+  no rule-test records (FR-071). Accepting a departure MUST rewrite the scenario's expected outcome
+  to Forge's behaviour, keeping the departure recorded on the scenario as accepted; the rule then
+  returns to the rule tests, scored against Forge's outcome. A patched departure returns the rule
+  with its expected outcome unchanged.
 
 #### Detectors and per-rule counts (root § 5)
 
@@ -441,7 +470,8 @@ and that the reporting half never enters the control score.
 - **FR-010**: A directed fork MUST wait for a live board that meets an enabled rule's base variant,
   as the rule's detector judges it on the board, at a phase boundary; fork the game; apply one
   contrasting variant's change through its classified operation; and play the fork on with the
-  decisions the game made.
+  decisions the game made, to the end of the current turn, recording it. The fork is then
+  discarded and the live game continues unchanged.
 - **FR-011**: The fork operations are: change a creature's power or toughness; add or remove a
   keyword; change a colour or type; add or remove counters; tap or untap a permanent; change a life
   total; replace one card with another. The existing damage-step probe is the "remove a keyword"
@@ -639,6 +669,11 @@ and that the reporting half never enters the control score.
   beyond their natural share, the copies gen-2's class, family and signature budgets give, until the
   rule's written records reach its share, through the gen-2 water-filling allocator, bounded by the
   reuse cap and `--text-cap`. Added copies come on top of the class budget.
+- **FR-054a**: Within a rule's share, records of polarity `fires` and records of polarity
+  `does_not_fire` MUST each draw half. A short side repeats up to the reuse cap, and the rest of
+  its half stays unfilled as the rule's shortfall; it is not given to the other side. Records of
+  polarity `other` count toward the rule's written records and draw no half of their own. Every
+  rule whose two sides stay unequal in a class MUST be named in the manifest.
 - **FR-055**: A record tagged with several rules MUST count toward each; each added copy MUST be
   drawn for the rule furthest below its share and carry that rule. A copy within the natural share
   MUST carry none. A record with no tag keeps its natural share.
@@ -657,7 +692,8 @@ and that the reporting half never enters the control score.
   resolution record MUST survive `build-corpus`, keyed to the permanent's card. A decision record
   whose candidate's key is unjoinable MUST be refused as `unjoinable-key`.
 - **FR-060**: The manifest MUST add the per-rule counts (FR-008's shape), per class and rule the
-  records available, share, written and shortfall, the one-sided conditions, and the closed subtype
+  records available, share, written and shortfall, each split by polarity, the one-sided conditions
+  and one-sided rules (FR-054a), and the closed subtype
   and keyword lists of FR-052/FR-053.
 
 #### Training (root § 13)
@@ -697,6 +733,14 @@ and that the reporting half never enters the control score.
   fields, leaving out any field whose constant-prediction loss is at or below `--deviance-floor`.
   Rescaling: AUC as 2 × AUC − 1; R² and explained deviance as is; a grid as one minus the ratio of
   its mean absolute error to the error of predicting the grid's mean outcome in every cell.
+- **FR-068a**: Every component MUST have something to score in each half of both validation
+  strata: at least one probe type with records, at least one grid with cells, at least one rule
+  whose test records hold both polarities, and at least one supervised output field. The strata
+  MUST be curated to meet this. `build-corpus`, and the freeze of the probe set and rule tests
+  (FR-071), MUST exit 1 when the corpus they produce does not meet it, naming the stratum, half
+  and component. Training runs no separate check for it. If an epoch nevertheless meets a
+  component with nothing to score, including a deviance component left empty because every field
+  falls at or below `--deviance-floor`, `train-effect-model` MUST exit 1 naming it.
 - **FR-069**: The control score MUST be the card-disjoint stratum score × `--stratum-weight`
   (default 0.5) plus the game-disjoint stratum score × (1 − it). A run MUST keep one best
   checkpoint, encoder, trunk and heads together, from the epoch with the best control score,
@@ -709,7 +753,8 @@ and that the reporting half never enters the control score.
   MUST drop repeated rows of one record, is reported, and never feeds a stratum score.
 - **FR-071**: A rule's test records MUST come from games in the validation strata, found there by
   its detector. Rule tests MUST be frozen per curated corpus with the knowledge-probe set, with a
-  content digest, and exclude every rule with a confirmed Forge departure (FR-005).
+  content digest, and exclude every rule with a confirmed Forge departure that is neither patched
+  nor accepted (FR-005).
 - **FR-072**: Records from probe forks, interventional resolutions, directed forks and collection
   aimed at a rule, and records matching a variant of polarity `other`, MUST NOT be rule-test
   records.
@@ -802,7 +847,7 @@ and that the reporting half never enters the control score.
 - **SC-006**: After all input and output changes, the map's rerun reports a learnable count, and
   every rule it reports learnable after gen-3 lists an output and no missing input.
 - **SC-007**: A gen-3 curated corpus's manifest gives, for every tagged rule in every class, its
-  share, written count and shortfall, and every one-sided condition.
+  share, written count and shortfall per polarity, and every one-sided condition and rule.
 - **SC-008**: A training run selects its checkpoint by control score, and its scorecard reports
   every probe and the rule tests on the reporting half, which never entered selection.
 - **SC-009**: A gen-3 checkpoint loads in `encode-abilities`, `evaluate-effect-model` and the
