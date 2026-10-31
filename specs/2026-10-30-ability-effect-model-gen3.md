@@ -192,6 +192,11 @@ minimal pair of boards on which changing one fact flips the rule's outcome.
 - A confirmed departure is recorded on the scenario. The rule's records stay out of the
   rule tests (§ 14.4) until Forge is patched on the `effect-record-hooks` branch or the
   departure is accepted.
+- A patched departure returns the rule to the rule tests with its expected outcome
+  unchanged.
+- An accepted departure rewrites the scenario's expected outcome to Forge's behaviour, and
+  stays recorded on the scenario as accepted. The rule returns to the rule tests, scored
+  against Forge's outcome.
 
 # 5. Rule detectors and the per-rule index
 
@@ -255,7 +260,8 @@ from a real game.
   the existing "remove a keyword" operation.
 - The collector runs each enabled rule's detector on the board at every phase boundary.
   When the board meets the precondition, it forks, applies the operation and plays the
-  fork on.
+  fork on to the end of the current turn, recording it. The fork is then discarded, and the
+  live game continues unchanged.
 - Each enabled rule is named in `--directed-fork-rules`, and directed forks take their own
   per-game budget, `--directed-forks-per-game`.
 - The base spec's score check against the live game before any change applies.
@@ -777,12 +783,18 @@ The verdict head gains a column for `timing` and one for each identifier of
   share until the rule's written records reach its share, through the gen-2 water-filling
   allocator. The reuse cap and `--text-cap` bound the added copies.
 - Added copies come on top of the class budget.
+- Within a rule's share, records of polarity `fires` and records of polarity
+  `does not fire` each draw half. A short side repeats up to the reuse cap. The rest of its
+  half stays unfilled, as the rule's shortfall, and is not given to the other side.
+- Records of polarity `other` count toward the rule's written records and draw no half of
+  their own.
 - A record tagged with several rules counts toward each. Each added copy is drawn for the
   rule furthest below its share. A record with no tag keeps its natural share.
 - An added copy carries the rule it was drawn for. A copy within the natural share carries
   none.
-- The manifest records, per class and rule, the records available, the share, the records
-  written and the shortfall.
+- The manifest records, per class, rule and polarity, the records available, the share,
+  the records written and the shortfall, and names every rule whose two sides stay unequal
+  in a class.
 
 ## 12.2 Condition balance
 
@@ -809,6 +821,16 @@ get examples from three sources, in amounts per-rule rebalancing sets:
 ## 12.4 Strata and refusals
 
 - The validation strata keep games between two Forge AIs.
+- Each validation stratum is built with the training stratum's rule budgets (§ 12.1), its
+  added copies carrying their rule. The explained-deviance component (§ 14.1) reads a
+  stratum's records with those copies, under the run's `--rule-mask`, as training reads its
+  own. Rule tests, probes, grids, gates and calibration read each distinct record once.
+- `build-corpus` places games in the strata, within each stratum's own definition (the
+  card-disjoint stratum's held-out cards, the game-disjoint stratum's games), so that every
+  rule with rule-test records of both polarities has test records of both polarities in
+  both halves (§ 14.2) of both strata, as far as its records allow. Game placement departs
+  from the gen-2 spec's hash threshold where this needs it. The checkpoint's recorded split
+  enumerates the placement. A rule left out of a half is named in the manifest.
 - A permanent spell's resolution record survives `build-corpus`, keyed to the permanent's
   card.
 - A decision record whose candidate's key is unjoinable is refused as `unjoinable-key`.
@@ -896,6 +918,32 @@ and the gen-2 spec's patience and `resume-best.pt` rules, which read that loss.
 - A probe that selects training records drops repeated rows of one record. Such a probe
   is reported and never feeds a stratum score.
 
+Balance, applied in each half of each stratum when the probe set and rule tests are
+frozen, r being one balance ratio recorded in the frozen set:
+
+- One polarity of a rule's test records holds at most r times as many records as the
+  other.
+- Each probe type holds at most r times the records of the smallest probe type.
+- Each grid cell holds at most r times the records of the smallest cell of its grid, and
+  every cell holds records.
+- A larger side, probe type or cell is subsampled by a seeded draw.
+
+Precision target, in each half of each stratum:
+
+- An item is a rule test, a probe type, a grid or an output field. An item enters its
+  component only when its own score's standard error on the rescaled scale (§ 14.1) is at
+  most 0.1. An item left out is named in the frozen set.
+- A component's standard error, √(Σ SEᵢ²) / m over its m items, is at most 0.05.
+- Standard errors are computed at the freeze, before any model exists, from the records
+  and their labels alone, at the worst case the labels allow. An AUC's is Hanley–McNeil's
+  at an AUC of 0.5: a rule with n test records of each polarity has a rescaled standard
+  error close to 2 · √(1 / (6n)), which needs n ≥ 67.
+- The freeze, and `build-corpus` where it can already tell, exit 1 when a component misses
+  its target, naming the stratum, half and component.
+- Training runs no separate check of the balance or the target. An epoch that meets a
+  component with nothing to score, a deviance component left empty by `--deviance-floor`
+  included, ends `train-effect-model` with exit 1, naming the stratum, half and component.
+
 ## 14.3 Gate 1
 
 Gate 1 reads the negative binomial deviance (§ 13.3). Its other margins are unchanged.
@@ -905,7 +953,7 @@ Gate 1 reads the negative binomial deviance (§ 13.3). Its other margins are unc
 - A rule's test records are taken from games placed in the validation strata, from the
   records its detector finds there.
 - The rule tests are frozen per curated corpus, with the knowledge-probe set, and exclude
-  every rule with a confirmed Forge departure (§ 4.4).
+  every rule with a confirmed Forge departure that is neither patched nor accepted (§ 4.4).
 - Records from probe forks, interventional resolutions, directed forks and collection aimed
   at a rule are not rule-test records.
 - Records matching a variant of polarity `other` are not rule-test records.
@@ -979,7 +1027,7 @@ Exit codes
 | code | meaning |
 |---|---|
 | 0 | success |
-| 1 | a startup check failed |
+| 1 | a startup check failed; or, at `build-corpus` or the freeze of the probe set and rule tests, a validation component missed its precision target; or, in training, a validation component had nothing to score (§ 14.2) |
 
 Printed output
 
@@ -1001,9 +1049,9 @@ Printed output
 | `rules/heads/<unit>.jsonl` | by the map | per-rule verdict, missing facts, gen-3 fields, learnable after gen-3 |
 | `rules/gen3-fields.json`, `rules/GEN3-FIELDS.md` | by the map's merge | gen-3's inputs, outputs, extensions and fixes |
 | effect-record shards | by collection | gen-3 records, `generation: 3` (§ 8.1) |
-| `manifest.json` | by `build-corpus` | adds per-rule counts (§ 5.2), per-rule budgets (§ 12.1), one-sided conditions (§ 12.2), and the closed subtype and keyword lists (§ 11.2, § 11.3) |
+| `manifest.json` | by `build-corpus` | adds per-rule counts (§ 5.2), per-rule budgets per polarity and one-sided rules (§ 12.1), one-sided conditions (§ 12.2), rules left out of a validation half (§ 12.4), and the closed subtype and keyword lists (§ 11.2, § 11.3) |
 | `output/effects/rule-counts.json` | by `rule-counts` | per-rule counts over a records set (§ 5.2) |
-| frozen rule tests | with the knowledge-probe set | the rule tests' records and their selection and reporting halves, with a content digest |
+| frozen rule tests | with the knowledge-probe set | the rule tests' records and their selection and reporting halves, with a content digest; the balance ratio r and the items left out by the precision target (§ 14.2) |
 | checkpoints | by `train-effect-model` | add the relation tables, the averaged weights, `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight` and `--relation-values` |
 | `resume.pt` | every epoch | adds the averaged weights |
 | knowledge-probe scorecards | per checkpoint | add the probes of § 14.5 and the rule tests, per half |
