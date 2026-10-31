@@ -243,7 +243,10 @@ from a real game.
 
 - The scenario's base variant is the situation the detector searches for on the live
   board. Each other variant's change is the perturbation the fork applies. The decisions
-  are the ones the game made.
+  that produced the forked board are the live game's.
+- From the fork on, each seat keeps its live controller, Forge AI or random seat, and
+  decides afresh, as in interventional forks. A fork is kept whether or not its decisions
+  match the ones the live game goes on to make.
 - Each variant's change is classified into one fork operation:
 
   | operation |
@@ -432,11 +435,17 @@ uses.
 ## 8.11 New record coverage
 
 - Turn-based actions get a record of kind `turn_action`, its `subkind` naming the
-  action: `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter`,
-  `attack_tap`. Its payload is the action's events.
+  action: `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter`.
+  Its payload is the action's events.
+- `turn_action` records are collected only. `build-corpus` writes none of them (§ 12.4),
+  and a rule only they show gets the map verdict `recorded` (§ 7).
 - Attackers records are anchored to one attacker, as blockers records are. Beside the
   anchor, the payload lists the players, planeswalkers and battles the anchor may attack,
   and whether it must attack.
+- On a real declaration (`what_if = false`) whose anchor is declared, the payload also
+  carries `tapped_by_attack`: whether declaring the attack tapped the anchor, read from the
+  declaration's tap events. The collector holds the record open until they arrive. A
+  what-if attackers record carries none.
 - A coverage round targets cards with an activated "any target" damage ability.
 
 ## 8.12 Keying, random seat and dropped events
@@ -461,6 +470,7 @@ uses.
 | `conditions_met` | resolution payload | list of `{segment, met}`, `segment` the chain index `attributed_to` uses |
 | `active` | each listed static line | bool |
 | `anchor_attacker`, `legal_defenders`, `must_attack` | `attackers` payload | entity ref; list of player or entity refs; bool |
+| `tapped_by_attack` | `attackers` payload, real declarations with the anchor declared | bool |
 | `must_block` | `blockers` payload, per listed creature | bool: the creature is required to block the anchor |
 | `turn_action` | `kind` | with the subkinds of § 8.11 |
 | the fields of § 8.4 | snapshot | as `rules/gen3-fields.json` gives each field's shape |
@@ -746,6 +756,9 @@ The 22 outputs of `rules/gen3-fields.json`:
 - `keywords_gained` and `keywords_lost` cover every keyword an effect in the corpus grants
   or removes, a closed list the manifest records.
 - Every named counter other than a keyword counter gets a signed-delta output.
+- `tap_state` is supervised on the anchor of an attackers record carrying
+  `tapped_by_attack`: tapped where it is true, unchanged where it is false. The record
+  supervises no other output beside its legality outputs.
 
 ## 11.4 Legality outputs
 
@@ -778,7 +791,10 @@ The verdict head gains a column for `timing` and one for each identifier of
 - A record's natural share is the number of copies gen-2's class, family and signature
   budgets give it.
 - A rule's share is taken within each sampling class: the class budget divided by the
-  number of rules tagged on the class's records (§ 5.1).
+  number of budgeted rules tagged on the class's records (§ 5.1).
+- A budgeted rule is one the rules-to-fields map marks `trained` (§ 7). A tagged rule with
+  any other verdict gets no share and no added copy. Its records are still counted per
+  polarity and keep their natural share, and the manifest names it as unbudgeted.
 - Within a class, `build-corpus` adds copies of a rule's records beyond their natural
   share until the rule's written records reach its share, through the gen-2 water-filling
   allocator. The reuse cap and `--text-cap` bound the added copies.
@@ -834,6 +850,8 @@ get examples from three sources, in amounts per-rule rebalancing sets:
 - A permanent spell's resolution record survives `build-corpus`, keyed to the permanent's
   card.
 - A decision record whose candidate's key is unjoinable is refused as `unjoinable-key`.
+- A `turn_action` record is written to no stratum. The manifest counts the records left
+  out by subkind.
 
 # 13. Training
 
@@ -851,6 +869,10 @@ added.
 - Under both, the outputs of every rule an added copy of the record was drawn for train at
   full weight on each copy of that record.
 - A gen-2 lethality copy trains every output at full weight.
+- A record from a directed fork or from collection aimed at a rule is a natural record. It
+  carries no rule tag of its own, and its copies within the natural share train every
+  output at full weight under both masks. Its aim only excludes it from the rule tests
+  (§ 14.4).
 
 ## 13.2 One loss scale
 
@@ -953,7 +975,9 @@ Gate 1 reads the negative binomial deviance (§ 13.3). Its other margins are unc
 - A rule's test records are taken from games placed in the validation strata, from the
   records its detector finds there.
 - The rule tests are frozen per curated corpus, with the knowledge-probe set, and exclude
-  every rule with a confirmed Forge departure that is neither patched nor accepted (§ 4.4).
+  every rule with a confirmed Forge departure that is neither patched nor accepted (§ 4.4),
+  and every rule the map does not mark `trained`. Neither kind constrains game placement
+  (§ 12.4).
 - Records from probe forks, interventional resolutions, directed forks and collection aimed
   at a rule are not rule-test records.
 - Records matching a variant of polarity `other` are not rule-test records.
