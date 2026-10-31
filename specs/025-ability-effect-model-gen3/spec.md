@@ -71,6 +71,22 @@ State on master when this feature starts (the gen-3 record's Result):
 - Q: How is each component's minimum size set? → A: From a precision target: each item's rescaled
   standard error at most 0.1, each component's at most 0.05, computed from labels alone at freeze
   time; items that miss it are left out and reported (FR-068b).
+- Q: Who makes a directed fork's decisions after the one-fact change, given the live game has not
+  made them yet? → A: Each seat keeps its live controller (Forge AI or random seat) and decides
+  afresh, as interventional forks do; every fork is kept, whether or not its decisions match the
+  live game's (FR-010).
+- Q: Does the rule mask treat directed-fork records as natural records or as copies drawn for
+  their rule? → A: As natural records: they carry no rule tag, and their natural copies train every
+  output at full weight under both masks; their aim only excludes them from the rule tests
+  (FR-061).
+- Q: Does a tagged rule whose map verdict is not `trained` get a share of the class budget? → A:
+  No. Only rules the map marks `trained` are budgeted and divide the class budget; the others are
+  counted, keep their natural share, and are named as unbudgeted in the manifest (FR-054, FR-060).
+- Q: How does `build-corpus` sample `turn_action` records, which no class of the mixture covers?
+  → A: It does not: they are collected but never written to a stratum, and the rules only they
+  show get the map verdict `recorded`. The attack-declaration tap is no `turn_action` subkind; it
+  becomes `tapped_by_attack` on a real declaration's attackers record, supervising the existing
+  `tap_state` output on the anchor (FR-036, FR-037, FR-053, FR-059).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -169,7 +185,8 @@ only if the collector writes them. The corpus is collected from scratch and cann
 10. **Given** a draw step, **When** the active player draws, **Then** a `turn_action` record with
     subkind `draw` holds the draw event.
 11. **Given** two attackers declared, **When** attackers records are written, **Then** each record
-    is anchored to one attacker and lists its legal defenders and whether it must attack.
+    is anchored to one attacker and lists its legal defenders and whether it must attack; a declared
+    anchor without vigilance carries `tapped_by_attack = true`, one with vigilance `false`.
 12. **Given** `--count-dropped-events`, **When** the run ends, **Then** the dropped events are
     printed by event type and engine phase, and the pilot report gives the number of
     `mana_produced` events with an empty `mana_by_color`.
@@ -298,7 +315,7 @@ copies carry none.
 
 **Acceptance Scenarios**:
 
-1. **Given** a class whose records carry 40 tagged rules and a class budget of 400,000, **When**
+1. **Given** a class whose records carry 40 tagged rules the map marks `trained` and a class budget of 400,000, **When**
    `build-corpus` runs, **Then** each rule's share is 10,000 records in that class, and a rule with
    2,000 natural records, 1,000 of each polarity, and a reuse cap of 4 is written up to 8,000 times
    with a shortfall of 2,000.
@@ -317,6 +334,8 @@ copies carry none.
    and a reuse cap of 4, **When** `build-corpus` runs, **Then** each polarity's half is 5,000,
    `fires` is written 5,000 times, `does_not_fire` 1,600 times, the shortfall is 3,400, and the
    manifest names the rule as one-sided in that class.
+8. **Given** a records set holding `turn_action` records, **When** `build-corpus` runs, **Then**
+   none of them is written to any stratum, and the manifest counts them by subkind.
 
 ---
 
@@ -431,6 +450,9 @@ and that the reporting half never enters the control score.
   nothing else.
 - A resume across the warmup boundary. The averaged weights start at the warmup's end, and
   `resume.pt` carries the step they started from.
+- A tagged rule whose map verdict is `recorded`, `missing` or `planned`. It gets no share and no
+  added copy, the manifest names it as unbudgeted with its counts, and it has no rule test, since no
+  output is trained on its outcome (FR-054, FR-073).
 - A directed fork rule whose precondition never occurs in a game. No fork is taken; the budget is
   unused.
 
@@ -481,9 +503,13 @@ and that the reporting half never enters the control score.
 
 - **FR-010**: A directed fork MUST wait for a live board that meets an enabled rule's base variant,
   as the rule's detector judges it on the board, at a phase boundary; fork the game; apply one
-  contrasting variant's change through its classified operation; and play the fork on with the
-  decisions the game made, to the end of the current turn, recording it. The fork is then
-  discarded and the live game continues unchanged.
+  contrasting variant's change through its classified operation; and play the fork on to the end
+  of the current turn, recording it. The decisions that produced the forked board are the live
+  game's. From the fork on, each seat keeps its live controller (Forge AI or random seat) and
+  decides afresh, as interventional forks do. A fork is kept whether or not its decisions match
+  the ones the live game goes on to make; its records carry the decisions it made and are tagged
+  by detectors like any other record. The fork is then discarded and the live game continues
+  unchanged.
 - **FR-011**: The fork operations are: change a creature's power or toughness; add or remove a
   keyword; change a colour or type; add or remove counters; tap or untap a permanent; change a life
   total; replace one card with another. The existing damage-step probe is the "remove a keyword"
@@ -585,11 +611,16 @@ and that the reporting half never enters the control score.
 - **FR-035**: A prevention that prevented nothing MUST write no note. A probe fork's damage events
   MUST carry their source, recovered from the payload's `assignment_choices`.
 - **FR-036**: Turn-based actions MUST get a record of kind `turn_action` with `subkind` one of
-  `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter`, `attack_tap`, its
-  payload the action's events.
+  `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter`, its payload the
+  action's events. `turn_action` records are collected only: `build-corpus` writes none of them to
+  any stratum (FR-059), and the rules only they show get the map verdict `recorded` (FR-015).
 - **FR-037**: Attackers records MUST be anchored to one attacker, as blockers records are, with
   `anchor_attacker`, `legal_defenders` (the players, planeswalkers and battles it may attack) and
-  `must_attack`. Blockers records MUST carry `must_block` per listed creature.
+  `must_attack`. An attackers record of a real declaration (`what_if = false`) whose anchor is
+  declared MUST also carry `tapped_by_attack`, whether declaring the attack tapped the anchor, read
+  from the declaration's tap events; the collector holds the record open until they arrive. A
+  what-if attackers record carries none. Blockers records MUST carry `must_block` per listed
+  creature.
 - **FR-038**: `collect-coverage --wording-cards PATH` MUST run a coverage round over the listed
   cards, those with an activated "any target" damage ability.
 - **FR-039**: A charm mode cast through Flashback MUST be keyed to a sidecar line. An ability a
@@ -664,7 +695,9 @@ and that the reporting half never enters the control score.
   `surveil` and `tutor` only for their own events, plus `shuffle`; each created-objects group's
   other-controller binary, subtypes, counters per type and group kind; `keywords_gained` and
   `keywords_lost` over the closed list `build-corpus` records; a signed-delta output for every named
-  counter other than a keyword counter.
+  counter other than a keyword counter; `tap_state` supervised on the anchor of an attackers record
+  carrying `tapped_by_attack` (FR-037), tapped where it is true and unchanged where it is false,
+  the record supervising no other output beside its legality outputs.
 - **FR-053a**: Legality outputs MUST follow root § 11.4: `target_legal` supervised on every card and
   player of a decision record (1 inside `legal_targets`, 0 outside), unsupervised for a candidate
   with no targeting clause, the union for several clauses; `blocker_legal` and `attacker_legal`
@@ -677,10 +710,13 @@ and that the reporting half never enters the control score.
 #### Curation (root § 12)
 
 - **FR-054**: `build-corpus` MUST take a rule's share within each sampling class as the class budget
-  divided by the number of rules tagged on the class's records, and add copies of a rule's records
+  divided by the number of budgeted rules tagged on the class's records, and add copies of a rule's records
   beyond their natural share, the copies gen-2's class, family and signature budgets give, until the
   rule's written records reach its share, through the gen-2 water-filling allocator, bounded by the
-  reuse cap and `--text-cap`. Added copies come on top of the class budget.
+  reuse cap and `--text-cap`. Added copies come on top of the class budget. A budgeted rule is one
+  the rules-to-fields map marks `trained`. A tagged rule with any other verdict gets no share and
+  no added copy, and no added copy is drawn for it; its records are still counted per polarity and
+  keep their natural share, and the manifest names it as unbudgeted.
 - **FR-054a**: Within a rule's share, records of polarity `fires` and records of polarity
   `does_not_fire` MUST each draw half. A short side repeats up to the reuse cap, and the rest of
   its half stays unfilled as the rule's shortfall; it is not given to the other side. Records of
@@ -702,10 +738,12 @@ and that the reporting half never enters the control score.
   amounts per-rule rebalancing sets.
 - **FR-059**: The validation strata MUST keep only games between two Forge AIs. A permanent spell's
   resolution record MUST survive `build-corpus`, keyed to the permanent's card. A decision record
-  whose candidate's key is unjoinable MUST be refused as `unjoinable-key`.
+  whose candidate's key is unjoinable MUST be refused as `unjoinable-key`. A `turn_action` record
+  MUST NOT be written to the training or either validation stratum; the manifest counts the
+  records left out by subkind.
 - **FR-060**: The manifest MUST add the per-rule counts (FR-008's shape), per class and rule the
   records available, share, written and shortfall, each split by polarity, the one-sided conditions
-  and one-sided rules (FR-054a), and the closed subtype
+  and one-sided rules (FR-054a), the unbudgeted rules with their counts (FR-054), and the closed subtype
   and keyword lists of FR-052/FR-053.
 
 #### Training (root § 13)
@@ -716,7 +754,11 @@ and that the reporting half never enters the control score.
   masked, while a natural copy trains every output; under `--rule-mask soft` every copy trains every
   output, outputs other than those of the record's drawn rules weighing n / d on each copy. Under
   both, the outputs of every rule an added copy of the record was drawn for MUST train at full
-  weight on each copy. A gen-2 lethality copy trains every output at full weight.
+  weight on each copy. A gen-2 lethality copy trains every output at full weight. A record from a
+  directed fork or from collection aimed at a rule is a natural record like any other: it carries
+  no rule tag of its own, its natural copies train every output at full weight under both masks,
+  and only the copies rule budgets add to it carry a rule. Its aim marks it only for exclusion from
+  the rule tests (FR-009, FR-072).
 - **FR-062**: Each output field's loss MUST be divided by the loss of its constant prediction on the
   same records under the same distribution, clamped below at `--deviance-floor` (default 0.04 nats).
 - **FR-063**: Count and amount fields MUST be scored by a negative binomial likelihood in place of
@@ -793,7 +835,8 @@ and that the reporting half never enters the control score.
 - **FR-071**: A rule's test records MUST come from games in the validation strata, found there by
   its detector. Rule tests MUST be frozen per curated corpus with the knowledge-probe set, with a
   content digest, and exclude every rule with a confirmed Forge departure that is neither patched
-  nor accepted (FR-005).
+  nor accepted (FR-005), and every rule the map does not mark `trained` (FR-054). Neither kind
+  constrains game placement under FR-068a.
 - **FR-072**: Records from probe forks, interventional resolutions, directed forks and collection
   aimed at a rule, and records matching a variant of polarity `other`, MUST NOT be rule-test
   records.
