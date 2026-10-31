@@ -506,7 +506,7 @@ The 33 inputs of `rules/gen3-fields.json` go into these places:
 |---|---|
 | card slot | subtypes, face state, is a copy, is a token, pending-event details, mana cost, printed loyalty and defense, designations, X paid, chosen values, costs paid, history, order rank |
 | ability slot | line flags (§ 9.2) |
-| relations (§ 10) | attached to, attacks, targets, source of a stack object, soulbond pair, a battle's protector, exiled with, merged with, same name |
+| relations (§ 10) | attached to, attacks, targets, source of, paired with (soulbond), protects (a battle's protector), linked by text (exiled with), merged with, has the same name |
 | player slot | speed, city's blessing, rad counters, monarch, initiative |
 | global slot | day or night |
 | command-zone and library card slots | floating effects, dungeons, library cards an effect touches |
@@ -519,6 +519,10 @@ The 33 inputs of `rules/gen3-fields.json` go into these places:
   embeddings serve chosen creature types.
 - Face state is one-hot over front, back, flipped, melded and face down, and replaces the
   face-down flag.
+- The relations row names relation types of § 10.3. Inputs placed in other rows bring
+  relation types of their own as well: a floating effect its `affects`, `created by` and
+  `pending on`, a dungeon `in dungeon`, a pending event's subject `last known state of`,
+  a chosen object `chose`, history `damaged this turn`, goad `goaded by`, a copy `copy of`.
 - Subtypes, is a copy, is a token, and the same-name, attached-to, attacks and targets
   relations read what the snapshot already records. Face state and pending-event details
   read it in part, and § 8.4 adds the rest.
@@ -555,11 +559,27 @@ This section replaces the gen-2 spec's rule that no other positional scheme is a
 
 ## 10.1 Attention
 
-- Each relation type is directed and has a learned key vector and a learned value vector.
-- When slot i attends to slot j, the key of j gains the key vector of the relation from i
-  to j before the score is taken, and the value of j gains its value vector before it is
-  passed to i.
-- Several relations on one pair add as vectors.
+- A relation is a directed, typed link from one slot of a record to another. A record
+  carries its relations as a set of (from slot, to slot, type) triples over its slots.
+- A relation is not a slot, and it adds no feature to the slot at either end. It acts
+  only inside attention.
+- One pair of slots can carry several relations, in either direction.
+- In one head of one layer, with `q`, `k` and `v` the head's query, key and value of a
+  slot, `d` the head width, `R(i, j)` the set of relation types from slot i to slot j, and
+  `K_r` and `V_r` the key and value vectors of type r (§ 10.2):
+
+  ```
+  score(i, j) = q_i · (k_j + Σ_{r ∈ R(i, j)} K_r) / √d
+  a(i, j)     = softmax over j of score(i, j), padding masked
+  out_i       = Σ_j a(i, j) · (v_j + Σ_{r ∈ R(i, j)} V_r)
+  ```
+
+- The key vectors change how much i attends to j. The value vectors change what i
+  receives from j.
+- Only the relations from i to j enter i's reading of j. When j reads i, the relations
+  from j to i apply, which are types of their own (§ 10.3).
+- The rest of the layer is gen-2's: pre-norm, the feed-forward block and dropout, as
+  `nn.TransformerEncoderLayer` with `norm_first=True` computes them.
 - The trunk's layer replaces `nn.TransformerEncoderLayer`. With both relation tables at
   zero it computes what the stock layer computes.
 - Every gen-3 checkpoint is trained with this trunk.
@@ -570,15 +590,31 @@ This section replaces the gen-2 spec's rule that no other positional scheme is a
   type, each one head wide.
 - The tables start at zero.
 - Under `--relation-values off`, the value tables stay at zero and are not trained.
+- The layer never builds a vector per pair of slots. The relation terms are computed per
+  relation type, so their cost grows with batch × slots × relation types:
+  - key term: `q_i · K_r` is computed once for each slot i and each type r, then looked
+    up for each pair (i, j) by the types in `R(i, j)`;
+  - value term: for each slot i and type r, the weights `a(i, j)` over the slots j with
+    r in `R(i, j)` are summed, and the sums multiply the value table.
+- The value term reads the attention weights, so the layer computes attention explicitly,
+  not through a fused attention kernel that does not return them.
 
 ## 10.3 Relation types
 
+- The table below lists every relation type. Each name in its last column is two types,
+  one per direction. Where a row names the direction ("from the line", "from a card to a
+  player"), that is the forward one.
+- Links of one family share its types, and the slots at the two ends say which link it
+  is: an Aura's and an Equipment's link to the permanent they are attached to are both
+  `attached to`.
+- A family has several types where the rules give one of its links behaviour no line
+  states (`in band with`, `must block`), or where the text that gives a link its meaning
+  sits at the other end (`bound to`).
+- A relation names its partner and carries no number. A count or amount about a link is
+  a feature of a slot (§ 10.4).
 - A card's lines are tied to it by `line of`, in both directions, and the lines of one
   card are tied to each other by `line of the same card`. A charm's mode slots are tied to
   their root by `mode of`.
-- A link gets a relation type of its own when the rules give it behaviour no line states,
-  or when the text that gives it meaning sits at the other end. Every other link shares
-  its family's type.
 - A link made by an ability points from that ability's line.
 - A mutated or melded permanent's cards contribute their lines through `line of`.
   `merged with` records which cards leave the battlefield with it.
@@ -613,18 +649,33 @@ This section replaces the gen-2 spec's rule that no other positional scheme is a
 
 ## 10.4 Gen-2 link features
 
+Each gen-2 feature that describes a link gains its relation. The feature stays as a slot
+feature unless the relation carries everything it says.
+
 | gen-2 feature | relation | the feature |
 |---|---|---|
 | card is attacking | attacks, to the player, planeswalker or battle attacked | kept |
 | card is blocking | blocks | kept |
-| attacker became blocked | blocks | kept |
-| number of blockers | blocks | kept |
+| attacker became blocked | blocks | kept: it stays set after every blocker has left, when no relation is left |
+| number of blockers | blocks | kept: a count |
 | card is attached | attached to | replaced by the relation |
 | card or player is a target of the acting ability | targets, from `[ACT]` | kept |
 | card is the acting ability's source | source of | kept |
 | controller is the acting player | controls, from each player slot | kept |
-| stack object's number of targets, divided amounts and up-to counts | targets, from the stack object | kept |
-| charm-mode flag | mode of | kept |
+| stack object's number of targets, divided amounts and up-to counts | targets, from the stack object | kept: counts and amounts |
+| charm-mode flag | mode of | kept: it marks a mode line among the card's lines |
+
+## 10.5 Layer properties
+
+The trunk's layer has these properties, each checked by a test:
+
+- With both relation tables at zero and its weights copied from an
+  `nn.TransformerEncoderLayer`, it reproduces that layer's outputs and gradients in fp32.
+- Permuting the slots and the relations together permutes its outputs the same way.
+- A relation from slot i to slot j changes the layer's output at i and not at j.
+- On a toy task only a relation can solve, reading a feature of the partner among
+  identical-looking slots, a small model learns with the relation and stays at chance
+  with the tables at zero.
 
 # 11. Outputs
 
