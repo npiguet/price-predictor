@@ -1,0 +1,569 @@
+---
+
+description: "Task list for 025-ability-effect-model-gen3"
+---
+
+# Tasks: Ability effect model — generation 3
+
+**Input**: Design documents from `/specs/025-ability-effect-model-gen3/`
+**Prerequisites**: [plan.md](plan.md), [spec.md](spec.md), [research.md](research.md), [data-model.md](data-model.md), [contracts/](contracts/), [quickstart.md](quickstart.md)
+**Authority**: the root spec [`../2026-10-30-ability-effect-model-gen3.md`](../2026-10-30-ability-effect-model-gen3.md), cited as "root § N.M"; decisions cited as R1, C2, D3, M1, T2, E4 … are in [research.md](research.md).
+
+**Tests**: Mandatory. Constitution Principle I is non-negotiable, and FR-049 requires the relation
+layer's four property tests to be written before the layer. Each test task sits beside the code it
+covers and is written before or with it. Fixtures come from real records and real converted output,
+never hand-built imitations of them; a hand-built record is allowed only where the spec asks for one
+(the near-miss record of story 1's independent test) and is derived from a real record by editing it.
+
+**Organization**: Grouped by the spec's eight user stories, in priority order. Story 1 runs on gen-2's
+corpus and starts first. Stories 2 and 3 change what is decided at collection time and must be done
+before the first gen-3 pilot game. Story 4 needs no gen-3 data. Stories 5–8 consume the gen-3 corpus.
+
+**Editing design documents**: any task that writes under `specs/` or `experiments/` loads the
+**feature-workflow** skill first, for every edit (memory: invoke it before every edit).
+
+**Prior art**: per Principle VII, a task that creates a module names the prior art it reuses or
+diverges from, citing [research.md § Codebase Survey](research.md#codebase-survey).
+
+## Path Conventions
+
+- `E/` is `src/effects/`. Fast tests live under `tests/unit/effects/{domain,application,infrastructure}/`
+  mirroring the source tree; JVM-dependent Python tests carry the `integration` marker.
+- `FC/` is `forge-connector/src/main/java/com/pricepredictor/connector/`, `FE/` is `FC/effects/`,
+  `FCT/` is `forge-connector/src/test/java/com/pricepredictor/connector/`.
+- `forge/` is the sibling `../forge` checkout on `effect-record-hooks`. Engine changes are new commits
+  on that branch, never amends or rebases (memory). `FG/` is
+  `forge/forge-game/src/main/java/forge/game/`, `FA/` is `forge/forge-ai/src/main/java/forge/ai/`;
+  Forge-side tests are `forge/forge-game/src/test/java/forge/game/**/EffectRecord*Test.java`.
+- Build Forge with `mvn install -DskipTests` first when it changed, then the connector with
+  `cd forge-connector && mvn install -DskipTests`; never `package`.
+- Python runs with `python -u` for anything long, with periodic progress lines.
+- Never commit `output/` or `models/`.
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[P]**: parallelizable (different file, no dependency on an incomplete task)
+- **[Story]**: US1–US8; absent on Setup, Foundational and Polish tasks
+
+---
+
+## Phase 1: Setup
+
+**Purpose**: baselines and fixtures later tasks compare against, before any code changes.
+
+- [ ] T001 Record the baseline: run `pytest -m "not integration"`, `pytest -m integration` (needs the JAR), `cd ../forge && mvn install -DskipTests`, `cd forge-connector && mvn install -DskipTests && mvn test`, and `ruff check`; note the counts in the PR description draft; every failure found is fixed before Phase 2, not carried (memory: nothing is pre-existing)
+- [ ] T002 [P] Build a gen-2 record fixture: extend `scripts/make_fixture_records.py` with a `--generation 2` mode that streams the gen-2 shards under `output/effects/records/` and writes `tests/fixtures/effects/gen2-records.jsonl.gz` holding, at minimum: a resolution whose effect half moves a 0-toughness creature to the graveyard in the state-based check (scenario `704.5f-1` `fires`), a resolution leaving a creature at toughness 1 (`does_not_fire`), a combat record with a deathtouch creature and a damage-step probe fork stripping deathtouch, a trigger fired and unfired, a continuous, a rewrite and the three playability subkinds, plus records from a random-seat game and from a Forge-AI game; write the sidecars they name under `tests/fixtures/effects/gen2-sidecars/` (already present: extend it). Check the sample against the real shards before using it (memory: fixtures mirror real output)
+- [ ] T003 [P] Locate gen-2's raw shards (today under `output/effects/records/{depleted,full-strength,held-out-coverage,…}`) and, after confirming with the user, move them to `output/effects/records-gen2/` (quickstart.md's path), so gen-3 pilot shards written to `output/effects/records/` never share a directory with them
+
+**Checkpoint**: both suites green; a gen-2 fixture exists for the detectors.
+
+---
+
+## Phase 2: Foundational (Blocking Prerequisites)
+
+**Purpose**: renames that must precede colliding names, the shared extractions several stories read,
+the gen-3 envelope, and the clean break. No user story starts before this phase is complete.
+
+### Renames (plan follow-up 1)
+
+- [ ] T004 [P] Rename `E/domain/rule_families.py` → `E/domain/effect_families.py`, `RuleFamily` → `EffectFamily`, `rule_family` → `effect_family`, updating every importer (`E/domain/corpus_plan.py:84` `Cell.of`, the corpus survey and writer, `breakdowns.py`, the probes) and moving `tests/unit/effects/domain/test_rule_families.py` → `test_effect_families.py`; the manifest key stays `families`
+- [ ] T005 [P] Rename `corpus_plan._selection_half` → `_what_if_half` in `E/domain/corpus_plan.py` and its tests in `tests/unit/effects/domain/test_corpus_plan.py`
+- [ ] T006 [P] Rename `ladder.PROBE_TYPES` → `PROBE_MODELS` in `scripts/effect_knowledge_probes/ladder.py` and every reader under `scripts/effect_knowledge_probes/` and `tests/unit/scripts/test_effect_knowledge_probes.py`
+
+### Shared extractions (Third-instance check)
+
+- [ ] T007 [P] Create `E/domain/seeded_draw.py` with `stable_order(ids, seed) -> list` and `smallest_k(ids, k, seed) -> list`, defined from the blake2b hash the existing draws use; switch `corpus_curation.game_hash` / `record_hash`, `validation_samples._sample_hash`, `admit_card_disjoint`'s shuffle and `scripts/effect_knowledge_probes/common.stable_hash` onto it without changing any draw's output (a test pins each existing draw on fixed ids); tests in `tests/unit/effects/domain/test_seeded_draw.py`; add the module to `_TORCH_FREE` in `tests/unit/effects/test_import_boundaries.py:170`
+- [ ] T008 [P] Extend `E/domain/canonical_digest.py` with a sha256 variant beside the blake2b-16 one, and make `scripts/effect_knowledge_probes/probe_set.canonical_digest` call it; test both against fixed documents in `tests/unit/effects/domain/test_canonical_digest.py`
+- [ ] T009 [P] Create `E/domain/rule_catalogue.py` (torch-free): move the scenario and heads enums from `scripts/rules_catalogue.py:27-46` here; add `ForkOperation` (`pt`, `keyword`, `colour_type`, `counters`, `tap`, `life`, `replace_card`), `Polarity`, `MapVerdict` (`trained`, `recorded`, `missing`, `planned`), `DetectorDeclaration`, `Departure` (status, resolution, `forge_behaviour`, `note`) and `RuleMapEntry` as frozen dataclasses (data-model.md § Rules catalogue); `scripts/rules_catalogue.py` imports them. Tests in `tests/unit/effects/domain/test_rule_catalogue.py`; add to `_TORCH_FREE`
+- [ ] T010 Replace `rules_catalogue.HEAD_OUTPUTS` (`scripts/rules_catalogue.py:35-43`, a hand copy) with `head_outputs()` in `E/domain/rule_catalogue.py`, derived from `HeadField` and the verdict-head column names in `E/domain/effect_head_layout.py`; a test asserts every name in the old hand list is in the derived one (depends on T009)
+- [ ] T011 [P] Create `E/infrastructure/rules_catalogue_io.py`: `load_scenarios(rules_dir) -> ScenarioCatalogue` (read-only view of every `rules/scenarios/<unit>.json` with its detector, variants and departure) and `load_heads(rules_dir) -> dict[rule_id, RuleMapEntry]` (from `rules/heads/<unit>.jsonl`, `outputs` filtered to `head_outputs()`, untagged names only; `new:`, `record:` and `planned:` entries dropped; a rule with no heads line reads `missing`) plus `heads_digest` (canonical digest of the parsed lines, R4). Tests in `tests/unit/effects/infrastructure/test_rules_catalogue_io.py` against the real `rules/` tree (depends on T009, T010)
+- [ ] T012 [P] Create `E/domain/rule_outcomes.py` (torch-free) and move into it `lethality_counterfactuals.lethal` (`E/domain/lethality_counterfactuals.py:197`), `combat_grid.step_deaths` and `evasion_grid.may_block` (from `scripts/effect_knowledge_probes/`); every former caller imports from the new module; existing tests pass unchanged and a new `tests/unit/effects/domain/test_rule_outcomes.py` pins each function on its existing cases
+
+### Gen-3 envelope and generation check (FR-018, FR-020)
+
+- [ ] T013 Add `generation: int | None`, `aimed_at: tuple[str, ...] | None` and `directed: DirectedTag | None` (`variant`, `operation: ForkOperation`) to `EffectRecord` in `E/domain/records.py`; add all three to `COLLECTION_METADATA_FIELDS`; add `turn_action` to the record kinds with subkinds `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter`; extend `_check_flags` with the directed-fork signature row (any kind, `interventional = false`, `fork = true`, `directed` set) and reject `directed` without `aimed_at`
+- [ ] T014 Add `ShardGeneration.GEN_3` in `E/domain/shard_generation.py`, keyed on `generation == 3`, else `random_seat` (gen-2), else gen-1; read and write the three envelope members in `E/infrastructure/record_codec.py` (`generation` first after `record_id`); tests in `tests/unit/effects/domain/test_records.py` and `tests/unit/effects/infrastructure/test_record_codec.py` round-trip a gen-3 envelope and still load every record of `gen1-records.jsonl.gz` and `gen2-records.jsonl.gz`
+- [ ] T015 Replace `refuse_mixed_generations` (`E/infrastructure/shard_io.py:423-434`) with `require_generation(paths, *allowed)`; callers `build_corpus.py:522`, `train_effect_model.py:444` and `evaluation_context.py:181` pass `GEN_3` only; the exit map in `E/infrastructure/cli.py:738` names the first offending shard and its generation; tests in `tests/unit/effects/infrastructure/test_shard_io.py` (a gen-2 shard refused by each consumer; gen-2 and gen-3 mixed refused everywhere)
+- [ ] T016 Add `generation` (always 3), `aimed_at` and `directed` to `FE/EffectRecord.java` (fields, setters, `toJson` writing `generation` first after `record_id`, `aimed_at` and `directed` only when set) and stamp `generation` in `FE/CollectorContext.java` beside `random_seat` (`:104`); extend `FCT/effects/EffectRecordTest.java` and `CollectorTest.anEnvelopeCarriesEveryFrozenField`
+- [ ] T017 Add the Java `ForkOperation` enum in `FE/directed/ForkOperation.java` with the seven wire spellings, and a contract test pair pinning Java and Python spellings: `FCT/effects/directed/ForkOperationContractTest.java` writes the list, `tests/unit/effects/domain/test_rule_catalogue.py` compares it with `ForkOperation` (prior art: `WireVocabularyTest`)
+
+### Clean break (M1, plan follow-up 7)
+
+- [ ] T018 Remove `EARLIER_LAYOUT` and every earlier-layout branch from `E/domain/effect_head_input.py:106-139` and its callers (`run_context.training_settings :128-137`, `model_loading`, `training_loop._feature_widths`), the gen-1 `option_kind` compatibility path and the `e_noise` shim; delete `tests/fixtures/effects/earlier-layout-features.npz` and the tests that read it; every loader (`E/infrastructure/effect_model_store.py`, `E/application/model_loading.py`, `encode_abilities.py`, `evaluation_context.py`, `scripts/effect_knowledge_probes/common.py`) refuses a checkpoint whose `training_settings["input_layout"]` is not `"gen-3"` with exit 1; tests in `tests/unit/effects/infrastructure/test_checkpoint_layout.py`
+- [ ] T019 Set `INPUT_LAYOUT = "gen-3"` and record it in `run_context.training_settings` (FR-045); `test_checkpoint_layout.py` asserts a fresh checkpoint records it and that a `"gen-2"` checkpoint is refused by each loader of T018
+
+**Checkpoint**: renames done; catalogue enums and IO importable; gen-3 envelopes round-trip in both languages; consumers accept gen-3 only; earlier layouts gone; suites green.
+
+---
+
+## Phase 3: User Story 1 — Count the records that show each rule (Priority: P1) 🎯 MVP
+
+**Goal**: every scenario declares a detector or a reason for none, every non-base variant is
+classified into a fork operation, and `rule-counts` tags and counts gen-2's records per rule, polarity
+and source.
+
+**Independent Test**: run `rule-counts` on gen-2's records; every scenario's detector fires on a
+record of its `fires` polarity wherever the corpus holds one, rejects a near-miss record edited from a
+real one, and the counts file and the printed table agree.
+
+### Catalogue schema (FR-002, FR-003, FR-005)
+
+- [ ] T020 [US1] Extend `scripts/rules_catalogue.py validate` (`validate_scenarios :362`) per contracts/catalogue-extensions.md: fail on a scenario with neither a `detector` object nor `{"none": reason}`; on an unknown `family` or a parameter the family does not declare (read from the detector registry of T023); on `record_kind` differing from the scenario's; on a non-base variant with neither `operation` (one of the seven) nor `{"unclassifiable": reason}`; on an `operation` on the base variant; on a `departure` outside its enums or a `resolution` without `status = confirmed`
+- [ ] T021 [P] [US1] Tests for T020 in a new `tests/unit/scripts/test_rules_catalogue.py`: one failing scenario per rule above, built by editing a real scenario from `rules/scenarios/`, and the real `rules/` tree passing once T030–T031 land
+- [ ] T022 [P] [US1] Add the `detector`, `variants[].operation` and `departure` sections to `rules/README.md` (`:153-222`), with the accept-rewrites-`expected` rule and the state transitions of data-model.md § Departure
+
+### Detector framework (FR-006, FR-007; R1)
+
+- [ ] T023 [US1] Create `E/domain/rule_detectors/__init__.py` (torch-free): `RuleTag(rule, polarity, observed, entities, scenario)`, a `DetectorFamily` protocol (`id`, `params` it declares, `needs(params) -> set[str]`, `tag(record, sidecar_lines, scenario) -> RuleTag | None`), a registry by family id, and `tag_record(record, catalogue, sidecars) -> list[RuleTag]` that runs each scenario's family, returns `NOT_COUNTABLE` for a scenario whose `needs` the record's generation lacks (FR-007), and merges several scenarios of one rule into one tag (polarity `fires` if any, else `does_not_fire`, else `other`; entities the union). Tags are per rule id. Prior art: `effect_families.effect_family`, `damage_step_keywords.qualifying_observations`, `lethality_counterfactuals.qualify`. Add the package to `_TORCH_FREE`
+- [ ] T024 [P] [US1] Tests for T023 in `tests/unit/effects/domain/rule_detectors/test_registry.py`: merging of polarities and entities across two scenarios of one rule; `NOT_COUNTABLE` on a gen-2 record for a `needs: ["failed_checks"]` declaration (acceptance 4); a `none` scenario tags nothing (acceptance 3); `observed ≠ (polarity == fires)` is flagged for review (acceptance 5)
+
+### Detector families (one module each, all [P] once T023 exists)
+
+Each family module declares its parameters and `needs`, and has a test file under
+`tests/unit/effects/domain/rule_detectors/` that tags a real `fires` record and rejects a near-miss
+record edited from a real one, both from `tests/fixtures/effects/gen2-records.jsonl.gz`.
+
+- [ ] T025 [P] [US1] `E/domain/rule_detectors/sba_zone_move.py`: a zone move filed in a resolution's effect half during the state-based check, parameterized by the check (`toughness_zero`, `lethal_damage`, `deathtouch_damage`, `zero_loyalty`, `legend_rule`, `aura_illegal`, …); polarity from the board (the creature's toughness after the resolution, its damage), observed from the move; acceptance 1 on `704.5f-1`. Reuse `rule_outcomes.lethal` (T012)
+- [ ] T026 [P] [US1] `E/domain/rule_detectors/trigger_mode.py`: a trigger record fired or unfired, parameterized by `Mode$` and optional trigger-zone/valid-card constraints read from the sidecar's script text
+- [ ] T027 [P] [US1] `E/domain/rule_detectors/keyword_combat.py`: combat records with a creature holding the keyword and damage-step probe forks stripping it, parameterized by the keyword; wraps `damage_step_keywords.qualifying_observations` rather than duplicating it, and tags the probe fork through `probed_keyword` (acceptance 2 on 702.2)
+- [ ] T028 [P] [US1] `E/domain/rule_detectors/verdict_bit.py`: a playability `decision` candidate's verdict bit (`can_play`, `affordable`, `has_legal_target`, and on gen-3 `timing` and a `failed_checks` identifier), parameterized by the bit and the line's restriction; declares `needs` for the gen-3 bits
+- [ ] T029 [P] [US1] Remaining families the catalogue's record kinds need, one module each: `continuous_contribution.py` (a continuous record's contribution present or absent, by layer and affected entity), `rewrite_event.py` (a rewrite record by `Event$` and replacement result), `legality_membership.py` (an entity inside or outside `legal_targets`, legal blockers or attackers); further families are added here only when T030 meets a scenario shape none of them covers, each with its own test file
+
+### Declarations over the catalogue (FR-002, FR-003)
+
+- [ ] T030 [US1] Declare `detector` on every scenario of `rules/scenarios/*.json` (1,763 scenarios over 410 units) in an agent-assisted pass, batched by unit as the heads pass ran (prior art: `scripts/rules_heads_workflow.js`; write `scripts/rules_detectors_workflow.js` beside it); each declaration names a family of T025–T029 with its parameters, `outcome`, `near_miss` and `needs`, or `{"none": reason}` where no record field or event shows the outcome; `rules_catalogue.py validate` passes after each batch; commit per batch
+- [ ] T031 [US1] Classify every non-base variant's `delta` (2,488 variants) into one `operation` or `{"unclassifiable": reason}`, in the same per-unit batches as T030 (it may share the workflow); `validate` passes; `rules_catalogue.py status` gains columns for declared detectors and classified variants per unit
+
+### Counting (FR-008, FR-009)
+
+- [ ] T032 [US1] Create `E/application/rule_counts.py`: read shards in parallel through `run_parallel` (`E/application/parallel_map.py:40`) and `WorkerContext.records`, tag each record with `tag_record`, classify its source (`aimed` when it carries `aimed_at`, else `random_seat` when any record of its game carries `random_seat` — decided per shard, since games never span shards — else `forge_ai`), and fold per worker into `RuleCounts` (`rule → polarity → source → count`, `not_countable`, `none: {rule → reason}`, `review: [{record_id, scenario}]`) merged by `tally_merge.merge_into`; accept gen-2 or gen-3 through `require_generation(paths, GEN_2, GEN_3)`, refusing a mix
+- [ ] T033 [P] [US1] Tests for T032 in `tests/unit/effects/application/test_rule_counts.py` on the gen-2 fixture: per-source split, a gen-2 record counted natural, not-countable rules listed rather than zero, the review list carrying record and scenario ids, determinism under one and several workers
+- [ ] T034 [US1] Add `rule-counts` to `E/infrastructure/cli.py` with `--records-dir` (required), `--output` (default `output/effects/rule-counts.json`), `--cards-folder` (repeatable, defaults as `build-corpus`), `--variant-scripts`, `--rules-dir` (default `rules`), `--workers`; print one line per rule grouped by unit (`fires` and `does_not_fire`, each `random_seat / forge_ai / aimed`), then the `none` rules with reasons, the not-countable rules and the review-list size; exit 1 on an empty directory or mixed generations (contracts/cli.md)
+- [ ] T035 [P] [US1] CLI contract test `tests/unit/effects/test_cli_contract_rule_counts.py`: flags and defaults, the JSON file and the printed table agree on the fixture, exit 1 on an empty dir and on mixed generations
+
+### Run and review (FR-004, FR-005; quickstart stage 1)
+
+- [ ] T036 [US1] Run `python -u -m effects rule-counts --records-dir output/effects/records-gen2` on gen-2's corpus; check every detector fires on at least one `fires` record wherever the corpus holds one, and fix detectors or declarations that do not (SC-002)
+- [ ] T037 [US1] Review the listed records against Forge, starting from `rules/FINDINGS.md`'s suspected departures: reread the rule, the card scripts and the record; correct wrong scenarios; record surviving disagreements as `departure` (`suspected`, then `confirmed` with `unpatched` / `patched` / `accepted`), rewriting every variant's `expected` to Forge's behaviour in the same edit when accepting; `validate` passes
+- [ ] T038 [US1] Hand the per-rule counts to the user for the run-time decisions (rules to enable for directed forks, coverage rounds, random-seat share); the user records them in the gen-3 record (`experiments/2026-10-30-effect-model-gen3-design.md`) — load the feature-workflow skill before any edit there
+
+**Checkpoint**: `validate` passes with every scenario declared and every variant classified (SC-001); `rule-counts` reports gen-2's counts (SC-002).
+
+---
+
+## Phase 4: User Story 2 — Collect a gen-3 corpus that records what decides each rule (Priority: P2)
+
+**Goal**: every record carries `generation: 3` and every field of root § 8.13; the held effect half
+spans the state-based loop; candidates come from a collector-side enumerator for both seats;
+`turn_action` and per-attacker records exist; dropped events can be counted.
+
+**Independent Test**: a short pilot with `--count-dropped-events`, then `validate-corpus` and
+`field-coverage` over its shards, and each acceptance scenario of story 2 checked on its records.
+
+### Engine hooks on `effect-record-hooks` (C1)
+
+- [ ] T039 [US2] Add a pending-delayed-trigger accessor to `FG/trigger/TriggerHandler.java` exposing `delayedTriggers`, `thisTurnDelayedTriggers` and `playerDefinedDelayedTriggers` (`:49-51`) read-only, as a new commit; Forge-side test `EffectRecordDelayedTriggerTest.java` registers a delayed trigger and reads it back
+- [ ] T040 [US2] Add a state-based-loop begin/end signal around the loop in `FG/phase/PhaseHandler.checkStateBasedEffects` (`:1168-1177`) through a new `EffectRecordHook` slot, as a new commit; Forge-side test `EffectRecordStateBasedLoopTest.java`: begin and end fire once per check, every pass between them, with a trigger added between two passes
+- [ ] T041 [US2] Add a priority-settled signal in `PhaseHandler.mainLoopStep` (`:1045`), after the state-based loop and before the priority holder chooses, as a new commit; Forge-side test `EffectRecordPrioritySettledTest.java`
+- [ ] T042 [US2] Add the three hooks to `PatchHooks.REQUIRED` (`FE/PatchHooks.java:319-325`) and register handlers in `FE/PatchedCollectors.java`; an unpatched Forge still runs and stamps records `degraded`; extend `FCT/effects/PatchHooksTest.java` and `PatchedCollectorTest.java`; build Forge then the connector with `mvn install -DskipTests`
+
+### Envelope and record kinds
+
+- [ ] T043 [US2] Stamp `aimed_at` in `FE/CollectorContext.java` for every record of a `collect-coverage` or `collect-variants` run (the run's `--directed-fork-rules`, possibly empty) from a new cap property `effect.aimed.at`, and never on a `match-outcomes` record outside a directed fork (FR-009a); test in `FCT/effects/EffectRecordTest.java`
+- [ ] T044 [US2] Add `TURN_ACTION` to `FE/RecordKind.java`, a `PHASED` `FE/EventType.java` with its `FE/BusEventReader.java` case for `GameEventCardPhased`, and a turn-action window (C7) that opens at `onPhase` for the draw, untap, cleanup and beginning-of-main phases and closes at the next `onPriority` or `onPhase`, writing one record per action with its `subkind` and `events` instead of `StackBrackets` orphans (`FE/StackBrackets.java:83-104`); test `FCT/effects/TurnActionRecordTest.java` covers draw (acceptance 10), untap, cleanup discard, phasing, day/night and a lore counter
+
+### State-based loop and dropped events (FR-028, FR-029, FR-041; C2)
+
+- [ ] T045 [US2] Rework the held effect half in `FE/HeldResolutionWindow.java` and `FE/BusBracketCollector.java` (`beginBracket :131`, `fileMove :345`, `route :529`, `onPriority :579`): it stays open from the resolution's end to the state-based loop's end signal; every death between begin and end is filed in it, marked as no clause's doing; a trigger put on the stack between passes opens its own bracket without closing the held half (`beginBracket` no longer calls `onNextAction()` inside the loop); the held half is written at the end signal; a combat damage step's record keeps its own check
+- [ ] T046 [US2] A state-based death with no held resolution and no open damage step reaches no record and is counted (FR-029), replacing `brackets.filing()`'s routing to the open bracket
+- [ ] T047 [US2] Extend `FCT/effects/StateBasedDeathTest.java`: a burn spell kills a creature with a dies trigger — the death sits in the spell's effect half, the trigger opens its own bracket and its record holds no death of that check (acceptance 7, SC-004); a trigger that causes a later death outside the check keeps that death; a -1/-1 counter death from an upkeep cost reaches no record and is counted
+- [ ] T048 [US2] Count every event arriving while no record is open, by event type and engine phase, under the cap property `effect.count.dropped.events` (`FE/CollectionCaps.java`); the worker writes its counts at exit and the Python supervisor sums them across workers and prints the table when the run ends; test in `FCT/effects/CollectionCapsTest.java` and a supervisor test in `tests/unit/effects/application/test_dropped_events.py`
+
+### Combat records (FR-027)
+
+- [ ] T049 [US2] Move the combat snapshot in `FE/CombatStepBracket.java:98-104` to `onPhase` of the damage step, before any damage; read the shape at the first damage event and the assignment at any point of the step; test in `FCT/effects/StackItemBracketTest.java` or a new `CombatStepBracketTest.java` with first strike: the snapshot shows no damage marked from that combat, shape and assignment filled (acceptance 6)
+
+### Lines of a permanent (FR-021–FR-023, FR-025; C5)
+
+- [ ] T050 [US2] In `FE/EntityJson.java`, widen `addKeys` (`:262`) from `SpellAbility` to `CardTraitBase` and rewrite `printedKeys` (`:236`) to list the live trigger, static and replacement lists (`Card.getTriggers :7119`, `getStaticAbilities :7081`, `getReplacementEffects :7143`) beside spell and activated abilities, keyed through `ProvenanceResolver.of(CardTraitBase)`, as `lines: [{keys, kind, granted, active?, cast_with?, chosen?}]`; each static carries `active = checkConditions()`; remove `grantedAttached` (`:250-256`); granted lines (attachments, another permanent's static, splice, emblems, text changes) come from the live lists flagged `granted`
+- [ ] T051 [US2] Keyword lines in `FE/EntityJson.java`: one line per `getKeywords()` instance from its own fragment with its value, printed or not; a `Secondary$ True` trait kept and keyed to the keyword line the card prints; protection lines read the instance's fragment naming its quality
+- [ ] T052 [US2] Rewrite `ptJson` (`FE/EntityJson.java:85-104`) as `base_pt` (`getCurrentPower/Toughness()`, layer 7b set base) and `pt_boosts` `{temporary, counters}` with every counter's contribution, and write `counters` over every named type (FR-025)
+- [ ] T053 [P] [US2] Tests in `FCT/effects/SnapshotBuilderTest.java`: acceptance 1–5 of story 2 (a creature's static, trigger and replacement lines with keys and `active`; a creature that lost all abilities lists none; a flying grant from another static listed on it; ward {2} and annihilator 2 keyword lines with values; protection from Goblins naming Goblins); Ensoul Artifact's set base; a face-down permanent's real face as inactive lines
+
+### New snapshot facts (FR-024)
+
+- [ ] T054 [P] [US2] Player and global facts in `FE/PlayerJson.java` and `FE/SnapshotBuilder.java`: `speed` (`Player.getSpeed :1882`), `city_blessing` (`hasBlessing :3657`), `rad`, `monarch` (`Game.getMonarch :171`), `initiative` (`hasInitiative :3551`), `turn_counts` (the per-turn counts of `in.history`), global `day_night` (`Game.getDayTime :1404`); per entity `owner`; test in `FCT/effects/SnapshotBuilderTest.java`
+- [ ] T055 [P] [US2] Card facts in `FE/EntityJson.java` per `rules/gen3-fields.json` (`in.designations`, `in.x_paid`, `in.chosen_values`, `in.costs_paid`, `in.history`, `in.order_rank`, `in.mana_cost`, `in.printed_loyalty_defense`, `in.face_state`, `in.pending_event_details`): `designations`, `x_paid` (`getXManaCostPaid :1636`), `chosen` (`:2158-2302`), `costs_paid`, `history`, `order_rank`, `real_face` (face-down only), `printed_loyalty`, `printed_defense`, `mana_cost`, `face_state` (`front|back|flipped|melded|face_down`); test per field
+- [ ] T056 [US2] Create `FE/FloatingEffects.java` (C4): at `ON_CLAUSE_RESOLVING` record the timestamp Forge assigns, the resolving line and the clause's `Duration$`; a snapshot builds one command-zone object per (line, timestamp) still present on a card, plus effect cards already in the command zone, as `floating_effects: [{id, source_lines, affected, remembered, duration, shield_left}]` with `duration ∈ {end_of_turn, until_leaves, permanent}` and a counting-down shield's amount from the effect card's per-API SVar; `delayed_triggers` from the T039 accessor in the same shape; `dungeons: [{player, dungeon, room}]` (`Card.getCurrentRoom :2332`); test `FCT/effects/FloatingEffectsTest.java` ("creatures can't block this turn", a prevention shield, a delayed end-step trigger, a dungeon)
+- [ ] T057 [P] [US2] Extra card entities in `FE/SnapshotBuilder.java`: `library_cards` (each library's top card plus every library card the record's events name, with position), `exiled_with` (`getExiledWith :2172`), `mutate_components` (`getMergedCards :1447`), `last_known` (the pending event's subject as it last existed); per static line the permanents it affects (`StaticEffects.getStaticEffect(stAb).getAffectedCards()`); the resolving ability's die results and coin flips (`in.random_results`); tests in `FCT/effects/SnapshotBuilderTest.java`
+
+### Links (FR-026, FR-050; C8)
+
+- [ ] T058 [US2] Write `links: [{from, to, type, index?}]` in `FE/SnapshotBuilder.java` for every family of root § 10.3 from the Forge source its row names (`getAttachedTo`, `getPlayerAttachedTo`, combat status, `Combat.getBandOfAttacker`, `getMustBlockCards :1685`, `getGoaded :7798`, stack targets with target index, sources and triggered objects, per-static affected lists, `getEffectSource :7248`, delayed-trigger objects via T039, `getExiledWith`, `getImprintedCards`, `getUntilLeavesBattlefield`, `getRemembered`, `getEncodingCard :1440`, `getHaunting :1398`, controller and owner, `getGainControlTargets`, `getCopiedPermanent :3592`, `getCloneOrigin :1705`, `getPairedWith :1405`, `getProtectingPlayer :2146`, `getChosenCard`, `getChosenPlayer`, `getPromisedGift :2137`, `getDamageHistory :6103`, `getBlockedThisTurn :1663`, `getCrewedByThisTurn :6821`, `getSaddledByThisTurn :6632`, the player's dungeon, the pending event's subject); a link made by an ability points from that ability's line; a remembered entry is a link only when no ability of that card is on the stack or resolving and the entry is a card or player (C8). `line of`, `line of the same card`, `mode of` and `has the same name` are built in Python (T116), not written here
+- [ ] T059 [P] [US2] Tests `FCT/effects/SnapshotLinksTest.java`: one case per family on a `TestBoard` (an Aura, a blocker, a goad, a targeted spell with two targets, an anthem's affected list, Oblivion Ring, a cipher, Control Magic, a Clone, soulbond, a chosen creature, Sengir Vampire's damage history, a dungeon); a transient remembered entry is not a link
+
+### Playability (FR-030–FR-033; C3)
+
+- [ ] T060 [US2] Extract `FE/TargetingClauses.java` from `PlayabilityVerdict.hasLegalTargets`, `DecisionCandidate.legalTargetsOf` (`:72-89`) and `RandomSeatController.targetingClausesOf` (`:397-430`): walk every targeting clause of a spell ability, each clause's candidates against its minimum; all three callers use it, behaviour unchanged, `PlayabilityVerdictTest` and `PlayabilityChannelTest` pass
+- [ ] T061 [US2] Extend `FE/PlayabilityVerdict.java` (`:38-105`): `timing` (`SpellAbility.canCastTiming :2574`), `can_play = canPlay ∧ timing ∧ no static prohibition` (`StaticAbilityCantBeCast.applyCantBeCastAbility :99`, `applyCantBeActivatedAbility :156`), `failed_checks: [{check, responsible_static}]` over the eleven identifiers from the per-check methods (`checkActivatorRestrictions :330`, `checkTimingRestrictions :282`, `checkZoneRestrictions :193`, `checkOtherRestrictions :349` → `script_restriction`, `getLimitToCheck`/`getGameLimitToCheck :580-598`, `MagicStack.isSplitSecondOnStack`), a `casting_speed` entry whenever `timing` is false; costs without the AI's cost preferences; a charm by how many offered modes have reachable targets; save and restore `card.setCastSA` and `setActivatingPlayer` around each check so the verdict never writes to the game
+- [ ] T062 [US2] Create `FE/PriorityCandidates.java`: at the priority-settled signal (T041), enumerate both players' candidates (spell abilities of every available card, both seats) once the state-based check is over, each with its `PlayabilityVerdict` and `legal_targets` as the union over all clauses, uncapped (lift `DecisionCandidate`'s 32-target cap `:21`); emit the decision records; the AI playability hook in `FE/PlayabilityChannel.java` (`:61-80, 180-237`) no longer produces decision records. Prior art: `RandomSeatController.playableCandidates`
+- [ ] T063 [US2] Switch `FC/RandomSeatController.java:248-277` `playableCandidates` to read `PriorityCandidates` in the same change as T062, so the seat's plays and its records agree on `can_play` (plan: easy to lose)
+- [ ] T064 [P] [US2] Tests `FCT/effects/PriorityCandidatesTest.java` and extended `PlayabilityVerdictTest.java`: a sorcery in hand on the opponent's turn carries `timing = false`, `can_play = false` and a `casting_speed` entry, and the player without priority is evaluated (acceptance 8); split second on the stack; a static prohibition with its `responsible_static`; a bundled restriction reports `script_restriction`; a spell with two targeting clauses lists their union; the game state is unchanged after enumeration (compare a state digest before and after)
+
+### Combat legality records (FR-037; C6)
+
+- [ ] T065 [US2] Pivot the per-defender legality loop (`FG/combat/CombatLegalityObserver.java`, called at `PhaseHandler.java:538`) in the collector to one attackers record per attacker with `anchor_attacker`, `legal_defenders` and `must_attack` (`combat.getAttackConstraints().getRequirements().get(c).hasRequirement()`); a declared anchor's record is held until `GameEventAttackersDeclared` (`PhaseHandler.java:629`) and carries `tapped_by_attack` from the `GameEventCardTapped` events before it (`:607`); no what-if attackers record is written and `what_if` leaves attackers records
+- [ ] T066 [US2] Create `FE/MustBlock.java`, a per-(blocker, attacker) predicate reimplementing `CombatUtil.java:640-660, 843-955` (`getMustBlockCards`, `MustBeBlockedBy`, `MustBeBlockedByAll`, "All creatures able to block CARDNAME do so.", `StaticAbilityMustBlock`), documented as a reimplementation because Forge has none; blockers records carry `must_block` per listed creature
+- [ ] T067 [P] [US2] Tests: `FCT/effects/AttackersRecordTest.java` (two attackers give two anchored records with legal defenders and `must_attack`; a declared anchor without vigilance carries `tapped_by_attack = true`, with vigilance `false` — acceptance 11) and `FCT/effects/MustBlockTest.java` (one case per source)
+
+### Payload fixes (FR-034, FR-035, FR-039, FR-040)
+
+- [ ] T068 [P] [US2] `conditions_met: [{segment, met}]` in `FE/ClauseOutcomeRouter.java` / `FE/RecordPayloads.java`: at the clause hook (`FG/ability/AbilityUtils.java:1446-1473`) call `sa.metConditions()` on identical state for each chain segment with `Condition$`, keyed by the chain index `attributed_to` uses, reading a gift segment after the GIFT trigger (`:1469`); test in `FCT/effects/ModalResolutionTest.java` or a new `ConditionsMetTest.java` (acceptance 9)
+- [ ] T069 [P] [US2] In `FE/RunParamNormalizer.java`, a prevention that prevented nothing writes no note; a probe fork's damage events carry their `source`, recovered from the payload's `assignment_choices`; tests in `FCT/effects/EventAttributionTest.java`
+- [ ] T070 [P] [US2] FR-039 keying in `FE/ProvenanceResolver.java`, `FE/CharmModes.java` and `FE/VariantRegistry.java`: a charm mode cast through Flashback keyed to a sidecar line; an ability a clone gains keyed to the copied card's line; a variant record's key names its file under `variant-scripts/`; tests in `FCT/effects/ProvenanceResolverTest.java` and `VariantRegistryTest.java`
+- [ ] T071 [P] [US2] FR-040 (C9): `HeldResolutionWindow.close` reports an empty effect half for an activation whose cost half paid no mana and moved no card; `RandomSeatController` keeps a per-turn set of (card, ability key) and filters them from its candidates, clearing at the next turn; test in `FCT/RandomSeatControllerTest.java` (or the existing random-seat test file)
+
+### Collection flags and coverage (FR-038, FR-041)
+
+- [ ] T072 [US2] Thread `--count-dropped-events` through `src/sealed/infrastructure/effect_collection_flags.py:28` `add_cap_flags`, `src/sealed/infrastructure/cli.py:1017`, `E/domain/collection_caps.py`, `E/application/collect_coverage.py` and `E/application/collect_variants.py` to the cap property of T048 (default off) and `FC/MatchWorkerMain.java:223`; `tests/unit/effects/domain/test_collection_caps.py` pins both spellings
+- [ ] T073 [US2] `collect-coverage --wording-cards PATH` (one card name per line) and `--directed-fork-rules LIST` (written to every record's `aimed_at`, T043) in `E/application/collect_coverage.py` and `E/infrastructure/cli.py`; `collect-variants` takes `--directed-fork-rules` the same way; CLI contract tests in `tests/unit/effects/test_cli_contract_collectors.py`
+
+### Python readers (FR-019, FR-042)
+
+- [ ] T074 [US2] Parse every new snapshot field and payload member of contracts/record-schema-delta.md in `E/domain/state_snapshot.py` and `E/domain/records.py` (lines with kinds and flags, `face_state`, `base_pt`/`pt_boosts`, `counters`, card facts, player facts, `day_night`, `floating_effects`, `delayed_triggers`, `dungeons`, the extra card entities, `links`, `conditions_met`, `timing`, `failed_checks`, anchored attackers, `must_block`, probe damage `source`, `turn_action`); tests in `tests/unit/effects/domain/test_state_snapshot.py` on records from the T079 pilot once it exists, and on JSON emitted by the Java tests until then
+- [ ] T075 [US2] Re-pin `tests/unit/effects/domain/test_schema_compatibility.py` to the gen-3 schema (FR-019): `_FROZEN_ENVELOPE` gains `generation`, `aimed_at`, `directed`; flipping `generation`, `aimed_at`, `directed` or `curation` leaves `SurfaceBuilder.build` unchanged (data-model.md § EffectRecord envelope)
+- [ ] T076 [US2] `validate-corpus` (`E/application/validate_corpus.py`) and `field-coverage` (`E/application/field_coverage.py`) cover every new field of root § 8.13 and refuse a `curation` member in a collected shard; the report gives the number of `mana_produced` events whose `mana_by_color` is empty (acceptance 12); tests in `tests/unit/effects/application/test_validate_corpus.py` and `test_field_coverage.py`
+
+### Documentation of the schema (FR-019)
+
+- [ ] T077 [P] [US2] Add the "Gen-3" section to `specs/023-ability-effect-model/contracts/record-schema.md` from contracts/record-schema-delta.md — load the feature-workflow skill first
+- [ ] T078 [P] [US2] Update the effect-record shard paragraph of `CLAUDE.md` (root): `generation`, `aimed_at`, `directed`, `turn_action`, the directed-fork flag signature, the gen-3 reader rule (gen-3 only except `rule-counts`)
+
+### Pilot (quickstart stage 3)
+
+- [ ] T079 [US2] Rebuild Forge and the connector (`mvn install -DskipTests`), run a short pilot `python -u -m sealed match-outcomes --effect-records --count-dropped-events` (without directed forks until US3 lands), then `validate-corpus`, `field-coverage` and `rule-counts` over it; check each story-2 acceptance scenario on its records, that every record carries `generation: 3`, every § 8.13 field is non-constant where the pilot can produce it (SC-003), and no trigger record holds a death of its state-based check (SC-004); fix what fails
+
+**Checkpoint**: a gen-3 pilot validates; the dropped-event table prints.
+
+---
+
+## Phase 5: User Story 3 — Directed forks fill the rules self-play rarely shows (Priority: P3)
+
+**Goal**: named rules fork at phase boundaries where their board precondition holds, apply one
+variant's change through one of seven operations, play the fork to the end of the turn and record it.
+
+**Independent Test**: enable one rule with a built operation, play a few games, and check each
+directed-fork record differs from its real twin by the one fact changed, was score-checked before the
+change, and counts against `--directed-forks-per-game`.
+
+### Engine and driver
+
+- [ ] T080 [US3] Patch `forge/forge-ai/src/main/java/forge/ai/simulation/GameCopier.java` (D3) as a new commit: copy pending delayed triggers (T039's accessor), the end-of-turn and until-leaves commands, `ExiledWith` (`:352`), attacked this turn (`:115`), this-turn casts (`:181`), counters added this turn (`:233`) and controller timestamps (`:357`), remapping card references to the copy; Forge-side test `EffectRecordGameCopierTest.java` checks each on a copy (Sneak Attack's sacrifice survives the copy)
+- [ ] T081 [US3] Spike (plan follow-up 6): in a throwaway JUnit test under `FCT/effects/`, copy a mid-turn game with `GameCopier`, loop `fork.getPhaseHandler().mainLoopStep()` until the turn number changes or the game ends, and confirm the copy plays out (AI decisions, delayed end-step trigger resolving); report what breaks before T083 is built on it
+- [ ] T082 [US3] Extract `Forks.ForkRun` in `FE/Forks.java` from `InterventionFork.intervene` (`:47-57`) and `DamageStepProbe.probe`: asFork, spend budget, `copyAndVerify` (`:162-179`), map objects, snapshot builder, run, catch `RuntimeException | StackOverflowError`, emit with flags; both drivers use it, `ForkRecordsTest` and `ProbeSchedulerTest` pass unchanged
+- [ ] T083 [US3] Create `FE/ForkPlayForward.java` (D4): loop `mainLoopStep` until the turn number changes or the game ends under the fork exception guard; during that span hook handlers dispatch by `Game` identity (`FE/PatchedCollectors.java`) to a fork-bound `PatchedCollectors` and `BusBracketCollector`; the fork's recorder schedules no intervention, probe or directed fork; in `FC/GamePlayer.java` (`:224-239`) attach each seat's controller to the copy, a random seat's with a `Random` seeded from the per-game fork seed (not the match source); test `FCT/effects/ForkPlayForwardTest.java` on a scripted board, and an `integration` test playing a fork forward inside a real match
+
+### Operations (FR-011; D2)
+
+- [ ] T084 [US3] Extract `FE/directed/KeywordEdit.java` from `ProbeScheduler.normalizeKeyword` and `DamageStepProbe.stripKeyword` (`Card.addChangedCardKeywords(null, List.of(kw), false, ts, null)`), adding the add direction; `DamageStepProbe` uses it, `ProbeSchedulerTest` passes
+- [ ] T085 [P] [US3] `FE/directed/operations/` — one class per operation, each ending with `fork.getAction().checkStaticAbilities()`: `PtOperation` (`addNewPT :4509` set, fresh timestamp), `KeywordOperation` (`KeywordEdit`), `ColourTypeOperation` (`addColor :4291`, `addChangedCardTypes :4247`), `CountersOperation` (`setCounters :326`, silent), `TapOperation` (`setTapped :4767`, silent), `LifeOperation` (`Player.setLife :414`; fires life triggers, documented), `ReplaceCardOperation` (`CardFactory.getCard`, raw `Zone.remove/add`, carrying controller, tapped state, summoning sickness, damage, counters, attachments and combat status)
+- [ ] T086 [P] [US3] Tests `FCT/effects/directed/ForkOperationsTest.java`: each operation on a `TestBoard` changes exactly its one fact (compare the snapshot before and after)
+
+### Registry and scheduling (FR-010, FR-010a, FR-012–FR-014a; D1, D5)
+
+- [ ] T087 [US3] Create `FE/directed/DirectedRule.java`, `BoardPrecondition.java`, `Binding.java` and `DirectedRules.java` (rule id → `DirectedRule` with `Optional<Binding> precondition(Game)` and `Map<String variantLabel, Application>`, each `Application` naming its `ForkOperation`); and `FC/DirectedRulesMain.java` printing registered rule ids one per line
+- [ ] T088 [US3] Registry contract test `FCT/effects/directed/DirectedRulesContractTest.java`: reads `rules/scenarios/*.json` and fails when a registered rule's variant label is missing or its operation differs from the scenario's classification
+- [ ] T089 [US3] Create `FE/directed/DirectedForkScheduler.java`: at each phase boundary, for each enabled rule that has not forked in this game and whose precondition holds, draw against `--directed-fork-probability` from a per-game seeded generator; try matching rules in ascending order of directed forks taken so far in the worker JVM's lifetime, ties by their order in `--directed-fork-rules`; stop once `--directed-forks-per-game` is spent; each fork, kept or discarded, counts; score-check the copy before any change (FR-013), discarding a mismatch; extend `FE/ForkBudget.java` with the directed budget; run the fork through `ForkRun` and `ForkPlayForward`
+- [ ] T090 [US3] Directed-fork records carry `aimed_at = [rule]`, `fork = true`, `interventional = false`, `directed = {variant, operation}` and `mirror_of` only when a live record was open at the fork point (D5); test in `FCT/effects/ForkRecordsTest.java`
+- [ ] T091 [P] [US3] Tests `FCT/effects/directed/DirectedForkSchedulerTest.java`: at most one fork per rule per game; probability 1 forks at the first match; the fewest-forks-first order and its tie-break; the budget stops further rules; a fork whose copy disagrees with the live score is discarded and still counts (acceptance 4)
+- [ ] T092 [US3] Cap properties `effect.directed.fork.rules`, `effect.directed.forks.per.game`, `effect.directed.fork.probability` in `FE/CollectionCaps.java`, read in `FC/MatchWorkerMain.java`; Python flags `--directed-fork-rules`, `--directed-forks-per-game` (2), `--directed-fork-probability` (0.25, in (0, 1]) in `src/sealed/infrastructure/effect_collection_flags.py`, `src/sealed/infrastructure/cli.py` and `collect-variants`; `test_collection_caps.py` pins the spellings
+- [ ] T093 [US3] Startup check in `src/sealed/infrastructure/cli.py` (FR-014): exit 1 naming the rule when a listed rule has no detector or a `none` detector, no non-base variant classified into an operation (both read through `rules_catalogue_io`), or is not printed by one run of `DirectedRulesMain`; exit 1 on a probability outside (0, 1]; test in `tests/unit/sealed/infrastructure/test_directed_fork_flags.py` (the JVM query stubbed; an `integration` variant runs it) (acceptance 2)
+
+### Rules
+
+- [ ] T094 [US3] Register `704.5f` in `FE/directed/rules/` with a precondition (a creature about to be dealt damage equal to its toughness at a phase boundary) and its `tougher` variant through `PtOperation`; test on a `TestBoard` (acceptance 1)
+- [ ] T095 [US3] Register one rule per remaining operation (keyword, colour or type, counters, tap, life, replace a card), each a scenario whose variant carries that operation; one test per rule checks the fork differs from its real twin by that one fact (acceptance 3)
+- [ ] T096 [US3] Register the rules the user chose from the stage-1 counts (T038), each with its precondition and classified variants; the contract test of T088 passes
+
+### Pilot
+
+- [ ] T097 [US3] Rebuild and run the pilot of quickstart stage 3 with `--directed-fork-rules 704.5f --directed-fork-probability 1`; check directed-fork records carry `aimed_at`, `directed`, `fork = true`, differ from the live turn by the one fact, and that `rule-counts` counts them as `aimed`
+
+**Checkpoint**: directed forks run in a pilot; seven operations built and tested.
+
+---
+
+## Phase 6: User Story 4 — A relation-aware trunk reads typed links between slots (Priority: P4)
+
+**Goal**: `RelationEncoderLayer` replaces `nn.TransformerEncoderLayer`; with zero tables it is the
+stock layer; step time and peak memory measured on the 8 GB GPU.
+
+**Independent Test**: the four layer-property tests of root § 10.5, and the step measurement on a
+fixed shard.
+
+- [ ] T098 [US4] Write `tests/unit/effects/domain/test_relation_attention.py` before the layer (FR-049), on CPU with a tiny config: (1) zero tables and weights copied from `nn.TransformerEncoderLayer(norm_first=True)` give equal outputs and gradients in fp32 (stock layer in train mode with dropout 0, or `torch.backends.mha.set_fastpath_enabled(False)`); (2) permuting slots and relations together permutes outputs; (3) a relation i→j changes the output at i and not at j; (4) a toy task — read a feature of the partner among identical-looking slots — learns with the relation and stays at chance with tables held at zero; (5) under relation values off, `rel_v` stays zero and gets no gradient
+- [ ] T099 [P] [US4] Create `E/domain/relation_types.py` (torch-free; M3, M4): every § 10.3 family as two types (forward, reverse), `targets` × 4 per direction with index ≥ 3 sharing the last, the enum order exposed as a list of names; tests in `tests/unit/effects/domain/test_relation_types.py`
+- [ ] T100 [US4] Create `E/domain/relation_attention.py` (M2): `RelationEncoderLayer` with the stock parameter names (`self_attn.in_proj_weight`, `self_attn.out_proj`, `linear1`, `linear2`, `norm1`, `norm2`), per-layer `rel_k` and `rel_v` of shape `(heads, relation_types, head_width)` zero-initialized (`rel_v` a buffer under values off); explicit scores; key term by `einsum` per slot and type and `index_put_` with accumulation over COO rows; padding mask, softmax, attention dropout; value term by `index_add_` of attention weights per slot and type times `rel_v`; never a per-pair vector. T098 passes
+- [ ] T101 [US4] Replace the trunk in `E/domain/effect_model.py:93-101` with six `RelationEncoderLayer`s taking the relation tensor; put `rel_k` and `rel_v` in the `head` parameter group (`E/application/run_context.py:53-65`); save `relation_types` (name list) and `relation_target_indices = 4` in the checkpoint and refuse a checkpoint whose list differs (`E/infrastructure/effect_model_store.py`); tests in `tests/unit/effects/domain/test_effect_model.py`
+- [ ] T102 [US4] Extend `TrunkInputs` and `collate_surfaces` (`E/domain/surface_collation.py:20-140`) with a `(N, 4)` long COO tensor `[batch, from, to, type]` with batch offsets; `SurfaceBatcher._masked` (`E/application/surface_batching.py:481-498`) drops relations under `no-state`; tests in `tests/unit/effects/domain/test_surface_collation.py` and `tests/unit/effects/application/test_surface_batching.py`
+- [ ] T103 [US4] `--relation-values on|off` (default on) on `train-effect-model` (`E/application/train_effect_model.py`, `E/infrastructure/cli.py`), recorded in the checkpoint (acceptance 5)
+- [ ] T104 [US4] Each training shard line carries `rel_k_norm` and `rel_v_norm`, the pre-clip gradient norms of the key and value tables read on the shard's last step, beside the group norms; the `head` group's norm still includes them (FR-067) — `E/application/training_loop.py`, `E/application/run_reporter.py`; test in `tests/unit/effects/application/test_run_reporter.py`
+- [ ] T105 [US4] Write `scripts/measure_trunk_step.py`: on a fixed curated shard at batch 32, build relations from what the snapshot already records (attached to, attacks, blocks, targets, source of, line of, line of the same card, has the same name), time one training step and report peak GPU memory and the relation-triple count per record; tests in `tests/unit/scripts/test_measure_trunk_step.py` on CPU with a tiny model
+- [ ] T106 [US4] Run `python -u scripts/measure_trunk_step.py --shard <fixed gen-2 curated shard> --batch-size 32` (quickstart stage 2); confirm it fits 8 GB (SC-005); hand the step time, peak memory and triple counts to the user for the gen-3 record — load the feature-workflow skill before any edit to `experiments/`
+
+**Checkpoint**: the trunk passes its property tests and fits the GPU.
+
+---
+
+## Phase 7: User Story 5 — The model reads and predicts what decides each rule (Priority: P5)
+
+**Goal**: the gen-3 input layout at width 256, relations emitted from records, the 22 new outputs,
+the § 11.3 extensions, gate-free legality outputs and the verdict head's new columns; the map reruns
+after each change.
+
+**Independent Test**: encode a gen-3 pilot's records into inputs and targets; check each new input
+and output on a hand-picked record; rerun the map and compare its learnable count.
+
+### Map rerun before the first change (FR-016)
+
+- [ ] T107 [US5] Rerun the rules-to-fields map against master's current targets before any input or output change: update `rules/MODEL-FIELDS.md` to the code as it stands, run `scripts/rules_heads_workflow.js`, then `python scripts/rules_catalogue.py gen3-fields`; commit the rerun's `rules/heads/` lines
+- [ ] T108 [US5] Extend `scripts/rules_catalogue.py gen3-fields` to print the rules newly learnable against the previous `rules/gen3-fields.json` and recompute `learnable_after_gen3`; test in `tests/unit/scripts/test_rules_catalogue.py`
+
+### Inputs (FR-043, FR-044, FR-044a)
+
+- [ ] T109 [US5] `--e-dim` default 256 in `E/application/train_effect_model.py:112` and `E/domain/ability_encoder.py:48` (FR-043); CLI contract test updated
+- [ ] T110 [US5] Write `scripts/scan_keyword_flags.py` (M5): scan Forge's card scripts for selectors naming a keyword and its engine code for `hasKeyword(...)` checks, and write `E/domain/kept_keyword_flags.py` (checked in) with protection and `split_second` included; run it and commit the output; test `tests/unit/scripts/test_scan_keyword_flags.py` fails if any of the eight damage-step keywords or an evasion keyword loses its flag
+- [ ] T111 [US5] Ability slots in `E/domain/effect_head_input.py` and `E/domain/effect_model.py`: an `ability_proj` reading line flags (active, granted temporarily, cast with with a multikicker count, chosen) beside `e`; a temporarily granted keyword as a granted line read through its reminder text, replacing gen-2's granted count and `OVERLAY_KEYWORDS_GEN2` multi-hot; a face not up as ability slots flagged inactive; keyword flags limited to `kept_keyword_flags`, a flagless fragmentless keyword expanding to its reminder text; a keyword counter as a granted keyword line
+- [ ] T112 [US5] Card-slot inputs in `E/domain/effect_head_input.py` per root § 9.4 and the `in.*` ids of `rules/gen3-fields.json`: subtypes as one learned embedding per subtype summed into the slot and shared with chosen creature types (one table in `effect_model.py`); face state one-hot over front, back, flipped, melded, face down, replacing the face-down flag; is a copy; is a token; pending-event details; mana cost; printed loyalty and defense with thermometers; designations; X paid; chosen values; costs paid (cost history as a count); history; order rank; every named counter other than a keyword counter as its own scalar; amounts as raw plus log1p, thermometers where root § 9.4 names them
+- [ ] T113 [US5] Player, global and acting-ability inputs: speed, city's blessing, rad counters, monarch, initiative per player; day or night globally; die results and coin flips on the acting ability; the six turn, priority and control inputs of root § 9.5 beside gen-2's acting-player inputs
+- [ ] T114 [US5] Command-zone and extra card slots (root § 9.3): one card slot per floating effect and delayed trigger, its ability slots reading the `e` of the source lines, structured inputs only for duration (three values) and shield amount; dungeons with rooms as lines, the current room flagged active; card slots for the pending event's last known subject, library cards (position as order rank), cards exiled with a permanent, a mutated permanent's components
+- [ ] T115 [US5] Remove gen-2's "card is attached" feature and the acting-ability resolution-outcome input (`act_features`, `_RESOLUTION_OUTCOMES`, `effect_head_input.py:322-339`); keep every other gen-2 link feature per root § 10.4 (FR-051)
+- [ ] T116 [US5] Emit relations in `SurfaceBuilder.build` (`effect_head_input.py:542-632`) after context dropout and gate-2 stripping have fixed slot indices: the record's `links` mapped to `relation_types` (target index capped), plus `line of` (both directions), `line of the same card`, `mode of`, and `has the same name` from name matches (slots and earlier chosen names), with no learned name embedding (FR-050)
+- [ ] T117 [P] [US5] Tests in `tests/unit/effects/domain/test_effect_head_input.py` on pilot records (T079): story 5 acceptance 1 (an Aura's `attached to` relation, no attached feature) and 2 ("creatures can't block this turn" as a command-zone slot with source-line `e`, `affects` relations and a duration); each new input on a hand-picked record; relations survive context dropout with remapped indices; widths match `effect_model.py`
+- [ ] T118 [US5] Update gate 2's strip (`E/application/gate_two.py`) and the combat and evasion grids (`scripts/effect_knowledge_probes/combat_grid.py`, `evasion_grid.py`) to edit both the kept flag and the granted keyword line (M5); their tests pass and a new case checks a stripped keyword leaves no line
+
+### Outputs (FR-052, FR-053, FR-053a, FR-053b)
+
+- [ ] T119 [US5] Per-entity outputs in `E/domain/effect_head_layout.py` (`PER_ENTITY_FIELDS`, `FIELD_SLICES`, `:230-343`) and targets in `E/domain/entity_field_targets.py` / `E/domain/effect_targets.py`: copies (permanent binary), designations changed, face after, player state change, game lost, combat status change, subtypes changed (closed list from the manifest), abilities changed, base P/T delta, damage prevented, regenerated, rad delta, energy delta; each supervised only by records that carry it
+- [ ] T120 [US5] Stack-object, verdict-head and global outputs: copies (spell count) and targets changed on the stack object; on the verdict head (`E/domain/aux_heads.py:102-120`, `aux_head_targets.py`) cost adjustment (signed delta per mana symbol kind, decision records), resolution outcome (cost halves), effects created, replacement result (supervising `rewrite` records), `timing` and one column per `failed_checks` identifier including `script_restriction`; a new `global` row in `AUX_HEADS` beside the created-objects head with turn structure change and day/night change
+- [ ] T121 [US5] Extensions of root § 11.3: `zone_outcome`'s new values (shuffled into library, to command zone, entered apart from a blink, ceased to exist; `library_bottom`; phasing in and out distinct); `library_events` setting `scry`/`surveil`/`tutor` only for their own events plus `shuffle`; each created-objects group's other-controller binary, subtypes, counters per type and group kind; `keywords_gained`/`keywords_lost` over the manifest's closed list; a signed delta per named counter other than keyword counters; `tap_state` on an attackers record's anchor carrying `tapped_by_attack`, that record supervising nothing else beside its legality outputs
+- [ ] T122 [US5] Legality outputs on a gate-free path (FR-053a): replace `_apply_playability` (`effect_targets.py:321-340`) and `EntityTargetBatch.scored` (`entity_field_targets.py:82-85`) so `target_legal` is supervised on every card and player of a decision record (1 in `legal_targets`, 0 elsewhere; unsupervised with no targeting clause), `blocker_legal`/`attacker_legal` on every listed creature, attack target legal on every player, planeswalker and battle of an anchored attackers record, the attack/block requirement on the anchor; add a per-row gate mask to `_gate_term` (`E/domain/effect_losses.py:150`) with playability records off
+- [ ] T123 [P] [US5] Tests in `tests/unit/effects/domain/test_effect_targets.py`, `test_entity_field_targets.py` and `test_aux_heads.py` on pilot records: story 5 acceptance 3 (`target_legal` 1 inside, 0 on every other card and player, gate unsupervised), 4 (`timing` 0, `casting_speed` 1), 5 (Ensoul Artifact's `base_pt_delta`), 6 (`game_lost` 1 for the loser, 0 for the winner); every new field's width matches its `FieldSpec`
+
+### Map reruns (FR-016, FR-017; SC-006)
+
+- [ ] T124 [US5] After each input or output task above lands (T111–T116, T119–T122), update `rules/MODEL-FIELDS.md` to the layout as built, rerun `scripts/rules_heads_workflow.js` and `gen3-fields`, and commit the newly learnable rules with the change (acceptance 7); after the last change check every rule reported learnable after gen-3 lists an output and no missing input (SC-006)
+- [ ] T125 [US5] `encode-abilities` loads a gen-3 checkpoint without restated flags and writes the 256-wide gen-3 `e` cache (SC-009); test in `tests/unit/effects/application/test_encode_abilities.py`
+
+**Checkpoint**: a pilot's records encode into gen-3 inputs and targets; the map's learnable count is reported.
+
+---
+
+## Phase 8: User Story 6 — Curate a corpus balanced rule by rule (Priority: P6)
+
+**Goal**: rule shares per class and polarity, added copies carrying their rule, condition balance,
+protection examples, global stratum placement with halves, and a manifest reporting all of it.
+
+**Independent Test**: build a corpus from a pilot's records and read the manifest: every tagged rule
+has its share, written count and shortfall per class; added copies carry a rule; natural copies none.
+
+### Collection-side sources (FR-057, FR-058; must land before stage 5)
+
+- [ ] T126 [US6] FR-057 in `FE/InterventionScheduler.java`: an interventional fork resolves a text whose branch is seen on one player's turn only at a phase boundary of the other player's turn, under the existing fork rules and budgets; test in `FCT/effects/ForkRecordsTest.java`
+- [ ] T127 [US6] FR-058 interventional forks granting a rare protection quality mid-game (from a creature type, a card type, a condition, everything) through `KeywordOperation`, played on to the end of the turn by `ForkPlayForward`, keeping their interventional flags; test in `FCT/effects/ForkRecordsTest.java`
+- [ ] T128 [P] [US6] FR-058 in `collect-variants`: swapping a protection keyword's quality as a whitelisted selector in `E/application/collect_variants.py` and its selector whitelist; test in `tests/unit/effects/application/test_collect_variants.py`
+
+### Pure curation steps
+
+- [ ] T129 [US6] Create `E/domain/rule_budgets.py` (torch-free; R2): per class, share = class target ÷ budgeted rules tagged in the class (only map verdict `trained`); each polarity half = share ÷ 2; natural written per (rule, polarity, source); halves filled separately, never redistributed; added copies of a record ≤ reuse cap − its natural copies, `--text-cap` still bounding a text; each added copy to the record's rule furthest below its half, greedily, in `seeded_draw` order; `other` records count toward the rule without a half; outputs per-record `(added copies, drawn rule per copy)` and `RuleRow`s; unbudgeted rules counted with their natural share
+- [ ] T130 [P] [US6] Tests `tests/unit/effects/domain/test_rule_budgets.py`: story 6 acceptance 1 (40 rules, budget 400,000 → share 10,000; 1,000 + 1,000 natural, reuse cap 4 → 8,000 written, shortfall 2,000), 2 (a two-rule record's copy goes to the rule further below), 7 (1,600 / 400 → 5,000 and 1,600 written, shortfall 3,400, one-sided); a `recorded` rule gets no share; determinism
+- [ ] T131 [US6] Condition balance (FR-056) in `E/domain/corpus_curation.py` (`SIGNATURE_CLASSES :167-173`) and `E/domain/sampling.py`: for a record whose acting line, candidate or listed static carries a turn or step condition, the outcome signature gains whether it held (from `failed_checks`, `conditions_met` or `active`); met and unmet draw equal budgets, a short side repeating up to the reuse cap; decision and legality records gain a signature level; one-sided conditions are returned for the manifest; tests in `tests/unit/effects/domain/test_corpus_curation.py` (acceptance 3)
+- [ ] T132 [US6] Create `E/domain/stratum_placement.py` (torch-free; R3): from per-game inventories `game → {(rule, polarity): n}` over budgeted, rule-test-eligible records and gen-2's crc32 game-disjoint draws, promote unplaced Forge-AI games carrying under-filled (rule, polarity, half) cells, smallest game hash first; order card-disjoint admission so under-filled cells go first under the per-text cap and the held-out-resolution requirement; assign halves per game within each stratum, greedily balancing every (rule, polarity) count; return `GameStrata` with `halves` and the rules left out of each half; replaces `GameRouting`, `admit_card_disjoint` and `_split_games` (`corpus_plan.py:484-558`, `corpus_curation.game_disjoint_draw :252`, `build_corpus.py:394`)
+- [ ] T133 [P] [US6] Tests `tests/unit/effects/domain/test_stratum_placement.py`: both polarities of every rule land in both halves of both strata where records allow; a rule that cannot is named; validation strata keep only Forge-AI games; deterministic for a given corpus
+- [ ] T134 [P] [US6] Correct the `GameRouting` docstring's placement promise (`corpus_plan.py:486-490`) or remove it with the class, and the placement promise in `src/effects/CLAUDE.md` (plan follow-up 8)
+
+### Survey, write and manifest
+
+- [ ] T135 [US6] Restructure the survey (`E/application/corpus_survey.py:279` `_ShardSurveyor`, `_route_games :339`, supply fold `:353`): tag each record with `tag_record`; return per-game rule inventories for candidate games and, for each tagged training record, (cell, keys, record hash, tags, natural copies); keep the training supply per game only for the candidate pool (game-disjoint draw below 10 × the share, plus every card-disjoint candidate) and fold it after placement; games outside the pool fold in the shard worker as today
+- [ ] T136 [US6] Restructure the write pass (`E/application/corpus_write.py:145` `_ShardWriter`, `_hold :176`): receive the per-record copy map sharded by the game hash `_repack_outputs` uses; write each record's `curation` member (T1: `natural_share`, `copies`, `drawn_rule`, `drawn_rules`, `rule_entities`); write the validation strata under the same rule budgets; write no `turn_action` record and count them by subkind; keep a permanent spell's resolution record, keyed to the permanent's card; refuse a decision record with an unjoinable candidate key as `unjoinable-key`
+- [ ] T137 [US6] Create `E/application/protection_copies.py` (FR-058): a copy of a real record granting a rare protection quality, relabelling its outcomes by rule 702.16 via `rule_outcomes`, carrying `synthetic = true` and its `drawn_rule`, in amounts the rule budgets set; tests in `tests/unit/effects/application/test_protection_copies.py`
+- [ ] T138 [US6] Extend `E/domain/corpus_manifest.py` (`:186-321`) with `RuleRow` (modelled on `FamilyRow`; `available`, `share`, `written`, `shortfall`, each split by `RuleSource`), `rule_counts`, `rule_map`, `rule_map_digest`, `rules`, `one_sided_rules`, `one_sided_conditions`, `unbudgeted_rules`, `left_out_of_half`, `turn_action_left_out`, `subtypes`, `keywords`, `halves`; gen-3 manifests only
+- [ ] T139 [US6] Wire into `E/application/build_corpus.py`: `require_generation(GEN_3)`; read `rules/heads/` and `rules/scenarios/` once through `rules_catalogue_io` and write the map snapshot and digest (FR-060a); run placement after `merge_surveys`, then rule budgets, then write; exit 1 when it can already tell a rule-test component misses its precision target (selection-set standard errors from T150), naming stratum, half and component; the torch-free boundary holds
+- [ ] T140 [P] [US6] Tests in `tests/unit/effects/application/test_build_corpus.py` on a gen-3 pilot fixture (`tests/fixtures/effects/gen3-records.jsonl.gz`, built by `make_fixture_records.py --generation 3` from the T079/T097 pilot): story 6 acceptance 4 (permanent spell resolution kept), 5 (`unjoinable-key`), 6 (a gen-2 record → exit 1), 8 (`turn_action` written nowhere, counted by subkind); added copies carry a rule, natural copies none; the manifest's every field present (SC-007)
+
+### Run
+
+- [ ] T141 [US6] Build a corpus from the pilot's records and read the manifest per the independent test; fix what fails
+
+**Checkpoint**: a curated gen-3 corpus with a complete rule manifest.
+
+---
+
+## Phase 9: User Story 7 — Train with the rule mask, one loss scale and averaged weights (Priority: P7)
+
+**Goal**: hard and soft rule masks from `curation`, each field's loss divided by its floored
+constant-prediction loss, the negative binomial for counts and amounts, and validation on an
+exponential moving average of the weights.
+
+**Independent Test**: a few epochs on a small curated gen-3 corpus under each mask mode, checking the
+mask, scaled losses, averaged weights and resume on a fixture.
+
+- [ ] T142 [US7] Negative binomial (T2) in `E/domain/field_kinds.py` (`:55, 141-180`) and `E/domain/effect_losses.py` (`:206, 239, 249-277`): every count and amount term (per-entity counts and signed-delta magnitudes, created-objects counts, the verdict head's cost per colour, the value head), one learned log-dispersion scalar per field in the `head` group; `E/domain/gate_metrics.py` (`:64-183`) and `E/application/gate_one.py` (`:134-164`) read the negative binomial deviance, each run with its own dispersion; tests in `tests/unit/effects/domain/test_field_kinds.py` and `test_gate_metrics.py` (reduces to the Poisson as dispersion → ∞)
+- [ ] T143 [US7] Generalize `E/domain/loss_floor.py` (`constant_predictor_floor`, `PartsMean`, `:81-130`) to every head, both strata and the negative binomial (moment fit then Newton steps on the dispersion); one function serves FR-062's denominators and FR-068's deviance component; tests in `tests/unit/effects/domain/test_loss_floor.py`
+- [ ] T144 [US7] Loss denominators (T3) in `E/application/train_effect_model.py`: at startup compute each field's constant-prediction loss on a seeded sample of 8 training shards, weighted as the run's `--rule-mask` weights the field, clamp at `--deviance-floor` (default 0.04), store in `resume.pt` and the checkpoint, reuse on resume; divide each field's loss by it (FR-062); test: a field at 0.01 nats is divided by 0.04 (acceptance 3)
+- [ ] T145 [US7] Rule mask (FR-061; T1) in `E/application/surface_batching.py` (`entity_target_tensors`) and `E/domain/effect_losses._gate_term`: under `hard`, an added copy trains only its drawn rule's manifest outputs plus the affected gate on `rule_entities` where the record supervises it, a natural copy everything; under `soft`, every copy trains every output, outputs other than those of `drawn_rules` weighing `natural_share / copies`; `drawn_rules`' outputs train at full weight on every copy under both; lethality copies and aimed records at full weight; an added copy whose rule names an output the record lacks trains only the gate on its entities
+- [ ] T146 [P] [US7] Tests in `tests/unit/effects/application/test_surface_batching.py`: story 7 acceptance 1 (hard, 702.2), 2 (soft, n = 1, d = 4 → 1/4 elsewhere, 1 on drawn rules' outputs), a hard-masked added copy trains the gate only on its rule's entities (plan: easy to lose), the missing-output edge case
+- [ ] T147 [US7] Create `E/application/weight_average.py` (T4): `WeightAverage` over the encoder, the model and the identity table, `torch._foreach_lerp_` after each optimizer step at rate `grad_accum / (steps_per_epoch × ema_epochs)`, starting at warmup's end; wire it into `E/application/training_loop.py` (`_optimizer_step :119-125`, `_close_epoch :237-251`, `_checkpoint :253-269`): validation, stopping and saved checkpoints read the average; an epoch ending before warmup is validated on the current weights, is not a best candidate and does not count toward patience; the curriculum switch resets best and patience (T5); tests in `tests/unit/effects/application/test_weight_average.py` and `test_training_loop_workers.py` (acceptance 4)
+- [ ] T148 [US7] `resume.pt` (`E/application/resume_state.py:40-145`) carries `weight_average` (`state`, `start_step`), `loss_denominators` and `best_control_score`; a resume refuses a change to `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight` or `--relation-values` (acceptance 5); a resume across warmup starts the average at warmup's end; tests in `tests/unit/effects/application/test_resume_state.py`
+- [ ] T149 [US7] Flags and startup checks on `train-effect-model` (`E/infrastructure/cli.py`, `train_effect_model.py`): `--rule-mask hard|soft` (hard), `--deviance-floor` (0.04), `--ema-epochs` (1), `--stratum-weight` (0.5, in [0, 1]), `--patience` (5); exit 1 when a record lacks `generation: 3`, the manifest has no per-rule counts (FR-066), or no selection set exists for the corpus digest (E1); `EffectCheckpoint` (`E/infrastructure/effect_model_store.py:90-140`) gains the fields of data-model.md § EffectCheckpoint and drops `best_val_loss`; tests in `tests/unit/effects/infrastructure/test_cli_train_exit.py` and `test_effect_model_store.py`
+
+**Checkpoint**: a fixture corpus trains under both masks and resumes.
+
+---
+
+## Phase 10: User Story 8 — Select checkpoints by probes and rule tests (Priority: P8)
+
+**Goal**: a frozen selection set with halves, balance and worst-case standard errors; a per-epoch
+control score from four components per stratum; the run keeps its best control-score epoch; new
+probes; scorecards per half.
+
+**Independent Test**: a short training on a fixture corpus with a frozen selection set; check the
+per-stratum components each epoch, the rescaling, the best-epoch choice, and that the reporting half
+never enters the control score.
+
+### Probe cores into the package (E1; plan follow-up 4)
+
+- [ ] T150 [US8] Create `E/domain/score_scales.py` (torch-free): AUC (from `scripts/_lib/stats.py:49`), R², the rescalings (AUC → 2·AUC − 1, R² and explained deviance as is, grid → 1 − MAE / MAE(grid mean)), clipping at −1, and the worst-case standard errors of E4 (Hanley–McNeil at AUC 0.5 × 2; the grid bound; the loss-ratio bound clustered by game); `scripts/_lib/stats.py`, `ladder.score`, `linear_probes`, `colour_pips.ranking_auc` and `ladder_check.within_record_auc` call it; tests in `tests/unit/effects/domain/test_score_scales.py`, including n = 67 per polarity giving ≈ 0.1 and three such items giving ≈ 0.058
+- [ ] T151 [P] [US8] Move the rung-3 readouts `readout.READOUTS` (`scripts/effect_knowledge_probes/readout.py:79`) and item scoring from `ladder.score` (`:89-110`) into `E/domain/probe_readouts.py`; the scripts import them; `tests/unit/scripts/test_effect_knowledge_probes.py` passes unchanged
+- [ ] T152 [P] [US8] Create `E/application/record_forward.py`: one chunked forward over records replacing `model_loading.forward_chunks :98`, `common.predict_all :259` and `Validator.score :265`, under the validation bf16 autocast; callers switched; tests in `tests/unit/effects/application/test_record_forward.py`
+
+### Selection set and freeze (FR-068a, FR-068b, FR-070–FR-073; E3–E6)
+
+- [ ] T153 [US8] Create `E/domain/selection_set.py` (torch-free) replacing `scripts/effect_knowledge_probes/probe_set.py`'s set: the `SelectionSet` of data-model.md (corpus digest, r = 4, halves, probes, grids, rule tests with entities, deviance samples, standard errors under both masks, left-out items, sha256 `digest`), its canonical JSON and its file `output/effects/reports/selection-set-<corpus digest>.json`
+- [ ] T154 [US8] Create `E/application/freeze_selection_set.py` following contracts/selection-set.md: read the manifest's halves, map snapshot and budgets; assign each stratum's games to halves by `stable_order(game_id, seed)` with ≥ 300 games per half (E5); collect probe records, grid records, rule-test records (detector tags; excluding aimed, probe-fork, interventional, polarity `other`, review-list records, rules not `trained`, rules with a confirmed unpatched unaccepted departure) and the deviance sample (capped at 16,384 per half); balance with r = 4 by seeded draw; compute each item's standard error, leave out and name items above 0.1; exit 1 naming stratum, half and component when a component's `√(Σ SEᵢ²) / m` exceeds 0.05 or a grid cell is empty
+- [ ] T155 [P] [US8] Tests `tests/unit/effects/application/test_freeze_selection_set.py`: story 8 acceptance 7 (no two-polarity rule in a half → exit 1 naming it), 8 (three rules at 67 per polarity → exit 1, smaller rules named), 9 (400 / 100 at r = 2 → 200 `fires` kept by seeded draw); story 3 acceptance 5 (directed-fork records never rule tests); story 1 acceptance 6 (a confirmed unpatched departure → no rule-test records) and 7 (an accepted departure scored against Forge's outcome); halves disjoint and deterministic; SC-010 on the fixture
+- [ ] T156 [US8] `scripts/effect_knowledge_probes/run.py --freeze-probe-set --corpus DIR` calls `freeze_selection_set` with no checkpoint (`--checkpoint` refused with it); the combat and evasion grids read frozen records instead of scanning shards; tests in `tests/unit/scripts/test_effect_knowledge_probes.py`
+
+### Control score in training (FR-068, FR-068c, FR-069, FR-075; E2)
+
+- [ ] T157 [US8] Create `E/application/control_score.py`: from a selection set, prepare the host side of every selection-half item once at startup (probe records, grid edits, rule-test records at their tag entities or `[ACT]`, deviance samples with copies under the run's mask) and cache it; each epoch run the device forward on the averaged weights through `record_forward`, score probes (rung 3, each probe type one item), grids, rule tests (per rule, mean over the manifest's outputs of the AUC ranking `fires` above `does_not_fire` — probability of the scenario's category, or expected value under the negative binomial — leaving out a one-polarity rule) and explained deviance (leaving out fields at or below the floor); stratum score = mean of the four rescaled, clipped components; control = `W · card_disjoint + (1 − W) · game_disjoint`; exit 1 naming stratum, half and component on an empty component (FR-068c)
+- [ ] T158 [P] [US8] Tests `tests/unit/effects/application/test_control_score.py`: story 8 acceptance 1 (rescaling, clipping, means, the mix), 2 (a floored field left out), 3 (an all-`fires` rule left out); the reporting half never read; an empty component exits 1
+- [ ] T159 [US8] Replace `EarlyStopper` (`E/application/training_schedule.py:18-100`) with a higher-is-better control-score stopper: one best checkpoint, encoder, trunk and heads together, from the best-control epoch; `--patience` counts epochs without a new best; a new best copies `resume.pt` to `resume-best.pt` (acceptance 4); the `Validator` (`E/application/validation_pass.py:241-263`) delegates its per-stratum scoring to `control_score`; calibration stays reported; the epoch line prints per stratum `probes`, `grids`, `rule_tests`, `deviance`, `score`, then `control` and `best` (FR-075); tests in `tests/unit/effects/application/test_training_loop_workers.py` and `test_run_reporter.py`
+- [ ] T160 [US8] Measure in-epoch selection time on the fixture and on a pilot corpus against a fifth of an epoch's training time (E2); tune the deviance sample cap if it misses and record the cap in the selection set
+
+### Probes and evaluation (FR-070, FR-074)
+
+- [ ] T161 [P] [US8] Turn and step conditions probe in a new `scripts/effect_knowledge_probes/conditions.py`: records whose acting line, candidate or board carries a turn or step condition, with whose turn and the phase edited; reads the matching verdict column, the predicted outcome or branch, or the affected creature's keywords or legality; casting-speed and split-second subsets
+- [ ] T162 [P] [US8] Anthem probe in a new `scripts/effect_knowledge_probes/anthem.py`: a board with an anthem keeping damaged creatures alive, the anthem destroyed; reads each creature's predicted death
+- [ ] T163 [P] [US8] Combat grid with several blockers in `scripts/effect_knowledge_probes/combat_grid.py`, scored through `rule_outcomes.step_deaths`
+- [ ] T164 [P] [US8] Evasion grid protection rows over every protection quality (creature type, card type, colour, condition, everything) in `scripts/effect_knowledge_probes/evasion_grid.py`
+- [ ] T165 [P] [US8] Toughness sweep on activated damage read with "any target" and with "target creature" in `scripts/effect_knowledge_probes/sweeps.py`
+- [ ] T166 [P] [US8] Board-abilities ablation (`board.py`) and ability-slot noise ablation (`ablation.py`) run on gen-3 checkpoints
+- [ ] T167 [P] [US8] Target-legality probe reading `target_legal` in `scripts/effect_knowledge_probes/target_restrictions.py`
+- [ ] T168 [US8] Wire T161–T167 into `run.py` and `scorecard.py`; line probes (`items`, `pairs`) drop repeated rows of one record, are reported and never feed a stratum score (acceptance 5); scorecards report probes and rule tests per half (acceptance 6); every probe requires gen-3 records and a gen-3 checkpoint; tests in `tests/unit/scripts/test_effect_knowledge_probes.py` for each new probe on fixture records
+- [ ] T169 [US8] `evaluate-effect-model` (`E/application/evaluate_effect_model.py`, `breakdowns.py`) scores the reporting half once through `control_score`'s scorer, reports the rule tests per half and gate 1 on the negative binomial deviance, requires gen-3 records and a `gen-3` checkpoint, and still exits 0 after any gate verdict; tests in `tests/unit/effects/infrastructure/test_cli_evaluate_exit.py` and `tests/unit/effects/application/test_gates.py`
+
+**Checkpoint**: a fixture run selects by control score; the scorecard reports the reporting half only (SC-008).
+
+---
+
+## Phase 11: Polish & Cross-Cutting Concerns
+
+- [ ] T170 [P] Update `src/effects/CLAUDE.md`: `rule-counts`, detectors, rule budgets and the `curation` member, global placement and halves (no longer stable across corpus growth), the gen-3 input layout and relations, the new outputs, the rule mask, loss denominators, averaged weights, the selection set and control score, the new flags and refusals
+- [ ] T171 [P] Update the root `CLAUDE.md`'s corpus file formats and model-artifact paragraphs (selection set, checkpoint fields, the `aimed_at` metadata rule) and `README.md`'s effects workflow with the commands of contracts/cli.md in quickstart.md's stage order
+- [ ] T172 [P] Confirm the import-direction test (`tests/unit/effects/test_import_boundaries.py`) passes with every new torch-free module in `_TORCH_FREE` (`rule_catalogue`, `rule_detectors`, `rule_outcomes`, `rule_budgets`, `stratum_placement`, `seeded_draw`, `selection_set`, `score_scales`, `relation_types`, `kept_keyword_flags`) and that `scripts/` imports `effects` but never the reverse (FR-078)
+- [ ] T173 Performance review against plan.md § Performance Review: `rule-counts` and the survey read each shard once in parallel; rule copies reach writers sharded by game hash; relation terms are batched gathers and scatters; the average updates with one `_foreach_lerp_`; selection scores are read once per epoch; profile one epoch and record step time, peak memory and selection time
+- [ ] T174 Full verification: `pytest -m "not integration"`, `pytest -m integration`, `cd ../forge && mvn install -DskipTests` plus its `EffectRecord*Test`s, `cd forge-connector && mvn install -DskipTests && mvn test`, `ruff check`, and IDE type diagnostics on every touched file; fix every failure and warning found
+- [ ] T175 Walk quickstart.md stages 1–8 end to end on the real Forge checkout and fix whatever breaks
+- [ ] T176 If implementation changes any contract in `specs/025-ability-effect-model-gen3/` or the root spec, update it in the same change — load the feature-workflow skill before each edit
+- [ ] T177 After the gen-3 runs, fill the Result and Future plans of `experiments/2026-10-30-effect-model-gen3-design.md` with the user and rewrite its TL;DR — load the feature-workflow skill before each edit
+
+---
+
+## Dependencies & Execution Order
+
+### Phase dependencies
+
+- **Setup (Phase 1)** → **Foundational (Phase 2)** → user stories.
+- **US1** needs T009–T011 (catalogue enums and IO), T012 (`rule_outcomes`) and T013–T015 (envelope,
+  generation check). It needs no Java change and no gen-3 data.
+- **US2** needs T013–T017. Its Java work is independent of US1; T074's Python readers need T013–T014.
+- **US3** needs US2's hooks (T039–T042), envelope stamping (T043) and the fork-operation enum (T017);
+  its startup check (T093) needs US1's catalogue declarations (T030–T031); T096 needs US1's counts.
+- **US4** needs only Foundational (T018–T019 for the layout). It runs in parallel with US1–US3.
+- **US5** needs US2's Python readers (T074) and pilot records (T079) for its tests, US4's relation
+  tensor (T102) for T116, and US6's manifest closed lists (T138) for the subtype and keyword output
+  widths (T119, T121): build those widths from a fixture manifest first and switch to the real one
+  once T138 lands.
+- **US6** needs US1's detectors (T023–T031), the map snapshot IO (T011), `seeded_draw` (T007) and
+  gen-3 pilot records (T079, T097). T126–T128 are collection-side and must land before stage 5.
+  T139's early precision exit needs T150.
+- **US7** needs US6's `curation` member (T136) and manifest (T138), and US5's outputs (T119–T122).
+  T149's selection-set check needs T153.
+- **US8** needs US6's halves (T132) and manifest, US7's averaged weights (T147) and negative binomial
+  (T142), and US5's outputs for the rule-test readouts.
+- **Polish** after the stories it documents.
+
+### Story order for the run plan
+
+US1 first (stage 1, gen-2 data). US4 in parallel (stage 2). US2 and US3 complete before the first gen-3
+pilot game (stage 3); the schema cannot be applied afterwards. US5's map reruns follow each layout
+change (stage 4). T126–T128 land before full collection (stage 5). US6 and US8's freeze run on the
+full corpus (stage 6), US7 trains (stage 7), US8's evaluation reports (stage 8).
+
+### Within each story
+
+Tests are written with or before the code they cover; T098 strictly before T100. Engine commits on
+`effect-record-hooks` are built with `mvn install -DskipTests` before the connector, and the connector
+before Python integration tests. Plan's five easy-to-lose pairs: T045–T048 land together (FR-028/029);
+T062 and T063 in one change (FR-033/040); T146 checks the hard mask on the gate (FR-061); T139/T154
+(placement invalidates a frozen set; training refuses without one, T149); T110's test guards gate 2
+and the grids (FR-044a).
+
+## Parallel Examples
+
+```text
+# Foundational: independent files
+T004 effect_families.py  |  T005 corpus_plan.py  |  T006 ladder.py  |  T007 seeded_draw.py  |  T008 canonical_digest.py  |  T012 rule_outcomes.py
+
+# US1: detector families, once T023 exists
+T025 sba_zone_move  ||  T026 trigger_mode  ||  T027 keyword_combat  ||  T028 verdict_bit  ||  T029 others
+
+# US1 ∥ US2 ∥ US4: Python catalogue work, Java collectors and the trunk touch disjoint files
+T030–T035 (rules/, rule_counts)  ||  T039–T073 (forge/, FE/)  ||  T098–T105 (relation_attention)
+
+# US2: snapshot facts are separate builders
+T054 PlayerJson  ||  T055 EntityJson facts  ||  T057 extra entities  ||  T068 conditions_met  ||  T069 notes  ||  T070 keying  ||  T071 random seat
+
+# US3: operations once KeywordEdit exists
+T085 seven operation classes  ||  T087–T088 registry and contract test
+
+# US8: new probes are separate scripts
+T161 conditions  ||  T162 anthem  ||  T163 combat grid  ||  T164 evasion  ||  T165 sweeps  ||  T166 ablations  ||  T167 target legality
+```
+
+## Implementation Strategy
+
+### MVP
+
+US1 alone: detectors declared over the whole catalogue and `rule-counts` on gen-2's corpus. It needs
+no new collection, it is the first stage of the run plan, and its counts steer US3's rule choice, the
+coverage rounds and the random-seat share.
+
+### Incremental delivery
+
+1. Setup + Foundational.
+2. US1 → stage 1 on gen-2 (counts, review against Forge), in parallel with US4 → stage 2 (trunk
+   properties and measurement) and the Java half of US2.
+3. US2 + US3 → stage 3 pilot with `--count-dropped-events` and one directed rule.
+4. US5 input and output changes, each followed by a map rerun (stage 4).
+5. T126–T128, then full collection, coverage and variants (stage 5).
+6. US6 → curate; US8's freeze (stage 6).
+7. US7 + US8's control score → train (stage 7); US8's evaluation and probes → report (stage 8).
+
+### Notes
+
+- Every new module cites its prior art; every [P] task touches a file no concurrent task touches.
+- Principle VIII items are checked in T173, not assumed.
+- Commit per task or per small group, referencing the task ID (memory: commit freely, never
+  `output/` or `models/`, push only when asked).
