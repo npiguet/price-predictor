@@ -276,6 +276,11 @@ from a real game.
   boundary. When it holds, the collector may fork, apply the operation and play the fork
   on to the end of the current turn, recording it. The fork is then discarded, and the
   live game continues unchanged.
+- The fork's copy of the game carries the live game's pending delayed triggers and
+  end-of-turn effects, so a fork played to the end of the turn resolves them as the live
+  game would.
+- An interventional fork resolves the stack and stops. Only directed forks and the
+  interventional forks of § 12.3 are played on to the end of the turn.
 - Each enabled rule is named in `--directed-fork-rules`, and directed forks take their own
   per-game budget, `--directed-forks-per-game`. A fork taken counts against the budget
   whether it is kept or discarded.
@@ -407,11 +412,10 @@ bracket they follow.
 
 - State-based actions have no record of their own. Their outcomes join the record of the
   action that left the board in that state. A combat damage step's record holds its own.
-- A resolution's held effect half takes every death until Forge's state-based check is
-  over: while the game's view tracker is frozen, every pass included.
-- A trigger that reaches the stack while the tracker is frozen opens its own bracket
-  without closing the held half. The held half is written at the first action after the
-  check ends.
+- A resolution's held effect half takes every death of the state-based check that follows
+  it, from the check's first pass to its end, every pass included.
+- Triggers reach the stack between two passes of the check. Such a trigger opens its own
+  bracket without closing the held half. The held half is written when the check ends.
 - The trigger's own record holds none of the check's deaths. A death filed in a held half
   stays marked as no clause's doing.
 - A state-based death with no held resolution and no open damage step reaches no record,
@@ -419,8 +423,10 @@ bracket they follow.
 
 ## 8.8 Playability verdicts
 
-- The AI's playability hook passes the candidate before the AI evaluates it, ahead of its
-  `canPlay` filter.
+- The collector enumerates the decision candidates of both players itself, at every
+  priority stop once the state-based check is over, the player without priority included.
+  The AI's playability hook produces no decision records, because Forge filters a spell on
+  timing before the hook and calls it for the player with priority only.
 - The collector's `PlayabilityVerdict` computes `can_play`, `affordable` and
   `has_legal_target` for both seats, from the rules alone:
   - mana and additional costs without the AI's cost preferences;
@@ -430,7 +436,8 @@ bracket they follow.
 - `legal_targets` lists every card and player the rules allow as a target of the
   candidate, whatever the AI would choose.
 - Each candidate carries a fourth verdict bit, `timing`: Forge's `canCastTiming`.
-- `can_play` is `canPlay` and `canCastTiming` together.
+- `can_play` is `canPlay` and `canCastTiming` together, and false when a static forbids the
+  play.
 - Each candidate carries `failed_checks`, the list of checks Forge found unmet:
 
   | identifier | check |
@@ -451,8 +458,6 @@ bracket they follow.
 - Each `failed_checks` entry carries `responsible_static` where a static decided it. A
   candidate whose `timing` bit is false carries a `casting_speed` entry. The candidate's own
   `responsible_static` keeps its gen-2 meaning.
-- The collector evaluates both players' candidates at every priority stop, the player
-  without priority included.
 
 ## 8.9 Resolution branches
 
@@ -476,10 +481,11 @@ uses.
 - Attackers records are anchored to one attacker, as blockers records are. Beside the
   anchor, the payload lists the players, planeswalkers and battles the anchor may attack,
   and whether it must attack.
-- On a real declaration (`what_if = false`) whose anchor is declared, the payload also
-  carries `tapped_by_attack`: whether declaring the attack tapped the anchor, read from the
-  declaration's tap events. The collector holds the record open until they arrive. A
-  what-if attackers record carries none.
+- Attackers records come from the turn-based declaration of attackers only. No what-if
+  attackers record is written.
+- When the anchor is declared, the payload also carries `tapped_by_attack`: whether
+  declaring the attack tapped the anchor, read from the declaration's tap events. The
+  collector holds the record open until they arrive.
 - A coverage round targets cards with an activated "any target" damage ability.
 
 ## 8.12 Keying, random seat and dropped events
@@ -506,7 +512,7 @@ uses.
 | `conditions_met` | resolution payload | list of `{segment, met}`, `segment` the chain index `attributed_to` uses |
 | `active` | each listed static line | bool |
 | `anchor_attacker`, `legal_defenders`, `must_attack` | `attackers` payload | entity ref; list of player or entity refs; bool |
-| `tapped_by_attack` | `attackers` payload, real declarations with the anchor declared | bool |
+| `tapped_by_attack` | `attackers` payload, the anchor declared | bool |
 | `must_block` | `blockers` payload, per listed creature | bool: the creature is required to block the anchor |
 | `turn_action` | `kind` | with the subkinds of § 8.11 |
 | the fields of § 8.4 | snapshot | as `rules/gen3-fields.json` gives each field's shape |
@@ -988,7 +994,8 @@ frozen, r being one balance ratio recorded in the frozen set:
   other.
 - Each probe type holds at most r times the records of the smallest probe type.
 - Each grid cell holds at most r times the records of the smallest cell of its grid, and
-  every cell holds records.
+  every cell holds records. A grid that edits the same records in every cell meets this
+  by construction.
 - A larger side, probe type or cell is subsampled by a seeded draw.
 
 Precision target, in each half of each stratum:
@@ -1001,6 +1008,8 @@ Precision target, in each half of each stratum:
   and their labels alone, at the worst case the labels allow. An AUC's is Hanley–McNeil's
   at an AUC of 0.5: a rule with n test records of each polarity has a rescaled standard
   error close to 2 · √(1 / (6n)), which needs n ≥ 67.
+- A grid whose rule outcome is the same in every cell has no error baseline. Its standard
+  error is unbounded, and it is left out.
 - The freeze, and `build-corpus` where it can already tell, exit 1 when a component misses
   its target, naming the stratum, half and component.
 - Training runs no separate check of the balance or the target. An epoch that meets a
@@ -1055,6 +1064,9 @@ python scripts/rules_catalogue.py split | packets | premark | validate | status 
 python -m effects rule-counts
     --records-dir DIR                    records to count; gen-2 or gen-3
     [--output PATH]                      default output/effects/rule-counts.json
+    [--cards-folder DIR]                 repeatable; default as build-corpus; sidecars the detectors read
+    [--variant-scripts DIR]              default as build-corpus
+    [--rules-dir DIR]                    default rules; scenarios and their detectors
 
 python -m sealed match-outcomes
     [--count-dropped-events]             off; counts events arriving with no open record
@@ -1084,7 +1096,8 @@ Startup validation
 
 - `build-corpus`, `train-effect-model`, `evaluate-effect-model` and the knowledge probes
   check that every record carries `generation: 3`.
-- `train-effect-model` checks that the corpus manifest carries per-rule counts.
+- `train-effect-model` checks that the corpus manifest carries per-rule counts, and that
+  the knowledge-probe set and rule tests are frozen for the corpus.
 - `match-outcomes` checks that every rule in `--directed-fork-rules` has a detector, a
   board precondition (§ 6) and at least one contrasting variant classified into a fork
   operation.

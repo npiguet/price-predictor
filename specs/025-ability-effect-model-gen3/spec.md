@@ -51,8 +51,9 @@ State on master when this feature starts (the gen-3 record's Result):
   variant then has its operation, and `match-outcomes` refuses only a rule with no detector or no
   classified variant (FR-014).
 - Q: Root § 6 says a directed fork "plays on". How far does it play before it stops? → A: To the
-  end of the current turn, then the fork is discarded, as interventional forks play the turn on
-  (FR-010).
+  end of the current turn, then the fork is discarded (FR-010). Interventional forks resolve the
+  stack and stop, so playing a fork on is new; the fork's copy carries the live game's delayed
+  triggers and end-of-turn effects.
 - Q: How does a rule's share divide between its `fires` records and its near misses? → A:
   Equally. Each polarity draws half the rule's share, a short side repeats up to the reuse cap, the
   manifest names a rule left one-sided, and `other` records count toward the rule without a half
@@ -520,7 +521,9 @@ and that the reporting half never enters the control score.
 - **FR-007**: Detectors MUST run over gen-2 and gen-3 records. A detector that needs a field the
   record's generation lacks MUST report the rule as not countable on that generation, never as
   zero.
-- **FR-008**: `python -m effects rule-counts --records-dir DIR [--output PATH]` MUST count, per
+- **FR-008**: `python -m effects rule-counts --records-dir DIR [--output PATH] [--cards-folder DIR]
+  [--variant-scripts DIR] [--rules-dir DIR]` (the last three for the sidecars and catalogue the
+  detectors read, defaulting as `build-corpus` does and to `rules`) MUST count, per
   rule, the records of each polarity, split into three sources: natural records of random-seat
   games, natural records of games between two Forge AIs, and aimed records (those carrying
   `aimed_at`, FR-009a, whatever their game). It MUST write them to `--output` (default
@@ -551,7 +554,10 @@ and that the reporting half never enters the control score.
   decides afresh, as interventional forks do. A fork is kept whether or not its decisions match
   the ones the live game goes on to make; its records carry the decisions it made and are tagged
   by detectors like any other record. The fork is then discarded and the live game continues
-  unchanged.
+  unchanged. The fork's copy of the game MUST carry the live game's pending delayed triggers and
+  end-of-turn effects, so a fork played to the end of the turn resolves them as the live game
+  would. Interventional forks resolve the stack and stop; only directed forks and the
+  interventional forks of FR-058 are played on to the end of the turn.
 - **FR-010a**: Each enabled rule MUST take at most one directed fork per game. At a phase boundary
   where a rule's board precondition holds and the rule has not forked in this game, the fork MUST
   be taken with probability `--directed-fork-probability`, drawn from a generator seeded per game.
@@ -640,22 +646,25 @@ and that the reporting half never enters the control score.
   of the step.
 - **FR-028**: State-based outcomes MUST join the record of the action that left the board in that
   state, replacing the base spec's bracket attribution. A resolution's held effect half MUST take
-  every death while the view tracker is frozen, every pass included. A trigger reaching the stack
-  during the check MUST open its own bracket without closing the held half, which is written at the
-  first action after the check ends. The trigger's own record MUST hold none of the check's deaths.
+  every death of the state-based check that follows it, from the check's first pass to its end,
+  every pass included. Triggers reach the stack between two passes of the check; such a trigger
+  MUST open its own bracket without closing the held half, which is written when the check ends.
+  The trigger's own record MUST hold none of the check's deaths.
   A death in a held half stays marked as no clause's doing. A combat damage step's record holds its
   own check.
 - **FR-029**: A state-based death with no held resolution and no open damage step MUST reach no
   record and be counted by the dropped-event count.
-- **FR-030**: The AI's playability hook MUST pass each candidate before the AI evaluates it, ahead
-  of its `canPlay` filter. The collector's `PlayabilityVerdict` MUST compute `can_play`,
+- **FR-030**: The collector MUST enumerate decision candidates itself (FR-033); the AI's
+  playability hook MUST NOT produce decision records, because Forge filters a spell on timing
+  before the hook and calls it for the player with priority only. The collector's
+  `PlayabilityVerdict` MUST compute `can_play`,
   `affordable` and `has_legal_target` for both seats from the rules alone: costs without the AI's
   cost preferences, each targeting clause's candidates against the clause's minimum, a charm by how
   many offered modes have reachable targets. The random seat MUST filter its own plays on the same
   verdict.
 - **FR-031**: `legal_targets` MUST list every card and player the rules allow as a target of the
   candidate. Each candidate MUST carry `timing` (`canCastTiming`); `can_play` MUST be `canPlay` and
-  `canCastTiming` together.
+  `canCastTiming` together, and false when a static forbids the play.
 - **FR-032**: Each candidate MUST carry `failed_checks`, a list of `{check, responsible_static}`
   over the identifiers `split_second`, `casting_speed`, `whose_turn`, `phase`, `combat`,
   `activation_limit`, `script_condition`, `zone`, `static_prohibition`, `cost`,
@@ -663,8 +672,8 @@ and that the reporting half never enters the control score.
   identifier; `script_restriction` only where Forge evaluates several together. A candidate whose
   `timing` is false MUST carry a `casting_speed` entry. `responsible_static` is set where a static
   decided the check; the candidate's own `responsible_static` keeps its gen-2 meaning.
-- **FR-033**: The collector MUST evaluate both players' candidates at every priority stop, the
-  player without priority included.
+- **FR-033**: The collector MUST enumerate and evaluate both players' candidates at every
+  priority stop, once the state-based check is over, the player without priority included.
 - **FR-034**: The resolution payload MUST carry `conditions_met`: for each chain segment with a
   `Condition$`, `{segment, met}`, keyed by the chain index `attributed_to` uses.
 - **FR-035**: A prevention that prevented nothing MUST write no note. A probe fork's damage events
@@ -675,11 +684,11 @@ and that the reporting half never enters the control score.
   any stratum (FR-059), and the rules only they show get the map verdict `recorded` (FR-015).
 - **FR-037**: Attackers records MUST be anchored to one attacker, as blockers records are, with
   `anchor_attacker`, `legal_defenders` (the players, planeswalkers and battles it may attack) and
-  `must_attack`. An attackers record of a real declaration (`what_if = false`) whose anchor is
-  declared MUST also carry `tapped_by_attack`, whether declaring the attack tapped the anchor, read
-  from the declaration's tap events; the collector holds the record open until they arrive. A
-  what-if attackers record carries none. Blockers records MUST carry `must_block` per listed
-  creature.
+  `must_attack`. Attackers records come from the turn-based declaration of attackers only; no
+  what-if attackers record is written. An attackers record whose anchor is declared MUST also carry
+  `tapped_by_attack`, whether declaring the attack tapped the anchor, read from the declaration's
+  tap events; the collector holds the record open until they arrive. Blockers records MUST carry
+  `must_block` per listed creature.
 - **FR-038**: `collect-coverage --wording-cards PATH` MUST run a coverage round over the listed
   cards, those with an activated "any target" damage ability.
 - **FR-039**: A charm mode cast through Flashback MUST be keyed to a sidecar line. An ability a
@@ -870,7 +879,7 @@ and that the reporting half never enters the control score.
   - Probes and grids even: in each half, each probe type MUST hold at most r times the records of
     the smallest probe type, and each grid cell at most r times the records of the smallest cell of
     its grid; larger ones are subsampled by a seeded draw at the freeze. Every grid cell MUST hold
-    records.
+    records. A grid that edits the same records in every cell meets this by construction.
 
   r is one balance ratio, set in planning and recorded in the frozen set.
 - **FR-068b**: Each component MUST meet a precision target in each half of both strata. An item (a
@@ -880,8 +889,10 @@ and that the reporting half never enters the control score.
   MUST be at most 0.05. Standard errors are computed when the rule tests and probe set are frozen,
   before any model exists, from the records and their labels alone, and at the worst case the
   labels allow: an AUC's by Hanley–McNeil at an AUC of 0.5, so a rule with n test records of each
-  polarity has a rescaled standard error close to 2·√(1 / (6n)), which needs n ≥ 67. The worst-case estimator for a grid and
-  for an output field's explained deviance is settled in planning. The freeze, and `build-corpus`
+  polarity has a rescaled standard error close to 2·√(1 / (6n)), which needs n ≥ 67. A grid whose
+  rule outcome is the same in every cell has no error baseline; its standard error is unbounded and
+  it is left out. The worst-case estimator for a grid and for an output field's explained deviance
+  is settled in planning ([research.md](research.md), Decision E4). The freeze, and `build-corpus`
   where it can already tell, MUST exit 1 when a component misses its target, naming the stratum,
   half and component.
 - **FR-068c**: Training runs no separate check of FR-068a or FR-068b. If an epoch nevertheless
@@ -926,7 +937,8 @@ and that the reporting half never enters the control score.
 - **FR-076**: The commands and flags of root § 15 MUST exist with the defaults given there; defaults
   live only in the operator surface. Startup validation: every record carries `generation: 3`
   (`build-corpus`, `train-effect-model`, `evaluate-effect-model`, the knowledge probes); the corpus
-  manifest carries per-rule counts (`train-effect-model`); every directed-fork rule has a detector,
+  manifest carries per-rule counts, and the knowledge-probe set and rule tests are frozen for the
+  corpus (`train-effect-model`); every directed-fork rule has a detector,
   a board precondition and a built operation (`match-outcomes`). A failed startup check MUST exit 1. Gates still exit 0
   after any verdict.
 
