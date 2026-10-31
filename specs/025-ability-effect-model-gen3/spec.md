@@ -62,9 +62,15 @@ State on master when this feature starts (the gen-3 record's Result):
   scored against Forge's outcome. A patched departure returns the rule unchanged. Only a confirmed
   departure that is neither patched nor accepted excludes the rule (FR-005, FR-071).
 - Q: What does a stratum score do when one of its four components has nothing to score? → A: That
-  never happens by design: the validation strata are curated so every component of both strata
-  has something to score, and curation fails when it cannot. Training does not check for it on
-  each run; if it meets an empty component anyway, it fails (FR-068a).
+  never happens by design: the validation strata are curated balanced, and every component of both
+  strata meets a precision target; curation fails when it cannot. Training does not check for it
+  on each run; if it meets an empty component anyway, it fails (FR-068a–FR-068c).
+- Q: What does "balanced" require of the validation strata? → A: All four: the training stratum's
+  rule mix, every rule's test records of both polarities in both strata, polarity-balanced rule
+  tests, and probe types and grid cells of comparable size (FR-068a).
+- Q: How is each component's minimum size set? → A: From a precision target: each item's rescaled
+  standard error at most 0.1, each component's at most 0.05, computed from labels alone at freeze
+  time; items that miss it are left out and reported (FR-068b).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -380,6 +386,12 @@ and that the reporting half never enters the control score.
 7. **Given** a curated corpus whose game-disjoint selection half holds no rule with test records of
    both polarities, **When** the probe set and rule tests are frozen, **Then** the freeze exits 1
    naming the stratum, the half and the rule-test component.
+8. **Given** a half whose rule tests hold three rules with exactly 67 records of each polarity and
+   others with fewer, **When** the rule tests are frozen, **Then** the smaller rules are left out
+   and named, and the freeze exits 1, because three items at a rescaled standard error near 0.1
+   give the component a standard error near 0.058, above 0.05.
+9. **Given** a rule with 400 `fires` and 100 `does_not_fire` test records in a half and r = 2,
+   **When** the rule tests are frozen, **Then** 200 `fires` records are kept by a seeded draw.
 
 ---
 
@@ -733,14 +745,41 @@ and that the reporting half never enters the control score.
   fields, leaving out any field whose constant-prediction loss is at or below `--deviance-floor`.
   Rescaling: AUC as 2 × AUC − 1; R² and explained deviance as is; a grid as one minus the ratio of
   its mean absolute error to the error of predicting the grid's mean outcome in every cell.
-- **FR-068a**: Every component MUST have something to score in each half of both validation
-  strata: at least one probe type with records, at least one grid with cells, at least one rule
-  whose test records hold both polarities, and at least one supervised output field. The strata
-  MUST be curated to meet this. `build-corpus`, and the freeze of the probe set and rule tests
-  (FR-071), MUST exit 1 when the corpus they produce does not meet it, naming the stratum, half
-  and component. Training runs no separate check for it. If an epoch nevertheless meets a
-  component with nothing to score, including a deviance component left empty because every field
-  falls at or below `--deviance-floor`, `train-effect-model` MUST exit 1 naming it.
+- **FR-068a**: The validation strata MUST be curated balanced, by four rules:
+  - Rule mix: each stratum MUST be built with the training stratum's rule budgets (FR-054,
+    FR-054a), its added copies carrying their rule. The explained-deviance component reads a
+    stratum's records with those copies, under the run's `--rule-mask`, as training reads its own.
+    Rule tests, probes, grids, gates and calibration read each distinct record once.
+  - Rules in both strata: `build-corpus` MUST place games in the strata, within each stratum's own
+    definition (the card-disjoint stratum's held-out cards, the game-disjoint stratum's games), so
+    that every rule with rule-test-eligible records of both polarities has test records of both
+    polarities in both halves of both strata, as far as its records allow. Game placement may
+    depart from gen-2's hash threshold to achieve this; the placement is what the checkpoint's
+    recorded split enumerates. A rule left out of a half is named in the manifest.
+  - Polarity balance: in each half, one polarity of a rule's test records MUST hold at most r times
+    as many records as the other; the larger side is subsampled by a seeded draw when the rule
+    tests are frozen.
+  - Probes and grids even: in each half, each probe type MUST hold at most r times the records of
+    the smallest probe type, and each grid cell at most r times the records of the smallest cell of
+    its grid; larger ones are subsampled by a seeded draw at the freeze. Every grid cell MUST hold
+    records.
+
+  r is one balance ratio, set in planning and recorded in the frozen set.
+- **FR-068b**: Each component MUST meet a precision target in each half of both strata. An item (a
+  rule test, a probe type, a grid, an output field) enters its component in a half only when its
+  own score's standard error on the rescaled scale is at most 0.1; an item that misses it is left
+  out and named in the frozen set. The component's standard error, √(Σ SEᵢ²) / m over its m items,
+  MUST be at most 0.05. Standard errors are computed when the rule tests and probe set are frozen,
+  before any model exists, from the records and their labels alone, and at the worst case the
+  labels allow: an AUC's by Hanley–McNeil at an AUC of 0.5, so a rule with n test records of each
+  polarity has a rescaled standard error close to 2·√(1 / (6n)), which needs n ≥ 67. The worst-case estimator for a grid and
+  for an output field's explained deviance is settled in planning. The freeze, and `build-corpus`
+  where it can already tell, MUST exit 1 when a component misses its target, naming the stratum,
+  half and component.
+- **FR-068c**: Training runs no separate check of FR-068a or FR-068b. If an epoch nevertheless
+  meets a component with nothing to score, including a deviance component left empty because every
+  field falls at or below `--deviance-floor`, `train-effect-model` MUST exit 1 naming the stratum,
+  half and component.
 - **FR-069**: The control score MUST be the card-disjoint stratum score × `--stratum-weight`
   (default 0.5) plus the game-disjoint stratum score × (1 − it). A run MUST keep one best
   checkpoint, encoder, trunk and heads together, from the epoch with the best control score,
@@ -852,6 +891,9 @@ and that the reporting half never enters the control score.
   every probe and the rule tests on the reporting half, which never entered selection.
 - **SC-009**: A gen-3 checkpoint loads in `encode-abilities`, `evaluate-effect-model` and the
   knowledge probes without restating any flag, and `encode-abilities` writes the gen-3 `e` cache.
+- **SC-010**: For a frozen gen-3 probe set and rule tests, every component in each half of both
+  strata has a worst-case standard error of at most 0.05 on the rescaled scale, and no rule's test
+  records, probe type or grid cell exceeds the balance ratio r against its counterpart.
 
 ## Assumptions
 
