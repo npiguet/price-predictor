@@ -80,7 +80,8 @@ No new flag. Behaviour:
 - Reads `rules/heads/` and `rules/scenarios/` once; writes the map snapshot and its digest.
 - Writes no `turn_action` record; counts them by subkind.
 - Exit 1 when it can already tell that a rule-test component misses its precision target, naming
-  stratum, half and component.
+  stratum, half and component. The corpus and its manifest are written before this exit, so a pilot
+  corpus that cannot meet the target is still readable.
 
 ## `scripts/effect_knowledge_probes/run.py --freeze-probe-set` (existing)
 

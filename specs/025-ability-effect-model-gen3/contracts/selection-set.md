@@ -20,9 +20,12 @@ everything but itself. Fields as [data-model.md](../data-model.md#selectionset-n
    departure) and the deviance sample.
 3. Balance with r = 4 by seeded draw: rule-test polarities, probe types, record-drawn grid cells.
 4. Compute each item's worst-case standard error (research Decision E4). Leave out items above 0.1 and
-   name them.
+   name them. Name every rule whose detector finds no test record in a half as untested.
 5. Check every component's `√(Σ SEᵢ²) / m ≤ 0.05`; otherwise exit 1 naming stratum, half and component.
 6. Write the file.
+
+The thresholds (300 games, 0.1, 0.05, r = 4) are keyword arguments of the freeze with these defaults;
+no operator flag overrides them (research Decision E5).
 
 ## Score
 

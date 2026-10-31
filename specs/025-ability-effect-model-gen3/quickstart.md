@@ -48,9 +48,14 @@ python -u -m effects rule-counts --records-dir output/effects/records
 ```
 
 Check: every record carries `generation: 3`; every § 8.13 field is non-constant in `field-coverage`
-where the pilot can produce it; the dropped-event table is printed with the count of `mana_produced`
-events whose `mana_by_color` is empty; no trigger record holds a death of the state-based loop its
-trigger arrived in; directed-fork records carry `aimed_at`, `directed`, `fork = true`.
+or listed as constant or absent with a reason the operator accepts; the dropped-event table is printed
+with the count of `mana_produced` events whose `mana_by_color` is empty; no trigger record holds a
+death of the state-based loop its trigger arrived in; directed-fork records carry `aimed_at`,
+`directed`, `fork = true`. Record gzipped bytes per game and games per hour against a gen-2 run with
+the same flags; if bytes per game more than double, raise it before stage 5.
+
+A pilot corpus built from these records cannot meet the precision target: `build-corpus` writes the
+corpus and manifest, then exits 1. Read the manifest anyway; the freeze is not run on a pilot.
 
 ## Stage 4 — the map rerun after each layout change (story 5)
 
@@ -82,6 +87,12 @@ Check: the manifest gives, for every tagged rule in every class, share, written 
 polarity and source, and names one-sided rules and conditions, unbudgeted rules and rules left out of
 a half. The freeze writes `selection-set-<digest>.json` or exits 1 naming the component that missed
 its target.
+
+Before stage 7, rerun the trunk measurement on a gen-3 curated shard and confirm it fits 8 GB:
+
+```bash
+python -u scripts/measure_trunk_step.py --shard <gen-3 curated shard> --batch-size 32
+```
 
 ## Stage 7 — train (story 7)
 

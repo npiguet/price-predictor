@@ -449,7 +449,7 @@ and that the reporting half never enters the control score.
 - A scenario's contrasting variant has polarity `other`. Its records are counted but are not
   rule-test records (FR-072).
 - A rule's detector exists but finds no record in either validation stratum. The rule contributes
-  nothing to the rule-test component; it is reported as untested.
+  nothing to the rule-test component; the frozen set names it as untested (FR-073).
 - A detector reads only gen-3 fields and `rule-counts` runs over gen-2 records. The rule is
   reported as not countable on gen-2 (FR-007).
 - A static's condition is reevaluated mid-action. `active` is Forge's answer at snapshot time.
@@ -470,7 +470,7 @@ and that the reporting half never enters the control score.
 - A mutated permanent. Each component card gets a card slot tied by `merged with`, and its lines
   reach the permanent through `line of`.
 - An entry of Forge's remembered list that does not outlive its resolution. It is not a relation;
-  the rule that separates lasting entries is settled in planning.
+  FR-050 gives the rule that separates lasting entries.
 - A banding combat. `in band with` exists as a relation type, but no banding output is trained
   (banding is out of scope).
 - An added copy whose rule names an output the record does not carry. Under the hard mask that
@@ -521,9 +521,10 @@ and that the reporting half never enters the control score.
 - **FR-007**: Detectors MUST run over gen-2 and gen-3 records. A detector that needs a field the
   record's generation lacks MUST report the rule as not countable on that generation, never as
   zero.
-- **FR-008**: `python -m effects rule-counts --records-dir DIR [--output PATH] [--cards-folder DIR]
+- **FR-008**: `python -m effects rule-counts --records-dir DIR [--output PATH] [--cards-folder DIR …]
   [--variant-scripts DIR] [--rules-dir DIR]` (the last three for the sidecars and catalogue the
-  detectors read, defaulting as `build-corpus` does and to `rules`) MUST count, per
+  detectors read, defaulting as `build-corpus` does and to `rules`; `--cards-folder` repeatable,
+  as on `build-corpus`) MUST count, per
   rule, the records of each polarity, split into three sources: natural records of random-seat
   games, natural records of games between two Forge AIs, and aimed records (those carrying
   `aimed_at`, FR-009a, whatever their game). It MUST write them to `--output` (default
@@ -745,11 +746,13 @@ and that the reporting half never enters the control score.
   pre-norm, feed-forward block and dropout, and satisfy the four properties of root § 10.5, each
   checked by a test written before the layer.
 - **FR-050**: The relation types MUST be those of root § 10.3's table, each name being two types,
-  one per direction; `targets` MUST have one type per target index. A card's lines MUST be tied to
+  one per direction; `targets` MUST have four types per direction, one each for target indices 0, 1
+  and 2 and one shared by index 3 and above. A card's lines MUST be tied to
   it by `line of`, the lines of one card to each other by `line of the same card`, a charm's modes
   to their root by `mode of`. Cost history MUST be a count on the card, not a relation. Same-name
   relations MUST be built from name matches, with no learned name embedding. A remembered-list entry
-  MUST be a relation only when it outlives its resolution.
+  MUST be a relation only when it outlives its resolution: the entry is a card or a player, and
+  the snapshot is taken while no ability of the remembering card is on the stack or resolving.
 - **FR-051**: Each gen-2 link feature MUST gain its relation and be kept or replaced as root § 10.4's
   table says.
 
@@ -898,7 +901,7 @@ and that the reporting half never enters the control score.
   it is left out. The worst-case estimator for a grid and for an output field's explained deviance
   is settled in planning ([research.md](research.md), Decision E4). The freeze, and `build-corpus`
   where it can already tell, MUST exit 1 when a component misses its target, naming the stratum,
-  half and component.
+  half and component. `build-corpus` MUST exit only after writing the corpus and its manifest.
 - **FR-068c**: Training runs no separate check of FR-068a or FR-068b. If an epoch nevertheless
   meets a component with nothing to score, including a deviance component left empty because every
   field falls at or below `--deviance-floor`, `train-effect-model` MUST exit 1 naming the stratum,
@@ -928,7 +931,8 @@ and that the reporting half never enters the control score.
   probability of the scenario's outcome for a binary or categorical output, the expected value for a
   count or delta. Its score MUST be the AUC ranking `fires` records above `does_not_fire` records,
   averaged over the rule's outputs. A rule whose test records in a stratum hold one polarity only
-  MUST be left out of that stratum's component.
+  MUST be left out of that stratum's component. A rule whose detector finds no test record in a
+  half MUST be named in the frozen set as untested.
 - **FR-074**: The knowledge-probe suite MUST gain the probes of root § 14.5: turn and step
   conditions (with casting-speed and split-second subsets), anthem, the combat grid with several
   blockers, the evasion grid's protection rows over every protection quality, the toughness sweep on
@@ -950,7 +954,8 @@ and that the reporting half never enters the control score.
 
 #### Records and artifacts (root § 16)
 
-- **FR-077**: A checkpoint MUST add the relation tables, the averaged weights, `--rule-mask`,
+- **FR-077**: A checkpoint MUST add the relation tables, the relation type names in table order
+  (every loader refusing a checkpoint whose list differs), the averaged weights, `--rule-mask`,
   `--deviance-floor`, `--ema-epochs`, `--stratum-weight`, `--relation-values` and the manifest's
   map content hash (FR-060a). The frozen rule
   tests MUST be written with the knowledge-probe set, holding the rule tests' records and their
@@ -1014,8 +1019,8 @@ and that the reporting half never enters the control score.
   per polarity split by natural random-seat games, natural Forge-AI games and aimed records (none
   on gen-2), or "not countable on gen-2".
 - **SC-003**: In a gen-3 pilot, every record carries `generation: 3`, every field of root § 8.13
-  appears with a non-constant value in `field-coverage` wherever the pilot's games can produce it,
-  and the dropped-event report is printed.
+  appears with a non-constant value in `field-coverage` or is listed as constant or absent with a
+  reason the operator accepts, and the dropped-event report is printed.
 - **SC-004**: In a gen-3 pilot, no trigger record holds a death of the state-based check that its
   trigger reached the stack during.
 - **SC-005**: The trunk layer passes all four property tests, and one training step at width 256 on
@@ -1044,9 +1049,9 @@ and that the reporting half never enters the control score.
 - Which rules to enable for directed forks, how many coverage rounds to run, the random-seat share,
   and whether to try the soft mask are run-time decisions recorded in the gen-3 record, not
   defaults this feature fixes. The run plan trains with the hard mask first.
-- The rule that tells a lasting remembered-list entry from a transient one is settled in planning
-  (root § 2).
-- Target-index relation types are capped at a fixed number of indices set in planning, recorded in
-  the checkpoint.
+- The rule that tells a lasting remembered-list entry from a transient one is FR-050's, decided in
+  [research.md](research.md) Decision C8.
+- Target-index relation types are capped at four per direction (FR-050, research Decision M3); the
+  checkpoint records the relation type names in order (FR-077).
 - Consuming `e` in the scorer, picker, draft agent or game agent is out of scope.
 - Run results land in the gen-3 record's Result section, never in this spec or the root spec.

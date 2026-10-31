@@ -102,7 +102,7 @@ Concepts gen-3 adds, none colliding with an existing name once the renames below
 | `PriorityCandidates` | `FE/PriorityCandidates.java` | `RandomSeatController.playableCandidates`, the AI playability hook |
 | `ForkPlayForward` | `FE/ForkPlayForward.java` | `InterventionFork.forceResolution`; Forge's `AITest` driving `mainLoopStep` |
 | `FloatingEffects` (floating effects as command-zone objects) | `FE/FloatingEffects.java` | `LayerContributions.addCard` (`FE/LayerContributions.java:43-69`) over the same timestamp-keyed layer tables; `ContinuousChannel.record` skipping static id 0 (`FE/ContinuousChannel.java:79-83`); `ClauseOutcomeRouter.clauseResolving` (`FE/ClauseOutcomeRouter.java:87-103`); `EventAttribution.declaredDuration :203-215`; `SnapshotBuilder.emblems :209-217`; `ProvenanceResolver.effectSource :331-334` (Decision C4) |
-| Protection copies | `E/application/protection_copies.py` | `lethality_counterfactuals.qualify :301` and `counterfactual :448`; `evasion_grid.edited :106` granting protection through `BoardEdit.grant_keyword` (`scripts/effect_knowledge_probes/board_edits.py:81`) and deciding the block by `may_block :63`; copies written by `_ShardWriter._train` (`E/application/corpus_write.py:186-205`) (Decision R5) |
+| Protection copies | `E/domain/protection_copies.py` | `lethality_counterfactuals.qualify :301` and `counterfactual :448`; `evasion_grid.edited :106` granting protection through `BoardEdit.grant_keyword` (`scripts/effect_knowledge_probes/board_edits.py:81`) and deciding the block by `may_block :63`; copies written by `_ShardWriter._train` (`E/application/corpus_write.py:186-205`) (Decision R5) |
 
 Renames, required by Principle VII(c) because the names would read as the same thing:
 
@@ -282,9 +282,11 @@ tests can only read outputs that exist.
 
 #### R5. Protection copies are written by `build-corpus`, in the lethality copies' shape but not through their code
 
-**Decision**: `E/application/protection_copies.py` follows `lethality_counterfactuals`' two steps: a
+**Decision**: `E/domain/protection_copies.py` (torch-free, beside `lethality_counterfactuals` in the
+domain layer, since both functions are pure rules) follows `lethality_counterfactuals`' two steps: a
 pure qualifier (`qualify :301`) deciding whether a real record can carry the copy, then a copy function
-(`counterfactual :448`) editing the record from a seeded generator. What it reuses and extends:
+(`counterfactual :448`) editing the record from a seeded generator. Only the write pass that calls it
+is application code. What it reuses and extends:
 
 - the outcomes come from `rule_outcomes`, extended with rule 702.16's: damage prevented, a block or
   target made illegal, an Aura put into the graveyard. The block outcome extends `may_block`'s
@@ -710,6 +712,12 @@ training reads the one for its `--rule-mask`.
 (Decision R3) and recorded in the manifest; the freeze reads them and assigns none, and exits 1 naming
 the stratum and half when a half holds fewer than 300 games. Line probes (`items`, `pairs`) read training records, are reported
 only, and never feed a stratum score.
+
+The thresholds (300 games per half, 0.1 per item, 0.05 per component, r = 4) are keyword arguments of
+`stratum_placement`, `selection_set` and `freeze_selection_set`, with these values as defaults, so unit
+tests pass small values. No operator flag overrides them. `build-corpus` writes the corpus and its
+manifest before any precision exit, so a pilot corpus, which cannot meet the thresholds, exits 1 and
+is still read (user decision).
 
 #### E6. Rule-test entity and output readout
 

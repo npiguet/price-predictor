@@ -132,9 +132,12 @@ The feature moves data (collection, `rule-counts`, curation, the freeze) and run
   checked-in constant, not a scan at startup. The loss-denominator pre-pass reads a fixed seeded
   sample of shards once and is stored in `resume.pt`.
 
-Measurement planned, not optimization: the US4 step-time and peak-memory measurement, and the
-in-epoch selection time, are recorded before the first training run. The deviance sample cap is tuned
-from them.
+Measurement planned, not optimization: the US4 step-time and peak-memory measurement, repeated on a
+gen-3 curated shard once the gen-3 layout exists, and the in-epoch selection time, are recorded before
+the first training run. The deviance sample cap is tuned from them. The stage-3 pilot records gzipped
+bytes per game and games per hour against gen-2 with the same flags, because gen-3 enumerates both
+seats' candidates at every priority stop with uncapped `legal_targets` and lists every line of every
+permanent.
 
 ## Project Structure
 
@@ -212,11 +215,11 @@ src/effects/
 │   ├── effect_targets.py, entity_field_targets.py  # new targets; gate-free legality
 │   ├── field_kinds.py, effect_losses.py, gate_metrics.py, loss_floor.py  # negative binomial; masks; denominators
 │   ├── corpus_plan.py, corpus_curation.py, corpus_manifest.py, sampling.py  # signature condition bit; RuleRow; manifest
+│   ├── protection_copies.py        # NEW: FR-058 rule-labelled copies (qualifier and copy, pure)
 │   └── canonical_digest.py         # sha256 variant
 ├── application/
 │   ├── rule_counts.py              # NEW
 │   ├── corpus_survey.py, corpus_write.py, build_corpus.py, validation_samples.py  # inventories, pool, copies, curation, strata
-│   ├── protection_copies.py        # NEW: FR-058 rule-labelled copies
 │   ├── freeze_selection_set.py     # NEW
 │   ├── control_score.py            # NEW
 │   ├── record_forward.py           # NEW: one chunked forward

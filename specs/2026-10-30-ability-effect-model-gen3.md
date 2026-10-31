@@ -97,8 +97,8 @@ Out of scope
   order of pending extra turns, effect expiry, mana emptying, event and stack order.
 - Characteristics the input already shows with no change to predict, such as a colour
   derived from a mana cost.
-- Which entries of Forge's remembered list are links: only an entry that outlives its
-  resolution is one (§ 10.3), and the rule that tells them apart is settled in planning.
+- Entries of Forge's remembered list that do not outlive their resolution, which are not
+  links (§ 10.3).
 - Per-clause target legality for a spell with several targeting clauses (§ 11.4).
 
 # 3. How it works
@@ -684,7 +684,11 @@ This section replaces the gen-2 spec's rule that no other positional scheme is a
   card, not a relation.
 - Two slots whose names match are related by `has the same name`, and so are a slot and
   a name chosen earlier that it matches. No name embedding is learned.
-- An entry of Forge's remembered list is a link only when it outlives its resolution.
+- An entry of Forge's remembered list is a link only when it outlives its resolution: the
+  entry is a card or a player, and the snapshot is taken while no ability of the
+  remembering card is on the stack or resolving.
+- `targets` has four types per direction: one each for target indices 0, 1 and 2, and
+  one shared by index 3 and above.
 
 | family | examples | Forge source | relation, one type per direction |
 |---|---|---|---|
@@ -1014,7 +1018,8 @@ Precision target, in each half of each stratum:
 - A grid whose rule outcome is the same in every cell has no error baseline. Its standard
   error is unbounded, and it is left out.
 - The freeze, and `build-corpus` where it can already tell, exit 1 when a component misses
-  its target, naming the stratum, half and component.
+  its target, naming the stratum, half and component. `build-corpus` exits only after
+  writing the corpus and its manifest.
 - Training runs no separate check of the balance or the target. An epoch that meets a
   component with nothing to score, a deviance component left empty by `--deviance-floor`
   included, ends `train-effect-model` with exit 1, naming the stratum, half and component.
@@ -1044,6 +1049,8 @@ Gate 1 reads the negative binomial deviance (§ 13.3). Its other margins are unc
   outcome happens above those where it does not, averaged over the rule's outputs.
 - A rule whose test records in a stratum hold one polarity only is left out of that
   stratum's rule-test component.
+- A rule whose detector finds no test record in a half is named in the frozen set as
+  untested.
 
 ## 14.5 New probes and measures
 
@@ -1140,7 +1147,7 @@ Printed output
 | `manifest.json` | by `build-corpus` | adds per-rule counts by source (§ 5.2), the map snapshot: each tagged rule's verdict and outputs, with the map's content hash (§ 12.1), per-rule budgets per polarity, one-sided rules and unbudgeted rules (§ 12.1), one-sided conditions (§ 12.2), rules left out of a validation half and `turn_action` records left out by subkind (§ 12.4), and the closed subtype and keyword lists (§ 11.2, § 11.3) |
 | `output/effects/rule-counts.json` | by `rule-counts` | per-rule counts by source over a records set (§ 5.2) |
 | frozen rule tests | with the knowledge-probe set | the rule tests' records and their selection and reporting halves, with a content digest; the balance ratio r and the items left out by the precision target (§ 14.2) |
-| checkpoints | by `train-effect-model` | add the relation tables, the averaged weights, `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight`, `--relation-values` and the manifest's map content hash; record the input layout `gen-3`, and every loader refuses a checkpoint of any other layout, gen-1 and gen-2 included |
+| checkpoints | by `train-effect-model` | add the relation tables, the relation type names in table order (§ 10.3), the averaged weights, `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight`, `--relation-values` and the manifest's map content hash; record the input layout `gen-3`, and every loader refuses a checkpoint of any other layout, gen-1 and gen-2 included, or with a different list of relation type names |
 | `resume.pt` | every epoch | adds the averaged weights |
 | knowledge-probe scorecards | per checkpoint | add the probes of § 14.5 and the rule tests, per half |
 
