@@ -672,13 +672,39 @@ another player are rare enough to leave out.
 2. **The facts the snapshot already records.** Subtypes, faces, copy sources, names, attachments,
    attack targets and stack targets need input slots and no new collection.
 3. **The collection and curation gaps.** Permanent-spell resolutions have to survive
-   `build-corpus`, turn-based actions need a record of their own, and attackers records are anchored
-   to one attacker, as blockers records already are. All three then feed outputs that exist.
+   `build-corpus`, and attackers records are anchored to one attacker, as blockers records already
+   are. Both then feed outputs that exist. An attackers record of a real declaration also records
+   whether declaring the attack tapped its anchor. That trains the existing tap-state output and
+   makes vigilance learnable.
 4. **Outputs for outcomes the records already carry.** The resolution outcome, a player losing,
    copies, phasing, regeneration, prevention, and extra and skipped turns are each a new output over
    a record field or event that exists. The zone outcome gains the destinations it now merges.
 5. **New collection with its own inputs and outputs**: the designation block, values chosen
    earlier, the objects exiled with a card, floating effects and what happened earlier in the turn.
+
+**Turn-based actions get records of their own but stay out of the corpus.** The draw in the draw
+step, the cleanup discard, untapping, untap-step phasing, the day/night flip and a Saga's lore
+counter follow from the rules alone in nearly every game. A corpus holding them would spend its
+budget on records whose outcome needs no ability text to predict. The collector writes them anyway,
+as `turn_action` records, so the dropped-event count no longer counts them and a later generation
+can train on them without collecting again. `build-corpus` writes none of them to any stratum.
+
+**Fourteen of the 15 rules that only turn-based actions show stay unlearnable in gen-3.** The
+fifteenth is the attack tap, which moves onto the attackers record. Each of the 14 has its outcome
+only in a turn-based action: a creature that does not untap (Claustrophobia), no maximum
+hand size (Reliquary Tower), a skipped draw (Necropotence), untap-step phasing, the day/night flip
+and the lore counter. The map gives them the verdict `recorded`. Rule budgets go only to rules the
+map marks `trained`, so these rules get no share and no rule test.
+
+**Folding a turn-based action into a neighbouring record is rejected, except for the attack tap.**
+A record pairs a board and an acting ability with the outcome that ability caused. A state-based
+death can join the record of the action before it, because the state-based check reacts to what
+that action did to the board. A turn-based action follows from the turn advancing, not from the
+action before it. Folded into the last record of the previous turn, the untap would teach the model
+that an end-of-turn resolution untaps every permanent. The lore counter comes closest, because it
+always triggers a chapter ability, but the chapter's record would then credit that ability with
+adding the counter. Declaring an attack does cause the tap that comes with it, so the attack tap
+alone moves onto the attackers record.
 
 **Running the map again over each new layout measures what the change bought.** The map is a pure
 reading of the layout and the scenarios, so a rerun counts the rules each change made learnable.
@@ -2010,8 +2036,8 @@ line gives every field's card-disjoint explained deviance, and each run's "Const
   `rules/FINDINGS.md`.
 - **Build the collection items not yet in**: every line of a permanent, the timing bit and failed
   checks, the owner field, the combat snapshot at the start of the damage step, the entities each
-  static affects, permanent-spell resolutions, turn-based action records, anchored attackers
-  records and the dropped-event count.
+  static affects, permanent-spell resolutions, turn-based action records kept out of the corpus,
+  anchored attackers records carrying the attack tap, and the dropped-event count.
 - **Build the relation-aware trunk at 256 wide before gen-3's first training run**, its tests
   written before it, and measure its step time and peak memory on a fixed shard.
 - **Train with the hard mask on rule-drawn records first**, and move to the soft mask only if a
