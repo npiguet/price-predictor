@@ -183,6 +183,8 @@ _TORCH_FREE = (
     "effects.domain.fork_operation",
     "effects.domain.rule_catalogue",
     "effects.domain.rule_outcomes",
+    "effects.domain.rule_detectors",
+    "effects.domain.rule_detectors.sba_zone_move",
     "effects.application.corpus_survey",
     "effects.application.corpus_write",
     "effects.application.corpus_report",

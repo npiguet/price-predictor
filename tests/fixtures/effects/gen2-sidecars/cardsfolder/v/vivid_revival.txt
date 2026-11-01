@@ -1,0 +1,4 @@
+name: vivid revival
+mana cost: {4}{G}
+types: sorcery
+spell[1]: return up to three target multicolored cards from your graveyard to your hand. exile CARDNAME.

@@ -1,0 +1,7 @@
+name: felothar the steadfast
+mana cost: {1}{W}{B}{G}
+types: legendary creature human warrior
+power toughness: 0/5
+activated[1]: {3}, {T}, sacrifice another creature: draw cards equal to the sacrificed creature's toughness, then discard cards equal to its power.
+static: each creature you control assigns combat damage equal to its toughness rather than its power.
+static: creatures you control can attack as though they didn't have defender.

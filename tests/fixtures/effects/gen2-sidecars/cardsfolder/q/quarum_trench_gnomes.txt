@@ -1,0 +1,5 @@
+name: quarum trench gnomes
+mana cost: {3}{R}
+types: creature gnome
+power toughness: 1/1
+activated[1]: {T}: if target plains is tapped for mana, it produces colorless mana instead of white mana.

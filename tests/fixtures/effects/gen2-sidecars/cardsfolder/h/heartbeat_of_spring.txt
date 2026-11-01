@@ -1,0 +1,4 @@
+name: heartbeat of spring
+mana cost: {2}{G}
+types: enchantment
+replacement: whenever a player taps a land for mana, that player adds one mana of any type that land produced.

@@ -1,0 +1,6 @@
+name: sea scryer
+mana cost: {1}{U}
+types: creature merfolk wizard
+power toughness: 1/1
+activated[1]: {T}: add {C}.
+activated[2]: {1}, {T}: add {U}.

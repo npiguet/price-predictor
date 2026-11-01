@@ -1,0 +1,4 @@
+name: villain token
+types: creature villain
+power toughness: 2/1
+static: menace

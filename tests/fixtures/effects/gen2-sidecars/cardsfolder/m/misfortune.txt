@@ -1,0 +1,6 @@
+name: misfortune
+mana cost: {1}{B}{R}{G}
+types: sorcery
+spell[1]: choose one
+option[2]: put a +1/+1 counter on each creature you control. you gain 4 life.
+option[3]: you put a -1/-1 counter on each creature that player controls and CARDNAME deals 4 damage to that player.

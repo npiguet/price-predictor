@@ -1,0 +1,8 @@
+name: a-karn, living legacy
+mana cost: {4}
+types: legendary planeswalker karn
+loyalty: 4
+planeswalker[1]: [+1]: create a tapped powerstone token.
+planeswalker[2]: 0: pay any amount of mana. look at that many cards from the top of your library, then put one of those cards into your hand and the rest on the bottom of your library in a random order.
+planeswalker[3]: [-6]: you get an emblem with "tap an untapped artifact you control: this emblem deals 1 damage to any target."
+replacement: CARDNAME enters with four loyalty counters on it.

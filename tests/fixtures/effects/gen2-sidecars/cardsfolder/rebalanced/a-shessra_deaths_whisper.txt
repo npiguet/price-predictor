@@ -1,0 +1,6 @@
+name: a-shessra, death's whisper
+mana cost: {1}{B}{G}
+types: legendary creature human elf warlock
+power toughness: 1/4
+triggered: bewitching whispers — when CARDNAME enters, target creature blocks this turn if able.
+triggered: whispers of the grave — at the beginning of your end step, if a creature died this turn, you may pay 2 life. if you do, draw a card.

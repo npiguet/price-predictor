@@ -1,0 +1,4 @@
+name: pyrrhic revival
+mana cost: {3}{W/B}{W/B}{W/B}
+types: sorcery
+spell[1]: each player returns each creature card from their graveyard to the battlefield with an additional -1/-1 counter on it.

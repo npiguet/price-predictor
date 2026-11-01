@@ -1,0 +1,6 @@
+name: searing spear askari
+mana cost: {2}{R}
+types: creature human knight
+power toughness: 2/2
+triggered: flanking
+activated[1]: {1}{R}: CARDNAME gains menace until end of turn.

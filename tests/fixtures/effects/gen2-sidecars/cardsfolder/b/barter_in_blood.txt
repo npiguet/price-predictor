@@ -1,0 +1,4 @@
+name: barter in blood
+mana cost: {2}{B}{B}
+types: sorcery
+spell[1]: each player sacrifices two creatures.

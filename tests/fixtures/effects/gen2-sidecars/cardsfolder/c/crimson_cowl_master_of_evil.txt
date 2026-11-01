@@ -1,0 +1,5 @@
+name: crimson cowl, master of evil
+mana cost: {2}{B}
+types: legendary creature human villain
+power toughness: 1/3
+triggered: whenever one or more nontoken villains you control attack a player, you create a 2/1 black villain creature token with menace.

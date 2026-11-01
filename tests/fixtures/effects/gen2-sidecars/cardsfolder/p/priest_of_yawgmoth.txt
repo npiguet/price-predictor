@@ -1,0 +1,5 @@
+name: priest of yawgmoth
+mana cost: {1}{B}
+types: creature phyrexian human cleric
+power toughness: 1/2
+activated[1]: {T}, sacrifice an artifact: add an amount of black mana equal to the sacrificed artifact's mana value.

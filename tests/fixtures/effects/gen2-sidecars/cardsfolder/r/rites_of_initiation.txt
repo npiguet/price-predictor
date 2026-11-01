@@ -1,0 +1,4 @@
+name: rites of initiation
+mana cost: {R}
+types: instant
+spell[1]: discard any number of cards at random. creatures you control get +1/+0 until end of turn for each card discarded this way.

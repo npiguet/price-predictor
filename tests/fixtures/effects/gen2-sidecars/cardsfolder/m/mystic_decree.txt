@@ -1,0 +1,4 @@
+name: mystic decree
+mana cost: {2}{U}{U}
+types: world enchantment
+static: all creatures lose flying and islandwalk.

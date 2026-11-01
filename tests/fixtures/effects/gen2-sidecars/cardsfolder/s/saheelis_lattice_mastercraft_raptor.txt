@@ -1,0 +1,13 @@
+layout: transform
+name: saheeli's lattice
+mana cost: {1}{R}
+types: artifact
+activated[1]: craft with one or more {4}{R}
+triggered: when CARDNAME enters, you may discard a card. if you do, draw two cards.
+
+ALTERNATE
+
+name: mastercraft raptor
+types: artifact creature dinosaur
+power toughness: */4
+static: CARDNAME's power is equal to the total power of the exiled cards used to craft it.

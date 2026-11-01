@@ -1,0 +1,4 @@
+name: sudden demise
+mana cost: {X}{R}
+types: sorcery
+spell[1]: choose a color. CARDNAME deals X damage to each creature of the chosen color.

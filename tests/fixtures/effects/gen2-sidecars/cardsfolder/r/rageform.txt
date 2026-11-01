@@ -1,0 +1,5 @@
+name: rageform
+mana cost: {2}{R}{R}
+types: enchantment
+triggered: when CARDNAME enters, it becomes an aura with enchant creature. manifest the top card of your library and attach CARDNAME to it.
+static: enchanted creature has double strike.

@@ -1,0 +1,5 @@
+name: sarkhan's dragonfire
+mana cost: {3}{R}{R}
+types: sorcery
+spell[1]: CARDNAME deals 4 damage to any target.
+spell[2]: look at the top five cards of your library. you may reveal a red card from among them and put it into your hand. put the rest on the bottom of your library in a random order.

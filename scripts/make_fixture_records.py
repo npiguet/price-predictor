@@ -18,7 +18,8 @@ so a ``SidecarCache`` rooted there resolves every key.
 ``--generation 2`` adds the categories the rule detectors are tested on: a
 resolution whose effect half kills a creature at toughness 0 or less in the
 state-based check (704.5f fires), one that leaves a creature at toughness 1
-(704.5f does not fire), a damage-step probe stripping deathtouch, and records
+(704.5f does not fire), a creature killed by damage (704.5g), a damage-step
+probe stripping deathtouch, and records
 from a random-seat game and from a game the Forge AI played on both seats.
 """
 
@@ -161,10 +162,18 @@ def _left_at_toughness_one(record: dict) -> bool:
                for entity_id, (toughness, _, died) in _toughness_after(record).items())
 
 
+def _lethal_damage_death(record: dict) -> bool:
+    """704.5g fires: a creature dealt damage by the resolution dies in the check."""
+    return _effect_resolution(record) and any(
+        damaged and died and toughness > 0
+        for toughness, damaged, died in _toughness_after(record).values())
+
+
 def _gen2_categories() -> dict[str, Callable[[dict], bool]]:
     """Gen-2's own categories, matched before the shared ones."""
     return {
         "704.5f-fires": _toughness_zero_death,
+        "704.5g-fires": _lethal_damage_death,
         "704.5f-does-not-fire": _left_at_toughness_one,
         "probe-deathtouch": lambda r: r["kind"] == "combat" and (
             r["payload"].get("probed_keyword") == "deathtouch"),

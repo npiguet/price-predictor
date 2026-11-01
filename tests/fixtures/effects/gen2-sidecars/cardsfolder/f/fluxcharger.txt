@@ -1,0 +1,6 @@
+name: fluxcharger
+mana cost: {2}{U}{R}
+types: creature weird
+power toughness: 1/5
+static: flying
+triggered: whenever you cast a instant or sorcery spell, you may switch CARDNAME's power and toughness until end of turn.

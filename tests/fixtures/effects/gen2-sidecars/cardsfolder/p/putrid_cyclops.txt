@@ -1,0 +1,5 @@
+name: putrid cyclops
+mana cost: {2}{B}
+types: creature zombie cyclops
+power toughness: 3/3
+triggered: when CARDNAME enters, scry 1, then reveal the top card of your library. CARDNAME gets -X/-X until end of turn, where X is that card's mana value.

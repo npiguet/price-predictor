@@ -1,0 +1,5 @@
+name: blue ward
+mana cost: {W}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature has protection from blue. this effect doesn't remove CARDNAME.

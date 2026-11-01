@@ -1,0 +1,5 @@
+name: prismite
+mana cost: {2}
+types: artifact creature golem
+power toughness: 2/1
+activated[1]: {2}: add one mana of any color.

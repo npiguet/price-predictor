@@ -1,0 +1,4 @@
+name: bleeding effect
+mana cost: {2}{W}{B}
+types: enchantment
+triggered: at the beginning of combat on your turn, creatures you control gain flying until end of turn if a creature card in your graveyard has flying. the same is true for first strike, double strike, deathtouch, hexproof, indestructible, lifelink, menace, reach, trample, and vigilance.

@@ -1,0 +1,5 @@
+name: lurker
+mana cost: {2}{G}
+types: creature beast
+power toughness: 2/3
+static: CARDNAME can't be the target of spells unless it attacked or blocked this turn.

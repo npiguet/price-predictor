@@ -1,0 +1,4 @@
+name: master the way
+mana cost: {3}{U}{R}
+types: sorcery
+spell[1]: draw a card. CARDNAME deals damage to any target equal to the number of cards in your hand.

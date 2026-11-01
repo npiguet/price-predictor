@@ -1,0 +1,5 @@
+name: lavaball trap
+mana cost: {6}{R}{R}
+types: instant trap
+spell[1]: destroy two target lands. CARDNAME deals 4 damage to each creature.
+static: if an opponent had two or more lands enter the battlefield under their control this turn, you may pay {3}{R}{R} rather than pay this spell's mana cost.

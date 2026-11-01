@@ -1,0 +1,6 @@
+name: skittering skirge
+mana cost: {B}{B}
+types: creature phyrexian imp
+power toughness: 3/2
+static: flying
+triggered: when you cast a creature spell, sacrifice CARDNAME.

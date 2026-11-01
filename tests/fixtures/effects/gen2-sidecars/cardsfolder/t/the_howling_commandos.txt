@@ -1,0 +1,5 @@
+name: the howling commandos
+mana cost: {1}{W}
+types: legendary creature human soldier hero
+power toughness: 3/1
+activated[1]: {5}: creatures you control get +1/+1 until end of turn. soldiers you control gain vigilance until end of turn.

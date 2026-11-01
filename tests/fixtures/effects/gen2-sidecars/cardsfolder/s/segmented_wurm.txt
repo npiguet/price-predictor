@@ -1,0 +1,5 @@
+name: segmented wurm
+mana cost: {3}{R}{G}
+types: creature wurm
+power toughness: 5/5
+triggered: whenever CARDNAME becomes the target of a spell or ability, put a -1/-1 counter on it.

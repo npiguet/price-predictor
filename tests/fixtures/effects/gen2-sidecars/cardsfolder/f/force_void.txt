@@ -1,0 +1,5 @@
+name: force void
+mana cost: {2}{U}
+types: instant
+spell[1]: counter target spell unless its controller pays {1}. draw a card at the beginning of the next turn's upkeep.
+spell[2]: draw a card.

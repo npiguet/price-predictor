@@ -1,0 +1,5 @@
+name: squallmonger
+mana cost: {3}{G}
+types: creature monger
+power toughness: 3/3
+activated[1]: {2}: CARDNAME deals 1 damage to each creature with flying and each player. any player may activate this ability.

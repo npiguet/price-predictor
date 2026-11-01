@@ -1,0 +1,7 @@
+name: snapdax, apex of the hunt
+mana cost: {1}{R}{W}{B}
+types: legendary creature dinosaur cat nightmare
+power toughness: 3/5
+alternate cost: mutate {2}{B/R}{W}{W}
+static: double strike
+triggered: whenever this creature mutates, it deals 4 damage to target creature or planeswalker an opponent controls and you gain 4 life.

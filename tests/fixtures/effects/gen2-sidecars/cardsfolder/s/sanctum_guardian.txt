@@ -1,0 +1,5 @@
+name: sanctum guardian
+mana cost: {1}{W}{W}
+types: creature human cleric
+power toughness: 1/4
+activated[1]: sacrifice CARDNAME: the next time a source of your choice would deal damage to any target this turn, prevent that damage. the next time the chosen source deals damage to any target this turn, prevent that damage.
