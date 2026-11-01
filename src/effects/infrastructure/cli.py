@@ -631,6 +631,56 @@ def _field_coverage_parser(subparsers) -> None:
 _NO_SHARDS = "effects.infrastructure.shard_io.NoShardsError"
 
 
+# ── rule-counts ─────────────────────────────────────────────────────────
+
+DEFAULT_RULE_COUNTS = "output/effects/rule-counts.json"
+
+
+def _rule_counts_parser(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "rule-counts",
+        help=(
+            "Count, per rule of the catalogue, the records showing each side of it, "
+            "split by random-seat, Forge-AI and aimed records"
+        ),
+    )
+    parser.set_defaults(func=run_rule_counts)
+    parser.add_argument(
+        "--records-dir", type=Path, required=True,
+        help="Shards to count: gen-2 or gen-3, never a mix",
+    )
+    parser.add_argument(
+        "--output", type=Path, default=Path(DEFAULT_RULE_COUNTS),
+        help="Counts file (default: %(default)s)",
+    )
+    _add_cards_folder(parser)
+    parser.add_argument(
+        "--variant-scripts", type=_optional_path, default=DEFAULT_VARIANT_SCRIPTS,
+        help="Variant sidecars the detectors read (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--rules-dir", type=Path, default=Path("rules"),
+        help="Scenarios and their detector declarations (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--workers", type=int, default=None,
+        help="Parallel shard readers; unset uses the CPU count",
+    )
+
+
+@exits_with({_NO_SHARDS: 1, MixedGenerationsError: 1, UnacceptedGenerationError: 1})
+def run_rule_counts(args: argparse.Namespace) -> int:
+    from effects.application.rule_counts import RuleCountsConfig
+    from effects.application.rule_counts import run as rule_counts
+    from effects.infrastructure.converted_trees import SourceTrees
+
+    roots = SourceTrees.of(args.cards_folders, args.variant_scripts).sidecar_roots()
+    return rule_counts(RuleCountsConfig(
+        records_dir=args.records_dir, output=args.output, rules_dir=args.rules_dir,
+        sidecar_roots=roots, workers=args.workers,
+    ))
+
+
 @exits_with({_NO_SHARDS: 1})
 def run_field_coverage(args: argparse.Namespace) -> int:
     from effects.application.field_coverage import field_coverage, report_lines
@@ -867,6 +917,7 @@ _SUBCOMMAND_BUILDERS = (
     _collect_coverage_parser,
     _build_corpus_parser,
     _field_coverage_parser,
+    _rule_counts_parser,
     _holdout_cards_parser,
     _validate_corpus_parser,
     _collect_variants_parser,
