@@ -54,7 +54,10 @@
           "label": "empty_hand",
           "polarity": "does_not_fire",
           "delta": "A's hand is empty.",
-          "expected": "Casting Radical Idea from A's graveyard is not legal: there is no card to discard."
+          "expected": "Casting Radical Idea from A's graveyard is not legal: there is no card to discard.",
+          "operation": {
+            "unclassifiable": "changes a hand or library or the zone a card starts in"
+          }
         }
       ],
       "cards": [
@@ -62,7 +65,21 @@
         "Island",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell candidate passes the cost check: every cost it carries, an additional cost such as a discard included, can be paid.",
+        "near_miss": "A candidate that fails the cost check because one of its costs cannot be paid.",
+        "params": {
+          "bit": "failed_check",
+          "check": "cost",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "702.133a-2",
@@ -126,13 +143,19 @@
           "label": "countered",
           "polarity": "fires",
           "delta": "In response, B casts Counterspell targeting Radical Idea, tapping two Islands.",
-          "expected": "Counterspell resolves and Radical Idea is countered: A draws nothing, and Radical Idea is in A's exile zone, not the graveyard. Forest is in A's graveyard."
+          "expected": "Counterspell resolves and Radical Idea is countered: A draws nothing, and Radical Idea is in A's exile zone, not the graveyard. Forest is in A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different spell or ability is cast"
+          }
         },
         {
           "label": "cast_from_hand",
           "polarity": "does_not_fire",
           "delta": "Radical Idea starts in A's hand instead of the graveyard and is cast from there with no discard.",
-          "expected": "Radical Idea resolves and A draws a card. Radical Idea is in A's graveyard, not in exile. Forest stays in A's hand."
+          "expected": "Radical Idea resolves and A draws a card. Radical Idea is in A's graveyard, not in exile. Forest stays in A's hand.",
+          "operation": {
+            "unclassifiable": "changes a hand or library or the zone a card starts in"
+          }
         }
       ],
       "cards": [
@@ -142,7 +165,19 @@
         "Plains",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A spell that resolves or is countered after being cast under an exile-on-leaving rule moves from the stack to exile instead of the graveyard.",
+        "near_miss": "Not counted: without api only the fires side is tagged (the near miss would be such a spell leaving the stack for its owner's graveyard).",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "exile"
+        },
+        "needs": []
+      }
     }
   ]
 }

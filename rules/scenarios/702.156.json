@@ -58,14 +58,27 @@
           "label": "x_four",
           "polarity": "does_not_fire",
           "delta": "A casts Aberrant with X = 4, tapping six Forests.",
-          "expected": "Aberrant enters with four +1/+1 counters and is a 4/4. The ravenous trigger does not fire (X is less than 5): A draws no card, hand is empty, library 2 cards."
+          "expected": "Aberrant enters with four +1/+1 counters and is a 4/4. The ravenous trigger does not fire (X is less than 5): A draws no card, hand is empty, library 2 cards.",
+          "operation": {
+            "unclassifiable": "a different value of X"
+          }
         }
       ],
       "cards": [
         "Forest",
         "Aberrant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A ravenous trigger fires when its permanent enters with X of 5 or more, drawing a card.",
+        "near_miss": "A ravenous trigger is evaluated for its permanent entering with X below 5 and does not fire.",
+        "params": {
+          "keyword": "Ravenous"
+        },
+        "needs": []
+      }
     }
   ]
 }

@@ -56,14 +56,28 @@
           "label": "no_defender",
           "polarity": "does_not_fire",
           "delta": "Guard Duty is not on the battlefield.",
-          "expected": "Hill Giant is a legal attacker; attacking player B is legal."
+          "expected": "Hill Giant is a legal attacker; attacking player B is legal.",
+          "operation": {
+            "unclassifiable": "the Aura granting defender is removed from the battlefield, a permanent removal rather than a keyword fact"
+          }
         }
       ],
       "cards": [
         "Hill Giant",
         "Guard Duty"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature with defender is outside the legal attackers, listed as forbidden.",
+        "near_miss": "A creature that is a legal attacker.",
+        "params": {
+          "list": "legal_attackers",
+          "fires_when": "outside"
+        },
+        "needs": []
+      }
     }
   ]
 }

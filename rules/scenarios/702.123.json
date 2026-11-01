@@ -58,13 +58,19 @@
           "label": "servos",
           "polarity": "other",
           "delta": "On resolution of the fabricate trigger A chooses not to put counters on it.",
-          "expected": "Weaponcraft Enthusiast has no counters and stays 0/1. A creates two 1/1 colorless Servo artifact creature tokens."
+          "expected": "Weaponcraft Enthusiast has no counters and stays 0/1. A creates two 1/1 colorless Servo artifact creature tokens.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         },
         {
           "label": "spell_countered",
           "polarity": "does_not_fire",
           "delta": "B responds by casting Counterspell with both Islands, targeting Weaponcraft Enthusiast.",
-          "expected": "Weaponcraft Enthusiast is countered and moves to A's graveyard. It never enters the battlefield, so the fabricate trigger does not fire and no counters or tokens appear."
+          "expected": "Weaponcraft Enthusiast is countered and moves to A's graveyard. It never enters the battlefield, so the fabricate trigger does not fire and no counters or tokens appear.",
+          "operation": {
+            "unclassifiable": "a different spell or ability is cast"
+          }
         }
       ],
       "cards": [
@@ -73,7 +79,17 @@
         "Weaponcraft Enthusiast",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A fabricate trigger fires when its permanent enters the battlefield.",
+        "near_miss": "A fabricate trigger is evaluated against a zone change it does not match and does not fire.",
+        "params": {
+          "keyword": "Fabricate"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.123b-1",
@@ -128,7 +144,10 @@
           "label": "one_instance",
           "polarity": "does_not_fire",
           "delta": "Cayth, Famed Mechanist is controlled by B instead of A.",
-          "expected": "Weaponcraft Enthusiast has only its own fabricate 2, so one trigger fires. It has two +1/+1 counters and is 2/3, and no Servo is created."
+          "expected": "Weaponcraft Enthusiast has only its own fabricate 2, so one trigger fires. It has two +1/+1 counters and is 2/3, and no Servo is created.",
+          "operation": {
+            "unclassifiable": "adds, removes, attaches or changes the controller of a permanent, which no fork operation does"
+          }
         }
       ],
       "cards": [
@@ -136,7 +155,17 @@
         "Cayth, Famed Mechanist",
         "Weaponcraft Enthusiast"
       ],
-      "forge_notes": "Variant one_instance moves Cayth, Famed Mechanist to B's battlefield; its granted fabricate applies only to its controller's creatures."
+      "forge_notes": "Variant one_instance moves Cayth, Famed Mechanist to B's battlefield; its granted fabricate applies only to its controller's creatures.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "Each fabricate instance of an entering permanent is evaluated and fires as its own trigger.",
+        "near_miss": "A fabricate trigger evaluated and not fired; the detector does not count instances per event, and misses an instance another permanent's effect grants, which reads off that effect's line.",
+        "params": {
+          "keyword": "Fabricate"
+        },
+        "needs": []
+      }
     }
   ]
 }

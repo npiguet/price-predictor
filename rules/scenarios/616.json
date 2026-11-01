@@ -71,13 +71,19 @@
           "label": "colossus-first",
           "polarity": "other",
           "delta": "B chooses Darksteel Colossus's own replacement effect to apply first.",
-          "expected": "Darksteel Colossus is shuffled into B's library instead of going to the graveyard; Rest in Peace no longer applies to it and does nothing. Diabolic Edict is still exiled."
+          "expected": "Darksteel Colossus is shuffled into B's library instead of going to the graveyard; Rest in Peace no longer applies to it and does nothing. Diabolic Edict is still exiled.",
+          "operation": {
+            "unclassifiable": "B chooses a different replacement effect to apply first: a player's choice."
+          }
         },
         {
           "label": "single-effect",
           "polarity": "does_not_fire",
           "delta": "Rest in Peace is not on the battlefield.",
-          "expected": "Only Darksteel Colossus's replacement effect applies, with no choice to make; it is shuffled into B's library. Diabolic Edict goes to A's graveyard."
+          "expected": "Only Darksteel Colossus's replacement effect applies, with no choice to make; it is shuffled into B's library. Diabolic Edict goes to A's graveyard.",
+          "operation": {
+            "unclassifiable": "Rest in Peace is removed from the battlefield: removing a permanent."
+          }
         }
       ],
       "cards": [
@@ -86,7 +92,10 @@
         "Darksteel Colossus",
         "Diabolic Edict"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The rule's outcome is that, of several applicable replacement effects, the affected object's controller chooses one and the rest are rechecked. A rewrite record is written per executeReplacement call, so it shows only the effect applied (replaced_by, outgoing); an effect no longer applicable after the recheck gets no call and no record, exactly as an effect that never applied. No record holds the candidate set or the controller's choice: the rewrite payload has no candidate list, no choice_made event is written for replacement ordering, and gen-3 decision candidates cover priority actions, not replacement choices."
+      }
     },
     {
       "id": "616.1a-1",
@@ -139,7 +148,10 @@
           "label": "no-landfall",
           "polarity": "does_not_fire",
           "delta": "A does not play the Mountain, so no land entered under A's control this turn.",
-          "expected": "Searing Blaze deals 1 damage to each, doubled to 2: B is at 18 life and Centaur Courser (3/3) survives with 2 damage marked."
+          "expected": "Searing Blaze deals 1 damage to each, doubled to 2: B is at 18 life and Centaur Courser (3/3) survives with 2 damage marked.",
+          "operation": {
+            "unclassifiable": "A does not play the Mountain: a different decision, and a land fewer on the battlefield."
+          }
         }
       ],
       "cards": [
@@ -148,7 +160,10 @@
         "Centaur Courser",
         "Searing Blaze"
       ],
-      "forge_notes": "In Forge the landfall condition is part of Searing Blaze's own damage amount (Count$Landfall), so the doubling applies to the final amount."
+      "forge_notes": "In Forge the landfall condition is part of Searing Blaze's own damage amount (Count$Landfall), so the doubling applies to the final amount.",
+      "detector": {
+        "none": "Forge does not implement a self-replacement effect as a replacement effect: the changed amount or action is computed inside the spell's own script (a Count$ condition such as Count$Landfall), so no rewrite record is written for it. The rewrite record of a later replacement (e.g. a damage_dealt updated) carries an incoming event that already reflects the self-replacement, but nothing in it distinguishes that from a spell whose base amount is the same. Looked in the rewrite payload (incoming, outgoing, result, replaced_by), EVENT_PARAMS (replacement_applied has no parameters) and the resolution record's events."
+      }
     },
     {
       "id": "616.1c-1",
@@ -199,7 +214,10 @@
           "label": "essence-absent",
           "polarity": "does_not_fire",
           "delta": "Essence of the Wild is not on the battlefield.",
-          "expected": "Rusted Sentinel enters as itself (a 3/4 Golem) and its own effect makes it enter tapped."
+          "expected": "Rusted Sentinel enters as itself (a 3/4 Golem) and its own effect makes it enter tapped.",
+          "operation": {
+            "unclassifiable": "Essence of the Wild is removed from the battlefield: removing a permanent."
+          }
         }
       ],
       "cards": [
@@ -257,13 +275,19 @@
           "label": "no-essence",
           "polarity": "does_not_fire",
           "delta": "Essence of the Wild is not on the battlefield.",
-          "expected": "Doubling Season alone makes four tokens; they enter as four 1/1 white Soldier tokens."
+          "expected": "Doubling Season alone makes four tokens; they enter as four 1/1 white Soldier tokens.",
+          "operation": {
+            "unclassifiable": "Essence of the Wild is removed from the battlefield: removing a permanent."
+          }
         },
         {
           "label": "no-doubling",
           "polarity": "other",
           "delta": "Doubling Season is not on the battlefield.",
-          "expected": "Raise the Alarm creates two tokens, and each enters as a copy of Essence of the Wild: two 6/6 Essence of the Wild tokens."
+          "expected": "Raise the Alarm creates two tokens, and each enters as a copy of Essence of the Wild: two 6/6 Essence of the Wild tokens.",
+          "operation": {
+            "unclassifiable": "Doubling Season is removed from the battlefield: removing a permanent."
+          }
         }
       ],
       "cards": [
@@ -326,7 +350,10 @@
           "label": "bears-enchanted",
           "polarity": "does_not_fire",
           "delta": "Pariah is attached to Grizzly Bears instead of Daunting Defender.",
-          "expected": "Pariah redirects the 3 damage to Grizzly Bears, which is not a Cleric, so nothing is prevented; Grizzly Bears dies. A stays at 20 life."
+          "expected": "Pariah redirects the 3 damage to Grizzly Bears, which is not a Cleric, so nothing is prevented; Grizzly Bears dies. A stays at 20 life.",
+          "operation": {
+            "unclassifiable": "Pariah is attached to a different creature: a different choice of what it enchants."
+          }
         }
       ],
       "cards": [

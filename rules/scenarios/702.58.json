@@ -58,13 +58,19 @@
           "label": "graft_1",
           "polarity": "fires",
           "delta": "A casts Simic Initiate (Graft 1), tapping Forest, instead of Vigean Graftmage.",
-          "expected": "Simic Initiate enters with one +1/+1 counter and is a 1/1."
+          "expected": "Simic Initiate enters with one +1/+1 counter and is a 1/1.",
+          "operation": {
+            "unclassifiable": "a different spell is cast; no fork operation changes the cast"
+          }
         },
         {
           "label": "no_graft",
           "polarity": "does_not_fire",
           "delta": "A casts Grizzly Bears, tapping Forest and Island, instead of Vigean Graftmage.",
-          "expected": "Grizzly Bears enters with no counters and is a 2/2."
+          "expected": "Grizzly Bears enters with no counters and is a 2/2.",
+          "operation": {
+            "unclassifiable": "a different spell is cast; no fork operation changes the cast"
+          }
         }
       ],
       "cards": [
@@ -74,7 +80,18 @@
         "Simic Initiate",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent with graft enters the battlefield with +1/+1 counters put on it as it enters.",
+        "near_miss": "A permanent without graft enters with no +1/+1 counters.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "+1/+1"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.58a-2",
@@ -130,13 +147,19 @@
           "label": "declined",
           "polarity": "other",
           "delta": "A chooses not to move a counter when the graft trigger resolves.",
-          "expected": "The graft trigger fires and resolves with no effect. Vigean Graftmage keeps two +1/+1 counters (2/2) and Grizzly Bears has none (2/2)."
+          "expected": "The graft trigger fires and resolves with no effect. Vigean Graftmage keeps two +1/+1 counters (2/2) and Grizzly Bears has none (2/2).",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         },
         {
           "label": "noncreature_enters",
           "polarity": "does_not_fire",
           "delta": "A casts Sol Ring, tapping Forest, instead of Grizzly Bears.",
-          "expected": "Sol Ring enters. The graft trigger does not fire. Vigean Graftmage keeps two +1/+1 counters (2/2)."
+          "expected": "Sol Ring enters. The graft trigger does not fire. Vigean Graftmage keeps two +1/+1 counters (2/2).",
+          "operation": {
+            "unclassifiable": "a different spell is cast; no fork operation changes the cast"
+          }
         }
       ],
       "cards": [
@@ -145,7 +168,17 @@
         "Grizzly Bears",
         "Sol Ring"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A graft trigger is evaluated when another creature enters the battlefield and fires.",
+        "near_miss": "A graft trigger is evaluated against an event it does not match, such as a noncreature permanent entering, and does not fire.",
+        "params": {
+          "keyword": "graft"
+        },
+        "needs": []
+      }
     }
   ]
 }

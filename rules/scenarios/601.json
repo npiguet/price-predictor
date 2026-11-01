@@ -58,7 +58,8 @@
           "label": "no-mana",
           "polarity": "does_not_fire",
           "delta": "A's only Mountain starts tapped.",
-          "expected": "The cast is not made: A cannot pay {R}, Lightning Bolt stays in A's hand, the stack is empty, and B's life is 20."
+          "expected": "The cast is not made: A cannot pay {R}, Lightning Bolt stays in A's hand, the stack is empty, and B's life is 20.",
+          "operation": "tap"
         }
       ],
       "cards": [
@@ -120,7 +121,10 @@
           "label": "green",
           "polarity": "does_not_fire",
           "delta": "Painter's Servant's controller chose green instead of blue.",
-          "expected": "Shock is red and green, so Pyroblast resolves and does nothing (it is not a fizzle: its target is still legal); Pyroblast is in B's graveyard, then Shock resolves: Grizzly Bears is dealt 2 damage and moves to B's graveyard."
+          "expected": "Shock is red and green, so Pyroblast resolves and does nothing (it is not a fizzle: its target is still legal); Pyroblast is in B's graveyard, then Shock resolves: Grizzly Bears is dealt 2 damage and moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different choice made as the permanent entered"
+          }
         }
       ],
       "cards": [
@@ -180,7 +184,10 @@
           "label": "two-creatures",
           "polarity": "does_not_fire",
           "delta": "B also controls Craw Wurm; A chooses Grizzly Bears and Craw Wurm as the two targets.",
-          "expected": "Legal: Undo can be cast (has_legal_target true, can_play true); when it resolves Grizzly Bears and Craw Wurm return to B's hand."
+          "expected": "Legal: Undo can be cast (has_legal_target true, can_play true); when it resolves Grizzly Bears and Craw Wurm return to B's hand.",
+          "operation": {
+            "unclassifiable": "adds a permanent and changes the targets chosen"
+          }
         }
       ],
       "cards": [
@@ -189,7 +196,18 @@
         "Grizzly Bears",
         "Craw Wurm"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell whose targets would need the same object twice for one instance of 'target' has no legal target choice: has_legal_target is false on its candidate.",
+        "near_miss": "A multi-target spell with a legal choice has has_legal_target true.",
+        "params": {
+          "bit": "has_legal_target",
+          "fires_when": false
+        },
+        "needs": []
+      }
     },
     {
       "id": "601.2c-2",
@@ -243,13 +261,17 @@
           "label": "two-objects",
           "polarity": "other",
           "delta": "B controls Forest and Grizzly Bears instead of Dryad Arbor; A chooses Grizzly Bears as the target creature and Forest as the target land.",
-          "expected": "Legal: when Spiteful Blow resolves Grizzly Bears and Forest are both destroyed and move to B's graveyard."
+          "expected": "Legal: when Spiteful Blow resolves Grizzly Bears and Forest are both destroyed and move to B's graveyard.",
+          "operation": {
+            "unclassifiable": "replaces one permanent with two and changes the targets chosen"
+          }
         },
         {
           "label": "no-creature",
           "polarity": "does_not_fire",
           "delta": "B controls only a Forest, no creature, instead of Dryad Arbor.",
-          "expected": "Illegal: there is no legal target creature (has_legal_target false, can_play false); Spiteful Blow stays in A's hand and the Swamps stay untapped."
+          "expected": "Illegal: there is no legal target creature (has_legal_target false, can_play false); Spiteful Blow stays in A's hand and the Swamps stay untapped.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -259,7 +281,18 @@
         "Forest",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell using 'target' twice with an object legal for both instances is a candidate with has_legal_target true.",
+        "near_miss": "A candidate with no legal target choice has has_legal_target false.",
+        "params": {
+          "bit": "has_legal_target",
+          "fires_when": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "601.2c-3",
@@ -308,13 +341,19 @@
           "label": "flagbearer",
           "polarity": "does_not_fire",
           "delta": "A chooses Standard Bearer as Shock's target.",
-          "expected": "Legal: Shock is cast, Mountain is tapped; when it resolves Standard Bearer is dealt 2 damage and moves to B's graveyard."
+          "expected": "Legal: Shock is cast, Mountain is tapped; when it resolves Standard Bearer is dealt 2 damage and moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different target chosen by the player"
+          }
         },
         {
           "label": "no-flagbearer",
           "polarity": "other",
           "delta": "Standard Bearer is not on B's battlefield (B controls only Grizzly Bears); A chooses Grizzly Bears.",
-          "expected": "Legal: no must-target effect applies; Shock is cast and, when it resolves, Grizzly Bears moves to B's graveyard."
+          "expected": "Legal: no must-target effect applies; Shock is cast and, when it resolves, Grizzly Bears moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -372,7 +411,8 @@
           "label": "nonblack-target",
           "polarity": "does_not_fire",
           "delta": "B's creature is Grizzly Bears instead of Child of Night.",
-          "expected": "Legal: Doom Blade is cast on Grizzly Bears (can_play true, Swamps tapped); when it resolves Grizzly Bears moves to B's graveyard."
+          "expected": "Legal: Doom Blade is cast on Grizzly Bears (can_play true, Swamps tapped); when it resolves Grizzly Bears moves to B's graveyard.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -381,7 +421,18 @@
         "Child of Night",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A proposed spell with no legal target cannot be cast: its candidate has has_legal_target false and can_play false.",
+        "near_miss": "A candidate with a legal target has has_legal_target true.",
+        "params": {
+          "bit": "has_legal_target",
+          "fires_when": false
+        },
+        "needs": []
+      }
     },
     {
       "id": "601.2f-1",
@@ -429,13 +480,19 @@
           "label": "untaxed",
           "polarity": "does_not_fire",
           "delta": "Sphere of Resistance is not on the battlefield.",
-          "expected": "Shock's total cost is {R}: can_play true; A casts it by tapping Mountain and when it resolves B's life is 18."
+          "expected": "Shock's total cost is {R}: can_play true; A casts it by tapping Mountain and when it resolves B's life is 18.",
+          "operation": {
+            "unclassifiable": "removes a permanent"
+          }
         },
         {
           "label": "taxed-payable",
           "polarity": "other",
           "delta": "A controls two Mountains (Sphere of Resistance still on B's battlefield).",
-          "expected": "Shock's total cost is {1}{R}: can_play true; A taps both Mountains and when it resolves B's life is 18."
+          "expected": "Shock's total cost is {1}{R}: can_play true; A taps both Mountains and when it resolves B's life is 18.",
+          "operation": {
+            "unclassifiable": "adds a permanent"
+          }
         }
       ],
       "cards": [
@@ -491,13 +548,17 @@
           "label": "floor",
           "polarity": "does_not_fire",
           "delta": "A casts Ornithopter (cost {0}) instead of Bronze Sable.",
-          "expected": "Ornithopter's total cost stays {0}: it is cast with no mana, Mountain stays untapped, and Ornithopter enters the battlefield."
+          "expected": "Ornithopter's total cost stays {0}: it is cast with no mana, Mountain stays untapped, and Ornithopter enters the battlefield.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         },
         {
           "label": "no-mana",
           "polarity": "other",
           "delta": "A's Mountain starts tapped.",
-          "expected": "Bronze Sable's total cost is {1}, not {0}: it cannot be paid, can_play false, and Bronze Sable stays in A's hand."
+          "expected": "Bronze Sable's total cost is {1}, not {0}: it cannot be paid, can_play false, and Bronze Sable stays in A's hand.",
+          "operation": "tap"
         }
       ],
       "cards": [
@@ -559,7 +620,10 @@
           "label": "no-familiar",
           "polarity": "does_not_fire",
           "delta": "Thunderscape Familiar is not on the battlefield; A sacrifices Grizzly Bears as the additional cost.",
-          "expected": "The total cost is {1}{B}, which A's single Swamp cannot pay: can_play false, Altar's Reap stays in A's hand and Grizzly Bears stays on the battlefield."
+          "expected": "The total cost is {1}{B}, which A's single Swamp cannot pay: can_play false, Altar's Reap stays in A's hand and Grizzly Bears stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "removes a permanent and changes the sacrifice chosen"
+          }
         }
       ],
       "cards": [
@@ -621,7 +685,10 @@
           "label": "no-sacrifice",
           "polarity": "does_not_fire",
           "delta": "A controls no creature (Grizzly Bears is not on the battlefield).",
-          "expected": "The sacrifice cost cannot be paid and partial payment is not allowed: Altar's Reap is not cast, stays in A's hand, and neither Swamp is tapped."
+          "expected": "The sacrifice cost cannot be paid and partial payment is not allowed: Altar's Reap is not cast, stays in A's hand, and neither Swamp is tapped.",
+          "operation": {
+            "unclassifiable": "removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -680,7 +747,10 @@
           "label": "creature",
           "polarity": "does_not_fire",
           "delta": "A casts Mons's Goblin Raiders (a creature spell) instead of Shock.",
-          "expected": "Young Pyromancer's trigger does not fire: A gets no Elemental token, and Mons's Goblin Raiders enters the battlefield."
+          "expected": "Young Pyromancer's trigger does not fire: A gets no Elemental token, and Mons's Goblin Raiders enters the battlefield.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         }
       ],
       "cards": [
@@ -690,7 +760,17 @@
         "Shock",
         "Mons's Goblin Raiders"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A 'whenever a player casts a spell' trigger is evaluated against a spell cast and fires.",
+        "near_miss": "The same trigger evaluated against a cast it does not match does not fire.",
+        "params": {
+          "mode": "SpellCast"
+        },
+        "needs": []
+      }
     },
     {
       "id": "601.3-1",
@@ -738,13 +818,19 @@
           "label": "not-prohibited-spell",
           "polarity": "does_not_fire",
           "delta": "A casts Shock (not a creature spell) targeting B instead.",
-          "expected": "Allowed: can_play true; Shock is cast and, when it resolves, B's life is 18."
+          "expected": "Allowed: can_play true; Shock is cast and, when it resolves, B's life is 18.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         },
         {
           "label": "opposing-golem",
           "polarity": "other",
           "delta": "Steel Golem is on B's battlefield instead of A's.",
-          "expected": "Allowed: Steel Golem only prohibits its controller's creature spells; Grizzly Bears can be cast (can_play true) and enters the battlefield."
+          "expected": "Allowed: Steel Golem only prohibits its controller's creature spells; Grizzly Bears can be cast (can_play true) and enters the battlefield.",
+          "operation": {
+            "unclassifiable": "moves a permanent to the other player"
+          }
         }
       ],
       "cards": [
@@ -754,7 +840,20 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A rule or effect prohibits beginning to cast a spell: the candidate's failed_checks hold static_prohibition.",
+        "near_miss": "A candidate whose casting no static prohibits: static_prohibition is not among its failed_checks.",
+        "params": {
+          "bit": "failed_check",
+          "check": "static_prohibition"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "601.3a-1",
@@ -806,7 +905,10 @@
           "label": "fixed-even",
           "polarity": "does_not_fire",
           "delta": "B holds Goblin Piker (mana value 2) instead of Rolling Thunder.",
-          "expected": "No choice can change Goblin Piker's mana value, so Void Winnower prohibits it: can_play false and Goblin Piker stays in B's hand."
+          "expected": "No choice can change Goblin Piker's mana value, so Void Winnower prohibits it: can_play false and Goblin Piker stays in B's hand.",
+          "operation": {
+            "unclassifiable": "changes a hand and the spell cast"
+          }
         }
       ],
       "cards": [
@@ -867,13 +969,19 @@
           "label": "creature-cast",
           "polarity": "does_not_fire",
           "delta": "A casts Cavern Lampad for its normal mana cost {3}{B} instead of its bestow cost.",
-          "expected": "Illegal: as a creature spell it has no flash (can_play false for the normal cast); Cavern Lampad stays in A's hand."
+          "expected": "Illegal: as a creature spell it has no flash (can_play false for the normal cast); Cavern Lampad stays in A's hand.",
+          "operation": {
+            "unclassifiable": "a different way of casting the spell"
+          }
         },
         {
           "label": "no-aid",
           "polarity": "other",
           "delta": "Sigarda's Aid is not on the battlefield.",
-          "expected": "Illegal: nothing gives the bestow cast flash, so it cannot be cast in B's end step (can_play false)."
+          "expected": "Illegal: nothing gives the bestow cast flash, so it cannot be cast in B's end step (can_play false).",
+          "operation": {
+            "unclassifiable": "removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -937,13 +1045,19 @@
           "label": "cannot-pay-more",
           "polarity": "does_not_fire",
           "delta": "A controls six Plains instead of seven.",
-          "expected": "The flash cast needs 7 mana and A has 6: can_play false in B's end step; Rout stays in A's hand."
+          "expected": "The flash cast needs 7 mana and A has 6: can_play false in B's end step; Rout stays in A's hand.",
+          "operation": {
+            "unclassifiable": "removes a permanent"
+          }
         },
         {
           "label": "own-turn",
           "polarity": "other",
           "delta": "It is A's turn, main phase 1 and the stack is empty (A still has seven Plains).",
-          "expected": "Rout is cast at sorcery speed for its normal cost {3}{W}{W}: can_play true, five Plains tapped and Grizzly Bears destroyed when it resolves."
+          "expected": "Rout is cast at sorcery speed for its normal cost {3}{W}{W}: can_play true, five Plains tapped and Grizzly Bears destroyed when it resolves.",
+          "operation": {
+            "unclassifiable": "changes the phase and turn"
+          }
         }
       ],
       "cards": [
@@ -1001,7 +1115,8 @@
           "label": "no-faerie",
           "polarity": "does_not_fire",
           "delta": "A controls Grizzly Bears instead of Faerie Miscreant.",
-          "expected": "Illegal: the condition is not met, so Illusion Spinners cannot be cast in B's end step (can_play false); it stays in A's hand."
+          "expected": "Illegal: the condition is not met, so Illusion Spinners cannot be cast in B's end step (can_play false); it stays in A's hand.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -1061,13 +1176,17 @@
           "label": "melek",
           "polarity": "other",
           "delta": "Melek, Izzet Paragon is on A's battlefield instead of Garruk's Horde.",
-          "expected": "Chop Down can be cast from the top of the library (can_play true, Craw Wurm is a legal target); Giant Killer cannot, because it is not an instant or sorcery card (can_play false)."
+          "expected": "Chop Down can be cast from the top of the library (can_play true, Craw Wurm is a legal target); Giant Killer cannot, because it is not an instant or sorcery card (can_play false).",
+          "operation": "replace_card"
         },
         {
           "label": "neither",
           "polarity": "does_not_fire",
           "delta": "A controls neither Garruk's Horde nor Melek.",
-          "expected": "Neither Giant Killer nor Chop Down can be cast from the top of the library (can_play false for both)."
+          "expected": "Neither Giant Killer nor Chop Down can be cast from the top of the library (can_play false for both).",
+          "operation": {
+            "unclassifiable": "removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -1128,7 +1247,10 @@
           "label": "odd-x",
           "polarity": "does_not_fire",
           "delta": "B announces X = 1 (mana value 3) instead of X = 2.",
-          "expected": "Legal: Rolling Thunder is cast with three Mountains tapped and, when it resolves, A's life is 19."
+          "expected": "Legal: Rolling Thunder is cast with three Mountains tapped and, when it resolves, A's life is 19.",
+          "operation": {
+            "unclassifiable": "a different X chosen by the player"
+          }
         }
       ],
       "cards": [
@@ -1136,7 +1258,10 @@
         "Mountain",
         "Rolling Thunder"
       ],
-      "forge_notes": "Forge's cast flow may never let B announce an X that makes the spell illegal."
+      "forge_notes": "Forge's cast flow may never let B announce an X that makes the spell illegal.",
+      "detector": {
+        "none": "A cast reverted after proposal leaves no record: Forge never offers an unpayable or illegal spell and the playability decision record is written before any cast is begun, so no field shows a reverted attempt."
+      }
     },
     {
       "id": "601.6-2",
@@ -1190,7 +1315,10 @@
           "label": "silence-first",
           "polarity": "fires",
           "delta": "B casts Silence before A casts Shock: A passes priority with an empty stack, B casts Silence and it resolves, then A has priority again and tries to cast Shock.",
-          "expected": "Illegal: A is prohibited from casting spells this turn, so Shock cannot be cast (can_play false) and stays in A's hand; Grizzly Bears is not damaged."
+          "expected": "Illegal: A is prohibited from casting spells this turn, so Shock cannot be cast (can_play false) and stays in A's hand; Grizzly Bears is not damaged.",
+          "operation": {
+            "unclassifiable": "a different spell cast first and a different order of play"
+          }
         }
       ],
       "cards": [
@@ -1200,7 +1328,20 @@
         "Shock",
         "Silence"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A prohibition already in effect when the player would begin casting a spell stops the cast: the candidate's failed_checks hold static_prohibition.",
+        "near_miss": "A candidate no prohibition applies to when the cast begins: static_prohibition is not among its failed_checks, and a prohibition that starts later leaves the spell on the stack.",
+        "params": {
+          "bit": "failed_check",
+          "check": "static_prohibition"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "601.6a-1",
@@ -1260,7 +1401,8 @@
           "label": "never-held",
           "polarity": "does_not_fire",
           "delta": "The attacking creature is Grizzly Bears instead of Isamaru, Hound of Konda (not legendary).",
-          "expected": "The condition never holds: Scarring Memories cannot be cast in the declare attackers step (can_play false); it stays in A's hand and nothing is sacrificed."
+          "expected": "The condition never holds: Scarring Memories cannot be cast in the declare attackers step (can_play false); it stays in A's hand and nothing is sacrificed.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -1271,7 +1413,10 @@
         "Grizzly Bears",
         "Mountain"
       ],
-      "forge_notes": "Forge may or may not offer the mana ability's sacrifice as a payment source for a spell whose flash condition it removes; check it."
+      "forge_notes": "Forge may or may not offer the mana ability's sacrifice as a payment source for a spell whose flash condition it removes; check it.",
+      "detector": {
+        "none": "The playability decision record is written before the cast begins and shows only that the flash condition held then; the spell's cost half lists the spell's own costs, not a sacrifice paid to a mana ability during payment, and no record field holds the condition's state at the start and at the end of one cast."
+      }
     },
     {
       "id": "601.8-1",
@@ -1325,7 +1470,10 @@
           "label": "sphere-first",
           "polarity": "does_not_fire",
           "delta": "A casts Sphere of Resistance first and lets it resolve, then tries to cast Shock with the one Mountain left.",
-          "expected": "Shock's total cost is {1}{R} and A has one untapped Mountain: can_play false, Shock stays in A's hand and Grizzly Bears is undamaged; Sphere of Resistance is on A's battlefield."
+          "expected": "Shock's total cost is {1}{R} and A has one untapped Mountain: can_play false, Shock stays in A's hand and Grizzly Bears is undamaged; Sphere of Resistance is on A's battlefield.",
+          "operation": {
+            "unclassifiable": "a different order of casting"
+          }
         }
       ],
       "cards": [
@@ -1334,7 +1482,10 @@
         "Shock",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "No record field shows a spell already on the stack unaffected by a later cost change: decision records show only candidates not yet cast, and the stack object's cost is not recorded."
+      }
     }
   ]
 }

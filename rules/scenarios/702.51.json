@@ -69,7 +69,8 @@
           "label": "one_bear_tapped",
           "polarity": "does_not_fire",
           "delta": "One of the five Grizzly Bears is already tapped.",
-          "expected": "Casting Siege Wurm is not legal (can_play false): only four creatures can convoke, so {1} of the cost cannot be paid."
+          "expected": "Casting Siege Wurm is not legal (can_play false): only four creatures can convoke, so {1} of the cost cannot be paid.",
+          "operation": "tap"
         }
       ],
       "cards": [
@@ -135,7 +136,10 @@
           "label": "red_creatures",
           "polarity": "does_not_fire",
           "delta": "The two creatures are Raging Goblin (red) instead of Grizzly Bears (green).",
-          "expected": "Casting Siege Wurm is not legal (can_play false): red creatures cannot pay {G}, and no green mana is available."
+          "expected": "Casting Siege Wurm is not legal (can_play false): red creatures cannot pay {G}, and no green mana is available.",
+          "operation": {
+            "unclassifiable": "replaces two permanents (both creatures change); one replace_card changes one permanent"
+          }
         }
       ],
       "cards": [
@@ -204,13 +208,17 @@
           "label": "without_reduction",
           "polarity": "does_not_fire",
           "delta": "Heartless Summoning is not on the battlefield.",
-          "expected": "Casting Siege Wurm is not legal (can_play false): the total cost is {5}{G}{G}, and three creatures cannot pay the generic {5}."
+          "expected": "Casting Siege Wurm is not legal (can_play false): the total cost is {5}{G}{G}, and three creatures cannot pay the generic {5}.",
+          "operation": {
+            "unclassifiable": "removes a permanent from the battlefield"
+          }
         },
         {
           "label": "one_bear_tapped",
           "polarity": "does_not_fire",
           "delta": "One of the three Grizzly Bears is tapped.",
-          "expected": "Casting Siege Wurm is not legal (can_play false): only two creatures can convoke against a total cost of {3}{G}{G}."
+          "expected": "Casting Siege Wurm is not legal (can_play false): only two creatures can convoke against a total cost of {3}{G}{G}.",
+          "operation": "tap"
         }
       ],
       "cards": [

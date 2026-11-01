@@ -54,13 +54,17 @@
           "label": "wrong_colors",
           "polarity": "does_not_fire",
           "delta": "A controls Mountain and Mountain instead of Forest and Mountain.",
-          "expected": "Casting Grizzly Bears is not legal: two mana are available but none is green."
+          "expected": "Casting Grizzly Bears is not legal: two mana are available but none is green.",
+          "operation": "replace_card"
         },
         {
           "label": "too_little_mana",
           "polarity": "does_not_fire",
           "delta": "A controls only Forest; the Mountain is absent.",
-          "expected": "Casting Grizzly Bears is not legal: the one available mana covers {G} but not the generic {1}."
+          "expected": "Casting Grizzly Bears is not legal: the one available mana covers {G} but not the generic {1}.",
+          "operation": {
+            "unclassifiable": "Removes the Mountain from A's battlefield; removing a permanent is not a fork operation."
+          }
         }
       ],
       "cards": [
@@ -68,7 +72,18 @@
         "Mountain",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate spell is affordable because the available mana matches its colored symbols and covers its generic part.",
+        "near_miss": "A candidate spell is not affordable with the available mana.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "202.1b-1",
@@ -119,7 +134,10 @@
           "label": "with_mana_cost",
           "polarity": "does_not_fire",
           "delta": "The candidate is Divination ({2}{U}) instead of Ancestral Vision.",
-          "expected": "Casting Divination is legal: its mana cost is payable with the three Islands."
+          "expected": "Casting Divination is legal: its mana cost is payable with the three Islands.",
+          "operation": {
+            "unclassifiable": "The candidate in A's hand is a different card (Divination); changing a hand is not a fork operation."
+          }
         }
       ],
       "cards": [
@@ -127,7 +145,17 @@
         "Ancestral Vision",
         "Divination"
       ],
-      "forge_notes": "Forge treats a card with ManaCost:no cost as uncastable from hand; its suspend ability is the only way to play it from hand."
+      "forge_notes": "Forge treats a card with ManaCost:no cost as uncastable from hand; its suspend ability is the only way to play it from hand.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate card with no mana cost cannot be played from hand (can_play false).",
+        "near_miss": "A candidate card with a mana cost can be played from hand.",
+        "params": {
+          "bit": "can_play"
+        },
+        "needs": []
+      }
     },
     {
       "id": "202.2-1",
@@ -174,25 +202,29 @@
           "label": "two_colors",
           "polarity": "fires",
           "delta": "A's permanent is Watchwolf (mana cost {G}{W}) instead of Grizzly Bears.",
-          "expected": "Watchwolf is green and white."
+          "expected": "Watchwolf is green and white.",
+          "operation": "replace_card"
         },
         {
           "label": "hybrid",
           "polarity": "fires",
           "delta": "A's permanent is Kitchen Finks (mana cost {1}{G/W}{G/W}) instead of Grizzly Bears.",
-          "expected": "Kitchen Finks is green and white."
+          "expected": "Kitchen Finks is green and white.",
+          "operation": "replace_card"
         },
         {
           "label": "phyrexian",
           "polarity": "fires",
           "delta": "A's permanent is Birthing Pod (an artifact with mana cost {3}{G/P}) instead of Grizzly Bears.",
-          "expected": "Birthing Pod is green although it is an artifact."
+          "expected": "Birthing Pod is green although it is an artifact.",
+          "operation": "replace_card"
         },
         {
           "label": "no_colored_symbol",
           "polarity": "does_not_fire",
           "delta": "A's permanent is Wurmcoil Engine (mana cost {6}) instead of Grizzly Bears.",
-          "expected": "Wurmcoil Engine has no colored symbol in its mana cost and is colorless."
+          "expected": "Wurmcoil Engine has no colored symbol in its mana cost and is colorless.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -247,13 +279,15 @@
           "label": "back_face",
           "polarity": "fires",
           "delta": "A's permanent is Delver of Secrets already transformed into Insectile Aberration (no mana cost, blue color indicator) instead of Dryad Arbor.",
-          "expected": "Insectile Aberration is blue."
+          "expected": "Insectile Aberration is blue.",
+          "operation": "replace_card"
         },
         {
           "label": "no_indicator",
           "polarity": "does_not_fire",
           "delta": "A's permanent is Forest (no mana cost, no color indicator) instead of Dryad Arbor.",
-          "expected": "Forest is colorless."
+          "expected": "Forest is colorless.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -315,19 +349,28 @@
           "label": "colorless",
           "polarity": "fires",
           "delta": "A casts Moonlace targeting Grizzly Bears, tapping one Island, instead of casting Prismatic Lace.",
-          "expected": "Grizzly Bears becomes colorless."
+          "expected": "Grizzly Bears becomes colorless.",
+          "operation": {
+            "unclassifiable": "A casts a different spell (Moonlace) instead of Prismatic Lace; no fork operation changes the spell cast."
+          }
         },
         {
           "label": "added_color",
           "polarity": "fires",
           "delta": "A casts Painter's Servant (tapping two Islands) and chooses blue as it enters, instead of casting Prismatic Lace.",
-          "expected": "Grizzly Bears is green and blue; blue is added to its green."
+          "expected": "Grizzly Bears is green and blue; blue is added to its green.",
+          "operation": {
+            "unclassifiable": "A casts a different spell (Painter's Servant, with a colour choice) instead of Prismatic Lace; no fork operation changes the spell cast."
+          }
         },
         {
           "label": "no_effect",
           "polarity": "does_not_fire",
           "delta": "A casts no spell; both players pass priority with an empty stack instead of A casting Prismatic Lace.",
-          "expected": "Grizzly Bears stays green and only green; Ornithopter stays colorless."
+          "expected": "Grizzly Bears stays green and only green; Ornithopter stays colorless.",
+          "operation": {
+            "unclassifiable": "A casts no spell instead of Prismatic Lace: a different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -339,7 +382,17 @@
         "Moonlace",
         "Painter's Servant"
       ],
-      "forge_notes": "Prismatic Lace and Moonlace apply a permanent-duration Animate effect that overwrites colors. Painter's Servant's static ability adds the chosen color to every permanent, so with it on the battlefield Ornithopter and Painter's Servant itself are blue too."
+      "forge_notes": "Prismatic Lace and Moonlace apply a permanent-duration Animate effect that overwrites colors. Painter's Servant's static ability adds the chosen color to every permanent, so with it on the battlefield Ornithopter and Painter's Servant itself are blue too.",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static ability contributes a colour change (adds a colour, sets it, or makes the object colourless).",
+        "near_miss": "A static applies to the board and contributes no colour.",
+        "params": {
+          "field": "colors"
+        },
+        "needs": []
+      }
     },
     {
       "id": "202.3-1",
@@ -401,13 +454,19 @@
           "label": "different_value",
           "polarity": "does_not_fire",
           "delta": "B casts Grizzly Bears ({1}{G}), tapping Forest and a Mountain, instead of Hill Giant.",
-          "expected": "Grizzly Bears has mana value 2, not 4, so it is not countered and resolves onto B's battlefield."
+          "expected": "Grizzly Bears has mana value 2, not 4, so it is not countered and resolves onto B's battlefield.",
+          "operation": {
+            "unclassifiable": "B casts a different spell (Grizzly Bears) instead of the base's; no fork operation changes the spell cast."
+          }
         },
         {
           "label": "phyrexian_symbol",
           "polarity": "fires",
           "delta": "B casts Birthing Pod ({3}{G/P}), tapping three Mountains and paying 2 life for {G/P}, instead of Hill Giant.",
-          "expected": "Birthing Pod has mana value 4 although only three mana were spent, so it is countered and put into B's graveyard; B is at 18 life."
+          "expected": "Birthing Pod has mana value 4 although only three mana were spent, so it is countered and put into B's graveyard; B is at 18 life.",
+          "operation": {
+            "unclassifiable": "B casts a different spell (Birthing Pod) instead of the base's; no fork operation changes the spell cast."
+          }
         }
       ],
       "cards": [
@@ -477,7 +536,10 @@
           "label": "nonzero_value",
           "polarity": "does_not_fire",
           "delta": "B casts Grizzly Bears ({1}{G}), tapping Forest and Mountain, instead of Ornithopter.",
-          "expected": "Grizzly Bears has mana value 2, not 0, so it is not countered and resolves onto B's battlefield."
+          "expected": "Grizzly Bears has mana value 2, not 0, so it is not countered and resolves onto B's battlefield.",
+          "operation": {
+            "unclassifiable": "B casts a different spell (Grizzly Bears) instead of the base's; no fork operation changes the spell cast."
+          }
         }
       ],
       "cards": [
@@ -538,7 +600,10 @@
           "label": "copy",
           "polarity": "does_not_fire",
           "delta": "B also controls a Clone that entered as a copy of Ravager of the Fells.",
-          "expected": "The Clone copy has mana value 0, so it is a legal target; Smother can be cast targeting it, and Ravager of the Fells is still not a legal target."
+          "expected": "The Clone copy has mana value 0, so it is a legal target; Smother can be cast targeting it, and Ravager of the Fells is still not a legal target.",
+          "operation": {
+            "unclassifiable": "Adds a permanent (a Clone copying Ravager of the Fells) to B's battlefield; adding a permanent is not a fork operation."
+          }
         }
       ],
       "cards": [
@@ -596,13 +661,19 @@
           "label": "unmelded",
           "polarity": "does_not_fire",
           "delta": "Graf Rats and Midnight Scavengers are two separate creatures on B's battlefield instead of the melded Chittering Host.",
-          "expected": "Graf Rats (mana value 2) is a legal target and Midnight Scavengers (mana value 5) is not; Smother can be cast targeting Graf Rats."
+          "expected": "Graf Rats (mana value 2) is a legal target and Midnight Scavengers (mana value 5) is not; Smother can be cast targeting Graf Rats.",
+          "operation": {
+            "unclassifiable": "Splits one melded permanent into two separate permanents, removing one permanent and adding two; not a fork operation."
+          }
         },
         {
           "label": "copy",
           "polarity": "other",
           "delta": "B also controls a Clone that entered as a copy of Chittering Host.",
-          "expected": "The Clone copy has mana value 0, so it is a legal target; Smother can be cast targeting it, and Chittering Host is still not a legal target."
+          "expected": "The Clone copy has mana value 0, so it is a legal target; Smother can be cast targeting it, and Chittering Host is still not a legal target.",
+          "operation": {
+            "unclassifiable": "Adds a permanent (a Clone copying Chittering Host) to B's battlefield; adding a permanent is not a fork operation."
+          }
         }
       ],
       "cards": [
@@ -677,19 +748,28 @@
           "label": "half_value_not_used",
           "polarity": "does_not_fire",
           "delta": "B casts Grizzly Bears ({1}{G}), tapping Forest and a Mountain, instead of Gray Ogre.",
-          "expected": "Grizzly Bears has mana value 2, which is Wear's half alone but not the card's, so it is not countered and resolves onto B's battlefield."
+          "expected": "Grizzly Bears has mana value 2, which is Wear's half alone but not the card's, so it is not countered and resolves onto B's battlefield.",
+          "operation": {
+            "unclassifiable": "B casts a different spell (Grizzly Bears) instead of the base's; no fork operation changes the spell cast."
+          }
         },
         {
           "label": "one_half_cast",
           "polarity": "does_not_fire",
           "delta": "B casts only the Wear half of Wear // Tear targeting Ornithopter, tapping two Mountains, instead of Gray Ogre.",
-          "expected": "On the stack the spell has mana value 2, that of Wear alone, not 3, so it is not countered and resolves: Ornithopter is destroyed and Pacifism goes to A's graveyard."
+          "expected": "On the stack the spell has mana value 2, that of Wear alone, not 3, so it is not countered and resolves: Ornithopter is destroyed and Pacifism goes to A's graveyard.",
+          "operation": {
+            "unclassifiable": "B casts a different spell (the Wear half of Wear // Tear) instead of the base's; no fork operation changes the spell cast."
+          }
         },
         {
           "label": "fused",
           "polarity": "fires",
           "delta": "B casts Wear // Tear fused, Wear targeting Ornithopter and Tear targeting Pacifism, tapping two Mountains and Plains, instead of Gray Ogre.",
-          "expected": "On the stack the fused spell has mana value 3 (2 + 1), the same as the revealed card, so it is countered and put into B's graveyard; Ornithopter and Pacifism stay on A's battlefield."
+          "expected": "On the stack the fused spell has mana value 3 (2 + 1), the same as the revealed card, so it is countered and put into B's graveyard; Ornithopter and Pacifism stay on A's battlefield.",
+          "operation": {
+            "unclassifiable": "B casts a different spell (Wear // Tear fused) instead of the base's; no fork operation changes the spell cast."
+          }
         }
       ],
       "cards": [
@@ -764,13 +844,19 @@
           "label": "x_equals_3",
           "polarity": "does_not_fire",
           "delta": "B casts Fireball with X=3 targeting A, tapping four Mountains, instead of Lightning Bolt.",
-          "expected": "On the stack Fireball has mana value 4 (X is 3), not 1, so it is not countered and resolves: A takes 3 damage and is at 17 life."
+          "expected": "On the stack Fireball has mana value 4 (X is 3), not 1, so it is not countered and resolves: A takes 3 damage and is at 17 life.",
+          "operation": {
+            "unclassifiable": "B casts a different spell (Fireball with X=3) instead of the base's; no fork operation changes the spell cast."
+          }
         },
         {
           "label": "x_equals_0",
           "polarity": "fires",
           "delta": "B casts Fireball with X=0 targeting A, tapping one Mountain, instead of Lightning Bolt.",
-          "expected": "On the stack Fireball has mana value 1 (X is 0), the same as the revealed Fireball, so it is countered and put into B's graveyard; A stays at 20 life."
+          "expected": "On the stack Fireball has mana value 1 (X is 0), the same as the revealed Fireball, so it is countered and put into B's graveyard; A stays at 20 life.",
+          "operation": {
+            "unclassifiable": "B casts a different spell (Fireball with X=0) instead of the base's; no fork operation changes the spell cast."
+          }
         }
       ],
       "cards": [
@@ -839,13 +925,19 @@
           "label": "smaller_value",
           "polarity": "does_not_fire",
           "delta": "B casts Giant Spider ({3}{G}), tapping three Swamps and Forest, instead of Beseech the Queen.",
-          "expected": "Giant Spider has mana value 4, not 6, so it is not countered and resolves onto B's battlefield."
+          "expected": "Giant Spider has mana value 4, not 6, so it is not countered and resolves onto B's battlefield.",
+          "operation": {
+            "unclassifiable": "B casts a different spell (Giant Spider) instead of the base's; no fork operation changes the spell cast."
+          }
         },
         {
           "label": "revealed_spent_amount",
           "polarity": "does_not_fire",
           "delta": "The top card of A's library is Gray Ogre (mana value 3, the amount of mana actually spent) instead of Craw Wurm.",
-          "expected": "Beseech the Queen has mana value 6, not 3, so it is not countered and resolves; B searches an empty library and finds nothing."
+          "expected": "Beseech the Queen has mana value 6, not 3, so it is not countered and resolves; B searches an empty library and finds nothing.",
+          "operation": {
+            "unclassifiable": "Changes the top card of A's library; changing a library is not a fork operation."
+          }
         }
       ],
       "cards": [

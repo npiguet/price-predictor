@@ -53,7 +53,10 @@
           "label": "already_monstrous",
           "polarity": "does_not_fire",
           "delta": "Fleecemane Lion is already monstrous and carries one +1/+1 counter from an earlier activation.",
-          "expected": "The ability resolves but puts no counter: Fleecemane Lion still has exactly one +1/+1 counter and is a 4/4 with hexproof and indestructible."
+          "expected": "The ability resolves but puts no counter: Fleecemane Lion still has exactly one +1/+1 counter and is a 4/4 with hexproof and indestructible.",
+          "operation": {
+            "unclassifiable": "The permanent is monstrous and carries a counter: two facts, and the monstrous designation is none a fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -111,7 +114,10 @@
           "label": "already_monstrous",
           "polarity": "does_not_fire",
           "delta": "Hundred-Handed One is already monstrous and carries three +1/+1 counters from an earlier activation.",
-          "expected": "The ability resolves but puts no counters: Hundred-Handed One still has exactly three +1/+1 counters and is a 6/8 with vigilance and reach."
+          "expected": "The ability resolves but puts no counters: Hundred-Handed One still has exactly three +1/+1 counters and is a 6/8 with vigilance and reach.",
+          "operation": {
+            "unclassifiable": "The permanent is monstrous and carries three counters: two facts, and the monstrous designation is none a fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -171,13 +177,19 @@
           "label": "x1",
           "polarity": "other",
           "delta": "A activates the ability with X = 1 ({X}{X}{G}, tapping three Forests) instead of X = 2.",
-          "expected": "Polukranos gets one +1/+1 counter and is monstrous (6/6). The trigger deals 1 damage to Grizzly Bears, which stays on the battlefield with 1 damage marked. Grizzly Bears deals 2 damage to Polukranos, which stays on the battlefield with 2 damage marked."
+          "expected": "Polukranos gets one +1/+1 counter and is monstrous (6/6). The trigger deals 1 damage to Grizzly Bears, which stays on the battlefield with 1 damage marked. Grizzly Bears deals 2 damage to Polukranos, which stays on the battlefield with 2 damage marked.",
+          "operation": {
+            "unclassifiable": "The player chooses a different X; no fork operation changes a player's decision."
+          }
         },
         {
           "label": "already_monstrous",
           "polarity": "does_not_fire",
           "delta": "Polukranos is already monstrous and carries one +1/+1 counter from an earlier activation.",
-          "expected": "The ability resolves but Polukranos does not become monstrous again: it keeps exactly one +1/+1 counter (6/6), the becomes-monstrous trigger does not fire, and Grizzly Bears takes no damage and stays on the battlefield."
+          "expected": "The ability resolves but Polukranos does not become monstrous again: it keeps exactly one +1/+1 counter (6/6), the becomes-monstrous trigger does not fire, and Grizzly Bears takes no damage and stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "The permanent is monstrous and carries a counter: two facts, and the monstrous designation is none a fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -246,7 +258,10 @@
           "label": "not_flickered",
           "polarity": "does_not_fire",
           "delta": "A does not cast Cloudshift; Cloudshift stays in A's hand.",
-          "expected": "Fleecemane Lion stays monstrous; the monstrosity ability resolves but puts no counter, and Fleecemane Lion still has exactly one +1/+1 counter and is a 4/4 with hexproof and indestructible."
+          "expected": "Fleecemane Lion stays monstrous; the monstrosity ability resolves but puts no counter, and Fleecemane Lion still has exactly one +1/+1 counter and is a 4/4 with hexproof and indestructible.",
+          "operation": {
+            "unclassifiable": "A spell is not cast; no fork operation changes the spells a player casts."
+          }
         }
       ],
       "cards": [

@@ -76,7 +76,10 @@
           "label": "lone_split_card",
           "polarity": "other",
           "delta": "B's hand holds only Fire // Ice.",
-          "expected": "B discards Fire // Ice and B's hand is empty; one card moved to B's graveyard."
+          "expected": "B discards Fire // Ice and B's hand is empty; one card moved to B's graveyard.",
+          "operation": {
+            "unclassifiable": "changing a hand"
+          }
         }
       ],
       "cards": [
@@ -138,7 +141,10 @@
           "label": "other_half",
           "polarity": "does_not_fire",
           "delta": "A chooses the Assault half ({R}) targeting Grizzly Bears instead, still with only the four Forests.",
-          "expected": "Casting Assault is illegal: {R} cannot be paid with Forests."
+          "expected": "Casting Assault is illegal: {R} cannot be paid with Forests.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, which no fork operation makes"
+          }
         }
       ],
       "cards": [
@@ -207,7 +213,10 @@
           "label": "cast_fire",
           "polarity": "does_not_fire",
           "delta": "A casts the Fire half ({1}{R}) instead, dealing 2 damage to Grizzly Bears; B has Red Elemental Blast available.",
-          "expected": "Fire is a red spell only: Red Elemental Blast cannot be cast (no blue spell or blue permanent to target); Fire resolves and Grizzly Bears dies."
+          "expected": "Fire is a red spell only: Red Elemental Blast cannot be cast (no blue spell or blue permanent to target); Fire resolves and Grizzly Bears dies.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, which no fork operation makes"
+          }
         }
       ],
       "cards": [
@@ -280,7 +289,10 @@
           "label": "ice_half",
           "polarity": "other",
           "delta": "A casts the copy as the Ice half, targeting Grizzly Bears.",
-          "expected": "The copy is cast as Ice: Grizzly Bears becomes tapped and A draws Island. Mizzix's Mastery is exiled."
+          "expected": "The copy is cast as Ice: Grizzly Bears becomes tapped and A draws Island. Mizzix's Mastery is exiled.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, which no fork operation makes"
+          }
         }
       ],
       "cards": [
@@ -345,7 +357,10 @@
           "label": "single_card",
           "polarity": "does_not_fire",
           "delta": "A's library holds Shock instead of Turn // Burn.",
-          "expected": "A finds Shock and puts it into hand."
+          "expected": "A finds Shock and puts it into hand.",
+          "operation": {
+            "unclassifiable": "changing a library"
+          }
         }
       ],
       "cards": [
@@ -412,7 +427,10 @@
           "label": "cast_turn",
           "polarity": "does_not_fire",
           "delta": "A casts the Turn half ({2}{U}) targeting Grizzly Bears, tapping three lands.",
-          "expected": "Turn is a spell with mana value 3: Spell Snare cannot be cast. Turn resolves and Grizzly Bears loses all abilities and becomes a red 0/1 Weird until end of turn."
+          "expected": "Turn is a spell with mana value 3: Spell Snare cannot be cast. Turn resolves and Grizzly Bears loses all abilities and becomes a red 0/1 Weird until end of turn.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, which no fork operation makes"
+          }
         }
       ],
       "cards": [
@@ -470,7 +488,10 @@
           "label": "instant_only",
           "polarity": "does_not_fire",
           "delta": "A's graveyard holds Shock instead of Commit // Memory.",
-          "expected": "The graveyard holds instant, creature and land types: three card types, so Dragon's Rage Channeler is a 1/1 without flying."
+          "expected": "The graveyard holds instant, creature and land types: three card types, so Dragon's Rage Channeler is a 1/1 without flying.",
+          "operation": {
+            "unclassifiable": "changing a graveyard"
+          }
         }
       ],
       "cards": [
@@ -535,13 +556,19 @@
           "label": "first_name",
           "polarity": "fires",
           "delta": "A chooses the name Fire.",
-          "expected": "Fire // Ice has the name Fire, so it is exiled from B's hand; Grizzly Bears stays in B's hand."
+          "expected": "Fire // Ice has the name Fire, so it is exiled from B's hand; Grizzly Bears stays in B's hand.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, which no fork operation makes"
+          }
         },
         {
           "label": "other_name",
           "polarity": "does_not_fire",
           "delta": "A chooses the name Grizzly Bears.",
-          "expected": "Only Grizzly Bears is exiled; Fire // Ice stays in B's hand."
+          "expected": "Only Grizzly Bears is exiled; Fire // Ice stays in B's hand.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, which no fork operation makes"
+          }
         }
       ],
       "cards": [
@@ -610,7 +637,10 @@
           "label": "burn_only",
           "polarity": "does_not_fire",
           "delta": "A casts only the Burn half ({1}{R}) targeting B instead of fusing.",
-          "expected": "Burn is a red spell only: Red Elemental Blast cannot be cast. Burn resolves and B is at 18 life."
+          "expected": "Burn is a red spell only: Red Elemental Blast cannot be cast. Burn resolves and B is at 18 life.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, which no fork operation makes"
+          }
         }
       ],
       "cards": [
@@ -675,7 +705,10 @@
           "label": "pool_only",
           "polarity": "does_not_fire",
           "delta": "Only the left half (Bottomless Pool) is unlocked, not Locker Room.",
-          "expected": "The Room has the name Bottomless Pool and no Locker Room rules text: no trigger fires, A draws no card. B is at 18 life."
+          "expected": "The Room has the name Bottomless Pool and no Locker Room rules text: no trigger fires, A draws no card. B is at 18 life.",
+          "operation": {
+            "unclassifiable": "unlocked designations are not an operation"
+          }
         }
       ],
       "cards": [
@@ -743,7 +776,10 @@
           "label": "no_shared_type_line",
           "polarity": "does_not_fire",
           "delta": "A's hand holds Fire // Ice instead of the Room, and A casts the Ice half ({1}{U}) targeting B's Island, tapping both Islands.",
-          "expected": "Ice is an instant spell only: Annul cannot be cast. Ice resolves, B's Island becomes tapped and A draws Island."
+          "expected": "Ice is an instant spell only: Annul cannot be cast. Ice resolves, B's Island becomes tapped and A draws Island.",
+          "operation": {
+            "unclassifiable": "changing a hand and a different cast"
+          }
         }
       ],
       "cards": [
@@ -809,7 +845,10 @@
           "label": "right_half",
           "polarity": "does_not_fire",
           "delta": "A casts Promising Stairs ({2}{U}) instead.",
-          "expected": "The Room enters with the right half unlocked and the left half locked: Central Elevator's unlock trigger does not fire, and A's hand stays empty."
+          "expected": "The Room enters with the right half unlocked and the left half locked: Central Elevator's unlock trigger does not fire, and A's hand stays empty.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, which no fork operation makes"
+          }
         }
       ],
       "cards": [
@@ -819,7 +858,17 @@
         "Bottomless Pool",
         "Locker Room"
       ],
-      "forge_notes": "Rooms are split cards in Forge (AlternateMode:Split, CardStateName LeftSplit/RightSplit) with locked and unlocked doors tracked per permanent; a Room put on the battlefield in a scenario setup needs its designations set explicitly."
+      "forge_notes": "Rooms are split cards in Forge (AlternateMode:Split, CardStateName LeftSplit/RightSplit) with locked and unlocked doors tracked per permanent; a Room put on the battlefield in a scenario setup needs its designations set explicitly.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on a door being unlocked is evaluated and fires when its permanent gets that half's unlocked designation, including as it enters with the half that was cast.",
+        "near_miss": "An unlock-door trigger evaluated against an unlock that is not its own door's, and not fired.",
+        "params": {
+          "mode": "UnlockDoor"
+        },
+        "needs": []
+      }
     },
     {
       "id": "709.5d-2",
@@ -876,7 +925,10 @@
           "label": "cast_instead",
           "polarity": "does_not_fire",
           "delta": "The Room starts in A's hand instead of A's graveyard, and A casts its Central Elevator half ({3}{U}) with the same four lands instead of casting Replenish.",
-          "expected": "The Room enters with the left half unlocked and the unlock trigger fires: A takes Bottomless Pool // Locker Room from the library."
+          "expected": "The Room enters with the left half unlocked and the unlock trigger fires: A takes Bottomless Pool // Locker Room from the library.",
+          "operation": {
+            "unclassifiable": "changing a hand and a different decision"
+          }
         }
       ],
       "cards": [
@@ -935,19 +987,28 @@
           "label": "stack_not_empty",
           "polarity": "does_not_fire",
           "delta": "A has first cast Shock targeting B, tapping Mountain, and Shock is still on the stack.",
-          "expected": "The special action is illegal while the stack is not empty."
+          "expected": "The special action is illegal while the stack is not empty.",
+          "operation": {
+            "unclassifiable": "a different spell cast first"
+          }
         },
         {
           "label": "opponent_turn",
           "polarity": "does_not_fire",
           "delta": "B is the active player and it is B's main phase with an empty stack.",
-          "expected": "The special action is illegal: it is not A's turn."
+          "expected": "The special action is illegal: it is not A's turn.",
+          "operation": {
+            "unclassifiable": "changing the turn"
+          }
         },
         {
           "label": "combat",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat on A's turn with an empty stack.",
-          "expected": "The special action is illegal: it is not a main phase."
+          "expected": "The special action is illegal: it is not a main phase.",
+          "operation": {
+            "unclassifiable": "changing the phase"
+          }
         }
       ],
       "cards": [
@@ -1009,7 +1070,10 @@
           "label": "nothing_locked",
           "polarity": "does_not_fire",
           "delta": "Both halves of the Room are already unlocked.",
-          "expected": "Locker Room's trigger fires on the combat damage and A draws Island; Ghostly Keybearer's trigger unlocks nothing and the Room keeps both designations. B is at 17 life."
+          "expected": "Locker Room's trigger fires on the combat damage and A draws Island; Ghostly Keybearer's trigger unlocks nothing and the Room keeps both designations. B is at 17 life.",
+          "operation": {
+            "unclassifiable": "designations are not an operation"
+          }
         }
       ],
       "cards": [
@@ -1065,13 +1129,19 @@
           "label": "lock_left",
           "polarity": "fires",
           "delta": "A chooses to lock the left half (Bottomless Pool) instead.",
-          "expected": "The Room loses the left half unlocked designation: only Locker Room is unlocked, so the Room has the name and text of Locker Room only."
+          "expected": "The Room loses the left half unlocked designation: only Locker Room is unlocked, so the Room has the name and text of Locker Room only.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, which no fork operation makes"
+          }
         },
         {
           "label": "nothing_unlocked",
           "polarity": "does_not_fire",
           "delta": "The Room starts with neither half unlocked.",
-          "expected": "No door is unlocked, so none can be locked: the Room keeps neither designation."
+          "expected": "No door is unlocked, so none can be locked: the Room keeps neither designation.",
+          "operation": {
+            "unclassifiable": "designations are not an operation"
+          }
         }
       ],
       "cards": [
@@ -1131,7 +1201,10 @@
           "label": "other_door",
           "polarity": "does_not_fire",
           "delta": "Which door starts locked is swapped: only Bottomless Pool is unlocked, so A pays {4}{U} (five Islands) to unlock Locker Room.",
-          "expected": "The right half is unlocked; Bottomless Pool's trigger is tied to its own door and does not fire. Grizzly Bears stays on the battlefield."
+          "expected": "The right half is unlocked; Bottomless Pool's trigger is tied to its own door and does not fire. Grizzly Bears stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "designations are not an operation"
+          }
         }
       ],
       "cards": [
@@ -1140,7 +1213,17 @@
         "Locker Room",
         "Grizzly Bears"
       ],
-      "forge_notes": "Rooms are split cards in Forge (AlternateMode:Split, CardStateName LeftSplit/RightSplit) with locked and unlocked doors tracked per permanent; a Room put on the battlefield in a scenario setup needs its designations set explicitly."
+      "forge_notes": "Rooms are split cards in Forge (AlternateMode:Split, CardStateName LeftSplit/RightSplit) with locked and unlocked doors tracked per permanent; a Room put on the battlefield in a scenario setup needs its designations set explicitly.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on a particular door being unlocked fires when its permanent is given that half's unlocked designation.",
+        "near_miss": "An unlock-door trigger evaluated against the unlocking of the other door, and not fired.",
+        "params": {
+          "mode": "UnlockDoor"
+        },
+        "needs": []
+      }
     },
     {
       "id": "709.5i-1",
@@ -1187,7 +1270,10 @@
           "label": "neither_unlocked",
           "polarity": "does_not_fire",
           "delta": "The Room starts with neither half unlocked.",
-          "expected": "The Room gains one designation only, so it is not fully unlocked: Erratic Apparition stays a 1/3."
+          "expected": "The Room gains one designation only, so it is not fully unlocked: Erratic Apparition stays a 1/3.",
+          "operation": {
+            "unclassifiable": "designations are not an operation"
+          }
         }
       ],
       "cards": [
@@ -1196,7 +1282,17 @@
         "Bottomless Pool",
         "Locker Room"
       ],
-      "forge_notes": "Rooms are split cards in Forge (AlternateMode:Split, CardStateName LeftSplit/RightSplit) with locked and unlocked doors tracked per permanent; a Room put on the battlefield in a scenario setup needs its designations set explicitly. A Room with neither designation is reachable via Replenish."
+      "forge_notes": "Rooms are split cards in Forge (AlternateMode:Split, CardStateName LeftSplit/RightSplit) with locked and unlocked doors tracked per permanent; a Room put on the battlefield in a scenario setup needs its designations set explicitly. A Room with neither designation is reachable via Replenish.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A fully-unlock trigger fires when a Room that had one unlocked designation gets the other, or gains both at once.",
+        "near_miss": "A fully-unlock trigger evaluated against an unlock that leaves a half locked, and not fired.",
+        "params": {
+          "mode": "FullyUnlock"
+        },
+        "needs": []
+      }
     }
   ]
 }

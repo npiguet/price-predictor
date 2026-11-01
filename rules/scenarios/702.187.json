@@ -55,13 +55,19 @@
           "label": "in_graveyard_from_earlier",
           "polarity": "does_not_fire",
           "delta": "Electro's Bolt has been in A's graveyard since an earlier turn, so it was not discarded this turn; A's hand is empty and A does not activate Wild Mongrel.",
-          "expected": "Casting Electro's Bolt from the graveyard is not legal. Grizzly Bears takes no damage."
+          "expected": "Casting Electro's Bolt from the graveyard is not legal. Grizzly Bears takes no damage.",
+          "operation": {
+            "unclassifiable": "Changes the history of the card, when it was discarded"
+          }
         },
         {
           "label": "one_mountain",
           "polarity": "does_not_fire",
           "delta": "A controls only one Mountain.",
-          "expected": "Casting Electro's Bolt from the graveyard is not legal: the mayhem cost {1}{R} cannot be paid. Grizzly Bears takes no damage."
+          "expected": "Casting Electro's Bolt from the graveyard is not legal: the mayhem cost {1}{R} cannot be paid. Grizzly Bears takes no damage.",
+          "operation": {
+            "unclassifiable": "Removes a permanent from the battlefield"
+          }
         }
       ],
       "cards": [
@@ -118,13 +124,19 @@
           "label": "in_graveyard_from_earlier",
           "polarity": "does_not_fire",
           "delta": "Oscorp Industries has been in A's graveyard since an earlier turn, so it was not discarded this turn; A's hand is empty and A does not activate Wild Mongrel.",
-          "expected": "Playing Oscorp Industries from the graveyard is not legal. A's life stays 20."
+          "expected": "Playing Oscorp Industries from the graveyard is not legal. A's life stays 20.",
+          "operation": {
+            "unclassifiable": "Changes the history of the card, when it was discarded"
+          }
         },
         {
           "label": "land_play_already_used",
           "polarity": "does_not_fire",
           "delta": "A has already played a land earlier this turn.",
-          "expected": "Playing Oscorp Industries from the graveyard is not legal: A has no land play left. Oscorp Industries stays in A's graveyard and A's life stays 20."
+          "expected": "Playing Oscorp Industries from the graveyard is not legal: A has no land play left. Oscorp Industries stays in A's graveyard and A's life stays 20.",
+          "operation": {
+            "unclassifiable": "Changes the turn's land-play count, a history fact"
+          }
         }
       ],
       "cards": [

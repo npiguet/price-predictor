@@ -49,7 +49,10 @@
           "label": "not_unleashed",
           "polarity": "does_not_fire",
           "delta": "A chooses not to have Rakdos Cackler enter with a +1/+1 counter.",
-          "expected": "Rakdos Cackler enters with no counters and is 1/1."
+          "expected": "Rakdos Cackler enters with no counters and is 1/1.",
+          "operation": {
+            "unclassifiable": "A different choice by A."
+          }
         }
       ],
       "cards": [
@@ -110,13 +113,15 @@
           "label": "no_counter",
           "polarity": "does_not_fire",
           "delta": "Rakdos Cackler has no +1/+1 counter (it is 1/1).",
-          "expected": "The block is legal; Rakdos Cackler can block Grizzly Bears."
+          "expected": "The block is legal; Rakdos Cackler can block Grizzly Bears.",
+          "operation": "counters"
         },
         {
           "label": "counter_on_other_creature",
           "polarity": "other",
           "delta": "A's creature is Runeclaw Bear with one +1/+1 counter instead of Rakdos Cackler.",
-          "expected": "The block is legal: Runeclaw Bear has no unleash, so its +1/+1 counter does not stop it blocking."
+          "expected": "The block is legal: Runeclaw Bear has no unleash, so its +1/+1 counter does not stop it blocking.",
+          "operation": "replace_card"
         }
       ],
       "cards": [

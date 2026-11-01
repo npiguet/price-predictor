@@ -62,13 +62,19 @@
           "label": "equipment_destroyed_in_response",
           "polarity": "other",
           "delta": "In response to the job select trigger, B casts Shatter targeting Warrior's Sword, tapping both Mountains.",
-          "expected": "Warrior's Sword is destroyed and moves to A's graveyard. The trigger still resolves: a 1/1 colorless Hero token is created and has nothing attached."
+          "expected": "Warrior's Sword is destroyed and moves to A's graveyard. The trigger still resolves: a 1/1 colorless Hero token is created and has nothing attached.",
+          "operation": {
+            "unclassifiable": "the opponent casts an additional spell, a player's decision no fork operation makes"
+          }
         },
         {
           "label": "spell_countered",
           "polarity": "does_not_fire",
           "delta": "B casts Counterspell targeting Warrior's Sword while it is on the stack, tapping both Islands.",
-          "expected": "Warrior's Sword is countered and moves to A's graveyard. It never enters the battlefield, so no job select trigger happens and no Hero token is created."
+          "expected": "Warrior's Sword is countered and moves to A's graveyard. It never enters the battlefield, so no job select trigger happens and no Hero token is created.",
+          "operation": {
+            "unclassifiable": "the opponent casts an additional spell, a player's decision no fork operation makes"
+          }
         }
       ],
       "cards": [
@@ -77,7 +83,17 @@
         "Counterspell",
         "Mountain",
         "Island"
-      ]
+      ],
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A job select trigger (keyword-derived, read off its Job select line) fires when its Equipment enters the battlefield.",
+        "near_miss": "A job select trigger evaluated against another object's zone change without firing.",
+        "params": {
+          "keyword": "Job select"
+        },
+        "needs": []
+      }
     }
   ]
 }

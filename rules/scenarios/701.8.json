@@ -54,7 +54,10 @@
           "label": "indestructible",
           "polarity": "does_not_fire",
           "delta": "Murder targets Darksteel Myr instead of Grizzly Bears.",
-          "expected": "Darksteel Myr is not destroyed and stays on the battlefield; Murder resolved and is in A's graveyard."
+          "expected": "Darksteel Myr is not destroyed and stays on the battlefield; Murder resolved and is in A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -63,7 +66,20 @@
         "Darksteel Myr",
         "Murder"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A destroy effect moves a permanent from the battlefield to its owner's graveyard.",
+        "near_miss": "A destroy effect resolves and the permanent stays (indestructible or regenerated).",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "graveyard",
+          "api": "Destroy"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.8b-1",
@@ -117,13 +133,19 @@
           "label": "toughness_zero",
           "polarity": "does_not_fire",
           "delta": "A casts Disfigure targeting Drudge Skeletons, tapping Swamp, instead of Shock.",
-          "expected": "Drudge Skeletons becomes -1/-1 and is put into B's graveyard by the toughness-0 state-based action. It was not destroyed, so the regeneration shield does not apply."
+          "expected": "Drudge Skeletons becomes -1/-1 and is put into B's graveyard by the toughness-0 state-based action. It was not destroyed, so the regeneration shield does not apply.",
+          "operation": {
+            "unclassifiable": "a different spell is cast"
+          }
         },
         {
           "label": "sacrificed",
           "polarity": "does_not_fire",
           "delta": "A casts Diabolic Edict targeting B, tapping Mountain and Swamp, instead of Shock.",
-          "expected": "B sacrifices Drudge Skeletons, their only creature, and it moves to B's graveyard. A sacrifice is not a destruction, so the regeneration shield does not apply."
+          "expected": "B sacrifices Drudge Skeletons, their only creature, and it moves to B's graveyard. A sacrifice is not a destruction, so the regeneration shield does not apply.",
+          "operation": {
+            "unclassifiable": "a different spell is cast"
+          }
         }
       ],
       "cards": [
@@ -134,7 +156,17 @@
         "Disfigure",
         "Diabolic Edict"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "A creature dealt damage that reaches its toughness is destroyed in the state-based check.",
+        "near_miss": "A creature dealt damage short of its toughness stays on the battlefield.",
+        "params": {
+          "check": "lethal_damage"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.8c-1",
@@ -190,13 +222,19 @@
           "label": "no_shield",
           "polarity": "does_not_fire",
           "delta": "B does not activate the regeneration ability.",
-          "expected": "Drudge Skeletons is destroyed and moves to B's graveyard."
+          "expected": "Drudge Skeletons is destroyed and moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different choice or decision by a player"
+          }
         },
         {
           "label": "cannot_regenerate",
           "polarity": "does_not_fire",
           "delta": "A casts Wrath of God instead of Murder, tapping two Plains and two Swamps; B still activates the regeneration ability in response.",
-          "expected": "Wrath of God destroys Drudge Skeletons and it can't be regenerated, so the shield is not used: Drudge Skeletons moves to B's graveyard."
+          "expected": "Wrath of God destroys Drudge Skeletons and it can't be regenerated, so the shield is not used: Drudge Skeletons moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different spell is cast"
+          }
         }
       ],
       "cards": [
@@ -206,7 +244,18 @@
         "Murder",
         "Wrath of God"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A destroy event is replaced by a regeneration shield (result replaced).",
+        "near_miss": "A destroy event meets the effect and is not replaced.",
+        "params": {
+          "event": "destroyed",
+          "result": "replaced"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.8c-2",
@@ -254,7 +303,10 @@
           "label": "no_shield",
           "polarity": "does_not_fire",
           "delta": "B does not activate the regeneration ability.",
-          "expected": "Drudge Skeletons is destroyed by the 3 damage and moves to B's graveyard. Hill Giant has 1 damage marked."
+          "expected": "Drudge Skeletons is destroyed by the 3 damage and moves to B's graveyard. Hill Giant has 1 damage marked.",
+          "operation": {
+            "unclassifiable": "a different choice or decision by a player"
+          }
         }
       ],
       "cards": [

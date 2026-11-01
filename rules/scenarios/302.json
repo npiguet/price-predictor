@@ -52,25 +52,37 @@
           "label": "main2_empty_stack",
           "polarity": "fires",
           "delta": "It is A's second main phase (step main2).",
-          "expected": "Casting Grizzly Bears is legal: can_play is true."
+          "expected": "Casting Grizzly Bears is legal: can_play is true.",
+          "operation": {
+            "unclassifiable": "changes the phase"
+          }
         },
         {
           "label": "combat",
           "polarity": "does_not_fire",
           "delta": "It is A's beginning of combat step (step beginning_of_combat) and A has priority.",
-          "expected": "Casting Grizzly Bears is not legal: can_play is false."
+          "expected": "Casting Grizzly Bears is not legal: can_play is false.",
+          "operation": {
+            "unclassifiable": "changes the phase"
+          }
         },
         {
           "label": "stack_not_empty",
           "polarity": "does_not_fire",
           "delta": "A has already cast Shock targeting B, tapping the Mountain. Shock is on the stack and A has priority.",
-          "expected": "Casting Grizzly Bears is not legal: can_play is false while Shock is on the stack."
+          "expected": "Casting Grizzly Bears is not legal: can_play is false while Shock is on the stack.",
+          "operation": {
+            "unclassifiable": "adds a spell on the stack (a different spell cast)"
+          }
         },
         {
           "label": "opponents_turn",
           "polarity": "does_not_fire",
           "delta": "It is B's turn (active B), B's first main phase, the stack is empty and A has priority.",
-          "expected": "Casting Grizzly Bears is not legal: can_play is false on B's turn."
+          "expected": "Casting Grizzly Bears is not legal: can_play is false on B's turn.",
+          "operation": {
+            "unclassifiable": "changes the turn"
+          }
         }
       ],
       "cards": [
@@ -79,7 +91,20 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": "The stack_not_empty variant puts Shock on the stack with the stack field of the setup: [{\"card\": \"Shock\", \"controller\": \"A\", \"targets\": [\"B\"]}]."
+      "forge_notes": "The stack_not_empty variant puts Shock on the stack with the stack field of the setup: [{\"card\": \"Shock\", \"controller\": \"A\", \"targets\": [\"B\"]}].",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A decision candidate whose timing bit is true: it may be played at this time (for a spell without flash, a main phase of its controller's turn with an empty stack).",
+        "near_miss": "A decision candidate whose timing bit is false: wrong phase or step, the opponent's turn, or a non-empty stack.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "302.2-1",
@@ -134,7 +159,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B responds with Counterspell targeting Grizzly Bears, tapping both Islands; Counterspell resolves first.",
-          "expected": "Counterspell counters Grizzly Bears. Grizzly Bears moves to A's graveyard and never reaches the battlefield. Counterspell moves to B's graveyard."
+          "expected": "Counterspell counters Grizzly Bears. Grizzly Bears moves to A's graveyard and never reaches the battlefield. Counterspell moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different spell cast by B in response"
+          }
         }
       ],
       "cards": [
@@ -143,7 +171,19 @@
         "Grizzly Bears",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent spell resolves and moves from the stack to the battlefield under its controller's control.",
+        "near_miss": "A spell on the stack that is countered instead and goes to the graveyard (not counted: a permanent spell's implicit trait has no line, so no api can be set).",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "302.4a-1",
@@ -188,13 +228,19 @@
           "label": "power_4",
           "polarity": "fires",
           "delta": "Bonesplitter is attached to Grizzly Bears.",
-          "expected": "Grizzly Bears has power 4 and deals 4 combat damage to B, whose life is 16."
+          "expected": "Grizzly Bears has power 4 and deals 4 combat damage to B, whose life is 16.",
+          "operation": {
+            "unclassifiable": "attaches an Equipment already on the battlefield; no fork operation changes an attachment"
+          }
         },
         {
           "label": "power_0",
           "polarity": "does_not_fire",
           "delta": "A attacks with Ornithopter (0/2) instead of Grizzly Bears.",
-          "expected": "Ornithopter has power 0 and deals no combat damage. B's life stays 20."
+          "expected": "Ornithopter has power 0 and deals no combat damage. B's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different attacker declared by the player (Ornithopter is already on the battlefield)"
+          }
         }
       ],
       "cards": [
@@ -252,7 +298,10 @@
           "label": "toughness_3",
           "polarity": "does_not_fire",
           "delta": "Shock targets Centaur Courser instead.",
-          "expected": "Centaur Courser (3/3) has 2 damage marked, less than its toughness, and stays on the battlefield."
+          "expected": "Centaur Courser (3/3) has 2 damage marked, less than its toughness, and stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "a different target (Centaur Courser is already on the battlefield)"
+          }
         }
       ],
       "cards": [
@@ -261,7 +310,17 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "A creature dealt damage whose marked damage reaches its toughness is destroyed and moves to the graveyard in the state-based check.",
+        "near_miss": "A creature dealt damage that stays below its toughness and stays on the battlefield.",
+        "params": {
+          "check": "lethal_damage"
+        },
+        "needs": []
+      }
     },
     {
       "id": "302.4c-1",
@@ -303,20 +362,34 @@
           "label": "anthem_opponents",
           "polarity": "does_not_fire",
           "delta": "Glorious Anthem is controlled by B instead of A.",
-          "expected": "Grizzly Bears is a 2/2, its printed values."
+          "expected": "Grizzly Bears is a 2/2, its printed values.",
+          "operation": {
+            "unclassifiable": "changes who controls the static source"
+          }
         },
         {
           "label": "anthem_and_counter",
           "polarity": "other",
           "delta": "Grizzly Bears also has a +1/+1 counter.",
-          "expected": "Grizzly Bears is a 4/4: the printed 2/2, the +1/+1 counter and the +1/+1 from Glorious Anthem."
+          "expected": "Grizzly Bears is a 4/4: the printed 2/2, the +1/+1 counter and the +1/+1 from Glorious Anthem.",
+          "operation": "counters"
         }
       ],
       "cards": [
         "Glorious Anthem",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static ability contributes a P/T modification to an affected creature.",
+        "near_miss": "A static ability applies to the board and contributes no P/T modification.",
+        "params": {
+          "field": "pt"
+        },
+        "needs": []
+      }
     },
     {
       "id": "302.5-1",
@@ -359,14 +432,28 @@
           "label": "not_animated",
           "polarity": "does_not_fire",
           "delta": "A does not activate Mutavault before combat.",
-          "expected": "Mutavault is not a creature, so it is not a legal attacker. There are no legal attackers."
+          "expected": "Mutavault is not a creature, so it is not a legal attacker. There are no legal attackers.",
+          "operation": {
+            "unclassifiable": "a different decision (the animate ability is not activated)"
+          }
         }
       ],
       "cards": [
         "Mountain",
         "Mutavault"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature is listed among the legal attackers of an attackers record.",
+        "near_miss": "A creature the attackers record lists as forbidden (tapped, summoning-sick or restricted); a noncreature permanent is never a candidate, so it shows on neither side.",
+        "params": {
+          "list": "legal_attackers",
+          "fires_when": "inside"
+        },
+        "needs": []
+      }
     },
     {
       "id": "302.5-2",
@@ -413,7 +500,10 @@
           "label": "not_animated",
           "polarity": "does_not_fire",
           "delta": "B does not activate Mutavault.",
-          "expected": "Mutavault is not a creature, so it is not a legal blocker. There are no legal blockers."
+          "expected": "Mutavault is not a creature, so it is not a legal blocker. There are no legal blockers.",
+          "operation": {
+            "unclassifiable": "a different decision (the animate ability is not activated)"
+          }
         }
       ],
       "cards": [
@@ -421,7 +511,18 @@
         "Mountain",
         "Mutavault"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature is listed among the legal blockers of a blockers record.",
+        "near_miss": "A creature the blockers record lists as forbidden (tapped, summoning-sick or restricted); a noncreature permanent is never a candidate, so it shows on neither side.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "inside"
+        },
+        "needs": []
+      }
     },
     {
       "id": "302.6-1",
@@ -470,13 +571,19 @@
           "label": "there_since_last_turn",
           "polarity": "does_not_fire",
           "delta": "Grizzly Bears has been on A's battlefield since before the turn began; A casts nothing.",
-          "expected": "Grizzly Bears is a legal attacker."
+          "expected": "Grizzly Bears is a legal attacker.",
+          "operation": {
+            "unclassifiable": "changes whether a spell is cast, a different decision"
+          }
         },
         {
           "label": "haste",
           "polarity": "other",
           "delta": "A casts Raging Goblin (haste), tapping the Mountain, instead of Grizzly Bears, and attempts to attack with it.",
-          "expected": "Raging Goblin is a legal attacker despite being cast this turn."
+          "expected": "Raging Goblin is a legal attacker despite being cast this turn.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         }
       ],
       "cards": [
@@ -533,13 +640,19 @@
           "label": "elves_there_since_last_turn",
           "polarity": "does_not_fire",
           "delta": "Llanowar Elves has been on A's battlefield since before the turn began; A casts nothing.",
-          "expected": "The tap ability can be activated and adds {G}."
+          "expected": "The tap ability can be activated and adds {G}.",
+          "operation": {
+            "unclassifiable": "changes whether a spell is cast, a different decision"
+          }
         },
         {
           "label": "arbor_played_this_turn",
           "polarity": "fires",
           "delta": "A plays Dryad Arbor as a land instead of casting Llanowar Elves, then attempts to tap it for {G}.",
-          "expected": "Dryad Arbor is a land creature that came under A's control this turn, so it cannot be tapped for mana: the activation is not legal."
+          "expected": "Dryad Arbor is a land creature that came under A's control this turn, so it cannot be tapped for mana: the activation is not legal.",
+          "operation": {
+            "unclassifiable": "a different decision (a land is played instead of a spell cast)"
+          }
         }
       ],
       "cards": [
@@ -598,7 +711,10 @@
           "label": "next_turn",
           "polarity": "fires",
           "delta": "A casts the second Shock on A's next turn instead, after the cleanup step of this turn.",
-          "expected": "The 2 damage marked on Hill Giant is removed in the cleanup step. After the second Shock Hill Giant has 2 damage marked again and stays on the battlefield."
+          "expected": "The 2 damage marked on Hill Giant is removed in the cleanup step. After the second Shock Hill Giant has 2 damage marked again and stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "changes the turn (the second Shock is cast after the cleanup step)"
+          }
         }
       ],
       "cards": [
@@ -653,7 +769,10 @@
           "label": "infect_source",
           "polarity": "does_not_fire",
           "delta": "A attacks with Glistener Elf (1/1 infect) instead.",
-          "expected": "Glistener Elf deals 1 damage to Grizzly Bears as one -1/-1 counter. Grizzly Bears has no damage marked and is a 1/1. Glistener Elf takes 2 damage and dies."
+          "expected": "Glistener Elf deals 1 damage to Grizzly Bears as one -1/-1 counter. Grizzly Bears has no damage marked and is a 1/1. Glistener Elf takes 2 damage and dies.",
+          "operation": {
+            "unclassifiable": "a different attacker declared by the player (Glistener Elf is already on the battlefield)"
+          }
         }
       ],
       "cards": [
@@ -712,7 +831,10 @@
           "label": "no_regeneration",
           "polarity": "does_not_fire",
           "delta": "B does not activate regeneration.",
-          "expected": "Drudge Skeletons is destroyed in the state-based check and moves to B's graveyard."
+          "expected": "Drudge Skeletons is destroyed in the state-based check and moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different decision (regeneration is not activated)"
+          }
         }
       ],
       "cards": [
@@ -721,7 +843,17 @@
         "Shock",
         "Swamp"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution's effect half holds a regenerated event: a creature's destruction was replaced by its regeneration shield, so it is tapped, removed from combat and the damage marked on it is removed.",
+        "near_miss": "A resolution without a regenerated event (not counted: no api is set, because a regeneration replaces a destruction of any origin, so only the fires side is tagged).",
+        "params": {
+          "event": "regenerated"
+        },
+        "needs": []
+      }
     }
   ]
 }

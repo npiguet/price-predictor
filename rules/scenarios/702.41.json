@@ -52,13 +52,19 @@
           "label": "one_artifact",
           "polarity": "does_not_fire",
           "delta": "A controls one Ornithopter instead of two.",
-          "expected": "Frogmite costs {3}; A has only two untapped lands, so it cannot be cast."
+          "expected": "Frogmite costs {3}; A has only two untapped lands, so it cannot be cast.",
+          "operation": {
+            "unclassifiable": "removes a permanent, not a fork operation"
+          }
         },
         {
           "label": "opponent_artifacts",
           "polarity": "does_not_fire",
           "delta": "A controls no Ornithopters and B controls two.",
-          "expected": "Frogmite costs {4}, since only artifacts A controls count; it cannot be cast with two Mountains."
+          "expected": "Frogmite costs {4}, since only artifacts A controls count; it cannot be cast with two Mountains.",
+          "operation": {
+            "unclassifiable": "both artifacts change controller to the opponent: two control changes, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -113,7 +119,8 @@
           "label": "one_instance",
           "polarity": "does_not_fire",
           "delta": "A controls a second Ornithopter instead of Mycosynth Golem.",
-          "expected": "Frogmite costs {2} (one instance, two artifacts); A has no mana, so it cannot be cast."
+          "expected": "Frogmite costs {2} (one instance, two artifacts); A has no mana, so it cannot be cast.",
+          "operation": "replace_card"
         }
       ],
       "cards": [

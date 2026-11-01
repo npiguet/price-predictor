@@ -60,13 +60,19 @@
           "label": "offspring_not_paid",
           "polarity": "does_not_fire",
           "delta": "A does not pay the offspring cost and taps only two Mountains for {1}{R}.",
-          "expected": "No offspring trigger fires. A controls only Steampath Charger (2/1) and no token."
+          "expected": "No offspring trigger fires. A controls only Steampath Charger (2/1) and no token.",
+          "operation": {
+            "unclassifiable": "A different casting choice: the offspring cost is not paid; no fork operation changes a player's choice."
+          }
         },
         {
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "A pays the offspring cost, but B casts Counterspell on Steampath Charger, tapping both Islands.",
-          "expected": "Steampath Charger is countered and moves to A's graveyard. It never enters, so no offspring trigger fires and there is no token."
+          "expected": "Steampath Charger is countered and moves to A's graveyard. It never enters, so no offspring trigger fires and there is no token.",
+          "operation": {
+            "unclassifiable": "An opponent casts a counterspell in response, a different spell cast; no fork operation casts a spell."
+          }
         }
       ],
       "cards": [
@@ -75,7 +81,17 @@
         "Steampath Charger",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An offspring enters trigger (keyword-generated, conditioned on the offspring cost being paid) is evaluated as its creature enters and fires.",
+        "near_miss": "The same offspring trigger evaluated on entering and not fired: the offspring cost was not paid.",
+        "params": {
+          "keyword": "Offspring"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.175b-1",
@@ -128,7 +144,10 @@
           "label": "one_paid",
           "polarity": "does_not_fire",
           "delta": "A pays only the printed offspring {2}, not the one granted by Zinnia, Valley's Voice, tapping four Mountains for {1}{R}{2}.",
-          "expected": "Only the paid instance triggers: A controls Steampath Charger (2/1) and one Steampath Charger token (1/1). Zinnia, Valley's Voice is 2/3. Two Mountains stay untapped."
+          "expected": "Only the paid instance triggers: A controls Steampath Charger (2/1) and one Steampath Charger token (1/1). Zinnia, Valley's Voice is 2/3. Two Mountains stay untapped.",
+          "operation": {
+            "unclassifiable": "A different casting choice: one offspring instance is left unpaid; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -136,7 +155,17 @@
         "Zinnia, Valley's Voice",
         "Steampath Charger"
       ],
-      "forge_notes": "Zinnia grants Offspring:2 to creature spells A casts (AddKeyword on the stack). Zinnia gets +1/+0 per other creature A controls with base power 1, which counts the 1/1 tokens."
+      "forge_notes": "Zinnia grants Offspring:2 to creature spells A casts (AddKeyword on the stack). Zinnia gets +1/+0 per other creature A controls with base power 1, which counts the 1/1 tokens.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An offspring enters trigger, one per offspring instance, is evaluated as its creature enters and fires for an instance whose cost was paid.",
+        "near_miss": "An offspring trigger evaluated on entering and not fired: its instance's cost was not paid.",
+        "params": {
+          "keyword": "Offspring"
+        },
+        "needs": []
+      }
     }
   ]
 }

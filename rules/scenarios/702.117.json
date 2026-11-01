@@ -59,13 +59,19 @@
           "label": "no_spell_cast",
           "polarity": "does_not_fire",
           "delta": "A casts no spell before Goblin Freerunner; Shock stays in A's hand.",
-          "expected": "Casting Goblin Freerunner is illegal: the surge cost is not available, the cost stays {3}{R} and A has only three Mountains."
+          "expected": "Casting Goblin Freerunner is illegal: the surge cost is not available, the cost stays {3}{R} and A has only three Mountains.",
+          "operation": {
+            "unclassifiable": "a different spell is cast, a decision by a player"
+          }
         },
         {
           "label": "opponent_spell_cast",
           "polarity": "does_not_fire",
           "delta": "A casts no spell before Goblin Freerunner; instead, after A passes priority in main1 with an empty stack, B casts Shock targeting A, it resolves and A receives priority again in main1.",
-          "expected": "Casting Goblin Freerunner is illegal: a spell cast by an opponent does not enable surge, the cost stays {3}{R} and A has only three Mountains. A's life is 18."
+          "expected": "Casting Goblin Freerunner is illegal: a spell cast by an opponent does not enable surge, the cost stays {3}{R} and A has only three Mountains. A's life is 18.",
+          "operation": {
+            "unclassifiable": "a different spell is cast, a decision by a player"
+          }
         }
       ],
       "cards": [

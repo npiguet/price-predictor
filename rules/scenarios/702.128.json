@@ -56,7 +56,10 @@
           "label": "ability_countered",
           "polarity": "does_not_fire",
           "delta": "B responds by casting Stifle with the Island, targeting the embalm ability.",
-          "expected": "The embalm ability is countered. Sacred Cat stays in exile because exiling was a cost, and no token is created. Stifle is in B's graveyard."
+          "expected": "The embalm ability is countered. Sacred Cat stays in exile because exiling was a cost, and no token is created. Stifle is in B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different spell or ability is cast"
+          }
         }
       ],
       "cards": [
@@ -112,14 +115,31 @@
           "label": "end_step",
           "polarity": "does_not_fire",
           "delta": "It is A's end step instead of the first main phase.",
-          "expected": "Activation is not legal outside a main phase. Sacred Cat stays in A's graveyard and the Plains stays untapped."
+          "expected": "Activation is not legal outside a main phase. Sacred Cat stays in A's graveyard and the Plains stays untapped.",
+          "operation": {
+            "unclassifiable": "changes the phase"
+          }
         }
       ],
       "cards": [
         "Plains",
         "Sacred Cat"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An activated ability restricted to sorcery timing passes the casting-speed check: its controller's main phase with an empty stack.",
+        "near_miss": "A candidate that fails the casting-speed check: outside its controller's main phase, or with a non-empty stack.",
+        "params": {
+          "bit": "failed_check",
+          "check": "casting_speed",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     }
   ]
 }

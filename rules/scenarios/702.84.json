@@ -57,7 +57,10 @@
           "label": "reanimated",
           "polarity": "does_not_fire",
           "delta": "A casts Zombify (paying {3}{B}) targeting Dregscape Zombie instead of activating unearth.",
-          "expected": "Dregscape Zombie returns to the battlefield with no delayed trigger and is still on the battlefield after the end step."
+          "expected": "Dregscape Zombie returns to the battlefield with no delayed trigger and is still on the battlefield after the end step.",
+          "operation": {
+            "unclassifiable": "a different spell cast instead of the unearth activation"
+          }
         }
       ],
       "cards": [
@@ -65,7 +68,17 @@
         "Dregscape Zombie",
         "Zombify"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "Unearth's delayed trigger fires at the beginning of the next end step and exiles the returned card.",
+        "near_miss": "Unearth's delayed trigger evaluated and not fired.",
+        "params": {
+          "keyword": "unearth"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.84a-2",
@@ -125,7 +138,10 @@
           "label": "reanimated",
           "polarity": "does_not_fire",
           "delta": "A casts Zombify (paying {3}{B}) targeting Dregscape Zombie instead of activating unearth.",
-          "expected": "Dregscape Zombie dies normally and moves to A's graveyard. It is not in exile."
+          "expected": "Dregscape Zombie dies normally and moves to A's graveyard. It is not in exile.",
+          "operation": {
+            "unclassifiable": "a different spell cast instead of the unearth activation"
+          }
         }
       ],
       "cards": [
@@ -189,7 +205,10 @@
           "label": "reanimated",
           "polarity": "does_not_fire",
           "delta": "A casts Zombify (paying {3}{B}) targeting Dregscape Zombie instead of activating unearth.",
-          "expected": "Dregscape Zombie came under A's control this turn and has no haste, so it is not a legal attacker."
+          "expected": "Dregscape Zombie came under A's control this turn and has no haste, so it is not a legal attacker.",
+          "operation": {
+            "unclassifiable": "a different spell cast instead of the unearth activation"
+          }
         }
       ],
       "cards": [
@@ -243,20 +262,40 @@
           "label": "combat_step",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "Unearth can be activated only at sorcery timing, so activating it is not legal (can_play false)."
+          "expected": "Unearth can be activated only at sorcery timing, so activating it is not legal (can_play false).",
+          "operation": {
+            "unclassifiable": "changes the phase"
+          }
         },
         {
           "label": "card_in_hand",
           "polarity": "does_not_fire",
           "delta": "Dregscape Zombie is in A's hand instead of the graveyard.",
-          "expected": "Unearth functions only while the card is in the graveyard, so activating it is not legal (can_play false)."
+          "expected": "Unearth functions only while the card is in the graveyard, so activating it is not legal (can_play false).",
+          "operation": {
+            "unclassifiable": "moves a card between zones"
+          }
         }
       ],
       "cards": [
         "Swamp",
         "Dregscape Zombie"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An ability restricted to sorcery timing passes the casting-speed check in its controller's main phase with an empty stack.",
+        "near_miss": "The candidate fails the casting-speed check outside that window.",
+        "params": {
+          "bit": "failed_check",
+          "check": "casting_speed",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     }
   ]
 }

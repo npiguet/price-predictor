@@ -59,14 +59,25 @@
           "label": "plain_attacker",
           "polarity": "does_not_fire",
           "delta": "A's attacker is a second Mons's Goblin Raiders (1/1, no abilities) instead of Fencing Ace.",
-          "expected": "There is a single combat damage step. Each Mons's Goblin Raiders deals 1 damage to the other and both are destroyed. B's life stays 20."
+          "expected": "There is a single combat damage step. Each Mons's Goblin Raiders deals 1 damage to the other and both are destroyed. B's life stays 20.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
         "Fencing Ace",
         "Mons's Goblin Raiders"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "keyword_combat",
+        "record_kind": "combat",
+        "outcome": "A real combat with a first or double striker, in which a creature with double strike deals combat damage.",
+        "near_miss": "A damage-step probe that re-ran the combat with double strike stripped from its carrier.",
+        "params": {
+          "keyword": "double_strike"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.4b-2",
@@ -118,7 +129,8 @@
           "label": "plain_attacker",
           "polarity": "does_not_fire",
           "delta": "A's attacker is Mons's Goblin Raiders (1/1, no abilities) instead of Fencing Ace.",
-          "expected": "There is a single combat damage step. The attacker deals 1 damage to Grizzly Bears, which survives with 1 damage marked; Grizzly Bears deals 2 damage and destroys the attacker."
+          "expected": "There is a single combat damage step. The attacker deals 1 damage to Grizzly Bears, which survives with 1 damage marked; Grizzly Bears deals 2 damage and destroys the attacker.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -126,7 +138,17 @@
         "Grizzly Bears",
         "Mons's Goblin Raiders"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "keyword_combat",
+        "record_kind": "combat",
+        "outcome": "A real combat in which a creature with double strike deals combat damage while creatures without first or double strike wait for the second step.",
+        "near_miss": "A damage-step probe that re-ran the combat with double strike stripped from its carrier.",
+        "params": {
+          "keyword": "double_strike"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.4b-3",
@@ -173,14 +195,25 @@
           "label": "plain_attacker",
           "polarity": "does_not_fire",
           "delta": "A's attacker is Mons's Goblin Raiders (1/1, no abilities) instead of Fencing Ace.",
-          "expected": "There is a single combat damage step in which the attacker deals 1 damage to B. B's life is 19."
+          "expected": "There is a single combat damage step in which the attacker deals 1 damage to B. B's life is 19.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
         "Fencing Ace",
         "Mons's Goblin Raiders"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "keyword_combat",
+        "record_kind": "combat",
+        "outcome": "A real combat in which a creature with double strike deals combat damage in each of the two combat damage steps.",
+        "near_miss": "A damage-step probe that re-ran the combat with double strike stripped from its carrier.",
+        "params": {
+          "keyword": "double_strike"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.4c-1",
@@ -236,7 +269,10 @@
           "label": "not_frogged",
           "polarity": "does_not_fire",
           "delta": "B does not cast Turn to Frog.",
-          "expected": "Fencing Ace deals 1 damage in each step. B's life is 18."
+          "expected": "Fencing Ace deals 1 damage in each step. B's life is 18.",
+          "operation": {
+            "unclassifiable": "a different spell is cast, not a fact on the board"
+          }
         }
       ],
       "cards": [
@@ -299,7 +335,10 @@
           "label": "no_charm",
           "polarity": "does_not_fire",
           "delta": "A does not cast Boros Charm.",
-          "expected": "Youthful Knight deals 2 damage in the first step only; it deals none in the second. B's life is 18."
+          "expected": "Youthful Knight deals 2 damage in the first step only; it deals none in the second. B's life is 18.",
+          "operation": {
+            "unclassifiable": "a different spell is cast, not a fact on the board"
+          }
         }
       ],
       "cards": [

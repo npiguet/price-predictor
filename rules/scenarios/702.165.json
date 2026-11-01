@@ -56,7 +56,10 @@
           "label": "itself",
           "polarity": "does_not_fire",
           "delta": "The backup trigger targets Serpent-Blade Assailant itself.",
-          "expected": "Serpent-Blade Assailant gets a +1/+1 counter (3/2). Nothing is granted since the target is not another creature; it keeps its own deathtouch. Grizzly Bears stays a 2/2 with no deathtouch."
+          "expected": "Serpent-Blade Assailant gets a +1/+1 counter (3/2). Nothing is granted since the target is not another creature; it keeps its own deathtouch. Grizzly Bears stays a 2/2 with no deathtouch.",
+          "operation": {
+            "unclassifiable": "a different target chosen for the backup trigger (the creature itself instead of another creature); no fork operation changes a target"
+          }
         }
       ],
       "cards": [
@@ -72,7 +75,7 @@
         "702.165b"
       ],
       "title": "A copy of a backup creature keeps the printed ability order and its backup grants the abilities below it",
-      "record_kind": "continuous",
+      "record_kind": "trigger",
       "setup": {
         "active": "A",
         "step": "main1",
@@ -115,7 +118,10 @@
           "label": "copy_of_bears",
           "polarity": "does_not_fire",
           "delta": "A has Clone enter as a copy of Grizzly Bears.",
-          "expected": "Clone enters as a 2/2 Grizzly Bears copy with no backup. No trigger fires and the original Grizzly Bears is a 2/2 with no counter and no deathtouch."
+          "expected": "Clone enters as a 2/2 Grizzly Bears copy with no backup. No trigger fires and the original Grizzly Bears is a 2/2 with no counter and no deathtouch.",
+          "operation": {
+            "unclassifiable": "a different copy choice made by the player as the Clone enters; no fork operation changes a choice"
+          }
         }
       ],
       "cards": [
@@ -175,7 +181,10 @@
           "label": "printed_vigilance",
           "polarity": "does_not_fire",
           "delta": "A's hand holds Sigiled Sentinel ({2}{W} 2/2 Human Knight with backup 1 and vigilance printed below it) instead of Serpent-Blade Assailant, cast by tapping Forest, Forest and Plains.",
-          "expected": "Grizzly Bears gets a +1/+1 counter (3/3) and gains vigilance until end of turn, since vigilance is printed below backup on Sigiled Sentinel."
+          "expected": "Grizzly Bears gets a +1/+1 counter (3/3) and gains vigilance until end of turn, since vigilance is printed below backup on Sigiled Sentinel.",
+          "operation": {
+            "unclassifiable": "a different card in hand and a different spell cast; replace_card swaps a permanent, not a card in hand"
+          }
         }
       ],
       "cards": [
@@ -243,7 +252,10 @@
           "label": "source_loses_abilities",
           "polarity": "fires",
           "delta": "In response to the backup trigger B casts Turn to Frog on Serpent-Blade Assailant, tapping two Islands.",
-          "expected": "Serpent-Blade Assailant becomes a 1/1 blue Frog with no abilities until end of turn. The backup trigger still resolves: Grizzly Bears gets a +1/+1 counter (3/3) and gains deathtouch until end of turn, as the abilities were determined when the trigger went on the stack."
+          "expected": "Serpent-Blade Assailant becomes a 1/1 blue Frog with no abilities until end of turn. The backup trigger still resolves: Grizzly Bears gets a +1/+1 counter (3/3) and gains deathtouch until end of turn, as the abilities were determined when the trigger went on the stack.",
+          "operation": {
+            "unclassifiable": "the opponent casts a spell in response to the trigger; a different spell cast is no fork operation"
+          }
         }
       ],
       "cards": [

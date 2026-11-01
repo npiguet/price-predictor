@@ -68,13 +68,19 @@
           "label": "rogue_blocked",
           "polarity": "does_not_fire",
           "delta": "B blocks Triton Shorethief with Grizzly Bears.",
-          "expected": "No player was dealt combat damage this turn. Casting Latchkey Faerie is not legal (can_play false)."
+          "expected": "No player was dealt combat damage this turn. Casting Latchkey Faerie is not legal (can_play false).",
+          "operation": {
+            "unclassifiable": "a different block decision by B"
+          }
         },
         {
           "label": "wrong_type",
           "polarity": "does_not_fire",
           "delta": "A attacks with Goblin Piker instead of Triton Shorethief and B declares no blockers.",
-          "expected": "B was dealt combat damage (life 18), but Goblin Piker is neither a Faerie nor a Rogue. Casting Latchkey Faerie is not legal (can_play false)."
+          "expected": "B was dealt combat damage (life 18), but Goblin Piker is neither a Faerie nor a Rogue. Casting Latchkey Faerie is not legal (can_play false).",
+          "operation": {
+            "unclassifiable": "a different attack declaration by A"
+          }
         }
       ],
       "cards": [
@@ -84,7 +90,21 @@
         "Grizzly Bears",
         "Latchkey Faerie"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A cast candidate using an alternative cost gated on what happened this turn (prowl) passes Forge's other-restrictions check, so the alternative cost is offered.",
+        "near_miss": "The candidate fails the other-restrictions check because the condition is unmet.",
+        "params": {
+          "bit": "failed_check",
+          "check": "script_restriction",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     }
   ]
 }

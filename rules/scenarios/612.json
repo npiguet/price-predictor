@@ -58,7 +58,10 @@
           "label": "name_word",
           "polarity": "does_not_fire",
           "delta": "The chosen color word to replace is white instead of black, replaced with red.",
-          "expected": "White Knight is still named White Knight, with first strike and protection from black; nothing about it changed."
+          "expected": "White Knight is still named White Knight, with first strike and protection from black; nothing about it changed.",
+          "operation": {
+            "unclassifiable": "A different choice by the casting player (which colour word to replace); no fork operation changes a choice."
+          }
         }
       ],
       "cards": [
@@ -66,7 +69,10 @@
         "White Knight",
         "Sleight of Mind"
       ],
-      "forge_notes": "Sleight of Mind has Duration$ Permanent. Its color choice goes through the activating player's chooseColor, so the scenario fixes both colors."
+      "forge_notes": "Sleight of Mind has Duration$ Permanent. Its color choice goes through the activating player's chooseColor, so the scenario fixes both colors.",
+      "detector": {
+        "none": "A text_change event (EVENT_PARAMS gives it no parameters) says only that a card's text changed, not which word nor that a card-name word was left alone; continuous contributions carry P/T, keywords, types, colours and a name from statics, and a ChangeText effect is none of those. No field shows a colour word changed in rules text but not in a name."
+      }
     },
     {
       "id": "612.2a-1",
@@ -120,7 +126,10 @@
           "label": "absent_type",
           "polarity": "does_not_fire",
           "delta": "B chooses to replace the creature type Elf with Goblin instead of Soldier with Goblin.",
-          "expected": "Raise the Alarm resolves and creates two 1/1 white Soldier creature tokens named Soldier Token under A's control; there are no Goblin tokens."
+          "expected": "Raise the Alarm resolves and creates two 1/1 white Soldier creature tokens named Soldier Token under A's control; there are no Goblin tokens.",
+          "operation": {
+            "unclassifiable": "A different choice by the casting player (which creature type to replace); no fork operation changes a choice."
+          }
         }
       ],
       "cards": [
@@ -181,7 +190,10 @@
           "label": "printed",
           "polarity": "does_not_fire",
           "delta": "Mind Bend targets Bull Hippo instead of Merfolk of the Pearl Trident.",
-          "expected": "Bull Hippo is 3/3 and has swampwalk; it no longer has islandwalk."
+          "expected": "Bull Hippo is 3/3 and has swampwalk; it no longer has islandwalk.",
+          "operation": {
+            "unclassifiable": "A different target for the text-changing spell; no fork operation changes a target."
+          }
         }
       ],
       "cards": [
@@ -191,7 +203,10 @@
         "Bull Hippo",
         "Mind Bend"
       ],
-      "forge_notes": "Mind Bend is a GenericChoice with a ChangeText sub-ability, so the scenario fixes the branch (land type) and both land types. Check that Forge leaves the AddKeyword$ Landwalk:Island granted by the static ability untouched."
+      "forge_notes": "Mind Bend is a GenericChoice with a ChangeText sub-ability, so the scenario fixes the branch (land type) and both land types. Check that Forge leaves the AddKeyword$ Landwalk:Island granted by the static ability untouched.",
+      "detector": {
+        "none": "Continuous contributions record what statics grant, and gen-3 card lines flag a line granted, but no record field or event says which lines a text-changing effect rewrote: text_change has no parameters and sits on resolution records. That a granted ability is left untouched while a printed one changes shows nowhere."
+      }
     },
     {
       "id": "612.4-1",
@@ -247,7 +262,10 @@
           "label": "absent_type",
           "polarity": "does_not_fire",
           "delta": "B chooses to replace the creature type Elf with Goblin instead of Soldier with Goblin.",
-          "expected": "Token 1 and token 2 are both still 1/1 white Soldier creatures named Soldier Token; neither is a Goblin."
+          "expected": "Token 1 and token 2 are both still 1/1 white Soldier creatures named Soldier Token; neither is a Goblin.",
+          "operation": {
+            "unclassifiable": "A different choice by the casting player (which creature type to replace); no fork operation changes a choice."
+          }
         }
       ],
       "cards": [
@@ -256,7 +274,10 @@
         "Raise the Alarm",
         "Artificial Evolution"
       ],
-      "forge_notes": "B acts on A's turn with priority after Raise the Alarm resolves."
+      "forge_notes": "B acts on A's turn with priority after Raise the Alarm resolves.",
+      "detector": {
+        "none": "A ChangeText effect is no static, so no continuous contribution records a token's subtype changing; the text_change event that marks it is on a resolution record and carries no parameters naming the word changed."
+      }
     },
     {
       "id": "612.5-1",
@@ -315,7 +336,10 @@
           "label": "enchantment_removed",
           "polarity": "does_not_fire",
           "delta": "After the trigger resolves, B casts Disenchant targeting Exchange of Words, tapping both Plains, and it resolves.",
-          "expected": "Exchange of Words is in A's graveyard; Serra Angel is a 4/4 with flying and vigilance again and Grizzly Bears is a 2/2 with no abilities."
+          "expected": "Exchange of Words is in A's graveyard; Serra Angel is a 4/4 with flying and vigilance again and Grizzly Bears is a 2/2 with no abilities.",
+          "operation": {
+            "unclassifiable": "An additional spell is cast and a permanent leaves the battlefield; no fork operation casts a spell or removes a permanent."
+          }
         }
       ],
       "cards": [
@@ -326,7 +350,10 @@
         "Exchange of Words",
         "Disenchant"
       ],
-      "forge_notes": "Implemented by ExchangeTextBox (TextBoxExchangeEffect) with Duration$ AsLongAsInPlay."
+      "forge_notes": "Implemented by ExchangeTextBox (TextBoxExchangeEffect) with Duration$ AsLongAsInPlay.",
+      "detector": {
+        "none": "An exchange of text boxes is noted as a text_change event on the ExchangeTextBox resolution record, not as a continuous contribution: continuous records carry no field for rules text, and nothing marks the texts returning when the exchange's duration ends."
+      }
     },
     {
       "id": "612.6-1",
@@ -374,7 +401,10 @@
           "label": "noncreature_on_top",
           "polarity": "does_not_fire",
           "delta": "The graveyard order is reversed, so Shock is the top card and Serra Angel is under it.",
-          "expected": "Volrath's Shapeshifter keeps its own characteristics: named Volrath's Shapeshifter, mana cost {1}{U}{U}, a blue 0/1 Phyrexian Shapeshifter creature with only '{2}: Discard a card.'"
+          "expected": "Volrath's Shapeshifter keeps its own characteristics: named Volrath's Shapeshifter, mana cost {1}{U}{U}, a blue 0/1 Phyrexian Shapeshifter creature with only '{2}: Discard a card.'",
+          "operation": {
+            "unclassifiable": "The order of cards in a graveyard changes; fork operations act on permanents and players, not on a graveyard's order."
+          }
         }
       ],
       "cards": [
@@ -440,13 +470,19 @@
           "label": "unattached",
           "polarity": "does_not_fire",
           "delta": "Spy Kit is on A's battlefield but not attached to any creature.",
-          "expected": "Only B's Grizzly Bears returns to B's hand; A's Hill Giant and B's Hill Giant stay on the battlefield."
+          "expected": "Only B's Grizzly Bears returns to B's hand; A's Hill Giant and B's Hill Giant stay on the battlefield.",
+          "operation": {
+            "unclassifiable": "An Equipment's attachment changes; no fork operation attaches or unattaches a permanent."
+          }
         },
         {
           "label": "own_name",
           "polarity": "other",
           "delta": "Echoing Truth targets B's Hill Giant instead of B's Grizzly Bears.",
-          "expected": "B's Hill Giant returns to B's hand and A's equipped Hill Giant returns to A's hand, since it keeps its own name; B's Grizzly Bears stays on the battlefield."
+          "expected": "B's Hill Giant returns to B's hand and A's equipped Hill Giant returns to A's hand, since it keeps its own name; B's Grizzly Bears stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "A different target for the spell; no fork operation changes a target."
+          }
         }
       ],
       "cards": [
@@ -456,7 +492,10 @@
         "Grizzly Bears",
         "Echoing Truth"
       ],
-      "forge_notes": "Check that sharesNameWith in Echoing Truth's ChangeZoneAll honors names added by AddNames$ AllNonLegendaryCreatureNames."
+      "forge_notes": "Check that sharesNameWith in Echoing Truth's ChangeZoneAll honors names added by AddNames$ AllNonLegendaryCreatureNames.",
+      "detector": {
+        "none": "The names an object has are no field of the resolution record's snapshot or of any event (zone_change carries from_zone, to_zone, cause, library_position); a bounce matching an object by an added name looks like any other zone_change."
+      }
     },
     {
       "id": "612.8-1",
@@ -511,13 +550,19 @@
           "label": "no_aura",
           "polarity": "does_not_fire",
           "delta": "A does not cast Honest Work; Bears 1 keeps the name Grizzly Bears.",
-          "expected": "Both Bears 1 and Bears 2 return to B's hand."
+          "expected": "Both Bears 1 and Bears 2 return to B's hand.",
+          "operation": {
+            "unclassifiable": "A spell is not cast, so an Aura is absent from the battlefield; no fork operation removes a permanent or a cast."
+          }
         },
         {
           "label": "target_renamed",
           "polarity": "fires",
           "delta": "Echoing Truth targets Bears 1 (named Humble Merchant) instead of Bears 2.",
-          "expected": "Only Bears 1 returns to B's hand; Honest Work goes to A's graveyard as a state-based action; Bears 2 stays on the battlefield."
+          "expected": "Only Bears 1 returns to B's hand; Honest Work goes to A's graveyard as a state-based action; Bears 2 stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "A different target for the spell; no fork operation changes a target."
+          }
         }
       ],
       "cards": [
@@ -526,7 +571,10 @@
         "Honest Work",
         "Echoing Truth"
       ],
-      "forge_notes": "Honest Work uses SetName$ Humble Merchant in its static ability."
+      "forge_notes": "Honest Work uses SetName$ Humble Merchant in its static ability.",
+      "detector": {
+        "none": "A resolution record's snapshot and events carry no object's current name (a set name exists only as a continuous contribution's name, on a different record kind); whether an object escaped a same-name effect because its name was replaced shows in no field of the resolution."
+      }
     },
     {
       "id": "612.10-1",
@@ -578,7 +626,10 @@
           "label": "no_splice",
           "polarity": "does_not_fire",
           "delta": "A does not splice Glacial Ray and pays only {1}{R} (two Mountains).",
-          "expected": "B is at 20 life; A has {R}{R}{R} in mana pool; Desperate Ritual is in A's graveyard and Glacial Ray is still in A's hand."
+          "expected": "B is at 20 life; A has {R}{R}{R} in mana pool; Desperate Ritual is in A's graveyard and Glacial Ray is still in A's hand.",
+          "operation": {
+            "unclassifiable": "A different casting decision (no splice, a different cost paid); no fork operation changes how a spell is cast."
+          }
         }
       ],
       "cards": [
@@ -586,7 +637,10 @@
         "Desperate Ritual",
         "Glacial Ray"
       ],
-      "forge_notes": "Mana in the pool empties at the end of the step, so it is read in main1 straight after resolution."
+      "forge_notes": "Mana in the pool empties at the end of the step, so it is read in main1 straight after resolution.",
+      "detector": {
+        "none": "No resolution field or event marks a spell carrying spliced text: gen-3 card lines' cast_with names only an alternative cost or kicker, and spliced lines are planned (planned.every_line), not collected; the spliced effect's events look like the spell's own."
+      }
     }
   ]
 }

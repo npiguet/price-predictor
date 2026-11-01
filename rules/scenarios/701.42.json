@@ -52,7 +52,8 @@
           "label": "wrong_partner",
           "polarity": "does_not_fire",
           "delta": "A controls Hill Giant instead of Midnight Scavengers.",
-          "expected": "Graf Rats' trigger does not fire. Graf Rats and Hill Giant stay on the battlefield and nothing is exiled."
+          "expected": "Graf Rats' trigger does not fire. Graf Rats and Hill Giant stay on the battlefield and nothing is exiled.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -60,7 +61,19 @@
         "Midnight Scavengers",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Meld resolution puts the melded permanent onto the battlefield.",
+        "near_miss": "A Meld resolution puts nothing onto the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "battlefield",
+          "api": "Meld"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.42b-1",
@@ -109,19 +122,26 @@
           "label": "token_primary",
           "polarity": "fires",
           "delta": "Graf Rats is the token (a copy of Graf Rats) and Midnight Scavengers is the card.",
-          "expected": "Both are exiled. The Graf Rats token ceases to exist, Midnight Scavengers stays in exile, and no Chittering Host enters the battlefield."
+          "expected": "Both are exiled. The Graf Rats token ceases to exist, Midnight Scavengers stays in exile, and no Chittering Host enters the battlefield.",
+          "operation": {
+            "unclassifiable": "Which of the two permanents is the token changes on both permanents: two facts."
+          }
         },
         {
           "label": "clone_partner",
           "polarity": "fires",
           "delta": "The Midnight Scavengers is Clone, a card that entered as a copy of Midnight Scavengers, instead of a token.",
-          "expected": "Graf Rats and the Clone are exiled. The Clone is not a meld card, so nothing is melded: Graf Rats and Clone both stay in exile as cards, and no Chittering Host enters the battlefield."
+          "expected": "Graf Rats and the Clone are exiled. The Clone is not a meld card, so nothing is melded: Graf Rats and Clone both stay in exile as cards, and no Chittering Host enters the battlefield.",
+          "operation": {
+            "unclassifiable": "The partner becomes a nontoken Clone that entered as a copy; a copy effect chosen on entry is no fork operation."
+          }
         },
         {
           "label": "two_cards",
           "polarity": "does_not_fire",
           "delta": "Both Graf Rats and Midnight Scavengers are cards, not tokens.",
-          "expected": "Both are exiled and melded: Chittering Host (5/6, haste, menace) enters the battlefield as one permanent."
+          "expected": "Both are exiled and melded: Chittering Host (5/6, haste, menace) enters the battlefield as one permanent.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -129,7 +149,20 @@
         "Midnight Scavengers",
         "Clone"
       ],
-      "forge_notes": "The token-primary variant needs a token copy of Graf Rats carrying the card's trigger. The clone_partner variant needs Clone on the battlefield already copying Midnight Scavengers."
+      "forge_notes": "The token-primary variant needs a token copy of Graf Rats carrying the card's trigger. The clone_partner variant needs Clone on the battlefield already copying Midnight Scavengers.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Meld resolution puts nothing onto the battlefield because the objects cannot be melded.",
+        "near_miss": "A Meld resolution puts the melded permanent onto the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "battlefield",
+          "api": "Meld",
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.42c-1",
@@ -181,13 +214,17 @@
           "label": "real_garrison",
           "polarity": "does_not_fire",
           "delta": "Hanweir Garrison is a card, not a token.",
-          "expected": "Both are exiled and melded: Hanweir, the Writhing Township (7/4, trample, haste) enters the battlefield as one permanent."
+          "expected": "Both are exiled and melded: Hanweir, the Writhing Township (7/4, trample, haste) enters the battlefield as one permanent.",
+          "operation": "replace_card"
         },
         {
           "label": "garrison_absent",
           "polarity": "other",
           "delta": "Hanweir Garrison is a card in A's graveyard instead of on the battlefield.",
-          "expected": "The ability resolves but A controls no creature named Hanweir Garrison, so nothing is exiled. Hanweir Battlements stays on the battlefield, tapped."
+          "expected": "The ability resolves but A controls no creature named Hanweir Garrison, so nothing is exiled. Hanweir Battlements stays on the battlefield, tapped.",
+          "operation": {
+            "unclassifiable": "A permanent moves from the battlefield to the graveyard; removing a permanent is no fork operation."
+          }
         }
       ],
       "cards": [
@@ -195,7 +232,20 @@
         "Hanweir Battlements",
         "Hanweir Garrison"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Meld resolution puts nothing onto the battlefield: objects that cannot be melded stay in their zone.",
+        "near_miss": "A Meld resolution puts the melded permanent onto the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "battlefield",
+          "api": "Meld",
+          "absent": true
+        },
+        "needs": []
+      }
     }
   ]
 }

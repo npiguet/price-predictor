@@ -70,19 +70,24 @@
           "label": "two_qualifying",
           "polarity": "does_not_fire",
           "delta": "A controls only one Ornithopter.",
-          "expected": "A has no enduring story. Balin's trigger resolves: A discards two Mountains and draws two Mountains; B stays at 20."
+          "expected": "A has no enduring story. Balin's trigger resolves: A discards two Mountains and draws two Mountains; B stays at 20.",
+          "operation": {
+            "unclassifiable": "Removes a permanent from the battlefield"
+          }
         },
         {
           "label": "third_is_plain",
           "polarity": "does_not_fire",
           "delta": "The second Ornithopter is replaced by Grizzly Bears, which is not an artifact, Saga or legendary.",
-          "expected": "A has no enduring story. Balin's trigger resolves: A discards two Mountains and draws two Mountains; B stays at 20."
+          "expected": "A has no enduring story. Balin's trigger resolves: A discards two Mountains and draws two Mountains; B stays at 20.",
+          "operation": "replace_card"
         },
         {
           "label": "third_is_legendary",
           "polarity": "fires",
           "delta": "The second Ornithopter is replaced by Isamaru, Hound of Konda, a legendary creature.",
-          "expected": "A has an enduring story. Balin's trigger resolves: A discards two Mountains, draws two Mountains, and Balin deals 2 damage to B (B at 18)."
+          "expected": "A has an enduring story. Balin's trigger resolves: A discards two Mountains, draws two Mountains, and Balin deals 2 damage to B (B at 18).",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -161,7 +166,10 @@
           "label": "shatter_in_response",
           "polarity": "does_not_fire",
           "delta": "B casts Shatter on one Ornithopter in response to Balin, while Balin is on the stack, instead of after Balin resolves.",
-          "expected": "Shatter destroys one Ornithopter before Balin enters; A never has an enduring story. Balin's trigger for Dwarven Trader resolves: A discards one Mountain and draws one Mountain; B stays at 20."
+          "expected": "Shatter destroys one Ornithopter before Balin enters; A never has an enduring story. Balin's trigger for Dwarven Trader resolves: A discards one Mountain and draws one Mountain; B stays at 20.",
+          "operation": {
+            "unclassifiable": "Casts an additional spell"
+          }
         }
       ],
       "cards": [
@@ -230,7 +238,10 @@
           "label": "no_story",
           "polarity": "does_not_fire",
           "delta": "No Ornithopter on A's battlefield.",
-          "expected": "A has no enduring story. Balin's enters trigger triggers once: one instance is put on the stack."
+          "expected": "A has no enduring story. Balin's enters trigger triggers once: one instance is put on the stack.",
+          "operation": {
+            "unclassifiable": "Removes a permanent from the battlefield"
+          }
         }
       ],
       "cards": [
@@ -239,7 +250,10 @@
         "Bifur, Melodic Rider",
         "Ornithopter"
       ],
-      "forge_notes": "Forge implements the doubling as a Panharmonicon-style static with Condition$ EnduringStory; whether the designation is applied before trigger checking on the same state-based pass should be verified."
+      "forge_notes": "Forge implements the doubling as a Panharmonicon-style static with Condition$ EnduringStory; whether the designation is applied before trigger checking on the same state-based pass should be verified.",
+      "detector": {
+        "none": "The ordering of continuous-effect reapplication before trigger checking shows in no record field or event; only its consequence (a doubled trigger count) is visible, as separate trigger records indistinguishable from other doublers. Looked at trigger records, trigger_fired events and the gen-3 snapshot."
+      }
     }
   ]
 }

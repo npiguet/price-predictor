@@ -59,13 +59,19 @@
           "label": "no_flash_creature",
           "polarity": "does_not_fire",
           "delta": "B's hand holds Grizzly Bears (no flash) instead of Ashcoat Bear.",
-          "expected": "Casting Grizzly Bears is illegal for B in A's beginning of combat step: can_play is false."
+          "expected": "Casting Grizzly Bears is illegal for B in A's beginning of combat step: can_play is false.",
+          "operation": {
+            "unclassifiable": "B's hand holds a different card; no fork operation changes a hand."
+          }
         },
         {
           "label": "flash_with_spell_on_stack",
           "polarity": "other",
           "delta": "Shock controlled by A targeting B is on the stack when B receives priority, and B's hand holds Ashcoat Bear.",
-          "expected": "Casting Ashcoat Bear in response to Shock is legal for B: can_play is true."
+          "expected": "Casting Ashcoat Bear in response to Shock is legal for B: can_play is true.",
+          "operation": {
+            "unclassifiable": "A spell is on the stack that the base does not have; a different spell cast, which no fork operation makes."
+          }
         }
       ],
       "cards": [

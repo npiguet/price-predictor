@@ -49,7 +49,10 @@
           "label": "no_material",
           "polarity": "does_not_fire",
           "delta": "A controls no Short Sword; there is no other artifact on A's battlefield or in A's graveyard.",
-          "expected": "The craft ability cannot be activated because its material cannot be exiled. Braided Net stays on the battlefield untransformed and both Islands stay untapped."
+          "expected": "The craft ability cannot be activated because its material cannot be exiled. Braided Net stays on the battlefield untransformed and both Islands stay untapped.",
+          "operation": {
+            "unclassifiable": "Removes a permanent from the base battlefield; no fork operation removes a permanent."
+          }
         }
       ],
       "cards": [
@@ -58,7 +61,19 @@
         "Short Sword",
         "Braided Quipu"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution returns a card from exile to the battlefield, a zone_change from exile to battlefield in the effect half, as a craft activation does with its exiled source.",
+        "near_miss": "Not counted: with no api the family tags only the fires side; a craft ability that cannot be activated writes no resolution.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "exile",
+          "to_zone": "battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.167a-2",
@@ -105,19 +120,28 @@
           "label": "beginning_of_combat",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "Activating craft is not legal: it is not a main phase."
+          "expected": "Activating craft is not legal: it is not a main phase.",
+          "operation": {
+            "unclassifiable": "Changes the step of the turn; no fork operation changes the phase or step."
+          }
         },
         {
           "label": "spell_on_stack",
           "polarity": "does_not_fire",
           "delta": "B has cast Shock targeting A, tapping B's Mountain; Shock is on the stack and A has priority.",
-          "expected": "Activating craft is not legal: the stack is not empty."
+          "expected": "Activating craft is not legal: the stack is not empty.",
+          "operation": {
+            "unclassifiable": "Adds a spell an opponent casts to the stack; a different spell cast is no fork operation."
+          }
         },
         {
           "label": "opponents_turn",
           "polarity": "does_not_fire",
           "delta": "B is the active player instead of A.",
-          "expected": "Activating craft is not legal: it is not A's turn."
+          "expected": "Activating craft is not legal: it is not A's turn.",
+          "operation": {
+            "unclassifiable": "Changes the active player, so whose turn it is; no fork operation changes the turn."
+          }
         }
       ],
       "cards": [
@@ -127,7 +151,20 @@
         "Shock",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate restricted to sorcery timing has a true timing verdict: its controller's main phase with an empty stack.",
+        "near_miss": "A candidate whose timing verdict is false: not its controller's main phase, or the stack is not empty.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "702.167b-1",
@@ -171,19 +208,28 @@
           "label": "card_in_your_graveyard",
           "polarity": "fires",
           "delta": "Short Sword is in A's graveyard instead of on A's battlefield.",
-          "expected": "Activating craft is legal: the artifact card in A's graveyard is a legal material."
+          "expected": "Activating craft is legal: the artifact card in A's graveyard is a legal material.",
+          "operation": {
+            "unclassifiable": "Moves the material card from the battlefield to the graveyard; no fork operation changes a card's zone."
+          }
         },
         {
           "label": "card_in_hand",
           "polarity": "does_not_fire",
           "delta": "Short Sword is in A's hand instead of on A's battlefield.",
-          "expected": "Activating craft is not legal: a card in hand is neither a permanent nor a card in a graveyard."
+          "expected": "Activating craft is not legal: a card in hand is neither a permanent nor a card in a graveyard.",
+          "operation": {
+            "unclassifiable": "Moves the material card from the battlefield to the hand; no fork operation changes a card's zone."
+          }
         },
         {
           "label": "opponents_permanent",
           "polarity": "does_not_fire",
           "delta": "Short Sword is on B's battlefield instead of A's.",
-          "expected": "Activating craft is not legal: the material must be a permanent A controls or a card in A's graveyard."
+          "expected": "Activating craft is not legal: the material must be a permanent A controls or a card in A's graveyard.",
+          "operation": {
+            "unclassifiable": "Changes which player controls the material permanent; no fork operation changes control."
+          }
         }
       ],
       "cards": [
@@ -191,7 +237,10 @@
         "Braided Net",
         "Short Sword"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "A decision candidate records only whether the craft ability is playable; which permanent or graveyard card pays the material part of the cost is in no playability field, and the cost half of the later activation lists exiled objects without the material description."
+      }
     },
     {
       "id": "702.167c-1",
@@ -238,13 +287,17 @@
           "label": "three_power_material",
           "polarity": "fires",
           "delta": "The material is Hill Giant (3/3) instead of Grizzly Bears.",
-          "expected": "Wretched Bonemass enters the battlefield as a 3/3."
+          "expected": "Wretched Bonemass enters the battlefield as a 3/3.",
+          "operation": "replace_card"
         },
         {
           "label": "unrelated_exiled_card",
           "polarity": "does_not_fire",
           "delta": "A's exile zone already contains a Hill Giant, exiled earlier by an unrelated effect.",
-          "expected": "Wretched Bonemass enters the battlefield as a 2/2: the Hill Giant already in exile was not exiled to pay the craft cost and is not counted."
+          "expected": "Wretched Bonemass enters the battlefield as a 2/2: the Hill Giant already in exile was not exiled to pay the craft cost and is not counted.",
+          "operation": {
+            "unclassifiable": "Adds a card to the exile zone; no fork operation puts a card in a zone."
+          }
         }
       ],
       "cards": [

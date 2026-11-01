@@ -74,7 +74,10 @@
           "label": "face-up",
           "polarity": "does_not_fire",
           "delta": "A casts the Battering Craghorn in hand face up for {2}{R}{R}, tapping all four Mountains, instead of face down.",
-          "expected": "The entering Battering Craghorn has the same name as the face-up Battering Craghorn A controls; Guardian Project's trigger does not fire and A draws no card."
+          "expected": "The entering Battering Craghorn has the same name as the face-up Battering Craghorn A controls; Guardian Project's trigger does not fire and A draws no card.",
+          "operation": {
+            "unclassifiable": "A casts the card face up instead of face down: a different way of casting a spell, which no fork operation changes."
+          }
         }
       ],
       "cards": [
@@ -83,7 +86,18 @@
         "Mountain",
         "Grizzly Bears"
       ],
-      "forge_notes": "Forge checks doesNotShareNameWith OtherYourBattlefield on the entering card; a face-down card's name is empty in Forge, which should make it share no name. Confirm that two face-down cards do not match each other."
+      "forge_notes": "Forge checks doesNotShareNameWith OtherYourBattlefield on the entering card; a face-down card's name is empty in Forge, which should make it share no name. Confirm that two face-down cards do not match each other.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on an object entering the battlefield (Mode$ ChangesZone, Destination$ Battlefield) is evaluated for an entering object and fires.",
+        "near_miss": "Such a trigger is evaluated for an entering object and does not fire, its condition on the entering object unmet.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "201.2b-1",
@@ -135,13 +149,17 @@
           "label": "face-down",
           "polarity": "does_not_fire",
           "delta": "Battering Craghorn is face down on the battlefield instead of face up.",
-          "expected": "The face-down creature is a Demon with no name, so only three Demons with different names are counted; Liliana's Contract's upkeep trigger does not fire and the game continues at 20 life each."
+          "expected": "The face-down creature is a Demon with no name, so only three Demons with different names are counted; Liliana's Contract's upkeep trigger does not fire and the game continues at 20 life each.",
+          "operation": {
+            "unclassifiable": "Turns a face-up permanent face down; face-down status is not among the seven fork operations, and replace_card puts a face-up card in place."
+          }
         },
         {
           "label": "duplicate-name",
           "polarity": "does_not_fire",
           "delta": "The fourth creature is a second Grizzly Bears (face up) instead of Battering Craghorn.",
-          "expected": "Two Demons share the name Grizzly Bears, so only three different names are counted; Liliana's Contract's upkeep trigger does not fire and the game continues."
+          "expected": "Two Demons share the name Grizzly Bears, so only three different names are counted; Liliana's Contract's upkeep trigger does not fire and the game continues.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -152,7 +170,17 @@
         "Gray Ogre",
         "Battering Craghorn"
       ],
-      "forge_notes": "Needs Conspiracy's ChooseType already set to Demon and a face-down Battering Craghorn on the battlefield (puzzle state). Forge counts Count$Valid Demon.YouCtrl$DifferentCardNames; whether a face-down card contributes an empty name to that count (and is skipped) should be confirmed."
+      "forge_notes": "Needs Conspiracy's ChooseType already set to Demon and a face-down Battering Craghorn on the battlefield (puzzle state). Forge counts Count$Valid Demon.YouCtrl$DifferentCardNames; whether a face-down card contributes an empty name to that count (and is skipped) should be confirmed.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A beginning-of-step trigger (Mode$ Phase) is evaluated and fires, its condition met.",
+        "near_miss": "A beginning-of-step trigger is evaluated and does not fire, its condition unmet.",
+        "params": {
+          "mode": "Phase"
+        },
+        "needs": []
+      }
     },
     {
       "id": "201.5-1",
@@ -205,7 +233,10 @@
           "label": "other-skeleton",
           "polarity": "does_not_fire",
           "delta": "Shock targets the second Drudge Skeletons instead of the first.",
-          "expected": "The regeneration shield stays on the first Drudge Skeletons, which is untapped and undamaged. The second Drudge Skeletons, despite sharing the name, has no shield, is dealt lethal damage and moves to A's graveyard."
+          "expected": "The regeneration shield stays on the first Drudge Skeletons, which is untapped and undamaged. The second Drudge Skeletons, despite sharing the name, has no shield, is dealt lethal damage and moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "Shock targets a different creature: a different target, which no fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -214,7 +245,17 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": "Forge scripts say Defined Self for the regenerate ability, so the 'same name' reading is implicit in the implementation."
+      "forge_notes": "Forge scripts say Defined Self for the regenerate ability, so the 'same name' reading is implicit in the implementation.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A regeneration shield is used: a permanent that would be destroyed is regenerated instead (a regenerated event in a resolution's effect half).",
+        "near_miss": "A permanent without a regeneration shield is destroyed; not counted, as the declaration sets no api.",
+        "params": {
+          "event": "regenerated"
+        },
+        "needs": []
+      }
     },
     {
       "id": "201.5a-1",
@@ -278,7 +319,10 @@
           "label": "made-by-second-grime",
           "polarity": "does_not_fire",
           "delta": "The Ooze token was created by the second Gutter Grime (3 slime counters) instead of the first.",
-          "expected": "The Ooze token is 3/3, counting only the second Gutter Grime's 3 slime counters. Shock deals 2 damage to it and it stays on the battlefield with 2 damage marked."
+          "expected": "The Ooze token is 3/3, counting only the second Gutter Grime's 3 slime counters. Shock deals 2 damage to it and it stays on the battlefield with 2 damage marked.",
+          "operation": {
+            "unclassifiable": "The token was created by a different Gutter Grime: the remembered source its ability reads is a binding no fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -286,7 +330,10 @@
         "Shock",
         "Mountain"
       ],
-      "forge_notes": "Puzzle state needs the Ooze token with the creating Gutter Grime as its remembered source; the token's power and toughness read Remembered$CardCounters.SLIME, which is how Forge binds the granted ability to its own Gutter Grime. The token is named 'Ooze Token' in Forge's token script and is not a cardsfolder card, so it is not listed in cards."
+      "forge_notes": "Puzzle state needs the Ooze token with the creating Gutter Grime as its remembered source; the token's power and toughness read Remembered$CardCounters.SLIME, which is how Forge binds the granted ability to its own Gutter Grime. The token is named 'Ooze Token' in Forge's token script and is not a cardsfolder card, so it is not listed in cards.",
+      "detector": {
+        "none": "No resolution event shows which object a token's granted name-reference counts counters on: the token's power and toughness are read from a remembered source in a characteristic-defining ability, and no gen-2 or gen-3 event or field records that binding."
+      }
     },
     {
       "id": "201.5b-1",
@@ -342,7 +389,10 @@
           "label": "murder-skeletons",
           "polarity": "does_not_fire",
           "delta": "Murder targets Drudge Skeletons instead of Quicksilver Elemental.",
-          "expected": "The regeneration shield is on Quicksilver Elemental, not on Drudge Skeletons, so Drudge Skeletons is destroyed and moves to A's graveyard. Quicksilver Elemental stays on the battlefield untouched."
+          "expected": "The regeneration shield is on Quicksilver Elemental, not on Drudge Skeletons, so Drudge Skeletons is destroyed and moves to A's graveyard. Quicksilver Elemental stays on the battlefield untouched.",
+          "operation": {
+            "unclassifiable": "Murder targets a different creature: a different target, which no fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -352,7 +402,17 @@
         "Island",
         "Swamp"
       ],
-      "forge_notes": "Forge implements the gain with GainsAbilitiesOfDefined; confirm that the regenerate effect's Defined Self resolves to the Elemental and not to the Drudge Skeletons card."
+      "forge_notes": "Forge implements the gain with GainsAbilitiesOfDefined; confirm that the regenerate effect's Defined Self resolves to the Elemental and not to the Drudge Skeletons card.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A regeneration shield is used: a permanent that would be destroyed is regenerated instead (a regenerated event in a resolution's effect half).",
+        "near_miss": "A permanent without a regeneration shield is destroyed; not counted, as the declaration sets no api.",
+        "params": {
+          "event": "regenerated"
+        },
+        "needs": []
+      }
     }
   ]
 }

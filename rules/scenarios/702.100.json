@@ -57,13 +57,19 @@
           "label": "equal_stats",
           "polarity": "does_not_fire",
           "delta": "A casts Mons's Goblin Raiders (1/1), tapping Mountain, instead of Grizzly Bears.",
-          "expected": "Mons's Goblin Raiders has neither greater power nor greater toughness than Experiment One, so evolve does not trigger. Experiment One stays 1/1."
+          "expected": "Mons's Goblin Raiders has neither greater power nor greater toughness than Experiment One, so evolve does not trigger. Experiment One stays 1/1.",
+          "operation": {
+            "unclassifiable": "A casts a different spell."
+          }
         },
         {
           "label": "greater_toughness_only",
           "polarity": "fires",
           "delta": "A casts Wall of Wood (0/3), tapping Forest, instead of Grizzly Bears.",
-          "expected": "Wall of Wood has greater toughness (3 > 1) but not greater power. Evolve triggers and Experiment One gets a +1/+1 counter, becoming 2/2."
+          "expected": "Wall of Wood has greater toughness (3 > 1) but not greater power. Evolve triggers and Experiment One gets a +1/+1 counter, becoming 2/2.",
+          "operation": {
+            "unclassifiable": "A casts a different spell."
+          }
         }
       ],
       "cards": [
@@ -74,7 +80,17 @@
         "Wall of Wood",
         "Mons's Goblin Raiders"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An evolve trigger fires when another creature enters under its controller's control with greater power or greater toughness than the evolve creature.",
+        "near_miss": "An evolve trigger is evaluated for an entering creature whose power and toughness are both no greater and does not fire.",
+        "params": {
+          "keyword": "evolve"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.100d-1",
@@ -132,7 +148,10 @@
           "label": "one_instance",
           "polarity": "does_not_fire",
           "delta": "Tyranid Prime is not on the battlefield, so Experiment One has only its own evolve.",
-          "expected": "One evolve trigger resolves. Experiment One gets one +1/+1 counter and is 2/2."
+          "expected": "One evolve trigger resolves. Experiment One gets one +1/+1 counter and is 2/2.",
+          "operation": {
+            "unclassifiable": "Removes a permanent from the battlefield."
+          }
         }
       ],
       "cards": [

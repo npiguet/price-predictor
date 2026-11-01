@@ -55,7 +55,10 @@
           "label": "red_spell",
           "polarity": "does_not_fire",
           "delta": "A attempts to cast Lightning Bolt targeting Black Knight, tapping Mountain, instead.",
-          "expected": "Black Knight is a legal target for Lightning Bolt (red); the cast is legal."
+          "expected": "Black Knight is a legal target for Lightning Bolt (red); the cast is legal.",
+          "operation": {
+            "unclassifiable": "A different spell is cast or activated, or none: a different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -117,7 +120,10 @@
           "label": "blue_source",
           "polarity": "does_not_fire",
           "delta": "A attempts to activate Prodigal Sorcerer's ability targeting Black Knight instead.",
-          "expected": "Black Knight is a legal target for Prodigal Sorcerer's ability (blue source); the activation is legal."
+          "expected": "Black Knight is a legal target for Prodigal Sorcerer's ability (blue source); the activation is legal.",
+          "operation": {
+            "unclassifiable": "A different spell is cast or activated, or none: a different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -183,7 +189,10 @@
           "label": "choose_red",
           "polarity": "does_not_fire",
           "delta": "B chooses red instead of white.",
-          "expected": "Grizzly Bears gains protection from red until end of turn. Pacifism stays attached to Grizzly Bears."
+          "expected": "Grizzly Bears gains protection from red until end of turn. Pacifism stays attached to Grizzly Bears.",
+          "operation": {
+            "unclassifiable": "A different choice by a player."
+          }
         }
       ],
       "cards": [
@@ -245,7 +254,10 @@
           "label": "protection_from_green",
           "polarity": "does_not_fire",
           "delta": "A chooses green instead of artifacts.",
-          "expected": "Bonesplitter stays attached to Grizzly Bears. Grizzly Bears is 4/2."
+          "expected": "Bonesplitter stays attached to Grizzly Bears. Grizzly Bears is 4/2.",
+          "operation": {
+            "unclassifiable": "A different choice by a player."
+          }
         }
       ],
       "cards": [
@@ -254,7 +266,18 @@
         "Plains",
         "Apostle's Blessing"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution grants a permanent protection, and an Equipment (or other non-Aura attachment) with the protected quality becomes unattached from it while staying on the battlefield.",
+        "near_miss": "A protection-granting resolution after which no attachment becomes unattached from the protected permanent.",
+        "params": {
+          "event": "unattached",
+          "api": "Protection"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.16e-1",
@@ -304,7 +327,8 @@
           "label": "unprotected_creature",
           "polarity": "does_not_fire",
           "delta": "B's creature is Savannah Lions (white 2/1) instead of Burrenton Forge-Tender.",
-          "expected": "Savannah Lions is dealt 2 damage and is destroyed."
+          "expected": "Savannah Lions is dealt 2 damage and is destroyed.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -313,7 +337,18 @@
         "Pyroclasm",
         "Savannah Lions"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "Damage from a source of the protected quality to the protected permanent is prevented.",
+        "near_miss": "Damage dealt to a permanent meets the effect and is not prevented.",
+        "params": {
+          "event": "damage_dealt",
+          "result": "prevented"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.16e-2",
@@ -366,7 +401,10 @@
           "label": "green_attacker",
           "polarity": "does_not_fire",
           "delta": "A attacks with Grizzly Bears instead of Hill Giant.",
-          "expected": "Grizzly Bears deals 2 damage to Burrenton Forge-Tender, which is destroyed. Burrenton Forge-Tender deals 1 damage to Grizzly Bears, which survives."
+          "expected": "Grizzly Bears deals 2 damage to Burrenton Forge-Tender, which is destroyed. Burrenton Forge-Tender deals 1 damage to Grizzly Bears, which survives.",
+          "operation": {
+            "unclassifiable": "A different attack declaration: a different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -423,7 +461,10 @@
           "label": "green_blocker",
           "polarity": "does_not_fire",
           "delta": "B declares Grizzly Bears (green) as the blocker instead of Savannah Lions.",
-          "expected": "Declaring Grizzly Bears as a blocker of Black Knight is legal."
+          "expected": "Declaring Grizzly Bears as a blocker of Black Knight is legal.",
+          "operation": {
+            "unclassifiable": "A different blocker is declared: a different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -431,7 +472,18 @@
         "Savannah Lions",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A potential blocker is outside the legal-blockers list for an attacker because of an evasion or protection restriction on the attacker.",
+        "near_miss": "The potential blocker is inside the legal-blockers list for the attacker.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.16j-1",
@@ -480,7 +532,10 @@
           "label": "target_hill_giant",
           "polarity": "does_not_fire",
           "delta": "A attempts to target Hill Giant instead of Progenitus.",
-          "expected": "Hill Giant is a legal target for Lightning Bolt; the cast is legal."
+          "expected": "Hill Giant is a legal target for Lightning Bolt; the cast is legal.",
+          "operation": {
+            "unclassifiable": "A different target is chosen: a different decision."
+          }
         }
       ],
       "cards": [
@@ -541,7 +596,10 @@
           "label": "block_hill_giant",
           "polarity": "does_not_fire",
           "delta": "B declares Grizzly Bears as a blocker of Hill Giant instead of Progenitus.",
-          "expected": "Declaring Grizzly Bears as a blocker of Hill Giant is legal."
+          "expected": "Declaring Grizzly Bears as a blocker of Hill Giant is legal.",
+          "operation": {
+            "unclassifiable": "A different blocker is declared: a different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -549,7 +607,18 @@
         "Hill Giant",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A potential blocker is outside the legal-blockers list for an attacker because of an evasion or protection restriction on the attacker.",
+        "near_miss": "The potential blocker is inside the legal-blockers list for the attacker.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.16j-3",
@@ -599,7 +668,8 @@
           "label": "hill_giant",
           "polarity": "does_not_fire",
           "delta": "B's creature is Hill Giant instead of Progenitus.",
-          "expected": "Hill Giant is dealt 2 damage and has 2 damage marked; it stays on the battlefield."
+          "expected": "Hill Giant is dealt 2 damage and has 2 damage marked; it stays on the battlefield.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -608,7 +678,18 @@
         "Pyroclasm",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "Damage to a permanent with protection from everything is prevented.",
+        "near_miss": "Damage dealt to a permanent meets the effect and is not prevented.",
+        "params": {
+          "event": "damage_dealt",
+          "result": "prevented"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.16k-1",
@@ -656,7 +737,10 @@
           "label": "protected_from_B",
           "polarity": "does_not_fire",
           "delta": "True-Name Nemesis has protection from player B instead.",
-          "expected": "True-Name Nemesis is a legal target for A's Lightning Bolt; the cast is legal."
+          "expected": "True-Name Nemesis is a legal target for A's Lightning Bolt; the cast is legal.",
+          "operation": {
+            "unclassifiable": "A different protection quality is given: removing one protection and adding another is more than one fact."
+          }
         }
       ],
       "cards": [
@@ -712,14 +796,28 @@
           "label": "protected_from_B",
           "polarity": "does_not_fire",
           "delta": "True-Name Nemesis has protection from player B instead.",
-          "expected": "Declaring A's Grizzly Bears as a blocker of True-Name Nemesis is legal."
+          "expected": "Declaring A's Grizzly Bears as a blocker of True-Name Nemesis is legal.",
+          "operation": {
+            "unclassifiable": "A different protection quality is given: removing one protection and adding another is more than one fact."
+          }
         }
       ],
       "cards": [
         "Grizzly Bears",
         "True-Name Nemesis"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A potential blocker is outside the legal-blockers list for an attacker because of an evasion or protection restriction on the attacker.",
+        "near_miss": "The potential blocker is inside the legal-blockers list for the attacker.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.16k-3",
@@ -769,7 +867,10 @@
           "label": "protected_from_B",
           "polarity": "does_not_fire",
           "delta": "True-Name Nemesis has protection from player B instead.",
-          "expected": "True-Name Nemesis is dealt 2 damage and is destroyed."
+          "expected": "True-Name Nemesis is dealt 2 damage and is destroyed.",
+          "operation": {
+            "unclassifiable": "A different protection quality is given: removing one protection and adding another is more than one fact."
+          }
         }
       ],
       "cards": [
@@ -777,7 +878,18 @@
         "True-Name Nemesis",
         "Pyroclasm"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "Damage from a player's sources to a permanent with protection from that player is prevented.",
+        "near_miss": "Damage dealt to a permanent meets the effect and is not prevented.",
+        "params": {
+          "event": "damage_dealt",
+          "result": "prevented"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.16n-1",
@@ -827,7 +939,10 @@
           "label": "second_protection",
           "polarity": "does_not_fire",
           "delta": "After Pledge of Loyalty resolves, A activates Sword of Light and Shadow's equip ability targeting Grizzly Bears, tapping the other two Plains; it resolves.",
-          "expected": "Sword of Light and Shadow becomes attached to Grizzly Bears (4/4, protection from white and from black). Pledge of Loyalty is put into A's graveyard in the state-based check."
+          "expected": "Sword of Light and Shadow becomes attached to Grizzly Bears (4/4, protection from white and from black). Pledge of Loyalty is put into A's graveyard in the state-based check.",
+          "operation": {
+            "unclassifiable": "A different spell is cast or activated, or none: a different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -894,7 +1009,10 @@
           "label": "choose_green",
           "polarity": "does_not_fire",
           "delta": "A chooses green instead of white.",
-          "expected": "Holy Strength, Benevolent Blessing and Pacifism all stay attached to Grizzly Bears."
+          "expected": "Holy Strength, Benevolent Blessing and Pacifism all stay attached to Grizzly Bears.",
+          "operation": {
+            "unclassifiable": "A different choice by a player."
+          }
         }
       ],
       "cards": [

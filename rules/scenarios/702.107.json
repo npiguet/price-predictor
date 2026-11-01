@@ -59,7 +59,10 @@
           "label": "creature-gone",
           "polarity": "does_not_fire",
           "delta": "In response, B casts Doom Blade targeting Salt Road Patrol, tapping both Swamps.",
-          "expected": "Doom Blade destroys Salt Road Patrol, which goes to A's graveyard. The outlast ability resolves and puts no counter anywhere."
+          "expected": "Doom Blade destroys Salt Road Patrol, which goes to A's graveyard. The outlast ability resolves and puts no counter anywhere.",
+          "operation": {
+            "unclassifiable": "a different spell is cast, a decision by a player"
+          }
         }
       ],
       "cards": [
@@ -121,31 +124,44 @@
           "label": "combat",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "Activating outlast is not legal because it is not a main phase."
+          "expected": "Activating outlast is not legal because it is not a main phase.",
+          "operation": {
+            "unclassifiable": "changes the phase"
+          }
         },
         {
           "label": "stack-not-empty",
           "polarity": "does_not_fire",
           "delta": "B has cast Shock targeting A (tapping Mountain) and it is on the stack, with A holding priority.",
-          "expected": "Activating outlast is not legal because the stack is not empty."
+          "expected": "Activating outlast is not legal because the stack is not empty.",
+          "operation": {
+            "unclassifiable": "a different spell is cast, a decision by a player"
+          }
         },
         {
           "label": "summoning-sick",
           "polarity": "does_not_fire",
           "delta": "Salt Road Patrol came under A's control this turn (summoning_sick true).",
-          "expected": "Activating outlast is not legal because the {T} cost cannot be paid."
+          "expected": "Activating outlast is not legal because the {T} cost cannot be paid.",
+          "operation": {
+            "unclassifiable": "no fork operation sets summoning sickness"
+          }
         },
         {
           "label": "already-tapped",
           "polarity": "does_not_fire",
           "delta": "Salt Road Patrol is tapped.",
-          "expected": "Activating outlast is not legal because the {T} cost cannot be paid."
+          "expected": "Activating outlast is not legal because the {T} cost cannot be paid.",
+          "operation": "tap"
         },
         {
           "label": "one-land",
           "polarity": "does_not_fire",
           "delta": "A controls only one Plains.",
-          "expected": "Activating outlast is not legal because {1}{W} cannot be paid."
+          "expected": "Activating outlast is not legal because {1}{W} cannot be paid.",
+          "operation": {
+            "unclassifiable": "adds or removes a permanent"
+          }
         }
       ],
       "cards": [

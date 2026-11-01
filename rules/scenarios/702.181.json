@@ -51,12 +51,25 @@
           "label": "no_attack",
           "polarity": "does_not_fire",
           "delta": "A declares no attackers.",
-          "expected": "The mobilize trigger does not fire and no token is created. B's life stays 20."
+          "expected": "The mobilize trigger does not fire and no token is created. B's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different attack declaration, a player's decision no fork operation makes"
+          }
         }
       ],
       "cards": [
         "Shock Brigade"
-      ]
+      ],
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A mobilize trigger (keyword-derived, read off its Mobilize line) fires when its creature attacks.",
+        "near_miss": "A mobilize trigger evaluated against an event without firing, its creature not attacking.",
+        "params": {
+          "keyword": "Mobilize"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.181a-2",
@@ -108,7 +121,10 @@
           "label": "empty_graveyard",
           "polarity": "does_not_fire",
           "delta": "A's graveyard is empty instead of holding two creature cards.",
-          "expected": "The mobilize trigger fires and resolves with X = 0: no Warrior tokens are created. Avenger of the Fallen deals 2 combat damage: B's life is 18."
+          "expected": "The mobilize trigger fires and resolves with X = 0: no Warrior tokens are created. Avenger of the Fallen deals 2 combat damage: B's life is 18.",
+          "operation": {
+            "unclassifiable": "changes a graveyard's contents, which no fork operation sets"
+          }
         }
       ],
       "cards": [

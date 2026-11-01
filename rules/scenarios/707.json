@@ -79,13 +79,17 @@
           "label": "counter",
           "polarity": "does_not_fire",
           "delta": "Grizzly Bears has a +1/+1 counter on it before Clone is cast.",
-          "expected": "The original Grizzly Bears is a 3/3 with a +1/+1 counter; the Clone enters as a 2/2 named Grizzly Bears with no counter."
+          "expected": "The original Grizzly Bears is a 3/3 with a +1/+1 counter; the Clone enters as a 2/2 named Grizzly Bears with no counter.",
+          "operation": "counters"
         },
         {
           "label": "giant_growth",
           "polarity": "does_not_fire",
           "delta": "In response to Clone, B casts Giant Growth on Grizzly Bears (tapping Forest) and it resolves first.",
-          "expected": "The original Grizzly Bears is a 5/5 until end of turn; the Clone enters as a 2/2 named Grizzly Bears."
+          "expected": "The original Grizzly Bears is a 5/5 until end of turn; the Clone enters as a 2/2 named Grizzly Bears.",
+          "operation": {
+            "unclassifiable": "B casts an additional spell in response; no fork operation casts a spell."
+          }
         }
       ],
       "cards": [
@@ -147,7 +151,10 @@
           "label": "activate_copy",
           "polarity": "fires",
           "delta": "After Clone has entered, A activates the copy's ability with X=1, tapping the sixth Island.",
-          "expected": "The copy has Chimeric Staff's ability and becomes a 1/1 Construct artifact creature until end of turn."
+          "expected": "The copy has Chimeric Staff's ability and becomes a 1/1 Construct artifact creature until end of turn.",
+          "operation": {
+            "unclassifiable": "A activates an ability the base does not; no fork operation makes a player act."
+          }
         }
       ],
       "cards": [
@@ -214,7 +221,10 @@
           "label": "bears",
           "polarity": "does_not_fire",
           "delta": "A chooses Grizzly Bears instead of Wall of Omens.",
-          "expected": "Clone is a green 2/2 named Grizzly Bears without defender; A drew no card."
+          "expected": "Clone is a green 2/2 named Grizzly Bears without defender; A drew no card.",
+          "operation": {
+            "unclassifiable": "A different choice of what the copy effect copies; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -278,7 +288,10 @@
           "label": "stays_face_down",
           "polarity": "does_not_fire",
           "delta": "A does not turn the creature face up.",
-          "expected": "Gathan Raiders is a face-down 2/2 and Clone is a colorless 2/2 with no name; A keeps the Mountain in hand."
+          "expected": "Gathan Raiders is a face-down 2/2 and Clone is a colorless 2/2 with no name; A keeps the Mountain in hand.",
+          "operation": {
+            "unclassifiable": "A decides not to turn the creature face up; no fork operation changes a player's decision."
+          }
         }
       ],
       "cards": [
@@ -341,7 +354,10 @@
           "label": "stays_face_down",
           "polarity": "does_not_fire",
           "delta": "A does not turn the creature face up.",
-          "expected": "Gathan Raiders is a face-down 2/2 and the enchanted creature is a colorless 2/2 with no name; A keeps the Mountain in hand."
+          "expected": "Gathan Raiders is a face-down 2/2 and the enchanted creature is a colorless 2/2 with no name; A keeps the Mountain in hand.",
+          "operation": {
+            "unclassifiable": "A decides not to turn the creature face up; no fork operation changes a player's decision."
+          }
         }
       ],
       "cards": [
@@ -409,7 +425,10 @@
           "label": "direct",
           "polarity": "does_not_fire",
           "delta": "A has Clone copy B's Runeclaw Bear instead of the Doppelganger.",
-          "expected": "Clone is a green 2/2 Bear named Runeclaw Bear with no abilities."
+          "expected": "Clone is a green 2/2 Bear named Runeclaw Bear with no abilities.",
+          "operation": {
+            "unclassifiable": "A different choice of what the copy effect copies; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -487,7 +506,10 @@
           "label": "direct",
           "polarity": "does_not_fire",
           "delta": "A had Clone copy B's Runeclaw Bear instead of the Doppelganger.",
-          "expected": "One upkeep trigger is put on the stack, from the Doppelganger only; the Clone has no abilities."
+          "expected": "One upkeep trigger is put on the stack, from the Doppelganger only; the Clone has no abilities.",
+          "operation": {
+            "unclassifiable": "A different choice of what the copy effect copies; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -553,7 +575,10 @@
           "label": "no_growth",
           "polarity": "does_not_fire",
           "delta": "A does not cast Giant Growth.",
-          "expected": "Unstable Shapeshifter is a 0/4 Wall named Wall of Omens; A drew exactly one card."
+          "expected": "Unstable Shapeshifter is a 0/4 Wall named Wall of Omens; A drew exactly one card.",
+          "operation": {
+            "unclassifiable": "A does not cast a spell the base casts; no fork operation removes a spell cast."
+          }
         }
       ],
       "cards": [
@@ -623,7 +648,10 @@
           "label": "bear",
           "polarity": "does_not_fire",
           "delta": "A chooses Runeclaw Bear instead.",
-          "expected": "Clone enters as an untapped 2/2 Runeclaw Bear with no counters."
+          "expected": "Clone enters as an untapped 2/2 Runeclaw Bear with no counters.",
+          "operation": {
+            "unclassifiable": "A different choice of what the copy effect copies; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -691,7 +719,10 @@
           "label": "bear",
           "polarity": "does_not_fire",
           "delta": "A chooses Runeclaw Bear instead.",
-          "expected": "No enters trigger fires; A's hand is empty."
+          "expected": "No enters trigger fires; A's hand is empty.",
+          "operation": {
+            "unclassifiable": "A different choice of what the copy effect copies; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -755,7 +786,10 @@
           "label": "same_choice",
           "polarity": "does_not_fire",
           "delta": "A chooses Bear for the Clone instead of Goblin.",
-          "expected": "Runeclaw Bear is a 4/4, Raging Goblin is a 1/1, the Automaton is a 3/3 and the Clone is a 3/3."
+          "expected": "Runeclaw Bear is a 4/4, Raging Goblin is a 1/1, the Automaton is a 3/3 and the Clone is a 3/3.",
+          "operation": {
+            "unclassifiable": "A makes a different as-enters choice; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -829,7 +863,10 @@
           "label": "clone_dies",
           "polarity": "does_not_fire",
           "delta": "B targets the Clone instead.",
-          "expected": "The Clone (a 1/3 Fiend Hunter) dies, Centaur Courser returns to the battlefield, and Grizzly Bears stays in exile."
+          "expected": "The Clone (a 1/3 Fiend Hunter) dies, Centaur Courser returns to the battlefield, and Grizzly Bears stays in exile.",
+          "operation": {
+            "unclassifiable": "B's spell takes a different target; no fork operation changes a target."
+          }
         }
       ],
       "cards": [
@@ -842,7 +879,10 @@
         "Clone",
         "Lightning Bolt"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "No record field distinguishes which linked ability a copied or original object's leave-the-battlefield trigger resolves against; the returned permanent shows only as an ordinary zone_change event, indistinguishable from any other return."
+      }
     },
     {
       "id": "707.8-1",
@@ -897,7 +937,10 @@
           "label": "no_flip",
           "polarity": "does_not_fire",
           "delta": "The top card of A's library is an Island.",
-          "expected": "Delver stays front face up; Clone enters as a blue 1/1 Human Wizard named Delver of Secrets."
+          "expected": "Delver stays front face up; Clone enters as a blue 1/1 Human Wizard named Delver of Secrets.",
+          "operation": {
+            "unclassifiable": "The top card of A's library differs; no fork operation changes a library."
+          }
         }
       ],
       "cards": [
@@ -960,7 +1003,10 @@
           "label": "front_up",
           "polarity": "does_not_fire",
           "delta": "The top card of A's library is an Island, so Delver stays front face up.",
-          "expected": "The token enters front face up as a blue 1/1 Delver of Secrets, and it is a double-faced token whose other face is Insectile Aberration."
+          "expected": "The token enters front face up as a blue 1/1 Delver of Secrets, and it is a double-faced token whose other face is Insectile Aberration.",
+          "operation": {
+            "unclassifiable": "The top card of A's library differs; no fork operation changes a library."
+          }
         }
       ],
       "cards": [
@@ -1022,7 +1068,10 @@
           "label": "original",
           "polarity": "does_not_fire",
           "delta": "A has Clone copy the original Juggernaut.",
-          "expected": "Clone is a 5/3 Juggernaut that is an artifact and a creature, not an enchantment."
+          "expected": "Clone is a 5/3 Juggernaut that is an artifact and a creature, not an enchantment.",
+          "operation": {
+            "unclassifiable": "A different choice of what the copy effect copies; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -1085,7 +1134,10 @@
           "label": "clone",
           "polarity": "does_not_fire",
           "delta": "A casts Clone (tapping four Islands) instead of Vesuvan Doppelganger.",
-          "expected": "Clone is a green 2/2 named Grizzly Bears; its color was copied."
+          "expected": "Clone is a green 2/2 named Grizzly Bears; its color was copied.",
+          "operation": {
+            "unclassifiable": "A casts a different spell from hand; no fork operation changes which spell is cast."
+          }
         }
       ],
       "cards": [
@@ -1153,7 +1205,10 @@
           "label": "clone",
           "polarity": "does_not_fire",
           "delta": "A casts Clone (tapping four Islands) instead of Quicksilver Gargantuan.",
-          "expected": "Clone is a Tarmogoyf with the characteristic-defining ability and is a 2/3 (instant and creature in graveyards)."
+          "expected": "Clone is a Tarmogoyf with the characteristic-defining ability and is a 2/3 (instant and creature in graveyards).",
+          "operation": {
+            "unclassifiable": "A casts a different spell from hand; no fork operation changes which spell is cast."
+          }
         }
       ],
       "cards": [
@@ -1215,7 +1270,10 @@
           "label": "spirit",
           "polarity": "does_not_fire",
           "delta": "A chooses Wandering Ones instead of Changeling Outcast.",
-          "expected": "The Mimic is a Spirit, Shapeshifter and Rogue only, receives no bonus and is a 1/1."
+          "expected": "The Mimic is a Spirit, Shapeshifter and Rogue only, receives no bonus and is a 1/1.",
+          "operation": {
+            "unclassifiable": "A different choice of what the copy effect copies; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -1285,7 +1343,10 @@
           "label": "direct",
           "polarity": "does_not_fire",
           "delta": "Altered Ego enters as a copy of Grizzly Bears directly instead of the Clone.",
-          "expected": "Altered Ego enters with two +1/+1 counters and is a 5/5."
+          "expected": "Altered Ego enters with two +1/+1 counters and is a 5/5.",
+          "operation": {
+            "unclassifiable": "A casts only one of the two copy creatures and copies a different object: a different spell cast and a different choice."
+          }
         }
       ],
       "cards": [
@@ -1350,7 +1411,10 @@
           "label": "bears",
           "polarity": "does_not_fire",
           "delta": "A chooses Grizzly Bears instead of Mutavault.",
-          "expected": "Moritte enters as a legendary snow Bear creature with two +1/+1 counters and changeling: a 4/4."
+          "expected": "Moritte enters as a legendary snow Bear creature with two +1/+1 counters and changeling: a 4/4.",
+          "operation": {
+            "unclassifiable": "A different choice of what the copy effect copies; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -1417,7 +1481,10 @@
           "label": "bears_card",
           "polarity": "does_not_fire",
           "delta": "A chooses the Grizzly Bears card instead of the Clone card (no second copy effect).",
-          "expected": "Spider-Man enters as a 4/4 named Superior Spider-Man and the linked trigger exiles Grizzly Bears from A's graveyard."
+          "expected": "Spider-Man enters as a 4/4 named Superior Spider-Man and the linked trigger exiles Grizzly Bears from A's graveyard.",
+          "operation": {
+            "unclassifiable": "A chooses a different card from the graveyard; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -1481,13 +1548,19 @@
           "label": "wurm",
           "polarity": "fires",
           "delta": "A sacrifices Craw Wurm (power 6) instead of Grizzly Bears.",
-          "expected": "The copy deals 6 and Fling deals 6: B is at 8."
+          "expected": "The copy deals 6 and Fling deals 6: B is at 8.",
+          "operation": {
+            "unclassifiable": "Both creatures are on the battlefield in the setup; A chooses a different creature to sacrifice as a cost, a player's choice no fork operation changes."
+          }
         },
         {
           "label": "no_copy",
           "polarity": "does_not_fire",
           "delta": "A does not cast Reverberate.",
-          "expected": "Only Fling deals 2 damage: B is at 18."
+          "expected": "Only Fling deals 2 damage: B is at 18.",
+          "operation": {
+            "unclassifiable": "A does not cast a spell the base casts; no fork operation removes a spell cast."
+          }
         }
       ],
       "cards": [
@@ -1497,7 +1570,18 @@
         "Fling",
         "Reverberate"
       ],
-      "forge_notes": "Both creatures are on the battlefield in the setup; the variant picks which is sacrificed."
+      "forge_notes": "Both creatures are on the battlefield in the setup; the variant picks which is sacrificed.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A copy-spell resolution puts a copy of a spell onto the stack (spell_copied), the copy carrying the original's decisions and the objects paid for its costs.",
+        "near_miss": "A copy-spell resolution that puts no copy onto the stack.",
+        "params": {
+          "event": "spell_copied",
+          "api": "CopySpellAbility"
+        },
+        "needs": []
+      }
     },
     {
       "id": "707.10-2",
@@ -1548,7 +1632,10 @@
           "label": "copy",
           "polarity": "does_not_fire",
           "delta": "A casts Twincast to copy Dawnglow Infusion.",
-          "expected": "The copy gains A no life because no mana was spent on it; the original gains 2: A is at 22."
+          "expected": "The copy gains A no life because no mana was spent on it; the original gains 2: A is at 22.",
+          "operation": {
+            "unclassifiable": "A casts an additional spell; no fork operation casts a spell."
+          }
         }
       ],
       "cards": [
@@ -1611,7 +1698,10 @@
           "label": "second_shock",
           "polarity": "fires",
           "delta": "A casts a second Shock targeting B (tapping a Mountain) instead of Dualcaster Mage.",
-          "expected": "Young Pyromancer triggered for both casts: A has two Elemental tokens; B is at 16."
+          "expected": "Young Pyromancer triggered for both casts: A has two Elemental tokens; B is at 16.",
+          "operation": {
+            "unclassifiable": "A casts a different spell from hand; no fork operation changes which spell is cast."
+          }
         }
       ],
       "cards": [
@@ -1620,7 +1710,17 @@
         "Shock",
         "Dualcaster Mage"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A spell-cast trigger is evaluated for a spell that was cast and fires.",
+        "near_miss": "A spell-cast trigger is evaluated for a cast spell and does not fire; a spell copy is never cast, raises no spell-cast event and so leaves no trigger record of its own.",
+        "params": {
+          "mode": "SpellCast"
+        },
+        "needs": []
+      }
     },
     {
       "id": "707.10a-1",
@@ -1678,13 +1778,19 @@
           "label": "counter_original",
           "polarity": "does_not_fire",
           "delta": "B's Counterspell targets the original Shock instead of the copy.",
-          "expected": "The Shock card is countered and moves to A's graveyard; the copy resolves, deals 2 damage and ceases to exist: B is at 18. A's graveyard holds Shock and Reverberate; B's holds Counterspell."
+          "expected": "The Shock card is countered and moves to A's graveyard; the copy resolves, deals 2 damage and ceases to exist: B is at 18. A's graveyard holds Shock and Reverberate; B's holds Counterspell.",
+          "operation": {
+            "unclassifiable": "B's spell takes a different target; no fork operation changes a target."
+          }
         },
         {
           "label": "no_counter",
           "polarity": "other",
           "delta": "B does not cast Counterspell.",
-          "expected": "The copy resolves for 2 damage and ceases to exist; Shock deals 2: B is at 16. A's graveyard holds Shock and Reverberate only."
+          "expected": "The copy resolves for 2 damage and ceases to exist; Shock deals 2: B is at 16. A's graveyard holds Shock and Reverberate only.",
+          "operation": {
+            "unclassifiable": "B does not cast a spell the base casts; no fork operation removes a spell cast."
+          }
         }
       ],
       "cards": [
@@ -1745,7 +1851,10 @@
           "label": "decline",
           "polarity": "does_not_fire",
           "delta": "A declines to pay {2} for Rings of Brighthearth.",
-          "expected": "Centaur Courser has 1 damage marked and is a Vampire; Olivia has one counter and is a 4/4."
+          "expected": "Centaur Courser has 1 damage marked and is a Vampire; Olivia has one counter and is a 4/4.",
+          "operation": {
+            "unclassifiable": "A declines an optional cost; no fork operation changes a player's decision."
+          }
         }
       ],
       "cards": [
@@ -1754,7 +1863,18 @@
         "Rings of Brighthearth",
         "Centaur Courser"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A copy-spell resolution copies an activated or triggered ability (spell_copied), the copy keeping the original's source.",
+        "near_miss": "A copy-spell resolution that puts no copy onto the stack.",
+        "params": {
+          "event": "spell_copied",
+          "api": "CopySpellAbility"
+        },
+        "needs": []
+      }
     },
     {
       "id": "707.10c-1",
@@ -1812,7 +1932,10 @@
           "label": "retarget",
           "polarity": "does_not_fire",
           "delta": "A changes the copy's target to B (a legal target) instead of leaving it unchanged.",
-          "expected": "The copy deals 2 damage to B: B is at 18; Shock fizzles; Grizzly Bears has no damage."
+          "expected": "The copy deals 2 damage to B: B is at 18; Shock fizzles; Grizzly Bears has no damage.",
+          "operation": {
+            "unclassifiable": "A chooses a new target for the copy; no fork operation changes a target."
+          }
         }
       ],
       "cards": [
@@ -1823,7 +1946,21 @@
         "Reverberate",
         "Gods Willing"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "resolution_outcome",
+        "record_kind": "resolution",
+        "outcome": "A targeted stack object, a copy that kept an illegal target included, leaves the stack fizzled because every target is illegal.",
+        "near_miss": "A targeted stack object resolves with a legal target.",
+        "params": {
+          "outcome": "fizzled",
+          "near": [
+            "resolved"
+          ],
+          "targeted": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "707.10d-1",
@@ -1880,7 +2017,8 @@
           "label": "hill_giant",
           "polarity": "fires",
           "delta": "Hill Giant replaces Abbey Gargoyles on B's battlefield.",
-          "expected": "A copy also targets Hill Giant: it has 2 damage marked; A is at 18, B is at 18, Grizzly Bears is dead."
+          "expected": "A copy also targets Hill Giant: it has 2 damage marked; A is at 18, B is at 18, Grizzly Bears is dead.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -1943,7 +2081,10 @@
           "label": "unexpected_allies",
           "polarity": "does_not_fire",
           "delta": "A casts Unexpected Allies (nontoken creature only), tapping two Mountains, instead of Giant Growth.",
-          "expected": "The token is not a legal target, so no copy is created: the token is a 1/1 and Grizzly Bears is a 4/2 with double team until end of turn."
+          "expected": "The token is not a legal target, so no copy is created: the token is a 1/1 and Grizzly Bears is a 4/2 with double team until end of turn.",
+          "operation": {
+            "unclassifiable": "A casts a different spell from hand; no fork operation changes which spell is cast."
+          }
         }
       ],
       "cards": [
@@ -2015,7 +2156,10 @@
           "label": "copy_countered",
           "polarity": "does_not_fire",
           "delta": "B counters the copy with Counterspell.",
-          "expected": "A controls only the Grizzly Bears card; no token exists and the copy is not in any graveyard."
+          "expected": "A controls only the Grizzly Bears card; no token exists and the copy is not in any graveyard.",
+          "operation": {
+            "unclassifiable": "B casts an additional spell; no fork operation casts a spell."
+          }
         }
       ],
       "cards": [
@@ -2087,7 +2231,10 @@
           "label": "land_on_top",
           "polarity": "does_not_fire",
           "delta": "The top card of A's library is an Island.",
-          "expected": "Nothing transforms; the token and the card are both 1/1 Delver of Secrets."
+          "expected": "Nothing transforms; the token and the card are both 1/1 Delver of Secrets.",
+          "operation": {
+            "unclassifiable": "The top card of A's library differs; no fork operation changes a library."
+          }
         }
       ],
       "cards": [
@@ -2159,7 +2306,10 @@
           "label": "stays_olivia",
           "polarity": "does_not_fire",
           "delta": "A does not cast Ashcoat Bear.",
-          "expected": "Centaur Courser has 1 damage marked and is a Vampire; the permanent is still a copy of Olivia Voldaren and is a 4/4 with a +1/+1 counter."
+          "expected": "Centaur Courser has 1 damage marked and is a Vampire; the permanent is still a copy of Olivia Voldaren and is a 4/4 with a +1/+1 counter.",
+          "operation": {
+            "unclassifiable": "A does not cast a spell the base casts; no fork operation removes a spell cast."
+          }
         }
       ],
       "cards": [
@@ -2230,13 +2380,19 @@
           "label": "decline",
           "polarity": "does_not_fire",
           "delta": "A does not cast the copy.",
-          "expected": "Juggernaut stays on the battlefield; the copy ceases to exist; A's Plains stay untapped."
+          "expected": "Juggernaut stays on the battlefield; the copy ceases to exist; A's Plains stay untapped.",
+          "operation": {
+            "unclassifiable": "A declines to cast the copy; no fork operation changes a player's decision."
+          }
         },
         {
           "label": "countered",
           "polarity": "other",
           "delta": "B casts Counterspell targeting the copy, tapping two Islands.",
-          "expected": "The copy is countered and ceases to exist instead of going to a graveyard; Juggernaut stays on the battlefield."
+          "expected": "The copy is countered and ceases to exist instead of going to a graveyard; Juggernaut stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "B casts an additional spell; no fork operation casts a spell."
+          }
         }
       ],
       "cards": [
@@ -2306,7 +2462,10 @@
           "label": "blocked",
           "polarity": "does_not_fire",
           "delta": "B blocks with Grizzly Bears instead of declaring no blockers.",
-          "expected": "No combat damage reaches B so nothing triggers: B is at 20; Grizzly Bears dies and the face-down creature survives with 2 damage."
+          "expected": "No combat damage reaches B so nothing triggers: B is at 20; Grizzly Bears dies and the face-down creature survives with 2 damage.",
+          "operation": {
+            "unclassifiable": "B declares a blocker instead of none; no fork operation changes a combat declaration."
+          }
         }
       ],
       "cards": [

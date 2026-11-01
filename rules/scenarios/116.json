@@ -56,32 +56,57 @@
           "label": "second-land",
           "polarity": "does_not_fire",
           "delta": "A has already played the battlefield Mountain as its land for this turn.",
-          "expected": "Playing the Mountain from hand is not legal: A has already used the one land play of the turn."
+          "expected": "Playing the Mountain from hand is not legal: A has already used the one land play of the turn.",
+          "operation": {
+            "unclassifiable": "changes the turn's history: a land was already played this turn"
+          }
         },
         {
           "label": "stack-not-empty",
           "polarity": "does_not_fire",
           "delta": "A has first cast Shock targeting B, tapping the battlefield Mountain, and still holds priority with Shock on the stack.",
-          "expected": "Playing the Mountain is not legal while Shock is on the stack."
+          "expected": "Playing the Mountain is not legal while Shock is on the stack.",
+          "operation": {
+            "unclassifiable": "a different spell cast, putting it on the stack"
+          }
         },
         {
           "label": "combat-step",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "Playing the Mountain is not legal outside a main phase."
+          "expected": "Playing the Mountain is not legal outside a main phase.",
+          "operation": {
+            "unclassifiable": "changes the step"
+          }
         },
         {
           "label": "opponents-turn",
           "polarity": "does_not_fire",
           "delta": "B is the active player and the step is main1; the stack is empty and A holds priority.",
-          "expected": "Playing the Mountain is not legal: it is not A's turn."
+          "expected": "Playing the Mountain is not legal: it is not A's turn.",
+          "operation": {
+            "unclassifiable": "changes the active player's turn"
+          }
         }
       ],
       "cards": [
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A land-play candidate's timing is true: its player has priority with an empty stack in a main phase of their own turn.",
+        "near_miss": "A land-play candidate's timing is false: the stack is not empty, it is not a main phase, or it is not the player's turn.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "116.2b-1",
@@ -141,19 +166,28 @@
           "label": "not-turned",
           "polarity": "does_not_fire",
           "delta": "A does not turn the creature face up and passes priority with Shock on the stack.",
-          "expected": "Shock deals 2 damage to the face-down 2/2 creature, which moves to A's graveyard."
+          "expected": "Shock deals 2 damage to the face-down 2/2 creature, which moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different choice by a player"
+          }
         },
         {
           "label": "cannot-pay",
           "polarity": "does_not_fire",
           "delta": "A controls only four Mountains, so the morph cost {4}{R} cannot be paid.",
-          "expected": "Turning the creature face up is not legal; the creature stays face down and dies to Shock."
+          "expected": "Turning the creature face up is not legal; the creature stays face down and dies to Shock.",
+          "operation": {
+            "unclassifiable": "removes a permanent (one Mountain)"
+          }
         },
         {
           "label": "opponent-tries",
           "polarity": "does_not_fire",
           "delta": "B (not the controller) tries to turn A's face-down creature face up instead.",
-          "expected": "Turning the creature face up is not legal for B; only its controller may take the action. The creature stays face down, and Shock's 2 damage moves the 2/2 to A's graveyard."
+          "expected": "Turning the creature face up is not legal for B; only its controller may take the action. The creature stays face down, and Shock's 2 damage moves the 2/2 to A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different player attempts the action"
+          }
         }
       ],
       "cards": [
@@ -161,7 +195,20 @@
         "Ainok Tracker",
         "Shock"
       ],
-      "forge_notes": "Requires a face-down permanent in the initial state; a puzzle file can mark it face down with a morph cost."
+      "forge_notes": "Requires a face-down permanent in the initial state; a puzzle file can mark it face down with a morph cost.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A turn-face-up candidate's timing is true whenever its controller has priority, including with a spell on the stack.",
+        "near_miss": "A turn-face-up candidate's timing is false.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "116.2c-1",
@@ -219,13 +266,17 @@
           "label": "not-paid",
           "polarity": "does_not_fire",
           "delta": "A does not pay {R}.",
-          "expected": "Convulsing Licid stays attached to Grizzly Bears, and blocking Hill Giant with Grizzly Bears is not legal."
+          "expected": "Convulsing Licid stays attached to Grizzly Bears, and blocking Hill Giant with Grizzly Bears is not legal.",
+          "operation": {
+            "unclassifiable": "a different choice by a player"
+          }
         },
         {
           "label": "no-mana",
           "polarity": "does_not_fire",
           "delta": "A's only Mountain is tapped, so {R} cannot be paid.",
-          "expected": "Ending the effect is not legal; Convulsing Licid stays attached, and blocking with Grizzly Bears is not legal."
+          "expected": "Ending the effect is not legal; Convulsing Licid stays attached, and blocking with Grizzly Bears is not legal.",
+          "operation": "tap"
         }
       ],
       "cards": [
@@ -234,7 +285,18 @@
         "Convulsing Licid",
         "Grizzly Bears"
       ],
-      "forge_notes": "Forge may implement the Licid's {R} revert as a stack-using ability or only at certain timings (RevertCost$ on Animate); check whether it is a no-stack action before using this as a ground-truth case. The other branch of 116.2c, stopping a delayed triggered ability from triggering, has no simple Forge card."
+      "forge_notes": "Forge may implement the Licid's {R} revert as a stack-using ability or only at certain timings (RevertCost$ on Animate); check whether it is a no-stack action before using this as a ground-truth case. The other branch of 116.2c, stopping a delayed triggered ability from triggering, has no simple Forge card.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A special action that ends a continuous effect is a playable candidate whenever its controller has priority and can pay its cost.",
+        "near_miss": "Such a candidate is not playable: its cost cannot be paid or its player may not take it now.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "116.2d-1",
@@ -295,13 +357,19 @@
           "label": "not-paid",
           "polarity": "does_not_fire",
           "delta": "A does not pay {2}.",
-          "expected": "Rampant Growth resolves but A can't search: no land leaves A's library, and A controls no extra land."
+          "expected": "Rampant Growth resolves but A can't search: no land leaves A's library, and A controls no extra land.",
+          "operation": {
+            "unclassifiable": "a different choice by a player"
+          }
         },
         {
           "label": "opponent-pays",
           "polarity": "does_not_fire",
           "delta": "B pays {2} (tapping two Plains) to ignore the effect for B, and A does not.",
-          "expected": "A still can't search: Rampant Growth resolves and nothing leaves A's library. The ignore applies only to the player who paid."
+          "expected": "A still can't search: Rampant Growth resolves and nothing leaves A's library. The ignore applies only to the player who paid.",
+          "operation": {
+            "unclassifiable": "a different choice by a player"
+          }
         }
       ],
       "cards": [
@@ -312,7 +380,10 @@
         "Plains",
         "Swamp"
       ],
-      "forge_notes": "The Forge script has a TODO about the AI not using the ignore action; the engine parameter IgnoreEffectCost$ 2 exists for a human-controlled player."
+      "forge_notes": "The Forge script has a TODO about the AI not using the ignore action; the engine parameter IgnoreEffectCost$ 2 exists for a human-controlled player.",
+      "detector": {
+        "none": "Forge's ignore-the-effect special action is a runtime AbilityStatic of API InternalIgnoreEffect, which maps to no event type, and a resolution record of the restricted spell shows only whether its own effect happened (a card leaving the library or not), not that a static's effect was ignored for a player."
+      }
     },
     {
       "id": "116.2e-1",
@@ -363,13 +434,19 @@
           "label": "spell-on-stack",
           "polarity": "fires",
           "delta": "B has cast Shock targeting A, and A has priority with Shock on the stack.",
-          "expected": "Discarding is legal with a spell on the stack: Circling Vultures moves to A's graveyard, and Shock stays on the stack unchanged."
+          "expected": "Discarding is legal with a spell on the stack: Circling Vultures moves to A's graveyard, and Shock stays on the stack unchanged.",
+          "operation": {
+            "unclassifiable": "a different spell cast, putting it on the stack"
+          }
         },
         {
           "label": "no-priority-step",
           "polarity": "does_not_fire",
           "delta": "The step is cleanup, in which no player receives priority.",
-          "expected": "Discarding is not legal; Circling Vultures stays in A's hand."
+          "expected": "Discarding is not legal; Circling Vultures stays in A's hand.",
+          "operation": {
+            "unclassifiable": "changes the step"
+          }
         }
       ],
       "cards": [
@@ -378,7 +455,20 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": "Forge implements it as an ability with ActivationZone$ Hand and InstantSpeed$ True, which uses the stack in the engine; cleanup priority is only reachable in a puzzle state."
+      "forge_notes": "Forge implements it as an ability with ActivationZone$ Hand and InstantSpeed$ True, which uses the stack in the engine; cleanup priority is only reachable in a puzzle state.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A discard-as-a-special-action candidate's timing is true whenever its owner could cast an instant, including with a spell on the stack.",
+        "near_miss": "Such a candidate's timing is false.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "116.2f-1",
@@ -430,19 +520,28 @@
           "label": "upkeep",
           "polarity": "does_not_fire",
           "delta": "The step is upkeep instead of main1.",
-          "expected": "Suspending is not legal: a sorcery can't be cast in the upkeep. Rift Bolt stays in hand."
+          "expected": "Suspending is not legal: a sorcery can't be cast in the upkeep. Rift Bolt stays in hand.",
+          "operation": {
+            "unclassifiable": "changes the step"
+          }
         },
         {
           "label": "stack-not-empty",
           "polarity": "does_not_fire",
           "delta": "B has cast Shock targeting A, tapping Mountain, and A has priority with Shock on the stack.",
-          "expected": "Suspending is not legal while the stack is not empty; Rift Bolt stays in hand."
+          "expected": "Suspending is not legal while the stack is not empty; Rift Bolt stays in hand.",
+          "operation": {
+            "unclassifiable": "a different spell cast, putting it on the stack"
+          }
         },
         {
           "label": "opponents-turn",
           "polarity": "does_not_fire",
           "delta": "B is the active player and the step is main1.",
-          "expected": "Suspending is not legal on B's turn; Rift Bolt stays in hand."
+          "expected": "Suspending is not legal on B's turn; Rift Bolt stays in hand.",
+          "operation": {
+            "unclassifiable": "changes the active player's turn"
+          }
         }
       ],
       "cards": [
@@ -450,7 +549,20 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A suspend candidate's timing is true when its card could begin to be cast: a sorcery-speed card in a main phase of its owner's turn with an empty stack.",
+        "near_miss": "A suspend candidate's timing is false: wrong step, a non-empty stack, or another player's turn.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "116.2g-1",
@@ -501,25 +613,37 @@
           "label": "combat-step",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "The action is not legal outside a main phase; Lurrus stays outside the game."
+          "expected": "The action is not legal outside a main phase; Lurrus stays outside the game.",
+          "operation": {
+            "unclassifiable": "changes the step"
+          }
         },
         {
           "label": "stack-not-empty",
           "polarity": "does_not_fire",
           "delta": "B has cast Shock targeting A and A has priority with Shock on the stack.",
-          "expected": "The action is not legal with a spell on the stack; Lurrus stays outside the game."
+          "expected": "The action is not legal with a spell on the stack; Lurrus stays outside the game.",
+          "operation": {
+            "unclassifiable": "a different spell cast, putting it on the stack"
+          }
         },
         {
           "label": "opponents-turn",
           "polarity": "does_not_fire",
           "delta": "B is the active player and the step is main1.",
-          "expected": "The action is not legal on B's turn; Lurrus stays outside the game."
+          "expected": "The action is not legal on B's turn; Lurrus stays outside the game.",
+          "operation": {
+            "unclassifiable": "changes the active player's turn"
+          }
         },
         {
           "label": "cannot-pay",
           "polarity": "does_not_fire",
           "delta": "A controls only two Plains.",
-          "expected": "The action is not legal: {3} can't be paid; Lurrus stays outside the game."
+          "expected": "The action is not legal: {3} can't be paid; Lurrus stays outside the game.",
+          "operation": {
+            "unclassifiable": "removes a permanent (one Plains)"
+          }
         }
       ],
       "cards": [
@@ -528,7 +652,20 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": "Companion setup needs the companion in the player's outside-the-game zone (sideboard); Forge supports it in constructed games with a companion declared."
+      "forge_notes": "Companion setup needs the companion in the player's outside-the-game zone (sideboard); Forge supports it in constructed games with a companion declared.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A companion-to-hand candidate's timing is true: a main phase of its owner's turn with an empty stack.",
+        "near_miss": "A companion-to-hand candidate's timing is false: wrong step, a non-empty stack, or another player's turn.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "116.2h-1",
@@ -580,19 +717,28 @@
           "label": "stack-not-empty",
           "polarity": "fires",
           "delta": "A has first cast Shock targeting B, tapping Mountain, and still holds priority with Shock on the stack.",
-          "expected": "Foretelling is legal with Shock on the stack; Behold the Multiverse moves to exile face down and Shock is unchanged on the stack."
+          "expected": "Foretelling is legal with Shock on the stack; Behold the Multiverse moves to exile face down and Shock is unchanged on the stack.",
+          "operation": {
+            "unclassifiable": "a different spell cast, putting it on the stack"
+          }
         },
         {
           "label": "opponents-turn",
           "polarity": "does_not_fire",
           "delta": "B is the active player and the step is main1; A holds priority with an empty stack.",
-          "expected": "Foretelling is not legal on B's turn; Behold the Multiverse stays in hand."
+          "expected": "Foretelling is not legal on B's turn; Behold the Multiverse stays in hand.",
+          "operation": {
+            "unclassifiable": "changes the active player's turn"
+          }
         },
         {
           "label": "cannot-pay",
           "polarity": "does_not_fire",
           "delta": "A controls only one land, an Island.",
-          "expected": "Foretelling is not legal: {2} can't be paid; Behold the Multiverse stays in hand."
+          "expected": "Foretelling is not legal: {2} can't be paid; Behold the Multiverse stays in hand.",
+          "operation": {
+            "unclassifiable": "removes permanents (two lands)"
+          }
         }
       ],
       "cards": [
@@ -601,7 +747,20 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A foretell candidate's timing is true whenever its owner has priority during their own turn, including with a spell on the stack.",
+        "near_miss": "A foretell candidate's timing is false: it is another player's turn.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "116.2k-1",
@@ -653,13 +812,19 @@
           "label": "stack-not-empty",
           "polarity": "does_not_fire",
           "delta": "B has cast Shock targeting A, tapping Mountain, and A has priority with Shock on the stack.",
-          "expected": "Plotting is not legal while the stack is not empty; Slickshot Show-Off stays in hand."
+          "expected": "Plotting is not legal while the stack is not empty; Slickshot Show-Off stays in hand.",
+          "operation": {
+            "unclassifiable": "a different spell cast, putting it on the stack"
+          }
         },
         {
           "label": "opponents-turn",
           "polarity": "does_not_fire",
           "delta": "B is the active player and the step is main1.",
-          "expected": "Plotting is not legal on B's turn; Slickshot Show-Off stays in hand."
+          "expected": "Plotting is not legal on B's turn; Slickshot Show-Off stays in hand.",
+          "operation": {
+            "unclassifiable": "changes the active player's turn"
+          }
         }
       ],
       "cards": [
@@ -667,7 +832,20 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": "Rule 702.170a limits plotting to the owner's main phase with an empty stack, stricter than 116.2k's 'during their own turn'; no variant here relies on the difference (an upkeep plot is left out)."
+      "forge_notes": "Rule 702.170a limits plotting to the owner's main phase with an empty stack, stricter than 116.2k's 'during their own turn'; no variant here relies on the difference (an upkeep plot is left out).",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A plot candidate's timing is true: its owner's own turn, with priority and an empty stack.",
+        "near_miss": "A plot candidate's timing is false: a non-empty stack or another player's turn.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "116.2m-1",
@@ -721,19 +899,28 @@
           "label": "combat-step",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "Unlocking is not legal outside a main phase; the Locker Room door stays locked."
+          "expected": "Unlocking is not legal outside a main phase; the Locker Room door stays locked.",
+          "operation": {
+            "unclassifiable": "changes the step"
+          }
         },
         {
           "label": "stack-not-empty",
           "polarity": "does_not_fire",
           "delta": "B has cast Shock targeting A and A has priority with Shock on the stack.",
-          "expected": "Unlocking is not legal while the stack is not empty; the door stays locked."
+          "expected": "Unlocking is not legal while the stack is not empty; the door stays locked.",
+          "operation": {
+            "unclassifiable": "a different spell cast, putting it on the stack"
+          }
         },
         {
           "label": "opponents-turn",
           "polarity": "does_not_fire",
           "delta": "B is the active player and the step is main1.",
-          "expected": "Unlocking is not legal on B's turn; the door stays locked."
+          "expected": "Unlocking is not legal on B's turn; the door stays locked.",
+          "operation": {
+            "unclassifiable": "changes the active player's turn"
+          }
         }
       ],
       "cards": [
@@ -742,7 +929,20 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": "Room cards are listed by their first-door Name line; the second door is named Locker Room. The Room-unlocked state must be settable in the initial state."
+      "forge_notes": "Room cards are listed by their first-door Name line; the second door is named Locker Room. The Room-unlocked state must be settable in the initial state.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An unlock-door candidate's timing is true: a main phase of its controller's turn with an empty stack.",
+        "near_miss": "An unlock-door candidate's timing is false: wrong step, a non-empty stack, or another player's turn.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "116.3-1",
@@ -793,14 +993,20 @@
           "label": "passes",
           "polarity": "other",
           "delta": "After playing the Mountain, A passes priority instead of casting Shock.",
-          "expected": "B receives priority with an empty stack; when B also passes, the game moves to beginning_of_combat. A did not keep priority once A passed."
+          "expected": "B receives priority with an empty stack; when B also passes, the game moves to beginning_of_combat. A did not keep priority once A passed.",
+          "operation": {
+            "unclassifiable": "a different choice by a player: passing priority instead of casting a spell"
+          }
         }
       ],
       "cards": [
         "Mountain",
         "Shock"
       ],
-      "forge_notes": "116.3 applies after every special action without condition, so it has no does_not_fire variant; the contrast is the 'passes' variant, where priority leaves A only once A passes."
+      "forge_notes": "116.3 applies after every special action without condition, so it has no does_not_fire variant; the contrast is the 'passes' variant, where priority leaves A only once A passes.",
+      "detector": {
+        "none": "Each decision record stands alone at one priority stop and names no preceding action, so no record field links a special action to the same player holding priority right after it; no event records priority passing."
+      }
     }
   ]
 }

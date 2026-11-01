@@ -61,13 +61,17 @@
           "label": "none_chosen",
           "polarity": "does_not_fire",
           "delta": "A chooses no permanent and no player.",
-          "expected": "Grizzly Bears still has one +1/+1 counter (a 3/3). B still has one poison counter."
+          "expected": "Grizzly Bears still has one +1/+1 counter (a 3/3). B still has one poison counter.",
+          "operation": {
+            "unclassifiable": "The player's proliferate choice changes; no fork operation changes a player's decision."
+          }
         },
         {
           "label": "no_counters",
           "polarity": "other",
           "delta": "Grizzly Bears has no counters, so A chooses only player B.",
-          "expected": "Grizzly Bears is a 2/2 with no counters. B has two poison counters. Hill Giant has no counters."
+          "expected": "Grizzly Bears is a 2/2 with no counters. B has two poison counters. Hill Giant has no counters.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -76,7 +80,18 @@
         "Grizzly Bears",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A proliferate resolution adds counters to the chosen permanents and players (counter_change events).",
+        "near_miss": "A proliferate resolution that added no counter.",
+        "params": {
+          "event": "counter_change",
+          "api": "Proliferate"
+        },
+        "needs": []
+      }
     }
   ]
 }

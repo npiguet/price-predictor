@@ -55,7 +55,10 @@
           "label": "no_aura_in_hand",
           "polarity": "does_not_fire",
           "delta": "A's hand holds Grizzly Bears instead of Holy Strength.",
-          "expected": "There is no Aura card to exchange. Arcanum Wings stays on Grizzly Bears (a 2/2 with flying) and A's hand is unchanged."
+          "expected": "There is no Aura card to exchange. Arcanum Wings stays on Grizzly Bears (a 2/2 with flying) and A's hand is unchanged.",
+          "operation": {
+            "unclassifiable": "changes a hand"
+          }
         }
       ],
       "cards": [
@@ -117,7 +120,10 @@
           "label": "can_enchant",
           "polarity": "does_not_fire",
           "delta": "A's hand holds Holy Strength (enchant creature) instead of Wild Growth.",
-          "expected": "The exchange succeeds. Arcanum Wings moves to A's hand and Holy Strength enters attached to Grizzly Bears."
+          "expected": "The exchange succeeds. Arcanum Wings moves to A's hand and Holy Strength enters attached to Grizzly Bears.",
+          "operation": {
+            "unclassifiable": "changes a hand"
+          }
         }
       ],
       "cards": [
@@ -180,7 +186,10 @@
           "label": "owner",
           "polarity": "does_not_fire",
           "delta": "Arcanum Wings is owned by A as well as controlled by A.",
-          "expected": "The exchange succeeds. Arcanum Wings moves to A's hand and Holy Strength enters attached to Grizzly Bears."
+          "expected": "The exchange succeeds. Arcanum Wings moves to A's hand and Holy Strength enters attached to Grizzly Bears.",
+          "operation": {
+            "unclassifiable": "changes the ownership of a permanent"
+          }
         }
       ],
       "cards": [

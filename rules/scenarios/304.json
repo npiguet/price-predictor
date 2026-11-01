@@ -61,13 +61,19 @@
           "label": "with-stack",
           "polarity": "fires",
           "delta": "B has first cast Shock targeting A, tapping B's Mountain, and A has priority with Shock on the stack.",
-          "expected": "Casting Lightning Bolt is legal: can_play is true while Shock is on the stack."
+          "expected": "Casting Lightning Bolt is legal: can_play is true while Shock is on the stack.",
+          "operation": {
+            "unclassifiable": "a different spell cast first, putting an object on the stack"
+          }
         },
         {
           "label": "sorcery",
           "polarity": "does_not_fire",
           "delta": "The candidate is A casting Lava Axe (a sorcery) instead of Lightning Bolt, paying {4}{R} with the five Mountains.",
-          "expected": "Casting Lava Axe is not legal: can_play is false, because it is not a main phase of A's turn."
+          "expected": "Casting Lava Axe is not legal: can_play is false, because it is not a main phase of A's turn.",
+          "operation": {
+            "unclassifiable": "a different spell candidate"
+          }
         }
       ],
       "cards": [
@@ -76,7 +82,20 @@
         "Lava Axe",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An instant candidate is castable whenever its controller has priority: the timing verdict bit is true even with a non-empty stack or outside a main phase.",
+        "near_miss": "A decision candidate whose timing bit is false: a sorcery-speed spell outside a main phase of its controller's turn or with a non-empty stack.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "304.2-1",
@@ -129,7 +148,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "After A passes priority B casts Counterspell targeting Shock, tapping both Islands, then both players pass.",
-          "expected": "Shock is countered: its text is not followed, B's life total stays 20, and Shock moves from the stack to A's graveyard; Counterspell goes to B's graveyard."
+          "expected": "Shock is countered: its text is not followed, B's life total stays 20, and Shock moves from the stack to A's graveyard; Counterspell goes to B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different spell cast by the opponent"
+          }
         }
       ],
       "cards": [
@@ -138,7 +160,19 @@
         "Shock",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolving instant or sorcery spell moves from the stack to its owner's graveyard.",
+        "near_miss": "A spell that leaves the stack without resolving (countered); not counted without an api, since an instant's acting line may have any API.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "graveyard"
+        },
+        "needs": []
+      }
     },
     {
       "id": "304.4-1",
@@ -190,7 +224,8 @@
           "label": "creature-card",
           "polarity": "does_not_fire",
           "delta": "The manifested card is Grizzly Bears instead of Lightning Bolt.",
-          "expected": "Grizzly Bears is exiled and returns to the battlefield face up under A's control as a 2/2; Cloudshift goes to A's graveyard."
+          "expected": "Grizzly Bears is exiled and returns to the battlefield face up under A's control as a 2/2; Cloudshift goes to A's graveyard.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -199,7 +234,10 @@
         "Cloudshift",
         "Grizzly Bears"
       ],
-      "forge_notes": "GameAction.changeZone refuses instants and sorceries moving to the battlefield. The face-down state must be a manifest, not a morph."
+      "forge_notes": "GameAction.changeZone refuses instants and sorceries moving to the battlefield. The face-down state must be a manifest, not a morph.",
+      "detector": {
+        "none": "The instant stays in exile: no zone_change event is produced for it, so no field shows the refusal, which looks like any resolution not touching the card (looked at zone_change and the effect half)."
+      }
     },
     {
       "id": "304.5-1",
@@ -253,7 +291,10 @@
           "label": "cast-instant",
           "polarity": "does_not_fire",
           "delta": "The candidate is A casting the instant Shock with the Mountain instead.",
-          "expected": "Casting Shock is not legal: can_play is false, because Silence stops A from casting spells."
+          "expected": "Casting Shock is not legal: can_play is false, because Silence stops A from casting spells.",
+          "operation": {
+            "unclassifiable": "a different candidate action"
+          }
         }
       ],
       "cards": [
@@ -263,7 +304,18 @@
         "Shock",
         "Silence"
       ],
-      "forge_notes": "Lion's Eye Diamond is a mana ability, so the activation does not use the stack; its playability verdict is the legality of activating it."
+      "forge_notes": "Lion's Eye Diamond is a mana ability, so the activation does not use the stack; its playability verdict is the legality of activating it.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A player with priority can activate an 'only as an instant' ability even when unable to cast spells: can_play is true.",
+        "near_miss": "A candidate that is an actual instant spell the player is barred from casting has a false can_play bit.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true
+        },
+        "needs": []
+      }
     }
   ]
 }

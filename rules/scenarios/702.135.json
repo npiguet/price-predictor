@@ -53,13 +53,17 @@
           "label": "survives",
           "polarity": "does_not_fire",
           "delta": "B's creature is Syndicate Messenger (2/3) instead of Ministrant of Obligation.",
-          "expected": "Syndicate Messenger survives with 2 damage marked; its afterlife trigger does not fire and B has no Spirit tokens."
+          "expected": "Syndicate Messenger survives with 2 damage marked; its afterlife trigger does not fire and B has no Spirit tokens.",
+          "operation": "replace_card"
         },
         {
           "label": "bounced",
           "polarity": "does_not_fire",
           "delta": "A casts Unsummon (tapping the Island) instead of Shock.",
-          "expected": "Ministrant of Obligation returns to B's hand and is never put into a graveyard; its afterlife trigger does not fire and B has no Spirit tokens."
+          "expected": "Ministrant of Obligation returns to B's hand and is never put into a graveyard; its afterlife trigger does not fire and B has no Spirit tokens.",
+          "operation": {
+            "unclassifiable": "a different spell or ability is cast"
+          }
         }
       ],
       "cards": [
@@ -70,7 +74,17 @@
         "Ministrant of Obligation",
         "Syndicate Messenger"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An afterlife trigger fires when its permanent is put into a graveyard from the battlefield.",
+        "near_miss": "An afterlife trigger is evaluated against a zone change it does not match, such as its permanent leaving the battlefield for a hand, and does not fire.",
+        "params": {
+          "keyword": "Afterlife"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.135b-1",
@@ -126,7 +140,10 @@
           "label": "one_instance",
           "polarity": "does_not_fire",
           "delta": "A does not cast Afterlife Insurance; A casts only Shock.",
-          "expected": "Orzhov Enforcer dies and its single afterlife trigger resolves: A gets one Spirit token."
+          "expected": "Orzhov Enforcer dies and its single afterlife trigger resolves: A gets one Spirit token.",
+          "operation": {
+            "unclassifiable": "a different spell or ability is cast"
+          }
         }
       ],
       "cards": [
@@ -136,7 +153,17 @@
         "Plains",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "Each afterlife instance of a dying permanent is evaluated and fires as its own trigger.",
+        "near_miss": "An afterlife trigger evaluated and not fired; the detector does not count instances per event, and misses an instance another permanent's effect grants, which reads off that effect's line.",
+        "params": {
+          "keyword": "Afterlife"
+        },
+        "needs": []
+      }
     }
   ]
 }

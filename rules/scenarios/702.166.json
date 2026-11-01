@@ -60,13 +60,17 @@
           "label": "no_permanent_to_sacrifice",
           "polarity": "does_not_fire",
           "delta": "A controls no Short Sword; its battlefield is two Islands only.",
-          "expected": "Casting Ice Out is not legal: no artifact, enchantment or token can be sacrificed, so it cannot be bargained and costs {1}{U}{U}, which two Islands cannot pay."
+          "expected": "Casting Ice Out is not legal: no artifact, enchantment or token can be sacrificed, so it cannot be bargained and costs {1}{U}{U}, which two Islands cannot pay.",
+          "operation": {
+            "unclassifiable": "Removes a permanent from the base battlefield; no fork operation removes a permanent."
+          }
         },
         {
           "label": "only_a_creature",
           "polarity": "does_not_fire",
           "delta": "Short Sword is replaced on A's battlefield by Grizzly Bears (a nonartifact, nontoken creature).",
-          "expected": "Casting Ice Out is not legal: Grizzly Bears is not an artifact, enchantment or token, so the spell cannot be bargained and costs {1}{U}{U}, which two Islands cannot pay."
+          "expected": "Casting Ice Out is not legal: Grizzly Bears is not an artifact, enchantment or token, so the spell cannot be bargained and costs {1}{U}{U}, which two Islands cannot pay.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -76,7 +80,10 @@
         "Ice Out",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "Whether an artifact, enchantment or token could be sacrificed as an optional additional cost is not recorded on a playability decision candidate (only can_play, affordable, has_legal_target, legal_targets, cost_after_adjustment, failed_checks); the optional sacrifice choice appears in no record field or event."
+      }
     },
     {
       "id": "702.166b-1",
@@ -132,7 +139,10 @@
           "label": "not_bargained",
           "polarity": "does_not_fire",
           "delta": "A casts Torch the Tower without sacrificing Short Sword.",
-          "expected": "Short Sword stays on the battlefield. Torch the Tower deals 2 damage to Hill Giant, which stays on the battlefield with 2 damage marked. A does not scry."
+          "expected": "Short Sword stays on the battlefield. Torch the Tower deals 2 damage to Hill Giant, which stays on the battlefield with 2 damage marked. A does not scry.",
+          "operation": {
+            "unclassifiable": "A different casting choice: the caster does not sacrifice a permanent for bargain; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -196,7 +206,10 @@
           "label": "not_bargained",
           "polarity": "does_not_fire",
           "delta": "A casts Brave the Wilds without sacrificing Short Sword; no target is chosen.",
-          "expected": "Brave the Wilds is cast with no target and resolves rather than fizzling. No land becomes a creature. A's library Forest moves to A's hand and Short Sword stays on the battlefield."
+          "expected": "Brave the Wilds is cast with no target and resolves rather than fizzling. No land becomes a creature. A's library Forest moves to A's hand and Short Sword stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "A different casting choice: the caster does not bargain and so chooses no target; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [

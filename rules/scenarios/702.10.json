@@ -56,7 +56,8 @@
           "label": "no_haste_creature",
           "polarity": "does_not_fire",
           "delta": "A's creature is Mons's Goblin Raiders (no haste) instead of Raging Goblin, also summoning sick.",
-          "expected": "Mons's Goblin Raiders is not a legal attacker."
+          "expected": "Mons's Goblin Raiders is not a legal attacker.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -115,13 +116,19 @@
           "label": "no_haste",
           "polarity": "does_not_fire",
           "delta": "Fervor is not on the battlefield.",
-          "expected": "Activating Prodigal Sorcerer's ability is illegal: the creature is summoning sick and its cost includes {T}."
+          "expected": "Activating Prodigal Sorcerer's ability is illegal: the creature is summoning sick and its cost includes {T}.",
+          "operation": {
+            "unclassifiable": "The haste-granting enchantment is removed from the battlefield; no fork operation removes a permanent."
+          }
         },
         {
           "label": "opponent_controls_fervor",
           "polarity": "does_not_fire",
           "delta": "Fervor is on B's side of the battlefield instead of A's.",
-          "expected": "Activating Prodigal Sorcerer's ability is illegal: Fervor gives haste only to creatures B controls."
+          "expected": "Activating Prodigal Sorcerer's ability is illegal: Fervor gives haste only to creatures B controls.",
+          "operation": {
+            "unclassifiable": "The haste-granting enchantment changes controller; no fork operation changes a permanent's controller."
+          }
         }
       ],
       "cards": [

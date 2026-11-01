@@ -55,7 +55,10 @@
           "label": "hard_cast",
           "polarity": "does_not_fire",
           "delta": "Firebolt is in A's hand instead of the graveyard and A casts it for its mana cost {R}.",
-          "expected": "Firebolt deals 2 damage to Grizzly Bears, which is destroyed. Firebolt is put into A's graveyard."
+          "expected": "Firebolt deals 2 damage to Grizzly Bears, which is destroyed. Firebolt is put into A's graveyard.",
+          "operation": {
+            "unclassifiable": "Moves a card between zones and changes how it is cast."
+          }
         }
       ],
       "cards": [
@@ -63,7 +66,19 @@
         "Mountain",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolving spell cast with an exile-instead clause moves from the stack to exile rather than the graveyard.",
+        "near_miss": "A resolving instant or sorcery whose effect half shows it going to the graveyard.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "exile"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.34a-2",
@@ -123,7 +138,10 @@
           "label": "hard_cast",
           "polarity": "does_not_fire",
           "delta": "Firebolt is in A's hand instead of the graveyard and A casts it for its mana cost {R}.",
-          "expected": "Firebolt is countered and is put into A's graveyard. Grizzly Bears is undamaged."
+          "expected": "Firebolt is countered and is put into A's graveyard. Grizzly Bears is undamaged.",
+          "operation": {
+            "unclassifiable": "Moves a card between zones and changes how it is cast."
+          }
         }
       ],
       "cards": [
@@ -133,7 +151,20 @@
         "Island",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A counter ability sends a countered spell with an exile-instead clause from the stack to exile.",
+        "near_miss": "A Counter resolution whose spell went to the graveyard.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "exile",
+          "api": "Counter"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.34a-3",
@@ -185,19 +216,28 @@
           "label": "flashback_unaffordable",
           "polarity": "does_not_fire",
           "delta": "A controls only four Mountains.",
-          "expected": "Casting Firebolt from the graveyard is illegal (can_play false): {4}{R} cannot be paid."
+          "expected": "Casting Firebolt from the graveyard is illegal (can_play false): {4}{R} cannot be paid.",
+          "operation": {
+            "unclassifiable": "Removes a permanent from the battlefield."
+          }
         },
         {
           "label": "in_exile",
           "polarity": "does_not_fire",
           "delta": "Firebolt is in A's exile zone instead of the graveyard.",
-          "expected": "Casting Firebolt is illegal (can_play false): flashback functions only in the graveyard."
+          "expected": "Casting Firebolt is illegal (can_play false): flashback functions only in the graveyard.",
+          "operation": {
+            "unclassifiable": "Moves a card between zones."
+          }
         },
         {
           "label": "no_flashback_card",
           "polarity": "does_not_fire",
           "delta": "A's graveyard holds Shock instead of Firebolt.",
-          "expected": "Casting Shock from the graveyard is illegal (can_play false): it has no flashback."
+          "expected": "Casting Shock from the graveyard is illegal (can_play false): it has no flashback.",
+          "operation": {
+            "unclassifiable": "Changes a card in the graveyard, which is not a permanent."
+          }
         }
       ],
       "cards": [

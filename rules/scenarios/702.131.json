@@ -72,7 +72,10 @@
           "label": "nine_permanents",
           "polarity": "does_not_fire",
           "delta": "A controls 9 Islands instead of 10.",
-          "expected": "A controls nine permanents when the spell resolves, does not get the city's blessing and draws two cards: A's hand holds 2 Plains, A's library holds 3. B's three Mountains do not count. Secrets of the Golden City goes to A's graveyard."
+          "expected": "A controls nine permanents when the spell resolves, does not get the city's blessing and draws two cards: A's hand holds 2 Plains, A's library holds 3. B's three Mountains do not count. Secrets of the Golden City goes to A's graveyard.",
+          "operation": {
+            "unclassifiable": "adds, removes, attaches or changes the controller of a permanent, which no fork operation does"
+          }
         }
       ],
       "cards": [
@@ -135,7 +138,10 @@
           "label": "nine_permanents",
           "polarity": "does_not_fire",
           "delta": "A controls 8 Plains instead of 9.",
-          "expected": "A controls nine permanents and does not have the city's blessing; Snubhorn Sentry stays a 0/3. B's two Mountains do not count."
+          "expected": "A controls nine permanents and does not have the city's blessing; Snubhorn Sentry stays a 0/3. B's two Mountains do not count.",
+          "operation": {
+            "unclassifiable": "adds, removes, attaches or changes the controller of a permanent, which no fork operation does"
+          }
         }
       ],
       "cards": [
@@ -203,7 +209,10 @@
           "label": "never_blessed",
           "polarity": "does_not_fire",
           "delta": "A starts with 8 Plains instead of 9, so A never had ten permanents.",
-          "expected": "The targeted Plains moves to A's graveyard and A controls eight permanents. A has never had the city's blessing, so Snubhorn Sentry stays a 0/3."
+          "expected": "The targeted Plains moves to A's graveyard and A controls eight permanents. A has never had the city's blessing, so Snubhorn Sentry stays a 0/3.",
+          "operation": {
+            "unclassifiable": "removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -273,7 +282,10 @@
           "label": "ninth_permanent",
           "polarity": "does_not_fire",
           "delta": "A controls six Plains instead of seven.",
-          "expected": "The Gnome token is A's ninth permanent: A does not get the city's blessing, the token stays a 1/1, Garruk's Packleader's trigger does not fire and A's library keeps 2 cards."
+          "expected": "The Gnome token is A's ninth permanent: A does not get the city's blessing, the token stays a 1/1, Garruk's Packleader's trigger does not fire and A's library keeps 2 cards.",
+          "operation": {
+            "unclassifiable": "adds, removes, attaches or changes the controller of a permanent, which no fork operation does"
+          }
         }
       ],
       "cards": [

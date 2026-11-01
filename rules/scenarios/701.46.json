@@ -50,13 +50,15 @@
           "label": "has_plus_counter",
           "polarity": "does_not_fire",
           "delta": "Sauroform Hybrid already has one +1/+1 counter.",
-          "expected": "The ability resolves and no counters are added. Sauroform Hybrid keeps its single +1/+1 counter and is 3/3."
+          "expected": "The ability resolves and no counters are added. Sauroform Hybrid keeps its single +1/+1 counter and is 3/3.",
+          "operation": "counters"
         },
         {
           "label": "other_counter_type",
           "polarity": "fires",
           "delta": "Sauroform Hybrid already has one charge counter and no +1/+1 counter.",
-          "expected": "A charge counter does not stop adapt: Sauroform Hybrid gets four +1/+1 counters and is 6/6 with one charge counter."
+          "expected": "A charge counter does not stop adapt: Sauroform Hybrid gets four +1/+1 counters and is 6/6 with one charge counter.",
+          "operation": "counters"
         }
       ],
       "cards": [

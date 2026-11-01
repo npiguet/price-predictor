@@ -56,7 +56,10 @@
           "label": "target_killed_in_response",
           "polarity": "does_not_fire",
           "delta": "In response, B casts Shock targeting Grizzly Bears, tapping Mountain.",
-          "expected": "Shock resolves first and Grizzly Bears dies. The reinforce ability fizzles. Mosquito Guard is still in A's graveyard because it was discarded as a cost."
+          "expected": "Shock resolves first and Grizzly Bears dies. The reinforce ability fizzles. Mosquito Guard is still in A's graveyard because it was discarded as a cost.",
+          "operation": {
+            "unclassifiable": "a different spell cast by B in response"
+          }
         }
       ],
       "cards": [
@@ -113,13 +116,19 @@
           "label": "on_battlefield",
           "polarity": "does_not_fire",
           "delta": "Mosquito Guard is on A's battlefield instead of in hand.",
-          "expected": "The activation is not legal (can_play false), because reinforce works only from hand."
+          "expected": "The activation is not legal (can_play false), because reinforce works only from hand.",
+          "operation": {
+            "unclassifiable": "moves a card between zones"
+          }
         },
         {
           "label": "in_graveyard",
           "polarity": "does_not_fire",
           "delta": "Mosquito Guard is in A's graveyard instead of in hand.",
-          "expected": "The activation is not legal (can_play false)."
+          "expected": "The activation is not legal (can_play false).",
+          "operation": {
+            "unclassifiable": "moves a card between zones"
+          }
         }
       ],
       "cards": [
@@ -127,7 +136,21 @@
         "Grizzly Bears",
         "Mosquito Guard"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An ability that functions only from one zone (the hand) passes the zone check because its card is in that zone.",
+        "near_miss": "The candidate fails the zone check because its card is in another zone.",
+        "params": {
+          "bit": "failed_check",
+          "check": "zone",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "702.77b-1",
@@ -186,7 +209,10 @@
           "label": "vanilla_card",
           "polarity": "does_not_fire",
           "delta": "The top card of the library is Goblin Piker instead of Mosquito Guard.",
-          "expected": "Goblin Piker has no activated ability, so all five milled creature cards stay in A's graveyard and A's hand is empty."
+          "expected": "Goblin Piker has no activated ability, so all five milled creature cards stay in A's graveyard and A's hand is empty.",
+          "operation": {
+            "unclassifiable": "changes the top card of a library"
+          }
         }
       ],
       "cards": [

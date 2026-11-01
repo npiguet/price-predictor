@@ -57,13 +57,19 @@
           "label": "attacker_blocked",
           "polarity": "does_not_fire",
           "delta": "B blocks Hill Giant with Grizzly Bears.",
-          "expected": "Casting Leonardo, Big Brother for the sneak cost is not legal: A controls no unblocked creature to return, and {W} alone cannot pay the mana cost {2}{W}. Leonardo stays in A's hand."
+          "expected": "Casting Leonardo, Big Brother for the sneak cost is not legal: A controls no unblocked creature to return, and {W} alone cannot pay the mana cost {2}{W}. Leonardo stays in A's hand.",
+          "operation": {
+            "unclassifiable": "A different choice by a player: a block"
+          }
         },
         {
           "label": "before_blockers",
           "polarity": "does_not_fire",
           "delta": "A tries to cast Leonardo, Big Brother by sneak in the declare attackers step, before blockers are declared.",
-          "expected": "Casting for the sneak cost is not legal: it is not the declare blockers step. Leonardo stays in A's hand and Hill Giant stays on the battlefield."
+          "expected": "Casting for the sneak cost is not legal: it is not the declare blockers step. Leonardo stays in A's hand and Hill Giant stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "Changes the step of the turn"
+          }
         }
       ],
       "cards": [
@@ -130,13 +136,19 @@
           "label": "attacking_planeswalker",
           "polarity": "fires",
           "delta": "Hill Giant attacks Jace Beleren instead of player B.",
-          "expected": "Leonardo, Big Brother enters tapped and attacking Jace Beleren. Leonardo deals 1 combat damage to Jace Beleren (loyalty 2). B's life stays 20."
+          "expected": "Leonardo, Big Brother enters tapped and attacking Jace Beleren. Leonardo deals 1 combat damage to Jace Beleren (loyalty 2). B's life stays 20.",
+          "operation": {
+            "unclassifiable": "Changes what the attacker attacks, a different choice"
+          }
         },
         {
           "label": "cast_normally",
           "polarity": "does_not_fire",
           "delta": "A casts Leonardo, Big Brother for its mana cost {2}{W} in the second main phase, tapping three Plains, instead of by sneak; Hill Giant stays on the battlefield.",
-          "expected": "Hill Giant deals 3 combat damage to B (17). Leonardo, Big Brother enters untapped and is not attacking."
+          "expected": "Hill Giant deals 3 combat damage to B (17). Leonardo, Big Brother enters untapped and is not attacking.",
+          "operation": {
+            "unclassifiable": "Casts the spell a different way"
+          }
         }
       ],
       "cards": [

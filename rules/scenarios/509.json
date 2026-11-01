@@ -57,14 +57,26 @@
           "label": "tapped_blocker",
           "polarity": "fires",
           "delta": "B's Hill Giant starts the turn tapped.",
-          "expected": "Hill Giant is not a legal blocker: the declaration is illegal. Grizzly Bears is not blocked by it."
+          "expected": "Hill Giant is not a legal blocker: the declaration is illegal. Grizzly Bears is not blocked by it.",
+          "operation": "tap"
         }
       ],
       "cards": [
         "Grizzly Bears",
         "Hill Giant"
       ],
-      "forge_notes": "The tapped state of a non-active player's creature must be set as a puzzle starting condition."
+      "forge_notes": "The tapped state of a non-active player's creature must be set as a puzzle starting condition.",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature the defending player controls is listed as forbidden from blocking the anchored attacker (a tapped creature among them), so it is not a legal blocker.",
+        "near_miss": "A creature the defending player controls is listed among the legal blockers of the anchored attacker.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside"
+        },
+        "needs": []
+      }
     },
     {
       "id": "509.1b-1",
@@ -114,7 +126,10 @@
           "label": "reach_blocker",
           "polarity": "does_not_fire",
           "delta": "B declares Giant Spider (reach) as the blocker instead of Grizzly Bears.",
-          "expected": "The declaration is legal: Giant Spider has reach. Wind Drake becomes blocked by Giant Spider."
+          "expected": "The declaration is legal: Giant Spider has reach. Wind Drake becomes blocked by Giant Spider.",
+          "operation": {
+            "unclassifiable": "B's choice of which creature blocks; a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         }
       ],
       "cards": [
@@ -122,7 +137,19 @@
         "Grizzly Bears",
         "Giant Spider"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature the defending player controls is listed as forbidden from blocking the anchored attacker by a static ability, such as an evasion keyword's or a 'can block only creatures with flying' restriction, so it is not a legal blocker.",
+        "near_miss": "A creature the defending player controls is listed among the legal blockers of the anchored attacker.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside",
+          "responsible_static": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "509.1b-2",
@@ -175,7 +202,10 @@
           "label": "flying_attacker",
           "polarity": "does_not_fire",
           "delta": "A attacks B with Wind Drake instead of Grizzly Bears.",
-          "expected": "The declaration is legal: Wind Drake has flying and Cloud Sprite has flying. Wind Drake becomes blocked by Cloud Sprite."
+          "expected": "The declaration is legal: Wind Drake has flying and Cloud Sprite has flying. Wind Drake becomes blocked by Cloud Sprite.",
+          "operation": {
+            "unclassifiable": "A's choice of which creature attacks; a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         }
       ],
       "cards": [
@@ -183,7 +213,19 @@
         "Wind Drake",
         "Cloud Sprite"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature the defending player controls is listed as forbidden from blocking the anchored attacker by a static ability, such as an evasion keyword's or a 'can block only creatures with flying' restriction, so it is not a legal blocker.",
+        "near_miss": "A creature the defending player controls is listed among the legal blockers of the anchored attacker.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside",
+          "responsible_static": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "509.1b-3",
@@ -239,7 +281,10 @@
           "label": "flying_before_block",
           "polarity": "does_not_fire",
           "delta": "A casts Aerial Maneuver on Grizzly Bears during the declare attackers step, before blockers are declared; B then tries to declare Hill Giant as a blocker.",
-          "expected": "Declaring Hill Giant as a blocker is illegal: Grizzly Bears has flying and Hill Giant does not. The declaration is undone and B declares no blockers; Grizzly Bears is unblocked and deals 3 damage to B (life 17); Hill Giant survives."
+          "expected": "Declaring Hill Giant as a blocker is illegal: Grizzly Bears has flying and Hill Giant does not. The declaration is undone and B declares no blockers; Grizzly Bears is unblocked and deals 3 damage to B (life 17); Hill Giant survives.",
+          "operation": {
+            "unclassifiable": "the change is when Aerial Maneuver is cast relative to the block declaration; a different spell cast or timing of a cast, not a fact on the board"
+          }
         }
       ],
       "cards": [
@@ -297,13 +342,17 @@
           "label": "block_declared",
           "polarity": "does_not_fire",
           "delta": "B declares Razorgrass Screen as a blocker of Grizzly Bears.",
-          "expected": "The declaration is legal. Grizzly Bears becomes blocked by Razorgrass Screen."
+          "expected": "The declaration is legal. Grizzly Bears becomes blocked by Razorgrass Screen.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         },
         {
           "label": "screen_tapped",
           "polarity": "does_not_fire",
           "delta": "B's Razorgrass Screen starts the turn tapped.",
-          "expected": "Declaring no blockers is legal: a tapped creature cannot block, so no requirement can be obeyed. Grizzly Bears is unblocked and deals 2 damage to B (life 18)."
+          "expected": "Declaring no blockers is legal: a tapped creature cannot block, so no requirement can be obeyed. Grizzly Bears is unblocked and deals 2 damage to B (life 18).",
+          "operation": "tap"
         }
       ],
       "cards": [
@@ -360,13 +409,19 @@
           "label": "neither_blocks",
           "polarity": "fires",
           "delta": "B declares no blockers.",
-          "expected": "The declaration is illegal: the requirement of Razorgrass Screen could be obeyed without disobeying menace (both blocking), but is not."
+          "expected": "The declaration is illegal: the requirement of Razorgrass Screen could be obeyed without disobeying menace (both blocking), but is not.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         },
         {
           "label": "only_screen_blocks",
           "polarity": "other",
           "delta": "B declares only Razorgrass Screen as a blocker.",
-          "expected": "The declaration is illegal: it violates the menace restriction, which needs two or more blockers."
+          "expected": "The declaration is illegal: it violates the menace restriction, which needs two or more blockers.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         }
       ],
       "cards": [
@@ -428,13 +483,19 @@
           "label": "no_block",
           "polarity": "does_not_fire",
           "delta": "B declares no blockers.",
-          "expected": "Hill Giant is not a blocking creature and takes no damage. Grizzly Bears is unblocked and deals 2 damage to B (life 18)."
+          "expected": "Hill Giant is not a blocking creature and takes no damage. Grizzly Bears is unblocked and deals 2 damage to B (life 18).",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         },
         {
           "label": "blocker_removed",
           "polarity": "other",
           "delta": "After blockers are declared, A casts Unsummon targeting Hill Giant, tapping Island, and it resolves.",
-          "expected": "Hill Giant returns to B's hand and is no longer a blocking creature. Grizzly Bears remains blocked, deals no damage and takes no damage (B's life stays 20)."
+          "expected": "Hill Giant returns to B's hand and is no longer a blocking creature. Grizzly Bears remains blocked, deals no damage and takes no damage (B's life stays 20).",
+          "operation": {
+            "unclassifiable": "a different spell cast or timing of a cast, not a fact on the board"
+          }
         }
       ],
       "cards": [
@@ -498,7 +559,10 @@
           "label": "never_blocked",
           "polarity": "does_not_fire",
           "delta": "B declares no blockers.",
-          "expected": "Grizzly Bears is an unblocked creature and deals 2 damage to B (life 18) even though Hill Giant is returned to B's hand."
+          "expected": "Grizzly Bears is an unblocked creature and deals 2 damage to B (life 18) even though Hill Giant is returned to B's hand.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         }
       ],
       "cards": [
@@ -556,14 +620,27 @@
           "label": "unblocked",
           "polarity": "does_not_fire",
           "delta": "B declares no blockers.",
-          "expected": "No trigger fires; A's life stays 20."
+          "expected": "No trigger fires; A's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         }
       ],
       "cards": [
         "Deepwood Tantiv",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A 'becomes blocked' trigger fires when blockers are declared.",
+        "near_miss": "A 'becomes blocked' trigger is evaluated against a block and does not fire, because the blocked attacker is not the creature it watches or a condition of it is unmet.",
+        "params": {
+          "mode": "AttackerBlocked"
+        },
+        "needs": []
+      }
     },
     {
       "id": "509.2a-1",
@@ -618,7 +695,10 @@
           "label": "unblocked",
           "polarity": "does_not_fire",
           "delta": "B declares no blockers.",
-          "expected": "No trigger is on the stack when A gets priority; the stack holds only Shock. Shock resolves (B life 18) and A's life stays 20."
+          "expected": "No trigger is on the stack when A gets priority; the stack holds only Shock. Shock resolves (B life 18) and A's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         }
       ],
       "cards": [
@@ -686,13 +766,19 @@
           "label": "blocks_one",
           "polarity": "fires",
           "delta": "B declares Clockwork Beetle as a blocker of only one Phyrexian Walker.",
-          "expected": "The trigger fires once; at end of combat one counter is removed. Beetle stays with one counter (1/1)."
+          "expected": "The trigger fires once; at end of combat one counter is removed. Beetle stays with one counter (1/1).",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         },
         {
           "label": "no_block",
           "polarity": "does_not_fire",
           "delta": "B declares no blockers.",
-          "expected": "No blocks trigger fires. Beetle keeps both counters (2/2). B's life stays 20."
+          "expected": "No blocks trigger fires. Beetle keeps both counters (2/2). B's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         }
       ],
       "cards": [
@@ -700,7 +786,17 @@
         "Clockwork Beetle",
         "Brave the Sands"
       ],
-      "forge_notes": "Forge fires Mode$ Blocks once per blocker, so the single-trigger result with two blocked attackers needs confirming."
+      "forge_notes": "Forge fires Mode$ Blocks once per blocker, so the single-trigger result with two blocked attackers needs confirming.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A 'whenever this creature blocks' trigger fires for a declared blocker.",
+        "near_miss": "A 'whenever this creature blocks' trigger is evaluated and does not fire.",
+        "params": {
+          "mode": "Blocks"
+        },
+        "needs": []
+      }
     },
     {
       "id": "509.3b-1",
@@ -754,13 +850,19 @@
           "label": "blocks_one",
           "polarity": "fires",
           "delta": "B declares Brimaz as a blocker of only one Phyrexian Walker.",
-          "expected": "Brimaz triggers once. B gets one Cat Soldier token, blocking that Walker."
+          "expected": "Brimaz triggers once. B gets one Cat Soldier token, blocking that Walker.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         },
         {
           "label": "no_block",
           "polarity": "does_not_fire",
           "delta": "B declares no blockers.",
-          "expected": "Brimaz does not trigger; B gets no token."
+          "expected": "Brimaz does not trigger; B gets no token.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         }
       ],
       "cards": [
@@ -818,20 +920,36 @@
           "label": "two_blockers",
           "polarity": "fires",
           "delta": "B declares both Grizzly Bears as blockers of Deepwood Tantiv.",
-          "expected": "The trigger still fires only once: A gains 2 life (22), not 4."
+          "expected": "The trigger still fires only once: A gains 2 life (22), not 4.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         },
         {
           "label": "unblocked",
           "polarity": "does_not_fire",
           "delta": "B declares no blockers.",
-          "expected": "No trigger fires; A's life stays 20."
+          "expected": "No trigger fires; A's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         }
       ],
       "cards": [
         "Deepwood Tantiv",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A 'becomes blocked' trigger fires once when an attacker becomes blocked, however many creatures block it.",
+        "near_miss": "A 'becomes blocked' trigger is evaluated against a block and does not fire, because the blocked attacker is not the creature it watches or a condition of it is unmet.",
+        "params": {
+          "mode": "AttackerBlocked"
+        },
+        "needs": []
+      }
     },
     {
       "id": "509.3d-1",
@@ -882,19 +1000,28 @@
           "label": "two_blockers",
           "polarity": "fires",
           "delta": "B declares both Grizzly Bears as blockers of Cave Tiger.",
-          "expected": "Cave Tiger triggers twice and becomes 4/4 until end of turn."
+          "expected": "Cave Tiger triggers twice and becomes 4/4 until end of turn.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         },
         {
           "label": "token_blocks_too",
           "polarity": "fires",
           "delta": "B declares Brimaz as the blocker of Cave Tiger (no Grizzly Bears block).",
-          "expected": "Brimaz's trigger creates a Cat Soldier token that enters blocking Cave Tiger. Cave Tiger triggers for Brimaz and again for the token, and becomes 4/4 until end of turn."
+          "expected": "Brimaz's trigger creates a Cat Soldier token that enters blocking Cave Tiger. Cave Tiger triggers for Brimaz and again for the token, and becomes 4/4 until end of turn.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         },
         {
           "label": "unblocked",
           "polarity": "does_not_fire",
           "delta": "B declares no blockers.",
-          "expected": "Cave Tiger does not trigger and stays 2/2."
+          "expected": "Cave Tiger does not trigger and stays 2/2.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         }
       ],
       "cards": [
@@ -902,7 +1029,17 @@
         "Grizzly Bears",
         "Brimaz, King of Oreskos"
       ],
-      "forge_notes": "Whether Forge fires AttackerBlockedByCreature for a creature put onto the battlefield blocking needs confirming."
+      "forge_notes": "Whether Forge fires AttackerBlockedByCreature for a creature put onto the battlefield blocking needs confirming.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A 'becomes blocked by a creature' trigger fires once for each creature blocking the attacker.",
+        "near_miss": "A 'becomes blocked by a creature' trigger is evaluated against a blocker-attacker pair and does not fire, because the pair is not one it watches or a condition of it is unmet.",
+        "params": {
+          "mode": "AttackerBlockedByCreature"
+        },
+        "needs": []
+      }
     },
     {
       "id": "509.3e-1",
@@ -955,14 +1092,27 @@
           "label": "blocks_one",
           "polarity": "does_not_fire",
           "delta": "B declares Lairwatch Giant as a blocker of only the first Grizzly Bears (the Giant assigns all its damage to it).",
-          "expected": "The trigger does not fire; the Giant has no first strike. The blocked Grizzly Bears is destroyed in the regular damage step while the Giant takes 2 damage and survives; the other Grizzly Bears is unblocked and deals 2 damage to B (life 18)."
+          "expected": "The trigger does not fire; the Giant has no first strike. The blocked Grizzly Bears is destroyed in the regular damage step while the Giant takes 2 damage and survives; the other Grizzly Bears is unblocked and deals 2 damage to B (life 18).",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         }
       ],
       "cards": [
         "Grizzly Bears",
         "Lairwatch Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on blocking a number of creatures fires when the blocker blocks that many creatures at the declaration.",
+        "near_miss": "The trigger is evaluated and does not fire because the blocker blocks fewer creatures.",
+        "params": {
+          "mode": "Blocks"
+        },
+        "needs": []
+      }
     },
     {
       "id": "509.3e-2",
@@ -1014,7 +1164,10 @@
           "label": "one_blocker",
           "polarity": "does_not_fire",
           "delta": "B declares only one Phyrexian Walker as a blocker; A assigns all 2 damage to it.",
-          "expected": "The trigger does not fire; Grizzly Bears has no deathtouch. The Phyrexian Walker (0/3) takes 2 damage and survives."
+          "expected": "The trigger does not fire; Grizzly Bears has no deathtouch. The Phyrexian Walker (0/3) takes 2 damage and survives.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         }
       ],
       "cards": [
@@ -1022,7 +1175,17 @@
         "Seifer, Balamb Rival",
         "Phyrexian Walker"
       ],
-      "forge_notes": "Seifer's goad trigger fires because A attacks B; goad does not restrict blocking."
+      "forge_notes": "Seifer's goad trigger fires because A attacks B; goad does not restrict blocking.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on becoming blocked by a number of creatures fires when that many block the attacker.",
+        "near_miss": "The trigger is evaluated and does not fire because fewer creatures block.",
+        "params": {
+          "mode": "AttackerBlocked"
+        },
+        "needs": []
+      }
     },
     {
       "id": "509.3f-1",
@@ -1072,13 +1235,19 @@
           "label": "recolored_before_block",
           "polarity": "fires",
           "delta": "In the beginning of combat step A activates Distorting Lens targeting Dune Beetle and chooses green.",
-          "expected": "Dune Beetle is nonblack when it blocks, so the trigger fires and Dune Beetle is destroyed at end of combat. Dread Specter survives."
+          "expected": "Dune Beetle is nonblack when it blocks, so the trigger fires and Dune Beetle is destroyed at end of combat. Dread Specter survives.",
+          "operation": {
+            "unclassifiable": "the delta is an activated ability used before blocks (Distorting Lens tapped, a colour chosen), and its result overwrites the blocker's colour, removing black and adding green: a different decision and more than one fact"
+          }
         },
         {
           "label": "recolored_after_block",
           "polarity": "does_not_fire",
           "delta": "After blockers are declared A activates Distorting Lens targeting Dune Beetle and chooses green.",
-          "expected": "Dune Beetle was black when it blocked, so the trigger does not fire even though it is now green. Dune Beetle survives combat."
+          "expected": "Dune Beetle was black when it blocked, so the trigger does not fire even though it is now green. Dune Beetle survives combat.",
+          "operation": {
+            "unclassifiable": "the change happens after blockers are declared, a change of timing no fork at the declaration can make"
+          }
         }
       ],
       "cards": [
@@ -1086,7 +1255,17 @@
         "Distorting Lens",
         "Dune Beetle"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger conditioned on the blocking creature's characteristic fires when the creature has it at the point it blocks.",
+        "near_miss": "A 'blocks or becomes blocked by a creature' trigger is evaluated against a blocker-attacker pair and does not fire, because a characteristic it asks of the blocker or the attacker (a colour, a type) is not there at the declaration.",
+        "params": {
+          "mode": "AttackerBlockedByCreature"
+        },
+        "needs": []
+      }
     },
     {
       "id": "509.3g-1",
@@ -1141,7 +1320,10 @@
           "label": "blocked_then_removed",
           "polarity": "does_not_fire",
           "delta": "B declares Grizzly Bears as a blocker of Crypt Cobra.",
-          "expected": "The trigger does not fire; B has no poison counters. Grizzly Bears returns to B's hand, Crypt Cobra stays blocked, deals no damage and B's life stays 20."
+          "expected": "The trigger does not fire; B has no poison counters. Grizzly Bears returns to B's hand, Crypt Cobra stays blocked, deals no damage and B's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         }
       ],
       "cards": [
@@ -1150,7 +1332,17 @@
         "Island",
         "Unsummon"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An 'attacks and isn't blocked' trigger fires when no creature is declared as a blocker for the attacker.",
+        "near_miss": "An 'attacks and isn't blocked' trigger is evaluated against an unblocked attacker and does not fire, because that attacker is not the creature it watches or a condition of it is unmet.",
+        "params": {
+          "mode": "AttackerUnblocked"
+        },
+        "needs": []
+      }
     },
     {
       "id": "509.4-1",
@@ -1204,13 +1396,19 @@
           "label": "brimaz_and_bears_block",
           "polarity": "fires",
           "delta": "B declares Brimaz and Grizzly Bears as blockers of Phyrexian Walker.",
-          "expected": "Carnage Gladiator triggers for each declared blocker; B loses 2 life (18). The token that enters blocking does not add a trigger."
+          "expected": "Carnage Gladiator triggers for each declared blocker; B loses 2 life (18). The token that enters blocking does not add a trigger.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         },
         {
           "label": "no_block",
           "polarity": "other",
           "delta": "B declares no blockers.",
-          "expected": "No block triggers fire; B's life stays 20 and no token is created."
+          "expected": "No block triggers fire; B's life stays 20 and no token is created.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         }
       ],
       "cards": [
@@ -1274,7 +1472,10 @@
           "label": "attacker_removed",
           "polarity": "fires",
           "delta": "In response to Brimaz's trigger A casts Unsummon targeting Grizzly Bears, tapping Island.",
-          "expected": "Grizzly Bears returns to A's hand. The Cat Soldier token enters the battlefield but is not blocking any creature."
+          "expected": "Grizzly Bears returns to A's hand. The Cat Soldier token enters the battlefield but is not blocking any creature.",
+          "operation": {
+            "unclassifiable": "a different spell cast or timing of a cast, not a fact on the board"
+          }
         }
       ],
       "cards": [
@@ -1333,7 +1534,10 @@
           "label": "lions_blocks",
           "polarity": "does_not_fire",
           "delta": "B declares Savannah Lions (power 2) as the blocker instead of Brimaz.",
-          "expected": "The declaration is illegal: a declared blocker with power 2 or less disobeys the restriction. Arlinn's Wolf is not blocked."
+          "expected": "The declaration is illegal: a declared blocker with power 2 or less disobeys the restriction. Arlinn's Wolf is not blocked.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+          }
         }
       ],
       "cards": [

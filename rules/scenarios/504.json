@@ -53,13 +53,19 @@
           "label": "b_active",
           "polarity": "other",
           "delta": "The active player is B, so the draw step is B's.",
-          "expected": "B draws Forest (hand 1 card, library 1 card). A draws nothing (hand 0, library 2 cards)."
+          "expected": "B draws Forest (hand 1 card, library 1 card). A draws nothing (hand 0, library 2 cards).",
+          "operation": {
+            "unclassifiable": "Changes whose turn it is."
+          }
         },
         {
           "label": "draw_step_skipped",
           "polarity": "does_not_fire",
           "delta": "A controls Necropotence.",
-          "expected": "A's draw step is skipped, so A draws nothing (hand 0, library 2 cards, Island still on top); B draws nothing either."
+          "expected": "A's draw step is skipped, so A draws nothing (hand 0, library 2 cards, Island still on top); B draws nothing either.",
+          "operation": {
+            "unclassifiable": "Adds a permanent to the battlefield."
+          }
         }
       ],
       "cards": [

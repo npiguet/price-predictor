@@ -70,7 +70,10 @@
           "label": "blocked",
           "polarity": "does_not_fire",
           "delta": "B declares their Grizzly Bears as a blocker of A's Grizzly Bears.",
-          "expected": "Ninjutsu cannot be activated because the attacking Grizzly Bears is blocked. Ninja of the Deep Hours stays in A's hand and the two Grizzly Bears deal 2 damage to each other and both move to their owners' graveyards."
+          "expected": "Ninjutsu cannot be activated because the attacking Grizzly Bears is blocked. Ninja of the Deep Hours stays in A's hand and the two Grizzly Bears deal 2 damage to each other and both move to their owners' graveyards.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -146,7 +149,10 @@
           "label": "attacking_player",
           "polarity": "other",
           "delta": "A declares Grizzly Bears as an attacker against B instead of Jace Beleren.",
-          "expected": "Ninja of the Deep Hours enters tapped and attacking B and deals 2 combat damage to B, whose life total is 18. Jace Beleren keeps 3 loyalty counters and A draws Forest."
+          "expected": "Ninja of the Deep Hours enters tapped and attacking B and deals 2 combat damage to B, whose life total is 18. Jace Beleren keeps 3 loyalty counters and A draws Forest.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         }
       ],
       "cards": [

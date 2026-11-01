@@ -58,7 +58,10 @@
           "label": "target_returned",
           "polarity": "does_not_fire",
           "delta": "With Swords to Plowshares on the stack, B casts Unsummon targeting Hill Giant, tapping Island, and Unsummon resolves first.",
-          "expected": "Hill Giant returns to B's hand. Swords to Plowshares fizzles: nothing is exiled and B's life stays 20."
+          "expected": "Hill Giant returns to B's hand. Swords to Plowshares fizzles: nothing is exiled and B's life stays 20.",
+          "operation": {
+            "unclassifiable": "An extra spell is cast in response; no fork operation casts a spell."
+          }
         }
       ],
       "cards": [
@@ -68,7 +71,20 @@
         "Swords to Plowshares",
         "Unsummon"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent moves from the battlefield to exile.",
+        "near_miss": "A change-zone resolution that moves nothing from the battlefield to exile.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "exile",
+          "api": "ChangeZone"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.13a-2",
@@ -132,7 +148,10 @@
           "label": "name_absent",
           "polarity": "does_not_fire",
           "delta": "A names Typhoid Rats instead of Grizzly Bears.",
-          "expected": "No card with that name is in B's hand, graveyard or library, so nothing is exiled. All of B's Grizzly Bears stay where they are."
+          "expected": "No card with that name is in B's hand, graveyard or library, so nothing is exiled. All of B's Grizzly Bears stay where they are.",
+          "operation": {
+            "unclassifiable": "A different card name is chosen; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -142,7 +161,18 @@
         "Swamp",
         "Typhoid Rats"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution moves cards to exile from whatever zone they are in.",
+        "near_miss": "Not counted: without a script API type to restrict to, every other resolution would be a near miss.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "exile"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.13a-3",
@@ -198,7 +228,10 @@
           "label": "cancel",
           "polarity": "does_not_fire",
           "delta": "B casts Cancel instead of Dissipate.",
-          "expected": "Lightning Bolt is countered and moves from the stack to A's graveyard, not to exile. B's life stays 20."
+          "expected": "Lightning Bolt is countered and moves from the stack to A's graveyard, not to exile. B's life stays 20.",
+          "operation": {
+            "unclassifiable": "A different spell is cast; no fork operation changes which spell a player casts."
+          }
         }
       ],
       "cards": [
@@ -208,7 +241,20 @@
         "Lightning Bolt",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A countered spell moves from the stack to exile.",
+        "near_miss": "A counter resolution that does not move the spell to exile.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "exile",
+          "api": "Counter"
+        },
+        "needs": []
+      }
     }
   ]
 }

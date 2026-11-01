@@ -102,7 +102,10 @@
           "label": "one_attacker",
           "polarity": "does_not_fire",
           "delta": "A declares Grizzly Bears as an attacker against B.",
-          "expected": "The declare blockers step takes place and B receives priority in it: casting Fog Patch (tapping both Forests) is legal there. B casts nothing, declares no blockers, and takes 2 combat damage in the combat damage step: B's life is 18."
+          "expected": "The declare blockers step takes place and B receives priority in it: casting Fog Patch (tapping both Forests) is legal there. B casts nothing, declares no blockers, and takes 2 combat damage in the combat damage step: B's life is 18.",
+          "operation": {
+            "unclassifiable": "A declares Grizzly Bears as an attacker instead of declaring none: a player's attack declaration, not a change to the board."
+          }
         }
       ],
       "cards": [
@@ -110,7 +113,10 @@
         "Forest",
         "Fog Patch"
       ],
-      "forge_notes": "If Forge does not stop at the declare attackers step at all when nobody attacks, the playability verdict at that step is simply absent rather than false."
+      "forge_notes": "If Forge does not stop at the declare attackers step at all when nobody attacks, the playability verdict at that step is simply absent rather than false.",
+      "detector": {
+        "none": "Rule 508.8's skipped steps leave only absences: no combat record is written for a damage step that does not happen, and no playability record is written in a declare blockers step that does not happen. phase_skipped (EVENT_PARAMS) is written only by a skip effect's resolution, never for an empty combat, and the snapshot's phase and combat_substep show only the step a record was taken in."
+      }
     },
     {
       "id": "506.1-2",
@@ -163,7 +169,10 @@
           "label": "plain_attacker",
           "polarity": "does_not_fire",
           "delta": "A attacks with Elite Vanguard (no first strike) instead of Youthful Knight, and B blocks it with Grizzly Bears.",
-          "expected": "Only one combat damage step takes place. Elite Vanguard and Grizzly Bears deal 2 damage to each other at the same time; both are destroyed and go to their owners' graveyards."
+          "expected": "Only one combat damage step takes place. Elite Vanguard and Grizzly Bears deal 2 damage to each other at the same time; both are destroyed and go to their owners' graveyards.",
+          "operation": {
+            "unclassifiable": "A attacks with a different creature (Elite Vanguard instead of Youthful Knight), which B blocks: a different attack declaration plus a block, more than one fact."
+          }
         }
       ],
       "cards": [
@@ -171,7 +180,17 @@
         "Elite Vanguard",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "keyword_combat",
+        "record_kind": "combat",
+        "outcome": "A combat with a first-strike attacker or blocker has a separate, earlier combat damage step in which that creature deals its damage.",
+        "near_miss": "A damage-step probe fork re-runs that combat with first strike stripped from its carrier, so its damage is dealt in the regular step.",
+        "params": {
+          "keyword": "first_strike"
+        },
+        "needs": []
+      }
     },
     {
       "id": "506.3-1",
@@ -222,7 +241,10 @@
           "label": "land_animated",
           "polarity": "does_not_fire",
           "delta": "In main1 A activates Treetop Village ({1}{G}, tapping both Forests); the ability resolves and Treetop Village is a 3/3 green Ape creature with trample until end of turn.",
-          "expected": "Legal attackers for A: Grizzly Bears and Treetop Village."
+          "expected": "Legal attackers for A: Grizzly Bears and Treetop Village.",
+          "operation": {
+            "unclassifiable": "A activates Treetop Village's animation ability, tapping two Forests: a player's activated ability, more than one fact."
+          }
         }
       ],
       "cards": [
@@ -288,7 +310,10 @@
           "label": "land_animated",
           "polarity": "does_not_fire",
           "delta": "In the declare attackers step B activates Treetop Village ({1}{G}, tapping both Forests); it resolves and Treetop Village is a 3/3 creature until end of turn.",
-          "expected": "Legal blockers for B: Grizzly Bears and Treetop Village. Mountain is still not offered."
+          "expected": "Legal blockers for B: Grizzly Bears and Treetop Village. Mountain is still not offered.",
+          "operation": {
+            "unclassifiable": "B activates Treetop Village's animation ability, tapping two Forests: a player's activated ability, more than one fact."
+          }
         }
       ],
       "cards": [
@@ -359,13 +384,19 @@
           "label": "jace_candidate",
           "polarity": "does_not_fire",
           "delta": "The attack target queried is Jace Beleren instead of Grizzly Bears.",
-          "expected": "Attacking Jace Beleren is legal: a planeswalker can be attacked."
+          "expected": "Attacking Jace Beleren is legal: a planeswalker can be attacked.",
+          "operation": {
+            "unclassifiable": "Only the attack target queried differs (a planeswalker instead of a creature); the board is the same, so no fork operation applies."
+          }
         },
         {
           "label": "jace_killed",
           "polarity": "other",
           "delta": "In main1 A casts Lightning Bolt targeting Jace Beleren, tapping Mountain; it resolves and Jace Beleren (loyalty 3) goes to B's graveyard.",
-          "expected": "Legal attack targets for Hill Giant: player B only. Grizzly Bears is still not an attack target."
+          "expected": "Legal attack targets for Hill Giant: player B only. Grizzly Bears is still not an attack target.",
+          "operation": {
+            "unclassifiable": "A casts Lightning Bolt at Jace Beleren, tapping Mountain: a spell cast that removes a permanent."
+          }
         }
       ],
       "cards": [
@@ -429,7 +460,10 @@
           "label": "copies_creature",
           "polarity": "does_not_fire",
           "delta": "Echoing Assault's trigger targets Grizzly Bears instead of Mutavault.",
-          "expected": "The token copy of Grizzly Bears is a 1/1 creature that enters tapped and attacking B. Mutavault deals 2, Grizzly Bears 2 and the token 1: B's life is 15. The token is sacrificed at the next end step."
+          "expected": "The token copy of Grizzly Bears is a 1/1 creature that enters tapped and attacking B. Mutavault deals 2, Grizzly Bears 2 and the token 1: B's life is 15. The token is sacrificed at the next end step.",
+          "operation": {
+            "unclassifiable": "Echoing Assault's trigger takes a different target (Grizzly Bears instead of Mutavault): a player's target choice."
+          }
         }
       ],
       "cards": [
@@ -438,7 +472,10 @@
         "Grizzly Bears",
         "Mountain"
       ],
-      "forge_notes": "Echoing Assault copies via CopyPermanent with TokenAttacking$ TriggeredAttackedTarget; whether Forge leaves a non-creature token in the attackers list is the thing to check."
+      "forge_notes": "Echoing Assault copies via CopyPermanent with TokenAttacking$ TriggeredAttackedTarget; whether Forge leaves a non-creature token in the attackers list is the thing to check.",
+      "detector": {
+        "none": "The outcome is that a permanent put onto the battlefield attacking is never an attacking creature. The entering resolution's token_created and zone_change events carry no attacking flag, and the later damage-step combat record shows only an absence from its attackers list. Seeing it needs the entering resolution and a later combat record joined; no single record field shows it."
+      }
     },
     {
       "id": "506.3c-1",
@@ -510,7 +547,10 @@
           "label": "planeswalker_stays",
           "polarity": "does_not_fire",
           "delta": "B does not cast Lightning Bolt.",
-          "expected": "Ninja of the Deep Hours enters tapped and attacking Jace Beleren, unblocked, and deals 2 combat damage to it: Jace Beleren's loyalty is 1. Its draw trigger does not fire (no damage to a player). B's life is 20."
+          "expected": "Ninja of the Deep Hours enters tapped and attacking Jace Beleren, unblocked, and deals 2 combat damage to it: Jace Beleren's loyalty is 1. Its draw trigger does not fire (no damage to a player). B's life is 20.",
+          "operation": {
+            "unclassifiable": "B does not cast Lightning Bolt: a player's decision not to cast a spell."
+          }
         }
       ],
       "cards": [
@@ -521,7 +561,10 @@
         "Ninja of the Deep Hours",
         "Lightning Bolt"
       ],
-      "forge_notes": "Whether Forge's ninjutsu resolution checks the stored defender and leaves the Ninja out of combat when that planeswalker is gone is the thing to check."
+      "forge_notes": "Whether Forge's ninjutsu resolution checks the stored defender and leaves the Ninja out of combat when that planeswalker is gone is the thing to check.",
+      "detector": {
+        "none": "The outcome is that a permanent put onto the battlefield attacking is never an attacking creature. The entering resolution's token_created and zone_change events carry no attacking flag, and the later damage-step combat record shows only an absence from its attackers list. Seeing it needs the entering resolution and a later combat record joined; no single record field shows it."
+      }
     },
     {
       "id": "506.3d-1",
@@ -586,7 +629,10 @@
           "label": "token_blocked",
           "polarity": "does_not_fire",
           "delta": "B declares Grizzly Bears as a blocker of the Goblin token.",
-          "expected": "The block is legal: the Goblin token entered attacking during the declare attackers step, before blockers were declared, so it is blocked. Grizzly Bears deals 2 damage to the token, which is destroyed; the token deals 1 damage to Grizzly Bears. Ninja of the Deep Hours still enters unblocked and deals 2 combat damage to B: B's life is 18."
+          "expected": "The block is legal: the Goblin token entered attacking during the declare attackers step, before blockers were declared, so it is blocked. Grizzly Bears deals 2 damage to the token, which is destroyed; the token deals 1 damage to Grizzly Bears. Ninja of the Deep Hours still enters unblocked and deals 2 combat damage to B: B's life is 18.",
+          "operation": {
+            "unclassifiable": "B declares Grizzly Bears as a blocker of the token: a player's block declaration."
+          }
         }
       ],
       "cards": [
@@ -595,7 +641,10 @@
         "Island",
         "Ninja of the Deep Hours"
       ],
-      "forge_notes": "No Forge card puts a creature onto the battlefield attacking at a step of the controller's choosing, so the contrast uses two effects of the same combat: a token put attacking in the declare attackers step (blockable) next to a ninjutsu creature put attacking in the declare blockers step (unblocked)."
+      "forge_notes": "No Forge card puts a creature onto the battlefield attacking at a step of the controller's choosing, so the contrast uses two effects of the same combat: a token put attacking in the declare attackers step (blockable) next to a ninjutsu creature put attacking in the declare blockers step (unblocked).",
+      "detector": {
+        "none": "The outcome is that a creature put onto the battlefield attacking after blockers are declared is unblocked. The entering resolution's zone_change or token_created event carries no attacking or blocked flag, and in the later damage-step combat record it is an attacker with no blockers, like any unblocked attacker. Seeing it needs the entering resolution's step and a later combat record joined."
+      }
     },
     {
       "id": "506.4-1",
@@ -657,7 +706,10 @@
           "label": "attacker_survives",
           "polarity": "does_not_fire",
           "delta": "A attacks with Earth Elemental instead of Grizzly Bears (B blocks it and Shocks it the same way).",
-          "expected": "Earth Elemental takes 2 damage from Shock and stays on the battlefield and in combat. It deals 4 combat damage to B's Grizzly Bears, which is destroyed, and takes 2 combat damage from it: Earth Elemental has 4 damage marked and survives."
+          "expected": "Earth Elemental takes 2 damage from Shock and stays on the battlefield and in combat. It deals 4 combat damage to B's Grizzly Bears, which is destroyed, and takes 2 combat damage from it: Earth Elemental has 4 damage marked and survives.",
+          "operation": {
+            "unclassifiable": "A attacks with Earth Elemental instead of Grizzly Bears: a different attack declaration. Replacing Grizzly Bears with Earth Elemental would leave two Earth Elementals, not this board."
+          }
         }
       ],
       "cards": [
@@ -733,7 +785,10 @@
           "label": "target_illegal",
           "polarity": "does_not_fire",
           "delta": "In response to Act of Aggression A casts Gods Willing targeting Hill Giant, tapping Plains, choosing protection from red and scrying 1 with an empty library; it resolves first.",
-          "expected": "Act of Aggression's only target is illegal when it tries to resolve, so it fizzles and A keeps control. Hill Giant stays in combat, blocked: it deals 3 damage to Grizzly Bears, which is destroyed, and takes 2 damage. Both players are at 20."
+          "expected": "Act of Aggression's only target is illegal when it tries to resolve, so it fizzles and A keeps control. Hill Giant stays in combat, blocked: it deals 3 damage to Grizzly Bears, which is destroyed, and takes 2 damage. Both players are at 20.",
+          "operation": {
+            "unclassifiable": "A casts Gods Willing in response, choosing a colour and scrying: a spell cast with a target and choices."
+          }
         }
       ],
       "cards": [
@@ -799,7 +854,10 @@
           "label": "no_shield",
           "polarity": "does_not_fire",
           "delta": "B does not activate the regeneration ability.",
-          "expected": "In the first-strike step Battle Hurda deals 3 damage to Gorilla Chieftain, which is destroyed and goes to B's graveyard before it deals any damage. Battle Hurda has no damage marked."
+          "expected": "In the first-strike step Battle Hurda deals 3 damage to Gorilla Chieftain, which is destroyed and goes to B's graveyard before it deals any damage. Battle Hurda has no damage marked.",
+          "operation": {
+            "unclassifiable": "B does not activate the regeneration ability: a player's decision."
+          }
         }
       ],
       "cards": [
@@ -869,7 +927,10 @@
           "label": "bystander_phases_out",
           "polarity": "does_not_fire",
           "delta": "Galadriel's Dismissal targets Elite Vanguard, which is not in combat, instead of Hill Giant.",
-          "expected": "Elite Vanguard phases out. Hill Giant stays in combat, blocked: it deals 3 damage to Grizzly Bears, which is destroyed, and takes 2 damage. Both players are at 20."
+          "expected": "Elite Vanguard phases out. Hill Giant stays in combat, blocked: it deals 3 damage to Grizzly Bears, which is destroyed, and takes 2 damage. Both players are at 20.",
+          "operation": {
+            "unclassifiable": "Galadriel's Dismissal targets Elite Vanguard instead of Hill Giant: a player's target choice."
+          }
         }
       ],
       "cards": [
@@ -939,7 +1000,10 @@
           "label": "still_creature",
           "polarity": "does_not_fire",
           "delta": "B does not cast Disenchant.",
-          "expected": "Sylvan Library (2/2) and Grizzly Bears (2/2) deal 2 damage to each other; both are destroyed and go to their owners' graveyards."
+          "expected": "Sylvan Library (2/2) and Grizzly Bears (2/2) deal 2 damage to each other; both are destroyed and go to their owners' graveyards.",
+          "operation": {
+            "unclassifiable": "B does not cast Disenchant: a player's decision not to cast a spell."
+          }
         }
       ],
       "cards": [
@@ -1002,7 +1066,10 @@
           "label": "cast_before_declaration",
           "polarity": "does_not_fire",
           "delta": "B casts Off Balance in the beginning of combat step, before attackers are declared, so A cannot declare Hill Giant as an attacker.",
-          "expected": "Hill Giant can't attack this turn and is not declared as an attacker. No combat damage is dealt: B's life is 20."
+          "expected": "Hill Giant can't attack this turn and is not declared as an attacker. No combat damage is dealt: B's life is 20.",
+          "operation": {
+            "unclassifiable": "B casts Off Balance earlier, in the beginning of combat step: a decision's timing, which also changes A's attack declaration."
+          }
         }
       ],
       "cards": [
@@ -1010,7 +1077,10 @@
         "Plains",
         "Off Balance"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The outcome is an absence: a declared creature that gains a can't-attack or can't-block restriction stays in combat. The restriction_change event is in the resolution record, while the later damage-step combat record, whose snapshot entities carry no restriction field, shows only that the creature is still in attackers or blocks. No single record shows both, and removed_from_combat is written only by RemoveFromCombat and ChangeCombatants resolutions, so its absence says nothing here."
+      }
     },
     {
       "id": "506.4a-2",
@@ -1068,7 +1138,10 @@
           "label": "cast_before_block",
           "polarity": "does_not_fire",
           "delta": "A casts Off Balance in the declare attackers step, before blockers are declared, so B cannot declare Grizzly Bears as a blocker.",
-          "expected": "Grizzly Bears can't block this turn, so B declares no blockers. Hill Giant is unblocked and deals 3 combat damage to B: B's life is 17."
+          "expected": "Grizzly Bears can't block this turn, so B declares no blockers. Hill Giant is unblocked and deals 3 combat damage to B: B's life is 17.",
+          "operation": {
+            "unclassifiable": "A casts Off Balance earlier, in the declare attackers step: a decision's timing, which also changes B's block declaration."
+          }
         }
       ],
       "cards": [
@@ -1077,7 +1150,10 @@
         "Grizzly Bears",
         "Off Balance"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The outcome is an absence: a declared creature that gains a can't-attack or can't-block restriction stays in combat. The restriction_change event is in the resolution record, while the later damage-step combat record, whose snapshot entities carry no restriction field, shows only that the creature is still in attackers or blocks. No single record shows both, and removed_from_combat is written only by RemoveFromCombat and ChangeCombatants resolutions, so its absence says nothing here."
+      }
     },
     {
       "id": "506.4b-1",
@@ -1136,7 +1212,10 @@
           "label": "tapped_before_block",
           "polarity": "does_not_fire",
           "delta": "B casts Icy Blast in the declare attackers step, before blockers are declared, so tapped Grizzly Bears cannot be declared as a blocker.",
-          "expected": "Grizzly Bears is tapped and can't be declared as a blocker. Hill Giant is unblocked and deals 3 combat damage to B: B's life is 17."
+          "expected": "Grizzly Bears is tapped and can't be declared as a blocker. Hill Giant is unblocked and deals 3 combat damage to B: B's life is 17.",
+          "operation": {
+            "unclassifiable": "B casts Icy Blast before blockers are declared instead of after: a decision's timing, which also changes B's block declaration."
+          }
         }
       ],
       "cards": [
@@ -1199,7 +1278,10 @@
           "label": "tapped_before_declaration",
           "polarity": "does_not_fire",
           "delta": "B casts Icy Blast in the beginning of combat step, before attackers are declared, so tapped Serra Angel cannot be declared as an attacker.",
-          "expected": "Serra Angel is tapped and can't be declared as an attacker. No combat damage is dealt: B's life is 20."
+          "expected": "Serra Angel is tapped and can't be declared as an attacker. No combat damage is dealt: B's life is 20.",
+          "operation": {
+            "unclassifiable": "B casts Icy Blast before attackers are declared instead of after: a decision's timing, which also changes A's attack declaration."
+          }
         }
       ],
       "cards": [
@@ -1270,13 +1352,19 @@
           "label": "planeswalker_stays",
           "polarity": "does_not_fire",
           "delta": "B does not cast Lightning Bolt.",
-          "expected": "Hill Giant is unblocked and deals 3 combat damage to Jace Beleren: loyalty 0, so it goes to B's graveyard. B's life is 20."
+          "expected": "Hill Giant is unblocked and deals 3 combat damage to Jace Beleren: loyalty 0, so it goes to B's graveyard. B's life is 20.",
+          "operation": {
+            "unclassifiable": "B does not cast Lightning Bolt: a player's decision not to cast a spell."
+          }
         },
         {
           "label": "blocked",
           "polarity": "fires",
           "delta": "B blocks Hill Giant with Grizzly Bears.",
-          "expected": "Jace Beleren is destroyed. Hill Giant remains an attacking creature and is blocked: it deals 3 damage to Grizzly Bears, which is destroyed, and takes 2 damage. B's life is 20."
+          "expected": "Jace Beleren is destroyed. Hill Giant remains an attacking creature and is blocked: it deals 3 damage to Grizzly Bears, which is destroyed, and takes 2 damage. B's life is 20.",
+          "operation": {
+            "unclassifiable": "B declares Grizzly Bears as a blocker: a player's block declaration."
+          }
         }
       ],
       "cards": [
@@ -1286,7 +1374,10 @@
         "Mountain",
         "Lightning Bolt"
       ],
-      "forge_notes": "Forge may drop the attacker from the attackers list when its defender leaves; the rule says it stays an attacking creature."
+      "forge_notes": "Forge may drop the attacker from the attackers list when its defender leaves; the rule says it stays an attacking creature.",
+      "detector": {
+        "none": "The outcome is an attacker that keeps attacking but attacks nothing after the planeswalker or battle it attacked leaves combat, and deals no combat damage if unblocked. The combat payload lists attackers without the entity each attacks, and no event marks an attacker as attacking nothing; the outcome is an absence of damage events."
+      }
     },
     {
       "id": "506.8a-1",
@@ -1340,13 +1431,19 @@
           "label": "before_declaration",
           "polarity": "does_not_fire",
           "delta": "The query is made in the beginning of combat step, before the declare attackers step begins.",
-          "expected": "Casting Master Warcraft is legal (can_play true)."
+          "expected": "Casting Master Warcraft is legal (can_play true).",
+          "operation": {
+            "unclassifiable": "The query is made in an earlier step (beginning of combat): a change of step."
+          }
         },
         {
           "label": "no_attackers_declared",
           "polarity": "fires",
           "delta": "A declares no attackers (the query is still made in the declare attackers step).",
-          "expected": "Casting Master Warcraft is illegal (can_play false) even though no attacker was declared: the declare attackers step has begun."
+          "expected": "Casting Master Warcraft is illegal (can_play false) even though no attacker was declared: the declare attackers step has begun.",
+          "operation": {
+            "unclassifiable": "A declares no attackers: a player's attack declaration."
+          }
         }
       ],
       "cards": [
@@ -1354,7 +1451,20 @@
         "Mountain",
         "Master Warcraft"
       ],
-      "forge_notes": "In the no_attackers_declared variant Forge may skip the declare attackers step's priority entirely, leaving no verdict to record."
+      "forge_notes": "In the no_attackers_declared variant Forge may skip the declare attackers step's priority entirely, leaving no verdict to record.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell or ability restricted to before attackers are declared fails its phase check once the declare attackers step has begun, whether or not attackers were declared.",
+        "near_miss": "The same kind of candidate passes its phase check in a step before the declare attackers step.",
+        "params": {
+          "bit": "failed_check",
+          "check": "phase"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "506.8b-1",
@@ -1410,7 +1520,10 @@
           "label": "before_blockers_step",
           "polarity": "does_not_fire",
           "delta": "The query is made in the declare attackers step, after Grizzly Bears is declared as an attacker.",
-          "expected": "Casting Gorilla War Cry is legal (can_play true)."
+          "expected": "Casting Gorilla War Cry is legal (can_play true).",
+          "operation": {
+            "unclassifiable": "The query is made in an earlier step (declare attackers): a change of step."
+          }
         }
       ],
       "cards": [
@@ -1418,7 +1531,20 @@
         "Mountain",
         "Gorilla War Cry"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell or ability restricted to before blockers are declared fails its phase check once the declare blockers step has begun, whether or not blockers were declared.",
+        "near_miss": "The same kind of candidate passes its phase check in a combat step before the declare blockers step.",
+        "params": {
+          "bit": "failed_check",
+          "check": "phase"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "506.8b-2",
@@ -1475,7 +1601,10 @@
           "label": "after_blockers_none_declared",
           "polarity": "does_not_fire",
           "delta": "B declares no blockers and the query is made in the declare blockers step.",
-          "expected": "Casting Chaotic Strike is legal (can_play true), although no blocker was declared."
+          "expected": "Casting Chaotic Strike is legal (can_play true), although no blocker was declared.",
+          "operation": {
+            "unclassifiable": "B declares no blockers and the query is made in the declare blockers step: a declaration plus a change of step."
+          }
         }
       ],
       "cards": [
@@ -1483,7 +1612,20 @@
         "Mountain",
         "Chaotic Strike"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell or ability restricted to after blockers are declared fails its phase check in a step before the declare blockers step.",
+        "near_miss": "The same kind of candidate passes its phase check once the declare blockers step has begun, whether or not blockers were declared.",
+        "params": {
+          "bit": "failed_check",
+          "check": "phase"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "506.8c-1",
@@ -1554,7 +1696,10 @@
           "label": "additional_main_phase",
           "polarity": "does_not_fire",
           "delta": "The query is made in the additional main phase between the two combat phases instead of the second combat phase's beginning of combat step.",
-          "expected": "Casting Mandate of Peace is illegal (can_play false): it is not combat."
+          "expected": "Casting Mandate of Peace is illegal (can_play false): it is not combat.",
+          "operation": {
+            "unclassifiable": "The query is made in the additional main phase instead of a combat step: a change of phase."
+          }
         }
       ],
       "cards": [
@@ -1564,7 +1709,21 @@
         "Mandate of Peace",
         "Relentless Assault"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell or ability restricted to during combat passes its phase check in a combat step of any combat phase of the turn, an additional one included.",
+        "near_miss": "The same kind of candidate fails its phase check outside the combat phase.",
+        "params": {
+          "bit": "failed_check",
+          "check": "phase",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "506.8d-1",
@@ -1637,7 +1796,10 @@
           "label": "first_combat_phase",
           "polarity": "does_not_fire",
           "delta": "The query is made in the beginning of combat step of the additional, first combat phase.",
-          "expected": "Casting Master Warcraft is legal (can_play true)."
+          "expected": "Casting Master Warcraft is legal (can_play true).",
+          "operation": {
+            "unclassifiable": "The query is made in the first combat phase instead of the second: a change of phase."
+          }
         }
       ],
       "cards": [
@@ -1646,7 +1808,20 @@
         "Master Warcraft",
         "Relentless Assault"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell or ability restricted to before a point in combat, without a 'during combat' clause, fails its first-combat check in a later combat phase of the turn.",
+        "near_miss": "The same kind of candidate passes that check in the turn's first combat phase.",
+        "params": {
+          "bit": "failed_check",
+          "check": "combat"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "506.8e-1",
@@ -1698,7 +1873,10 @@
           "label": "declare_attackers_step",
           "polarity": "does_not_fire",
           "delta": "The query is made in the declare attackers step, after A declared no attackers, instead of the end of combat step.",
-          "expected": "Casting Gorilla War Cry is legal (can_play true)."
+          "expected": "Casting Gorilla War Cry is legal (can_play true).",
+          "operation": {
+            "unclassifiable": "The query is made in the declare attackers step instead of the end of combat step: a change of step."
+          }
         }
       ],
       "cards": [
@@ -1706,7 +1884,20 @@
         "Mountain",
         "Gorilla War Cry"
       ],
-      "forge_notes": "Only the first sentence of 506.8e is illustrated. The second sentence (a skipped combat phase leaves casting possible only before the precombat main phase ends) gives the same verdicts as the ordinary 'before attackers are declared' case in every position, so no separate variant tells it apart. If Forge skips the declare attackers step's priority when nobody attacks, the declare_attackers_step verdict is absent."
+      "forge_notes": "Only the first sentence of 506.8e is illustrated. The second sentence (a skipped combat phase leaves casting possible only before the precombat main phase ends) gives the same verdicts as the ordinary 'before attackers are declared' case in every position, so no separate variant tells it apart. If Forge skips the declare attackers step's priority when nobody attacks, the declare_attackers_step verdict is absent.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell or ability restricted to before blockers are declared fails its phase check after the declare attackers step has ended in a combat whose declare blockers step was skipped.",
+        "near_miss": "The same kind of candidate passes its phase check during the declare attackers step.",
+        "params": {
+          "bit": "failed_check",
+          "check": "phase"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "506.8f-1",
@@ -1757,7 +1948,10 @@
           "label": "blockers_step_happens",
           "polarity": "does_not_fire",
           "delta": "A attacks B with Grizzly Bears instead of declaring no attackers, so the declare blockers step happens (B declares no blockers); the query is made in that step.",
-          "expected": "Casting Chaotic Strike is legal (can_play true)."
+          "expected": "Casting Chaotic Strike is legal (can_play true).",
+          "operation": {
+            "unclassifiable": "A attacks with Grizzly Bears instead of declaring none and the query moves to the declare blockers step: a declaration plus a change of step."
+          }
         }
       ],
       "cards": [
@@ -1765,7 +1959,20 @@
         "Mountain",
         "Chaotic Strike"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell or ability restricted to during combat after blockers are declared fails its after-blockers check in a combat phase whose declare blockers step was skipped.",
+        "near_miss": "The same kind of candidate passes that check in a combat phase whose declare blockers step took place.",
+        "params": {
+          "bit": "failed_check",
+          "check": "combat"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "506.8g-1",
@@ -1814,14 +2021,30 @@
           "label": "before_combat",
           "polarity": "does_not_fire",
           "delta": "The query is made in main1, before combat.",
-          "expected": "Activating Apprentice Sorcerer is legal (can_play true)."
+          "expected": "Activating Apprentice Sorcerer is legal (can_play true).",
+          "operation": {
+            "unclassifiable": "The query is made in main1 instead of the declare attackers step: a change of phase."
+          }
         }
       ],
       "cards": [
         "Apprentice Sorcerer",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An activated ability restricted to before a point in combat fails its phase check once that point has passed.",
+        "near_miss": "The same kind of ability passes its phase check before that point.",
+        "params": {
+          "bit": "failed_check",
+          "check": "phase"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "506.8g-2",
@@ -1865,14 +2088,30 @@
           "label": "beginning_of_combat",
           "polarity": "does_not_fire",
           "delta": "The query is made in the beginning of combat step.",
-          "expected": "Activating Jade Statue is legal (can_play true)."
+          "expected": "Activating Jade Statue is legal (can_play true).",
+          "operation": {
+            "unclassifiable": "The query is made in the beginning of combat step instead of main1: a change of phase."
+          }
         }
       ],
       "cards": [
         "Jade Statue",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An activated ability restricted to during combat fails its phase check outside the combat phase.",
+        "near_miss": "The same kind of ability passes its phase check in a combat step.",
+        "params": {
+          "bit": "failed_check",
+          "check": "phase"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     }
   ]
 }

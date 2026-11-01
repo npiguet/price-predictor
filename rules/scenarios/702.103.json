@@ -57,7 +57,10 @@
           "label": "cast-normally",
           "polarity": "does_not_fire",
           "delta": "A casts Hopeful Eidolon for its mana cost {W} instead of bestowing it, tapping one Plains.",
-          "expected": "Hopeful Eidolon enters the battlefield as a 1/1 lifelink Enchantment Creature, attached to nothing. Grizzly Bears is 2/2 without lifelink. Three Plains stay untapped."
+          "expected": "Hopeful Eidolon enters the battlefield as a 1/1 lifelink Enchantment Creature, attached to nothing. Grizzly Bears is 2/2 without lifelink. Three Plains stay untapped.",
+          "operation": {
+            "unclassifiable": "A different way of casting the spell, a different decision."
+          }
         }
       ],
       "cards": [
@@ -116,13 +119,19 @@
           "label": "no-creature",
           "polarity": "does_not_fire",
           "delta": "A controls no Grizzly Bears, so there is no creature on the battlefield.",
-          "expected": "Casting Hopeful Eidolon bestowed is not legal because it has no legal target. Casting it as a creature spell for {W} is legal."
+          "expected": "Casting Hopeful Eidolon bestowed is not legal because it has no legal target. Casting it as a creature spell for {W} is legal.",
+          "operation": {
+            "unclassifiable": "Removes a permanent from the battlefield."
+          }
         },
         {
           "label": "opponents-creature",
           "polarity": "fires",
           "delta": "The Grizzly Bears is controlled by B instead of A.",
-          "expected": "Casting Hopeful Eidolon bestowed is legal, targeting B's Grizzly Bears."
+          "expected": "Casting Hopeful Eidolon bestowed is legal, targeting B's Grizzly Bears.",
+          "operation": {
+            "unclassifiable": "Changes the controller of a permanent."
+          }
         }
       ],
       "cards": [
@@ -187,7 +196,10 @@
           "label": "cast-normally",
           "polarity": "does_not_fire",
           "delta": "A casts Triton Wavebreaker for its mana cost {U} instead of bestowing it, tapping one Island, then activates the Engine with four other Islands.",
-          "expected": "The token copy is a 1/1 Enchantment Creature, and so is the original card; neither is an Aura. Grizzly Bears is 2/2."
+          "expected": "The token copy is a 1/1 Enchantment Creature, and so is the original card; neither is an Aura. Grizzly Bears is 2/2.",
+          "operation": {
+            "unclassifiable": "A different way of casting the spell, a different decision."
+          }
         }
       ],
       "cards": [
@@ -249,7 +261,10 @@
           "label": "as-creature",
           "polarity": "does_not_fire",
           "delta": "A considers casting Hopeful Eidolon as a creature spell for {W} instead.",
-          "expected": "Casting Hopeful Eidolon as a creature spell is not legal."
+          "expected": "Casting Hopeful Eidolon as a creature spell is not legal.",
+          "operation": {
+            "unclassifiable": "A different way of casting the spell, a different decision."
+          }
         }
       ],
       "cards": [
@@ -316,7 +331,8 @@
           "label": "target-survives",
           "polarity": "does_not_fire",
           "delta": "B's creature is Centaur Courser (3/3) instead of Grizzly Bears.",
-          "expected": "Shock leaves Centaur Courser on the battlefield with 2 damage. Hopeful Eidolon resolves as a bestowed Aura attached to Centaur Courser, which is 4/4 with lifelink and 2 damage."
+          "expected": "Shock leaves Centaur Courser on the battlefield with 2 damage. Hopeful Eidolon resolves as a bestowed Aura attached to Centaur Courser, which is 4/4 with lifelink and 2 damage.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -381,7 +397,8 @@
           "label": "creature-survives",
           "polarity": "does_not_fire",
           "delta": "A's creature is Centaur Courser (3/3, 4/4 with the Aura) instead of Grizzly Bears.",
-          "expected": "Centaur Courser survives with 3 damage. Hopeful Eidolon stays attached to it as a bestowed Aura and is not a creature."
+          "expected": "Centaur Courser survives with 3 damage. Hopeful Eidolon stays attached to it as a bestowed Aura and is not a creature.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -449,7 +466,10 @@
           "label": "other-color",
           "polarity": "does_not_fire",
           "delta": "B chooses red for the protection.",
-          "expected": "Hopeful Eidolon stays attached to Grizzly Bears as a bestowed Aura, which is 3/3 with lifelink and protection from red."
+          "expected": "Hopeful Eidolon stays attached to Grizzly Bears as a bestowed Aura, which is 3/3 with lifelink and protection from red.",
+          "operation": {
+            "unclassifiable": "A different colour choice by B."
+          }
         }
       ],
       "cards": [
@@ -518,7 +538,10 @@
           "label": "creature-stays",
           "polarity": "does_not_fire",
           "delta": "B does not cast Shock, so Grizzly Bears stays on the battlefield.",
-          "expected": "At A's untap step Hopeful Eidolon phases in attached to Grizzly Bears and is still a bestowed Aura (not a creature); Grizzly Bears is 3/3 with lifelink."
+          "expected": "At A's untap step Hopeful Eidolon phases in attached to Grizzly Bears and is still a bestowed Aura (not a creature); Grizzly Bears is 3/3 with lifelink.",
+          "operation": {
+            "unclassifiable": "B casts nothing, a different decision."
+          }
         }
       ],
       "cards": [

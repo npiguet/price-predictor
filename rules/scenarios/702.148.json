@@ -58,7 +58,10 @@
           "label": "mana_cost",
           "polarity": "does_not_fire",
           "delta": "A casts Path of Peril for its mana cost {1}{B}{B}, tapping three Swamps.",
-          "expected": "The spell destroys only creatures with mana value 2 or less: Savannah Lions and Grizzly Bears are destroyed, Hill Giant (mana value 4) stays on the battlefield."
+          "expected": "The spell destroys only creatures with mana value 2 or less: Savannah Lions and Grizzly Bears are destroyed, Hill Giant (mana value 4) stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "a different cast choice"
+          }
         }
       ],
       "cards": [
@@ -123,7 +126,10 @@
           "label": "mana_cost",
           "polarity": "does_not_fire",
           "delta": "A tries to cast Fierce Retribution for its mana cost {1}{W}.",
-          "expected": "The cast is not legal: the spell needs a target attacking creature and none exists. Grizzly Bears is unaffected and no Plains are tapped."
+          "expected": "The cast is not legal: the spell needs a target attacking creature and none exists. Grizzly Bears is unaffected and no Plains are tapped.",
+          "operation": {
+            "unclassifiable": "a different cast choice"
+          }
         }
       ],
       "cards": [
@@ -131,7 +137,18 @@
         "Plains",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell cast with a cost that removes its targeting restriction has a legal target.",
+        "near_miss": "The same spell cast normally has no legal target.",
+        "params": {
+          "bit": "has_legal_target",
+          "fires_when": true
+        },
+        "needs": []
+      }
     }
   ]
 }

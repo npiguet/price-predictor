@@ -49,19 +49,31 @@
           "label": "tied",
           "polarity": "fires",
           "delta": "B's life total is 15, tied with A's.",
-          "expected": "B is tied for the most life, so dethrone fires: a +1/+1 counter, 3 damage, B is at 12."
+          "expected": "B is tied for the most life, so dethrone fires: a +1/+1 counter, 3 damage, B is at 12.",
+          "operation": "life"
         },
         {
           "label": "less-life",
           "polarity": "does_not_fire",
           "delta": "B's life total is 14, less than A's 15.",
-          "expected": "Dethrone does not fire. Enraged Revolutionary stays 2/1 with no counter, deals 2 damage and B is at 12."
+          "expected": "Dethrone does not fire. Enraged Revolutionary stays 2/1 with no counter, deals 2 damage and B is at 12.",
+          "operation": "life"
         }
       ],
       "cards": [
         "Enraged Revolutionary"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A dethrone trigger fires when its creature attacks the player with the most life or tied for the most life.",
+        "near_miss": "A dethrone trigger is evaluated for its creature attacking a player with less life than another player and does not fire.",
+        "params": {
+          "keyword": "dethrone"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.105b-1",
@@ -112,7 +124,10 @@
           "label": "single-instance",
           "polarity": "does_not_fire",
           "delta": "Marchesa, the Black Rose is not on the battlefield.",
-          "expected": "One dethrone trigger fires: one +1/+1 counter (3/2), 3 damage and B is at 17."
+          "expected": "One dethrone trigger fires: one +1/+1 counter (3/2), 3 damage and B is at 17.",
+          "operation": {
+            "unclassifiable": "Removes a permanent from the battlefield."
+          }
         }
       ],
       "cards": [

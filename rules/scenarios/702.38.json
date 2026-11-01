@@ -59,13 +59,19 @@
           "label": "no_soldier_in_hand",
           "polarity": "does_not_fire",
           "delta": "Elite Vanguard is in A's graveyard instead of A's hand, so A's hand holds no other Soldier.",
-          "expected": "No card can be revealed. Daru Stinger enters with no counters, a 1/1."
+          "expected": "No card can be revealed. Daru Stinger enters with no counters, a 1/1.",
+          "operation": {
+            "unclassifiable": "changes a hand or library card, not a fork operation"
+          }
         },
         {
           "label": "two_soldiers",
           "polarity": "fires",
           "delta": "A's hand holds a second Elite Vanguard and A reveals both.",
-          "expected": "Daru Stinger enters with two +1/+1 counters, a 3/3."
+          "expected": "Daru Stinger enters with two +1/+1 counters, a 3/3.",
+          "operation": {
+            "unclassifiable": "changes a hand or library card, not a fork operation"
+          }
         }
       ],
       "cards": [

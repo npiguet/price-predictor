@@ -56,25 +56,37 @@
           "label": "main2_empty_stack",
           "polarity": "fires",
           "delta": "It is A's second main phase (step main2).",
-          "expected": "Casting Bonesplitter is legal: can_play is true."
+          "expected": "Casting Bonesplitter is legal: can_play is true.",
+          "operation": {
+            "unclassifiable": "changes the phase"
+          }
         },
         {
           "label": "combat",
           "polarity": "does_not_fire",
           "delta": "It is A's beginning of combat step (step beginning_of_combat) and A has priority.",
-          "expected": "Casting Bonesplitter is not legal: can_play is false."
+          "expected": "Casting Bonesplitter is not legal: can_play is false.",
+          "operation": {
+            "unclassifiable": "changes the phase"
+          }
         },
         {
           "label": "stack_not_empty",
           "polarity": "does_not_fire",
           "delta": "A has already cast Shock targeting B, tapping one Mountain. Shock is on the stack and A has priority.",
-          "expected": "Casting Bonesplitter is not legal: can_play is false while Shock is on the stack."
+          "expected": "Casting Bonesplitter is not legal: can_play is false while Shock is on the stack.",
+          "operation": {
+            "unclassifiable": "adds a spell on the stack (a different spell cast)"
+          }
         },
         {
           "label": "opponents_turn",
           "polarity": "does_not_fire",
           "delta": "It is B's turn (active B), B's first main phase, the stack is empty and A has priority.",
-          "expected": "Casting Bonesplitter is not legal: can_play is false on B's turn."
+          "expected": "Casting Bonesplitter is not legal: can_play is false on B's turn.",
+          "operation": {
+            "unclassifiable": "changes the turn"
+          }
         }
       ],
       "cards": [
@@ -82,7 +94,20 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": "The stack_not_empty variant puts Shock on the stack with the stack field of the setup: [{\"card\": \"Shock\", \"controller\": \"A\", \"targets\": [\"B\"]}]."
+      "forge_notes": "The stack_not_empty variant puts Shock on the stack with the stack field of the setup: [{\"card\": \"Shock\", \"controller\": \"A\", \"targets\": [\"B\"]}].",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A decision candidate whose timing bit is true: it may be played at this time (for a spell without flash, a main phase of its controller's turn with an empty stack).",
+        "near_miss": "A decision candidate whose timing bit is false: wrong phase or step, the opponent's turn, or a non-empty stack.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "301.2-1",
@@ -136,7 +161,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B responds with Counterspell targeting Bonesplitter, tapping both Islands; Counterspell resolves first.",
-          "expected": "Counterspell resolves and counters Bonesplitter. Bonesplitter moves to A's graveyard and never reaches the battlefield. Counterspell moves to B's graveyard."
+          "expected": "Counterspell resolves and counters Bonesplitter. Bonesplitter moves to A's graveyard and never reaches the battlefield. Counterspell moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different spell cast by B in response"
+          }
         }
       ],
       "cards": [
@@ -145,7 +173,19 @@
         "Island",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent spell resolves and moves from the stack to the battlefield under its controller's control.",
+        "near_miss": "A spell on the stack that is countered instead and goes to the graveyard (not counted: a permanent spell's implicit trait has no line, so no api can be set).",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "301.5-1",
@@ -189,7 +229,10 @@
           "label": "mutavault_animated",
           "polarity": "does_not_fire",
           "delta": "Before that, A activates Mutavault's animate ability {1}, tapping one Mountain, and it resolves; Mutavault is a 2/2 creature until end of turn. Then A activates equip {1} with the other Mountain, targeting Mutavault.",
-          "expected": "Mutavault is a legal target. Equip resolves and Bonesplitter is attached to Mutavault, which is a 4/2 land creature."
+          "expected": "Mutavault is a legal target. Equip resolves and Bonesplitter is attached to Mutavault, which is a 4/2 land creature.",
+          "operation": {
+            "unclassifiable": "an extra activation by a player before the equip, a different decision"
+          }
         }
       ],
       "cards": [
@@ -197,7 +240,18 @@
         "Mountain",
         "Mutavault"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate ability with no legal target (has_legal_target false) because every permanent fails the ability's target restriction.",
+        "near_miss": "A candidate ability with at least one legal target.",
+        "params": {
+          "bit": "has_legal_target",
+          "fires_when": false
+        },
+        "needs": []
+      }
     },
     {
       "id": "301.5b-1",
@@ -250,13 +304,19 @@
           "label": "equip_after_cast",
           "polarity": "other",
           "delta": "After Bonesplitter resolves, A also activates equip {1} with the other Plains, targeting Grizzly Bears, and it resolves.",
-          "expected": "Bonesplitter was unattached on entering. After the equip ability resolves it is attached to Grizzly Bears, which is a 4/2."
+          "expected": "Bonesplitter was unattached on entering. After the equip ability resolves it is attached to Grizzly Bears, which is a 4/2.",
+          "operation": {
+            "unclassifiable": "an additional activation by the player"
+          }
         },
         {
           "label": "put_by_giant",
           "polarity": "other",
           "delta": "A does not cast Bonesplitter. A activates Stonehewer Giant ({1}{W}, tap, tapping both Plains), searching the library for Bonesplitter, putting it onto the battlefield and attaching it to Grizzly Bears.",
-          "expected": "Bonesplitter enters the battlefield unattached; the ability then attaches it to Grizzly Bears, which is a 4/2. The library is shuffled."
+          "expected": "Bonesplitter enters the battlefield unattached; the ability then attaches it to Grizzly Bears, which is a 4/2. The library is shuffled.",
+          "operation": {
+            "unclassifiable": "a different spell or ability and decision"
+          }
         }
       ],
       "cards": [
@@ -315,7 +375,10 @@
           "label": "equippable_creature",
           "polarity": "does_not_fire",
           "delta": "The trigger targets Grizzly Bears instead of Angelic Curator.",
-          "expected": "Bonesplitter becomes attached to Grizzly Bears, which is a 4/2."
+          "expected": "Bonesplitter becomes attached to Grizzly Bears, which is a 4/2.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -325,7 +388,19 @@
         "Mountain",
         "Sigarda's Aid"
       ],
-      "forge_notes": "Forge's Attach effect should refuse the attachment because of protection; confirm it leaves Bonesplitter unattached rather than attaching it."
+      "forge_notes": "Forge's Attach effect should refuse the attachment because of protection; confirm it leaves Bonesplitter unattached rather than attaching it.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An attach effect resolves and produces no attached event: the object it would attach to cannot be equipped (or enchanted) by it, so the attaching permanent does not move.",
+        "near_miss": "An attach effect resolves and attaches the permanent (an attached event).",
+        "params": {
+          "event": "attached",
+          "api": "Attach",
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "301.5c-1",
@@ -379,7 +454,10 @@
           "label": "other_creature_enchanted",
           "polarity": "does_not_fire",
           "delta": "Song of the Dryads targets Hill Giant instead.",
-          "expected": "Hill Giant becomes a colorless Forest land. Bonesplitter stays attached to Grizzly Bears, which is a 4/2."
+          "expected": "Hill Giant becomes a colorless Forest land. Bonesplitter stays attached to Grizzly Bears, which is a 4/2.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -389,7 +467,17 @@
         "Hill Giant",
         "Song of the Dryads"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An Equipment or Fortification attached to an illegal permanent becomes unattached in the state-based check after a resolution (an unattached event) and stays on the battlefield.",
+        "near_miss": "A resolution after which no Equipment or Fortification becomes unattached (not counted: no api is set, because the unattach comes from the state-based check rather than the acting line's API, so only the fires side is tagged).",
+        "params": {
+          "event": "unattached"
+        },
+        "needs": []
+      }
     },
     {
       "id": "301.5c-2",
@@ -442,7 +530,10 @@
           "label": "other_artifact_ensouled",
           "polarity": "does_not_fire",
           "delta": "Ensoul Artifact targets Sol Ring instead.",
-          "expected": "Sol Ring is a 5/5 artifact creature. Bonesplitter stays attached to Grizzly Bears, which is a 4/2."
+          "expected": "Sol Ring is a 5/5 artifact creature. Bonesplitter stays attached to Grizzly Bears, which is a 4/2.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -452,7 +543,17 @@
         "Island",
         "Sol Ring"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An Equipment that is also a creature becomes unattached in the state-based check after a resolution (an unattached event).",
+        "near_miss": "A resolution after which no Equipment or Fortification becomes unattached (not counted: no api is set, because the unattach comes from the state-based check rather than the acting line's API, so only the fires side is tagged).",
+        "params": {
+          "event": "unattached"
+        },
+        "needs": []
+      }
     },
     {
       "id": "301.5c-3",
@@ -504,7 +605,10 @@
           "label": "other_creature_shocked",
           "polarity": "does_not_fire",
           "delta": "Shock targets Centaur Courser instead of Grizzly Bears.",
-          "expected": "Centaur Courser (3/3) has 2 damage marked and survives. Bonesplitter stays attached to Grizzly Bears, which is a 4/2."
+          "expected": "Centaur Courser (3/3) has 2 damage marked and survives. Bonesplitter stays attached to Grizzly Bears, which is a 4/2.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -514,7 +618,17 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An Equipment whose creature left the battlefield becomes unattached in the state-based check after a resolution (an unattached event) and stays on the battlefield.",
+        "near_miss": "A resolution after which no Equipment or Fortification becomes unattached (not counted: no api is set, because the unattach comes from the state-based check rather than the acting line's API, so only the fires side is tagged).",
+        "params": {
+          "event": "unattached"
+        },
+        "needs": []
+      }
     },
     {
       "id": "301.5d-1",
@@ -563,7 +677,10 @@
           "label": "equipment_controller_tries",
           "polarity": "does_not_fire",
           "delta": "It is A's turn (active A) and A attempts to activate equip, tapping A's Mountain and targeting A's Hill Giant.",
-          "expected": "The activation is legal. Equip resolves and Bonesplitter moves to A's Hill Giant (5/3). Grizzly Bears, still controlled by B, is a 2/2."
+          "expected": "The activation is legal. Equip resolves and Bonesplitter moves to A's Hill Giant (5/3). Grizzly Bears, still controlled by B, is a 2/2.",
+          "operation": {
+            "unclassifiable": "a different player makes the decision and the turn changes"
+          }
         }
       ],
       "cards": [
@@ -573,7 +690,10 @@
         "Hill Giant",
         "Mountain"
       ],
-      "forge_notes": "Reach the base state by having B resolve Control Magic on A's equipped Grizzly Bears earlier, or build it as a puzzle state."
+      "forge_notes": "Reach the base state by having B resolve Control Magic on A's equipped Grizzly Bears earlier, or build it as a puzzle state.",
+      "detector": {
+        "none": "An activation by a player who does not control the Equipment is never enumerated: decision candidates (gen-2's and gen-3's both-player enumerator alike) list only abilities the deciding player may activate, so no candidate, verdict bit or failed_checks entry shows the refusal; searched playability decision candidates, verdict bits and failed_checks."
+      }
     },
     {
       "id": "301.5e-1",
@@ -628,7 +748,10 @@
           "label": "ordinary_creature",
           "polarity": "does_not_fire",
           "delta": "Grizzly Bears is in A's graveyard instead of Angelic Curator, and is the creature target.",
-          "expected": "Grizzly Bears returns to the battlefield and Bonesplitter returns attached to it. Grizzly Bears is a 4/2."
+          "expected": "Grizzly Bears returns to the battlefield and Bonesplitter returns attached to it. Grizzly Bears is a 4/2.",
+          "operation": {
+            "unclassifiable": "changes the contents of a graveyard and the target"
+          }
         }
       ],
       "cards": [
@@ -683,7 +806,10 @@
           "label": "target_land",
           "polarity": "does_not_fire",
           "delta": "The fortify ability targets one of the Mountains instead.",
-          "expected": "The activation is legal. Fortify resolves and Darksteel Garrison is attached to that Mountain, which has indestructible."
+          "expected": "The activation is legal. Fortify resolves and Darksteel Garrison is attached to that Mountain, which has indestructible.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -691,7 +817,18 @@
         "Grizzly Bears",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate ability with no legal target (has_legal_target false) because every permanent fails the ability's target restriction.",
+        "near_miss": "A candidate ability with at least one legal target.",
+        "params": {
+          "bit": "has_legal_target",
+          "fires_when": false
+        },
+        "needs": []
+      }
     },
     {
       "id": "301.6-2",
@@ -744,7 +881,10 @@
           "label": "other_artifact_ensouled",
           "polarity": "does_not_fire",
           "delta": "Ensoul Artifact targets Sol Ring instead.",
-          "expected": "Sol Ring is a 5/5 artifact creature. Darksteel Garrison stays attached to Mountain, which has indestructible."
+          "expected": "Sol Ring is a 5/5 artifact creature. Darksteel Garrison stays attached to Mountain, which has indestructible.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -754,7 +894,17 @@
         "Mountain",
         "Sol Ring"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Fortification that is also a creature becomes unattached from its land in the state-based check after a resolution (an unattached event).",
+        "near_miss": "A resolution after which no Equipment or Fortification becomes unattached (not counted: no api is set, because the unattach comes from the state-based check rather than the acting line's API, so only the fires side is tagged).",
+        "params": {
+          "event": "unattached"
+        },
+        "needs": []
+      }
     },
     {
       "id": "301.7a-1",
@@ -796,14 +946,20 @@
           "label": "crewed",
           "polarity": "does_not_fire",
           "delta": "A first activates crew 1, tapping Grizzly Bears, and the ability resolves.",
-          "expected": "Smuggler's Copter is an artifact creature with power 3 and toughness 3 until end of turn."
+          "expected": "Smuggler's Copter is an artifact creature with power 3 and toughness 3 until end of turn.",
+          "operation": {
+            "unclassifiable": "an activation by the player (crew) tapping another creature"
+          }
         }
       ],
       "cards": [
         "Grizzly Bears",
         "Smuggler's Copter"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The snapshot writes pt null for every noncreature permanent by the collector's own construction (EntityJson.ptJson), so a noncreature Vehicle's missing P/T shows the collector's convention, not the rule; no event or continuous contribution records an absence of P/T. Searched continuous contributions, snapshot entity pt and EVENT_PARAMS."
+      }
     },
     {
       "id": "301.7b-1",
@@ -850,7 +1006,8 @@
           "label": "without_counter",
           "polarity": "does_not_fire",
           "delta": "Smuggler's Copter has no +1/+1 counter.",
-          "expected": "Smuggler's Copter becomes a creature with exactly its printed 3/3."
+          "expected": "Smuggler's Copter becomes a creature with exactly its printed 3/3.",
+          "operation": "counters"
         }
       ],
       "cards": [

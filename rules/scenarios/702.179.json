@@ -60,13 +60,19 @@
           "label": "no_keyword",
           "polarity": "other",
           "delta": "A casts Grizzly Bears (1G), tapping both Forests, instead of Burnout Bashtronaut.",
-          "expected": "Grizzly Bears enters the battlefield. A still has no speed. B still has no speed."
+          "expected": "Grizzly Bears enters the battlefield. A still has no speed. B still has no speed.",
+          "operation": {
+            "unclassifiable": "a different spell cast, a player's decision no fork operation makes"
+          }
         },
         {
           "label": "already_has_speed",
           "polarity": "does_not_fire",
           "delta": "A already has speed 3 before casting Burnout Bashtronaut.",
-          "expected": "Burnout Bashtronaut enters the battlefield. A's speed stays 3."
+          "expected": "Burnout Bashtronaut enters the battlefield. A's speed stays 3.",
+          "operation": {
+            "unclassifiable": "changes a player's speed, which no fork operation sets"
+          }
         }
       ],
       "cards": [
@@ -74,7 +80,18 @@
         "Grizzly Bears",
         "Mountain",
         "Forest"
-      ]
+      ],
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A player's speed increases by 1 in a resolution's effect half (speed_changed with delta 1), as when a player with no speed who controls a start your engines! permanent gets speed 1 in the state-based check.",
+        "near_miss": "No clean near miss without an api restriction, so only the fires side is tagged.",
+        "params": {
+          "event": "speed_changed",
+          "delta": 1
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.179d-1",
@@ -127,19 +144,28 @@
           "label": "creature_target",
           "polarity": "does_not_fire",
           "delta": "Shock targets B's Grizzly Bears instead of player B.",
-          "expected": "Grizzly Bears moves to B's graveyard. B's life stays 20. The speed trigger does not fire and A's speed stays 1."
+          "expected": "Grizzly Bears moves to B's graveyard. B's life stays 20. The speed trigger does not fire and A's speed stays 1.",
+          "operation": {
+            "unclassifiable": "a different target for the spell, a player's choice no fork operation makes"
+          }
         },
         {
           "label": "max_speed",
           "polarity": "does_not_fire",
           "delta": "A's speed is 4 instead of 1.",
-          "expected": "B loses 2 life (life 18). The speed trigger does not fire and A's speed stays 4."
+          "expected": "B loses 2 life (life 18). The speed trigger does not fire and A's speed stays 4.",
+          "operation": {
+            "unclassifiable": "changes a player's speed, which no fork operation sets"
+          }
         },
         {
           "label": "opponents_turn",
           "polarity": "does_not_fire",
           "delta": "It is B's turn (B is the active player, main1) instead of A's turn; A casts Shock at instant speed.",
-          "expected": "B loses 2 life (life 18). The speed trigger does not fire and A's speed stays 1."
+          "expected": "B loses 2 life (life 18). The speed trigger does not fire and A's speed stays 1.",
+          "operation": {
+            "unclassifiable": "changes whose turn it is, which no fork operation sets"
+          }
         }
       ],
       "cards": [
@@ -202,7 +228,10 @@
           "label": "next_turn",
           "polarity": "fires",
           "delta": "The second Shock is cast on A's next turn instead of the same turn (A's Mountains untap, A's speed stays 2 in between).",
-          "expected": "B loses 2 life twice (life 16). The speed trigger fires on each of the two turns: A's speed becomes 2 after the first Shock and 3 after the second."
+          "expected": "B loses 2 life twice (life 16). The speed trigger fires on each of the two turns: A's speed becomes 2 after the first Shock and 3 after the second.",
+          "operation": {
+            "unclassifiable": "moves the second spell to a later turn, a turn change no fork operation makes"
+          }
         }
       ],
       "cards": [
@@ -264,7 +293,10 @@
           "label": "equal_speed",
           "polarity": "does_not_fire",
           "delta": "A has speed 2 instead of no speed.",
-          "expected": "Grizzly Bears returns to B's hand. B's speed stays 2. A's speed stays 2."
+          "expected": "Grizzly Bears returns to B's hand. B's speed stays 2. A's speed stays 2.",
+          "operation": {
+            "unclassifiable": "changes a player's speed, which no fork operation sets"
+          }
         }
       ],
       "cards": [

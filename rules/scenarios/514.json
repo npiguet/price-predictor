@@ -67,13 +67,19 @@
           "label": "seven_cards",
           "polarity": "does_not_fire",
           "delta": "A has seven Mountains in hand instead of eight.",
-          "expected": "A discards nothing: A has 7 cards in hand and an empty graveyard. B still keeps 9 cards."
+          "expected": "A discards nothing: A has 7 cards in hand and an empty graveyard. B still keeps 9 cards.",
+          "operation": {
+            "unclassifiable": "changes a hand, not a board fact"
+          }
         },
         {
           "label": "no_maximum",
           "polarity": "other",
           "delta": "A controls Spellbook (no maximum hand size) on the battlefield, with eight cards in hand.",
-          "expected": "A discards nothing and keeps 8 cards in hand."
+          "expected": "A discards nothing and keeps 8 cards in hand.",
+          "operation": {
+            "unclassifiable": "adds a permanent to the battlefield, no fork operation makes"
+          }
         }
       ],
       "cards": [
@@ -136,7 +142,10 @@
           "label": "same_turn",
           "polarity": "does_not_fire",
           "delta": "B casts the second Shock in the same main phase, right after the first resolves, tapping the other Mountain.",
-          "expected": "No cleanup has happened between the Shocks, so Hill Giant has 4 damage marked and moves to A's graveyard."
+          "expected": "No cleanup has happened between the Shocks, so Hill Giant has 4 damage marked and moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "a change of when the second Shock is cast (turn timing), no fork operation makes"
+          }
         }
       ],
       "cards": [
@@ -144,7 +153,10 @@
         "Shock",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "Looked for an event or turn_action record of the cleanup removing marked damage: damage_healed is for effects, and the turn_action subkinds are draw, cleanup_discard, untap, phasing, day_night, lore_counter. Marked damage shows only as a snapshot field of later records, which no family reads."
+      }
     },
     {
       "id": "514.2-2",
@@ -200,7 +212,10 @@
           "label": "counters",
           "polarity": "does_not_fire",
           "delta": "Grizzly Bears starts with three +1/+1 counters, and A does not cast Giant Growth.",
-          "expected": "Grizzly Bears (5/5) survives the two Shocks with 4 damage marked. At cleanup the damage is removed but the counters stay, so it is an undamaged 5/5."
+          "expected": "Grizzly Bears (5/5) survives the two Shocks with 4 damage marked. At cleanup the damage is removed but the counters stay, so it is an undamaged 5/5.",
+          "operation": {
+            "unclassifiable": "more than one fact changes: counters are added and the Giant Growth cast is dropped"
+          }
         }
       ],
       "cards": [
@@ -210,7 +225,10 @@
         "Forest",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "Looked for an event or turn_action record of the cleanup ending effects and removing damage: no event type or turn_action subkind (draw, cleanup_discard, untap, phasing, day_night, lore_counter) is written for either; they show only as snapshot differences between later records."
+      }
     },
     {
       "id": "514.3a-1",
@@ -274,13 +292,19 @@
           "label": "no_discard",
           "polarity": "does_not_fire",
           "delta": "A has seven cards in hand: six Mountains and Ancestral Recall.",
-          "expected": "Nothing is discarded, Megrim does not trigger, no player gets priority in the cleanup step and A stays at 20 life."
+          "expected": "Nothing is discarded, Megrim does not trigger, no player gets priority in the cleanup step and A stays at 20 life.",
+          "operation": {
+            "unclassifiable": "changes a hand, not a board fact"
+          }
         },
         {
           "label": "draw_in_response",
           "polarity": "other",
           "delta": "With Megrim's trigger on the stack, A casts Ancestral Recall on itself (tapping Island) and it resolves before the trigger.",
-          "expected": "A draws 3 cards (9 in hand). The trigger resolves (A at 18). The next cleanup step makes A discard 2 Mountains, which trigger Megrim twice: both triggers resolve (A at 14), and a final cleanup step finds 7 cards and ends the turn."
+          "expected": "A draws 3 cards (9 in hand). The trigger resolves (A at 18). The next cleanup step makes A discard 2 Mountains, which trigger Megrim twice: both triggers resolve (A at 14), and a final cleanup step finds 7 cards and ends the turn.",
+          "operation": {
+            "unclassifiable": "a different spell cast or timing of a cast, not a fact on the board"
+          }
         }
       ],
       "cards": [

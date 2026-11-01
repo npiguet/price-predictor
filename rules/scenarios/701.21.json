@@ -63,13 +63,19 @@
           "label": "destroy",
           "polarity": "does_not_fire",
           "delta": "A casts Doom Blade targeting Cudgel Troll instead of Diabolic Edict.",
-          "expected": "The destruction is replaced by the regeneration shield: Cudgel Troll stays on the battlefield, tapped, with damage removed."
+          "expected": "The destruction is replaced by the regeneration shield: Cudgel Troll stays on the battlefield, tapped, with damage removed.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         },
         {
           "label": "no_creature",
           "polarity": "does_not_fire",
           "delta": "B controls no creature (only Forest).",
-          "expected": "B has nothing to sacrifice. Nothing is sacrificed, and A's Grizzly Bears stays on the battlefield."
+          "expected": "B has nothing to sacrifice. Nothing is sacrificed, and A's Grizzly Bears stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -80,7 +86,18 @@
         "Cudgel Troll",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A sacrifice effect resolves and a permanent is sacrificed (a sacrificed event in the resolution's effect half), bypassing any destruction replacement.",
+        "near_miss": "A sacrifice effect resolves and sacrifices nothing.",
+        "params": {
+          "event": "sacrificed",
+          "api": "Sacrifice"
+        },
+        "needs": []
+      }
     }
   ]
 }

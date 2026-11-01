@@ -51,26 +51,49 @@
           "label": "instant_timing",
           "polarity": "does_not_fire",
           "delta": "It is B's upkeep (B is the active player) and A has priority.",
-          "expected": "Not legal: a level bar can be activated only as a sorcery."
+          "expected": "Not legal: a level bar can be activated only as a sorcery.",
+          "operation": {
+            "unclassifiable": "The turn and step change (the opponent's upkeep instead of the player's main phase); no fork operation changes the phase or the turn."
+          }
         },
         {
           "label": "already_level_two",
           "polarity": "does_not_fire",
           "delta": "Druid Class is already level 2.",
-          "expected": "Not legal: the Level 2 bar requires the Class to be level 1."
+          "expected": "Not legal: the Level 2 bar requires the Class to be level 1.",
+          "operation": {
+            "unclassifiable": "The Class's level is a designation, not a counter (716.4); no fork operation sets a designation."
+          }
         },
         {
           "label": "skipping_a_level",
           "polarity": "does_not_fire",
           "delta": "A attempts the Level 3 ability ({4}{G}, tapping all five Forests) while Druid Class is level 1.",
-          "expected": "Not legal: the Level 3 bar requires the Class to be level 2."
+          "expected": "Not legal: the Level 3 bar requires the Class to be level 2.",
+          "operation": {
+            "unclassifiable": "The player activates a different ability; no fork operation changes a decision."
+          }
         }
       ],
       "cards": [
         "Forest",
         "Druid Class"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An activated ability candidate passes the casting-speed check (legal at sorcery timing in the controller's main phase).",
+        "near_miss": "A candidate that failed the casting-speed check.",
+        "params": {
+          "bit": "failed_check",
+          "check": "casting_speed",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "716.2a-2",
@@ -116,14 +139,28 @@
           "label": "level_one",
           "polarity": "does_not_fire",
           "delta": "Druid Class is level 1.",
-          "expected": "Not legal: the Level 2 ability is not yet active and A has no land plays left."
+          "expected": "Not legal: the Level 2 ability is not yet active and A has no land plays left.",
+          "operation": {
+            "unclassifiable": "The Class's level is a designation, not a counter (716.4); no fork operation sets a designation."
+          }
         }
       ],
       "cards": [
         "Druid Class",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A play-land candidate is legal because a static grants an additional land play.",
+        "near_miss": "A land play candidate that is not legal for lack of land plays.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "716.2b-1",
@@ -176,7 +213,10 @@
           "label": "activate_the_original",
           "polarity": "does_not_fire",
           "delta": "A activates the Level 2 ability of the original Druid Class instead of the copy's.",
-          "expected": "Not legal: the original is level 2 and the Level 2 bar requires level 1."
+          "expected": "Not legal: the original is level 2 and the Level 2 bar requires level 1.",
+          "operation": {
+            "unclassifiable": "The player activates a different permanent's ability; no fork operation changes a decision."
+          }
         }
       ],
       "cards": [
@@ -185,7 +225,18 @@
         "Druid Class",
         "Mirrormade"
       ],
-      "forge_notes": "The part of 716.2b about a permanent that stops being a Class keeping its level is not illustrated: no Forge card removes the Class type from a Class."
+      "forge_notes": "The part of 716.2b about a permanent that stops being a Class keeping its level is not illustrated: no Forge card removes the Class type from a Class.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An activated-ability candidate is legal because its conditions on the permanent's state are met.",
+        "near_miss": "The same candidate illegal because the permanent's state does not meet them.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "716.3-1",
@@ -231,20 +282,37 @@
           "label": "level_two",
           "polarity": "fires",
           "delta": "Druid Class is level 2.",
-          "expected": "The landfall trigger fires the same way; A gains 1 life (21)."
+          "expected": "The landfall trigger fires the same way; A gains 1 life (21).",
+          "operation": {
+            "unclassifiable": "The Class's level is a designation, not a counter (716.4); no fork operation sets a designation."
+          }
         },
         {
           "label": "opponent_controls_class",
           "polarity": "does_not_fire",
           "delta": "Druid Class is controlled by B instead of A.",
-          "expected": "The Forest enters under A's control, not under the Class controller's, so the landfall trigger does not fire. A and B stay at 20 life."
+          "expected": "The Forest enters under A's control, not under the Class controller's, so the landfall trigger does not fire. A and B stay at 20 life.",
+          "operation": {
+            "unclassifiable": "The Class's controller changes to the opponent; no fork operation changes control."
+          }
         }
       ],
       "cards": [
         "Druid Class",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger not gated by any level or state is evaluated and fires whenever its event occurs.",
+        "near_miss": "A trigger of this mode evaluated and not fired.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "716.4-1",
@@ -294,7 +362,10 @@
           "label": "class_level_three",
           "polarity": "other",
           "delta": "Druid Class is level 3.",
-          "expected": "Student of Warfare still gets exactly 2 level counters and becomes a 3/3 with first strike, not a higher level: Druid Class's class level plays no part. Druid Class gets no level counters and stays at class level 3."
+          "expected": "Student of Warfare still gets exactly 2 level counters and becomes a 3/3 with first strike, not a higher level: Druid Class's class level plays no part. Druid Class gets no level counters and stays at class level 3.",
+          "operation": {
+            "unclassifiable": "The Class's level is a designation, not a counter (716.4); no fork operation sets a designation."
+          }
         }
       ],
       "cards": [
@@ -303,7 +374,18 @@
         "Druid Class",
         "Venerated Teacher"
       ],
-      "forge_notes": "Forge needs the Class level to be set directly in the setup."
+      "forge_notes": "Forge needs the Class level to be set directly in the setup.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution's effect half puts level counters on a permanent; a Class's level is a designation and never changes through level counters.",
+        "near_miss": "Not counted: no api singles out level-counter effects, so only the fires side is tagged.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "level"
+        },
+        "needs": []
+      }
     }
   ]
 }

@@ -60,13 +60,15 @@
           "label": "craw_wurm",
           "polarity": "other",
           "delta": "B's creature is Craw Wurm (6/4) instead of Grizzly Bears.",
-          "expected": "Centaur Courser deals 3 damage to Craw Wurm and Craw Wurm deals 6 damage to Centaur Courser. Centaur Courser is destroyed and moves to A's graveyard. Craw Wurm stays on the battlefield with 3 damage marked."
+          "expected": "Centaur Courser deals 3 damage to Craw Wurm and Craw Wurm deals 6 damage to Centaur Courser. Centaur Courser is destroyed and moves to A's graveyard. Craw Wurm stays on the battlefield with 3 damage marked.",
+          "operation": "replace_card"
         },
         {
           "label": "zero_power",
           "polarity": "does_not_fire",
           "delta": "A's creature is Wall of Wood (0/3) instead of Centaur Courser.",
-          "expected": "Wall of Wood deals 0 damage to Grizzly Bears, which stays on the battlefield undamaged. Grizzly Bears deals 2 damage to Wall of Wood, which stays on the battlefield with 2 damage marked."
+          "expected": "Wall of Wood deals 0 damage to Grizzly Bears, which stays on the battlefield undamaged. Grizzly Bears deals 2 damage to Wall of Wood, which stays on the battlefield with 2 damage marked.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -77,7 +79,19 @@
         "Craw Wurm",
         "Wall of Wood"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A fight deals damage: damage_dealt events from both fighters.",
+        "near_miss": "A fight resolution that dealt less damage than two fighters would.",
+        "params": {
+          "event": "damage_dealt",
+          "min_count": 2,
+          "api": "Fight"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.14b-1",
@@ -140,19 +154,28 @@
           "label": "no_response",
           "polarity": "does_not_fire",
           "delta": "B does not cast Lightning Bolt; both players pass with Prey Upon on the stack.",
-          "expected": "Both targets are legal on resolution. Centaur Courser deals 3 damage to Grizzly Bears, which is destroyed. Grizzly Bears deals 2 damage to Centaur Courser, which stays on the battlefield with 2 damage marked."
+          "expected": "Both targets are legal on resolution. Centaur Courser deals 3 damage to Grizzly Bears, which is destroyed. Grizzly Bears deals 2 damage to Centaur Courser, which stays on the battlefield with 2 damage marked.",
+          "operation": {
+            "unclassifiable": "The opponent casts no spell in response; no fork operation changes a player's decisions."
+          }
         },
         {
           "label": "shock_response",
           "polarity": "does_not_fire",
           "delta": "B casts Shock instead of Lightning Bolt targeting Centaur Courser.",
-          "expected": "Shock deals 2 damage to Centaur Courser, which survives with 2 damage and stays a legal target. Prey Upon resolves normally: Centaur Courser deals 3 damage to Grizzly Bears, which is destroyed, and Grizzly Bears deals 2 more damage to Centaur Courser (4 total), which is destroyed. Both creatures are in their owners' graveyards."
+          "expected": "Shock deals 2 damage to Centaur Courser, which survives with 2 damage and stays a legal target. Prey Upon resolves normally: Centaur Courser deals 3 damage to Grizzly Bears, which is destroyed, and Grizzly Bears deals 2 more damage to Centaur Courser (4 total), which is destroyed. Both creatures are in their owners' graveyards.",
+          "operation": {
+            "unclassifiable": "A different spell is cast; no fork operation changes which spell a player casts."
+          }
         },
         {
           "label": "opposing_creature_bolted",
           "polarity": "fires",
           "delta": "B casts Lightning Bolt targeting B's own Grizzly Bears instead of Centaur Courser.",
-          "expected": "Grizzly Bears is destroyed and moves to B's graveyard before Prey Upon resolves. Prey Upon resolves with one illegal target: Centaur Courser fights nothing, takes no damage and stays on the battlefield undamaged."
+          "expected": "Grizzly Bears is destroyed and moves to B's graveyard before Prey Upon resolves. Prey Upon resolves with one illegal target: Centaur Courser fights nothing, takes no damage and stays on the battlefield undamaged.",
+          "operation": {
+            "unclassifiable": "A different target is chosen; no fork operation changes a target."
+          }
         }
       ],
       "cards": [
@@ -164,7 +187,19 @@
         "Centaur Courser",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A fight resolution deals no damage, a fighter having left the battlefield or become an illegal target.",
+        "near_miss": "A fight resolution deals damage.",
+        "params": {
+          "event": "damage_dealt",
+          "api": "Fight",
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.14d-1",
@@ -223,7 +258,10 @@
           "label": "combat_after_fog",
           "polarity": "does_not_fire",
           "delta": "A does not cast Prey Upon; A attacks with Centaur Courser and B blocks with Grizzly Bears.",
-          "expected": "The combat damage that would be dealt between Centaur Courser and Grizzly Bears is prevented. Both creatures stay on the battlefield with no damage marked."
+          "expected": "The combat damage that would be dealt between Centaur Courser and Grizzly Bears is prevented. Both creatures stay on the battlefield with no damage marked.",
+          "operation": {
+            "unclassifiable": "The player attacks instead of casting the fight spell; no fork operation changes a player's decisions."
+          }
         }
       ],
       "cards": [
@@ -233,7 +271,19 @@
         "Centaur Courser",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A fight deals non-combat damage (damage_dealt with combat false).",
+        "near_miss": "A fight resolution that deals no non-combat damage.",
+        "params": {
+          "event": "damage_dealt",
+          "combat": false,
+          "api": "Fight"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.14c-1",
@@ -289,7 +339,10 @@
           "label": "fights_bears",
           "polarity": "does_not_fire",
           "delta": "A targets Grizzly Bears instead of Nightfall Predator.",
-          "expected": "Nightfall Predator deals 5 damage to Grizzly Bears, which is destroyed and moves to B's graveyard. Grizzly Bears deals 2 damage to Nightfall Predator, which stays on the battlefield with 2 damage marked."
+          "expected": "Nightfall Predator deals 5 damage to Grizzly Bears, which is destroyed and moves to B's graveyard. Grizzly Bears deals 2 damage to Nightfall Predator, which stays on the battlefield with 2 damage marked.",
+          "operation": {
+            "unclassifiable": "A different target is chosen; no fork operation changes a target."
+          }
         }
       ],
       "cards": [

@@ -54,13 +54,19 @@
           "label": "no_life_lost",
           "polarity": "does_not_fire",
           "delta": "Shock targets Grizzly Bears instead of player B.",
-          "expected": "Grizzly Bears dies and B's life stays 20. Casting Skewer the Critics is not legal: the spectacle cost is unavailable and {2}{R} cannot be paid with one Mountain."
+          "expected": "Grizzly Bears dies and B's life stays 20. Casting Skewer the Critics is not legal: the spectacle cost is unavailable and {2}{R} cannot be paid with one Mountain.",
+          "operation": {
+            "unclassifiable": "a different target for Shock"
+          }
         },
         {
           "label": "own_life_lost",
           "polarity": "does_not_fire",
           "delta": "Shock targets player A instead of player B.",
-          "expected": "A's life goes from 20 to 18 and B's stays 20. Casting Skewer the Critics is not legal: the spectacle cost is unavailable because no opponent lost life."
+          "expected": "A's life goes from 20 to 18 and B's stays 20. Casting Skewer the Critics is not legal: the spectacle cost is unavailable because no opponent lost life.",
+          "operation": {
+            "unclassifiable": "a different target for Shock"
+          }
         }
       ],
       "cards": [

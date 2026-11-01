@@ -62,7 +62,10 @@
           "label": "wrath_drawn_second",
           "polarity": "does_not_fire",
           "delta": "A's library order is Island, Thunderous Wrath, Island (top first), so Thunderous Wrath is the second card drawn.",
-          "expected": "Thunderous Wrath is not the first card drawn this turn, so no miracle trigger fires. It stays in A's hand along with an Island. Mountain stays untapped, but {4}{R}{R} cannot be paid, so it cannot be cast. Grizzly Bears is unharmed."
+          "expected": "Thunderous Wrath is not the first card drawn this turn, so no miracle trigger fires. It stays in A's hand along with an Island. Mountain stays untapped, but {4}{R}{R} cannot be paid, so it cannot be cast. Grizzly Bears is unharmed.",
+          "operation": {
+            "unclassifiable": "Changes the order of A's library."
+          }
         }
       ],
       "cards": [
@@ -72,7 +75,17 @@
         "Inspiration",
         "Thunderous Wrath"
       ],
-      "forge_notes": "Check that Forge offers miracle for a draw made on the opponent's turn and counts draws per player."
+      "forge_notes": "Check that Forge offers miracle for a draw made on the opponent's turn and counts draws per player.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A miracle trigger fires when its card is the first card its owner draws in the turn.",
+        "near_miss": "A miracle trigger is evaluated for its card drawn as the second or a later card of the turn and does not fire.",
+        "params": {
+          "keyword": "miracle"
+        },
+        "needs": []
+      }
     }
   ]
 }

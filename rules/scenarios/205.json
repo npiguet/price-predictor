@@ -62,19 +62,24 @@
           "label": "land-creature",
           "polarity": "other",
           "delta": "B's permanent is Dryad Arbor (Land Creature - Forest Dryad) instead of Grizzly Bears.",
-          "expected": "Dryad Arbor is a colorless Land - Forest only: it has neither the Creature type nor the creature type Dryad, and it has no power or toughness."
+          "expected": "Dryad Arbor is a colorless Land - Forest only: it has neither the Creature type nor the creature type Dryad, and it has no power or toughness.",
+          "operation": "replace_card"
         },
         {
           "label": "aura-removed",
           "polarity": "does_not_fire",
           "delta": "After Song of the Dryads resolves, A casts Naturalize targeting Song of the Dryads (tapping two Forests) and it resolves.",
-          "expected": "Song of the Dryads goes to A's graveyard; Grizzly Bears is a green 2/2 Creature - Bear again and no longer a land."
+          "expected": "Song of the Dryads goes to A's graveyard; Grizzly Bears is a green 2/2 Creature - Bear again and no longer a land.",
+          "operation": {
+            "unclassifiable": "Removing the Aura is a different spell cast and a permanent leaving, not an attribute change."
+          }
         },
         {
           "label": "counter-kept",
           "polarity": "other",
           "delta": "Grizzly Bears has one +1/+1 counter on it.",
-          "expected": "Grizzly Bears is a colorless Land - Forest with no power or toughness, and the +1/+1 counter stays on it."
+          "expected": "Grizzly Bears is a colorless Land - Forest with no power or toughness, and the +1/+1 counter stays on it.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -84,7 +89,18 @@
         "Song of the Dryads",
         "Naturalize"
       ],
-      "forge_notes": "The clause that an instant or sorcery retains its type cannot be reached: no Forge card sets the card type of an instant or sorcery object on the battlefield or stack. Song of the Dryads is scripted with RemoveCardTypes and RemoveLandTypes, then adds Land and Forest."
+      "forge_notes": "The clause that an instant or sorcery retains its type cannot be reached: no Forge card sets the card type of an instant or sorcery object on the battlefield or stack. Song of the Dryads is scripted with RemoveCardTypes and RemoveLandTypes, then adds Land and Forest.",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static effect sets an object's card type outright, replacing its existing types.",
+        "near_miss": "A static applies to the board and sets no type outright: it adds or removes types, or contributes none.",
+        "params": {
+          "field": "types",
+          "value": "="
+        },
+        "needs": []
+      }
     },
     {
       "id": "205.1b-1",
@@ -139,13 +155,19 @@
           "label": "replace",
           "polarity": "does_not_fire",
           "delta": "A casts Song of the Dryads (tapping both Forests and one Island) targeting Darksteel Citadel instead of Ensoul Artifact.",
-          "expected": "Darksteel Citadel is a colorless Land - Forest only: it is no longer an artifact and not a creature."
+          "expected": "Darksteel Citadel is a colorless Land - Forest only: it is no longer an artifact and not a creature.",
+          "operation": {
+            "unclassifiable": "A different spell is cast."
+          }
         },
         {
           "label": "aura-removed",
           "polarity": "other",
           "delta": "After Ensoul Artifact resolves, A casts Naturalize targeting Ensoul Artifact (tapping two Forests) and it resolves.",
-          "expected": "Ensoul Artifact goes to A's graveyard; Darksteel Citadel is an Artifact Land again, not a creature, with no power or toughness."
+          "expected": "Ensoul Artifact goes to A's graveyard; Darksteel Citadel is an Artifact Land again, not a creature, with no power or toughness.",
+          "operation": {
+            "unclassifiable": "A second spell is cast and a permanent is removed."
+          }
         }
       ],
       "cards": [
@@ -206,7 +228,8 @@
           "label": "creature-only",
           "polarity": "does_not_fire",
           "delta": "B's permanent is Grizzly Bears (a creature that is not an artifact) instead of Ornithopter.",
-          "expected": "Shatter has no legal target: has_legal_target is false and it cannot be cast."
+          "expected": "Shatter has no legal target: has_legal_target is false and it cannot be cast.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -265,7 +288,8 @@
           "label": "artifact-only",
           "polarity": "does_not_fire",
           "delta": "B's permanent is Sol Ring (an artifact that is not a creature) instead of Ornithopter.",
-          "expected": "Doom Blade has no legal target: has_legal_target is false and it cannot be cast."
+          "expected": "Doom Blade has no legal target: has_legal_target is false and it cannot be cast.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -326,7 +350,10 @@
           "label": "no-song",
           "polarity": "does_not_fire",
           "delta": "A does not cast Song of the Dryads and goes straight to considering Goblin Grenade.",
-          "expected": "Changeling Outcast is a creature and every creature type, so it is a Goblin: Goblin Grenade can be cast by sacrificing it, and can_play is true."
+          "expected": "Changeling Outcast is a creature and every creature type, so it is a Goblin: Goblin Grenade can be cast by sacrificing it, and can_play is true.",
+          "operation": {
+            "unclassifiable": "A player does not cast a spell; a different decision."
+          }
         }
       ],
       "cards": [
@@ -393,7 +420,10 @@
           "label": "different-legend",
           "polarity": "does_not_fire",
           "delta": "A casts Mirri, Cat Warrior (tapping two Forests and the Plains) instead of the second Isamaru, Hound of Konda.",
-          "expected": "No legend rule applies since the names differ: the Forest Isamaru, Song of the Dryads and Mirri all stay on the battlefield."
+          "expected": "No legend rule applies since the names differ: the Forest Isamaru, Song of the Dryads and Mirri all stay on the battlefield.",
+          "operation": {
+            "unclassifiable": "A different spell is cast."
+          }
         }
       ],
       "cards": [
@@ -454,7 +484,10 @@
           "label": "opponent-controls-first",
           "polarity": "does_not_fire",
           "delta": "The first Isamaru, Hound of Konda is on B's battlefield instead of A's.",
-          "expected": "The legend rule looks at one controller at a time: both Isamarus stay on the battlefield, one under each player."
+          "expected": "The legend rule looks at one controller at a time: both Isamarus stay on the battlefield, one under each player.",
+          "operation": {
+            "unclassifiable": "Changes which player controls a permanent."
+          }
         }
       ],
       "cards": [
@@ -462,7 +495,17 @@
         "Isamaru, Hound of Konda",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "Two or more legendary permanents with the same name under one controller after a resolution, one put into the graveyard by the state-based check.",
+        "near_miss": "A legendary permanent enters with no same-named twin under its controller.",
+        "params": {
+          "check": "legend_rule"
+        },
+        "needs": []
+      }
     },
     {
       "id": "205.4e-1",
@@ -512,19 +555,26 @@
           "label": "legendary-creature",
           "polarity": "does_not_fire",
           "delta": "A's creature is Isamaru, Hound of Konda instead of Grizzly Bears.",
-          "expected": "A controls a legendary creature: Urza's Ruinous Blast can be cast and can_play is true."
+          "expected": "A controls a legendary creature: Urza's Ruinous Blast can be cast and can_play is true.",
+          "operation": "replace_card"
         },
         {
           "label": "legendary-planeswalker",
           "polarity": "does_not_fire",
           "delta": "A controls Jace Beleren (a legendary planeswalker) in addition to Grizzly Bears.",
-          "expected": "A controls a legendary planeswalker: Urza's Ruinous Blast can be cast and can_play is true."
+          "expected": "A controls a legendary planeswalker: Urza's Ruinous Blast can be cast and can_play is true.",
+          "operation": {
+            "unclassifiable": "Adds a permanent."
+          }
         },
         {
           "label": "opponent-legend",
           "polarity": "fires",
           "delta": "B controls Isamaru, Hound of Konda; A's creature is still Grizzly Bears.",
-          "expected": "Only the caster's own legendary permanents count: casting is not permitted and can_play is false."
+          "expected": "Only the caster's own legendary permanents count: casting is not permitted and can_play is false.",
+          "operation": {
+            "unclassifiable": "Adds a permanent."
+          }
         }
       ],
       "cards": [
@@ -534,7 +584,20 @@
         "Jace Beleren",
         "Urza's Ruinous Blast"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell with a script-level cast restriction (such as a legendary sorcery's required legendary permanent) fails that restriction and cannot be played.",
+        "near_miss": "No candidate of the decision fails the script-restriction check.",
+        "params": {
+          "bit": "failed_check",
+          "check": "script_restriction"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "205.4f-1",
@@ -585,13 +648,19 @@
           "label": "opponent-owns-older",
           "polarity": "fires",
           "delta": "The older Concordant Crossroads is on B's battlefield instead of A's.",
-          "expected": "The rule ignores controller: B's Concordant Crossroads moves to B's graveyard and A's new one stays."
+          "expected": "The rule ignores controller: B's Concordant Crossroads moves to B's graveyard and A's new one stays.",
+          "operation": {
+            "unclassifiable": "Changes which player controls a permanent."
+          }
         },
         {
           "label": "not-a-world",
           "polarity": "does_not_fire",
           "delta": "A casts Glorious Anthem (tapping the Forest and two Plains) instead of the second Concordant Crossroads.",
-          "expected": "Glorious Anthem is not a world permanent: both it and the original Concordant Crossroads stay on the battlefield."
+          "expected": "Glorious Anthem is not a world permanent: both it and the original Concordant Crossroads stay on the battlefield.",
+          "operation": {
+            "unclassifiable": "A different spell is cast."
+          }
         }
       ],
       "cards": [
@@ -600,7 +669,17 @@
         "Concordant Crossroads",
         "Glorious Anthem"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "Two or more world permanents on the battlefield after a resolution, all but the newest put into the graveyard by the state-based check.",
+        "near_miss": "A world permanent enters alone.",
+        "params": {
+          "check": "world_rule"
+        },
+        "needs": []
+      }
     }
   ]
 }

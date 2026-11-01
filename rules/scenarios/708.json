@@ -63,13 +63,19 @@
           "label": "cyber_conversion",
           "polarity": "other",
           "delta": "A casts Cyber Conversion targeting Exalted Angel instead of Backslide.",
-          "expected": "Exalted Angel is face down with exactly the characteristics Cyber Conversion lists: a 2/2 artifact creature of subtype Cyberman. It has no name, no mana cost, no color, no flying and no other abilities."
+          "expected": "Exalted Angel is face down with exactly the characteristics Cyber Conversion lists: a 2/2 artifact creature of subtype Cyberman. It has no name, no mana cost, no color, no flying and no other abilities.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         },
         {
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "In response to Backslide, B casts Counterspell targeting it, tapping both of B's Islands.",
-          "expected": "Backslide is countered and goes to A's graveyard. Exalted Angel stays face up on the battlefield as a 4/5 white Angel with flying."
+          "expected": "Backslide is countered and goes to A's graveyard. Exalted Angel stays face up on the battlefield as a 4/5 white Angel with flying.",
+          "operation": {
+            "unclassifiable": "a different spell cast by B"
+          }
         }
       ],
       "cards": [
@@ -129,7 +135,10 @@
           "label": "face_down_target",
           "polarity": "does_not_fire",
           "delta": "Exalted Angel is already face down on the battlefield.",
-          "expected": "Cyber Conversion resolves and nothing happens. The permanent stays a plain 2/2 face-down creature: it is not an artifact and has no Cyberman subtype."
+          "expected": "Cyber Conversion resolves and nothing happens. The permanent stays a plain 2/2 face-down creature: it is not an artifact and has no Cyberman subtype.",
+          "operation": {
+            "unclassifiable": "face-down status is not an operation"
+          }
         }
       ],
       "cards": [
@@ -186,7 +195,10 @@
           "label": "face_up",
           "polarity": "fires",
           "delta": "A casts Nightdrinker Moroii face up for its mana cost {3}{B}, tapping all four Swamps.",
-          "expected": "Nightdrinker Moroii enters face up as a 4/2 flyer. Its enters-the-battlefield trigger fires and resolves. A's life total is 17."
+          "expected": "Nightdrinker Moroii enters face up as a 4/2 flyer. Its enters-the-battlefield trigger fires and resolves. A's life total is 17.",
+          "operation": {
+            "unclassifiable": "a different cast"
+          }
         }
       ],
       "cards": [
@@ -251,13 +263,19 @@
           "label": "face_up_blast",
           "polarity": "does_not_fire",
           "delta": "B casts Echo Tracer face up for {2}{U} instead of face down.",
-          "expected": "Casting Red Elemental Blast is legal: the blue Echo Tracer spell is a legal target for its counter mode."
+          "expected": "Casting Red Elemental Blast is legal: the blue Echo Tracer spell is a legal target for its counter mode.",
+          "operation": {
+            "unclassifiable": "a different cast"
+          }
         },
         {
           "label": "face_down_scatter",
           "polarity": "other",
           "delta": "A checks Essence Scatter (counter target creature spell), tapping both of A's Islands, instead of Red Elemental Blast.",
-          "expected": "Casting Essence Scatter is legal: the face-down spell is a creature spell, so the Echo Tracer spell is a legal target."
+          "expected": "Casting Essence Scatter is legal: the face-down spell is a creature spell, so the Echo Tracer spell is a legal target.",
+          "operation": {
+            "unclassifiable": "a different spell checked"
+          }
         }
       ],
       "cards": [
@@ -317,13 +335,19 @@
           "label": "opponents_permanent",
           "polarity": "does_not_fire",
           "delta": "The face-down Exalted Angel is controlled by B.",
-          "expected": "Turning the face-down Exalted Angel face up is not legal for A."
+          "expected": "Turning the face-down Exalted Angel face up is not legal for A.",
+          "operation": {
+            "unclassifiable": "control of the permanent is not an operation"
+          }
         },
         {
           "label": "face_down_spell",
           "polarity": "does_not_fire",
           "delta": "The face-down Exalted Angel is a spell on the stack controlled by A instead of a permanent on the battlefield.",
-          "expected": "Turning the face-down Exalted Angel face up is not legal while it is a spell; spells can't be turned face up."
+          "expected": "Turning the face-down Exalted Angel face up is not legal while it is a spell; spells can't be turned face up.",
+          "operation": {
+            "unclassifiable": "moving a permanent to the stack"
+          }
         }
       ],
       "cards": [
@@ -385,7 +409,10 @@
           "label": "stays_down",
           "polarity": "does_not_fire",
           "delta": "A does not turn the creature face up.",
-          "expected": "The permanent is still face down: a nameless 5/5 creature (2/2 plus +3/+3) with ward {2} and no flying. A's life total stays 20."
+          "expected": "The permanent is still face down: a nameless 5/5 creature (2/2 plus +3/+3) with ward {2} and no flying. A's life total stays 20.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, which no fork operation makes"
+          }
         }
       ],
       "cards": [
@@ -457,7 +484,10 @@
           "label": "stays_down",
           "polarity": "does_not_fire",
           "delta": "A does not cast Break Open.",
-          "expected": "The permanent is still a face-down 2/2 with no name and no abilities after Cytoshape resolves and stays that way."
+          "expected": "The permanent is still a face-down 2/2 with no name and no abilities after Cytoshape resolves and stays that way.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, which no fork operation makes"
+          }
         }
       ],
       "cards": [
@@ -520,7 +550,10 @@
           "label": "stays_down",
           "polarity": "does_not_fire",
           "delta": "A does not turn Hooded Hydra face up.",
-          "expected": "Hooded Hydra stays face down as a nameless 2/2 with no counters."
+          "expected": "Hooded Hydra stays face down as a nameless 2/2 with no counters.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, which no fork operation makes"
+          }
         }
       ],
       "cards": [
@@ -581,7 +614,8 @@
           "label": "land_card",
           "polarity": "does_not_fire",
           "delta": "The face-down card is a Forest instead of Grizzly Bears.",
-          "expected": "The permanent is revealed as a Forest, which is not a creature card. A can't turn it face up and it stays face down."
+          "expected": "The permanent is revealed as a Forest, which is not a creature card. A can't turn it face up and it stays face down.",
+          "operation": "replace_card"
         }
       ],
       "cards": [

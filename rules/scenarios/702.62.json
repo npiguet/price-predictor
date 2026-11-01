@@ -49,13 +49,17 @@
           "label": "end_step",
           "polarity": "does_not_fire",
           "delta": "The step is A's end step, where a sorcery cannot be cast.",
-          "expected": "Suspending is not legal: Rift Bolt could not begin to be cast, so it stays in A's hand."
+          "expected": "Suspending is not legal: Rift Bolt could not begin to be cast, so it stays in A's hand.",
+          "operation": {
+            "unclassifiable": "changes the phase or turn"
+          }
         },
         {
           "label": "cannot_pay",
           "polarity": "does_not_fire",
           "delta": "A's Mountain is tapped.",
-          "expected": "Suspending is not legal: the suspend cost {R} cannot be paid, so Rift Bolt stays in A's hand."
+          "expected": "Suspending is not legal: the suspend cost {R} cannot be paid, so Rift Bolt stays in A's hand.",
+          "operation": "tap"
         }
       ],
       "cards": [
@@ -113,20 +117,36 @@
           "label": "two_counters",
           "polarity": "does_not_fire",
           "delta": "Rift Bolt has two time counters.",
-          "expected": "The upkeep trigger fires and one time counter is removed. Rift Bolt stays in exile with one time counter and B's life is 20."
+          "expected": "The upkeep trigger fires and one time counter is removed. Rift Bolt stays in exile with one time counter and B's life is 20.",
+          "operation": {
+            "unclassifiable": "sets time counters on a card in exile, which is not a permanent"
+          }
         },
         {
           "label": "opponents_upkeep",
           "polarity": "does_not_fire",
           "delta": "It is B's upkeep (B is the active player) instead of A's.",
-          "expected": "The suspend trigger does not fire. Rift Bolt stays in exile with one time counter and B's life is 20."
+          "expected": "The suspend trigger does not fire. Rift Bolt stays in exile with one time counter and B's life is 20.",
+          "operation": {
+            "unclassifiable": "changes the phase or turn"
+          }
         }
       ],
       "cards": [
         "Rift Bolt",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A suspend trigger of a suspended card is evaluated at its owner's upkeep, or when its last time counter is removed, and fires.",
+        "near_miss": "A suspend trigger is evaluated against an event it does not match, such as another player's upkeep, and does not fire.",
+        "params": {
+          "keyword": "suspend"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.62a-3",
@@ -174,7 +194,10 @@
           "label": "cast_prohibited",
           "polarity": "does_not_fire",
           "delta": "A controls Steel Golem, so A cannot cast creature spells.",
-          "expected": "Durkwood Baloth cannot be cast and stays in exile with no time counters. It never enters and cannot attack."
+          "expected": "Durkwood Baloth cannot be cast and stays in exile with no time counters. It never enters and cannot attack.",
+          "operation": {
+            "unclassifiable": "adds or removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -230,7 +253,10 @@
           "label": "no_prohibition",
           "polarity": "does_not_fire",
           "delta": "Steel Golem is not on the battlefield.",
-          "expected": "Suspending is legal. Durkwood Baloth moves from A's hand to exile with five time counters."
+          "expected": "Suspending is legal. Durkwood Baloth moves from A's hand to exile with five time counters.",
+          "operation": {
+            "unclassifiable": "adds or removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -238,7 +264,19 @@
         "Steel Golem",
         "Durkwood Baloth"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A static that prohibits casting makes the candidate's can_play false.",
+        "near_miss": "The same candidate has can_play true with no prohibiting static.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": false,
+          "responsible_static": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.62d-1",
@@ -292,13 +330,19 @@
           "label": "no_increase",
           "polarity": "does_not_fire",
           "delta": "Thalia, Guardian of Thraben is not on the battlefield.",
-          "expected": "Rift Bolt is cast for no mana, resolves, and B's life is 17."
+          "expected": "Rift Bolt is cast for no mana, resolves, and B's life is 17.",
+          "operation": {
+            "unclassifiable": "adds or removes a permanent"
+          }
         },
         {
           "label": "increase_paid",
           "polarity": "other",
           "delta": "A controls an untapped Mountain.",
-          "expected": "Rift Bolt is cast by paying {1}, tapping Mountain. It resolves and B's life is 17."
+          "expected": "Rift Bolt is cast by paying {1}, tapping Mountain. It resolves and B's life is 17.",
+          "operation": {
+            "unclassifiable": "adds a permanent"
+          }
         }
       ],
       "cards": [
@@ -306,7 +350,19 @@
         "Thalia, Guardian of Thraben",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A cost-increasing static makes a free cast unaffordable: the candidate's affordable bit is false.",
+        "near_miss": "The same cast is affordable when no static raises its cost.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": false,
+          "responsible_static": true
+        },
+        "needs": []
+      }
     }
   ]
 }

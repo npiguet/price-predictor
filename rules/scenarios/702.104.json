@@ -53,7 +53,10 @@
           "label": "declined",
           "polarity": "does_not_fire",
           "delta": "B declines to pay tribute.",
-          "expected": "Fanatic of Xenagos enters the battlefield with no counters (3/3 before its own trigger resolves)."
+          "expected": "Fanatic of Xenagos enters the battlefield with no counters (3/3 before its own trigger resolves).",
+          "operation": {
+            "unclassifiable": "A different choice by B."
+          }
         }
       ],
       "cards": [
@@ -113,7 +116,10 @@
           "label": "paid",
           "polarity": "does_not_fire",
           "delta": "B pays tribute, so Fanatic of Xenagos enters with a +1/+1 counter.",
-          "expected": "The trigger does not fire. Fanatic of Xenagos is 4/4 from the counter and has no haste."
+          "expected": "The trigger does not fire. Fanatic of Xenagos is 4/4 from the counter and has no haste.",
+          "operation": {
+            "unclassifiable": "A different choice by B."
+          }
         }
       ],
       "cards": [
@@ -121,7 +127,19 @@
         "Forest",
         "Fanatic of Xenagos"
       ],
-      "forge_notes": "B's tribute choice is an AI decision in Forge and has to be forced."
+      "forge_notes": "B's tribute choice is an AI decision in Forge and has to be forced.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A tribute creature's enters trigger conditioned on tribute not being paid fires when the creature enters untributed.",
+        "near_miss": "The same trigger is evaluated for a tribute creature that entered with tribute paid and does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield",
+          "selector": "Card.Self+notTributed"
+        },
+        "needs": []
+      }
     }
   ]
 }

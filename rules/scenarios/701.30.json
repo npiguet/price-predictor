@@ -68,13 +68,19 @@
           "label": "a_top",
           "polarity": "does_not_fire",
           "delta": "A leaves Hill Giant on top.",
-          "expected": "A's library from the top is Hill Giant, Plains, Forest. B's library from the top is Island, Mountain, Swamp."
+          "expected": "A's library from the top is Hill Giant, Plains, Forest. B's library from the top is Island, Mountain, Swamp.",
+          "operation": {
+            "unclassifiable": "The player's clash choice changes; no fork operation changes a player's decision."
+          }
         },
         {
           "label": "b_bottom",
           "polarity": "other",
           "delta": "B also puts Island on the bottom.",
-          "expected": "A's library from the top is Plains, Forest, Hill Giant. B's library from the top is Mountain, Swamp, Island."
+          "expected": "A's library from the top is Plains, Forest, Hill Giant. B's library from the top is Mountain, Swamp, Island.",
+          "operation": {
+            "unclassifiable": "The opponent's clash choice changes; no fork operation changes a player's decision."
+          }
         }
       ],
       "cards": [
@@ -87,7 +93,20 @@
         "Mountain",
         "Swamp"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A clash resolution moves a revealed top card of a library to the bottom.",
+        "near_miss": "A clash resolution that left the revealed card on top.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "library",
+          "to_zone": "library",
+          "api": "Clash"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.30d-1",
@@ -148,13 +167,19 @@
           "label": "tie",
           "polarity": "does_not_fire",
           "delta": "B's top card is Hill Giant too (mana value 4).",
-          "expected": "Both reveal mana value 4: nobody wins. Grizzly Bears gets only +2/+2 until end of turn: a 4/4 without trample."
+          "expected": "Both reveal mana value 4: nobody wins. Grizzly Bears gets only +2/+2 until end of turn: a 4/4 without trample.",
+          "operation": {
+            "unclassifiable": "The top card of B's library changes; no fork operation changes a library."
+          }
         },
         {
           "label": "lower",
           "polarity": "does_not_fire",
           "delta": "B's top card is Craw Wurm (mana value 6).",
-          "expected": "A reveals mana value 4 and B reveals mana value 6: A does not win. Grizzly Bears is a 4/4 without trample until end of turn."
+          "expected": "A reveals mana value 4 and B reveals mana value 6: A does not win. Grizzly Bears is a 4/4 without trample until end of turn.",
+          "operation": {
+            "unclassifiable": "The top card of B's library changes; no fork operation changes a library."
+          }
         }
       ],
       "cards": [
@@ -167,7 +192,19 @@
         "Mountain",
         "Craw Wurm"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A clash resolution in which the clashing player won (a clash_resolved event with won true): their revealed card's mana value was higher than every other revealed card's.",
+        "near_miss": "A clash resolution in which the clashing player did not win, on a tie or a lower mana value.",
+        "params": {
+          "event": "clash_resolved",
+          "won": true,
+          "api": "Clash"
+        },
+        "needs": []
+      }
     }
   ]
 }

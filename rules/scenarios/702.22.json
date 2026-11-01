@@ -58,7 +58,10 @@
           "label": "no_activation",
           "polarity": "does_not_fire",
           "delta": "A does not activate Tolaria.",
-          "expected": "Both Lady Orca and The Lady of the Mountain have 'bands with other legendary creatures' from Mountain Stronghold. Tolaria is untapped."
+          "expected": "Both Lady Orca and The Lady of the Mountain have 'bands with other legendary creatures' from Mountain Stronghold. Tolaria is untapped.",
+          "operation": {
+            "unclassifiable": "A different spell is cast or activated, or none: a different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -67,7 +70,18 @@
         "Lady Orca",
         "The Lady of the Mountain"
       ],
-      "forge_notes": "Mountain Stronghold grants 'Bands with other:Creature.Legendary'; Tolaria's Debuff lists Banding and Bands with other, and the scenario depends on Forge's Debuff matching the parameterised keyword. Tolaria is the only Forge card that removes banding, and its text names 'bands with other' explicitly, so the scenario shows the outcome 702.22b requires rather than isolating the rule's implication."
+      "forge_notes": "Mountain Stronghold grants 'Bands with other:Creature.Legendary'; Tolaria's Debuff lists Banding and Bands with other, and the scenario depends on Forge's Debuff matching the parameterised keyword. Tolaria is the only Forge card that removes banding, and its text names 'bands with other' explicitly, so the scenario shows the outcome 702.22b requires rather than isolating the rule's implication.",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static ability's contribution removes banding from a permanent, which then has no bands-with-other abilities either.",
+        "near_miss": "A static ability applies to the board and removes no banding.",
+        "params": {
+          "field": "keywords",
+          "value": "-banding"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.22c-1",
@@ -121,7 +135,8 @@
           "label": "second_member_has_banding",
           "polarity": "does_not_fire",
           "delta": "A's second Grizzly Bears is Mesa Pegasus (flying, banding) instead.",
-          "expected": "The band declaration is legal: Benalish Hero and Mesa Pegasus have banding, and Grizzly Bears is the only member without it."
+          "expected": "The band declaration is legal: Benalish Hero and Mesa Pegasus have banding, and Grizzly Bears is the only member without it.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -129,7 +144,10 @@
         "Grizzly Bears",
         "Mesa Pegasus"
       ],
-      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band and that Forge rejects an illegal band composition."
+      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band and that Forge rejects an illegal band composition.",
+      "detector": {
+        "none": "No record field names bands: the combat and playability payloads list attackers, blocks and legality without band membership, so the rule's outcome is not shown."
+      }
     },
     {
       "id": "702.22d-1",
@@ -182,13 +200,19 @@
           "label": "band_same_defender",
           "polarity": "does_not_fire",
           "delta": "Both Benalish Hero and Grizzly Bears attack player B.",
-          "expected": "The declaration is legal: both band members attack player B."
+          "expected": "The declaration is legal: both band members attack player B.",
+          "operation": {
+            "unclassifiable": "A different attack declaration: a different decision by a player."
+          }
         },
         {
           "label": "no_band_split_attack",
           "polarity": "other",
           "delta": "A declares no band; Benalish Hero attacks Jace Beleren and Grizzly Bears attacks player B, as before.",
-          "expected": "The declaration is legal: with no band, each creature may attack a different defender."
+          "expected": "The declaration is legal: with no band, each creature may attack a different defender.",
+          "operation": {
+            "unclassifiable": "A different choice by a player."
+          }
         }
       ],
       "cards": [
@@ -196,7 +220,10 @@
         "Grizzly Bears",
         "Jace Beleren"
       ],
-      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band. Forge may not enforce the restriction when a band is declared from the UI, so this scenario may need a direct validity check."
+      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band. Forge may not enforce the restriction when a band is declared from the UI, so this scenario may need a direct validity check.",
+      "detector": {
+        "none": "No record field names bands: the combat and playability payloads list attackers, blocks and legality without band membership, so the rule's outcome is not shown."
+      }
     },
     {
       "id": "702.22e-1",
@@ -256,7 +283,10 @@
           "label": "no_band",
           "polarity": "does_not_fire",
           "delta": "A declares no band; Benalish Hero and Grizzly Bears attack separately.",
-          "expected": "Wall of Wood blocks only Grizzly Bears and takes 2 damage, surviving. The Frog is unblocked and deals 1 damage to B, who goes to 19 life."
+          "expected": "Wall of Wood blocks only Grizzly Bears and takes 2 damage, surviving. The Frog is unblocked and deals 1 damage to B, who goes to 19 life.",
+          "operation": {
+            "unclassifiable": "A different choice by a player."
+          }
         }
       ],
       "cards": [
@@ -266,7 +296,10 @@
         "Island",
         "Turn to Frog"
       ],
-      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band."
+      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band.",
+      "detector": {
+        "none": "No record field names bands: the combat and playability payloads list attackers, blocks and legality without band membership, so the rule's outcome is not shown."
+      }
     },
     {
       "id": "702.22f-1",
@@ -327,7 +360,10 @@
           "label": "hero_stays",
           "polarity": "does_not_fire",
           "delta": "A does not cast Disharmony, so Benalish Hero stays in the band.",
-          "expected": "Benalish Hero is blocked by Wall of Wood together with Grizzly Bears. Wall of Wood takes 1 + 2 = 3 damage and is destroyed. Benalish Hero stays tapped. B takes no combat damage and stays at 20 life."
+          "expected": "Benalish Hero is blocked by Wall of Wood together with Grizzly Bears. Wall of Wood takes 1 + 2 = 3 damage and is destroyed. Benalish Hero stays tapped. B takes no combat damage and stays at 20 life.",
+          "operation": {
+            "unclassifiable": "A different spell is cast or activated, or none: a different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -337,7 +373,10 @@
         "Wall of Wood",
         "Disharmony"
       ],
-      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band."
+      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band.",
+      "detector": {
+        "none": "No record field names bands: the combat and playability payloads list attackers, blocks and legality without band membership, so the rule's outcome is not shown."
+      }
     },
     {
       "id": "702.22g-1",
@@ -389,7 +428,10 @@
           "label": "giant_blocks_bears",
           "polarity": "does_not_fire",
           "delta": "Hill Giant is declared blocking Grizzly Bears instead of Mesa Pegasus.",
-          "expected": "The block is legal: Grizzly Bears did not gain flying from Mesa Pegasus, so Hill Giant can block it."
+          "expected": "The block is legal: Grizzly Bears did not gain flying from Mesa Pegasus, so Hill Giant can block it.",
+          "operation": {
+            "unclassifiable": "A different blocker is declared: a different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -397,7 +439,10 @@
         "Grizzly Bears",
         "Hill Giant"
       ],
-      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band."
+      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band.",
+      "detector": {
+        "none": "No record field names bands: the blockers legality record lists legal and forbidden blockers per anchored attacker, and neither it nor the snapshot's entity combat state says which attackers share a band, so no record can show band members keeping separate abilities; the legal-blockers list alone shows only evasion rules such as flying (702.9)."
+      }
     },
     {
       "id": "702.22h-1",
@@ -450,7 +495,10 @@
           "label": "no_band",
           "polarity": "does_not_fire",
           "delta": "A declares no band; Mesa Pegasus and Grizzly Bears attack separately.",
-          "expected": "Wall of Wood blocks only Grizzly Bears and takes 2 damage, surviving. Mesa Pegasus is unblocked and deals 1 damage to B, who goes to 19 life."
+          "expected": "Wall of Wood blocks only Grizzly Bears and takes 2 damage, surviving. Mesa Pegasus is unblocked and deals 1 damage to B, who goes to 19 life.",
+          "operation": {
+            "unclassifiable": "A different choice by a player."
+          }
         }
       ],
       "cards": [
@@ -458,7 +506,10 @@
         "Grizzly Bears",
         "Wall of Wood"
       ],
-      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band."
+      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band.",
+      "detector": {
+        "none": "No record field names bands: the combat and playability payloads list attackers, blocks and legality without band membership, so the rule's outcome is not shown."
+      }
     },
     {
       "id": "702.22i-1",
@@ -521,7 +572,10 @@
           "label": "no_band",
           "polarity": "does_not_fire",
           "delta": "A declares no band; Benalish Hero and Grizzly Bears attack separately.",
-          "expected": "Only Benalish Hero becomes blocked and deals no damage. Grizzly Bears stays unblocked and deals 2 damage to B, who goes to 18 life."
+          "expected": "Only Benalish Hero becomes blocked and deals no damage. Grizzly Bears stays unblocked and deals 2 damage to B, who goes to 18 life.",
+          "operation": {
+            "unclassifiable": "A different choice by a player."
+          }
         }
       ],
       "cards": [
@@ -530,7 +584,10 @@
         "Plains",
         "Curtain of Light"
       ],
-      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band."
+      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band.",
+      "detector": {
+        "none": "No record field names bands: the combat and playability payloads list attackers, blocks and legality without band membership, so the rule's outcome is not shown."
+      }
     },
     {
       "id": "702.22j-1",
@@ -581,7 +638,10 @@
           "label": "no_banding_blocker",
           "polarity": "does_not_fire",
           "delta": "Mons's Goblin Raiders (no banding) blocks together with Grizzly Bears, and Benalish Hero does not block. The dividing player is now A, who assigns 1 damage to Mons's Goblin Raiders and 2 to Grizzly Bears.",
-          "expected": "A divides Hill Giant's damage: Mons's Goblin Raiders and Grizzly Bears are both destroyed. Benalish Hero is unharmed. Hill Giant takes 1 + 2 = 3 damage and is destroyed."
+          "expected": "A divides Hill Giant's damage: Mons's Goblin Raiders and Grizzly Bears are both destroyed. Benalish Hero is unharmed. Hill Giant takes 1 + 2 = 3 damage and is destroyed.",
+          "operation": {
+            "unclassifiable": "A different blocker is declared: a different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -590,7 +650,10 @@
         "Grizzly Bears",
         "Mons's Goblin Raiders"
       ],
-      "forge_notes": "The damage division is a decision, which the scenario fixes; the rule decides who makes it. Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band."
+      "forge_notes": "The damage division is a decision, which the scenario fixes; the rule decides who makes it. Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band.",
+      "detector": {
+        "none": "No record field names bands: the combat and playability payloads list attackers, blocks and legality without band membership, so the rule's outcome is not shown."
+      }
     },
     {
       "id": "702.22k-1",
@@ -643,7 +706,10 @@
           "label": "no_band",
           "polarity": "does_not_fire",
           "delta": "A declares no band; Benalish Hero and Grizzly Bears attack separately.",
-          "expected": "Hill Giant blocks only Grizzly Bears and deals all 3 damage to it; Grizzly Bears is destroyed. Benalish Hero is unblocked and deals 1 damage to B, who goes to 19 life. Hill Giant takes 2 damage and survives."
+          "expected": "Hill Giant blocks only Grizzly Bears and deals all 3 damage to it; Grizzly Bears is destroyed. Benalish Hero is unblocked and deals 1 damage to B, who goes to 19 life. Hill Giant takes 2 damage and survives.",
+          "operation": {
+            "unclassifiable": "A different choice by a player."
+          }
         }
       ],
       "cards": [
@@ -651,7 +717,10 @@
         "Grizzly Bears",
         "Hill Giant"
       ],
-      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band."
+      "forge_notes": "Forge asks for bands as part of the attack declaration; the scenario assumes the declaration can name the band.",
+      "detector": {
+        "none": "No record field names bands: the combat and playability payloads list attackers, blocks and legality without band membership, so the rule's outcome is not shown."
+      }
     }
   ]
 }

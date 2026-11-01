@@ -51,7 +51,8 @@
           "label": "defender_has_forest",
           "polarity": "does_not_fire",
           "delta": "B controls a Forest instead of the Swamp.",
-          "expected": "Declaring Grizzly Bears as a blocker of Bog Wraith is legal."
+          "expected": "Declaring Grizzly Bears as a blocker of Bog Wraith is legal.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -60,7 +61,18 @@
         "Swamp",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A potential blocker is outside the legal-blockers list for an attacker because of an evasion or protection restriction on the attacker.",
+        "near_miss": "The potential blocker is inside the legal-blockers list for the attacker.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.14c-2",
@@ -109,7 +121,8 @@
           "label": "defender_has_basic_only",
           "polarity": "does_not_fire",
           "delta": "B controls a Forest instead of Evolving Wilds.",
-          "expected": "Declaring Grizzly Bears as a blocker of Dryad Sophisticate is legal."
+          "expected": "Declaring Grizzly Bears as a blocker of Dryad Sophisticate is legal.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -118,7 +131,18 @@
         "Evolving Wilds",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A potential blocker is outside the legal-blockers list for an attacker because of an evasion or protection restriction on the attacker.",
+        "near_miss": "The potential blocker is inside the legal-blockers list for the attacker.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.14d-1",
@@ -167,7 +191,8 @@
           "label": "defender_has_forest",
           "polarity": "does_not_fire",
           "delta": "B controls a Forest instead of the Swamp.",
-          "expected": "Declaring B's Bog Wraith as a blocker of A's Bog Wraith is legal."
+          "expected": "Declaring B's Bog Wraith as a blocker of A's Bog Wraith is legal.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -175,7 +200,18 @@
         "Swamp",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A potential blocker is outside the legal-blockers list for an attacker because of an evasion or protection restriction on the attacker.",
+        "near_miss": "The potential blocker is inside the legal-blockers list for the attacker.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside"
+        },
+        "needs": []
+      }
     }
   ]
 }

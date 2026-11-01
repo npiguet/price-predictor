@@ -61,7 +61,10 @@
           "label": "b_second_turn",
           "polarity": "does_not_fire",
           "delta": "The attack declaration examined is in B's second turn after the cast, after A's own next turn has begun (A passes that turn without casting a spell).",
-          "expected": "Llanowar Elves is no longer goaded. Declaring no attackers is a legal attack declaration."
+          "expected": "Llanowar Elves is no longer goaded. Declaring no attackers is a legal attack declaration.",
+          "operation": {
+            "unclassifiable": "A later turn is examined; no fork operation changes the turn."
+          }
         }
       ],
       "cards": [
@@ -125,7 +128,8 @@
           "label": "tapped_for_mana",
           "polarity": "does_not_fire",
           "delta": "In B's upkeep B taps Llanowar Elves for mana, so it is tapped at the declare attackers step.",
-          "expected": "Llanowar Elves is not able to attack, so the requirement does not apply. Declaring no attackers is a legal attack declaration."
+          "expected": "Llanowar Elves is not able to attack, so the requirement does not apply. Declaring no attackers is a legal attack declaration.",
+          "operation": "tap"
         }
       ],
       "cards": [
@@ -225,7 +229,10 @@
           "label": "second_goad_by_same_player",
           "polarity": "does_not_fire",
           "delta": "The second goad on Grizzly Bears is A's instead of B's: on A's previous turn A also activated A's Laser Screwdriver targeting Grizzly Bears (paying with three of A's Mountains), and B does not activate B's.",
-          "expected": "A goading Grizzly Bears again adds no requirement, so Grizzly Bears and Centaur Courser carry one requirement each. Grizzly Bears attacking A alone and Centaur Courser attacking A alone are both legal; no attack is illegal."
+          "expected": "A goading Grizzly Bears again adds no requirement, so Grizzly Bears and Centaur Courser carry one requirement each. Grizzly Bears attacking A alone and Centaur Courser attacking A alone are both legal; no attack is illegal.",
+          "operation": {
+            "unclassifiable": "A different player goads the creature, on an earlier turn; no fork operation changes a player's decisions or the game's history."
+          }
         }
       ],
       "cards": [

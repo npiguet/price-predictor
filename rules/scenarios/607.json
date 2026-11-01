@@ -12,19 +12,48 @@
   "scenarios": [
     {
       "id": "607.2a-1",
-      "rules": ["607.2a"],
+      "rules": [
+        "607.2a"
+      ],
       "title": "An ability that returns the exiled card returns only the card its own linked ability exiled",
       "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {
-          "A": ["Plains", "Plains", "Plains", "Plains", "Plains", "Plains"],
-          "B": ["Grizzly Bears", "Hill Giant", "Plains", "Plains", "Island"]
+        "life": {
+          "A": 20,
+          "B": 20
         },
-        "hand": {"A": ["Oblivion Ring", "Oblivion Ring"], "B": ["Disenchant", "Stifle"]},
-        "graveyard": {}, "library": {}, "exile": {},
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Hill Giant",
+            "Plains",
+            "Plains",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Oblivion Ring",
+            "Oblivion Ring"
+          ],
+          "B": [
+            "Disenchant",
+            "Stifle"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": "The two Oblivion Rings in A's hand are called the first ring and the second ring below."
       },
       "decisions": [
@@ -37,28 +66,87 @@
         "The first ring's leaves-the-battlefield trigger goes on the stack. Both players pass; it resolves."
       ],
       "variants": [
-        {"label": "first_ring_leaves", "polarity": "fires", "delta": "", "expected": "Grizzly Bears returns to the battlefield under B's control. Hill Giant stays in exile. The second Oblivion Ring stays on the battlefield."},
-        {"label": "second_ring_leaves", "polarity": "other", "delta": "B's Disenchant targets the second Oblivion Ring instead of the first.", "expected": "Hill Giant returns to the battlefield under B's control. Grizzly Bears stays in exile. The first Oblivion Ring stays on the battlefield."},
-        {"label": "first_ring_exiled_nothing", "polarity": "does_not_fire", "delta": "B responds to the first ring's enters trigger by casting Stifle targeting it, tapping Island; the trigger is countered.", "expected": "Grizzly Bears stays on the battlefield; the second ring exiles Hill Giant. When the first ring leaves, its return trigger resolves and returns nothing: Hill Giant stays in exile and the second Oblivion Ring stays on the battlefield."}
+        {
+          "label": "first_ring_leaves",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears returns to the battlefield under B's control. Hill Giant stays in exile. The second Oblivion Ring stays on the battlefield."
+        },
+        {
+          "label": "second_ring_leaves",
+          "polarity": "other",
+          "delta": "B's Disenchant targets the second Oblivion Ring instead of the first.",
+          "expected": "Hill Giant returns to the battlefield under B's control. Grizzly Bears stays in exile. The first Oblivion Ring stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "B's Disenchant has a different target, a player's choice; no fork operation retargets a spell or ability."
+          }
+        },
+        {
+          "label": "first_ring_exiled_nothing",
+          "polarity": "does_not_fire",
+          "delta": "B responds to the first ring's enters trigger by casting Stifle targeting it, tapping Island; the trigger is countered.",
+          "expected": "Grizzly Bears stays on the battlefield; the second ring exiles Hill Giant. When the first ring leaves, its return trigger resolves and returns nothing: Hill Giant stays in exile and the second Oblivion Ring stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "B casts an extra spell (Stifle) countering the enters trigger; no fork operation casts a spell."
+          }
+        }
       ],
-      "cards": ["Plains", "Island", "Oblivion Ring", "Grizzly Bears", "Hill Giant", "Disenchant", "Stifle"],
-      "forge_notes": "Forge implements the return as Defined$ ExiledWith, which selects the cards exiled by that Oblivion Ring object."
+      "cards": [
+        "Plains",
+        "Island",
+        "Oblivion Ring",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Disenchant",
+        "Stifle"
+      ],
+      "forge_notes": "Forge implements the return as Defined$ ExiledWith, which selects the cards exiled by that Oblivion Ring object.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution moves cards from exile to the battlefield: an ability returning the cards exiled with its source.",
+        "near_miss": "A linked return ability whose exiling ability exiled nothing, or nothing still in exile, returns no card; not counted, since outcome_event counts a near miss only with api set and every other ChangeZone resolution would then count as one.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "Exile",
+          "to_zone": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "607.2b-1",
-      "rules": ["607.2b"],
+      "rules": [
+        "607.2b"
+      ],
       "title": "A cost that uses cards exiled with this object accepts only cards its linked replacement effect exiled",
       "record_kind": "playability",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {
-          "A": ["Void Maw", "Mountain", "Plains"],
-          "B": ["Grizzly Bears"]
+        "life": {
+          "A": 20,
+          "B": 20
         },
-        "hand": {"A": ["Shock", "Swords to Plowshares"]},
-        "graveyard": {}, "library": {}, "exile": {},
+        "battlefield": {
+          "A": [
+            "Void Maw",
+            "Mountain",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Swords to Plowshares"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": "Void Maw is a 4/5 that has been under A's control since an earlier turn."
       },
       "decisions": [
@@ -67,28 +155,70 @@
         "If it is legal, A activates Void Maw's ability, paying its cost by putting a card exiled with Void Maw into its owner's graveyard. Both players pass; it resolves."
       ],
       "variants": [
-        {"label": "exiled_by_replacement", "polarity": "fires", "delta": "", "expected": "Void Maw's replacement effect exiles Grizzly Bears instead of letting it die. Activating Void Maw's +2/+2 ability is legal (can_play true) because the exiled Grizzly Bears can pay the cost; once paid, Grizzly Bears is in B's graveyard and Void Maw is 6/7 until end of turn."},
-        {"label": "exiled_by_other_source", "polarity": "does_not_fire", "delta": "A casts Swords to Plowshares targeting Grizzly Bears, tapping Plains, instead of casting Shock.", "expected": "Grizzly Bears is exiled by Swords to Plowshares and B gains 2 life. Activating Void Maw's +2/+2 ability is illegal (can_play false): no card is exiled with Void Maw to pay the cost, and Void Maw stays 4/5."}
+        {
+          "label": "exiled_by_replacement",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Void Maw's replacement effect exiles Grizzly Bears instead of letting it die. Activating Void Maw's +2/+2 ability is legal (can_play true) because the exiled Grizzly Bears can pay the cost; once paid, Grizzly Bears is in B's graveyard and Void Maw is 6/7 until end of turn."
+        },
+        {
+          "label": "exiled_by_other_source",
+          "polarity": "does_not_fire",
+          "delta": "A casts Swords to Plowshares targeting Grizzly Bears, tapping Plains, instead of casting Shock.",
+          "expected": "Grizzly Bears is exiled by Swords to Plowshares and B gains 2 life. Activating Void Maw's +2/+2 ability is illegal (can_play false): no card is exiled with Void Maw to pay the cost, and Void Maw stays 4/5.",
+          "operation": {
+            "unclassifiable": "A casts a different spell (Swords to Plowshares instead of Shock); no fork operation changes the spell cast."
+          }
+        }
       ],
-      "cards": ["Void Maw", "Mountain", "Plains", "Grizzly Bears", "Shock", "Swords to Plowshares"],
+      "cards": [
+        "Void Maw",
+        "Mountain",
+        "Plains",
+        "Grizzly Bears",
+        "Shock",
+        "Swords to Plowshares"
+      ],
       "forge_notes": "The exiled card is recorded through the replacement effect's ChangeZone (ExiledWithSource), whereas Swords to Plowshares exiles the card as an ordinary spell effect."
     },
     {
       "id": "607.2c-1",
-      "rules": ["607.2c"],
+      "rules": [
+        "607.2c"
+      ],
       "title": "An ability that refers to the creature put onto the battlefield with this object triggers only for that creature",
       "record_kind": "trigger",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
+        "life": {
+          "A": 20,
+          "B": 20
+        },
         "battlefield": {
-          "A": ["Swamp", "Swamp", "Swamp", "Swamp", "Mountain", "Runeclaw Bear"],
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Mountain",
+            "Runeclaw Bear"
+          ],
           "B": []
         },
-        "hand": {"A": ["Diabolic Servitude", "Shock"]},
-        "graveyard": {"A": ["Grizzly Bears"]},
-        "library": {}, "exile": {},
+        "hand": {
+          "A": [
+            "Diabolic Servitude",
+            "Shock"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "library": {},
+        "exile": {},
         "notes": ""
       },
       "decisions": [
@@ -97,27 +227,81 @@
         "A casts Shock targeting Grizzly Bears, tapping Mountain. Both players pass; Shock resolves and Grizzly Bears dies in the state-based check."
       ],
       "variants": [
-        {"label": "linked_creature_dies", "polarity": "fires", "delta": "", "expected": "Grizzly Bears, the creature put onto the battlefield with Diabolic Servitude, dies and Diabolic Servitude's trigger fires: Grizzly Bears is exiled from the graveyard and Diabolic Servitude returns to A's hand."},
-        {"label": "other_creature_dies", "polarity": "does_not_fire", "delta": "Shock targets Runeclaw Bear instead of Grizzly Bears.", "expected": "Runeclaw Bear dies and goes to A's graveyard. Diabolic Servitude's trigger does not fire; it stays on the battlefield and Grizzly Bears stays on the battlefield."}
+        {
+          "label": "linked_creature_dies",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears, the creature put onto the battlefield with Diabolic Servitude, dies and Diabolic Servitude's trigger fires: Grizzly Bears is exiled from the graveyard and Diabolic Servitude returns to A's hand."
+        },
+        {
+          "label": "other_creature_dies",
+          "polarity": "does_not_fire",
+          "delta": "Shock targets Runeclaw Bear instead of Grizzly Bears.",
+          "expected": "Runeclaw Bear dies and goes to A's graveyard. Diabolic Servitude's trigger does not fire; it stays on the battlefield and Grizzly Bears stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "Shock has a different target, a player's choice; no fork operation retargets a spell or ability."
+          }
+        }
       ],
-      "cards": ["Swamp", "Mountain", "Runeclaw Bear", "Grizzly Bears", "Diabolic Servitude", "Shock"],
-      "forge_notes": "Forge tracks the linked creature with RememberTargets on the enters ability."
+      "cards": [
+        "Swamp",
+        "Mountain",
+        "Runeclaw Bear",
+        "Grizzly Bears",
+        "Diabolic Servitude",
+        "Shock"
+      ],
+      "forge_notes": "Forge tracks the linked creature with RememberTargets on the enters ability.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A dies trigger whose ValidCard$ is the object its source remembered (the one put onto the battlefield with it) is evaluated and fires when that object dies.",
+        "near_miss": "The same trigger is evaluated when another creature dies and does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "origin": "Battlefield",
+          "destination": "Graveyard",
+          "selector": "Card.IsRemembered"
+        },
+        "needs": []
+      }
     },
     {
       "id": "607.2d-1",
-      "rules": ["607.2d"],
+      "rules": [
+        "607.2d"
+      ],
       "title": "An ability that refers to the chosen value uses the value its linked ability chose",
       "record_kind": "playability",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {
-          "A": ["Plains", "Plains", "Plains", "Plains"],
-          "B": ["Mountain"]
+        "life": {
+          "A": 20,
+          "B": 20
         },
-        "hand": {"A": ["Voice of All"], "B": ["Shock"]},
-        "graveyard": {}, "library": {}, "exile": {},
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Voice of All"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": ""
       },
       "decisions": [
@@ -126,24 +310,66 @@
         "A passes priority with an empty stack, and B considers casting Shock, tapping Mountain."
       ],
       "variants": [
-        {"label": "chose_red", "polarity": "fires", "delta": "", "expected": "Voice of All has protection from red. Voice of All is not a legal target of Shock: B's legal targets for Shock are A and B only."},
-        {"label": "chose_blue", "polarity": "does_not_fire", "delta": "As Voice of All enters, A chooses blue instead of red.", "expected": "Voice of All has protection from blue only. Voice of All is a legal target of Shock (B's legal targets include Voice of All, A and B); Shock would deal 2 damage and destroy the 2/2."}
+        {
+          "label": "chose_red",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Voice of All has protection from red. Voice of All is not a legal target of Shock: B's legal targets for Shock are A and B only."
+        },
+        {
+          "label": "chose_blue",
+          "polarity": "does_not_fire",
+          "delta": "As Voice of All enters, A chooses blue instead of red.",
+          "expected": "Voice of All has protection from blue only. Voice of All is a legal target of Shock (B's legal targets include Voice of All, A and B); Shock would deal 2 damage and destroy the 2/2.",
+          "operation": {
+            "unclassifiable": "A different colour is chosen as the permanent enters, a player's choice; no fork operation sets a chosen value."
+          }
+        }
       ],
-      "cards": ["Plains", "Mountain", "Voice of All", "Shock"],
+      "cards": [
+        "Plains",
+        "Mountain",
+        "Voice of All",
+        "Shock"
+      ],
       "forge_notes": "The protection keyword is built from Card.ChosenColor."
     },
     {
       "id": "607.2e-1",
-      "rules": ["607.2e"],
+      "rules": [
+        "607.2e"
+      ],
       "title": "An ability that refers to noted information uses what its linked ability noted",
       "record_kind": "playability",
       "setup": {
         "active": "B",
         "step": "end",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {"A": ["Jeweled Amulet", "Mountain", "Island"], "B": ["Grizzly Bears"]},
-        "hand": {"A": ["Scorching Shot"]},
-        "graveyard": {}, "library": {"A": ["Island"]}, "exile": {},
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Jeweled Amulet",
+            "Mountain",
+            "Island"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Scorching Shot"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Island"
+          ]
+        },
+        "exile": {},
         "notes": "Jeweled Amulet has no charge counters. It is B's end step and A has priority."
       },
       "decisions": [
@@ -153,27 +379,69 @@
         "A tries to cast Scorching Shot ({R}{R}) targeting Grizzly Bears, paying with the Amulet's mana and Mountain. If it is cast, both players pass and it resolves."
       ],
       "variants": [
-        {"label": "noted_red", "polarity": "fires", "delta": "", "expected": "The Amulet adds {R}. Casting Scorching Shot is legal (can_play true); it resolves, deals 5 damage to Grizzly Bears, and Grizzly Bears goes to B's graveyard."},
-        {"label": "noted_blue", "polarity": "does_not_fire", "delta": "In B's end step A pays the Amulet's {1} by tapping Island instead of Mountain, so blue mana is noted.", "expected": "The Amulet adds {U}. Casting Scorching Shot is illegal (can_play false): A's mana sources give only one {R}. Grizzly Bears stays on the battlefield."}
+        {
+          "label": "noted_red",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Amulet adds {R}. Casting Scorching Shot is legal (can_play true); it resolves, deals 5 damage to Grizzly Bears, and Grizzly Bears goes to B's graveyard."
+        },
+        {
+          "label": "noted_blue",
+          "polarity": "does_not_fire",
+          "delta": "In B's end step A pays the Amulet's {1} by tapping Island instead of Mountain, so blue mana is noted.",
+          "expected": "The Amulet adds {U}. Casting Scorching Shot is illegal (can_play false): A's mana sources give only one {R}. Grizzly Bears stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "A pays the activation with a different land, a payment choice; no fork operation changes how a cost is paid."
+          }
+        }
       ],
-      "cards": ["Jeweled Amulet", "Mountain", "Island", "Scorching Shot", "Grizzly Bears"],
-      "forge_notes": "Forge stores the noted type with RememberCostMana and reads it with Produced$ Special LastNotedType."
+      "cards": [
+        "Jeweled Amulet",
+        "Mountain",
+        "Island",
+        "Scorching Shot",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Forge stores the noted type with RememberCostMana and reads it with Produced$ Special LastNotedType.",
+      "detector": {
+        "none": "The information a linked ability noted (Forge's RememberCostMana, read as LastNotedType) is in no record field: EVENT_PARAMS' mana_produced shows the colour produced and choice_made only a player's choice, the playability candidate bits (can_play, affordable, has_legal_target, gen-3 timing, failed_checks) show only the verdict, and gen-3's chosen_values hold chosen colours, types, words and numbers but no noted mana type to compare with."
+      }
     },
     {
       "id": "607.2g-1",
-      "rules": ["607.2g"],
+      "rules": [
+        "607.2g"
+      ],
       "title": "An ability that refers to the cost paid as this object entered sees the amount its linked ability had paid",
       "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
+        "life": {
+          "A": 20,
+          "B": 20
+        },
         "battlefield": {
-          "A": ["Plains", "Plains", "Plains", "Plains", "Plains", "Plains", "Plains", "Plains"],
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
           "B": []
         },
-        "hand": {"A": ["Phyrexian Processor"]},
-        "graveyard": {}, "library": {}, "exile": {},
+        "hand": {
+          "A": [
+            "Phyrexian Processor"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": ""
       },
       "decisions": [
@@ -182,25 +450,75 @@
         "A activates Phyrexian Processor ({4}, {T}), tapping the other four Plains. Both players pass; the ability resolves."
       ],
       "variants": [
-        {"label": "paid_four", "polarity": "fires", "delta": "", "expected": "A is at 16 life. The ability creates a 4/4 black Phyrexian Minion creature token under A's control."},
-        {"label": "paid_two", "polarity": "other", "delta": "As Phyrexian Processor enters, A pays 2 life instead of 4.", "expected": "A is at 18 life. The ability creates a 2/2 black Phyrexian Minion creature token."},
-        {"label": "paid_zero", "polarity": "does_not_fire", "delta": "As Phyrexian Processor enters, A pays 0 life instead of 4.", "expected": "A is at 20 life. The ability creates a 0/0 Phyrexian Minion token, which is put into the graveyard and ceases to exist in the next state-based check; no creature remains on the battlefield."}
+        {
+          "label": "paid_four",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A is at 16 life. The ability creates a 4/4 black Phyrexian Minion creature token under A's control."
+        },
+        {
+          "label": "paid_two",
+          "polarity": "other",
+          "delta": "As Phyrexian Processor enters, A pays 2 life instead of 4.",
+          "expected": "A is at 18 life. The ability creates a 2/2 black Phyrexian Minion creature token.",
+          "operation": {
+            "unclassifiable": "A different amount of life is paid as the permanent enters, a payment choice; no fork operation sets a paid cost."
+          }
+        },
+        {
+          "label": "paid_zero",
+          "polarity": "does_not_fire",
+          "delta": "As Phyrexian Processor enters, A pays 0 life instead of 4.",
+          "expected": "A is at 20 life. The ability creates a 0/0 Phyrexian Minion token, which is put into the graveyard and ceases to exist in the next state-based check; no creature remains on the battlefield.",
+          "operation": {
+            "unclassifiable": "A different amount of life is paid as the permanent enters, a payment choice; no fork operation sets a paid cost."
+          }
+        }
       ],
-      "cards": ["Plains", "Phyrexian Processor"],
-      "forge_notes": "Forge stores the amount in the SVar LifePaidOnETB through StoreSVar."
+      "cards": [
+        "Plains",
+        "Phyrexian Processor"
+      ],
+      "forge_notes": "Forge stores the amount in the SVar LifePaidOnETB through StoreSVar.",
+      "detector": {
+        "none": "The cost paid as the object entered (life paid through StoreSVar) is in no record field of the resolution that reads it: the Token resolution's token_created characteristics show the token's size, but neither an event in EVENT_PARAMS nor gen-3's costs_paid (mana spent and cast-from zone) or x_paid (a cast X) carries the life paid on entering to compare it with."
+      }
     },
     {
       "id": "607.2h-1",
-      "rules": ["607.2h"],
+      "rules": [
+        "607.2h"
+      ],
       "title": "A triggered ability in the same paragraph as a static ability refers only to what that static ability did",
       "record_kind": "trigger",
       "setup": {
         "active": "A",
         "step": "draw",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {"A": ["Primitive Etchings"], "B": []},
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Primitive Etchings"
+          ],
+          "B": []
+        },
         "hand": {},
-        "graveyard": {}, "library": {"A": ["Grizzly Bears", "Forest", "Forest", "Forest"], "B": ["Forest", "Forest", "Forest"]},
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Grizzly Bears",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
         "exile": {},
         "notes": "A's library is listed top first. A has not drawn a card this turn yet."
       },
@@ -209,27 +527,65 @@
         "If its reveal trigger goes on the stack, both players pass and it resolves."
       ],
       "variants": [
-        {"label": "creature_revealed", "polarity": "fires", "delta": "", "expected": "Grizzly Bears is revealed as the first card drawn this turn. The trigger fires and A draws a second card, Forest; A's hand is Grizzly Bears and Forest."},
-        {"label": "land_revealed", "polarity": "does_not_fire", "delta": "A's library is Forest on top, then Grizzly Bears, instead of Grizzly Bears on top, then Forest.", "expected": "Forest is revealed as the first card drawn this turn. The trigger does not fire; A draws no further card, and A's hand is Forest."}
+        {
+          "label": "creature_revealed",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears is revealed as the first card drawn this turn. The trigger fires and A draws a second card, Forest; A's hand is Grizzly Bears and Forest."
+        },
+        {
+          "label": "land_revealed",
+          "polarity": "does_not_fire",
+          "delta": "A's library is Forest on top, then Grizzly Bears, instead of Grizzly Bears on top, then Forest.",
+          "expected": "Forest is revealed as the first card drawn this turn. The trigger does not fire; A draws no further card, and A's hand is Forest.",
+          "operation": {
+            "unclassifiable": "A's library is in a different order; no fork operation changes a library."
+          }
+        }
       ],
-      "cards": ["Primitive Etchings", "Grizzly Bears", "Forest"],
+      "cards": [
+        "Primitive Etchings",
+        "Grizzly Bears",
+        "Forest"
+      ],
       "forge_notes": "Forge models the reveal as a static-style Drawn trigger that calls an ImmediateTrigger when the revealed card is a creature."
     },
     {
       "id": "607.2i-1",
-      "rules": ["607.2i"],
+      "rules": [
+        "607.2i"
+      ],
       "title": "An ability that checks a kicker cost sees only whether its own linked kicker was paid",
       "record_kind": "trigger",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {
-          "A": ["Island", "Island", "Island", "Plains", "Swamp", "Swamp", "Swamp"],
-          "B": ["Grizzly Bears"]
+        "life": {
+          "A": 20,
+          "B": 20
         },
-        "hand": {"A": ["Stormscape Battlemage"]},
-        "graveyard": {}, "library": {}, "exile": {},
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Plains",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Stormscape Battlemage"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": ""
       },
       "decisions": [
@@ -237,25 +593,83 @@
         "Its enters trigger or triggers, if any, go on the stack. If the destroy trigger is on the stack it targets Grizzly Bears. Both players pass until the stack is empty."
       ],
       "variants": [
-        {"label": "w_kicker_only", "polarity": "fires", "delta": "", "expected": "Only the {W}-kicker trigger fires: A gains 3 life and is at 23. Grizzly Bears stays on the battlefield."},
-        {"label": "b_kicker_only", "polarity": "other", "delta": "A pays kicker {2}{B} only, tapping three Islands and three Swamps, instead of kicker {W}.", "expected": "Only the {2}{B}-kicker trigger fires: Grizzly Bears is destroyed and goes to B's graveyard. A stays at 20 life."},
-        {"label": "unkicked", "polarity": "does_not_fire", "delta": "A pays no kicker, tapping three Islands only.", "expected": "Neither enters trigger fires: A stays at 20 life and Grizzly Bears stays on the battlefield."}
+        {
+          "label": "w_kicker_only",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Only the {W}-kicker trigger fires: A gains 3 life and is at 23. Grizzly Bears stays on the battlefield."
+        },
+        {
+          "label": "b_kicker_only",
+          "polarity": "other",
+          "delta": "A pays kicker {2}{B} only, tapping three Islands and three Swamps, instead of kicker {W}.",
+          "expected": "Only the {2}{B}-kicker trigger fires: Grizzly Bears is destroyed and goes to B's graveyard. A stays at 20 life.",
+          "operation": {
+            "unclassifiable": "A pays a different kicker, a casting choice; no fork operation sets which additional cost was paid."
+          }
+        },
+        {
+          "label": "unkicked",
+          "polarity": "does_not_fire",
+          "delta": "A pays no kicker, tapping three Islands only.",
+          "expected": "Neither enters trigger fires: A stays at 20 life and Grizzly Bears stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "A pays no kicker, a casting choice; no fork operation sets which additional cost was paid."
+          }
+        }
       ],
-      "cards": ["Island", "Plains", "Swamp", "Grizzly Bears", "Stormscape Battlemage"],
-      "forge_notes": "Forge matches the kicker with Card.Self+kicked 1 and Card.Self+kicked 2."
+      "cards": [
+        "Island",
+        "Plains",
+        "Swamp",
+        "Grizzly Bears",
+        "Stormscape Battlemage"
+      ],
+      "forge_notes": "Forge matches the kicker with Card.Self+kicked 1 and Card.Self+kicked 2.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An enters trigger conditioned on its own object's kicker having been paid is evaluated and fires for an object cast with that kicker.",
+        "near_miss": "The same trigger is evaluated for an object cast without that kicker and does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield",
+          "selector": "Card.Self+kicked"
+        },
+        "needs": []
+      }
     },
     {
       "id": "607.2j-1",
-      "rules": ["607.2j"],
+      "rules": [
+        "607.2j"
+      ],
       "title": "An ability that refers to the variable cost paid as this object was cast sees the number of times it was kicked",
       "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {"A": ["Plains", "Plains", "Plains", "Plains"], "B": []},
-        "hand": {"A": ["Everflowing Chalice"]},
-        "graveyard": {}, "library": {}, "exile": {},
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Everflowing Chalice"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": ""
       },
       "decisions": [
@@ -263,28 +677,75 @@
         "A taps Everflowing Chalice for mana."
       ],
       "variants": [
-        {"label": "kicked_twice", "polarity": "fires", "delta": "", "expected": "Everflowing Chalice enters with 2 charge counters and its mana ability adds {C}{C}."},
-        {"label": "kicked_once", "polarity": "other", "delta": "A pays multikicker {2} once, tapping two Plains, instead of twice.", "expected": "Everflowing Chalice enters with 1 charge counter and its mana ability adds {C}."},
-        {"label": "unkicked", "polarity": "does_not_fire", "delta": "A pays no multikicker.", "expected": "Everflowing Chalice enters with no charge counters and its mana ability adds no mana."}
+        {
+          "label": "kicked_twice",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Everflowing Chalice enters with 2 charge counters and its mana ability adds {C}{C}."
+        },
+        {
+          "label": "kicked_once",
+          "polarity": "other",
+          "delta": "A pays multikicker {2} once, tapping two Plains, instead of twice.",
+          "expected": "Everflowing Chalice enters with 1 charge counter and its mana ability adds {C}.",
+          "operation": {
+            "unclassifiable": "A pays multikicker a different number of times, a casting choice; no fork operation sets a paid cost."
+          }
+        },
+        {
+          "label": "unkicked",
+          "polarity": "does_not_fire",
+          "delta": "A pays no multikicker.",
+          "expected": "Everflowing Chalice enters with no charge counters and its mana ability adds no mana.",
+          "operation": {
+            "unclassifiable": "A pays no multikicker, a casting choice; no fork operation sets a paid cost."
+          }
+        }
       ],
-      "cards": ["Plains", "Everflowing Chalice"],
+      "cards": [
+        "Plains",
+        "Everflowing Chalice"
+      ],
       "forge_notes": "Forge reads the times kicked with Count$TimesKicked."
     },
     {
       "id": "607.2k-1",
-      "rules": ["607.2k"],
+      "rules": [
+        "607.2k"
+      ],
       "title": "The champion keyword's return ability returns only the creature its own exile ability exiled",
       "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {
-          "A": ["Plains", "Plains", "Plains", "Plains", "Plains", "Grizzly Bears"],
-          "B": ["Plains"]
+        "life": {
+          "A": 20,
+          "B": 20
         },
-        "hand": {"A": ["Changeling Hero"], "B": ["Swords to Plowshares"]},
-        "graveyard": {}, "library": {}, "exile": {},
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Changeling Hero"
+          ],
+          "B": [
+            "Swords to Plowshares"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": "In the other_exiled variant, A's exile zone also holds Runeclaw Bear, exiled earlier by another effect."
       },
       "decisions": [
@@ -295,28 +756,87 @@
         "The champion return trigger goes on the stack. Both players pass; it resolves."
       ],
       "variants": [
-        {"label": "champion_returns", "polarity": "fires", "delta": "", "expected": "Grizzly Bears returns to the battlefield under A's control. A gains 4 life (Changeling Hero's power) and is at 24."},
-        {"label": "other_exiled", "polarity": "other", "delta": "A's exile zone also holds Runeclaw Bear, exiled earlier by another effect.", "expected": "Grizzly Bears returns to the battlefield under A's control. Runeclaw Bear stays in exile. A is at 24 life."},
-        {"label": "no_creature_to_champion", "polarity": "does_not_fire", "delta": "A controls no Grizzly Bears, so there is no other creature to exile for champion.", "expected": "The champion trigger resolves with nothing exiled and Changeling Hero is sacrificed to A's graveyard. B does not cast Swords to Plowshares (no target), and no card returns to the battlefield."}
+        {
+          "label": "champion_returns",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears returns to the battlefield under A's control. A gains 4 life (Changeling Hero's power) and is at 24."
+        },
+        {
+          "label": "other_exiled",
+          "polarity": "other",
+          "delta": "A's exile zone also holds Runeclaw Bear, exiled earlier by another effect.",
+          "expected": "Grizzly Bears returns to the battlefield under A's control. Runeclaw Bear stays in exile. A is at 24 life.",
+          "operation": {
+            "unclassifiable": "An extra card is in A's exile zone; no fork operation adds a card to exile."
+          }
+        },
+        {
+          "label": "no_creature_to_champion",
+          "polarity": "does_not_fire",
+          "delta": "A controls no Grizzly Bears, so there is no other creature to exile for champion.",
+          "expected": "The champion trigger resolves with nothing exiled and Changeling Hero is sacrificed to A's graveyard. B does not cast Swords to Plowshares (no target), and no card returns to the battlefield.",
+          "operation": {
+            "unclassifiable": "A creature is removed from the battlefield; no fork operation removes a permanent."
+          }
+        }
       ],
-      "cards": ["Plains", "Grizzly Bears", "Runeclaw Bear", "Changeling Hero", "Swords to Plowshares"],
-      "forge_notes": "The other_exiled variant adds Runeclaw Bear to A's exile zone at setup. Forge implements champion as K:Champion:Creature."
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Runeclaw Bear",
+        "Changeling Hero",
+        "Swords to Plowshares"
+      ],
+      "forge_notes": "The other_exiled variant adds Runeclaw Bear to A's exile zone at setup. Forge implements champion as K:Champion:Creature.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution moves a card from exile to the battlefield, as champion's leaves-the-battlefield half returns the card its exile half exiled.",
+        "near_miss": "A linked return ability whose exiling ability exiled nothing, or nothing still in exile, returns no card; not counted, since outcome_event counts a near miss only with api set and every other ChangeZone resolution would then count as one.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "Exile",
+          "to_zone": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "607.2m-1",
-      "rules": ["607.2m", "607.2f"],
+      "rules": [
+        "607.2m",
+        "607.2f"
+      ],
       "title": "An ability preceded by an anchor word applies only if its anchor word was chosen as the permanent entered",
       "record_kind": "trigger",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
+        "life": {
+          "A": 20,
+          "B": 20
+        },
         "battlefield": {
-          "A": ["Island", "Swamp", "Plains", "Plains", "Mountain", "Runeclaw Bear"],
+          "A": [
+            "Island",
+            "Swamp",
+            "Plains",
+            "Plains",
+            "Mountain",
+            "Runeclaw Bear"
+          ],
           "B": []
         },
-        "hand": {"A": ["Phenomenon Investigators", "Shock"]},
-        "graveyard": {}, "library": {}, "exile": {},
+        "hand": {
+          "A": [
+            "Phenomenon Investigators",
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": ""
       },
       "decisions": [
@@ -326,28 +846,75 @@
         "The players pass priority through the rest of the turn; if the Doubt end-step trigger occurs, A declines to return a permanent."
       ],
       "variants": [
-        {"label": "chose_believe", "polarity": "fires", "delta": "", "expected": "The Believe trigger fires when the nontoken Runeclaw Bear dies, and A creates a 2/2 black Horror enchantment creature token. Runeclaw Bear is in A's graveyard."},
-        {"label": "chose_doubt", "polarity": "does_not_fire", "delta": "As Phenomenon Investigators enters, A chooses Doubt instead of Believe.", "expected": "No Believe trigger fires and A creates no token. Runeclaw Bear is in A's graveyard."}
+        {
+          "label": "chose_believe",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Believe trigger fires when the nontoken Runeclaw Bear dies, and A creates a 2/2 black Horror enchantment creature token. Runeclaw Bear is in A's graveyard."
+        },
+        {
+          "label": "chose_doubt",
+          "polarity": "does_not_fire",
+          "delta": "As Phenomenon Investigators enters, A chooses Doubt instead of Believe.",
+          "expected": "No Believe trigger fires and A creates no token. Runeclaw Bear is in A's graveyard.",
+          "operation": {
+            "unclassifiable": "A different anchor word is chosen as the permanent enters, a player's choice; no fork operation sets a chosen word."
+          }
+        }
       ],
-      "cards": ["Island", "Swamp", "Plains", "Mountain", "Runeclaw Bear", "Phenomenon Investigators", "Shock"],
+      "cards": [
+        "Island",
+        "Swamp",
+        "Plains",
+        "Mountain",
+        "Runeclaw Bear",
+        "Phenomenon Investigators",
+        "Shock"
+      ],
       "forge_notes": "Forge stores the anchor word as ChosenMode and gates each bullet with Card.Self+ChosenModeBelieve / ChosenModeDoubt."
     },
     {
       "id": "607.2q-1",
-      "rules": ["607.2q"],
+      "rules": [
+        "607.2q"
+      ],
       "title": "A permanent's ability that refers to cards exiled with it includes the card exiled to pay for casting its spell",
       "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {
-          "A": ["Plains", "Plains", "Plains", "Plains", "Plains", "Plains", "Grizzly Bears"],
-          "B": ["Hill Giant", "Plains"]
+        "life": {
+          "A": 20,
+          "B": 20
         },
-        "hand": {"A": ["Fear of Abduction"], "B": ["Swords to Plowshares"]},
-        "graveyard": {}, "library": {},
-        "exile": {"B": []},
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Hill Giant",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fear of Abduction"
+          ],
+          "B": [
+            "Swords to Plowshares"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {
+          "B": []
+        },
         "notes": "In the unrelated_exiled variant B's exile zone also holds Runeclaw Bear, exiled earlier by another effect."
       },
       "decisions": [
@@ -358,27 +925,73 @@
         "Fear of Abduction's leaves-the-battlefield trigger goes on the stack. Both players pass; it resolves."
       ],
       "variants": [
-        {"label": "cost_and_effect_cards", "polarity": "fires", "delta": "", "expected": "Grizzly Bears (exiled to pay the cost) returns to A's hand and Hill Giant (exiled by the enters trigger) returns to B's hand. B's Swords to Plowshares exiles Fear of Abduction, so A gains 5 life and is at 25."},
-        {"label": "unrelated_exiled", "polarity": "does_not_fire", "delta": "B's exile zone also holds Runeclaw Bear, exiled earlier by another effect.", "expected": "Grizzly Bears returns to A's hand and Hill Giant returns to B's hand, as in the base. Runeclaw Bear stays in exile."}
+        {
+          "label": "cost_and_effect_cards",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears (exiled to pay the cost) returns to A's hand and Hill Giant (exiled by the enters trigger) returns to B's hand. B's Swords to Plowshares exiles Fear of Abduction, so A gains 5 life and is at 25."
+        },
+        {
+          "label": "unrelated_exiled",
+          "polarity": "does_not_fire",
+          "delta": "B's exile zone also holds Runeclaw Bear, exiled earlier by another effect.",
+          "expected": "Grizzly Bears returns to A's hand and Hill Giant returns to B's hand, as in the base. Runeclaw Bear stays in exile.",
+          "operation": {
+            "unclassifiable": "An extra card is in B's exile zone; no fork operation adds a card to exile."
+          }
+        }
       ],
-      "cards": ["Plains", "Grizzly Bears", "Hill Giant", "Runeclaw Bear", "Fear of Abduction", "Swords to Plowshares"],
+      "cards": [
+        "Plains",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Runeclaw Bear",
+        "Fear of Abduction",
+        "Swords to Plowshares"
+      ],
       "forge_notes": "Whether Forge counts the card exiled as a cost as ExiledWithSource of the resulting permanent must be checked; the unrelated_exiled variant puts Runeclaw Bear in B's exile zone in setup."
     },
     {
       "id": "607.3-1",
-      "rules": ["607.3"],
+      "rules": [
+        "607.3"
+      ],
       "title": "A single-card reference to the exiled card applies to every card exiled when the linked ability was copied",
       "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {
-          "A": ["Strionic Resonator", "Plains", "Plains", "Plains", "Plains", "Plains"],
-          "B": ["Grizzly Bears", "Hill Giant", "Plains", "Plains"]
+        "life": {
+          "A": 20,
+          "B": 20
         },
-        "hand": {"A": ["Oblivion Ring"], "B": ["Disenchant"]},
-        "graveyard": {}, "library": {}, "exile": {},
+        "battlefield": {
+          "A": [
+            "Strionic Resonator",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Hill Giant",
+            "Plains",
+            "Plains"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Oblivion Ring"
+          ],
+          "B": [
+            "Disenchant"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": ""
       },
       "decisions": [
@@ -391,24 +1004,74 @@
         "Oblivion Ring's leaves-the-battlefield trigger goes on the stack. Both players pass; it resolves."
       ],
       "variants": [
-        {"label": "trigger_copied", "polarity": "fires", "delta": "", "expected": "Both exiled cards return to the battlefield under B's control: Grizzly Bears and Hill Giant."},
-        {"label": "trigger_not_copied", "polarity": "does_not_fire", "delta": "A does not activate Strionic Resonator, so only Grizzly Bears is exiled.", "expected": "Grizzly Bears returns to the battlefield under B's control. Hill Giant was never exiled and stays on the battlefield."}
+        {
+          "label": "trigger_copied",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Both exiled cards return to the battlefield under B's control: Grizzly Bears and Hill Giant."
+        },
+        {
+          "label": "trigger_not_copied",
+          "polarity": "does_not_fire",
+          "delta": "A does not activate Strionic Resonator, so only Grizzly Bears is exiled.",
+          "expected": "Grizzly Bears returns to the battlefield under B's control. Hill Giant was never exiled and stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "A does not activate Strionic Resonator, a different decision; no fork operation changes a player's activations."
+          }
+        }
       ],
-      "cards": ["Strionic Resonator", "Plains", "Oblivion Ring", "Grizzly Bears", "Hill Giant", "Disenchant"],
-      "forge_notes": "Forge's TrigReturn uses Defined$ ExiledWith, which returns every card exiled by the Oblivion Ring object; whether the copy's exile counts as the Oblivion Ring's depends on the copy keeping the Ring as its host."
+      "cards": [
+        "Strionic Resonator",
+        "Plains",
+        "Oblivion Ring",
+        "Grizzly Bears",
+        "Hill Giant",
+        "Disenchant"
+      ],
+      "forge_notes": "Forge's TrigReturn uses Defined$ ExiledWith, which returns every card exiled by the Oblivion Ring object; whether the copy's exile counts as the Oblivion Ring's depends on the copy keeping the Ring as its host.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "One resolution moves two or more cards from exile to the battlefield, as a return ability referring to \"the exiled card\" returns every card its linked ability exiled.",
+        "near_miss": "A return ability's linked exile ability exiled one card and one card returns; not counted, since without api outcome_event tags only the fires side.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "Exile",
+          "to_zone": "Battlefield",
+          "min_count": 2
+        },
+        "needs": []
+      }
     },
     {
       "id": "607.4-1",
-      "rules": ["607.4"],
+      "rules": [
+        "607.4"
+      ],
       "title": "An ability linked to several abilities refers to each one's choice independently",
       "record_kind": "trigger",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {"A": ["Paradise Plume", "Mountain"], "B": []},
-        "hand": {"A": ["Shock"]},
-        "graveyard": {}, "library": {}, "exile": {},
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Paradise Plume",
+            "Mountain"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": "Paradise Plume entered earlier with red chosen. In the chose_blue variant blue was chosen instead."
       },
       "decisions": [
@@ -417,30 +1080,84 @@
         "If Paradise Plume's trigger goes on the stack, A chooses to gain 1 life. Both players pass until the stack is empty."
       ],
       "variants": [
-        {"label": "chose_red", "polarity": "fires", "delta": "", "expected": "Paradise Plume's mana ability adds {R}. Shock is a red spell, so Paradise Plume's trigger fires and A gains 1 life (21). Shock deals 2 damage to B (18)."},
-        {"label": "chose_blue", "polarity": "does_not_fire", "delta": "The color chosen as Paradise Plume entered was blue, not red.", "expected": "Paradise Plume's mana ability adds {U}. Shock is not blue, so Paradise Plume's trigger does not fire and A stays at 20. Shock deals 2 damage to B (18)."}
+        {
+          "label": "chose_red",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Paradise Plume's mana ability adds {R}. Shock is a red spell, so Paradise Plume's trigger fires and A gains 1 life (21). Shock deals 2 damage to B (18)."
+        },
+        {
+          "label": "chose_blue",
+          "polarity": "does_not_fire",
+          "delta": "The color chosen as Paradise Plume entered was blue, not red.",
+          "expected": "Paradise Plume's mana ability adds {U}. Shock is not blue, so Paradise Plume's trigger does not fire and A stays at 20. Shock deals 2 damage to B (18).",
+          "operation": {
+            "unclassifiable": "A different colour was chosen as the permanent entered, a player's choice; no fork operation sets a chosen value."
+          }
+        }
       ],
-      "cards": ["Paradise Plume", "Mountain", "Shock"],
-      "forge_notes": "Forge stores the color in ChosenColor; the setup needs Paradise Plume to start on the battlefield with that choice made."
+      "cards": [
+        "Paradise Plume",
+        "Mountain",
+        "Shock"
+      ],
+      "forge_notes": "Forge stores the color in ChosenColor; the setup needs Paradise Plume to start on the battlefield with that choice made.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A spell-cast trigger whose ValidCard$ is the colour chosen as its source entered is evaluated and fires for a spell of the chosen colour.",
+        "near_miss": "The same trigger is evaluated for a spell not of the chosen colour and does not fire.",
+        "params": {
+          "mode": "SpellCast",
+          "selector": "Card.ChosenColor"
+        },
+        "needs": []
+      }
     },
     {
       "id": "607.5-1",
-      "rules": ["607.5"],
+      "rules": [
+        "607.5"
+      ],
       "title": "Linked abilities acquired together stay linked to each other and not to the printed abilities of another creature",
       "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "declare_blockers",
-        "life": {"A": 20, "B": 20},
+        "life": {
+          "A": 20,
+          "B": 20
+        },
         "battlefield": {
           "A": [
-            {"card": "Quicksilver Elemental", "tapped": true, "summoning_sick": false},
-            {"card": "Sisters of Stone Death", "tapped": true, "summoning_sick": false},
-            "Island", "Island", "Island", "Island", "Island", "Island", "Swamp", "Forest"
+            {
+              "card": "Quicksilver Elemental",
+              "tapped": true,
+              "summoning_sick": false
+            },
+            {
+              "card": "Sisters of Stone Death",
+              "tapped": true,
+              "summoning_sick": false
+            },
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Swamp",
+            "Forest"
           ],
-          "B": ["Grizzly Bears", "Runeclaw Bear"]
+          "B": [
+            "Grizzly Bears",
+            "Runeclaw Bear"
+          ]
         },
-        "hand": {}, "graveyard": {}, "library": {}, "exile": {},
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": "A attacked with Quicksilver Elemental and Sisters of Stone Death. B declared Grizzly Bears blocking Quicksilver Elemental and Runeclaw Bear blocking Sisters of Stone Death. A has priority in the declare blockers step."
       },
       "decisions": [
@@ -450,27 +1167,82 @@
         "A activates the Elemental's acquired ability {2}{B}: put a creature card exiled with it onto the battlefield under A's control, paying with three Islands. Both players pass; it resolves."
       ],
       "variants": [
-        {"label": "both_exiled", "polarity": "fires", "delta": "", "expected": "Grizzly Bears, exiled by the Elemental's acquired ability, is put onto the battlefield under A's control. Runeclaw Bear, exiled by Sisters's own ability, stays in exile."},
-        {"label": "elemental_never_exiled", "polarity": "does_not_fire", "delta": "A does not activate the Elemental's acquired exile ability, so Grizzly Bears is not exiled.", "expected": "The Elemental's acquired return ability resolves and puts no creature onto the battlefield: Runeclaw Bear, exiled by Sisters's own ability, stays in exile and Grizzly Bears stays on the battlefield under B's control."}
+        {
+          "label": "both_exiled",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears, exiled by the Elemental's acquired ability, is put onto the battlefield under A's control. Runeclaw Bear, exiled by Sisters's own ability, stays in exile."
+        },
+        {
+          "label": "elemental_never_exiled",
+          "polarity": "does_not_fire",
+          "delta": "A does not activate the Elemental's acquired exile ability, so Grizzly Bears is not exiled.",
+          "expected": "The Elemental's acquired return ability resolves and puts no creature onto the battlefield: Runeclaw Bear, exiled by Sisters's own ability, stays in exile and Grizzly Bears stays on the battlefield under B's control.",
+          "operation": {
+            "unclassifiable": "A does not activate the acquired exile ability, a different decision; no fork operation changes a player's activations."
+          }
+        }
       ],
-      "cards": ["Quicksilver Elemental", "Sisters of Stone Death", "Island", "Swamp", "Forest", "Grizzly Bears", "Runeclaw Bear"],
-      "forge_notes": "Forge gives the Elemental the abilities as a copy hosted by the Elemental, so ExiledWithSource on the Elemental differs from Sisters's own exiled cards."
+      "cards": [
+        "Quicksilver Elemental",
+        "Sisters of Stone Death",
+        "Island",
+        "Swamp",
+        "Forest",
+        "Grizzly Bears",
+        "Runeclaw Bear"
+      ],
+      "forge_notes": "Forge gives the Elemental the abilities as a copy hosted by the Elemental, so ExiledWithSource on the Elemental differs from Sisters's own exiled cards.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution moves cards from exile to the battlefield: an ability returning the cards exiled with its source.",
+        "near_miss": "A linked return ability whose exiling ability exiled nothing, or nothing still in exile, returns no card; not counted, since outcome_event counts a near miss only with api set and every other ChangeZone resolution would then count as one.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "Exile",
+          "to_zone": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "607.5a-1",
-      "rules": ["607.5a"],
+      "rules": [
+        "607.5a"
+      ],
       "title": "An ability that refers to an undefined choice does nothing",
       "record_kind": "playability",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {
-          "A": ["Unstable Shapeshifter", "Plains", "Plains", "Plains", "Plains"],
-          "B": ["Mountain"]
+        "life": {
+          "A": 20,
+          "B": 20
         },
-        "hand": {"A": ["Voice of All"], "B": ["Shock"]},
-        "graveyard": {}, "library": {}, "exile": {},
+        "battlefield": {
+          "A": [
+            "Unstable Shapeshifter",
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Mountain"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Voice of All"
+          ],
+          "B": [
+            "Shock"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": ""
       },
       "decisions": [
@@ -480,10 +1252,29 @@
         "A passes priority with an empty stack, and B considers casting Shock, tapping Mountain."
       ],
       "variants": [
-        {"label": "target_copy", "polarity": "fires", "delta": "", "expected": "The copy of Voice of All has no protection from red, because no color was chosen for it. It is a legal target of Shock (B's legal targets include the copy)."},
-        {"label": "target_original", "polarity": "does_not_fire", "delta": "B considers targeting the real Voice of All instead of the Unstable Shapeshifter copy.", "expected": "The real Voice of All has protection from red, the color chosen as it entered. It is not a legal target of Shock."}
+        {
+          "label": "target_copy",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The copy of Voice of All has no protection from red, because no color was chosen for it. It is a legal target of Shock (B's legal targets include the copy)."
+        },
+        {
+          "label": "target_original",
+          "polarity": "does_not_fire",
+          "delta": "B considers targeting the real Voice of All instead of the Unstable Shapeshifter copy.",
+          "expected": "The real Voice of All has protection from red, the color chosen as it entered. It is not a legal target of Shock.",
+          "operation": {
+            "unclassifiable": "B considers a different target, a player's choice; no fork operation retargets a spell or ability."
+          }
+        }
       ],
-      "cards": ["Unstable Shapeshifter", "Plains", "Mountain", "Voice of All", "Shock"],
+      "cards": [
+        "Unstable Shapeshifter",
+        "Plains",
+        "Mountain",
+        "Voice of All",
+        "Shock"
+      ],
       "forge_notes": "Whether Forge leaves the copy's chosen color empty, so that Card.ChosenColor matches nothing, must be checked."
     }
   ]

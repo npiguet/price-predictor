@@ -69,13 +69,19 @@
           "label": "b_turn",
           "polarity": "other",
           "delta": "It is B's turn (B's main phase 1) and A activates the ability at instant speed after B passes priority.",
-          "expected": "Grizzly Bears has 1 damage marked. Arcee is Arcee, Acrobatic Coupe with one +1/+1 counter; it is a Vehicle and not a creature during B's turn."
+          "expected": "Grizzly Bears has 1 damage marked. Arcee is Arcee, Acrobatic Coupe with one +1/+1 counter; it is a Vehicle and not a creature during B's turn.",
+          "operation": {
+            "unclassifiable": "The turn changes to B's, with the ability activated at instant speed; no fork operation changes the turn."
+          }
         },
         {
           "label": "target_gone",
           "polarity": "does_not_fire",
           "delta": "In response to the ability, B casts Unsummon (tapping Island) on Grizzly Bears, returning it to B's hand.",
-          "expected": "The ability's only target is gone, so it is removed from the stack without resolving: no damage is dealt and Arcee stays Arcee, Sharpshooter with one +1/+1 counter. Grizzly Bears is in B's hand."
+          "expected": "The ability's only target is gone, so it is removed from the stack without resolving: no damage is dealt and Arcee stays Arcee, Sharpshooter with one +1/+1 counter. Grizzly Bears is in B's hand.",
+          "operation": {
+            "unclassifiable": "An additional spell is cast in response; no fork operation casts a spell."
+          }
         }
       ],
       "cards": [
@@ -85,7 +91,18 @@
         "Island",
         "Unsummon"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution turns a double-faced permanent over (a face_change event names it).",
+        "near_miss": "A transform resolution that produced no face_change.",
+        "params": {
+          "event": "face_change",
+          "api": "SetState"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.28c-1",
@@ -144,7 +161,8 @@
           "label": "double_faced_card",
           "polarity": "does_not_fire",
           "delta": "The permanent is the card Arcee, Sharpshooter itself (with one +1/+1 counter) instead of a Clone copying it, and A's graveyard is empty.",
-          "expected": "Grizzly Bears has 1 damage marked. Arcee converts and is Arcee, Acrobatic Coupe, a 2/2 Vehicle that is a creature during A's turn."
+          "expected": "Grizzly Bears has 1 damage marked. Arcee converts and is Arcee, Acrobatic Coupe, a 2/2 Vehicle that is a creature during A's turn.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -153,7 +171,19 @@
         "Arcee, Sharpshooter",
         "Grizzly Bears"
       ],
-      "forge_notes": "Card.canTransform requires the card itself to be transformable, so SetState skips a Clone whose copiable values come from a double-faced card."
+      "forge_notes": "Card.canTransform requires the card itself to be transformable, so SetState skips a Clone whose copiable values come from a double-faced card.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A transform or convert resolution turns nothing over (no face_change event), as when the permanent is not a double-faced card.",
+        "near_miss": "A transform or convert resolution that turned a permanent over (a face_change event).",
+        "params": {
+          "event": "face_change",
+          "api": "SetState",
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.28b-1",
@@ -220,7 +250,10 @@
           "label": "turn_face_up",
           "polarity": "fires",
           "delta": "Instead of activating Arcee, A turns Daru Lancer face up by paying {2}{W}{W} with all four lands.",
-          "expected": "Daru Lancer is face up. Aven Farseer's trigger fires: Aven Farseer has one +1/+1 counter and is 2/2. Arcee is still Arcee, Sharpshooter."
+          "expected": "Daru Lancer is face up. Aven Farseer's trigger fires: Aven Farseer has one +1/+1 counter and is 2/2. Arcee is still Arcee, Sharpshooter.",
+          "operation": {
+            "unclassifiable": "The player takes a different action (a morph turned face up instead of an ability activated); no fork operation changes a player's action."
+          }
         }
       ],
       "cards": [
@@ -231,7 +264,17 @@
         "Daru Lancer",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A turned-face-up trigger fires when a permanent it watches is turned face up.",
+        "near_miss": "A turned-face-up trigger evaluated against a face-up turn it does not watch does not fire; a convert is no face-up turn and evaluates no turned-face-up trigger.",
+        "params": {
+          "mode": "TurnFaceUp"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.28e-1",
@@ -288,7 +331,10 @@
           "label": "one_activation",
           "polarity": "fires",
           "delta": "A activates the ability once only (one counter removed); the second activation does not happen.",
-          "expected": "Hill Giant has 1 damage marked. Arcee converts once, to Arcee, Acrobatic Coupe, with one +1/+1 counter."
+          "expected": "Hill Giant has 1 damage marked. Arcee converts once, to Arcee, Acrobatic Coupe, with one +1/+1 counter.",
+          "operation": {
+            "unclassifiable": "The player activates the ability once instead of twice; no fork operation changes a player's decision."
+          }
         }
       ],
       "cards": [
@@ -296,7 +342,18 @@
         "Arcee, Sharpshooter",
         "Hill Giant"
       ],
-      "forge_notes": "Forge stores the host's transform timestamp on the stack instance (StoredTransform) and compares it when SetState resolves."
+      "forge_notes": "Forge stores the host's transform timestamp on the stack instance (StoredTransform) and compares it when SetState resolves.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution turns a double-faced permanent over (a face_change event names it).",
+        "near_miss": "A transform resolution that produced no face_change.",
+        "params": {
+          "event": "face_change",
+          "api": "SetState"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.28f-1",
@@ -355,7 +412,10 @@
           "label": "unenchanted",
           "polarity": "does_not_fire",
           "delta": "Bound by Moonsilver is not on the battlefield.",
-          "expected": "Grizzly Bears has 1 damage marked. Arcee converts to Arcee, Acrobatic Coupe."
+          "expected": "Grizzly Bears has 1 damage marked. Arcee converts to Arcee, Acrobatic Coupe.",
+          "operation": {
+            "unclassifiable": "A permanent is removed from the battlefield; no fork operation removes a permanent."
+          }
         }
       ],
       "cards": [
@@ -364,7 +424,19 @@
         "Bound by Moonsilver",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A transform or convert resolution turns nothing over (no face_change event), as when an effect says the permanent can't transform.",
+        "near_miss": "A transform or convert resolution that turned a permanent over (a face_change event).",
+        "params": {
+          "event": "face_change",
+          "api": "SetState",
+          "absent": true
+        },
+        "needs": []
+      }
     }
   ]
 }

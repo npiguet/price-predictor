@@ -75,7 +75,10 @@
           "label": "own-shuffle",
           "polarity": "does_not_fire",
           "delta": "Worldly Tutor is in A's hand instead of B's and A casts it, tapping A's Forest, choosing A's Grizzly Bears.",
-          "expected": "Grizzly Bears is the top card of A's library. A shuffled A's own library, which does not trigger Cosi's Trickster: it stays 1/1 with no counter."
+          "expected": "Grizzly Bears is the top card of A's library. A shuffled A's own library, which does not trigger Cosi's Trickster: it stays 1/1 with no counter.",
+          "operation": {
+            "unclassifiable": "The spell moves to the other player's hand and that player casts it; no fork operation changes who casts a spell."
+          }
         }
       ],
       "cards": [
@@ -85,7 +88,17 @@
         "Worldly Tutor",
         "Grizzly Bears"
       ],
-      "forge_notes": "Worldly Tutor is ChangeZone Library to Library with LibraryPosition 0; check that Forge runs the shuffle that fires Shuffled triggers."
+      "forge_notes": "Worldly Tutor is ChangeZone Library to Library with LibraryPosition 0; check that Forge runs the shuffle that fires Shuffled triggers.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A shuffle trigger fires when a library is shuffled, whatever the library's size or the cards moved into it.",
+        "near_miss": "A shuffle trigger evaluated against an event that is not a shuffle of a library it watches.",
+        "params": {
+          "mode": "Shuffled"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.24c-1",
@@ -154,13 +167,19 @@
           "label": "no-response",
           "polarity": "other",
           "delta": "A does not activate Relic of Progenitus.",
-          "expected": "Guile moves from the graveyard to A's library, which is shuffled and now holds four cards. Cosi's Trickster triggers and becomes 2/2."
+          "expected": "Guile moves from the graveyard to A's library, which is shuffled and now holds four cards. Cosi's Trickster triggers and becomes 2/2.",
+          "operation": {
+            "unclassifiable": "A player chooses not to activate an ability; no fork operation changes a player's decision."
+          }
         },
         {
           "label": "own-trickster",
           "polarity": "does_not_fire",
           "delta": "Cosi's Trickster is under A's control instead of B's.",
-          "expected": "Guile is exiled by the Relic and A's library is shuffled, which does not trigger A's own Cosi's Trickster: it stays 1/1."
+          "expected": "Guile is exiled by the Relic and A's library is shuffled, which does not trigger A's own Cosi's Trickster: it stays 1/1.",
+          "operation": {
+            "unclassifiable": "A permanent changes controller; no fork operation sets a permanent's controller."
+          }
         }
       ],
       "cards": [
@@ -171,7 +190,17 @@
         "Diabolic Edict",
         "Forest"
       ],
-      "forge_notes": "Guile's trigger uses Defined$ TriggeredCardLKICopy with Origin$ Graveyard; if the card is no longer there Forge may skip the move and the shuffle, which would diverge from the rule. In the own-trickster variant A sacrifices Guile to Diabolic Edict by choice (Cosi's Trickster is also A's creature)."
+      "forge_notes": "Guile's trigger uses Defined$ TriggeredCardLKICopy with Origin$ Graveyard; if the card is no longer there Forge may skip the move and the shuffle, which would diverge from the rule. In the own-trickster variant A sacrifices Guile to Diabolic Edict by choice (Cosi's Trickster is also A's creature).",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A shuffle trigger fires when a library is shuffled, whatever the library's size or the cards moved into it.",
+        "near_miss": "A shuffle trigger evaluated against an event that is not a shuffle of a library it watches.",
+        "params": {
+          "mode": "Shuffled"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.24d-1",
@@ -235,13 +264,19 @@
           "label": "one-card",
           "polarity": "fires",
           "delta": "The trigger also targets B's Grizzly Bears.",
-          "expected": "Grizzly Bears moves from B's graveyard to B's library, which is shuffled with four cards. Cosi's Trickster becomes 2/2."
+          "expected": "Grizzly Bears moves from B's graveyard to B's library, which is shuffled with four cards. Cosi's Trickster becomes 2/2.",
+          "operation": {
+            "unclassifiable": "The trigger takes a different target; no fork operation changes a target."
+          }
         },
         {
           "label": "own-trickster",
           "polarity": "does_not_fire",
           "delta": "Cosi's Trickster is under B's control instead of A's.",
-          "expected": "B's library is shuffled, which does not trigger B's own Cosi's Trickster: it stays 1/1."
+          "expected": "B's library is shuffled, which does not trigger B's own Cosi's Trickster: it stays 1/1.",
+          "operation": {
+            "unclassifiable": "A permanent changes controller; no fork operation sets a permanent's controller."
+          }
         }
       ],
       "cards": [
@@ -250,7 +285,17 @@
         "Loaming Shaman",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A shuffle trigger fires when a library is shuffled, whatever the library's size or the cards moved into it.",
+        "near_miss": "A shuffle trigger evaluated against an event that is not a shuffle of a library it watches.",
+        "params": {
+          "mode": "Shuffled"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.24e-1",
@@ -310,13 +355,19 @@
           "label": "zero-cards",
           "polarity": "fires",
           "delta": "B's library holds only the Forest.",
-          "expected": "The Forest moves to B's hand and the now empty library is shuffled. Cosi's Trickster triggers and becomes 2/2."
+          "expected": "The Forest moves to B's hand and the now empty library is shuffled. Cosi's Trickster triggers and becomes 2/2.",
+          "operation": {
+            "unclassifiable": "The library's contents change; no fork operation changes a library."
+          }
         },
         {
           "label": "own-trickster",
           "polarity": "does_not_fire",
           "delta": "Cosi's Trickster is under B's control instead of A's.",
-          "expected": "B's library of one card is shuffled, which does not trigger B's own Cosi's Trickster: it stays 1/1."
+          "expected": "B's library of one card is shuffled, which does not trigger B's own Cosi's Trickster: it stays 1/1.",
+          "operation": {
+            "unclassifiable": "A permanent changes controller; no fork operation sets a permanent's controller."
+          }
         }
       ],
       "cards": [
@@ -326,7 +377,17 @@
         "Forest",
         "Grizzly Bears"
       ],
-      "forge_notes": "Forge may skip the Shuffled trigger for a library of fewer than two cards, which the rule forbids."
+      "forge_notes": "Forge may skip the Shuffled trigger for a library of fewer than two cards, which the rule forbids.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A shuffle trigger fires when a library is shuffled, whatever the library's size or the cards moved into it.",
+        "near_miss": "A shuffle trigger evaluated against an event that is not a shuffle of a library it watches.",
+        "params": {
+          "mode": "Shuffled"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.24f-1",
@@ -406,13 +467,17 @@
           "label": "one-colossus",
           "polarity": "other",
           "delta": "A controls one Darksteel Colossus and one Grizzly Bears instead of the second Colossus.",
-          "expected": "The Colossus is shuffled into A's library (four cards) and the Grizzly Bears goes to A's graveyard. One shuffle, so Cosi's Trickster triggers once and becomes 2/2."
+          "expected": "The Colossus is shuffled into A's library (four cards) and the Grizzly Bears goes to A's graveyard. One shuffle, so Cosi's Trickster triggers once and becomes 2/2.",
+          "operation": "replace_card"
         },
         {
           "label": "own-trickster",
           "polarity": "does_not_fire",
           "delta": "Cosi's Trickster is under A's control instead of B's (A sacrifices both Colossi; B keeps nothing to protect, sacrificing both Grizzly Bears).",
-          "expected": "Both Colossi are shuffled into A's library, which does not trigger A's own Cosi's Trickster: it stays 1/1."
+          "expected": "Both Colossi are shuffled into A's library, which does not trigger A's own Cosi's Trickster: it stays 1/1.",
+          "operation": {
+            "unclassifiable": "A permanent changes controller and the players' sacrifice choices change with it; no fork operation sets a controller or a choice."
+          }
         }
       ],
       "cards": [
@@ -423,7 +488,17 @@
         "Barter in Blood",
         "Forest"
       ],
-      "forge_notes": "Each Darksteel Colossus replacement shuffles on its own; Forge may count two sequential shuffles rather than one simultaneous event, with the same trigger count. Barter in Blood does not target, and Indestructible does not matter for sacrifice. In the own-trickster variant B has only the two Grizzly Bears to sacrifice."
+      "forge_notes": "Each Darksteel Colossus replacement shuffles on its own; Forge may count two sequential shuffles rather than one simultaneous event, with the same trigger count. Barter in Blood does not target, and Indestructible does not matter for sacrifice. In the own-trickster variant B has only the two Grizzly Bears to sacrifice.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A shuffle trigger fires when a library is shuffled, whatever the library's size or the cards moved into it.",
+        "near_miss": "A shuffle trigger evaluated against an event that is not a shuffle of a library it watches.",
+        "params": {
+          "mode": "Shuffled"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.24g-1",
@@ -503,13 +578,15 @@
           "label": "zombie-only",
           "polarity": "does_not_fire",
           "delta": "A controls a Grizzly Bears instead of Darksteel Colossus.",
-          "expected": "Gravebane Zombie is on top of A's library (four cards: Zombie then three Forests). Nothing was shuffled, so Cosi's Trickster stays 1/1. The Grizzly Bears is in A's graveyard."
+          "expected": "Gravebane Zombie is on top of A's library (four cards: Zombie then three Forests). Nothing was shuffled, so Cosi's Trickster stays 1/1. The Grizzly Bears is in A's graveyard.",
+          "operation": "replace_card"
         },
         {
           "label": "colossus-only",
           "polarity": "other",
           "delta": "A controls a Grizzly Bears instead of Gravebane Zombie.",
-          "expected": "Darksteel Colossus is shuffled into A's library (four cards) and no card is forced on top. Cosi's Trickster becomes 2/2. The Grizzly Bears is in A's graveyard."
+          "expected": "Darksteel Colossus is shuffled into A's library (four cards) and no card is forced on top. Cosi's Trickster becomes 2/2. The Grizzly Bears is in A's graveyard.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -521,7 +598,17 @@
         "Barter in Blood",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution's effect half shuffles a library (a library_shuffled event) while it also puts an object into a set position of that library; the placed object keeps its position.",
+        "near_miss": "No near miss is counted: the shuffle and the placement come from replacement effects, not the acting line's own API, so no api restricts the detector.",
+        "params": {
+          "event": "library_shuffled"
+        },
+        "needs": []
+      }
     }
   ]
 }

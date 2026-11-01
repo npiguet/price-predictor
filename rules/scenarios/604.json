@@ -48,14 +48,27 @@
           "label": "anthem_in_graveyard",
           "polarity": "does_not_fire",
           "delta": "Glorious Anthem is in A's graveyard instead of on the battlefield.",
-          "expected": "Grizzly Bears is 2/2."
+          "expected": "Grizzly Bears is 2/2.",
+          "operation": {
+            "unclassifiable": "moves a permanent between zones"
+          }
         }
       ],
       "cards": [
         "Glorious Anthem",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static ability whose source is on the battlefield contributes its P/T change to the permanents it affects on the stable board.",
+        "near_miss": "A static on the battlefield applies to the board and contributes no P/T change; a static whose source has left the battlefield writes no continuous record at all, so that side of the rule is not observed.",
+        "params": {
+          "field": "pt"
+        },
+        "needs": []
+      }
     },
     {
       "id": "604.4-1",
@@ -104,7 +117,10 @@
           "label": "not_moved",
           "polarity": "does_not_fire",
           "delta": "A does not activate the equip ability; both players just pass priority.",
-          "expected": "Bonesplitter stays attached to Grizzly Bears, which is 4/2; Runeclaw Bear is 2/2."
+          "expected": "Bonesplitter stays attached to Grizzly Bears, which is 4/2; Runeclaw Bear is 2/2.",
+          "operation": {
+            "unclassifiable": "a different player decision (no equip activation)"
+          }
         }
       ],
       "cards": [
@@ -170,7 +186,10 @@
           "label": "terror",
           "polarity": "does_not_fire",
           "delta": "A casts Terror (paying Swamp and Forest) targeting Grizzly Bears instead of Abrupt Decay.",
-          "expected": "Counterspell counters Terror, which moves to A's graveyard; Grizzly Bears stays on the battlefield."
+          "expected": "Counterspell counters Terror, which moves to A's graveyard; Grizzly Bears stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "a different spell is cast"
+          }
         }
       ],
       "cards": [
@@ -182,7 +201,19 @@
         "Terror",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A counterspell resolves and counters nothing: its target spell has a static ability saying it can't be countered, so no spell_countered event is written.",
+        "near_miss": "A counterspell resolves and removes its target spell from the stack, writing a spell_countered event.",
+        "params": {
+          "event": "spell_countered",
+          "api": "Counter",
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "604.5-2",
@@ -235,7 +266,8 @@
           "label": "one_island",
           "polarity": "does_not_fire",
           "delta": "A's battlefield is one Island and one Mountain instead of two Islands.",
-          "expected": "Casting Gush is illegal (can_play false): the alternative cost needs two Islands and the {4}{U} cost cannot be paid."
+          "expected": "Casting Gush is illegal (can_play false): the alternative cost needs two Islands and the {4}{U} cost cannot be paid.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -292,7 +324,10 @@
           "label": "main2",
           "polarity": "does_not_fire",
           "delta": "The step is main2 instead of main1; earlier this turn Grizzly Bears attacked B, went unblocked and dealt its combat damage, so the combat damage step has passed (Grizzly Bears is tapped, B is at 18 life).",
-          "expected": "Casting Berserk is illegal (can_play false); Berserk stays in A's hand and Grizzly Bears is 2/2."
+          "expected": "Casting Berserk is illegal (can_play false); Berserk stays in A's hand and Grizzly Bears is 2/2.",
+          "operation": {
+            "unclassifiable": "changes the phase and what happened earlier in the turn"
+          }
         }
       ],
       "cards": [
@@ -300,7 +335,20 @@
         "Grizzly Bears",
         "Berserk"
       ],
-      "forge_notes": "Forge implements this restriction as an ActivationPhases parameter on the spell, not as a static ability."
+      "forge_notes": "Forge implements this restriction as an ActivationPhases parameter on the spell, not as a static ability.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate spell fails the phase check because its own 'cast only during/before ...' static ability excludes the current step.",
+        "near_miss": "A decision in which every candidate passes the phase check, a phase-restricted spell in a step its restriction allows included.",
+        "params": {
+          "bit": "failed_check",
+          "check": "phase"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "604.7-1",
@@ -354,7 +402,10 @@
           "label": "anthem_kept",
           "polarity": "does_not_fire",
           "delta": "B does not cast Disenchant; Glorious Anthem stays on the battlefield.",
-          "expected": "Shock resolves and deals 2 damage to Grizzly Bears (3/3), which stays on the battlefield with 2 damage marked."
+          "expected": "Shock resolves and deals 2 damage to Grizzly Bears (3/3), which stays on the battlefield with 2 damage marked.",
+          "operation": {
+            "unclassifiable": "a different player decision (no Disenchant cast)"
+          }
         }
       ],
       "cards": [
@@ -365,7 +416,10 @@
         "Shock",
         "Disenchant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The rule is a prohibition with no act of its own: once a static's source leaves the battlefield the board is computed without the static, and no record distinguishes that from a board the static was never on. A continuous record is written per acting static on a stable board, so a departed source writes none; resolution snapshots carry post-departure characteristics and gen-3 last_known cards, but no field marks a static's effect as computed from, or denied, last known information (looked at continuous payload.contributions, resolution events and snapshots, gen-2 and gen-3)."
+      }
     }
   ]
 }

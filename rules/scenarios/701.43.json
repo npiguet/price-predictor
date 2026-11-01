@@ -56,13 +56,19 @@
           "label": "not_exerted",
           "polarity": "does_not_fire",
           "delta": "A attacks without exerting Ahn-Crop Crasher (no trigger).",
-          "expected": "Combat damage leaves B at 17. After A's next untap step Ahn-Crop Crasher is untapped."
+          "expected": "Combat damage leaves B at 17. After A's next untap step Ahn-Crop Crasher is untapped.",
+          "operation": {
+            "unclassifiable": "The player chooses not to pay the exert attack cost, a decision."
+          }
         }
       ],
       "cards": [
         "Ahn-Crop Crasher"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The outcome is an untap skipped in the untap step, and no record is written at the untap step (a turn-based action, not a resolution, trigger or decision). The exert itself is an attack cost paid at declare attackers, outside any resolution's effect half; Forge reports it only as the run of an Exerted trigger, which the collector writes as a generic state_flag_change whose mode is not an EVENT_PARAMS parameter, and neither the gen-2 snapshot nor the gen-3 designations list an exerted state."
+      }
     },
     {
       "id": "701.43b-1",
@@ -117,7 +123,10 @@
           "label": "not_exerted",
           "polarity": "does_not_fire",
           "delta": "A attacks without exerting Ahn-Crop Crasher (no trigger).",
-          "expected": "After A's next untap step Ahn-Crop Crasher is untapped."
+          "expected": "After A's next untap step Ahn-Crop Crasher is untapped.",
+          "operation": {
+            "unclassifiable": "The player chooses not to pay the exert attack cost, a decision."
+          }
         }
       ],
       "cards": [
@@ -126,7 +135,10 @@
         "Icy Manipulator",
         "Island"
       ],
-      "forge_notes": "Only the not-yet-tapped branch of 701.43b is exercised. Exerting twice before one untap step is reachable (vigilance plus an additional combat), but it has no observable contrast: both effects expire at the same untap step either way."
+      "forge_notes": "Only the not-yet-tapped branch of 701.43b is exercised. Exerting twice before one untap step is reachable (vigilance plus an additional combat), but it has no observable contrast: both effects expire at the same untap step either way.",
+      "detector": {
+        "none": "The outcome is an untap skipped in the untap step after a permanent was exerted while untapped. No record is written at the untap step, the exert is an attack cost outside any resolution's effect half, and no gen-2 or gen-3 snapshot field marks a permanent as exerted (see 701.43a-1)."
+      }
     },
     {
       "id": "701.43d-1",
@@ -174,14 +186,27 @@
           "label": "not_exerted",
           "polarity": "does_not_fire",
           "delta": "A attacks without exerting Ahn-Crop Crasher.",
-          "expected": "The trigger does not fire. Grizzly Bears blocks: Ahn-Crop Crasher (3/2) deals 3 damage to Grizzly Bears and Grizzly Bears deals 2 to it. Both creatures die. B is at 20."
+          "expected": "The trigger does not fire. Grizzly Bears blocks: Ahn-Crop Crasher (3/2) deals 3 damage to Grizzly Bears and Grizzly Bears deals 2 to it. Both creatures die. B is at 20.",
+          "operation": {
+            "unclassifiable": "The player chooses not to pay the exert attack cost, a decision."
+          }
         }
       ],
       "cards": [
         "Ahn-Crop Crasher",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "The when-you-do trigger linked to an optional attack cost (exert) is evaluated and fires after the cost is paid.",
+        "near_miss": "The same linked trigger is evaluated and does not fire.",
+        "params": {
+          "mode": "OptionalAttackCost"
+        },
+        "needs": []
+      }
     }
   ]
 }

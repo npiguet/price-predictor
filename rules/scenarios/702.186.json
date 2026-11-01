@@ -56,7 +56,10 @@
           "label": "not_harnessed",
           "polarity": "does_not_fire",
           "delta": "The Soul Stone is not harnessed.",
-          "expected": "The triggered ability does not fire. Grizzly Bears stays in A's graveyard."
+          "expected": "The triggered ability does not fire. Grizzly Bears stays in A's graveyard.",
+          "operation": {
+            "unclassifiable": "Changes a designation, which no fork operation sets"
+          }
         }
       ],
       "cards": [

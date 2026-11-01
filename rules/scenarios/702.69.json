@@ -63,7 +63,10 @@
           "label": "no_permanent_died",
           "polarity": "does_not_fire",
           "delta": "A's Lightning Bolt targets player B instead of Grizzly Bears.",
-          "expected": "B's life is 17 and Grizzly Bears stays on the battlefield. No permanent has gone to a graveyard this turn, so gravestorm makes no copies. A controls one Clue token."
+          "expected": "B's life is 17 and Grizzly Bears stays on the battlefield. No permanent has gone to a graveyard this turn, so gravestorm makes no copies. A controls one Clue token.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [

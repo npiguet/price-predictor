@@ -53,20 +53,36 @@
           "label": "no_other_attacker",
           "polarity": "does_not_fire",
           "delta": "A attacks with Goblin Wardriver only; Grizzly Bears stays home.",
-          "expected": "Battle cry triggers and resolves with no other attacking creature to affect. Goblin Wardriver stays 2/2 and Grizzly Bears stays 2/2 untapped at home. Combat damage: 2, so B's life is 18."
+          "expected": "Battle cry triggers and resolves with no other attacking creature to affect. Goblin Wardriver stays 2/2 and Grizzly Bears stays 2/2 untapped at home. Combat damage: 2, so B's life is 18.",
+          "operation": {
+            "unclassifiable": "Different attack declaration by A."
+          }
         },
         {
           "label": "battle_cry_creature_home",
           "polarity": "does_not_fire",
           "delta": "A attacks with Grizzly Bears only; Goblin Wardriver stays home.",
-          "expected": "Battle cry does not trigger because Goblin Wardriver did not attack. Grizzly Bears stays 2/2. Combat damage: 2, so B's life is 18."
+          "expected": "Battle cry does not trigger because Goblin Wardriver did not attack. Grizzly Bears stays 2/2. Combat damage: 2, so B's life is 18.",
+          "operation": {
+            "unclassifiable": "Different attack declaration by A."
+          }
         }
       ],
       "cards": [
         "Goblin Wardriver",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A battle cry trigger fires when its creature is declared as an attacker.",
+        "near_miss": "A battle cry trigger is evaluated against an attack its creature is not part of and does not fire.",
+        "params": {
+          "keyword": "battle cry"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.91b-1",
@@ -130,7 +146,10 @@
           "label": "one_instance",
           "polarity": "does_not_fire",
           "delta": "A does not cast Rampant Growth, so only one land entered and Reckless Pyrosurfer has a single instance of battle cry.",
-          "expected": "One battle cry trigger resolves. Grizzly Bears gets +1/+0 and is 3/2. Combat damage: 2 + 3 = 5, so B's life is 15."
+          "expected": "One battle cry trigger resolves. Grizzly Bears gets +1/+0 and is 3/2. Combat damage: 2 + 3 = 5, so B's life is 15.",
+          "operation": {
+            "unclassifiable": "A different decision (not casting a spell) changes how many instances there are; no fork operation adds a keyword instance."
+          }
         }
       ],
       "cards": [

@@ -63,13 +63,19 @@
           "label": "no_shield",
           "polarity": "does_not_fire",
           "delta": "B does not activate Cudgel Troll's regenerate ability.",
-          "expected": "Cudgel Troll is destroyed and moves to B's graveyard."
+          "expected": "Cudgel Troll is destroyed and moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (B does not activate the ability)"
+          }
         },
         {
           "label": "shield_used_up",
           "polarity": "does_not_fire",
           "delta": "After the first Doom Blade resolves, A casts the second Doom Blade on Cudgel Troll, tapping the other two Swamps, and B does not activate the ability again.",
-          "expected": "The first Doom Blade is regenerated. The shield was used up by the first destruction, so the second Doom Blade destroys Cudgel Troll and it moves to B's graveyard."
+          "expected": "The first Doom Blade is regenerated. The shield was used up by the first destruction, so the second Doom Blade destroys Cudgel Troll and it moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "adds a second spell cast and changes player decisions"
+          }
         }
       ],
       "cards": [
@@ -78,7 +84,18 @@
         "Doom Blade",
         "Cudgel Troll"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A destroy effect resolves and the target permanent regenerates instead of being destroyed (a regenerated event in the resolution's effect half).",
+        "near_miss": "A destroy effect resolves with no regenerated event: the permanent is destroyed.",
+        "params": {
+          "event": "regenerated",
+          "api": "Destroy"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.19a-2",
@@ -132,7 +149,10 @@
           "label": "no_shield",
           "polarity": "does_not_fire",
           "delta": "B does not activate the regenerate ability.",
-          "expected": "Halberdier deals 3 first-strike damage to Cudgel Troll, which is destroyed and moves to B's graveyard before dealing damage. Halberdier survives undamaged. B's life stays 20."
+          "expected": "Halberdier deals 3 first-strike damage to Cudgel Troll, which is destroyed and moves to B's graveyard before dealing damage. Halberdier survives undamaged. B's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different decision by a player (B does not activate the ability)"
+          }
         }
       ],
       "cards": [
@@ -197,7 +217,10 @@
           "label": "one_shield_only",
           "polarity": "does_not_fire",
           "delta": "B's creature is Cudgel Troll, whose regeneration is a shield from an activated ability, and B activates it once (tapping Forest) in response to the first Doom Blade.",
-          "expected": "The first Doom Blade is regenerated; the second finds no shield and destroys Cudgel Troll, which moves to B's graveyard."
+          "expected": "The first Doom Blade is regenerated; the second finds no shield and destroys Cudgel Troll, which moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "changes the card and B's activation decision (more than one fact)"
+          }
         }
       ],
       "cards": [
@@ -207,7 +230,18 @@
         "Mossbridge Troll",
         "Cudgel Troll"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A destroy event meets a destruction replacement, such as a static regeneration ability, and is replaced: the permanent stays on the battlefield.",
+        "near_miss": "A destroy event meets a destruction replacement and is not replaced.",
+        "params": {
+          "event": "destroyed",
+          "result": "replaced"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.19c-1",
@@ -215,7 +249,7 @@
         "701.19c"
       ],
       "title": "A regeneration shield can be created under can't-be-regenerated, but it does not apply",
-      "record_kind": "rewrite",
+      "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "main1",
@@ -264,7 +298,10 @@
           "label": "doom_blade",
           "polarity": "does_not_fire",
           "delta": "A casts Doom Blade instead of Terror.",
-          "expected": "The shield applies: Cudgel Troll stays on the battlefield, tapped, with damage removed."
+          "expected": "The shield applies: Cudgel Troll stays on the battlefield, tapped, with damage removed.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         }
       ],
       "cards": [

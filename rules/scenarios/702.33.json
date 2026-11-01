@@ -55,7 +55,10 @@
           "label": "unkicked",
           "polarity": "does_not_fire",
           "delta": "A does not pay the kicker; A casts Burst Lightning for {R} only.",
-          "expected": "Burst Lightning deals 2 damage to Centaur Courser, which stays on the battlefield with 2 damage marked."
+          "expected": "Burst Lightning deals 2 damage to Centaur Courser, which stays on the battlefield with 2 damage marked.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -113,13 +116,19 @@
           "label": "kicked_once",
           "polarity": "other",
           "delta": "A pays the multikicker only once (two Mountains tapped).",
-          "expected": "Everflowing Chalice enters with 1 charge counter."
+          "expected": "Everflowing Chalice enters with 1 charge counter.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         },
         {
           "label": "unkicked",
           "polarity": "does_not_fire",
           "delta": "A pays no multikicker.",
-          "expected": "Everflowing Chalice enters with no charge counters."
+          "expected": "Everflowing Chalice enters with no charge counters.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -178,7 +187,10 @@
           "label": "unkicked",
           "polarity": "does_not_fire",
           "delta": "A casts Gatekeeper of Malakir for {B}{B} only, without the kicker.",
-          "expected": "No trigger fires. Grizzly Bears stays on B's battlefield and Gatekeeper of Malakir is on the battlefield."
+          "expected": "No trigger fires. Grizzly Bears stays on B's battlefield and Gatekeeper of Malakir is on the battlefield.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -186,7 +198,19 @@
         "Swamp",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A when-this-enters trigger conditioned on the permanent having been kicked is evaluated and fires only when it was.",
+        "near_miss": "The same trigger evaluated for an unkicked permanent and not fired.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield",
+          "selector": "Card.Self+kicked"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.33f-1",
@@ -240,13 +264,19 @@
           "label": "kicked_white",
           "polarity": "other",
           "delta": "A pays the {W} kicker instead of the {R} kicker (tapping Plains instead of Mountain), and the trigger targets Phyrexian Walker.",
-          "expected": "The 'kicked with its {W} kicker' trigger fires: Phyrexian Walker (an artifact creature) is destroyed and is in B's graveyard. B's life stays 20."
+          "expected": "The 'kicked with its {W} kicker' trigger fires: Phyrexian Walker (an artifact creature) is destroyed and is in B's graveyard. B's life stays 20.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         },
         {
           "label": "unkicked",
           "polarity": "does_not_fire",
           "delta": "A pays no kicker.",
-          "expected": "Neither trigger fires: B's life stays 20 and Phyrexian Walker stays on the battlefield."
+          "expected": "Neither trigger fires: B's life stays 20 and Phyrexian Walker stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -256,7 +286,19 @@
         "Mountain",
         "Plains"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A when-this-enters trigger conditioned on a numbered kicker cost having been paid fires only when that kicker was paid.",
+        "near_miss": "The same trigger evaluated with that kicker unpaid and not fired.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield",
+          "selector": "Card.Self+kicked 1"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.33g-1",
@@ -307,7 +349,10 @@
           "label": "kicked",
           "polarity": "does_not_fire",
           "delta": "A also pays the kicker {1}{R}, tapping all four lands.",
-          "expected": "The cast is illegal (can_play false): a kicked Jilt needs another target creature to deal 2 damage to, and Grizzly Bears is the only creature."
+          "expected": "The cast is illegal (can_play false): a kicked Jilt needs another target creature to deal 2 damage to, and Grizzly Bears is the only creature.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         }
       ],
       "cards": [

@@ -64,7 +64,10 @@
           "label": "no_cheaper_card",
           "polarity": "does_not_fire",
           "delta": "A's library, top to bottom, is Mountain, Craw Wurm, Hill Giant instead of Mountain, Shock, Hill Giant.",
-          "expected": "Craw Wurm (mana value 6) and Hill Giant (mana value 4) are not less than 4, so cascade exiles the whole library and casts nothing. All three exiled cards go to the bottom of A's library in random order. Grizzly Bears survives. Bloodbraid Elf resolves onto the battlefield."
+          "expected": "Craw Wurm (mana value 6) and Hill Giant (mana value 4) are not less than 4, so cascade exiles the whole library and casts nothing. All three exiled cards go to the bottom of A's library in random order. Grizzly Bears survives. Bloodbraid Elf resolves onto the battlefield.",
+          "operation": {
+            "unclassifiable": "changes the order and contents of A's library"
+          }
         }
       ],
       "cards": [
@@ -141,7 +144,10 @@
           "label": "one_instance",
           "polarity": "does_not_fire",
           "delta": "A casts Bloodbraid Elf (mana value 4, one instance of cascade), tapping two Mountains and two Forests, instead of Maelstrom Wanderer.",
-          "expected": "One cascade trigger. Shock kills Grizzly Bears; Hill Giant is undamaged. A's library is Lightning Bolt then Mountain, with Lightning Bolt on top. Bloodbraid Elf is on the battlefield."
+          "expected": "One cascade trigger. Shock kills Grizzly Bears; Hill Giant is undamaged. A's library is Lightning Bolt then Mountain, with Lightning Bolt on top. Bloodbraid Elf is on the battlefield.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         }
       ],
       "cards": [
@@ -155,7 +161,17 @@
         "Grizzly Bears",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "Each cascade instance fires as its own trigger when its spell is cast.",
+        "near_miss": "A cascade trigger evaluated and not fired; the detector does not count instances per spell.",
+        "params": {
+          "keyword": "cascade"
+        },
+        "needs": []
+      }
     }
   ]
 }

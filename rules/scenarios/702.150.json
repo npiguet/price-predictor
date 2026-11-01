@@ -58,14 +58,29 @@
           "label": "paid_mana",
           "polarity": "does_not_fire",
           "delta": "A pays {B} for the {B/P} symbol with a sixth Swamp instead of paying 2 life.",
-          "expected": "A's life stays 20. Vraska enters the battlefield with 6 loyalty counters."
+          "expected": "A's life stays 20. Vraska enters the battlefield with 6 loyalty counters.",
+          "operation": {
+            "unclassifiable": "a different payment choice"
+          }
         }
       ],
       "cards": [
         "Vraska, Betrayal's Sting",
         "Swamp"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A permanent entering the battlefield meets a replacement that changes how it enters (such as entering with fewer loyalty counters) and the handler reports updated.",
+        "near_miss": "Such a replacement meets an entering permanent and leaves the event as it was.",
+        "params": {
+          "event": "zone_change",
+          "result": "updated",
+          "to_zone": "Battlefield"
+        },
+        "needs": []
+      }
     }
   ]
 }

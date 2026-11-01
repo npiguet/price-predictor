@@ -61,13 +61,19 @@
           "label": "not_lethal",
           "polarity": "does_not_fire",
           "delta": "B casts Shock (2 damage), tapping Mountain, instead of Lightning Bolt.",
-          "expected": "The damage is not lethal. Grizzly Bears (3/3) has 2 damage marked and Hyena Umbra stays attached."
+          "expected": "The damage is not lethal. Grizzly Bears (3/3) has 2 damage marked and Hyena Umbra stays attached.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         },
         {
           "label": "not_destruction",
           "polarity": "does_not_fire",
           "delta": "B casts Last Gasp (-3/-3), tapping Mountain and Swamp, instead of Lightning Bolt.",
-          "expected": "Grizzly Bears has toughness 0 and is put into A's graveyard by state-based actions; this is not destruction, so umbra armor does not apply. Hyena Umbra, no longer attached, is put into A's graveyard."
+          "expected": "Grizzly Bears has toughness 0 and is put into A's graveyard by state-based actions; this is not destruction, so umbra armor does not apply. Hyena Umbra, no longer attached, is put into A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         }
       ],
       "cards": [
@@ -80,7 +86,18 @@
         "Last Gasp",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A destroy event is replaced (not carried out) by a replacement effect.",
+        "near_miss": "A destroy event that meets the replacement effect and is not replaced.",
+        "params": {
+          "event": "destroyed",
+          "result": "replaced"
+        },
+        "needs": []
+      }
     }
   ]
 }

@@ -54,25 +54,37 @@
           "label": "declare_attackers_step",
           "polarity": "does_not_fire",
           "delta": "The step is declare_attackers instead of main1.",
-          "expected": "Plotting is not legal: it is not a main phase."
+          "expected": "Plotting is not legal: it is not a main phase.",
+          "operation": {
+            "unclassifiable": "Changes the step of the turn; no fork operation changes the phase or step."
+          }
         },
         {
           "label": "spell_on_stack",
           "polarity": "does_not_fire",
           "delta": "B has cast Shock targeting A, tapping B's Mountain; Shock is on the stack and A has priority.",
-          "expected": "Plotting is not legal: the stack is not empty."
+          "expected": "Plotting is not legal: the stack is not empty.",
+          "operation": {
+            "unclassifiable": "Adds a spell an opponent casts to the stack; a different spell cast is no fork operation."
+          }
         },
         {
           "label": "opponents_turn",
           "polarity": "does_not_fire",
           "delta": "B is the active player instead of A.",
-          "expected": "Plotting is not legal: it is not A's turn."
+          "expected": "Plotting is not legal: it is not A's turn.",
+          "operation": {
+            "unclassifiable": "Changes the active player, so whose turn it is; no fork operation changes the turn."
+          }
         },
         {
           "label": "one_land",
           "polarity": "does_not_fire",
           "delta": "A controls one Mountain instead of two.",
-          "expected": "Plotting is not legal: {1}{R} cannot be paid."
+          "expected": "Plotting is not legal: {1}{R} cannot be paid.",
+          "operation": {
+            "unclassifiable": "Changes how many lands the player controls, adding or removing permanents; no fork operation adds or removes a permanent."
+          }
         }
       ],
       "cards": [
@@ -80,7 +92,20 @@
         "Highway Robbery",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate restricted to sorcery timing has a true timing verdict: its controller's main phase with an empty stack.",
+        "near_miss": "A candidate whose timing verdict is false: not its controller's main phase, or the stack is not empty.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "702.170b-1",
@@ -133,13 +158,19 @@
           "label": "cast_instead",
           "polarity": "other",
           "delta": "A casts Highway Robbery for {1}{R} instead of plotting it, and B responds with Counterspell, tapping both Islands.",
-          "expected": "Highway Robbery is on the stack, is countered and goes to A's graveyard. It is not exiled and not plotted."
+          "expected": "Highway Robbery is on the stack, is countered and goes to A's graveyard. It is not exiled and not plotted.",
+          "operation": {
+            "unclassifiable": "A different action by the player (casting instead of plotting) and an opponent's response; no fork operation changes a choice or casts a spell."
+          }
         },
         {
           "label": "one_land",
           "polarity": "does_not_fire",
           "delta": "A controls one Mountain instead of two.",
-          "expected": "Plotting does not happen: {1}{R} cannot be paid. Highway Robbery stays in A's hand."
+          "expected": "Plotting does not happen: {1}{R} cannot be paid. Highway Robbery stays in A's hand.",
+          "operation": {
+            "unclassifiable": "Changes how many lands the player controls, adding or removing permanents; no fork operation adds or removes a permanent."
+          }
         }
       ],
       "cards": [
@@ -148,7 +179,10 @@
         "Highway Robbery",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "Plotting is a special action: it uses no stack object, so it writes no resolution record, and gen-3 adds no record kind for special actions (turn_action subkinds are draw, cleanup_discard, untap, phasing, day_night, lore_counter). The move to exile and the plotted designation appear in no resolution payload or event (EVENT_PARAMS has no plot event; a designation shows only in a later record's snapshot, not as any record's outcome)."
+      }
     },
     {
       "id": "702.170c-1",
@@ -197,7 +231,10 @@
           "label": "card_too_expensive",
           "polarity": "does_not_fire",
           "delta": "Hill Giant (mana value 4) is in A's hand instead of Grizzly Bears.",
-          "expected": "The enters trigger resolves but A has no legal card to exile. Hill Giant stays in A's hand and nothing is plotted."
+          "expected": "The enters trigger resolves but A has no legal card to exile. Hill Giant stays in A's hand and nothing is plotted.",
+          "operation": {
+            "unclassifiable": "Changes a card in the player's hand; no fork operation changes a hand."
+          }
         }
       ],
       "cards": [
@@ -253,19 +290,28 @@
           "label": "same_turn",
           "polarity": "does_not_fire",
           "delta": "Grizzly Bears became plotted earlier this turn.",
-          "expected": "Casting it is not legal: it did not become plotted on an earlier turn."
+          "expected": "Casting it is not legal: it did not become plotted on an earlier turn.",
+          "operation": {
+            "unclassifiable": "Changes the turn on which the card became plotted, a piece of game history; no fork operation sets history."
+          }
         },
         {
           "label": "spell_on_stack",
           "polarity": "does_not_fire",
           "delta": "B has cast Shock targeting A, tapping B's Mountain; Shock is on the stack and A has priority.",
-          "expected": "Casting it is not legal: the stack is not empty."
+          "expected": "Casting it is not legal: the stack is not empty.",
+          "operation": {
+            "unclassifiable": "Adds a spell an opponent casts to the stack; a different spell cast is no fork operation."
+          }
         },
         {
           "label": "opponents_turn",
           "polarity": "does_not_fire",
           "delta": "B is the active player instead of A.",
-          "expected": "Casting it is not legal: it is not A's turn."
+          "expected": "Casting it is not legal: it is not A's turn.",
+          "operation": {
+            "unclassifiable": "Changes the active player, so whose turn it is; no fork operation changes the turn."
+          }
         }
       ],
       "cards": [
@@ -273,7 +319,20 @@
         "Shock",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate restricted to sorcery timing, such as casting a plotted card, has a true timing verdict: its controller's main phase with an empty stack (the later-turn condition is not part of the timing verdict).",
+        "near_miss": "A candidate whose timing verdict is false: not its controller's main phase, or the stack is not empty.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "702.170f-1",
@@ -322,13 +381,19 @@
           "label": "land_on_top",
           "polarity": "does_not_fire",
           "delta": "The top card of A's library is Forest instead of Grizzly Bears.",
-          "expected": "Plotting is not legal: Fblthp lets A plot only nonland cards. The library is unchanged."
+          "expected": "Plotting is not legal: Fblthp lets A plot only nonland cards. The library is unchanged.",
+          "operation": {
+            "unclassifiable": "Changes the top card of the library; no fork operation changes a library."
+          }
         },
         {
           "label": "no_fblthp",
           "polarity": "does_not_fire",
           "delta": "A controls no Fblthp, Lost on the Range.",
-          "expected": "Plotting is not legal: the top card of the library has no plot ability. The library is unchanged."
+          "expected": "Plotting is not legal: the top card of the library has no plot ability. The library is unchanged.",
+          "operation": {
+            "unclassifiable": "Removes a permanent from the base battlefield; no fork operation removes a permanent."
+          }
         }
       ],
       "cards": [
@@ -338,7 +403,10 @@
         "Mountain",
         "Plains"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "Plotting is a special action: it uses no stack object, so it writes no resolution record, and gen-3 adds no record kind for special actions (turn_action subkinds are draw, cleanup_discard, untap, phasing, day_night, lore_counter). The move to exile and the plotted designation appear in no resolution payload or event (EVENT_PARAMS has no plot event; a designation shows only in a later record's snapshot, not as any record's outcome)."
+      }
     }
   ]
 }

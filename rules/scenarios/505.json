@@ -54,19 +54,35 @@
           "label": "postcombat_main",
           "polarity": "does_not_fire",
           "delta": "The step is main2 (the postcombat main phase) instead of main1.",
-          "expected": "History of Benalia keeps 1 lore counter; no chapter ability triggers and A controls no Knight token."
+          "expected": "History of Benalia keeps 1 lore counter; no chapter ability triggers and A controls no Knight token.",
+          "operation": {
+            "unclassifiable": "Changes the phase or step."
+          }
         },
         {
           "label": "opponents_saga",
           "polarity": "does_not_fire",
           "delta": "History of Benalia is on B's battlefield instead of A's; A is still the active player.",
-          "expected": "History of Benalia keeps 1 lore counter; no chapter ability triggers and B controls no Knight token."
+          "expected": "History of Benalia keeps 1 lore counter; no chapter ability triggers and B controls no Knight token.",
+          "operation": {
+            "unclassifiable": "Moves a permanent to the other player's battlefield."
+          }
         }
       ],
       "cards": [
         "History of Benalia"
       ],
-      "forge_notes": "Forge adds the lore counter in PhaseHandler on entering MAIN1 with no stack object; the chapter trigger caused by the added counter is what reaches the stack."
+      "forge_notes": "Forge adds the lore counter in PhaseHandler on entering MAIN1 with no stack object; the chapter trigger caused by the added counter is what reaches the stack.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A Saga's chapter ability (the keyword Chapter) is evaluated as a lore counter is put on the Saga, such as the one the active player adds as their precombat main phase begins, and fires.",
+        "near_miss": "A chapter ability evaluated against a lore counter that reaches none of its chapter numbers, which does not fire.",
+        "params": {
+          "keyword": "Chapter"
+        },
+        "needs": []
+      }
     },
     {
       "id": "505.5-1",
@@ -110,13 +126,19 @@
           "label": "roll_misses_lights",
           "polarity": "other",
           "delta": "The roll is 4 instead of 6.",
-          "expected": "A rolls a 4, which matches no light of Balloon Stand; Balloon Stand is not visited, its ability does not trigger and A controls no Balloon token."
+          "expected": "A rolls a 4, which matches no light of Balloon Stand; Balloon Stand is not visited, its ability does not trigger and A controls no Balloon token.",
+          "operation": {
+            "unclassifiable": "A different die roll result."
+          }
         },
         {
           "label": "no_attraction",
           "polarity": "does_not_fire",
           "delta": "Balloon Stand is not on the battlefield, so A controls no Attraction.",
-          "expected": "A does not roll to visit Attractions; no die roll occurs and A controls no token."
+          "expected": "A does not roll to visit Attractions; no die roll occurs and A controls no token.",
+          "operation": {
+            "unclassifiable": "Removes a permanent from the battlefield."
+          }
         }
       ],
       "cards": [
@@ -175,13 +197,19 @@
           "label": "combat_step",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "can_play is false for Grizzly Bears, Divination and Sol Ring; can_play is true for Lightning Bolt."
+          "expected": "can_play is false for Grizzly Bears, Divination and Sol Ring; can_play is true for Lightning Bolt.",
+          "operation": {
+            "unclassifiable": "Changes the phase or step."
+          }
         },
         {
           "label": "nonactive_player",
           "polarity": "does_not_fire",
           "delta": "The hand and lands belong to B instead of A, and A is still the active player in main1; B receives priority after A passes with an empty stack.",
-          "expected": "can_play is false for Grizzly Bears, Divination and Sol Ring; can_play is true for Lightning Bolt."
+          "expected": "can_play is false for Grizzly Bears, Divination and Sol Ring; can_play is true for Lightning Bolt.",
+          "operation": {
+            "unclassifiable": "Moves the hand and lands to the other player and changes who has priority."
+          }
         }
       ],
       "cards": [
@@ -243,25 +271,37 @@
           "label": "land_already_played",
           "polarity": "does_not_fire",
           "delta": "A has already played a land this turn (the Mountain on the battlefield).",
-          "expected": "Playing Forest is not legal (can_play false)."
+          "expected": "Playing Forest is not legal (can_play false).",
+          "operation": {
+            "unclassifiable": "Changes the turn's land-play history and a permanent."
+          }
         },
         {
           "label": "stack_not_empty",
           "polarity": "does_not_fire",
           "delta": "A's Lightning Bolt targeting B is on the stack (A tapped the Mountain for it) and A holds priority.",
-          "expected": "Playing Forest is not legal (can_play false)."
+          "expected": "Playing Forest is not legal (can_play false).",
+          "operation": {
+            "unclassifiable": "Puts a spell on the stack, a different spell cast."
+          }
         },
         {
           "label": "combat_step",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "Playing Forest is not legal (can_play false)."
+          "expected": "Playing Forest is not legal (can_play false).",
+          "operation": {
+            "unclassifiable": "Changes the phase or step."
+          }
         },
         {
           "label": "nonactive_player",
           "polarity": "does_not_fire",
           "delta": "The Forest is in B's hand instead of A's; A is the active player in main1 and B receives priority after A passes with an empty stack.",
-          "expected": "Playing Forest is not legal for B (can_play false)."
+          "expected": "Playing Forest is not legal for B (can_play false).",
+          "operation": {
+            "unclassifiable": "Moves the hand and lands to the other player and changes who has priority."
+          }
         }
       ],
       "cards": [
@@ -319,7 +359,10 @@
           "label": "with_exploration",
           "polarity": "fires",
           "delta": "A also controls Exploration on the battlefield.",
-          "expected": "Playing Forest is legal (can_play true)."
+          "expected": "Playing Forest is legal (can_play true).",
+          "operation": {
+            "unclassifiable": "Adds a permanent to the battlefield."
+          }
         }
       ],
       "cards": [
@@ -383,7 +426,10 @@
           "label": "cast_creature",
           "polarity": "does_not_fire",
           "delta": "A casts Grizzly Bears (tapping both Forests) instead of playing the Forest.",
-          "expected": "Grizzly Bears is on the stack and B receives priority: Counterspell has a legal target (has_legal_target true, can_play true). B passes; Grizzly Bears resolves and enters A's battlefield."
+          "expected": "Grizzly Bears is on the stack and B receives priority: Counterspell has a legal target (has_legal_target true, can_play true). B passes; Grizzly Bears resolves and enters A's battlefield.",
+          "operation": {
+            "unclassifiable": "A different action by a player (cast instead of play a land)."
+          }
         }
       ],
       "cards": [

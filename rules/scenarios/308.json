@@ -54,7 +54,10 @@
           "label": "opponents_turn",
           "polarity": "does_not_fire",
           "delta": "The active player is B (step main1; B has passed priority so A holds it) instead of A.",
-          "expected": "Tarfire is legal to cast (can_play true). Aquitect's Will is not legal (can_play false)."
+          "expected": "Tarfire is legal to cast (can_play true). Aquitect's Will is not legal (can_play false).",
+          "operation": {
+            "unclassifiable": "Changes whose turn it is, which no fork operation does."
+          }
         }
       ],
       "cards": [
@@ -64,7 +67,20 @@
         "Tarfire",
         "Aquitect's Will"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A kindred card's cast candidate whose timing is that of its other card type (legal timing).",
+        "near_miss": "A kindred sorcery candidate on the opponent's turn has timing false.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "308.1-2",
@@ -112,7 +128,10 @@
           "label": "kindred_instant",
           "polarity": "does_not_fire",
           "delta": "A casts Tarfire targeting B, tapping one Mountain, instead of Cloak and Dagger.",
-          "expected": "Tarfire resolves and deals 2 damage to B (18). It does not enter the battlefield and is put into A's graveyard."
+          "expected": "Tarfire resolves and deals 2 damage to B (18). It does not enter the battlefield and is put into A's graveyard.",
+          "operation": {
+            "unclassifiable": "A casts a different spell, a different decision."
+          }
         }
       ],
       "cards": [
@@ -120,7 +139,19 @@
         "Cloak and Dagger",
         "Tarfire"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolved spell moves from the stack to the battlefield when its other type is a permanent type (zone_change in the effect half).",
+        "near_miss": "A kindred instant or sorcery moves to the graveyard instead; not counted without an api.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "battlefield"
+        },
+        "needs": []
+      }
     }
   ]
 }

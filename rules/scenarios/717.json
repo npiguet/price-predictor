@@ -50,7 +50,10 @@
           "label": "deck_empty",
           "polarity": "does_not_fire",
           "delta": "A's Attraction deck is empty.",
-          "expected": "The trigger resolves and nothing happens: no Attraction is on the battlefield. Deadbeat Attendant stays on the battlefield."
+          "expected": "The trigger resolves and nothing happens: no Attraction is on the battlefield. Deadbeat Attendant stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "The Attraction deck in the command zone is emptied; no fork operation changes a command-zone deck."
+          }
         }
       ],
       "cards": [
@@ -58,7 +61,19 @@
         "Deadbeat Attendant",
         "Concession Stand"
       ],
-      "forge_notes": "Needs a registered Attraction deck for player A; an empty deck is the default."
+      "forge_notes": "Needs a registered Attraction deck for player A; an empty deck is the default.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A card is put onto the battlefield by an effect that opens it from outside the library or hand.",
+        "near_miss": "An effect of the same API that put nothing onto the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "battlefield",
+          "api": "OpenAttraction"
+        },
+        "needs": []
+      }
     },
     {
       "id": "717.4-1",
@@ -111,7 +126,10 @@
           "label": "attraction_controlled_by_opponent",
           "polarity": "does_not_fire",
           "delta": "Concession Stand is controlled by B instead of A.",
-          "expected": "A controls no Attraction, so no die is rolled as main1 begins. Complaints Clerk does not trigger and no token is created."
+          "expected": "A controls no Attraction, so no die is rolled as main1 begins. Complaints Clerk does not trigger and no token is created.",
+          "operation": {
+            "unclassifiable": "The Attraction's controller changes to the opponent; no fork operation changes control."
+          }
         }
       ],
       "cards": [
@@ -119,7 +137,17 @@
         "Concession Stand",
         "Mountain"
       ],
-      "forge_notes": "Needs the die result fixed (seeded or forced roll)."
+      "forge_notes": "Needs the die result fixed (seeded or forced roll).",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A visit ability is evaluated, which shows that the player who controls that Attraction rolled to visit their Attractions as their precombat main phase began. Forge evaluates a visit trigger only when the roll matches one of the Attraction's lit numbers.",
+        "near_miss": "Not seen: a player who controls no Attraction rolls no die, and a roll matching no lit number leaves no visit trigger record.",
+        "params": {
+          "keyword": "Visit"
+        },
+        "needs": []
+      }
     },
     {
       "id": "717.5-1",
@@ -171,20 +199,36 @@
           "label": "roll_6",
           "polarity": "fires",
           "delta": "The die shows 6.",
-          "expected": "6 is also lit: the visit ability triggers and A creates a Food token."
+          "expected": "6 is also lit: the visit ability triggers and A creates a Food token.",
+          "operation": {
+            "unclassifiable": "The die roll's result differs; a random result is no fork operation."
+          }
         },
         {
           "label": "roll_3",
           "polarity": "does_not_fire",
           "delta": "The die shows 3.",
-          "expected": "3 is not lit: the visit ability does not trigger and A creates no Food token."
+          "expected": "3 is not lit: the visit ability does not trigger and A creates no Food token.",
+          "operation": {
+            "unclassifiable": "The die roll's result differs; a random result is no fork operation."
+          }
         }
       ],
       "cards": [
         "Concession Stand",
         "Mountain"
       ],
-      "forge_notes": "Needs the die result fixed (seeded or forced roll)."
+      "forge_notes": "Needs the die result fixed (seeded or forced roll).",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An Attraction's visit ability (a trigger the Visit keyword generates) fires because the roll to visit matched one of its lit numbers.",
+        "near_miss": "A visit ability evaluated and not fired. Rarely seen: Forge evaluates a visit trigger only for Attractions whose lit numbers match the roll, so a non-matching roll leaves no trigger record.",
+        "params": {
+          "keyword": "Visit"
+        },
+        "needs": []
+      }
     },
     {
       "id": "717.6-1",
@@ -236,7 +280,10 @@
           "label": "exiled",
           "polarity": "does_not_fire",
           "delta": "A casts Banishing Light (tapping Mountain and both Plains) instead of Shatter; its enters trigger targets Concession Stand and resolves.",
-          "expected": "Exile is excepted: Concession Stand is exiled, not put into the command zone. The replacement does not apply."
+          "expected": "Exile is excepted: Concession Stand is exiled, not put into the command zone. The replacement does not apply.",
+          "operation": {
+            "unclassifiable": "A different spell is cast (an exile effect instead of a destroy effect); no fork operation changes what is cast."
+          }
         }
       ],
       "cards": [
@@ -246,7 +293,19 @@
         "Banishing Light",
         "Concession Stand"
       ],
-      "forge_notes": "Forge moves the card to the Junkyard zone in GameAction.changeZone; exile is explicitly excepted."
+      "forge_notes": "Forge moves the card to the Junkyard zone in GameAction.changeZone; exile is explicitly excepted.",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A move to the graveyard is replaced by a move to another zone.",
+        "near_miss": "A move to the graveyard that met a replacement effect and was not replaced.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "graveyard",
+          "result": "replaced"
+        },
+        "needs": []
+      }
     }
   ]
 }

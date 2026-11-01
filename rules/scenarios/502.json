@@ -44,13 +44,19 @@
           "label": "phases_in",
           "polarity": "fires",
           "delta": "Tolarian Drake is phased out at the start of the untap step, having phased out while A controlled it.",
-          "expected": "Tolarian Drake phases in in A's untap step: it is on the battlefield again as a 2/4 flyer."
+          "expected": "Tolarian Drake phases in in A's untap step: it is on the battlefield again as a 2/4 flyer.",
+          "operation": {
+            "unclassifiable": "Changes which permanents are phased out, a different board history."
+          }
         },
         {
           "label": "opponents_untap",
           "polarity": "does_not_fire",
           "delta": "The active player is B, so it is B's untap step (Tolarian Drake is phased in and A's).",
-          "expected": "Tolarian Drake does not phase: it stays phased in and A controls a 2/4 flyer."
+          "expected": "Tolarian Drake does not phase: it stays phased in and A controls a 2/4 flyer.",
+          "operation": {
+            "unclassifiable": "Changes whose turn it is."
+          }
         }
       ],
       "cards": [
@@ -105,7 +111,10 @@
           "label": "one_spell",
           "polarity": "does_not_fire",
           "delta": "B had cast Grizzly Bears during its previous turn (it is on B's battlefield, not in hand).",
-          "expected": "It stays day: Fearful Villager remains a 2/3 on its front face."
+          "expected": "It stays day: Fearful Villager remains a 2/3 on its front face.",
+          "operation": {
+            "unclassifiable": "Changes the previous turn's history and a permanent or hand."
+          }
         }
       ],
       "cards": [
@@ -161,7 +170,10 @@
           "label": "one_spell",
           "polarity": "does_not_fire",
           "delta": "B cast only one Grizzly Bears during its previous turn (the other is in B's hand, not on the battlefield).",
-          "expected": "It stays night: the permanent remains the 4/3 Fearsome Werewolf."
+          "expected": "It stays night: the permanent remains the 4/3 Fearsome Werewolf.",
+          "operation": {
+            "unclassifiable": "Changes the previous turn's history and a permanent or hand."
+          }
         }
       ],
       "cards": [
@@ -228,13 +240,19 @@
           "label": "aura_on_grizzly",
           "polarity": "does_not_fire",
           "delta": "Claustrophobia is attached to Grizzly Bears instead of Runeclaw Bear.",
-          "expected": "Runeclaw Bear untaps; Grizzly Bears (enchanted) stays tapped."
+          "expected": "Runeclaw Bear untaps; Grizzly Bears (enchanted) stays tapped.",
+          "operation": {
+            "unclassifiable": "Attaches the Aura to a different permanent."
+          }
         },
         {
           "label": "opponents_untap",
           "polarity": "other",
           "delta": "The active player is B, so it is B's untap step.",
-          "expected": "B's Island untaps; A's Grizzly Bears and Runeclaw Bear stay tapped."
+          "expected": "B's Island untaps; A's Grizzly Bears and Runeclaw Bear stay tapped.",
+          "operation": {
+            "unclassifiable": "Changes whose turn it is."
+          }
         }
       ],
       "cards": [
@@ -291,7 +309,10 @@
           "label": "upkeep_step",
           "polarity": "does_not_fire",
           "delta": "The attempt happens in the upkeep step (setup.step upkeep), where A receives priority.",
-          "expected": "Casting Lightning Bolt is legal (can_play true) with Grizzly Bears as a legal target."
+          "expected": "Casting Lightning Bolt is legal (can_play true) with Grizzly Bears as a legal target.",
+          "operation": {
+            "unclassifiable": "Changes the phase or step."
+          }
         }
       ],
       "cards": [
@@ -299,7 +320,10 @@
         "Lightning Bolt",
         "Grizzly Bears"
       ],
-      "forge_notes": "The untap step has no priority in Forge; a playability query there may need to be modeled as the first priority of the upkeep. The second half of 502.4 (triggers waiting) is shown by scenario 503.1a-1."
+      "forge_notes": "The untap step has no priority in Forge; a playability query there may need to be modeled as the first priority of the upkeep. The second half of 502.4 (triggers waiting) is shown by scenario 503.1a-1.",
+      "detector": {
+        "none": "The rule's outcome is that nothing is cast, activated or resolved in the untap step because no player receives priority. Neither gen-2 nor gen-3 writes a decision record there: gen-3 writes decision candidates at every priority stop (record-schema-delta, behaviour changes) and the untap step is none, gen-2's AI-hook decisions likewise come only at priority. No playability record or verdict bit shows it; verdict_bit timing false would instead tag sorcery-speed candidates at other priority stops, another rule's outcome."
+      }
     }
   ]
 }

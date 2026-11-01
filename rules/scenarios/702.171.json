@@ -55,13 +55,17 @@
           "label": "not_enough_power",
           "polarity": "does_not_fire",
           "delta": "Fugitive Wizard (1/1) is on A's battlefield instead of Grizzly Bears.",
-          "expected": "Saddling is not legal: the total power of the other untapped creatures is 1, less than 2. Quilled Charger is not saddled, its attack trigger does not fire, and it deals 4 damage. B is at 16."
+          "expected": "Saddling is not legal: the total power of the other untapped creatures is 1, less than 2. Quilled Charger is not saddled, its attack trigger does not fire, and it deals 4 damage. B is at 16.",
+          "operation": "replace_card"
         },
         {
           "label": "two_small_creatures",
           "polarity": "fires",
           "delta": "Two Fugitive Wizards (1/1 each) are on A's battlefield instead of Grizzly Bears; both are tapped to saddle.",
-          "expected": "Both Fugitive Wizards are tapped, their total power 2 meeting the cost. Quilled Charger becomes saddled, its attack trigger fires and it deals 5 damage. B is at 15."
+          "expected": "Both Fugitive Wizards are tapped, their total power 2 meeting the cost. Quilled Charger becomes saddled, its attack trigger fires and it deals 5 damage. B is at 15.",
+          "operation": {
+            "unclassifiable": "Replaces one permanent with two, adding a permanent; no fork operation adds a permanent."
+          }
         }
       ],
       "cards": [
@@ -120,19 +124,28 @@
           "label": "beginning_of_combat",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "Activating saddle is not legal: it is not a main phase."
+          "expected": "Activating saddle is not legal: it is not a main phase.",
+          "operation": {
+            "unclassifiable": "Changes the step of the turn; no fork operation changes the phase or step."
+          }
         },
         {
           "label": "spell_on_stack",
           "polarity": "does_not_fire",
           "delta": "B has cast Shock targeting A, tapping B's Mountain; Shock is on the stack and A has priority.",
-          "expected": "Activating saddle is not legal: the stack is not empty."
+          "expected": "Activating saddle is not legal: the stack is not empty.",
+          "operation": {
+            "unclassifiable": "Adds a spell an opponent casts to the stack; a different spell cast is no fork operation."
+          }
         },
         {
           "label": "opponents_turn",
           "polarity": "does_not_fire",
           "delta": "B is the active player instead of A.",
-          "expected": "Activating saddle is not legal: it is not A's turn."
+          "expected": "Activating saddle is not legal: it is not A's turn.",
+          "operation": {
+            "unclassifiable": "Changes the active player, so whose turn it is; no fork operation changes the turn."
+          }
         }
       ],
       "cards": [
@@ -141,7 +154,20 @@
         "Shock",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate restricted to sorcery timing has a true timing verdict: its controller's main phase with an empty stack.",
+        "near_miss": "A candidate whose timing verdict is false: not its controller's main phase, or the stack is not empty.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "702.171b-1",
@@ -189,7 +215,10 @@
           "label": "saddled_last_turn",
           "polarity": "does_not_fire",
           "delta": "Quilled Charger became saddled during A's previous turn, not this turn (so Grizzly Bears, tapped for that saddle, untapped in this turn's untap step).",
-          "expected": "Quilled Charger is no longer saddled, its attack trigger does not fire and it deals 4 damage. B is at 16. Grizzly Bears is untapped."
+          "expected": "Quilled Charger is no longer saddled, its attack trigger does not fire and it deals 4 damage. B is at 16. Grizzly Bears is untapped.",
+          "operation": {
+            "unclassifiable": "Changes the turn on which the Mount became saddled, and with it the saddled designation and the creature's tapped state: game history and more than one fact."
+          }
         }
       ],
       "cards": [

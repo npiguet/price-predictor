@@ -65,13 +65,19 @@
           "label": "no_teamwork",
           "polarity": "does_not_fire",
           "delta": "A does not declare teamwork, and no creature is tapped.",
-          "expected": "Grizzly Bears stays untapped. Repulsor Blast deals 5 damage to Hill Giant, which moves to B's graveyard. B's life stays 20."
+          "expected": "Grizzly Bears stays untapped. Repulsor Blast deals 5 damage to Hill Giant, which moves to B's graveyard. B's life stays 20.",
+          "operation": {
+            "unclassifiable": "A different choice by a player: no teamwork declared"
+          }
         },
         {
           "label": "power_short",
           "polarity": "does_not_fire",
           "delta": "A declares teamwork by tapping only Llanowar Elves (power 1) instead of Grizzly Bears.",
-          "expected": "Tapping creatures with total power 1 does not pay teamwork 2, so casting Repulsor Blast with that teamwork payment is not legal. Llanowar Elves stays untapped and Hill Giant takes no damage."
+          "expected": "Tapping creatures with total power 1 does not pay teamwork 2, so casting Repulsor Blast with that teamwork payment is not legal. Llanowar Elves stays untapped and Hill Giant takes no damage.",
+          "operation": {
+            "unclassifiable": "A different choice by a player: which creatures to tap"
+          }
         }
       ],
       "cards": [
@@ -134,7 +140,10 @@
           "label": "teamwork_not_declared",
           "polarity": "does_not_fire",
           "delta": "A does not declare teamwork when casting Beast Mode, and Grizzly Bears is not tapped.",
-          "expected": "Virtual Assistant's trigger does not fire and A creates no token. Beast Mode gives Virtual Assistant +2/+2 and trample until end of turn (5/5) and no counter."
+          "expected": "Virtual Assistant's trigger does not fire and A creates no token. Beast Mode gives Virtual Assistant +2/+2 and trample until end of turn (5/5) and no counter.",
+          "operation": {
+            "unclassifiable": "A different choice by a player: no teamwork declared"
+          }
         }
       ],
       "cards": [
@@ -197,7 +206,10 @@
           "label": "teamwork_not_declared",
           "polarity": "does_not_fire",
           "delta": "A does not declare teamwork.",
-          "expected": "Casting is not legal: only the target 'creature with mana value 3 or less' is chosen, and no such creature is on the battlefield, so Cruel Alliance has no legal target and stays in A's hand."
+          "expected": "Casting is not legal: only the target 'creature with mana value 3 or less' is chosen, and no such creature is on the battlefield, so Cruel Alliance has no legal target and stays in A's hand.",
+          "operation": {
+            "unclassifiable": "A different choice by a player: no teamwork declared"
+          }
         }
       ],
       "cards": [

@@ -56,13 +56,19 @@
           "label": "opponents_creature",
           "polarity": "does_not_fire",
           "delta": "A targets B's Hill Giant instead of Grizzly Bears.",
-          "expected": "The target is not legal (it must be another creature A controls). The ability is not activated and Lizard Blades stays unattached."
+          "expected": "The target is not legal (it must be another creature A controls). The ability is not activated and Lizard Blades stays unattached.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         },
         {
           "label": "combat_timing",
           "polarity": "does_not_fire",
           "delta": "A tries to activate the reconfigure ability in the beginning of combat step instead of main phase 1.",
-          "expected": "The activation is not legal (sorcery timing only). Lizard Blades stays unattached and the Mountains stay untapped."
+          "expected": "The activation is not legal (sorcery timing only). Lizard Blades stays unattached and the Mountains stay untapped.",
+          "operation": {
+            "unclassifiable": "a different phase"
+          }
         }
       ],
       "cards": [
@@ -71,7 +77,18 @@
         "Hill Giant",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An attach ability resolves and produces an attached event.",
+        "near_miss": "An attach ability resolved with no attached event.",
+        "params": {
+          "event": "attached",
+          "api": "Attach"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.151a-2",
@@ -124,7 +141,10 @@
           "label": "not_attached",
           "polarity": "does_not_fire",
           "delta": "Lizard Blades is not attached to any creature.",
-          "expected": "The unattach ability cannot be activated (it is attached to nothing). Lizard Blades stays a 1/1 creature and the Mountains stay untapped."
+          "expected": "The unattach ability cannot be activated (it is attached to nothing). Lizard Blades stays a 1/1 creature and the Mountains stay untapped.",
+          "operation": {
+            "unclassifiable": "changes an attachment"
+          }
         }
       ],
       "cards": [
@@ -132,7 +152,18 @@
         "Grizzly Bears",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An unattach ability resolves and produces an unattached event.",
+        "near_miss": "An unattach ability resolved with no unattached event.",
+        "params": {
+          "event": "unattached",
+          "api": "Unattach"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.151b-1",
@@ -182,14 +213,28 @@
           "label": "unattached",
           "polarity": "does_not_fire",
           "delta": "Lizard Blades is not attached to Grizzly Bears.",
-          "expected": "Lizard Blades is an Artifact Creature Equipment Lizard 1/1 with double strike and can attack alongside Grizzly Bears (2/2 without double strike)."
+          "expected": "Lizard Blades is an Artifact Creature Equipment Lizard 1/1 with double strike and can attack alongside Grizzly Bears (2/2 without double strike).",
+          "operation": {
+            "unclassifiable": "changes an attachment"
+          }
         }
       ],
       "cards": [
         "Lizard Blades",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static ability removes the creature type from a permanent.",
+        "near_miss": "A static contributing no type removal on the board.",
+        "params": {
+          "field": "types",
+          "value": "-Creature"
+        },
+        "needs": []
+      }
     }
   ]
 }

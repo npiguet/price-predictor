@@ -56,7 +56,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B casts Counterspell on Thraben Inspector, tapping both Islands.",
-          "expected": "Thraben Inspector is countered and moves to A's graveyard without entering the battlefield. No enters trigger fires and A controls no Clue token."
+          "expected": "Thraben Inspector is countered and moves to A's graveyard without entering the battlefield. No enters trigger fires and A controls no Clue token.",
+          "operation": {
+            "unclassifiable": "An extra spell is cast in response; no fork operation casts a spell."
+          }
         }
       ],
       "cards": [
@@ -65,7 +68,19 @@
         "Thraben Inspector",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An investigate resolution creates a Clue token.",
+        "near_miss": "An investigate resolution that creates no Clue.",
+        "params": {
+          "event": "token_created",
+          "token_kind": "Clue",
+          "api": "Investigate"
+        },
+        "needs": []
+      }
     }
   ]
 }

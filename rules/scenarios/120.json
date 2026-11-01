@@ -56,7 +56,10 @@
           "label": "animated",
           "polarity": "does_not_fire",
           "delta": "In response to Pyroclasm, B activates Mutavault's {1} ability, tapping Forest, and Mutavault becomes a 2/2 creature until end of turn.",
-          "expected": "Mutavault is a creature when Pyroclasm resolves and is dealt 2 damage, which is lethal. Mutavault moves to B's graveyard in the state-based check. Hill Giant has 2 damage marked and stays."
+          "expected": "Mutavault is a creature when Pyroclasm resolves and is dealt 2 damage, which is lethal. Mutavault moves to B's graveyard in the state-based check. Hill Giant has 2 damage marked and stays.",
+          "operation": {
+            "unclassifiable": "a player activates an ability in response (a different decision)"
+          }
         }
       ],
       "cards": [
@@ -123,13 +126,19 @@
           "label": "pumped",
           "polarity": "fires",
           "delta": "After blockers are declared, A casts Giant Growth on Grizzly Bears, tapping Forest, and it resolves.",
-          "expected": "Grizzly Bears is 5/5 and deals 5 combat damage to Hill Giant; Hill Giant deals 3 to Grizzly Bears. Hill Giant moves to B's graveyard. Grizzly Bears has 3 damage marked and survives."
+          "expected": "Grizzly Bears is 5/5 and deals 5 combat damage to Hill Giant; Hill Giant deals 3 to Grizzly Bears. Hill Giant moves to B's graveyard. Grizzly Bears has 3 damage marked and survives.",
+          "operation": {
+            "unclassifiable": "a player casts an additional spell in response (a different spell cast)"
+          }
         },
         {
           "label": "unblocked",
           "polarity": "does_not_fire",
           "delta": "B declares no blockers.",
-          "expected": "Hill Giant is not blocking and deals no combat damage. Grizzly Bears deals 2 combat damage to B, whose life is 18. No creature has damage marked."
+          "expected": "Hill Giant is not blocking and deals no combat damage. Grizzly Bears deals 2 combat damage to B, whose life is 18. No creature has damage marked.",
+          "operation": {
+            "unclassifiable": "the defending player declares no blockers (a different decision)"
+          }
         }
       ],
       "cards": [
@@ -190,7 +199,10 @@
           "label": "white_source",
           "polarity": "does_not_fire",
           "delta": "The creature A chooses to deal the damage is Savannah Lions (white, 2 power) instead of Grizzly Bears.",
-          "expected": "Savannah Lions is the source of the 2 damage. Black Knight has protection from white, so the damage is prevented. Black Knight has no damage marked and stays on the battlefield. Rabid Bite is green and could target it."
+          "expected": "Savannah Lions is the source of the 2 damage. Black Knight has protection from white, so the damage is prevented. Black Knight has no damage marked and stays on the battlefield. Rabid Bite is green and could target it.",
+          "operation": {
+            "unclassifiable": "a different creature is chosen as the source of the damage (a player's choice)"
+          }
         }
       ],
       "cards": [
@@ -200,7 +212,17 @@
         "Black Knight",
         "Rabid Bite"
       ],
-      "forge_notes": "Rabid Bite is implemented with DamageSource$ ParentTarget, so the creature is the damage source."
+      "forge_notes": "Rabid Bite is implemented with DamageSource$ ParentTarget, so the creature is the damage source.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A spell or ability's resolution deals damage: its effect half holds a damage_dealt event, whose cause is the object the effect says deals it.",
+        "near_miss": "No near miss is counted: without api the detector tags only resolutions holding a damage_dealt (damage abilities resolve under several APIs, such as DealDamage, Pump with a DealDamage sub-ability, or Fight).",
+        "params": {
+          "event": "damage_dealt"
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.3a-1",
@@ -256,13 +278,19 @@
           "label": "infect",
           "polarity": "does_not_fire",
           "delta": "A attacks with Glistener Elf (1/1 infect) instead of Grizzly Bears.",
-          "expected": "Glistener Elf deals 1 damage to B in the form of a poison counter. B's life stays 20 and B has 1 poison counter."
+          "expected": "Glistener Elf deals 1 damage to B in the form of a poison counter. B's life stays 20 and B has 1 poison counter.",
+          "operation": {
+            "unclassifiable": "a different creature is declared as the attacker (a player's choice, and a different card with other characteristics)"
+          }
         },
         {
           "label": "blocked",
           "polarity": "does_not_fire",
           "delta": "B declares Hill Giant as a blocker of Grizzly Bears.",
-          "expected": "No combat damage is dealt to B. B's life stays 20. Hill Giant has 2 damage marked and Grizzly Bears moves to A's graveyard."
+          "expected": "No combat damage is dealt to B. B's life stays 20. Hill Giant has 2 damage marked and Grizzly Bears moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different blocking decision by the defending player"
+          }
         }
       ],
       "cards": [
@@ -326,13 +354,19 @@
           "label": "no_infect",
           "polarity": "does_not_fire",
           "delta": "A attacks with Grizzly Bears (no infect) instead of Glistener Elf.",
-          "expected": "Grizzly Bears deals 2 damage to B, who loses 2 life and is at 18. B has no poison counters."
+          "expected": "Grizzly Bears deals 2 damage to B, who loses 2 life and is at 18. B has no poison counters.",
+          "operation": {
+            "unclassifiable": "a different creature is declared as the attacker (a player's choice, and a different card with other characteristics)"
+          }
         },
         {
           "label": "blocked",
           "polarity": "other",
           "delta": "B declares Hill Giant as a blocker of Glistener Elf.",
-          "expected": "B receives no poison counters and keeps 20 life. Glistener Elf deals its damage to Hill Giant as one -1/-1 counter, and Glistener Elf is dealt 3 damage and dies."
+          "expected": "B receives no poison counters and keeps 20 life. Glistener Elf deals its damage to Hill Giant as one -1/-1 counter, and Glistener Elf is dealt 3 damage and dies.",
+          "operation": {
+            "unclassifiable": "a different blocking decision by the defending player"
+          }
         }
       ],
       "cards": [
@@ -340,7 +374,17 @@
         "Grizzly Bears",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "keyword_combat",
+        "record_kind": "combat",
+        "outcome": "A creature with infect deals combat damage, which a player receives as poison counters (and a creature as -1/-1 counters) instead of life loss or marked damage.",
+        "near_miss": "A damage-step probe fork re-running the combat with infect stripped from that creature.",
+        "params": {
+          "keyword": "infect"
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.3c-1",
@@ -398,7 +442,10 @@
           "label": "prevented",
           "polarity": "does_not_fire",
           "delta": "In response, B casts Mending Hands targeting Jace Beleren, tapping Plains.",
-          "expected": "Mending Hands prevents the next 4 damage to Jace Beleren, so Shock's 2 damage is prevented. No loyalty counters are removed and Jace Beleren has 3 loyalty."
+          "expected": "Mending Hands prevents the next 4 damage to Jace Beleren, so Shock's 2 damage is prevented. No loyalty counters are removed and Jace Beleren has 3 loyalty.",
+          "operation": {
+            "unclassifiable": "a player casts an additional spell in response (a different spell cast)"
+          }
         }
       ],
       "cards": [
@@ -468,13 +515,19 @@
           "label": "no_wither",
           "polarity": "does_not_fire",
           "delta": "A attacks with Savannah Lions (2/1, no wither) instead of Sickle Ripper.",
-          "expected": "Savannah Lions deals 2 damage to Hill Giant, marked as damage. Hill Giant is still a 3/3 with no counters and 2 damage marked. Savannah Lions dies."
+          "expected": "Savannah Lions deals 2 damage to Hill Giant, marked as damage. Hill Giant is still a 3/3 with no counters and 2 damage marked. Savannah Lions dies.",
+          "operation": {
+            "unclassifiable": "a different creature is declared as the attacker (a player's choice, and a different card with other characteristics)"
+          }
         },
         {
           "label": "infect",
           "polarity": "fires",
           "delta": "A attacks with Glistener Elf (1/1 infect) instead of Sickle Ripper.",
-          "expected": "Glistener Elf deals 1 damage to Hill Giant as one -1/-1 counter. Hill Giant is a 2/2 with no damage marked. Glistener Elf dies."
+          "expected": "Glistener Elf deals 1 damage to Hill Giant as one -1/-1 counter. Hill Giant is a 2/2 with no damage marked. Glistener Elf dies.",
+          "operation": {
+            "unclassifiable": "a different creature is declared as the attacker (a player's choice, and a different card with other characteristics)"
+          }
         }
       ],
       "cards": [
@@ -483,7 +536,17 @@
         "Glistener Elf",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "keyword_combat",
+        "record_kind": "combat",
+        "outcome": "A creature with wither deals combat damage to a creature, which gets that many -1/-1 counters instead of marked damage.",
+        "near_miss": "A damage-step probe fork re-running the combat with wither stripped from that creature.",
+        "params": {
+          "keyword": "wither"
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.3e-1",
@@ -539,7 +602,10 @@
           "label": "wither",
           "polarity": "does_not_fire",
           "delta": "A attacks with Sickle Ripper (2/1 wither) instead of Savannah Lions.",
-          "expected": "Sickle Ripper deals its damage as two -1/-1 counters. Hill Giant has no damage marked and is a 1/1. Sickle Ripper dies."
+          "expected": "Sickle Ripper deals its damage as two -1/-1 counters. Hill Giant has no damage marked and is a 1/1. Sickle Ripper dies.",
+          "operation": {
+            "unclassifiable": "a different creature is declared as the attacker (a player's choice, and a different card with other characteristics)"
+          }
         }
       ],
       "cards": [
@@ -603,13 +669,19 @@
           "label": "blocked_lifelink",
           "polarity": "fires",
           "delta": "B declares Hill Giant as a blocker of Child of Night.",
-          "expected": "Child of Night deals 2 damage to Hill Giant and A gains 2 life (22). B's life stays 20. Child of Night dies."
+          "expected": "Child of Night deals 2 damage to Hill Giant and A gains 2 life (22). B's life stays 20. Child of Night dies.",
+          "operation": {
+            "unclassifiable": "a different blocking decision by the defending player"
+          }
         },
         {
           "label": "no_lifelink",
           "polarity": "does_not_fire",
           "delta": "A attacks with Savannah Lions (no lifelink) instead of Child of Night.",
-          "expected": "Savannah Lions deals 2 damage to B (18). A's life stays 20."
+          "expected": "Savannah Lions deals 2 damage to B (18). A's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different creature is declared as the attacker (a player's choice, and a different card with other characteristics)"
+          }
         }
       ],
       "cards": [
@@ -617,7 +689,17 @@
         "Savannah Lions",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "keyword_combat",
+        "record_kind": "combat",
+        "outcome": "A lifelink creature deals combat damage and its controller gains that much life.",
+        "near_miss": "Probe fork re-running the combat with lifelink stripped.",
+        "params": {
+          "keyword": "lifelink"
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.3g-1",
@@ -673,13 +755,19 @@
           "label": "toxic_blocked",
           "polarity": "does_not_fire",
           "delta": "B declares Grizzly Bears as a blocker of Branchblight Stalker.",
-          "expected": "The damage goes to Grizzly Bears, not to a player. B's life stays 20 and B gets no poison counters. Both creatures die."
+          "expected": "The damage goes to Grizzly Bears, not to a player. B's life stays 20 and B gets no poison counters. Both creatures die.",
+          "operation": {
+            "unclassifiable": "a different blocking decision by the defending player"
+          }
         },
         {
           "label": "not_toxic",
           "polarity": "does_not_fire",
           "delta": "A attacks with Savannah Lions (no toxic) instead of Branchblight Stalker.",
-          "expected": "Savannah Lions deals 2 damage to B (18). B gets no poison counters."
+          "expected": "Savannah Lions deals 2 damage to B (18). B gets no poison counters.",
+          "operation": {
+            "unclassifiable": "a different creature is declared as the attacker (a player's choice, and a different card with other characteristics)"
+          }
         }
       ],
       "cards": [
@@ -745,7 +833,10 @@
           "label": "prevented",
           "polarity": "does_not_fire",
           "delta": "In response, B casts Mending Hands targeting Invasion of Dominaria, tapping Plains.",
-          "expected": "Shock's 2 damage is prevented by Mending Hands. No defense counters are removed and Invasion of Dominaria has 5 defense counters."
+          "expected": "Shock's 2 damage is prevented by Mending Hands. No defense counters are removed and Invasion of Dominaria has 5 defense counters.",
+          "operation": {
+            "unclassifiable": "a player casts an additional spell in response (a different spell cast)"
+          }
         }
       ],
       "cards": [
@@ -810,13 +901,19 @@
           "label": "no_prevention",
           "polarity": "does_not_fire",
           "delta": "B does not activate Samite Healer.",
-          "expected": "The 2 damage is dealt. B loses 2 life (18). A gains 2 life from lifelink, doubled by Boon Reflection to 4 (24)."
+          "expected": "The 2 damage is dealt. B loses 2 life (18). A gains 2 life from lifelink, doubled by Boon Reflection to 4 (24).",
+          "operation": {
+            "unclassifiable": "the defending player does not activate the prevention ability (a different decision)"
+          }
         },
         {
           "label": "no_boon",
           "polarity": "does_not_fire",
           "delta": "A does not control Boon Reflection (the card is not on the battlefield).",
-          "expected": "The prevention makes the damage 1. B loses 1 life (19) and A gains 1 life (21), with no doubling."
+          "expected": "The prevention makes the damage 1. B loses 1 life (19) and A gains 1 life (21), with no doubling.",
+          "operation": {
+            "unclassifiable": "removing a permanent from the battlefield"
+          }
         }
       ],
       "cards": [
@@ -876,13 +973,19 @@
           "label": "exactly_lethal",
           "polarity": "does_not_fire",
           "delta": "Flame Spill targets Craw Wurm (6/4) instead of Grizzly Bears.",
-          "expected": "All 4 damage is lethal damage, so there is no excess. B stays at 20 and Craw Wurm dies."
+          "expected": "All 4 damage is lethal damage, so there is no excess. B stays at 20 and Craw Wurm dies.",
+          "operation": {
+            "unclassifiable": "the spell targets a different creature (a different target)"
+          }
         },
         {
           "label": "already_damaged",
           "polarity": "fires",
           "delta": "Grizzly Bears has 1 damage marked before Flame Spill resolves.",
-          "expected": "Lethal damage is only 1 more. Grizzly Bears is dealt 1 damage and B is dealt 3 excess damage (17)."
+          "expected": "Lethal damage is only 1 more. Grizzly Bears is dealt 1 damage and B is dealt 3 excess damage (17).",
+          "operation": {
+            "unclassifiable": "the amount of damage marked on a creature; no fork operation sets marked damage"
+          }
         }
       ],
       "cards": [
@@ -943,7 +1046,10 @@
           "label": "no_trample",
           "polarity": "does_not_fire",
           "delta": "The creature that deals damage is Hill Giant (3/3, no trample) instead of Argothian Swine.",
-          "expected": "Hill Giant deals all 3 damage to Grizzly Bears, which dies. There is no redirection and B stays at 20."
+          "expected": "Hill Giant deals all 3 damage to Grizzly Bears, which dies. There is no redirection and B stays at 20.",
+          "operation": {
+            "unclassifiable": "a different creature is chosen as the source of the damage (a player's choice)"
+          }
         }
       ],
       "cards": [
@@ -1011,7 +1117,10 @@
           "label": "no_deathtouch",
           "polarity": "does_not_fire",
           "delta": "Gorgon's Head is on A's battlefield unattached, so Argothian Swine does not have deathtouch.",
-          "expected": "Argothian Swine deals all 3 damage to Hill Giant, which is exactly lethal, so there is no excess. B stays at 20 and Hill Giant moves to B's graveyard."
+          "expected": "Argothian Swine deals all 3 damage to Hill Giant, which is exactly lethal, so there is no excess. B stays at 20 and Hill Giant moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "the Aura or Equipment is attached to a different permanent; no fork operation moves an attachment"
+          }
         }
       ],
       "cards": [
@@ -1078,13 +1187,19 @@
           "label": "prevent_1",
           "polarity": "fires",
           "delta": "In response, B activates Samite Healer, tapping it, targeting Jackal Pup (prevent the next 1 damage).",
-          "expected": "The damage is reduced from 3 to 2. Jackal Pup is dealt 2 damage, its trigger fires and deals 2 damage to B (18). Jackal Pup dies."
+          "expected": "The damage is reduced from 3 to 2. Jackal Pup is dealt 2 damage, its trigger fires and deals 2 damage to B (18). Jackal Pup dies.",
+          "operation": {
+            "unclassifiable": "a player activates an ability in response (a different decision)"
+          }
         },
         {
           "label": "prevent_all",
           "polarity": "does_not_fire",
           "delta": "In response, B casts Mending Hands targeting Jackal Pup, tapping Plains.",
-          "expected": "All 3 damage is prevented. No damage is dealt, Jackal Pup's trigger does not fire, B stays at 20 and Jackal Pup stays on the battlefield."
+          "expected": "All 3 damage is prevented. No damage is dealt, Jackal Pup's trigger does not fire, B stays at 20 and Jackal Pup stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "a player casts an additional spell in response (a different spell cast)"
+          }
         }
       ],
       "cards": [
@@ -1095,7 +1210,18 @@
         "Plains",
         "Mending Hands"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A damage event meets a prevention or replacement effect and is dealt as modified, a reduced amount (Forge's prevention shield reports updated when damage remains).",
+        "near_miss": "A damage event meets such an effect and is not dealt as a reduced amount: prevented or replaced entirely, or not modified.",
+        "params": {
+          "event": "damage_dealt",
+          "result": "updated"
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.4c-1",
@@ -1147,13 +1273,19 @@
           "label": "boon_theirs",
           "polarity": "does_not_fire",
           "delta": "B controls Boon Reflection instead of A.",
-          "expected": "Boon Reflection only affects its controller's life gain. B loses 2 life (18) and A gains 2 life (22)."
+          "expected": "Boon Reflection only affects its controller's life gain. B loses 2 life (18) and A gains 2 life (22).",
+          "operation": {
+            "unclassifiable": "a permanent is controlled by the other player; no fork operation changes control"
+          }
         },
         {
           "label": "no_lifelink",
           "polarity": "does_not_fire",
           "delta": "A attacks with Savannah Lions (no lifelink) instead of Child of Night.",
-          "expected": "There is no life gain to replace. B loses 2 life (18) and A stays at 20."
+          "expected": "There is no life gain to replace. B loses 2 life (18) and A stays at 20.",
+          "operation": {
+            "unclassifiable": "a different creature is declared as the attacker (a player's choice, and a different card with other characteristics)"
+          }
         }
       ],
       "cards": [
@@ -1211,7 +1343,10 @@
           "label": "indestructible",
           "polarity": "does_not_fire",
           "delta": "Lightning Bolt targets Darksteel Myr (0/1 indestructible) instead of Grizzly Bears.",
-          "expected": "Darksteel Myr is dealt 3 damage and has 3 damage marked. The state-based check does not destroy it, so it stays on the battlefield."
+          "expected": "Darksteel Myr is dealt 3 damage and has 3 damage marked. The state-based check does not destroy it, so it stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "the spell targets a different creature (a different target)"
+          }
         }
       ],
       "cards": [
@@ -1220,7 +1355,17 @@
         "Grizzly Bears",
         "Darksteel Myr"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "A creature the resolution dealt lethal damage is put into its owner's graveyard by the state-based check after the resolution, not by the damage itself.",
+        "near_miss": "A creature the resolution dealt damage short of lethal stays on the battlefield.",
+        "params": {
+          "check": "lethal_damage"
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.6-1",
@@ -1271,7 +1416,10 @@
           "label": "one_shock",
           "polarity": "does_not_fire",
           "delta": "A casts only the first Shock.",
-          "expected": "Hill Giant has 2 damage marked, less than its toughness of 3, and stays on the battlefield."
+          "expected": "Hill Giant has 2 damage marked, less than its toughness of 3, and stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "the second spell is not cast (a different spell cast)"
+          }
         }
       ],
       "cards": [
@@ -1279,7 +1427,17 @@
         "Shock",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "A creature whose damage already marked plus the damage the resolution dealt reaches its toughness is destroyed in the state-based check.",
+        "near_miss": "A creature whose total marked damage stays below its toughness stays on the battlefield.",
+        "params": {
+          "check": "lethal_damage"
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.6-2",
@@ -1330,7 +1488,10 @@
           "label": "next_turn",
           "polarity": "does_not_fire",
           "delta": "A passes priority in the end step and casts Shock during B's following upkeep instead, after the cleanup step.",
-          "expected": "The 2 damage was removed in the cleanup step. Shock deals 2 damage to a Hill Giant with no damage marked. It has 2 damage marked, less than its toughness of 3, and stays on the battlefield."
+          "expected": "The 2 damage was removed in the cleanup step. Shock deals 2 damage to a Hill Giant with no damage marked. It has 2 damage marked, less than its toughness of 3, and stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "the spell is cast in a later turn (a different phase and turn)"
+          }
         }
       ],
       "cards": [
@@ -1388,7 +1549,10 @@
           "label": "regenerated",
           "polarity": "fires",
           "delta": "In response, B activates Drudge Skeletons' regeneration ability, tapping Swamp.",
-          "expected": "Lightning Bolt deals 3 damage. The state-based destruction is replaced by the regeneration shield: Drudge Skeletons becomes tapped, all damage is removed (0 marked), and it stays on the battlefield."
+          "expected": "Lightning Bolt deals 3 damage. The state-based destruction is replaced by the regeneration shield: Drudge Skeletons becomes tapped, all damage is removed (0 marked), and it stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "a player activates an ability in response (a different decision)"
+          }
         }
       ],
       "cards": [
@@ -1397,7 +1561,17 @@
         "Drudge Skeletons",
         "Swamp"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent regenerates: the effect half holds a regenerated event, and all damage marked on the permanent is removed.",
+        "near_miss": "No near miss is counted: without api the detector tags only resolutions holding a regenerated event.",
+        "params": {
+          "event": "regenerated"
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.8-1",
@@ -1453,7 +1627,10 @@
           "label": "two_power",
           "polarity": "does_not_fire",
           "delta": "A attacks with Grizzly Bears (2/2) instead of Darksteel Myr.",
-          "expected": "Grizzly Bears deals 2 damage to Jackal Pup and its trigger fires, dealing 2 damage to B (18). Jackal Pup and Grizzly Bears both die."
+          "expected": "Grizzly Bears deals 2 damage to Jackal Pup and its trigger fires, dealing 2 damage to B (18). Jackal Pup and Grizzly Bears both die.",
+          "operation": {
+            "unclassifiable": "a different creature is declared as the attacker (a player's choice, and a different card with other characteristics)"
+          }
         }
       ],
       "cards": [
@@ -1521,13 +1698,19 @@
           "label": "linked_bystander",
           "polarity": "does_not_fire",
           "delta": "Spirit Link is attached to Savannah Lions, which is not in combat, instead of Grizzly Bears.",
-          "expected": "The same combat damage is dealt, but the enchanted creature deals no damage. Spirit Link does not trigger and A stays at 20."
+          "expected": "The same combat damage is dealt, but the enchanted creature deals no damage. Spirit Link does not trigger and A stays at 20.",
+          "operation": {
+            "unclassifiable": "the Aura or Equipment is attached to a different permanent; no fork operation moves an attachment"
+          }
         },
         {
           "label": "linked_blocker",
           "polarity": "fires",
           "delta": "Spirit Link is attached to Hill Giant instead of Grizzly Bears.",
-          "expected": "Spirit Link triggers on Hill Giant's 3 damage only. A, who controls Spirit Link, gains 3 life (23)."
+          "expected": "Spirit Link triggers on Hill Giant's 3 damage only. A, who controls Spirit Link, gains 3 life (23).",
+          "operation": {
+            "unclassifiable": "the Aura or Equipment is attached to a different permanent; no fork operation moves an attachment"
+          }
         }
       ],
       "cards": [
@@ -1536,7 +1719,17 @@
         "Spirit Link",
         "Hill Giant"
       ],
-      "forge_notes": "Spirit Link attached to an opponent's creature is only reached by setting up the state directly."
+      "forge_notes": "Spirit Link attached to an opponent's creature is only reached by setting up the state directly.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on damage dealt by a specified source (Mode DamageDealtOnce) fires when that source deals damage, and counts only that source's damage.",
+        "near_miss": "The trigger is evaluated on damage dealt by other sources and does not fire.",
+        "params": {
+          "mode": "DamageDealtOnce"
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.10-1",
@@ -1587,7 +1780,10 @@
           "label": "exactly_lethal",
           "polarity": "does_not_fire",
           "delta": "Lightning Bolt targets Hill Giant (3/3) instead of Grizzly Bears.",
-          "expected": "Hill Giant is dealt exactly lethal damage, so there is no excess. Magmatic Galleon does not trigger and A creates no Treasure. Hill Giant dies."
+          "expected": "Hill Giant is dealt exactly lethal damage, so there is no excess. Magmatic Galleon does not trigger and A creates no Treasure. Hill Giant dies.",
+          "operation": {
+            "unclassifiable": "the spell targets a different creature (a different target)"
+          }
         }
       ],
       "cards": [
@@ -1597,7 +1793,17 @@
         "Grizzly Bears",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An excess-damage trigger (Mode ExcessDamageAll) fires when the damage dealt to a permanent exceeds lethal damage.",
+        "near_miss": "The trigger is evaluated on damage that is lethal or less and does not fire.",
+        "params": {
+          "mode": "ExcessDamageAll"
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.10-2",
@@ -1650,7 +1856,10 @@
           "label": "undamaged",
           "polarity": "does_not_fire",
           "delta": "Hill Giant has no damage marked.",
-          "expected": "Hill Giant is dealt exactly lethal damage with no excess. Magmatic Galleon does not trigger and A creates no Treasure."
+          "expected": "Hill Giant is dealt exactly lethal damage with no excess. Magmatic Galleon does not trigger and A creates no Treasure.",
+          "operation": {
+            "unclassifiable": "the amount of damage marked on a creature; no fork operation sets marked damage"
+          }
         }
       ],
       "cards": [
@@ -1659,7 +1868,17 @@
         "Lightning Bolt",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An excess-damage trigger (Mode ExcessDamageAll) fires when the damage dealt to a permanent, counted with the damage already marked on it, exceeds lethal damage.",
+        "near_miss": "The trigger is evaluated on damage that is lethal or less and does not fire.",
+        "params": {
+          "mode": "ExcessDamageAll"
+        },
+        "needs": []
+      }
     }
   ]
 }

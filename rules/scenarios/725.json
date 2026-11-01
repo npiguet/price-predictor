@@ -75,13 +75,19 @@
           "label": "b_is_monarch",
           "polarity": "does_not_fire",
           "delta": "B is the monarch instead of A.",
-          "expected": "It is not the beginning of B's end step, so the monarch trigger does not fire: A draws nothing and B draws nothing."
+          "expected": "It is not the beginning of B's end step, so the monarch trigger does not fire: A draws nothing and B draws nothing.",
+          "operation": {
+            "unclassifiable": "Moves the monarch designation, which no fork operation sets."
+          }
         },
         {
           "label": "no_monarch",
           "polarity": "other",
           "delta": "No player is the monarch.",
-          "expected": "There is no monarch trigger and no player draws."
+          "expected": "There is no monarch trigger and no player draws.",
+          "operation": {
+            "unclassifiable": "Removes the monarch designation, which no fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -162,7 +168,10 @@
           "label": "blocked",
           "polarity": "does_not_fire",
           "delta": "A declares Hill Giant as a blocker for Grizzly Bears.",
-          "expected": "Combat damage is dealt to Grizzly Bears, which moves to B's graveyard, and not to A (20). A remains the monarch. At B's end step nobody draws."
+          "expected": "Combat damage is dealt to Grizzly Bears, which moves to B's graveyard, and not to A (20). A remains the monarch. At B's end step nobody draws.",
+          "operation": {
+            "unclassifiable": "A different block declaration, a player's choice."
+          }
         }
       ],
       "cards": [
@@ -253,13 +262,19 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B responds to Thorn of the Black Rose with Counterspell, tapping both Islands.",
-          "expected": "Thorn of the Black Rose is countered and moves to A's graveyard. No enters trigger exists, so B remains the monarch and A does not. At A's end step nobody draws."
+          "expected": "Thorn of the Black Rose is countered and moves to A's graveyard. No enters trigger exists, so B remains the monarch and A does not. At A's end step nobody draws.",
+          "operation": {
+            "unclassifiable": "A different spell cast in response, a player's choice."
+          }
         },
         {
           "label": "no_previous_monarch",
           "polarity": "other",
           "delta": "No player is the monarch before Thorn of the Black Rose enters.",
-          "expected": "A becomes the monarch; nobody loses the designation. At the beginning of A's end step A draws a card."
+          "expected": "A becomes the monarch; nobody loses the designation. At the beginning of A's end step A draws a card.",
+          "operation": {
+            "unclassifiable": "Removes the monarch designation, which no fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -268,7 +283,18 @@
         "Thorn of the Black Rose",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A become-the-monarch resolution holds a monarch_changed event: the designation moves to the new monarch and the previous monarch ceases to have it.",
+        "near_miss": "A become-the-monarch resolution whose player already is the monarch holds no monarch_changed event: the designation does not move.",
+        "params": {
+          "event": "monarch_changed",
+          "api": "BecomeMonarch"
+        },
+        "needs": []
+      }
     },
     {
       "id": "725.5-1",
@@ -322,7 +348,10 @@
           "label": "a_already_monarch",
           "polarity": "does_not_fire",
           "delta": "A is the monarch before casting Fealty to the Realm.",
-          "expected": "As soon as Fealty to the Realm is attached, A controls Grizzly Bears, while the trigger is still on the stack. After the trigger resolves A is still the monarch and still controls Grizzly Bears."
+          "expected": "As soon as Fealty to the Realm is attached, A controls Grizzly Bears, while the trigger is still on the stack. After the trigger resolves A is still the monarch and still controls Grizzly Bears.",
+          "operation": {
+            "unclassifiable": "Adds the monarch designation, which no fork operation sets."
+          }
         }
       ],
       "cards": [

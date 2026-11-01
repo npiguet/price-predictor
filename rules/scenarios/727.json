@@ -98,13 +98,17 @@
           "label": "b_controls_karn",
           "polarity": "fires",
           "delta": "B controls Karn Liberated with 14 loyalty counters (moved from A's battlefield) and it is B's turn with B as the active player; B activates the -14 ability.",
-          "expected": "The game restarts as in the base, with life totals 20 and 20, and B takes the first turn of the new game."
+          "expected": "The game restarts as in the base, with life totals 20 and 20, and B takes the first turn of the new game.",
+          "operation": {
+            "unclassifiable": "More than one fact: the planeswalker changes controller and the active player changes; no operation moves a permanent to another player or changes the turn."
+          }
         },
         {
           "label": "thirteen_loyalty",
           "polarity": "does_not_fire",
           "delta": "Karn Liberated has 13 loyalty counters instead of 14.",
-          "expected": "The -14 ability cannot be activated because its cost cannot be paid. The game is not restarted: life stays A 12, B 5 and every permanent stays on the battlefield."
+          "expected": "The -14 ability cannot be activated because its cost cannot be paid. The game is not restarted: life stays A 12, B 5 and every permanent stays on the battlefield.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -115,7 +119,10 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": "Forge's mulligan service runs when the new game opens; the expected hands assume every player keeps seven cards."
+      "forge_notes": "Forge's mulligan service runs when the new game opens; the expected hands assume every player keeps seven cards.",
+      "detector": {
+        "none": "game_restarted is declared in EVENT_PARAMS but is in KNOWN_UNEMITTED (the gen-2 record schema: no collector references it, and the connector's EventType has no such member), and rules/gen3-fields.json drops new:game_restart, so no gen-2 or gen-3 record marks a game as restarted."
+      }
     },
     {
       "id": "727.2-1",
@@ -203,7 +210,10 @@
           "label": "hill_giant_still_outside",
           "polarity": "does_not_fire",
           "delta": "Hill Giant was never brought into the game: it is in A's sideboard instead of A's hand (Living Wish found nothing).",
-          "expected": "Hill Giant is not part of the new game: A's seven-card hand and 7-card library hold 14 cards, including Living Wish but not Hill Giant, which remains outside the game. Grizzly Bears is in B's deck as in the base."
+          "expected": "Hill Giant is not part of the new game: A's seven-card hand and 7-card library hold 14 cards, including Living Wish but not Hill Giant, which remains outside the game. Grizzly Bears is in B's deck as in the base.",
+          "operation": {
+            "unclassifiable": "Moves a card from A's hand to outside the game; no operation changes hand or sideboard contents."
+          }
         }
       ],
       "cards": [
@@ -215,7 +225,10 @@
         "Mountain",
         "Living Wish"
       ],
-      "forge_notes": "Forge's mulligan service runs when the new game opens; the expected hands assume every player keeps seven cards. Forge keeps sideboard cards in a Sideboard zone that a restart does not touch."
+      "forge_notes": "Forge's mulligan service runs when the new game opens; the expected hands assume every player keeps seven cards. Forge keeps sideboard cards in a Sideboard zone that a restart does not touch.",
+      "detector": {
+        "none": "game_restarted is declared in EVENT_PARAMS but is in KNOWN_UNEMITTED (the gen-2 record schema: no collector references it, and the connector's EventType has no such member), and rules/gen3-fields.json drops new:game_restart, so no gen-2 or gen-3 record marks a game as restarted, and no event lists which cards join the new game."
+      }
     },
     {
       "id": "727.3-1",
@@ -292,7 +305,10 @@
           "label": "seven_cards",
           "polarity": "does_not_fire",
           "delta": "B owns 7 cards in all zones (its library has 5 Mountains) instead of 5.",
-          "expected": "B draws all seven cards into its hand with an empty library and is still in the game after the first upkeep's state-based check."
+          "expected": "B draws all seven cards into its hand with an empty library and is still in the game after the first upkeep's state-based check.",
+          "operation": {
+            "unclassifiable": "Adds two cards to B's library; no operation changes library contents."
+          }
         }
       ],
       "cards": [
@@ -301,7 +317,10 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": "Forge's mulligan service runs when the new game opens; the expected hands assume every player keeps seven cards."
+      "forge_notes": "Forge's mulligan service runs when the new game opens; the expected hands assume every player keeps seven cards.",
+      "detector": {
+        "none": "game_restarted is declared in EVENT_PARAMS but is in KNOWN_UNEMITTED (the gen-2 record schema: no collector references it, and the connector's EventType has no such member), and rules/gen3-fields.json drops new:game_restart, so no gen-2 or gen-3 record marks a game as restarted; a player_lost in the new game's first upkeep is an ordinary 704.5b loss that no record ties to a restart."
+      }
     },
     {
       "id": "727.4-1",
@@ -382,7 +401,10 @@
           "label": "no_enter_trigger",
           "polarity": "does_not_fire",
           "delta": "Grizzly Bears (no enters trigger) was exiled with Karn Liberated instead of Lone Missionary.",
-          "expected": "Grizzly Bears returns to the battlefield under A's control. No ability goes on the stack in the first upkeep and A's life stays 20."
+          "expected": "Grizzly Bears returns to the battlefield under A's control. No ability goes on the stack in the first upkeep and A's life stays 20.",
+          "operation": {
+            "unclassifiable": "A different card is in exile; replace_card replaces a permanent, not a card in exile."
+          }
         }
       ],
       "cards": [
@@ -392,7 +414,10 @@
         "Plains",
         "Mountain"
       ],
-      "forge_notes": "Forge's mulligan service runs when the new game opens; the expected hands assume every player keeps seven cards."
+      "forge_notes": "Forge's mulligan service runs when the new game opens; the expected hands assume every player keeps seven cards.",
+      "detector": {
+        "none": "game_restarted is declared in EVENT_PARAMS but is in KNOWN_UNEMITTED (the gen-2 record schema: no collector references it, and the connector's EventType has no such member), and rules/gen3-fields.json drops new:game_restart, so no gen-2 or gen-3 record marks a game as restarted; nothing shows the restarting effect finishing before the first untap step or its triggers waiting for priority."
+      }
     },
     {
       "id": "727.5-1",
@@ -472,7 +497,10 @@
           "label": "nonpermanent_exiled_by_karn",
           "polarity": "does_not_fire",
           "delta": "B's card in exile is Shock, exiled from B's hand with Karn Liberated's +4 ability, instead of Grizzly Bears.",
-          "expected": "Shock is not a permanent card, so it is not exempt: it joins B's deck, and B's seven-card hand and 6-card library hold 13 cards including Shock. A's battlefield is empty and A's seven-card hand and 6-card library hold 13 cards."
+          "expected": "Shock is not a permanent card, so it is not exempt: it joins B's deck, and B's seven-card hand and 6-card library hold 13 cards including Shock. A's battlefield is empty and A's seven-card hand and 6-card library hold 13 cards.",
+          "operation": {
+            "unclassifiable": "A different card in exile, exiled by a different ability; no operation changes exile contents or history."
+          }
         }
       ],
       "cards": [
@@ -482,7 +510,10 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": "Forge's mulligan service runs when the new game opens; the expected hands assume every player keeps seven cards."
+      "forge_notes": "Forge's mulligan service runs when the new game opens; the expected hands assume every player keeps seven cards.",
+      "detector": {
+        "none": "game_restarted is declared in EVENT_PARAMS but is in KNOWN_UNEMITTED (the gen-2 record schema: no collector references it, and the connector's EventType has no such member), and rules/gen3-fields.json drops new:game_restart, so no gen-2 or gen-3 record marks a game as restarted, and no event or field marks a card as exempt from the restart."
+      }
     },
     {
       "id": "727.6-1",
@@ -559,13 +590,17 @@
           "label": "both_short",
           "polarity": "other",
           "delta": "A's subgame library has 1 Plains instead of 10, so A owns 5 cards in the subgame.",
-          "expected": "Both players lose the restarted subgame at its first upkeep, so it is a draw and nobody wins. Once Shahrazad finishes, A's main-game life goes from 20 to 10 and B's from 18 to 9."
+          "expected": "Both players lose the restarted subgame at its first upkeep, so it is a draw and nobody wins. Once Shahrazad finishes, A's main-game life goes from 20 to 10 and B's from 18 to 9.",
+          "operation": {
+            "unclassifiable": "Removes nine cards from A's subgame library; no operation changes library contents."
+          }
         },
         {
           "label": "thirteen_loyalty",
           "polarity": "does_not_fire",
           "delta": "Karn Liberated has 13 loyalty counters instead of 14.",
-          "expected": "The -14 ability cannot be activated; the subgame is not restarted and the main game and Shahrazad are unchanged."
+          "expected": "The -14 ability cannot be activated; the subgame is not restarted and the main game and Shahrazad are unchanged.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -578,7 +613,10 @@
         "Forest",
         "Swamp"
       ],
-      "forge_notes": "Forge's RestartGame inside a SubGame has not been exercised by the card scripts. Setup lists the subgame zones; main-game state is in notes."
+      "forge_notes": "Forge's RestartGame inside a SubGame has not been exercised by the card scripts. Setup lists the subgame zones; main-game state is in notes.",
+      "detector": {
+        "none": "No event type or record field covers subgames: EVENT_PARAMS has no subgame event, and rules/gen3-fields.json drops new:subgame_boundary, so no gen-2 or gen-3 record marks a subgame's start, end or zones. game_restarted is declared in EVENT_PARAMS but is in KNOWN_UNEMITTED (the gen-2 record schema: no collector references it, and the connector's EventType has no such member), and rules/gen3-fields.json drops new:game_restart, so no gen-2 or gen-3 record marks a game as restarted."
+      }
     }
   ]
 }

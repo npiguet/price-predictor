@@ -60,13 +60,19 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "In response, B casts Counterspell, tapping two Islands, targeting Germination Practicum.",
-          "expected": "Germination Practicum is countered and put into A's graveyard. It never resolves, so Grizzly Bears gets no counters (2/2) and no paradigm effect is created."
+          "expected": "Germination Practicum is countered and put into A's graveyard. It never resolves, so Grizzly Bears gets no counters (2/2) and no paradigm effect is created.",
+          "operation": {
+            "unclassifiable": "Casts an additional spell"
+          }
         },
         {
           "label": "second_resolution",
           "polarity": "does_not_fire",
           "delta": "A spell named Germination Practicum has already resolved earlier this game: another copy is in A's exile zone and its paradigm effect is active.",
-          "expected": "Germination Practicum resolves: Grizzly Bears gets two +1/+1 counters (4/4) and this Germination Practicum is exiled. It does not create a second paradigm effect, so A still gets one free copy per precombat main phase."
+          "expected": "Germination Practicum resolves: Grizzly Bears gets two +1/+1 counters (4/4) and this Germination Practicum is exiled. It does not create a second paradigm effect, so A still gets one free copy per precombat main phase.",
+          "operation": {
+            "unclassifiable": "Adds a card to the exile zone"
+          }
         }
       ],
       "cards": [
@@ -76,7 +82,19 @@
         "Counterspell",
         "Island"
       ],
-      "forge_notes": "Forge implements paradigm as an exile sub-ability plus a Unique$ effect with a Main1 phase trigger. It may not check explicitly that this is the first resolution."
+      "forge_notes": "Forge implements paradigm as an exile sub-ability plus a Unique$ effect with a Main1 phase trigger. It may not check explicitly that this is the first resolution.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A spell resolves and moves from the stack to exile instead of the graveyard.",
+        "near_miss": "A resolution that moves no spell from the stack to exile.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "exile"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.192a-2",
@@ -124,20 +142,36 @@
           "label": "own_postcombat_main",
           "polarity": "does_not_fire",
           "delta": "The step is A's postcombat main phase (main2), not the precombat one.",
-          "expected": "No paradigm trigger fires. Grizzly Bears stays a 2/2."
+          "expected": "No paradigm trigger fires. Grizzly Bears stays a 2/2.",
+          "operation": {
+            "unclassifiable": "Changes the phase of the turn"
+          }
         },
         {
           "label": "opponents_precombat_main",
           "polarity": "does_not_fire",
           "delta": "B is the active player at the beginning of B's precombat main phase.",
-          "expected": "No paradigm trigger fires, as the effect acts only in its controller's main phases. Grizzly Bears stays a 2/2."
+          "expected": "No paradigm trigger fires, as the effect acts only in its controller's main phases. Grizzly Bears stays a 2/2.",
+          "operation": {
+            "unclassifiable": "Changes whose turn it is"
+          }
         }
       ],
       "cards": [
         "Germination Practicum",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A paradigm trigger is evaluated at the beginning of its controller's precombat main phase and fires.",
+        "near_miss": "A paradigm trigger is evaluated at the beginning of another phase or of another player's main phase and does not fire.",
+        "params": {
+          "keyword": "Paradigm"
+        },
+        "needs": []
+      }
     }
   ]
 }

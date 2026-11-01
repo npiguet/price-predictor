@@ -59,7 +59,10 @@
           "label": "decline",
           "polarity": "does_not_fire",
           "delta": "A chooses not to copy the spell when the demonstrate trigger resolves.",
-          "expected": "No copies are created. Only Grizzly Bears is destroyed. B creates 2 Treasure tokens, A creates none. Hill Giant and Savannah Lions stay on the battlefield."
+          "expected": "No copies are created. Only Grizzly Bears is destroyed. B creates 2 Treasure tokens, A creates none. Hill Giant and Savannah Lions stay on the battlefield.",
+          "operation": {
+            "unclassifiable": "a different player choice"
+          }
         }
       ],
       "cards": [
@@ -69,7 +72,17 @@
         "Grizzly Bears",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A demonstrate trigger fires when its own spell is cast.",
+        "near_miss": "A demonstrate trigger is evaluated against another spell being cast and does not fire.",
+        "params": {
+          "keyword": "Demonstrate"
+        },
+        "needs": []
+      }
     }
   ]
 }

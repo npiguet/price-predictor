@@ -10,7 +10,7 @@
         "702.109a"
       ],
       "title": "A permanent whose dash cost was paid has haste",
-      "record_kind": "combat",
+      "record_kind": "continuous",
       "setup": {
         "active": "A",
         "step": "main1",
@@ -51,7 +51,10 @@
           "label": "cast-normally",
           "polarity": "does_not_fire",
           "delta": "A casts Mardu Scout for its mana cost {R}{R} instead.",
-          "expected": "Mardu Scout is summoning sick and cannot attack. B stays at 20."
+          "expected": "Mardu Scout is summoning sick and cannot attack. B stays at 20.",
+          "operation": {
+            "unclassifiable": "a different spell is cast, a decision by a player"
+          }
         }
       ],
       "cards": [
@@ -109,13 +112,19 @@
           "label": "cast-normally",
           "polarity": "does_not_fire",
           "delta": "A casts Mardu Scout for its mana cost {R}{R}, and does not attack with it.",
-          "expected": "No delayed trigger exists. Mardu Scout is still on the battlefield at the end step."
+          "expected": "No delayed trigger exists. Mardu Scout is still on the battlefield at the end step.",
+          "operation": {
+            "unclassifiable": "a different spell is cast, a decision by a player"
+          }
         },
         {
           "label": "dies-first",
           "polarity": "other",
           "delta": "B blocks Mardu Scout with Grizzly Bears, so Mardu Scout dies in combat damage before the end step.",
-          "expected": "Mardu Scout deals 3 damage to Grizzly Bears (dies) and takes 2, so it goes to A's graveyard. At the end step it is not returned: it is in the graveyard, not in A's hand."
+          "expected": "Mardu Scout deals 3 damage to Grizzly Bears (dies) and takes 2, so it goes to A's graveyard. At the end step it is not returned: it is in the graveyard, not in A's hand.",
+          "operation": {
+            "unclassifiable": "a different decision by a player in combat (a block)"
+          }
         }
       ],
       "cards": [
@@ -123,7 +132,17 @@
         "Mardu Scout",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "The delayed trigger a dash-cast permanent's spell creates fires at the beginning of the next end step and returns the permanent to its owner's hand.",
+        "near_miss": "That delayed trigger is evaluated against another phase event and does not fire.",
+        "params": {
+          "keyword": "Dash"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.109a-3",
@@ -170,7 +189,10 @@
           "label": "one-land",
           "polarity": "does_not_fire",
           "delta": "A controls only the Mountain.",
-          "expected": "Casting for the dash cost is not legal because {1}{R} needs two mana. Casting for the mana cost is not legal."
+          "expected": "Casting for the dash cost is not legal because {1}{R} needs two mana. Casting for the mana cost is not legal.",
+          "operation": {
+            "unclassifiable": "adds or removes a permanent"
+          }
         }
       ],
       "cards": [

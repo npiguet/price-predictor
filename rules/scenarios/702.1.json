@@ -64,7 +64,10 @@
           "label": "one_land",
           "polarity": "does_not_fire",
           "delta": "A controls one Forest instead of two.",
-          "expected": "The activation is not legal: {1}{G} cannot be paid. Grizzly Bears stays in the graveyard and Varolz has no counters."
+          "expected": "The activation is not legal: {1}{G} cannot be paid. Grizzly Bears stays in the graveyard and Varolz has no counters.",
+          "operation": {
+            "unclassifiable": "adds, removes or moves a permanent, which no fork operation does"
+          }
         }
       ],
       "cards": [
@@ -126,7 +129,10 @@
           "label": "no_response",
           "polarity": "does_not_fire",
           "delta": "A does not cast Shock, so A's life stays 5.",
-          "expected": "The echo cost is {5} when the trigger resolves; A controls only four Mountains and cannot pay it, so Volcano Hellion is sacrificed and moves to A's graveyard."
+          "expected": "The echo cost is {5} when the trigger resolves; A controls only four Mountains and cannot pay it, so Volcano Hellion is sacrificed and moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player, not a fact on the board"
+          }
         }
       ],
       "cards": [
@@ -184,7 +190,8 @@
           "label": "no_keywords",
           "polarity": "does_not_fire",
           "delta": "Hill Giant (no keywords) replaces White Knight.",
-          "expected": "No creature has first strike or protection; Grizzly Bears and Hill Giant gain nothing."
+          "expected": "No creature has first strike or protection; Grizzly Bears and Hill Giant gain nothing.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -193,7 +200,18 @@
         "Grizzly Bears",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution grants keyword abilities to creatures, each with its variants and variables: a keyword_change gaining them.",
+        "near_miss": "A resolution of a keyword grant that gives no creature a keyword.",
+        "params": {
+          "event": "keyword_change",
+          "removed": false
+        },
+        "needs": []
+      }
     }
   ]
 }

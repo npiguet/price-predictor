@@ -67,19 +67,28 @@
           "label": "no_first_strike",
           "polarity": "does_not_fire",
           "delta": "A attacks with Elite Vanguard (2/1, no first strike) instead of Youthful Knight, and B still blocks with Grizzly Bears.",
-          "expected": "No creature has first strike, so all combat damage is dealt simultaneously in the single regular step: Elite Vanguard and Grizzly Bears each deal 2 damage and both die."
+          "expected": "No creature has first strike, so all combat damage is dealt simultaneously in the single regular step: Elite Vanguard and Grizzly Bears each deal 2 damage and both die.",
+          "operation": {
+            "unclassifiable": "A declares a different attacker already on the battlefield (the one without first strike); a different attack declaration, which no fork operation makes."
+          }
         },
         {
           "label": "giant_blocks",
           "polarity": "other",
           "delta": "B declares Hill Giant (3/3) as the blocker instead of Grizzly Bears.",
-          "expected": "In the first-strike step Youthful Knight deals 2 damage to Hill Giant, which survives with 2 damage marked. In the regular step Hill Giant deals 3 damage to Youthful Knight, which dies. Hill Giant stays on the battlefield with 2 damage."
+          "expected": "In the first-strike step Youthful Knight deals 2 damage to Hill Giant, which survives with 2 damage marked. In the regular step Hill Giant deals 3 damage to Youthful Knight, which dies. Hill Giant stays on the battlefield with 2 damage.",
+          "operation": {
+            "unclassifiable": "B declares a different blocker already on the battlefield; a different block declaration, which no fork operation makes."
+          }
         },
         {
           "label": "both_first_strike",
           "polarity": "other",
           "delta": "B declares Benalish Knight (2/2, first strike) as the blocker instead of Grizzly Bears.",
-          "expected": "Both creatures deal damage simultaneously in the first-strike step: Benalish Knight takes 2 and Youthful Knight takes 2, and both die. No creature deals damage in the regular step."
+          "expected": "Both creatures deal damage simultaneously in the first-strike step: Benalish Knight takes 2 and Youthful Knight takes 2, and both die. No creature deals damage in the regular step.",
+          "operation": {
+            "unclassifiable": "B declares a different blocker already on the battlefield; a different block declaration, which no fork operation makes."
+          }
         }
       ],
       "cards": [
@@ -89,7 +98,17 @@
         "Benalish Knight",
         "Elite Vanguard"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "keyword_combat",
+        "record_kind": "combat",
+        "outcome": "A creature with first strike deals combat damage in the first-strike damage step.",
+        "near_miss": "A damage-step probe fork re-ran the combat with first strike stripped from its carrier.",
+        "params": {
+          "keyword": "first_strike"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.7c-1",
@@ -149,7 +168,10 @@
           "label": "gained_before_first_step",
           "polarity": "does_not_fire",
           "delta": "B casts Ambush in the declare blockers step, before any combat damage is dealt, instead of after the first-strike damage.",
-          "expected": "Hill Giant has first strike when the first-strike step begins, so Hill Giant and Youthful Knight deal damage simultaneously in that step. Youthful Knight dies and Hill Giant has 2 damage marked. No creature deals damage in the second step."
+          "expected": "Hill Giant has first strike when the first-strike step begins, so Hill Giant and Youthful Knight deal damage simultaneously in that step. Youthful Knight dies and Hill Giant has 2 damage marked. No creature deals damage in the second step.",
+          "operation": {
+            "unclassifiable": "B casts the instant in an earlier step than the base does; a different timing of a decision, which no fork operation makes."
+          }
         }
       ],
       "cards": [
@@ -220,7 +242,10 @@
           "label": "double_strike_in_response",
           "polarity": "does_not_fire",
           "delta": "In response to Walking Sponge's ability A casts Boros Charm (tapping Mountain and Plains) choosing the mode that gives Youthful Knight double strike, then the ability resolves too.",
-          "expected": "Boros Charm resolves first, then Walking Sponge removes first strike only; Youthful Knight keeps double strike and deals 2 more damage in the second step. Hill Giant (3/3) has taken 4 damage in total and dies, while its own 3 damage kills Youthful Knight."
+          "expected": "Boros Charm resolves first, then Walking Sponge removes first strike only; Youthful Knight keeps double strike and deals 2 more damage in the second step. Hill Giant (3/3) has taken 4 damage in total and dies, while its own 3 damage kills Youthful Knight.",
+          "operation": {
+            "unclassifiable": "A casts a spell in response that the base does not cast; a different decision and spell, which no fork operation makes."
+          }
         }
       ],
       "cards": [

@@ -61,13 +61,19 @@
           "label": "graveyard",
           "polarity": "does_not_fire",
           "delta": "B's Grizzly Bears is in B's graveyard instead of on the battlefield.",
-          "expected": "Day of Judgment resolves and destroys nothing; Grizzly Bears stays in B's graveyard."
+          "expected": "Day of Judgment resolves and destroys nothing; Grizzly Bears stays in B's graveyard.",
+          "operation": {
+            "unclassifiable": "Moves a card to another zone."
+          }
         },
         {
           "label": "hand",
           "polarity": "does_not_fire",
           "delta": "B's Grizzly Bears is in B's hand instead of on the battlefield.",
-          "expected": "Day of Judgment resolves and destroys nothing; Grizzly Bears stays in B's hand."
+          "expected": "Day of Judgment resolves and destroys nothing; Grizzly Bears stays in B's hand.",
+          "operation": {
+            "unclassifiable": "Moves a card to another zone."
+          }
         }
       ],
       "cards": [
@@ -127,13 +133,19 @@
           "label": "two-cards",
           "polarity": "other",
           "delta": "B's hand is Grizzly Bears and Hill Giant.",
-          "expected": "Mind Rot resolves; B discards Grizzly Bears and Hill Giant, and both are in B's graveyard."
+          "expected": "Mind Rot resolves; B discards Grizzly Bears and Hill Giant, and both are in B's graveyard.",
+          "operation": {
+            "unclassifiable": "Changes the contents of a hand."
+          }
         },
         {
           "label": "empty-hand",
           "polarity": "does_not_fire",
           "delta": "B's hand is empty.",
-          "expected": "Mind Rot resolves and B discards nothing; nothing else happens."
+          "expected": "Mind Rot resolves and B discards nothing; nothing else happens.",
+          "operation": {
+            "unclassifiable": "Changes the contents of a hand."
+          }
         }
       ],
       "cards": [
@@ -193,13 +205,19 @@
           "label": "no-orrery",
           "polarity": "does_not_fire",
           "delta": "Vedalken Orrery is not on the battlefield.",
-          "expected": "can_play is false for Divination."
+          "expected": "can_play is false for Divination.",
+          "operation": {
+            "unclassifiable": "Removes a permanent."
+          }
         },
         {
           "label": "land",
           "polarity": "does_not_fire",
           "delta": "The card asked about is Island, played from hand, instead of casting Divination.",
-          "expected": "can_play is false for playing Island at A's beginning of combat, with Vedalken Orrery on the battlefield."
+          "expected": "can_play is false for playing Island at A's beginning of combat, with Vedalken Orrery on the battlefield.",
+          "operation": {
+            "unclassifiable": "Asks about a different card and action."
+          }
         }
       ],
       "cards": [
@@ -267,13 +285,19 @@
           "label": "no-orrery",
           "polarity": "does_not_fire",
           "delta": "Vedalken Orrery is not on the battlefield.",
-          "expected": "Casting Firebolt from B's graveyard at B's upkeep is illegal. B's life stays 20."
+          "expected": "Casting Firebolt from B's graveyard at B's upkeep is illegal. B's life stays 20.",
+          "operation": {
+            "unclassifiable": "Removes a permanent."
+          }
         },
         {
           "label": "no-trance",
           "polarity": "does_not_fire",
           "delta": "A does not cast Shaman's Trance first.",
-          "expected": "Casting Firebolt from B's graveyard is illegal. B's life stays 20."
+          "expected": "Casting Firebolt from B's graveyard is illegal. B's life stays 20.",
+          "operation": {
+            "unclassifiable": "Omits a spell cast."
+          }
         }
       ],
       "cards": [
@@ -330,7 +354,10 @@
           "label": "no-orrery",
           "polarity": "does_not_fire",
           "delta": "Chromatic Orrery is not on the battlefield.",
-          "expected": "can_play is false for Coral Merfolk."
+          "expected": "can_play is false for Coral Merfolk.",
+          "operation": {
+            "unclassifiable": "Removes a permanent."
+          }
         }
       ],
       "cards": [
@@ -391,7 +418,10 @@
           "label": "mountain",
           "polarity": "does_not_fire",
           "delta": "A pays {R/G} with the Mountain instead of an Island, and the two generic with Islands.",
-          "expected": "Firespout deals 3 damage to each creature without flying; Grizzly Bears is destroyed and moves to B's graveyard."
+          "expected": "Firespout deals 3 damage to each creature without flying; Grizzly Bears is destroyed and moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "A different payment choice by the player."
+          }
         }
       ],
       "cards": [
@@ -450,7 +480,10 @@
           "label": "other-source",
           "polarity": "does_not_fire",
           "delta": "A chooses Raging Goblin as the red source instead.",
-          "expected": "The 1 damage from Prodigal Pyromancer is dealt; A's life is 19. The shield for Raging Goblin is not used."
+          "expected": "The 1 damage from Prodigal Pyromancer is dealt; A's life is 19. The shield for Raging Goblin is not used.",
+          "operation": {
+            "unclassifiable": "A different choice by the player."
+          }
         }
       ],
       "cards": [
@@ -459,7 +492,18 @@
         "Prodigal Pyromancer",
         "Raging Goblin"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A damage event meets a prevention shield set for its source and is prevented, whatever kind of damage it is.",
+        "near_miss": "A damage event meets a replacement or prevention effect and is not prevented (not replaced, replaced or updated).",
+        "params": {
+          "event": "damage_dealt",
+          "result": "prevented"
+        },
+        "needs": []
+      }
     },
     {
       "id": "609.7a-2",
@@ -513,7 +557,10 @@
           "label": "other-source",
           "polarity": "does_not_fire",
           "delta": "A chooses Prodigal Pyromancer as the red source instead of the Raging Goblin spell.",
-          "expected": "Raging Goblin deals 1 combat damage to A; A's life is 19."
+          "expected": "Raging Goblin deals 1 combat damage to A; A's life is 19.",
+          "operation": {
+            "unclassifiable": "A different choice by the player."
+          }
         }
       ],
       "cards": [
@@ -523,7 +570,18 @@
         "Prodigal Pyromancer",
         "Raging Goblin"
       ],
-      "forge_notes": "The shield tracks the chosen card by identity; whether Forge keeps it across the spell becoming a permanent should be checked."
+      "forge_notes": "The shield tracks the chosen card by identity; whether Forge keeps it across the spell becoming a permanent should be checked.",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A damage event meets a prevention shield set for its source and is prevented, including damage from the permanent a chosen permanent spell became.",
+        "near_miss": "A damage event meets a replacement or prevention effect and is not prevented (not replaced, replaced or updated).",
+        "params": {
+          "event": "damage_dealt",
+          "result": "prevented"
+        },
+        "needs": []
+      }
     },
     {
       "id": "609.7b-1",
@@ -576,7 +634,10 @@
           "label": "still-red",
           "polarity": "does_not_fire",
           "delta": "B does not activate Alchor's Tomb.",
-          "expected": "Prodigal Pyromancer is still red; its 1 damage is prevented and A's life stays 20. The shield is used up."
+          "expected": "Prodigal Pyromancer is still red; its 1 damage is prevented and A's life stays 20. The shield is used up.",
+          "operation": {
+            "unclassifiable": "Omits an activation, so a different decision."
+          }
         }
       ],
       "cards": [
@@ -636,7 +697,10 @@
           "label": "green-spell",
           "polarity": "does_not_fire",
           "delta": "A casts Hornet Sting (green) targeting B, tapping Forest, instead of Lightning Bolt.",
-          "expected": "Hornet Sting deals 1 damage to B; B's life is 19."
+          "expected": "Hornet Sting deals 1 damage to B; B's life is 19.",
+          "operation": {
+            "unclassifiable": "A different spell is cast."
+          }
         }
       ],
       "cards": [
@@ -646,7 +710,18 @@
         "Lightning Bolt",
         "Hornet Sting"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A damage event is modified in place by a damage replacement keyed to a property of its source, whatever zone the source is in.",
+        "near_miss": "A damage event meets a replacement or prevention effect with another result (prevented, not replaced, replaced).",
+        "params": {
+          "event": "damage_dealt",
+          "result": "updated"
+        },
+        "needs": []
+      }
     }
   ]
 }

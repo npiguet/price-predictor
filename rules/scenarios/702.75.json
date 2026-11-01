@@ -62,13 +62,19 @@
           "label": "short_library",
           "polarity": "other",
           "delta": "A's library is only Lightning Bolt and Grizzly Bears.",
-          "expected": "A looks at both cards and exiles Lightning Bolt face down. Grizzly Bears goes to the bottom of the library and is the only card in it."
+          "expected": "A looks at both cards and exiles Lightning Bolt face down. Grizzly Bears goes to the bottom of the library and is the only card in it.",
+          "operation": {
+            "unclassifiable": "changes the contents of A's library"
+          }
         },
         {
           "label": "empty_library",
           "polarity": "does_not_fire",
           "delta": "A's library is empty.",
-          "expected": "The hideaway trigger resolves with no cards to look at. Nothing is exiled and Collector's Cage stays on the battlefield."
+          "expected": "The hideaway trigger resolves with no cards to look at. Nothing is exiled and Collector's Cage stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "changes the contents of A's library"
+          }
         }
       ],
       "cards": [

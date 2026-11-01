@@ -63,13 +63,19 @@
           "label": "stack-not-empty",
           "polarity": "does_not_fire",
           "delta": "B's Shock targeting A, paid with B's Mountain, is already on the stack (set up on the stack) and A has priority in response.",
-          "expected": "Grizzly Bears is not castable (can_play false) while the stack is non-empty."
+          "expected": "Grizzly Bears is not castable (can_play false) while the stack is non-empty.",
+          "operation": {
+            "unclassifiable": "Puts B's Shock on the stack: a new stack object, which no fork operation adds."
+          }
         },
         {
           "label": "combat-step",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1 (empty stack, A has priority).",
-          "expected": "Grizzly Bears is not castable (can_play false) outside a main phase."
+          "expected": "Grizzly Bears is not castable (can_play false) outside a main phase.",
+          "operation": {
+            "unclassifiable": "Changes the step; no fork operation changes the phase or step."
+          }
         }
       ],
       "cards": [
@@ -78,7 +84,20 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": "The stack-not-empty variant puts B's Shock on the stack through setup.stack: {card Shock, controller B, targets [A]}."
+      "forge_notes": "The stack-not-empty variant puts B's Shock on the stack through setup.stack: {card Shock, controller B, targets [A]}.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A noninstant spell candidate has a true timing verdict: its controller has priority in their main phase with an empty stack.",
+        "near_miss": "A noninstant spell candidate has a false timing verdict: another step, another player's turn, or a non-empty stack.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "117.1a-2",
@@ -129,20 +148,39 @@
           "label": "stack-not-empty",
           "polarity": "fires",
           "delta": "A passes priority; B casts Shock targeting A, tapping Mountain; A receives priority with B's Shock on the stack.",
-          "expected": "Shock is still castable by A (can_play true) with a spell on the stack; A's Shock resolves first and B's life is 18, then B's Shock resolves and A's life is 18."
+          "expected": "Shock is still castable by A (can_play true) with a spell on the stack; A's Shock resolves first and B's life is 18, then B's Shock resolves and A's life is 18.",
+          "operation": {
+            "unclassifiable": "A different sequence of decisions: A passes and B casts a spell, putting it on the stack."
+          }
         },
         {
           "label": "no-priority",
           "polarity": "does_not_fire",
           "delta": "The step is untap instead of beginning_of_combat.",
-          "expected": "Shock is not castable (can_play false) because no player receives priority in the untap step."
+          "expected": "Shock is not castable (can_play false) because no player receives priority in the untap step.",
+          "operation": {
+            "unclassifiable": "Changes the step; no fork operation changes the phase or step."
+          }
         }
       ],
       "cards": [
         "Mountain",
         "Shock"
       ],
-      "forge_notes": "The untap-step variant may not be reachable through a puzzle state; it can be checked by asking the playability query before priority is granted."
+      "forge_notes": "The untap-step variant may not be reachable through a puzzle state; it can be checked by asking the playability query before priority is granted.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An instant-speed candidate has its timing verdict true whenever its player has priority, including with a non-empty stack.",
+        "near_miss": "A candidate whose timing verdict is false.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "117.1b-1",
@@ -191,13 +229,19 @@
           "label": "stack-not-empty",
           "polarity": "fires",
           "delta": "B's Shock targeting Mogg Fanatic, paid with B's Mountain, is already on the stack (set up on the stack) and A has priority.",
-          "expected": "The ability is still activatable with a spell on the stack; A sacrifices Mogg Fanatic in response targeting B, the ability resolves first (B's life is 19) and B's Shock then fizzles."
+          "expected": "The ability is still activatable with a spell on the stack; A sacrifices Mogg Fanatic in response targeting B, the ability resolves first (B's life is 19) and B's Shock then fizzles.",
+          "operation": {
+            "unclassifiable": "Puts B's Shock on the stack: a new stack object, which no fork operation adds."
+          }
         },
         {
           "label": "no-priority",
           "polarity": "does_not_fire",
           "delta": "The step is untap instead of beginning_of_combat.",
-          "expected": "The ability is not activatable (can_play false) because no player receives priority in the untap step."
+          "expected": "The ability is not activatable (can_play false) because no player receives priority in the untap step.",
+          "operation": {
+            "unclassifiable": "Changes the step; no fork operation changes the phase or step."
+          }
         }
       ],
       "cards": [
@@ -206,7 +250,20 @@
         "Shock",
         "Mountain"
       ],
-      "forge_notes": "The stack-not-empty variant puts B's Shock on the stack through setup.stack: {card Shock, controller B, targets [Mogg Fanatic]}."
+      "forge_notes": "The stack-not-empty variant puts B's Shock on the stack through setup.stack: {card Shock, controller B, targets [Mogg Fanatic]}.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An activated-ability candidate has its timing verdict true whenever its controller has priority.",
+        "near_miss": "A candidate whose timing verdict is false.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "117.1d-1",
@@ -261,7 +318,10 @@
           "label": "no-source",
           "polarity": "does_not_fire",
           "delta": "A controls only two Forests, not three.",
-          "expected": "A has no mana ability to activate; the payment cannot be made and Force Spike counters Grizzly Bears, which goes to A's graveyard."
+          "expected": "A has no mana ability to activate; the payment cannot be made and Force Spike counters Grizzly Bears, which goes to A's graveyard.",
+          "operation": {
+            "unclassifiable": "Removes a land from A's battlefield; no fork operation removes a permanent."
+          }
         }
       ],
       "cards": [
@@ -324,7 +384,10 @@
           "label": "creature-spell",
           "polarity": "does_not_fire",
           "delta": "A casts Grizzly Bears (tapping Forest and Mountain) instead of Shock.",
-          "expected": "Guttersnipe's trigger does not fire; the stack holds only Grizzly Bears and B's life stays 20."
+          "expected": "Guttersnipe's trigger does not fire; the stack holds only Grizzly Bears and B's life stays 20.",
+          "operation": {
+            "unclassifiable": "A casts a different spell: a different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -334,7 +397,17 @@
         "Shock",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on a spell being cast is evaluated and fires during casting.",
+        "near_miss": "The same kind of trigger evaluated and not fired.",
+        "params": {
+          "mode": "SpellCast"
+        },
+        "needs": []
+      }
     },
     {
       "id": "117.2a-2",
@@ -385,7 +458,10 @@
           "label": "noncreature-spell",
           "polarity": "does_not_fire",
           "delta": "A casts Shock targeting B (tapping Mountain) instead of Grizzly Bears.",
-          "expected": "No creature enters, so Soul Warden's trigger does not fire; A's life stays 20 and B's life is 18."
+          "expected": "No creature enters, so Soul Warden's trigger does not fire; A's life stays 20 and B's life is 18.",
+          "operation": {
+            "unclassifiable": "A casts a different spell: a different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -395,7 +471,18 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on a permanent entering the battlefield is evaluated and fires.",
+        "near_miss": "The same kind of trigger evaluated and not fired.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "117.3a-1",
@@ -447,13 +534,19 @@
           "label": "untap",
           "polarity": "does_not_fire",
           "delta": "The step is untap instead of upkeep.",
-          "expected": "No player receives priority in the untap step; nothing is on the stack and A's life stays 20."
+          "expected": "No player receives priority in the untap step; nothing is on the stack and A's life stays 20.",
+          "operation": {
+            "unclassifiable": "Changes the step; no fork operation changes the phase or step."
+          }
         },
         {
           "label": "draw",
           "polarity": "other",
           "delta": "The step is draw instead of upkeep.",
-          "expected": "A draws Grizzly Bears as a turn-based action before receiving priority; Grizzly Bears is in A's hand when A first has priority, the upkeep trigger does not fire and A's life stays 20."
+          "expected": "A draws Grizzly Bears as a turn-based action before receiving priority; Grizzly Bears is in A's hand when A first has priority, the upkeep trigger does not fire and A's life stays 20.",
+          "operation": {
+            "unclassifiable": "Changes the step; no fork operation changes the phase or step."
+          }
         }
       ],
       "cards": [
@@ -462,7 +555,17 @@
         "Shock",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A beginning-of-step trigger is evaluated and fires.",
+        "near_miss": "A beginning-of-step trigger evaluated and not fired.",
+        "params": {
+          "mode": "Phase"
+        },
+        "needs": []
+      }
     },
     {
       "id": "117.3b-1",
@@ -514,20 +617,29 @@
           "label": "nonactive-caster",
           "polarity": "fires",
           "delta": "A passes priority with an empty stack, then B casts Shock targeting A, tapping Mountain; both pass and it resolves.",
-          "expected": "A's life is 18; A, the active player, receives priority after B's Shock resolves, before B does."
+          "expected": "A's life is 18; A, the active player, receives priority after B's Shock resolves, before B does.",
+          "operation": {
+            "unclassifiable": "A different sequence of decisions: A passes and B casts the spell."
+          }
         },
         {
           "label": "mana-ability",
           "polarity": "does_not_fire",
           "delta": "A taps Mountain for mana instead of casting Shock; nothing is put on the stack.",
-          "expected": "No spell or ability resolves; A, who activated the mana ability, still holds priority and B's life stays 20."
+          "expected": "No spell or ability resolves; A, who activated the mana ability, still holds priority and B's life stays 20.",
+          "operation": {
+            "unclassifiable": "A different decision: A activates a mana ability instead of casting a spell."
+          }
         }
       ],
       "cards": [
         "Mountain",
         "Shock"
       ],
-      "forge_notes": "Priority holder after resolution is a checked outcome only if the harness exposes it; otherwise assert who may act first."
+      "forge_notes": "Priority holder after resolution is a checked outcome only if the harness exposes it; otherwise assert who may act first.",
+      "detector": {
+        "none": "A resolution record's snapshot is taken before the resolution, so its global.priority names who held priority before it; the next decision record names the new priority holder but nothing in it marks that a resolution just happened, and no family or record field joins the two. No event records priority passing (EVENT_PARAMS has none)."
+      }
     },
     {
       "id": "117.3c-1",
@@ -584,7 +696,10 @@
           "label": "passes-first",
           "polarity": "other",
           "delta": "A passes priority after casting the first Shock instead of casting the second; A casts the second Shock when A next receives priority, after B's Giant Growth.",
-          "expected": "Stack bottom to top: Shock, Giant Growth, Shock. The second Shock resolves first and Grizzly Bears (2/2) moves to B's graveyard; Giant Growth and the first Shock fizzle."
+          "expected": "Stack bottom to top: Shock, Giant Growth, Shock. The second Shock resolves first and Grizzly Bears (2/2) moves to B's graveyard; Giant Growth and the first Shock fizzle.",
+          "operation": {
+            "unclassifiable": "A different decision: A passes priority instead of casting the second spell at once."
+          }
         }
       ],
       "cards": [
@@ -594,7 +709,10 @@
         "Giant Growth",
         "Grizzly Bears"
       ],
-      "forge_notes": "No does_not_fire variant: every cast by a player with priority gives that player priority again, so the rule has no branch where it applies and its effect fails. Which player holds priority is not a record field; the stack order is the observable consequence."
+      "forge_notes": "No does_not_fire variant: every cast by a player with priority gives that player priority again, so the rule has no branch where it applies and its effect fails. Which player holds priority is not a record field; the stack order is the observable consequence.",
+      "detector": {
+        "none": "The rule's outcome is who holds priority after a cast; a resolution record's snapshot predates the resolution and its events hold no priority change, and EVENT_PARAMS has no priority event. The spell_cast events show only that later casts happened, not who received priority between them."
+      }
     },
     {
       "id": "117.4-1",
@@ -647,13 +765,19 @@
           "label": "response",
           "polarity": "does_not_fire",
           "delta": "After A passes, B casts Giant Growth targeting Grizzly Bears, tapping Forest, instead of passing; A then passes and B passes.",
-          "expected": "B's action interrupted the succession, so Shock stayed on the stack; Giant Growth resolves first (Grizzly Bears 5/5), then after another full round of passes Shock resolves and Grizzly Bears survives with 2 damage marked."
+          "expected": "B's action interrupted the succession, so Shock stayed on the stack; Giant Growth resolves first (Grizzly Bears 5/5), then after another full round of passes Shock resolves and Grizzly Bears survives with 2 damage marked.",
+          "operation": {
+            "unclassifiable": "A different decision: B casts a spell in response instead of passing."
+          }
         },
         {
           "label": "empty-stack",
           "polarity": "other",
           "delta": "A casts no spell; A passes and B passes.",
-          "expected": "The stack is empty, so no object resolves and the main phase ends: the game moves to beginning_of_combat; Grizzly Bears is untouched."
+          "expected": "The stack is empty, so no object resolves and the main phase ends: the game moves to beginning_of_combat; Grizzly Bears is untouched.",
+          "operation": {
+            "unclassifiable": "A different decision: A casts no spell."
+          }
         }
       ],
       "cards": [
@@ -663,7 +787,10 @@
         "Giant Growth",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "Passing priority is not an event in EVENT_PARAMS and no record field counts passes; a resolution record exists whenever an object resolves but says nothing about whether all players passed in succession before it."
+      }
     },
     {
       "id": "117.5-1",
@@ -716,7 +843,8 @@
           "label": "survives",
           "polarity": "does_not_fire",
           "delta": "B's creature is Centaur Courser (3/3, so 5/3 with Rancor) instead of Grizzly Bears, and Rancor is attached to it.",
-          "expected": "Centaur Courser survives with 2 damage marked, no state-based action is performed and Rancor stays attached; no trigger is put on the stack."
+          "expected": "Centaur Courser survives with 2 damage marked, no state-based action is performed and Rancor stays attached; no trigger is put on the stack.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -782,13 +910,19 @@
           "label": "no-response",
           "polarity": "does_not_fire",
           "delta": "B casts nothing in response.",
-          "expected": "Shock resolves with no spell above it and Grizzly Bears (2/2) moves to B's graveyard."
+          "expected": "Shock resolves with no spell above it and Grizzly Bears (2/2) moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "A different decision: B casts nothing in response."
+          }
         },
         {
           "label": "counter-response",
           "polarity": "fires",
           "delta": "After B's Giant Growth, A casts the second Shock targeting Grizzly Bears, tapping the second Mountain.",
-          "expected": "The second Shock, cast last, resolves first: Grizzly Bears (2/2) dies; Giant Growth and the first Shock fizzle because their target is gone."
+          "expected": "The second Shock, cast last, resolves first: Grizzly Bears (2/2) dies; Giant Growth and the first Shock fizzle because their target is gone.",
+          "operation": {
+            "unclassifiable": "A different decision: A casts another spell in response."
+          }
         }
       ],
       "cards": [

@@ -51,20 +51,34 @@
           "label": "giant_summoning_sick",
           "polarity": "does_not_fire",
           "delta": "Hill Giant entered the battlefield this turn (summoning sick, no haste).",
-          "expected": "Hill Giant is not eligible to be tapped for enlist. No enlist trigger fires. Barkweave Crusher stays 2/5, deals 2 combat damage: B is at 18. Hill Giant stays untapped."
+          "expected": "Hill Giant is not eligible to be tapped for enlist. No enlist trigger fires. Barkweave Crusher stays 2/5, deals 2 combat damage: B is at 18. Hill Giant stays untapped.",
+          "operation": {
+            "unclassifiable": "changes when the creature entered"
+          }
         },
         {
           "label": "giant_already_tapped",
           "polarity": "does_not_fire",
           "delta": "Hill Giant is already tapped.",
-          "expected": "Hill Giant is not an untapped creature, so it cannot be tapped for enlist. No enlist trigger fires. Barkweave Crusher stays 2/5, deals 2 combat damage: B is at 18."
+          "expected": "Hill Giant is not an untapped creature, so it cannot be tapped for enlist. No enlist trigger fires. Barkweave Crusher stays 2/5, deals 2 combat damage: B is at 18.",
+          "operation": "tap"
         }
       ],
       "cards": [
         "Barkweave Crusher",
         "Hill Giant"
       ],
-      "forge_notes": "Variants change the state of Hill Giant in the setup: use summoning_sick true or tapped true on its entry."
+      "forge_notes": "Variants change the state of Hill Giant in the setup: use summoning_sick true or tapped true on its entry.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An enlist trigger fires when its creature attacks and its controller taps an eligible creature for enlist, adding that creature's power.",
+        "near_miss": "An enlist trigger is evaluated where no creature was tapped for enlist and does not fire.",
+        "params": {
+          "keyword": "Enlist"
+        },
+        "needs": []
+      }
     }
   ]
 }

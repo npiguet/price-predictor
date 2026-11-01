@@ -55,7 +55,10 @@
           "label": "end-step",
           "polarity": "does_not_fire",
           "delta": "A casts Otherworldly Journey during the end step instead of main1.",
-          "expected": "Grizzly Bears moves to exile on resolution. The delayed trigger does not fire this turn; it fires at the beginning of the next end step, when the card returns with a +1/+1 counter."
+          "expected": "Grizzly Bears moves to exile on resolution. The delayed trigger does not fire this turn; it fires at the beginning of the next end step, when the card returns with a +1/+1 counter.",
+          "operation": {
+            "unclassifiable": "Changes the phase."
+          }
         }
       ],
       "cards": [
@@ -63,7 +66,17 @@
         "Grizzly Bears",
         "Otherworldly Journey"
       ],
-      "forge_notes": "Forge phrases the card as 'At end of turn' with Phase$ End of Turn; confirm the delayed trigger waits for the next turn when created during the end step."
+      "forge_notes": "Forge phrases the card as 'At end of turn' with Phase$ End of Turn; confirm the delayed trigger waits for the next turn when created during the end step.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolving one-shot effect creates a delayed triggered ability.",
+        "near_miss": "A resolution that creates no delayed trigger; not counted, since no api is set.",
+        "params": {
+          "event": "delayed_trigger_created"
+        },
+        "needs": []
+      }
     },
     {
       "id": "610.3-1",
@@ -118,7 +131,10 @@
           "label": "giant-dies",
           "polarity": "does_not_fire",
           "delta": "B targets Hill Giant with Terror instead of Banisher Priest.",
-          "expected": "Hill Giant is destroyed. Banisher Priest stays, so Grizzly Bears remains in exile."
+          "expected": "Hill Giant is destroyed. Banisher Priest stays, so Grizzly Bears remains in exile.",
+          "operation": {
+            "unclassifiable": "A different target."
+          }
         }
       ],
       "cards": [
@@ -128,7 +144,19 @@
         "Terror",
         "Grizzly Bears"
       ],
-      "forge_notes": "The Priest/Bears link cannot be stated in the zone lists; build it by casting Banisher Priest and targeting Grizzly Bears."
+      "forge_notes": "The Priest/Bears link cannot be stated in the zone lists; build it by casting Banisher Priest and targeting Grizzly Bears.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An until-effect's second one-shot effect returns an exiled object from exile to the battlefield right after the specified event.",
+        "near_miss": "An until-effect whose specified event has not happened leaves the object in exile.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "Exile",
+          "to_zone": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "610.3a-1",
@@ -184,7 +212,10 @@
           "label": "no-response",
           "polarity": "does_not_fire",
           "delta": "B does not cast Terror.",
-          "expected": "The ability resolves and Grizzly Bears is exiled until the Angel leaves the battlefield; the Angel stays."
+          "expected": "The ability resolves and Grizzly Bears is exiled until the Angel leaves the battlefield; the Angel stays.",
+          "operation": {
+            "unclassifiable": "Omits a spell cast."
+          }
         }
       ],
       "cards": [
@@ -253,7 +284,10 @@
           "label": "no-response",
           "polarity": "does_not_fire",
           "delta": "B does not cast Terror.",
-          "expected": "The trigger resolves and Grizzly Bears is exiled until Banisher Priest leaves the battlefield; Banisher Priest stays."
+          "expected": "The trigger resolves and Grizzly Bears is exiled until Banisher Priest leaves the battlefield; Banisher Priest stays.",
+          "operation": {
+            "unclassifiable": "Omits a spell cast."
+          }
         }
       ],
       "cards": [
@@ -317,7 +351,10 @@
           "label": "own",
           "polarity": "does_not_fire",
           "delta": "The exiled Grizzly Bears is owned by B instead of A (B owned and controlled it when it was exiled).",
-          "expected": "Grizzly Bears returns to the battlefield under B's control."
+          "expected": "Grizzly Bears returns to the battlefield under B's control.",
+          "operation": {
+            "unclassifiable": "Changes a card's owner, which no fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -388,7 +425,10 @@
           "label": "two-terrors",
           "polarity": "does_not_fire",
           "delta": "A casts Terror twice instead (first on B's Banisher Priest, then on A's own, each resolving separately), instead of Day of Judgment.",
-          "expected": "The Priests die at different times. Hill Giant returns when B's Priest dies and Grizzly Bears returns later, when A's Priest dies; they do not return simultaneously."
+          "expected": "The Priests die at different times. Hill Giant returns when B's Priest dies and Grizzly Bears returns later, when A's Priest dies; they do not return simultaneously.",
+          "operation": {
+            "unclassifiable": "A different spell cast, repeated."
+          }
         }
       ],
       "cards": [
@@ -400,7 +440,20 @@
         "Hill Giant",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "Two or more objects return from exile to the battlefield in one resolution.",
+        "near_miss": "A resolution returning a single object.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "Exile",
+          "to_zone": "Battlefield",
+          "min_count": 2
+        },
+        "needs": []
+      }
     },
     {
       "id": "610.4-1",
@@ -452,7 +505,10 @@
           "label": "other-target",
           "polarity": "does_not_fire",
           "delta": "B targets Mind Stone with Disenchant instead of Oubliette.",
-          "expected": "Mind Stone is destroyed. Oubliette stays, so Grizzly Bears remains phased out."
+          "expected": "Mind Stone is destroyed. Oubliette stays, so Grizzly Bears remains phased out.",
+          "operation": {
+            "unclassifiable": "A different target."
+          }
         }
       ],
       "cards": [
@@ -462,7 +518,18 @@
         "Plains",
         "Disenchant"
       ],
-      "forge_notes": "Build the state by casting Oubliette on Grizzly Bears; the zone lists cannot show a phased-out permanent."
+      "forge_notes": "Build the state by casting Oubliette on Grizzly Bears; the zone lists cannot show a phased-out permanent.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution's effect half holds a permanent phasing in, as an until-effect's second one-shot effect right after its specified event.",
+        "near_miss": "A permanent phased out by an until-effect stays phased out because the specified event has not happened; not counted, since no api is set.",
+        "params": {
+          "event": "phased",
+          "out": false
+        },
+        "needs": []
+      }
     },
     {
       "id": "610.4a-1",
@@ -518,7 +585,10 @@
           "label": "teleport",
           "polarity": "does_not_fire",
           "delta": "A does not cast Oubliette; instead B activates Blink Dog's Teleport ({3}{W}) at A's end step, so Blink Dog phases out on its own.",
-          "expected": "Blink Dog phases in during B's untap step, untapped."
+          "expected": "Blink Dog phases in during B's untap step, untapped.",
+          "operation": {
+            "unclassifiable": "A different spell and permanent set-up."
+          }
         }
       ],
       "cards": [
@@ -585,7 +655,10 @@
           "label": "no-response",
           "polarity": "does_not_fire",
           "delta": "B does not cast Disenchant.",
-          "expected": "The ability resolves: Grizzly Bears untaps and phases out until The Moment leaves the battlefield."
+          "expected": "The ability resolves: Grizzly Bears untaps and phases out until The Moment leaves the battlefield.",
+          "operation": {
+            "unclassifiable": "Omits a spell cast."
+          }
         }
       ],
       "cards": [
@@ -653,7 +726,10 @@
           "label": "no-response",
           "polarity": "does_not_fire",
           "delta": "B does not cast Disenchant.",
-          "expected": "The trigger resolves and Grizzly Bears phases out until Oubliette leaves the battlefield."
+          "expected": "The trigger resolves and Grizzly Bears phases out until Oubliette leaves the battlefield.",
+          "operation": {
+            "unclassifiable": "Omits a spell cast."
+          }
         }
       ],
       "cards": [
@@ -721,7 +797,10 @@
           "label": "two-disenchants",
           "polarity": "does_not_fire",
           "delta": "B casts Disenchant twice instead (first on A's Oubliette, then on B's own, each resolving separately), instead of Tranquility.",
-          "expected": "The Oubliettes are destroyed at different times. Grizzly Bears phases in after the first Disenchant and Hill Giant after the second; they do not phase in simultaneously."
+          "expected": "The Oubliettes are destroyed at different times. Grizzly Bears phases in after the first Disenchant and Hill Giant after the second; they do not phase in simultaneously.",
+          "operation": {
+            "unclassifiable": "A different spell cast, repeated."
+          }
         }
       ],
       "cards": [
@@ -733,7 +812,19 @@
         "Tranquility",
         "Disenchant"
       ],
-      "forge_notes": "Build the state by casting each Oubliette on the opponent's creature; the zone lists cannot show a phased-out permanent."
+      "forge_notes": "Build the state by casting each Oubliette on the opponent's creature; the zone lists cannot show a phased-out permanent.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "Two or more permanents phase in within one resolution's effect half, simultaneously.",
+        "near_miss": "A resolution phasing in a single permanent; not counted, since no api is set.",
+        "params": {
+          "event": "phased",
+          "out": false,
+          "min_count": 2
+        },
+        "needs": []
+      }
     },
     {
       "id": "610.5-1",
@@ -781,13 +872,17 @@
           "label": "creature",
           "polarity": "does_not_fire",
           "delta": "The card asked about is Coral Merfolk ({1}{U}), tapping Island and Chief Engineer, instead of Mind Stone.",
-          "expected": "can_play is false: Coral Merfolk is not an artifact spell and has no convoke, so Chief Engineer cannot pay for it and only one mana is available."
+          "expected": "can_play is false: Coral Merfolk is not an artifact spell and has no convoke, so Chief Engineer cannot pay for it and only one mana is available.",
+          "operation": {
+            "unclassifiable": "Asks about a different card."
+          }
         },
         {
           "label": "engineer-tapped",
           "polarity": "does_not_fire",
           "delta": "Chief Engineer is tapped.",
-          "expected": "can_play is false for Mind Stone: only one mana is available and no creature can be tapped for convoke."
+          "expected": "can_play is false for Mind Stone: only one mana is available and no creature can be tapped for convoke.",
+          "operation": "tap"
         }
       ],
       "cards": [

@@ -60,13 +60,17 @@
           "label": "tap_nothing",
           "polarity": "does_not_fire",
           "delta": "A taps no creature when paying the harmonize cost.",
-          "expected": "The cast is not legal: the total cost stays {5}{U} and A has only four Islands. Unending Whisper stays in A's graveyard."
+          "expected": "The cast is not legal: the total cost stays {5}{U} and A has only four Islands. Unending Whisper stays in A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different choice while paying the cost (no creature tapped), which no fork operation makes"
+          }
         },
         {
           "label": "bigger_creature",
           "polarity": "fires",
           "delta": "A controls Hill Giant (power 3) instead of Grizzly Bears and taps it.",
-          "expected": "The cast is legal with a total cost of {2}{U}. Hill Giant becomes tapped and three Islands are tapped, leaving one Island untapped. A draws Island."
+          "expected": "The cast is legal with a total cost of {2}{U}. Hill Giant becomes tapped and three Islands are tapped, leaving one Island untapped. A draws Island.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -139,14 +143,29 @@
           "label": "cast_from_hand",
           "polarity": "does_not_fire",
           "delta": "A instead casts the hand copy for its mana cost {U}, tapping one Island, without harmonize.",
-          "expected": "The spell resolves and A draws Island. It moves from the stack to A's graveyard, which now holds two Unending Whisper. The graveyard copy is unchanged."
+          "expected": "The spell resolves and A draws Island. It moves from the stack to A's graveyard, which now holds two Unending Whisper. The graveyard copy is unchanged.",
+          "operation": {
+            "unclassifiable": "a different card cast from a different zone, a player's decision no fork operation makes"
+          }
         }
       ],
       "cards": [
         "Unending Whisper",
         "Grizzly Bears",
         "Island"
-      ]
+      ],
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A spell cast with an exiling clause leaves the stack for exile instead of the graveyard on resolving (zone_change stack to exile).",
+        "near_miss": "A resolving spell that left the stack to the graveyard.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "exile"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.180a-3",
@@ -216,7 +235,10 @@
           "label": "hand_countered",
           "polarity": "does_not_fire",
           "delta": "A casts the hand copy for {U} (tapping one Island, no creature tapped) instead of the graveyard copy, and B counters it.",
-          "expected": "The spell is countered and A draws nothing. It moves from the stack to A's graveyard, which now holds two Unending Whisper. B's Counterspell moves to B's graveyard."
+          "expected": "The spell is countered and A draws nothing. It moves from the stack to A's graveyard, which now holds two Unending Whisper. B's Counterspell moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different card cast from a different zone, a player's decision no fork operation makes"
+          }
         }
       ],
       "cards": [
@@ -224,7 +246,20 @@
         "Counterspell",
         "Grizzly Bears",
         "Island"
-      ]
+      ],
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A countered spell that must be exiled goes from the stack to exile instead of the graveyard (zone_change stack to exile in a Counter resolution).",
+        "near_miss": "A Counter resolution whose countered spell went to the graveyard.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "exile",
+          "api": "Counter"
+        },
+        "needs": []
+      }
     }
   ]
 }

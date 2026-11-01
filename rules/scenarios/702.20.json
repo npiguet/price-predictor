@@ -51,7 +51,10 @@
           "label": "plain_attacker",
           "polarity": "does_not_fire",
           "delta": "A attacks with Grizzly Bears instead of Alpine Watchdog.",
-          "expected": "Grizzly Bears is attacking and tapped. Its combat damage puts B at 18."
+          "expected": "Grizzly Bears is attacking and tapped. Its combat damage puts B at 18.",
+          "operation": {
+            "unclassifiable": "A different attack declaration: a different decision by a player."
+          }
         }
       ],
       "cards": [

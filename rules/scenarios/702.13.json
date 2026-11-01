@@ -52,13 +52,19 @@
           "label": "same_color_blocker",
           "polarity": "does_not_fire",
           "delta": "B declares Hill Giant (red) as the blocker instead of Grizzly Bears.",
-          "expected": "Declaring Hill Giant as a blocker of Bladetusk Boar is legal."
+          "expected": "Declaring Hill Giant as a blocker of Bladetusk Boar is legal.",
+          "operation": {
+            "unclassifiable": "A different blocker is declared: a different decision by a player."
+          }
         },
         {
           "label": "artifact_blocker",
           "polarity": "does_not_fire",
           "delta": "B declares Phyrexian Walker (a colorless artifact creature) as the blocker instead of Grizzly Bears.",
-          "expected": "Declaring Phyrexian Walker as a blocker of Bladetusk Boar is legal."
+          "expected": "Declaring Phyrexian Walker as a blocker of Bladetusk Boar is legal.",
+          "operation": {
+            "unclassifiable": "A different blocker is declared: a different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -67,7 +73,18 @@
         "Hill Giant",
         "Phyrexian Walker"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A potential blocker is outside the legal-blockers list for an attacker because of an evasion or protection restriction on the attacker.",
+        "near_miss": "The potential blocker is inside the legal-blockers list for the attacker.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside"
+        },
+        "needs": []
+      }
     }
   ]
 }

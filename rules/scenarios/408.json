@@ -63,7 +63,10 @@
           "label": "stifled",
           "polarity": "does_not_fire",
           "delta": "In response to the -8 ability, B casts Stifle targeting it, tapping Island, and Stifle resolves first.",
-          "expected": "The -8 ability is countered and no emblem is created; the command zone stays empty. Elspeth has 0 loyalty and moves to A's graveyard in the state-based check. Shock deals 2 damage to Grizzly Bears, which moves to A's graveyard."
+          "expected": "The -8 ability is countered and no emblem is created; the command zone stays empty. Elspeth has 0 loyalty and moves to A's graveyard in the state-based check. Shock deals 2 damage to Grizzly Bears, which moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "A different spell cast: B casts Stifle on the activated ability, a player decision no fork operation makes."
+          }
         }
       ],
       "cards": [

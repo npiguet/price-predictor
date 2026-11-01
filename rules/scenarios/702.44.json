@@ -59,13 +59,19 @@
           "label": "one_color",
           "polarity": "fires",
           "delta": "A pays {2} with both Plains ({W}{W}) instead.",
-          "expected": "Pentad Prism enters the battlefield with 1 charge counter (white was the only color spent)."
+          "expected": "Pentad Prism enters the battlefield with 1 charge counter (white was the only color spent).",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         },
         {
           "label": "colorless_only",
           "polarity": "does_not_fire",
           "delta": "A pays {2} by tapping Sol Ring for {C}{C} instead.",
-          "expected": "Pentad Prism enters the battlefield with 0 charge counters, because no colored mana was spent."
+          "expected": "Pentad Prism enters the battlefield with 0 charge counters, because no colored mana was spent.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -128,13 +134,19 @@
           "label": "one_color",
           "polarity": "fires",
           "delta": "A pays {4} with all four Plains instead.",
-          "expected": "Etched Oracle enters with 1 +1/+1 counter and is a 1/1 on the battlefield."
+          "expected": "Etched Oracle enters with 1 +1/+1 counter and is a 1/1 on the battlefield.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         },
         {
           "label": "colorless_only",
           "polarity": "does_not_fire",
           "delta": "A pays {4} by tapping both Sol Rings for {C}{C}{C}{C} instead.",
-          "expected": "Etched Oracle enters with no +1/+1 counters, because no colored mana was spent, and is put into the graveyard as a 0/0 by the next state-based check."
+          "expected": "Etched Oracle enters with no +1/+1 counters, because no colored mana was spent, and is put into the graveyard as a 0/0 by the next state-based check.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -200,7 +212,10 @@
           "label": "reanimated",
           "polarity": "does_not_fire",
           "delta": "A casts Zombify (cost {3}{B}) targeting the Etched Oracle in the graveyard, paying with the Swamp and the three Plains, instead of casting the Etched Oracle from hand.",
-          "expected": "Zombify resolves and Etched Oracle enters the battlefield from the graveyard with no counters, as a 0/0, and is put into the graveyard by the next state-based check. The Etched Oracle in hand stays in hand."
+          "expected": "Zombify resolves and Etched Oracle enters the battlefield from the graveyard with no counters, as a 0/0, and is put into the graveyard by the next state-based check. The Etched Oracle in hand stays in hand.",
+          "operation": {
+            "unclassifiable": "a different spell cast, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -267,13 +282,19 @@
           "label": "one_color",
           "polarity": "fires",
           "delta": "A pays {6} with all six Plains instead.",
-          "expected": "Arcbound Wanderer enters with 1 +1/+1 counter and is a 1/1 on the battlefield."
+          "expected": "Arcbound Wanderer enters with 1 +1/+1 counter and is a 1/1 on the battlefield.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         },
         {
           "label": "colorless_only",
           "polarity": "does_not_fire",
           "delta": "A pays {6} by tapping all three Sol Rings for {C}{C}{C}{C}{C}{C} instead.",
-          "expected": "Arcbound Wanderer enters with no +1/+1 counters, because no colored mana was spent, and is put into the graveyard as a 0/0 by the next state-based check."
+          "expected": "Arcbound Wanderer enters with no +1/+1 counters, because no colored mana was spent, and is put into the graveyard as a 0/0 by the next state-based check.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         }
       ],
       "cards": [

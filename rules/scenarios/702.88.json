@@ -59,7 +59,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "In response, B casts Counterspell targeting Staggershock, tapping both Islands.",
-          "expected": "Staggershock is countered and goes to A's graveyard, not exile. B's life stays 20."
+          "expected": "Staggershock is countered and goes to A's graveyard, not exile. B's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different spell cast by B in response"
+          }
         }
       ],
       "cards": [
@@ -68,7 +71,19 @@
         "Staggershock",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolving spell is put into exile instead of its owner's graveyard.",
+        "near_miss": "Not counted: without api only the fires side is tagged (the near miss would be a resolving spell put into the graveyard).",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "exile"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.88a-2",
@@ -116,14 +131,27 @@
           "label": "declined",
           "polarity": "does_not_fire",
           "delta": "A chooses not to cast Staggershock.",
-          "expected": "Staggershock stays in exile and is never cast. B's life stays 18."
+          "expected": "Staggershock stays in exile and is never cast. B's life stays 18.",
+          "operation": {
+            "unclassifiable": "a different choice by A"
+          }
         }
       ],
       "cards": [
         "Staggershock",
         "Grizzly Bears"
       ],
-      "forge_notes": "Needs the rebound delayed trigger to exist; reach the state by playing the previous turn's cast (702.88a-1) or by creating the delayed trigger explicitly."
+      "forge_notes": "Needs the rebound delayed trigger to exist; reach the state by playing the previous turn's cast (702.88a-1) or by creating the delayed trigger explicitly.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "Rebound's delayed trigger fires at the beginning of its controller's next upkeep and lets them cast the exiled card.",
+        "near_miss": "Rebound's delayed trigger evaluated and not fired.",
+        "params": {
+          "keyword": "rebound"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.88a-3",
@@ -178,7 +206,10 @@
           "label": "cast_from_hand",
           "polarity": "fires",
           "delta": "Staggershock starts in A's hand instead of A's library, and A casts it from hand targeting player B, tapping three Mountains, instead of casting Bloodbraid Elf.",
-          "expected": "Staggershock resolves: B's life becomes 18. It is exiled instead of going to A's graveyard, and A's graveyard is empty."
+          "expected": "Staggershock resolves: B's life becomes 18. It is exiled instead of going to A's graveyard, and A's graveyard is empty.",
+          "operation": {
+            "unclassifiable": "changes the zone the spell starts in and the spell cast"
+          }
         }
       ],
       "cards": [
@@ -187,7 +218,19 @@
         "Bloodbraid Elf",
         "Staggershock"
       ],
-      "forge_notes": "The top of A's library must be pinned to Staggershock."
+      "forge_notes": "The top of A's library must be pinned to Staggershock.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolving spell is put into exile instead of its owner's graveyard.",
+        "near_miss": "Not counted: without api only the fires side is tagged (the near miss would be a resolving spell put into the graveyard).",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "exile"
+        },
+        "needs": []
+      }
     }
   ]
 }

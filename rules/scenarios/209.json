@@ -59,7 +59,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B responds with Counterspell, tapping two Islands.",
-          "expected": "Liliana of the Veil is countered and moves to A's graveyard; she never enters the battlefield, so no loyalty counters are placed."
+          "expected": "Liliana of the Veil is countered and moves to A's graveyard; she never enters the battlefield, so no loyalty counters are placed.",
+          "operation": {
+            "unclassifiable": "B casts a different spell (Counterspell)."
+          }
         }
       ],
       "cards": [
@@ -138,31 +141,46 @@
           "label": "already_activated",
           "polarity": "does_not_fire",
           "delta": "Earlier this turn A activated Liliana's +1 and it resolved.",
-          "expected": "Activating Liliana's +1 again is not legal, because one of her loyalty abilities was already activated this turn."
+          "expected": "Activating Liliana's +1 again is not legal, because one of her loyalty abilities was already activated this turn.",
+          "operation": {
+            "unclassifiable": "A prior loyalty activation earlier in the turn; game history, not board state."
+          }
         },
         {
           "label": "other_walker_activated",
           "polarity": "other",
           "delta": "Earlier this turn A activated Jace Beleren's +2 and it resolved.",
-          "expected": "Activating Liliana's +1 is legal, since only the activating permanent's own earlier activations count."
+          "expected": "Activating Liliana's +1 is legal, since only the activating permanent's own earlier activations count.",
+          "operation": {
+            "unclassifiable": "A prior activation of a different permanent; game history."
+          }
         },
         {
           "label": "opponent_turn",
           "polarity": "does_not_fire",
           "delta": "B is the active player and it is B's main phase; A has priority.",
-          "expected": "Activating Liliana's +1 is not legal, because it is not A's turn."
+          "expected": "Activating Liliana's +1 is not legal, because it is not A's turn.",
+          "operation": {
+            "unclassifiable": "Changes the turn and active player."
+          }
         },
         {
           "label": "combat_step",
           "polarity": "does_not_fire",
           "delta": "The step is beginning of combat instead of main phase.",
-          "expected": "Activating Liliana's +1 is not legal, because it is not a main phase."
+          "expected": "Activating Liliana's +1 is not legal, because it is not a main phase.",
+          "operation": {
+            "unclassifiable": "Changes the step/phase."
+          }
         },
         {
           "label": "stack_not_empty",
           "polarity": "does_not_fire",
           "delta": "A has cast Shock targeting B, tapping Mountain, and it is still on the stack.",
-          "expected": "Activating Liliana's +1 is not legal, because the stack is not empty."
+          "expected": "Activating Liliana's +1 is not legal, because the stack is not empty.",
+          "operation": {
+            "unclassifiable": "A different spell is cast and remains on the stack."
+          }
         }
       ],
       "cards": [
@@ -172,7 +190,20 @@
         "Shock",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An activated ability candidate restricted to sorcery timing has timing legal: a main phase of its controller's turn with an empty stack.",
+        "near_miss": "A candidate in another step, on another player's turn or with a non-empty stack has timing false.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     }
   ]
 }

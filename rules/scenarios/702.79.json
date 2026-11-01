@@ -52,7 +52,8 @@
           "label": "has_counter",
           "polarity": "does_not_fire",
           "delta": "Safehold Elite starts with a -1/-1 counter (it is a 1/1).",
-          "expected": "Safehold Elite dies and goes to B's graveyard. Persist does not trigger and it stays in the graveyard."
+          "expected": "Safehold Elite dies and goes to B's graveyard. Persist does not trigger and it stays in the graveyard.",
+          "operation": "counters"
         }
       ],
       "cards": [

@@ -57,7 +57,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "Instead of passing, B responds by casting Counterspell targeting Grizzly Bears, tapping both Islands.",
-          "expected": "Grizzly Bears is on the stack when Counterspell resolves and is countered: it moves to A's graveyard without reaching the battlefield. A's Forests stay tapped."
+          "expected": "Grizzly Bears is on the stack when Counterspell resolves and is countered: it moves to A's graveyard without reaching the battlefield. A's Forests stay tapped.",
+          "operation": {
+            "unclassifiable": "a different spell is cast"
+          }
         }
       ],
       "cards": [
@@ -66,7 +69,20 @@
         "Grizzly Bears",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "resolution_outcome",
+        "record_kind": "resolution",
+        "outcome": "A cast spell leaves the stack as resolved.",
+        "near_miss": "A cast spell is countered.",
+        "params": {
+          "outcome": "resolved",
+          "near": [
+            "countered"
+          ]
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.5a-2",
@@ -112,14 +128,26 @@
           "label": "unpayable",
           "polarity": "does_not_fire",
           "delta": "One of A's Forests is tapped.",
-          "expected": "Not legal: can_play is false, because {1}{G} cannot be paid with one untapped Forest."
+          "expected": "Not legal: can_play is false, because {1}{G} cannot be paid with one untapped Forest.",
+          "operation": "tap"
         }
       ],
       "cards": [
         "Forest",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell candidate whose costs can be paid is affordable.",
+        "near_miss": "A spell candidate whose costs cannot be paid.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true
+        },
+        "needs": []
+      }
     }
   ]
 }

@@ -67,13 +67,19 @@
           "label": "keep-both",
           "polarity": "does_not_fire",
           "delta": "A keeps both cards on top, in their current order.",
-          "expected": "A's graveyard holds only Citywatch Sphinx. A's library is Forest, Mountain, Island from the top."
+          "expected": "A's graveyard holds only Citywatch Sphinx. A's library is Forest, Mountain, Island from the top.",
+          "operation": {
+            "unclassifiable": "The player's surveil choice changes; no fork operation changes a player's decision."
+          }
         },
         {
           "label": "both-to-graveyard",
           "polarity": "fires",
           "delta": "A puts both Forest and Mountain into the graveyard.",
-          "expected": "A's graveyard holds Citywatch Sphinx, Forest and Mountain. A's library is Island."
+          "expected": "A's graveyard holds Citywatch Sphinx, Forest and Mountain. A's library is Island.",
+          "operation": {
+            "unclassifiable": "The player's surveil choice changes; no fork operation changes a player's decision."
+          }
         }
       ],
       "cards": [
@@ -84,7 +90,20 @@
         "Mountain",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A surveil resolution moves cards from the top of the library to the graveyard.",
+        "near_miss": "A surveil resolution that moved no card.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "library",
+          "to_zone": "graveyard",
+          "api": "Surveil"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.25c-1",
@@ -149,7 +168,10 @@
           "label": "one-artifact",
           "polarity": "fires",
           "delta": "A also controls Ornithopter.",
-          "expected": "A surveils 1, keeping the Forest on top, and draws three Forests. Whispering Snitch triggers and its trigger resolves after Cerebral Download: B takes 1 damage (19) and A gains 1 life (21)."
+          "expected": "A surveils 1, keeping the Forest on top, and draws three Forests. Whispering Snitch triggers and its trigger resolves after Cerebral Download: B takes 1 damage (19) and A gains 1 life (21).",
+          "operation": {
+            "unclassifiable": "A permanent is added to the battlefield; no fork operation adds a permanent."
+          }
         }
       ],
       "cards": [
@@ -159,7 +181,17 @@
         "Forest",
         "Ornithopter"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on surveilling fires when a player surveils 1 or more.",
+        "near_miss": "A surveil trigger evaluated against a surveil it does not watch (another player's, or not the first this turn) does not fire; a surveil 0 is no surveil event and evaluates no trigger at all.",
+        "params": {
+          "mode": "Surveil"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.25d-1",
@@ -220,13 +252,19 @@
           "label": "two-cards",
           "polarity": "fires",
           "delta": "A's library holds Forest and Forest, and A puts both into the graveyard.",
-          "expected": "Both Forests move to A's graveyard after Citywatch Sphinx, then Whispering Snitch triggers: B 19, A 21."
+          "expected": "Both Forests move to A's graveyard after Citywatch Sphinx, then Whispering Snitch triggers: B 19, A 21.",
+          "operation": {
+            "unclassifiable": "The library gains two cards and the player's surveil choice is set; no fork operation changes a library or a decision."
+          }
         },
         {
           "label": "no-death",
           "polarity": "does_not_fire",
           "delta": "B's hand holds Swords to Plowshares instead of Terror, and B casts it targeting Citywatch Sphinx, tapping Plains.",
-          "expected": "Citywatch Sphinx is exiled and does not die, so no surveil occurs and Whispering Snitch does not trigger. A gains 5 life (25) from Swords to Plowshares and B stays at 20."
+          "expected": "Citywatch Sphinx is exiled and does not die, so no surveil occurs and Whispering Snitch does not trigger. A gains 5 life (25) from Swords to Plowshares and B stays at 20.",
+          "operation": {
+            "unclassifiable": "B holds and casts a different spell, with another land; no fork operation changes a hand or the spell cast."
+          }
         }
       ],
       "cards": [
@@ -237,7 +275,17 @@
         "Terror",
         "Swords to Plowshares"
       ],
-      "forge_notes": "A's library is empty throughout; A must not draw during the scenario."
+      "forge_notes": "A's library is empty throughout; A must not draw during the scenario.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on surveilling fires after a surveil completes, even if no card could be looked at or moved.",
+        "near_miss": "A surveil trigger evaluated against a surveil it does not watch (another player's, or not the first this turn) does not fire.",
+        "params": {
+          "mode": "Surveil"
+        },
+        "needs": []
+      }
     }
   ]
 }

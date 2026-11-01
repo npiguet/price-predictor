@@ -49,20 +49,36 @@
           "label": "roll_not_lit",
           "polarity": "does_not_fire",
           "delta": "The die result is 5.",
-          "expected": "5 is lit on neither Kiddie Coaster, so neither is visited and nothing triggers. Grizzly Bears stays a 2/2."
+          "expected": "5 is lit on neither Kiddie Coaster, so neither is visited and nothing triggers. Grizzly Bears stays a 2/2.",
+          "operation": {
+            "unclassifiable": "The die result changes, a random outcome no fork operation sets."
+          }
         },
         {
           "label": "roll_lit_on_both",
           "polarity": "other",
           "delta": "The die result is 3.",
-          "expected": "3 is lit on both Kiddie Coasters, so both are visited and both visit abilities trigger and resolve: Grizzly Bears gets +1/+0 twice and is a 4/2."
+          "expected": "3 is lit on both Kiddie Coasters, so both are visited and both visit abilities trigger and resolve: Grizzly Bears gets +1/+0 twice and is a 4/2.",
+          "operation": {
+            "unclassifiable": "The die result changes, a random outcome no fork operation sets."
+          }
         }
       ],
       "cards": [
         "Kiddie Coaster",
         "Grizzly Bears"
       ],
-      "forge_notes": "Forge rolls to visit automatically at the precombat main phase (PhaseHandler) only when the active player controls an Attraction; the die result must be forced."
+      "forge_notes": "Forge rolls to visit automatically at the precombat main phase (PhaseHandler) only when the active player controls an Attraction; the die result must be forced.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An Attraction's visit trigger is evaluated and fires because the visit roll matched one of its lit numbers.",
+        "near_miss": "A visit trigger is evaluated and does not fire.",
+        "params": {
+          "keyword": "Visit"
+        },
+        "needs": []
+      }
     }
   ]
 }

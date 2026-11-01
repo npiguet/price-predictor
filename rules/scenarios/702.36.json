@@ -56,19 +56,28 @@
           "label": "black_blocker",
           "polarity": "does_not_fire",
           "delta": "B declares Walking Corpse blocking Severed Legion instead (Grizzly Bears does not block).",
-          "expected": "The block is legal: Walking Corpse is a black creature."
+          "expected": "The block is legal: Walking Corpse is a black creature.",
+          "operation": {
+            "unclassifiable": "A different blocking declaration by B."
+          }
         },
         {
           "label": "artifact_blocker",
           "polarity": "does_not_fire",
           "delta": "B declares Phyrexian Walker blocking Severed Legion instead (Grizzly Bears does not block).",
-          "expected": "The block is legal: Phyrexian Walker is an artifact creature."
+          "expected": "The block is legal: Phyrexian Walker is an artifact creature.",
+          "operation": {
+            "unclassifiable": "A different blocking declaration by B."
+          }
         },
         {
           "label": "green_blocks_plain",
           "polarity": "other",
           "delta": "B declares Grizzly Bears blocking Hill Giant instead.",
-          "expected": "The block is legal: Hill Giant has no fear."
+          "expected": "The block is legal: Hill Giant has no fear.",
+          "operation": {
+            "unclassifiable": "A different blocking declaration by B."
+          }
         }
       ],
       "cards": [
@@ -78,7 +87,19 @@
         "Walking Corpse",
         "Phyrexian Walker"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature that is neither an artifact creature nor black is forbidden, by a static ability, from blocking an attacker with fear.",
+        "near_miss": "An artifact creature or black creature is listed among the legal blockers of an attacker with fear.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside",
+          "responsible_static": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.36c-1",
@@ -131,7 +152,10 @@
           "label": "black_blocker",
           "polarity": "does_not_fire",
           "delta": "B declares Walking Corpse blocking Severed Legion instead (Grizzly Bears does not block).",
-          "expected": "The block is legal: Walking Corpse is a black creature."
+          "expected": "The block is legal: Walking Corpse is a black creature.",
+          "operation": {
+            "unclassifiable": "A different blocking declaration by B."
+          }
         }
       ],
       "cards": [
@@ -140,7 +164,19 @@
         "Grizzly Bears",
         "Walking Corpse"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature that is neither an artifact creature nor black is forbidden, by a static ability, from blocking an attacker with fear, however many instances of fear the attacker has.",
+        "near_miss": "An artifact creature or black creature is listed among the legal blockers of an attacker with one or more instances of fear.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside",
+          "responsible_static": true
+        },
+        "needs": []
+      }
     }
   ]
 }

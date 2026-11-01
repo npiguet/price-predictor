@@ -74,13 +74,17 @@
           "label": "two_artifacts",
           "polarity": "does_not_fire",
           "delta": "A controls two Ornithopters instead of three.",
-          "expected": "Only two of the three generic mana can be paid by improvise, and A has no other source. Casting is not legal and Reverse Engineer stays in A's hand."
+          "expected": "Only two of the three generic mana can be paid by improvise, and A has no other source. Casting is not legal and Reverse Engineer stays in A's hand.",
+          "operation": {
+            "unclassifiable": "adds, removes, attaches or changes the controller of a permanent, which no fork operation does"
+          }
         },
         {
           "label": "one_artifact_tapped",
           "polarity": "does_not_fire",
           "delta": "One of the three Ornithopters is tapped.",
-          "expected": "Only two untapped artifacts can be tapped, so the {3} cannot be paid. Casting is not legal and Reverse Engineer stays in A's hand."
+          "expected": "Only two untapped artifacts can be tapped, so the {3} cannot be paid. Casting is not legal and Reverse Engineer stays in A's hand.",
+          "operation": "tap"
         }
       ],
       "cards": [
@@ -163,7 +167,10 @@
           "label": "two_blue_sources",
           "polarity": "does_not_fire",
           "delta": "A controls two Islands instead of one.",
-          "expected": "Both Islands pay {U}{U} and three Ornithopters pay the {3}; casting is legal and Reverse Engineer resolves: A draws three cards. Two Ornithopters stay untapped."
+          "expected": "Both Islands pay {U}{U} and three Ornithopters pay the {3}; casting is legal and Reverse Engineer resolves: A draws three cards. Two Ornithopters stay untapped.",
+          "operation": {
+            "unclassifiable": "adds, removes, attaches or changes the controller of a permanent, which no fork operation does"
+          }
         }
       ],
       "cards": [
@@ -248,7 +255,10 @@
           "label": "three_artifacts",
           "polarity": "does_not_fire",
           "delta": "A controls three Ornithopters instead of four.",
-          "expected": "The total cost is {4}{U}{U} and only three generic mana can be paid by improvise. Casting is not legal and Reverse Engineer stays in A's hand."
+          "expected": "The total cost is {4}{U}{U} and only three generic mana can be paid by improvise. Casting is not legal and Reverse Engineer stays in A's hand.",
+          "operation": {
+            "unclassifiable": "adds, removes, attaches or changes the controller of a permanent, which no fork operation does"
+          }
         }
       ],
       "cards": [
@@ -322,7 +332,10 @@
           "label": "two_artifacts",
           "polarity": "does_not_fire",
           "delta": "A controls one Ornithopter instead of two.",
-          "expected": "The second instance of improvise adds no further payment ability: only two generic mana can be paid, so casting is not legal and Reverse Engineer stays in A's hand."
+          "expected": "The second instance of improvise adds no further payment ability: only two generic mana can be paid, so casting is not legal and Reverse Engineer stays in A's hand.",
+          "operation": {
+            "unclassifiable": "adds, removes, attaches or changes the controller of a permanent, which no fork operation does"
+          }
         }
       ],
       "cards": [

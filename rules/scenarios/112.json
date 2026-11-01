@@ -58,13 +58,19 @@
           "label": "already-resolved",
           "polarity": "does_not_fire",
           "delta": "B passes priority with Grizzly Bears on the stack, so it resolves; B is then asked about Essence Scatter in the beginning of combat step.",
-          "expected": "Grizzly Bears is a permanent on the battlefield, no longer a spell: Essence Scatter has no legal target and cannot be cast."
+          "expected": "Grizzly Bears is a permanent on the battlefield, no longer a spell: Essence Scatter has no legal target and cannot be cast.",
+          "operation": {
+            "unclassifiable": "A different decision (B passes and lets the spell resolve) and a later step; no fork operation moves a spell from the stack to the battlefield."
+          }
         },
         {
           "label": "not-cast",
           "polarity": "does_not_fire",
           "delta": "A does not cast Grizzly Bears; it stays in A's hand and A passes priority with an empty stack to the beginning of combat step, where B is asked about Essence Scatter.",
-          "expected": "Grizzly Bears is a card in hand, not a spell: Essence Scatter has no legal target and cannot be cast."
+          "expected": "Grizzly Bears is a card in hand, not a spell: Essence Scatter has no legal target and cannot be cast.",
+          "operation": {
+            "unclassifiable": "A different decision (A does not cast the spell), which leaves the stack empty and the card in hand; no fork operation changes what is on the stack."
+          }
         }
       ],
       "cards": [
@@ -130,13 +136,19 @@
           "label": "unrelated-response",
           "polarity": "does_not_fire",
           "delta": "B casts Shock targeting A's face, tapping the Mountain, instead of casting Essence Scatter.",
-          "expected": "Shock resolves first and A is at 18 life. Grizzly Bears stays on the stack through that resolution, then resolves and enters the battlefield under A's control. It is not countered."
+          "expected": "Shock resolves first and A is at 18 life. Grizzly Bears stays on the stack through that resolution, then resolves and enters the battlefield under A's control. It is not countered.",
+          "operation": {
+            "unclassifiable": "A different spell cast (a burn spell at a player instead of a counterspell), not a fact a fork operation sets."
+          }
         },
         {
           "label": "no-response",
           "polarity": "other",
           "delta": "B casts nothing and passes priority.",
-          "expected": "The Grizzly Bears spell resolves and enters the battlefield under A's control; A's and B's graveyards are empty."
+          "expected": "The Grizzly Bears spell resolves and enters the battlefield under A's control; A's and B's graveyards are empty.",
+          "operation": {
+            "unclassifiable": "A different decision (B casts nothing), which removes a spell from the stack; no fork operation does that."
+          }
         }
       ],
       "cards": [
@@ -147,7 +159,20 @@
         "Essence Scatter",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "resolution_outcome",
+        "record_kind": "resolution",
+        "outcome": "A spell leaves the stack by being countered.",
+        "near_miss": "A spell on the stack resolves instead.",
+        "params": {
+          "outcome": "countered",
+          "near": [
+            "resolved"
+          ]
+        },
+        "needs": []
+      }
     },
     {
       "id": "112.1a-1",
@@ -208,7 +233,10 @@
           "label": "no-negate",
           "polarity": "other",
           "delta": "B does not cast Negate and passes priority.",
-          "expected": "The Shock copy resolves and deals 2 damage to Grizzly Bears, which moves to B's graveyard in the state-based check. The original Shock then resolves with Grizzly Bears already gone, so it fizzles. Twincast and the original Shock are in A's graveyard, and the copy ceases to exist."
+          "expected": "The Shock copy resolves and deals 2 damage to Grizzly Bears, which moves to B's graveyard in the state-based check. The original Shock then resolves with Grizzly Bears already gone, so it fizzles. Twincast and the original Shock are in A's graveyard, and the copy ceases to exist.",
+          "operation": {
+            "unclassifiable": "A different decision (B does not cast the counterspell), not a fact a fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -279,13 +307,19 @@
           "label": "no-response",
           "polarity": "other",
           "delta": "B does not cast Negate and passes priority.",
-          "expected": "The Shock copy resolves and deals 2 damage to Grizzly Bears, which moves to B's graveyard in the state-based check. The copy ceases to exist and the original Shock card remains in exile."
+          "expected": "The Shock copy resolves and deals 2 damage to Grizzly Bears, which moves to B's graveyard in the state-based check. The copy ceases to exist and the original Shock card remains in exile.",
+          "operation": {
+            "unclassifiable": "A different decision (B does not cast the counterspell), not a fact a fork operation sets."
+          }
         },
         {
           "label": "copy-declined",
           "polarity": "does_not_fire",
           "delta": "When the Scepter ability resolves, A chooses not to copy the card, so no copy is cast.",
-          "expected": "No spell is put on the stack; Negate has no legal target and cannot be cast. Grizzly Bears is undamaged and the Shock card remains in exile."
+          "expected": "No spell is put on the stack; Negate has no legal target and cannot be cast. Grizzly Bears is undamaged and the Shock card remains in exile.",
+          "operation": {
+            "unclassifiable": "A different choice by A when the ability resolves (no copy cast), not a fact a fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -364,7 +398,10 @@
           "label": "no-copy",
           "polarity": "does_not_fire",
           "delta": "A does not cast Twincast and passes priority.",
-          "expected": "Only the original Divination resolves: B draws two cards and A draws none. A's hand still holds Twincast and B's Divination moves to B's graveyard."
+          "expected": "Only the original Divination resolves: B draws two cards and A draws none. A's hand still holds Twincast and B's Divination moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "A different decision (A does not cast the copy spell), not a fact a fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -447,13 +484,19 @@
           "label": "copy-of-shock",
           "polarity": "other",
           "delta": "The card in B's graveyard is Shock instead of Divination.",
-          "expected": "A casts two copies of Shock, both owned and controlled by A, each targeting B's face. B is at 16 life and A draws no cards. Both original Shock cards and Spelltwine are exiled."
+          "expected": "A casts two copies of Shock, both owned and controlled by A, each targeting B's face. B is at 16 life and A draws no cards. Both original Shock cards and Spelltwine are exiled.",
+          "operation": {
+            "unclassifiable": "Swaps a card in a graveyard; replace_card covers permanents only, and the copy then cast is a different spell."
+          }
         },
         {
           "label": "no-opposing-card",
           "polarity": "does_not_fire",
           "delta": "B's graveyard is empty.",
-          "expected": "Spelltwine cannot be cast: it has no legal target in an opponent's graveyard, so no copy is ever created and nothing changes."
+          "expected": "Spelltwine cannot be cast: it has no legal target in an opponent's graveyard, so no copy is ever created and nothing changes.",
+          "operation": {
+            "unclassifiable": "Removes a card from a graveyard; no fork operation changes a graveyard."
+          }
         }
       ],
       "cards": [
@@ -518,7 +561,10 @@
           "label": "no-servant",
           "polarity": "does_not_fire",
           "delta": "Painter's Servant is not on the battlefield.",
-          "expected": "The Grizzly Bears spell is only green. Blue Elemental Blast's counter mode has no legal target, its destroy mode has none either, and it cannot be cast."
+          "expected": "The Grizzly Bears spell is only green. Blue Elemental Blast's counter mode has no legal target, its destroy mode has none either, and it cannot be cast.",
+          "operation": {
+            "unclassifiable": "Removes a permanent from the battlefield; no fork operation removes a permanent."
+          }
         }
       ],
       "cards": [
@@ -585,7 +631,10 @@
           "label": "no-change",
           "polarity": "does_not_fire",
           "delta": "B does not cast Sleight of Mind.",
-          "expected": "Black Knight keeps its printed protection from white, so the red Shock can legally target it and is castable at it."
+          "expected": "Black Knight keeps its printed protection from white, so the red Shock can legally target it and is castable at it.",
+          "operation": {
+            "unclassifiable": "A different decision (B does not cast the text-changing spell), not a fact a fork operation sets."
+          }
         }
       ],
       "cards": [

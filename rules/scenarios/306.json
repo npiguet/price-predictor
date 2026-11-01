@@ -53,19 +53,28 @@
           "label": "combat_phase",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "Casting Jace Beleren is illegal (can_play false): it is not a main phase and Jace has no flash. Jace stays in A's hand."
+          "expected": "Casting Jace Beleren is illegal (can_play false): it is not a main phase and Jace has no flash. Jace stays in A's hand.",
+          "operation": {
+            "unclassifiable": "Changes the phase or step, not a property a fork operation sets."
+          }
         },
         {
           "label": "stack_not_empty",
           "polarity": "does_not_fire",
           "delta": "A Shock spell controlled by B targeting A is on the stack.",
-          "expected": "Casting Jace Beleren is illegal (can_play false): the stack is not empty. Jace stays in A's hand."
+          "expected": "Casting Jace Beleren is illegal (can_play false): the stack is not empty. Jace stays in A's hand.",
+          "operation": {
+            "unclassifiable": "Puts an object on the stack, which no fork operation does."
+          }
         },
         {
           "label": "opponents_turn",
           "polarity": "does_not_fire",
           "delta": "B is the active player in main1 with an empty stack.",
-          "expected": "Casting Jace Beleren is illegal (can_play false): it is not A's turn. Jace stays in A's hand."
+          "expected": "Casting Jace Beleren is illegal (can_play false): it is not A's turn. Jace stays in A's hand.",
+          "operation": {
+            "unclassifiable": "Changes whose turn it is, which no fork operation does."
+          }
         }
       ],
       "cards": [
@@ -73,7 +82,20 @@
         "Island",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate planeswalker cast whose timing is legal: main phase of its owner's turn, empty stack.",
+        "near_miss": "A candidate cast in another step, on the opponent's turn or with a non-empty stack has timing false.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "306.2-1",
@@ -128,7 +150,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B, with priority after A casts Jace Beleren, casts Counterspell targeting it, tapping both Islands; both players pass.",
-          "expected": "Counterspell resolves; Jace Beleren is countered and moves to A's graveyard without entering the battlefield; Counterspell moves to B's graveyard."
+          "expected": "Counterspell resolves; Jace Beleren is countered and moves to A's graveyard without entering the battlefield; Counterspell moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "B casts a spell in response, a different spell cast and decision."
+          }
         }
       ],
       "cards": [
@@ -136,7 +161,19 @@
         "Counterspell",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolving permanent spell moves from the stack to the battlefield (zone_change) in its resolution's effect half.",
+        "near_miss": "A spell that left the stack otherwise (countered) shows no such zone change; not counted without an api.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "306.4-1",
@@ -193,7 +230,10 @@
           "label": "different_name",
           "polarity": "does_not_fire",
           "delta": "The card in A's hand is Jace, the Mind Sculptor (2UU, loyalty 3) instead, cast tapping all four Islands.",
-          "expected": "Both planeswalkers stay on the battlefield, each with 3 loyalty counters; nothing goes to the graveyard."
+          "expected": "Both planeswalkers stay on the battlefield, each with 3 loyalty counters; nothing goes to the graveyard.",
+          "operation": {
+            "unclassifiable": "A different card in hand cast as a different spell, not a property a fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -201,7 +241,17 @@
         "Jace, the Mind Sculptor",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "Of two or more legendary permanents (planeswalkers included) with one name under one controller, one moves to the graveyard in the state-based check.",
+        "near_miss": "A legendary permanent enters with no same-named twin and stays.",
+        "params": {
+          "check": "legend_rule"
+        },
+        "needs": []
+      }
     },
     {
       "id": "306.5b-1",
@@ -250,7 +300,10 @@
           "label": "doubling_season",
           "polarity": "other",
           "delta": "A also controls Doubling Season on the battlefield (its mana is not needed).",
-          "expected": "Jace Beleren enters with 6 loyalty counters: the entering replacement puts 3 counters and Doubling Season doubles that."
+          "expected": "Jace Beleren enters with 6 loyalty counters: the entering replacement puts 3 counters and Doubling Season doubles that.",
+          "operation": {
+            "unclassifiable": "Adds or removes a permanent, which no fork operation does."
+          }
         }
       ],
       "cards": [
@@ -306,19 +359,28 @@
           "label": "minus_one",
           "polarity": "other",
           "delta": "A activates the -1 ability instead (put a +1/+1 counter on each creature you control; A controls none).",
-          "expected": "Ajani has 3 loyalty counters, so its loyalty is 3; nothing else changes."
+          "expected": "Ajani has 3 loyalty counters, so its loyalty is 3; nothing else changes.",
+          "operation": {
+            "unclassifiable": "A different decision or choice by a player, not a property a fork operation sets."
+          }
         },
         {
           "label": "ultimate",
           "polarity": "does_not_fire",
           "delta": "A attempts to activate the -6 ability instead.",
-          "expected": "Activation is illegal (can_play false): Ajani has only 4 loyalty, fewer than 6 counters to remove; its loyalty stays 4."
+          "expected": "Activation is illegal (can_play false): Ajani has only 4 loyalty, fewer than 6 counters to remove; its loyalty stays 4.",
+          "operation": {
+            "unclassifiable": "A different decision or choice by a player, not a property a fork operation sets."
+          }
         }
       ],
       "cards": [
         "Ajani Goldmane"
       ],
-      "forge_notes": "The ultimate variant is a playability verdict whose input is the loyalty value."
+      "forge_notes": "The ultimate variant is a playability verdict whose input is the loyalty value.",
+      "detector": {
+        "none": "A planeswalker's loyalty is derived from its loyalty counters; no event or record field states loyalty separately from the counters, and a continuous record's contributions carry no loyalty. Looked in continuous contributions and state.entities counters."
+      }
     },
     {
       "id": "306.5d-1",
@@ -366,26 +428,48 @@
           "label": "second_activation",
           "polarity": "does_not_fire",
           "delta": "Ajani Goldmane already activated a loyalty ability earlier this turn (its +1, which resolved; the 4 loyalty counters shown already reflect it).",
-          "expected": "Activating +1 is illegal (can_play false): Ajani already activated a loyalty ability this turn."
+          "expected": "Activating +1 is illegal (can_play false): Ajani already activated a loyalty ability this turn.",
+          "operation": {
+            "unclassifiable": "Changes a per-turn history (a loyalty ability already activated this turn), not a counter, characteristic or permanent a fork operation sets."
+          }
         },
         {
           "label": "combat_phase",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "Activation is illegal (can_play false): it is not a main phase."
+          "expected": "Activation is illegal (can_play false): it is not a main phase.",
+          "operation": {
+            "unclassifiable": "Changes the phase or step, not a property a fork operation sets."
+          }
         },
         {
           "label": "stack_not_empty",
           "polarity": "does_not_fire",
           "delta": "A Shock spell controlled by B targeting A is on the stack.",
-          "expected": "Activation is illegal (can_play false): the stack is not empty."
+          "expected": "Activation is illegal (can_play false): the stack is not empty.",
+          "operation": {
+            "unclassifiable": "Puts an object on the stack, which no fork operation does."
+          }
         }
       ],
       "cards": [
         "Ajani Goldmane",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A loyalty-ability candidate whose timing is legal: sorcery timing (main phase of own turn, empty stack).",
+        "near_miss": "A candidate in another step or with a non-empty stack has timing false.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "306.6-1",
@@ -443,7 +527,10 @@
           "label": "own_planeswalker",
           "polarity": "does_not_fire",
           "delta": "A declares Grizzly Bears as an attacker against Ajani Goldmane, A's own planeswalker.",
-          "expected": "The attack is illegal: a player cannot attack a planeswalker they control."
+          "expected": "The attack is illegal: a player cannot attack a planeswalker they control.",
+          "operation": {
+            "unclassifiable": "A attacks a different planeswalker, a different target and decision."
+          }
         }
       ],
       "cards": [
@@ -509,7 +596,10 @@
           "label": "damage_prevented",
           "polarity": "does_not_fire",
           "delta": "In response, B casts Healing Salve choosing the prevention mode targeting Jace Beleren, tapping Plains.",
-          "expected": "Healing Salve resolves first and Shock's 2 damage is prevented: no loyalty counters are removed and Jace Beleren keeps 3 loyalty counters."
+          "expected": "Healing Salve resolves first and Shock's 2 damage is prevented: no loyalty counters are removed and Jace Beleren keeps 3 loyalty counters.",
+          "operation": {
+            "unclassifiable": "B casts Healing Salve in response, a different spell cast and decision."
+          }
         }
       ],
       "cards": [
@@ -519,7 +609,18 @@
         "Mountain",
         "Plains"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution's effect half removes loyalty counters from a planeswalker (a counter_change of counter type loyalty), as damage dealt to a planeswalker does.",
+        "near_miss": "Damage to a planeswalker is prevented and no loyalty counter is removed; not counted without an api.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "loyalty"
+        },
+        "needs": []
+      }
     },
     {
       "id": "306.9-1",
@@ -573,7 +674,10 @@
           "label": "one_loyalty_left",
           "polarity": "does_not_fire",
           "delta": "A casts Shock (2 damage) instead of Lightning Bolt.",
-          "expected": "Shock removes 2 loyalty counters; Jace Beleren has 1 loyalty and stays on the battlefield."
+          "expected": "Shock removes 2 loyalty counters; Jace Beleren has 1 loyalty and stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "A different spell cast (a different card in hand), not a property a fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -582,7 +686,17 @@
         "Jace Beleren",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "A planeswalker whose loyalty counters number 0 moves to the graveyard in the state-based check after a resolution.",
+        "near_miss": "A planeswalker loses loyalty but keeps 1 or more and stays.",
+        "params": {
+          "check": "loyalty_zero"
+        },
+        "needs": []
+      }
     }
   ]
 }

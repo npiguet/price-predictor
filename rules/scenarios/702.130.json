@@ -51,14 +51,27 @@
           "label": "unblocked",
           "polarity": "does_not_fire",
           "delta": "B declares no blockers.",
-          "expected": "The afflict trigger does not fire. Khenra Eternal deals 2 combat damage to B, whose life goes from 20 to 18. Grizzly Bears stays on the battlefield undamaged."
+          "expected": "The afflict trigger does not fire. Khenra Eternal deals 2 combat damage to B, whose life goes from 20 to 18. Grizzly Bears stays on the battlefield undamaged.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         }
       ],
       "cards": [
         "Khenra Eternal",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An afflict trigger fires when its creature becomes blocked.",
+        "near_miss": "An afflict trigger is evaluated against a combat event it does not match, such as its creature attacking unblocked, and does not fire.",
+        "params": {
+          "keyword": "Afflict"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.130b-1",
@@ -111,13 +124,19 @@
           "label": "one_instance",
           "polarity": "does_not_fire",
           "delta": "Dagger of the Worthy is on A's battlefield but not attached to Khenra Eternal.",
-          "expected": "Only the printed afflict triggers: B's life goes from 20 to 19. Khenra Eternal (2/2) and Grizzly Bears destroy each other; B's life stays 19."
+          "expected": "Only the printed afflict triggers: B's life goes from 20 to 19. Khenra Eternal (2/2) and Grizzly Bears destroy each other; B's life stays 19.",
+          "operation": {
+            "unclassifiable": "adds, removes, attaches or changes the controller of a permanent, which no fork operation does"
+          }
         },
         {
           "label": "unblocked",
           "polarity": "does_not_fire",
           "delta": "B declares no blockers.",
-          "expected": "Neither afflict trigger fires. Khenra Eternal deals 4 combat damage to B, whose life goes from 20 to 16."
+          "expected": "Neither afflict trigger fires. Khenra Eternal deals 4 combat damage to B, whose life goes from 20 to 16.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         }
       ],
       "cards": [
@@ -125,7 +144,17 @@
         "Dagger of the Worthy",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "Each afflict instance on a blocked creature is evaluated and fires as its own trigger.",
+        "near_miss": "An afflict trigger evaluated and not fired; the detector does not count instances per event, and misses an instance another permanent's effect grants, which reads off that effect's line.",
+        "params": {
+          "keyword": "Afflict"
+        },
+        "needs": []
+      }
     }
   ]
 }

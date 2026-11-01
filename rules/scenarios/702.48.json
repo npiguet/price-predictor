@@ -56,13 +56,19 @@
           "label": "no_offering",
           "polarity": "does_not_fire",
           "delta": "A does not pay the offering cost.",
-          "expected": "Casting Patron of the Akki is not legal: it is a creature spell and it is not A's main phase with an empty stack, and the cost would be {4}{R}{R}."
+          "expected": "Casting Patron of the Akki is not legal: it is a creature spell and it is not A's main phase with an empty stack, and the cost would be {4}{R}{R}.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         },
         {
           "label": "wrong_type",
           "polarity": "does_not_fire",
           "delta": "A tries to sacrifice Grizzly Bears (not a Goblin) as the offering instead of Mons's Goblin Raiders.",
-          "expected": "Casting Patron of the Akki by sacrificing Grizzly Bears is not legal because Grizzly Bears is not a Goblin; Grizzly Bears stays on the battlefield and Patron of the Akki stays in hand."
+          "expected": "Casting Patron of the Akki by sacrificing Grizzly Bears is not legal because Grizzly Bears is not a Goblin; Grizzly Bears stays on the battlefield and Patron of the Akki stays in hand.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -125,13 +131,19 @@
           "label": "sacrifice_piker",
           "polarity": "fires",
           "delta": "A sacrifices Goblin Piker instead of Avian Changeling.",
-          "expected": "The cost after adjustment is {3}{R}: the generic {1} reduces generic and the {R} reduces one of the {R}. A taps four Mountains and Patron of the Akki enters the battlefield. Goblin Piker is in A's graveyard."
+          "expected": "The cost after adjustment is {3}{R}: the generic {1} reduces generic and the {R} reduces one of the {R}. A taps four Mountains and Patron of the Akki enters the battlefield. Goblin Piker is in A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         },
         {
           "label": "no_sacrifice",
           "polarity": "does_not_fire",
           "delta": "A does not pay the offering cost.",
-          "expected": "The cost is the full {4}{R}{R}, which is six mana; A controls only five Mountains, so casting Patron of the Akki is not legal."
+          "expected": "The cost is the full {4}{R}{R}, which is six mana; A controls only five Mountains, so casting Patron of the Akki is not legal.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         }
       ],
       "cards": [

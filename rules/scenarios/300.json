@@ -50,13 +50,19 @@
           "label": "nonland_creature",
           "polarity": "does_not_fire",
           "delta": "The card in A's hand is Llanowar Elves (a creature that is not a land) instead of Dryad Arbor.",
-          "expected": "Casting Llanowar Elves without paying its mana cost is legal: can_play is true."
+          "expected": "Casting Llanowar Elves without paying its mana cost is legal: can_play is true.",
+          "operation": {
+            "unclassifiable": "changes the card in a player's hand, not a permanent"
+          }
         },
         {
           "label": "play_as_land",
           "polarity": "other",
           "delta": "A plays Dryad Arbor as a land instead of attempting to cast it.",
-          "expected": "Playing Dryad Arbor as a land is legal. It does not use the stack and enters the battlefield under A's control as a 1/1 green land creature."
+          "expected": "Playing Dryad Arbor as a land is legal. It does not use the stack and enters the battlefield under A's control as a 1/1 green land creature.",
+          "operation": {
+            "unclassifiable": "a different decision by the player (playing as a land instead of casting)"
+          }
         }
       ],
       "cards": [
@@ -64,7 +70,10 @@
         "Llanowar Elves",
         "Omniscience"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "A land creature is never listed as a cast candidate (a land is played, not cast), so no decision-record candidate, verdict bit or event shows a cast refused for being a land; searched playability/decision candidates and resolution events."
+      }
     },
     {
       "id": "300.2-1",
@@ -113,7 +122,8 @@
           "label": "nonartifact_creature",
           "polarity": "does_not_fire",
           "delta": "B's creature is Grizzly Bears (a creature that is not an artifact) instead of Ornithopter.",
-          "expected": "Shatter has no legal target: has_legal_target is false and can_play is false."
+          "expected": "Shatter has no legal target: has_legal_target is false and can_play is false.",
+          "operation": "replace_card"
         }
       ],
       "cards": [

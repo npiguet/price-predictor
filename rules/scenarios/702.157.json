@@ -60,20 +60,36 @@
           "label": "paid_once",
           "polarity": "fires",
           "delta": "A pays the squad cost {2} once, tapping six Plains.",
-          "expected": "The squad trigger fires and creates one token copy: A controls Zephyrim and one Zephyrim token."
+          "expected": "The squad trigger fires and creates one token copy: A controls Zephyrim and one Zephyrim token.",
+          "operation": {
+            "unclassifiable": "a different payment choice"
+          }
         },
         {
           "label": "not_paid",
           "polarity": "does_not_fire",
           "delta": "A does not pay the squad cost, tapping four Plains.",
-          "expected": "The squad trigger does not fire. A controls only Zephyrim, no token."
+          "expected": "The squad trigger does not fire. A controls only Zephyrim, no token.",
+          "operation": {
+            "unclassifiable": "a different payment choice"
+          }
         }
       ],
       "cards": [
         "Plains",
         "Zephyrim"
       ],
-      "forge_notes": "The token copies do not themselves have a squad payment, so they create nothing when they enter."
+      "forge_notes": "The token copies do not themselves have a squad payment, so they create nothing when they enter.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A squad trigger fires when its creature enters with the squad cost paid at least once, creating that many token copies.",
+        "near_miss": "A squad trigger is evaluated for its creature entering with the squad cost unpaid and does not fire.",
+        "params": {
+          "keyword": "Squad"
+        },
+        "needs": []
+      }
     }
   ]
 }

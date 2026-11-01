@@ -56,13 +56,19 @@
           "label": "two_levels",
           "polarity": "fires",
           "delta": "A activates level up a second time, paying {W} with the other Plains; it resolves.",
-          "expected": "Student of Warfare has two level counters and is a 3/3 with first strike."
+          "expected": "Student of Warfare has two level counters and is a 3/3 with first strike.",
+          "operation": {
+            "unclassifiable": "an extra activation by A"
+          }
         },
         {
           "label": "killed_in_response",
           "polarity": "does_not_fire",
           "delta": "In response to the activation, B casts Shock targeting Student of Warfare, tapping Mountain.",
-          "expected": "Shock resolves first and Student of Warfare dies (A's graveyard). The level up ability then resolves and puts no counter anywhere."
+          "expected": "Shock resolves first and Student of Warfare dies (A's graveyard). The level up ability then resolves and puts no counter anywhere.",
+          "operation": {
+            "unclassifiable": "a different spell cast by B in response"
+          }
         }
       ],
       "cards": [
@@ -71,7 +77,18 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution puts a level counter on a permanent, which is what a level up ability does.",
+        "near_miss": "Not counted: no api singles out level up's Keyword line, so only the fires side is tagged.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "level"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.87a-2",
@@ -123,13 +140,19 @@
           "label": "combat_step",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "Level up can be activated only at sorcery timing, so activating it is not legal (can_play false)."
+          "expected": "Level up can be activated only at sorcery timing, so activating it is not legal (can_play false).",
+          "operation": {
+            "unclassifiable": "changes the phase"
+          }
         },
         {
           "label": "stack_not_empty",
           "polarity": "does_not_fire",
           "delta": "B's Shock (targeting A) is on the stack and A holds priority.",
-          "expected": "The stack is not empty, so level up cannot be activated (can_play false)."
+          "expected": "The stack is not empty, so level up cannot be activated (can_play false).",
+          "operation": {
+            "unclassifiable": "adds a spell to the stack"
+          }
         }
       ],
       "cards": [
@@ -138,7 +161,21 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An ability restricted to sorcery timing passes the casting-speed check in its controller's main phase with an empty stack.",
+        "near_miss": "The candidate fails the casting-speed check outside that window.",
+        "params": {
+          "bit": "failed_check",
+          "check": "casting_speed",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     }
   ]
 }

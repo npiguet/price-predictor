@@ -54,7 +54,10 @@
           "label": "empty_hand",
           "polarity": "does_not_fire",
           "delta": "B's hand is empty.",
-          "expected": "Nothing is discarded; B's graveyard stays empty. Mind Rot resolved and is in A's graveyard."
+          "expected": "Nothing is discarded; B's graveyard stays empty. Mind Rot resolved and is in A's graveyard.",
+          "operation": {
+            "unclassifiable": "changes a hand"
+          }
         }
       ],
       "cards": [
@@ -63,7 +66,20 @@
         "Mountain",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A discard moves a card from its owner's hand to their graveyard.",
+        "near_miss": "A discard effect resolves and no card moves from the hand to the graveyard.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "hand",
+          "to_zone": "graveyard",
+          "api": "Discard"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.9c-1",
@@ -115,7 +131,10 @@
           "label": "to_graveyard",
           "polarity": "does_not_fire",
           "delta": "A declines Library of Leng's replacement.",
-          "expected": "Grizzly Bears goes to A's graveyard as a creature card with power 2, so Cragganwick Cremator deals 2 damage to B. B is at 18 life."
+          "expected": "Grizzly Bears goes to A's graveyard as a creature card with power 2, so Cragganwick Cremator deals 2 damage to B. B is at 18 life.",
+          "operation": {
+            "unclassifiable": "a different choice or decision by a player"
+          }
         }
       ],
       "cards": [
@@ -124,7 +143,20 @@
         "Cragganwick Cremator",
         "Grizzly Bears"
       ],
-      "forge_notes": "The cost half of 701.9c (an illegal cost payment) cannot be reached: Library of Leng replaces only discards caused by an effect, not discards paid as a cost. Forge's script applies the replacement to any discard (Discard$ True); confirm it hides the card's characteristics from the follow-up condition."
+      "forge_notes": "The cost half of 701.9c (an illegal cost payment) cannot be reached: Library of Leng replaces only discards caused by an effect, not discards paid as a cost. Forge's script applies the replacement to any discard (Discard$ True); confirm it hides the card's characteristics from the follow-up condition.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A discarded card is put into a hidden zone, the library, by a replacement.",
+        "near_miss": "A discard effect resolves and no card moves from the hand to the library.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "hand",
+          "to_zone": "library",
+          "api": "Discard"
+        },
+        "needs": []
+      }
     }
   ]
 }

@@ -56,20 +56,36 @@
           "label": "six_lands",
           "polarity": "does_not_fire",
           "delta": "A controls six Forests instead of seven.",
-          "expected": "The condition does not hold: the To-solve trigger does not fire and the Case stays unsolved."
+          "expected": "The condition does not hold: the To-solve trigger does not fire and the Case stays unsolved.",
+          "operation": {
+            "unclassifiable": "A land is removed from the battlefield; no fork operation removes a permanent."
+          }
         },
         {
           "label": "opponents_end_step",
           "polarity": "does_not_fire",
           "delta": "It is B's turn (B is the active player) and the step is B's end step; A controls seven Forests.",
-          "expected": "The trigger is for its controller's end step only: it does not fire and the Case stays unsolved."
+          "expected": "The trigger is for its controller's end step only: it does not fire and the Case stays unsolved.",
+          "operation": {
+            "unclassifiable": "The turn changes to the opponent's; no fork operation changes the phase or the turn."
+          }
         }
       ],
       "cards": [
         "Case of the Locked Hothouse",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A phase trigger with a state condition is evaluated at the beginning of a step and fires when the condition holds.",
+        "near_miss": "The phase trigger evaluated with its condition false, not fired.",
+        "params": {
+          "mode": "Phase"
+        },
+        "needs": []
+      }
     },
     {
       "id": "719.3b-1",
@@ -116,7 +132,10 @@
           "label": "leaves_and_returns",
           "polarity": "does_not_fire",
           "delta": "Before the end step A casts Unsummon (tapping Island) targeting the Case, then casts the Case again (tapping Swamp) and it resolves; its enters trigger has no target.",
-          "expected": "The new Case is not solved and is a noncreature enchantment; the condition is false at the end step, so it stays unsolved."
+          "expected": "The new Case is not solved and is a noncreature enchantment; the condition is false at the end step, so it stays unsolved.",
+          "operation": {
+            "unclassifiable": "The player casts two additional spells (a bounce spell, then the Case again); no fork operation adds a spell or an action."
+          }
         }
       ],
       "cards": [
@@ -174,7 +193,10 @@
           "label": "original_activation",
           "polarity": "does_not_fire",
           "delta": "A checks the original Case's Solved ability instead of the copy's.",
-          "expected": "The original is solved: activating its Solved ability is legal."
+          "expected": "The original is solved: activating its Solved ability is legal.",
+          "operation": {
+            "unclassifiable": "The player considers a different permanent's ability; no fork operation changes a decision."
+          }
         }
       ],
       "cards": [
@@ -182,7 +204,17 @@
         "Copy Enchantment",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An activated ability's candidate is illegal because the permanent lacks a designation the ability requires.",
+        "near_miss": "The same ability's candidate legal when the designation is present.",
+        "params": {
+          "bit": "can_play"
+        },
+        "needs": []
+      }
     },
     {
       "id": "719.3c-1",
@@ -224,14 +256,27 @@
           "label": "unsolved",
           "polarity": "does_not_fire",
           "delta": "The Case is not solved.",
-          "expected": "Grizzly Bears is a 2/2."
+          "expected": "Grizzly Bears is a 2/2.",
+          "operation": {
+            "unclassifiable": "Solved is a designation, not a counter or a characteristic; no fork operation sets a designation."
+          }
         }
       ],
       "cards": [
         "Case of the Gateway Express",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static that applies only while a permanent state holds contributes a P/T boost.",
+        "near_miss": "The static is on the board but its condition fails and it contributes no P/T.",
+        "params": {
+          "field": "pt"
+        },
+        "needs": []
+      }
     },
     {
       "id": "719.3c-2",
@@ -284,7 +329,10 @@
           "label": "unsolved",
           "polarity": "does_not_fire",
           "delta": "The Case is not solved.",
-          "expected": "The Case does not trigger and A draws no card. Lightning Bolt deals 3 damage to B (17 life)."
+          "expected": "The Case does not trigger and A draws no card. Lightning Bolt deals 3 damage to B (17 life).",
+          "operation": {
+            "unclassifiable": "Solved is a designation, not a counter or a characteristic; no fork operation sets a designation."
+          }
         }
       ],
       "cards": [
@@ -292,7 +340,17 @@
         "Mountain",
         "Lightning Bolt"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger gated by a permanent state is evaluated on its event and fires.",
+        "near_miss": "The trigger's event occurred with the state absent and it did not fire.",
+        "params": {
+          "mode": "SpellCast"
+        },
+        "needs": []
+      }
     },
     {
       "id": "719.3c-3",
@@ -337,14 +395,28 @@
           "label": "unsolved",
           "polarity": "does_not_fire",
           "delta": "The Case is not solved.",
-          "expected": "Activating the ability is not legal."
+          "expected": "Activating the ability is not legal.",
+          "operation": {
+            "unclassifiable": "Solved is a designation, not a counter or a characteristic; no fork operation sets a designation."
+          }
         }
       ],
       "cards": [
         "Case of the Uneaten Feast",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An activated ability gated by a permanent state has a legal candidate.",
+        "near_miss": "The candidate illegal because the state is absent.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true
+        },
+        "needs": []
+      }
     }
   ]
 }

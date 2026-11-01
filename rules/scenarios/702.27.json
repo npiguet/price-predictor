@@ -62,19 +62,28 @@
           "label": "buyback_not_paid",
           "polarity": "does_not_fire",
           "delta": "A does not pay the buyback cost and taps one Mountain only.",
-          "expected": "Fugitive Wizard dies. Searing Touch moves to A's graveyard."
+          "expected": "Fugitive Wizard dies. Searing Touch moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         },
         {
           "label": "countered",
           "polarity": "other",
           "delta": "B responds with Counterspell, tapping both Islands.",
-          "expected": "Searing Touch is countered and moves to A's graveyard, not to A's hand. Fugitive Wizard survives undamaged."
+          "expected": "Searing Touch is countered and moves to A's graveyard, not to A's hand. Fugitive Wizard survives undamaged.",
+          "operation": {
+            "unclassifiable": "A different spell cast."
+          }
         },
         {
           "label": "fizzled",
           "polarity": "other",
           "delta": "B responds with Unsummon on Fugitive Wizard, tapping one Island.",
-          "expected": "Fugitive Wizard returns to B's hand. Searing Touch has no legal target, fizzles and moves to A's graveyard, not to A's hand."
+          "expected": "Fugitive Wizard returns to B's hand. Searing Touch has no legal target, fizzles and moves to A's graveyard, not to A's hand.",
+          "operation": {
+            "unclassifiable": "A different spell cast."
+          }
         }
       ],
       "cards": [
@@ -85,7 +94,19 @@
         "Counterspell",
         "Unsummon"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolving spell with a return-to-hand clause moves from the stack to its owner's hand instead of the graveyard.",
+        "near_miss": "A resolving instant or sorcery whose effect half shows the spell going to the graveyard.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "hand"
+        },
+        "needs": []
+      }
     }
   ]
 }

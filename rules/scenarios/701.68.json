@@ -66,7 +66,10 @@
           "label": "blight_not_paid",
           "polarity": "does_not_fire",
           "delta": "A does not pay the optional additional cost, so no creature is blighted.",
-          "expected": "Grizzly Bears has no counters and is 2/2. Cinder Strike deals 2 damage to Hill Giant, which stays on the battlefield with 2 damage marked."
+          "expected": "Grizzly Bears has no counters and is 2/2. Cinder Strike deals 2 damage to Hill Giant, which stays on the battlefield with 2 damage marked.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player, not a fact on the board"
+          }
         }
       ],
       "cards": [
@@ -126,7 +129,10 @@
           "label": "no_creature",
           "polarity": "fires",
           "delta": "A controls no creature (Grizzly Bears is not on the battlefield).",
-          "expected": "The activation is not legal: A cannot pay blight 2. Evershrike's Gift stays in the graveyard and both Plains stay untapped."
+          "expected": "The activation is not legal: A cannot pay blight 2. Evershrike's Gift stays in the graveyard and both Plains stay untapped.",
+          "operation": {
+            "unclassifiable": "adds, removes or moves a permanent, which no fork operation does"
+          }
         }
       ],
       "cards": [
@@ -189,13 +195,19 @@
           "label": "blight_giant",
           "polarity": "fires",
           "delta": "A puts the -1/-1 counter on Hill Giant instead of Grizzly Bears.",
-          "expected": "Hill Giant has one -1/-1 counter (2/2). The token is a tapped, attacking copy of Hill Giant (3/3, no counters); no token copies Grizzly Bears."
+          "expected": "Hill Giant has one -1/-1 counter (2/2). The token is a tapped, attacking copy of Hill Giant (3/3, no counters); no token copies Grizzly Bears.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player, not a fact on the board"
+          }
         },
         {
           "label": "no_blight",
           "polarity": "does_not_fire",
           "delta": "A chooses not to blight.",
-          "expected": "No creature receives a counter and no token is created."
+          "expected": "No creature receives a counter and no token is created.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player, not a fact on the board"
+          }
         }
       ],
       "cards": [

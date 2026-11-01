@@ -63,7 +63,10 @@
           "label": "from_hand",
           "polarity": "does_not_fire",
           "delta": "A plays Mountain from hand as the land drop instead of Forest from the library.",
-          "expected": "The top card of the library does not change, so Forest stays revealed throughout; no card is withheld from reveal."
+          "expected": "The top card of the library does not change, so Forest stays revealed throughout; no card is withheld from reveal.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         }
       ],
       "cards": [
@@ -73,7 +76,10 @@
         "Shock",
         "Oracle of Mul Daya"
       ],
-      "forge_notes": "Forge may reveal the new top card at once; the revealed-state timing is not part of the existing playability fields."
+      "forge_notes": "Forge may reveal the new top card at once; the revealed-state timing is not part of the existing playability fields.",
+      "detector": {
+        "none": "Looked for a reveal of the new top card timed against the action in progress: card_revealed and card_looked_at are events of a resolution's effect half, and playing a land or casting a spell from the library writes none; the gen-3 library_cards snapshot shows the library between records, not during an action, and an action in progress is a field gen-3 drops."
+      }
     },
     {
       "id": "401.5-2",
@@ -127,7 +133,10 @@
           "label": "from_hand",
           "polarity": "does_not_fire",
           "delta": "A casts the Grizzly Bears in hand instead of the one on top of the library.",
-          "expected": "The top card of the library is still Grizzly Bears and A may look at it throughout the casting; no new top card appears."
+          "expected": "The top card of the library is still Grizzly Bears and A may look at it throughout the casting; no new top card appears.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         }
       ],
       "cards": [
@@ -137,7 +146,10 @@
         "Island",
         "Vizier of the Menagerie"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "Looked for a reveal of the new top card timed against the action in progress: card_revealed and card_looked_at are events of a resolution's effect half, and playing a land or casting a spell from the library writes none; the gen-3 library_cards snapshot shows the library between records, not during an action, and an action in progress is a field gen-3 drops."
+      }
     },
     {
       "id": "401.7-1",
@@ -192,7 +204,10 @@
           "label": "long_library",
           "polarity": "does_not_fire",
           "delta": "B's library holds five cards: Forest, Island, Swamp, Mountain, Plains from the top.",
-          "expected": "Sol Ring goes fourth from the top: Forest, Island, Swamp, Sol Ring, Mountain, Plains."
+          "expected": "Sol Ring goes fourth from the top: Forest, Island, Swamp, Sol Ring, Mountain, Plains.",
+          "operation": {
+            "unclassifiable": "changes a library"
+          }
         }
       ],
       "cards": [

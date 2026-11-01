@@ -46,26 +46,45 @@
           "label": "paid",
           "polarity": "other",
           "delta": "A pays {G} by tapping Forest when the trigger resolves.",
-          "expected": "Echo triggers and is paid: Pouncing Jaguar stays on the battlefield, Forest is tapped."
+          "expected": "Echo triggers and is paid: Pouncing Jaguar stays on the battlefield, Forest is tapped.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         },
         {
           "label": "opponents_upkeep",
           "polarity": "does_not_fire",
           "delta": "It is B's upkeep: B is the active player.",
-          "expected": "No echo trigger fires: Pouncing Jaguar stays on the battlefield and Forest stays untapped."
+          "expected": "No echo trigger fires: Pouncing Jaguar stays on the battlefield and Forest stays untapped.",
+          "operation": {
+            "unclassifiable": "Changes the turn."
+          }
         },
         {
           "label": "already_paid",
           "polarity": "does_not_fire",
           "delta": "Pouncing Jaguar has been under A's control since before A's previous upkeep (its echo was paid then).",
-          "expected": "No echo trigger fires at this upkeep: Pouncing Jaguar stays on the battlefield and Forest stays untapped."
+          "expected": "No echo trigger fires at this upkeep: Pouncing Jaguar stays on the battlefield and Forest stays untapped.",
+          "operation": {
+            "unclassifiable": "Changes the history of when the permanent came under control."
+          }
         }
       ],
       "cards": [
         "Pouncing Jaguar",
         "Forest"
       ],
-      "forge_notes": "The already_paid variant needs Forge's 'echo paid' flag set on Pouncing Jaguar; a puzzle state may have to set it explicitly."
+      "forge_notes": "The already_paid variant needs Forge's 'echo paid' flag set on Pouncing Jaguar; a puzzle state may have to set it explicitly.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An echo trigger is evaluated at the beginning of its controller's upkeep and fires when the permanent came under that player's control since their most recent upkeep.",
+        "near_miss": "An echo trigger evaluated and not fired: another player's upkeep, or a permanent its controller has controlled since before their most recent upkeep.",
+        "params": {
+          "keyword": "Echo"
+        },
+        "needs": []
+      }
     }
   ]
 }

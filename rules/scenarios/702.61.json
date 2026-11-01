@@ -61,13 +61,19 @@
           "label": "without_split_second",
           "polarity": "does_not_fire",
           "delta": "A casts Shock (no split second) targeting B's Grizzly Bears, tapping one Mountain, instead of Sudden Shock.",
-          "expected": "B's Shock can be cast in response: can_play is true."
+          "expected": "B's Shock can be cast in response: can_play is true.",
+          "operation": {
+            "unclassifiable": "a different spell is cast; no fork operation changes the cast"
+          }
         },
         {
           "label": "activate_ability",
           "polarity": "fires",
           "delta": "B tries to activate Prodigal Sorcerer ({T}: 1 damage to any target) instead of casting Shock.",
-          "expected": "The activation is not allowed: can_play is false."
+          "expected": "The activation is not allowed: can_play is false.",
+          "operation": {
+            "unclassifiable": "a different action: activating an ability instead of casting a spell"
+          }
         }
       ],
       "cards": [
@@ -77,7 +83,20 @@
         "Sudden Shock",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate spell or non-mana ability is refused by the split second check: a spell with split second is on the stack.",
+        "near_miss": "A candidate the split second check does not refuse.",
+        "params": {
+          "bit": "failed_check",
+          "check": "split_second"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "702.61b-1",
@@ -138,13 +157,19 @@
           "label": "turn_face_up",
           "polarity": "fires",
           "delta": "B instead turns the face-down creature face up (a special action), paying its morph cost {1}{R}{R} with the three Mountains.",
-          "expected": "Turning Battering Craghorn face up is allowed and it becomes a 3/1 first striker."
+          "expected": "Turning Battering Craghorn face up is allowed and it becomes a 3/1 first striker.",
+          "operation": {
+            "unclassifiable": "a different action: a special action instead of a mana ability"
+          }
         },
         {
           "label": "activate_ability",
           "polarity": "does_not_fire",
           "delta": "B instead tries to activate Prodigal Sorcerer ({T}: 1 damage to any target).",
-          "expected": "The activation is not allowed: can_play is false."
+          "expected": "The activation is not allowed: can_play is false.",
+          "operation": {
+            "unclassifiable": "a different action: a non-mana ability instead of a mana ability"
+          }
         }
       ],
       "cards": [
@@ -207,7 +232,10 @@
           "label": "creature_cast",
           "polarity": "does_not_fire",
           "delta": "A casts Grizzly Bears, tapping Forest and Mountain, instead of Sudden Shock.",
-          "expected": "Young Pyromancer's trigger does not fire and no token is created."
+          "expected": "Young Pyromancer's trigger does not fire and no token is created.",
+          "operation": {
+            "unclassifiable": "a different spell is cast; no fork operation changes the cast"
+          }
         }
       ],
       "cards": [

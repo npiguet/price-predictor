@@ -44,19 +44,35 @@
           "label": "roll_six",
           "polarity": "fires",
           "delta": "The d6 shows 6.",
-          "expected": "6 is lit up: the visit ability triggers and A creates a Food token."
+          "expected": "6 is lit up: the visit ability triggers and A creates a Food token.",
+          "operation": {
+            "unclassifiable": "a different die result"
+          }
         },
         {
           "label": "roll_four",
           "polarity": "does_not_fire",
           "delta": "The d6 shows 4.",
-          "expected": "4 is not a lit-up number. The visit ability does not trigger. A creates no Food token."
+          "expected": "4 is not a lit-up number. The visit ability does not trigger. A creates no Food token.",
+          "operation": {
+            "unclassifiable": "a different die result"
+          }
         }
       ],
       "cards": [
         "Concession Stand"
       ],
-      "forge_notes": "Reaching this state needs an Attraction on the battlefield, which in Forge needs an attraction deck and the lit-up variant; the die result must be forced."
+      "forge_notes": "Reaching this state needs an Attraction on the battlefield, which in Forge needs an attraction deck and the lit-up variant; the die result must be forced.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A visit trigger fires when its controller rolls to visit Attractions and the result is a number lit up on the Attraction.",
+        "near_miss": "A visit trigger is evaluated against a roll whose result is not lit up on the Attraction and does not fire.",
+        "params": {
+          "keyword": "Visit"
+        },
+        "needs": []
+      }
     }
   ]
 }

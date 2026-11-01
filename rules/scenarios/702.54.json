@@ -58,13 +58,19 @@
           "label": "creature_damaged",
           "polarity": "does_not_fire",
           "delta": "Shock targets Grizzly Bears instead of player B.",
-          "expected": "Grizzly Bears dies, B stays at 20, and Gorehorn Minotaurs enters with no counters as a 3/3."
+          "expected": "Grizzly Bears dies, B stays at 20, and Gorehorn Minotaurs enters with no counters as a 3/3.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         },
         {
           "label": "self_damaged",
           "polarity": "does_not_fire",
           "delta": "Shock targets player A instead of player B.",
-          "expected": "A is at 18, B stays at 20, and Gorehorn Minotaurs enters with no counters as a 3/3."
+          "expected": "A is at 18, B stays at 20, and Gorehorn Minotaurs enters with no counters as a 3/3.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -73,7 +79,18 @@
         "Shock",
         "Gorehorn Minotaurs"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent spell's resolution puts +1/+1 counters on the permanent as it enters.",
+        "near_miss": "The permanent enters with no +1/+1 counters. Not counted: a permanent spell's acting line is the implicit spell, which has no API type for api to name.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "+1/+1"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.54b-1",
@@ -130,13 +147,19 @@
           "label": "bolt_to_face",
           "polarity": "fires",
           "delta": "A holds Lightning Bolt instead of Shock and casts it at player B.",
-          "expected": "B is at 17. Petrified Wood-Kin enters with three +1/+1 counters and is a 6/6."
+          "expected": "B is at 17. Petrified Wood-Kin enters with three +1/+1 counters and is a 6/6.",
+          "operation": {
+            "unclassifiable": "a different card in a hand"
+          }
         },
         {
           "label": "creature_damaged",
           "polarity": "does_not_fire",
           "delta": "Shock targets Grizzly Bears instead of player B.",
-          "expected": "Grizzly Bears dies, B stays at 20, and Petrified Wood-Kin enters with no counters as a 3/3."
+          "expected": "Grizzly Bears dies, B stays at 20, and Petrified Wood-Kin enters with no counters as a 3/3.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -147,7 +170,18 @@
         "Lightning Bolt",
         "Petrified Wood-Kin"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent spell's resolution puts +1/+1 counters on the permanent as it enters.",
+        "near_miss": "The permanent enters with no +1/+1 counters. Not counted: a permanent spell's acting line is the implicit spell, which has no API type for api to name.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "+1/+1"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.54c-1",
@@ -200,13 +234,19 @@
           "label": "no_bloodlord",
           "polarity": "does_not_fire",
           "delta": "Bloodlord of Vaasgoth is not on the battlefield.",
-          "expected": "B is at 18. Bloodrage Vampire enters with one +1/+1 counter and is a 4/2."
+          "expected": "B is at 18. Bloodrage Vampire enters with one +1/+1 counter and is a 4/2.",
+          "operation": {
+            "unclassifiable": "removes a permanent from the battlefield"
+          }
         },
         {
           "label": "opponent_not_damaged",
           "polarity": "other",
           "delta": "Shock targets player A instead of player B.",
-          "expected": "A is at 18, B stays at 20. Bloodrage Vampire enters with no counters as a 3/1."
+          "expected": "A is at 18, B stays at 20. Bloodrage Vampire enters with no counters as a 3/1.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [

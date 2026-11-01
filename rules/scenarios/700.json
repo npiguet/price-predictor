@@ -58,7 +58,10 @@
           "label": "legal_mode",
           "polarity": "does_not_fire",
           "delta": "B controls a Grizzly Bears on the battlefield.",
-          "expected": "A chooses the -1/-1 mode targeting Grizzly Bears, the trigger stays on the stack and resolves. Grizzly Bears is 1/1 until end of turn and stays on the battlefield."
+          "expected": "A chooses the -1/-1 mode targeting Grizzly Bears, the trigger stays on the stack and resolves. Grizzly Bears is 1/1 until end of turn and stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "adds or removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -66,7 +69,10 @@
         "Downwind Ambusher",
         "Grizzly Bears"
       ],
-      "forge_notes": "Forge may never put the trigger on the stack at all when no mode is choosable; either way the ability does not resolve."
+      "forge_notes": "Forge may never put the trigger on the stack at all when no mode is choosable; either way the ability does not resolve.",
+      "detector": {
+        "none": "The trigger record shows only that the modal trigger fired; that it was then removed for want of a choosable mode is in no field. No resolution pair is written for it, a missing resolution is no record, and EVENT_PARAMS has no event for a trigger removed from the stack."
+      }
     },
     {
       "id": "700.2d-1",
@@ -120,13 +126,19 @@
           "label": "creature_mode_once",
           "polarity": "does_not_fire",
           "delta": "A chooses the 1-damage-to-each-creature mode once and the 2-damage-to-each-opponent mode twice instead of the first mode three times.",
-          "expected": "Each creature is dealt 1 damage once. Grizzly Bears, Hill Giant and Craw Wurm all stay on the battlefield with 1 damage marked. B's life is 16."
+          "expected": "Each creature is dealt 1 damage once. Grizzly Bears, Hill Giant and Craw Wurm all stay on the battlefield with 1 damage marked. B's life is 16.",
+          "operation": {
+            "unclassifiable": "a different choice or decision by a player"
+          }
         },
         {
           "label": "same_mode_twice",
           "polarity": "other",
           "delta": "A chooses the 1-damage-to-each-creature mode twice and the 2-damage-to-each-opponent mode once instead of the first mode three times.",
-          "expected": "Each creature is dealt 1 damage twice. Grizzly Bears dies and is in B's graveyard. Hill Giant stays with 2 damage marked and Craw Wurm stays with 2 damage marked. B's life is 18."
+          "expected": "Each creature is dealt 1 damage twice. Grizzly Bears dies and is in B's graveyard. Hill Giant stays with 2 damage marked and Craw Wurm stays with 2 damage marked. B's life is 18.",
+          "operation": {
+            "unclassifiable": "a different choice or decision by a player"
+          }
         }
       ],
       "cards": [
@@ -196,7 +208,10 @@
           "label": "no_redirect",
           "polarity": "does_not_fire",
           "delta": "B does not cast Deflection.",
-          "expected": "Izzet Charm deals 2 damage to Grizzly Bears, which dies and is in B's graveyard. Runeclaw Bear is undamaged."
+          "expected": "Izzet Charm deals 2 damage to Grizzly Bears, which dies and is in B's graveyard. Runeclaw Bear is undamaged.",
+          "operation": {
+            "unclassifiable": "a different choice or decision by a player"
+          }
         }
       ],
       "cards": [
@@ -207,7 +222,17 @@
         "Izzet Charm",
         "Deflection"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution changes the targets of a spell on the stack (a targets_changed event), the spell keeping its chosen modes.",
+        "near_miss": "No near miss is tagged.",
+        "params": {
+          "event": "targets_changed"
+        },
+        "needs": []
+      }
     },
     {
       "id": "700.2g-1",
@@ -263,7 +288,10 @@
           "label": "no_copy",
           "polarity": "does_not_fire",
           "delta": "A does not cast Reverberate.",
-          "expected": "Only the original resolves: Grizzly Bears takes 2 damage and dies. Runeclaw Bear is undamaged and stays on the battlefield."
+          "expected": "Only the original resolves: Grizzly Bears takes 2 damage and dies. Runeclaw Bear is undamaged and stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "a different choice or decision by a player"
+          }
         }
       ],
       "cards": [
@@ -274,7 +302,17 @@
         "Grizzly Bears",
         "Runeclaw Bear"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution copies a spell on the stack (a spell_copied event); the copy carries the original's chosen modes.",
+        "near_miss": "No near miss is tagged.",
+        "params": {
+          "event": "spell_copied"
+        },
+        "needs": []
+      }
     },
     {
       "id": "700.2h-1",
@@ -331,13 +369,19 @@
           "label": "one_mode_only",
           "polarity": "does_not_fire",
           "delta": "A chooses only the draw mode.",
-          "expected": "Casting is legal. The cost after adjustment is {B}{B}{B}: the unchosen mode's {2} is not added."
+          "expected": "Casting is legal. The cost after adjustment is {B}{B}{B}: the unchosen mode's {2} is not added.",
+          "operation": {
+            "unclassifiable": "a different choice or decision by a player"
+          }
         },
         {
           "label": "both_modes_four_lands",
           "polarity": "other",
           "delta": "A controls four Swamps instead of five and chooses both modes.",
-          "expected": "The cost after adjustment is still {2}{B}{B}{B} (5 mana); A cannot pay it with four Swamps, so casting with both modes is not legal (can_play false)."
+          "expected": "The cost after adjustment is still {2}{B}{B}{B} (5 mana); A cannot pay it with four Swamps, so casting with both modes is not legal (can_play false).",
+          "operation": {
+            "unclassifiable": "removes a land permanent from the battlefield"
+          }
         }
       ],
       "cards": [
@@ -406,7 +450,10 @@
           "label": "blessing_to_hand",
           "polarity": "does_not_fire",
           "delta": "A chooses the pile of Grizzly Bears and Gaea's Blessing for its hand.",
-          "expected": "Grizzly Bears and Gaea's Blessing are in A's hand. Forest, Forest and Mountain are in A's graveyard with Fact or Fiction. Gaea's Blessing's trigger does not fire. Plains is the only card left in A's library."
+          "expected": "Grizzly Bears and Gaea's Blessing are in A's hand. Forest, Forest and Mountain are in A's graveyard with Fact or Fiction. Gaea's Blessing's trigger does not fire. Plains is the only card left in A's library.",
+          "operation": {
+            "unclassifiable": "a different choice or decision by a player"
+          }
         }
       ],
       "cards": [
@@ -418,7 +465,17 @@
         "Gaea's Blessing",
         "Plains"
       ],
-      "forge_notes": "Forge's Fact or Fiction moves the piles with Origin$ Library, so Gaea's Blessing's library-to-graveyard trigger should see the move."
+      "forge_notes": "Forge's Fact or Fiction moves the piles with Origin$ Library, so Gaea's Blessing's library-to-graveyard trigger should see the move.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution separates cards into piles (a piles_made event) and the chosen pile moves from the library, where the piles stayed, to its destination.",
+        "near_miss": "No near miss is tagged.",
+        "params": {
+          "event": "piles_made"
+        },
+        "needs": []
+      }
     },
     {
       "id": "700.5-1",
@@ -463,7 +520,8 @@
           "label": "devotion_four",
           "polarity": "does_not_fire",
           "delta": "The second Raging Goblin is a Grizzly Bears instead, which has no red symbol.",
-          "expected": "A's devotion to red is 4 (1 + 2 + 1). Purphoros is not a creature, only a legendary enchantment."
+          "expected": "A's devotion to red is 4 (1 + 2 + 1). Purphoros is not a creature, only a legendary enchantment.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -517,7 +575,8 @@
           "label": "without_altar",
           "polarity": "does_not_fire",
           "delta": "Altar of the Pantheon is replaced by a Mountain.",
-          "expected": "A's devotion to red is 4 (1 + 2 + 1). Purphoros is not a creature."
+          "expected": "A's devotion to red is 4 (1 + 2 + 1). Purphoros is not a creature.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -581,7 +640,10 @@
           "label": "bounced",
           "polarity": "does_not_fire",
           "delta": "A casts Unsummon on Grizzly Bears instead of Song of the Dryads.",
-          "expected": "Grizzly Bears returns to A's hand before the end step. At the end step nothing is sacrificed: Grizzly Bears is in A's hand and Unsummon is in A's graveyard."
+          "expected": "Grizzly Bears returns to A's hand before the end step. At the end step nothing is sacrificed: Grizzly Bears is in A's hand and Unsummon is in A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different spell is cast"
+          }
         }
       ],
       "cards": [
@@ -638,7 +700,8 @@
           "label": "wizard_joins",
           "polarity": "fires",
           "delta": "Cabal Evangel is a Fugitive Wizard instead.",
-          "expected": "A's party has 4 creatures (Cleric, Warrior, Rogue, Wizard), a full party. Archpriest of Iona is a 4/2."
+          "expected": "A's party has 4 creatures (Cleric, Warrior, Rogue, Wizard), a full party. Archpriest of Iona is a 4/2.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -693,7 +756,8 @@
           "label": "single_type_cleric",
           "polarity": "does_not_fire",
           "delta": "Shieldmage Elder is a Cabal Evangel instead, which is only a Cleric.",
-          "expected": "A's party has 3 creatures (Cleric, Warrior, Rogue) and no Wizard. Archpriest of Iona is a 3/2."
+          "expected": "A's party has 3 creatures (Cleric, Warrior, Rogue) and no Wizard. Archpriest of Iona is a 3/2.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -766,7 +830,10 @@
           "label": "not_activated",
           "polarity": "does_not_fire",
           "delta": "B does not activate Jace Beleren's loyalty ability.",
-          "expected": "Jace Beleren is not a legal target: Cut Short has no legal target (has_legal_target false) and cannot be cast."
+          "expected": "Jace Beleren is not a legal target: Cut Short has no legal target (has_legal_target false) and cannot be cast.",
+          "operation": {
+            "unclassifiable": "a different choice or decision by a player"
+          }
         }
       ],
       "cards": [
@@ -832,13 +899,19 @@
           "label": "only_instant_in_graveyard",
           "polarity": "does_not_fire",
           "delta": "Shock targets B's Grizzly Bears instead.",
-          "expected": "B's Grizzly Bears goes to B's graveyard. A's graveyard holds only Shock, an instant, so A has not descended. Ruin-Lurker Bat's end step trigger does not fire."
+          "expected": "B's Grizzly Bears goes to B's graveyard. A's graveyard holds only Shock, an instant, so A has not descended. Ruin-Lurker Bat's end step trigger does not fire.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         },
         {
           "label": "token_dies",
           "polarity": "does_not_fire",
           "delta": "A's Grizzly Bears is a creature token and Shock targets it.",
-          "expected": "The token dies, but a token is not a card, so no permanent card is put into A's graveyard; A has not descended. Ruin-Lurker Bat's trigger does not fire."
+          "expected": "The token dies, but a token is not a card, so no permanent card is put into A's graveyard; A has not descended. Ruin-Lurker Bat's trigger does not fire.",
+          "operation": {
+            "unclassifiable": "more than one fact: the creature becomes a token and Shock changes target, and making a permanent a token is no fork operation"
+          }
         }
       ],
       "cards": [
@@ -907,7 +980,10 @@
           "label": "outlaw_on_battlefield",
           "polarity": "does_not_fire",
           "delta": "Krovikan Scoundrel is already on A's battlefield instead of in A's hand, and A casts only Take the Fall.",
-          "expected": "A controls an outlaw permanent: Hill Giant gets -4/-0 and is -1/3 until end of turn. A draws Plains."
+          "expected": "A controls an outlaw permanent: Hill Giant gets -4/-0 and is -1/3 until end of turn. A draws Plains.",
+          "operation": {
+            "unclassifiable": "moves a card between zones, adding a permanent"
+          }
         }
       ],
       "cards": [
@@ -972,13 +1048,19 @@
           "label": "targets_own_permanent",
           "polarity": "does_not_fire",
           "delta": "Shock targets A's own Grizzly Bears.",
-          "expected": "No opponent, opponent's permanent, spell or ability, or card in an opponent's graveyard is targeted, so no crime is committed. Vadmir's trigger does not fire and Vadmir stays 2/2 with no counters."
+          "expected": "No opponent, opponent's permanent, spell or ability, or card in an opponent's graveyard is targeted, so no crime is committed. Vadmir's trigger does not fire and Vadmir stays 2/2 with no counters.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         },
         {
           "label": "targets_opponent_player",
           "polarity": "fires",
           "delta": "Shock targets player B.",
-          "expected": "Targeting an opponent commits a crime. Vadmir's trigger fires and Vadmir gets a +1/+1 counter, becoming 3/3. B's life is 18."
+          "expected": "Targeting an opponent commits a crime. Vadmir's trigger fires and Vadmir gets a +1/+1 counter, becoming 3/3. B's life is 18.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -987,7 +1069,17 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A crime trigger is evaluated and fires after a player targets an opponent or an opponent's permanent, spell, ability or card.",
+        "near_miss": "The same trigger is evaluated and does not fire because nothing of an opponent was targeted.",
+        "params": {
+          "mode": "CommitCrime"
+        },
+        "needs": []
+      }
     },
     {
       "id": "700.14-1",
@@ -1044,7 +1136,10 @@
           "label": "small_second_spell",
           "polarity": "does_not_fire",
           "delta": "A casts Llanowar Elves for the second spell instead of Centaur Courser.",
-          "expected": "A has spent 3 mana on spells this turn, short of 4, so A does not expend 4. Boxer's trigger does not fire and Boxer does not have indestructible."
+          "expected": "A has spent 3 mana on spells this turn, short of 4, so A does not expend 4. Boxer's trigger does not fire and Boxer does not have indestructible.",
+          "operation": {
+            "unclassifiable": "a different spell is cast"
+          }
         }
       ],
       "cards": [
@@ -1054,7 +1149,17 @@
         "Centaur Courser",
         "Llanowar Elves"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An expend trigger is evaluated and fires when the mana spent on spells this turn first reaches its threshold.",
+        "near_miss": "The same trigger is evaluated and does not fire because the threshold was not reached.",
+        "params": {
+          "mode": "ManaExpend"
+        },
+        "needs": []
+      }
     },
     {
       "id": "700.16-1",
@@ -1103,25 +1208,29 @@
           "label": "legendary_white_blue",
           "polarity": "fires",
           "delta": "A's creature is Kasimir the Lone Wolf (legendary, white and blue) instead of Tyrox.",
-          "expected": "Kasimir is legendary, not a Villain and white, so it is worthy: the activation is legal."
+          "expected": "Kasimir is legendary, not a Villain and white, so it is worthy: the activation is legal.",
+          "operation": "replace_card"
         },
         {
           "label": "villain",
           "polarity": "does_not_fire",
           "delta": "A's creature is Living Laser (legendary, red, a Villain) instead of Tyrox.",
-          "expected": "Living Laser is a Villain, so it is not worthy and is not a legal equip target: no legal target (has_legal_target false)."
+          "expected": "Living Laser is a Villain, so it is not worthy and is not a legal equip target: no legal target (has_legal_target false).",
+          "operation": "replace_card"
         },
         {
           "label": "not_legendary",
           "polarity": "does_not_fire",
           "delta": "A's creature is Goblin Assailant (red, not legendary) instead of Tyrox.",
-          "expected": "Goblin Assailant is not legendary, so it is not worthy and is not a legal equip target (has_legal_target false)."
+          "expected": "Goblin Assailant is not legendary, so it is not worthy and is not a legal equip target (has_legal_target false).",
+          "operation": "replace_card"
         },
         {
           "label": "wrong_colour",
           "polarity": "does_not_fire",
           "delta": "A's creature is Terrian, World Tyrant (legendary, green) instead of Tyrox.",
-          "expected": "Terrian is neither red nor white, so it is not worthy and is not a legal equip target (has_legal_target false)."
+          "expected": "Terrian is neither red nor white, so it is not worthy and is not a legal equip target (has_legal_target false).",
+          "operation": "replace_card"
         }
       ],
       "cards": [

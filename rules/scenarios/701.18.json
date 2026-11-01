@@ -50,25 +50,37 @@
           "label": "land_already_played",
           "polarity": "does_not_fire",
           "delta": "A has already played a land this turn.",
-          "expected": "Playing Forest is not legal. Forest stays in hand."
+          "expected": "Playing Forest is not legal. Forest stays in hand.",
+          "operation": {
+            "unclassifiable": "A land has already been played this turn; no fork operation changes the turn's history."
+          }
         },
         {
           "label": "combat_step",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "Playing Forest is not legal. Forest stays in hand."
+          "expected": "Playing Forest is not legal. Forest stays in hand.",
+          "operation": {
+            "unclassifiable": "The step differs; no fork operation changes the phase or step."
+          }
         },
         {
           "label": "stack_not_empty",
           "polarity": "does_not_fire",
           "delta": "B's Shock targeting A is on the stack in A's main phase (B's Mountain is tapped for it), and A has priority.",
-          "expected": "Playing Forest is not legal. Forest stays in hand."
+          "expected": "Playing Forest is not legal. Forest stays in hand.",
+          "operation": {
+            "unclassifiable": "A spell is on the stack; no fork operation casts a spell."
+          }
         },
         {
           "label": "opponents_turn",
           "polarity": "does_not_fire",
           "delta": "B is the active player (the step is still main1); B has passed priority with an empty stack and A has priority.",
-          "expected": "Playing Forest is not legal on B's turn. Forest stays in hand."
+          "expected": "Playing Forest is not legal on B's turn. Forest stays in hand.",
+          "operation": {
+            "unclassifiable": "The other player is active; no fork operation changes whose turn it is."
+          }
         }
       ],
       "cards": [
@@ -131,7 +143,10 @@
           "label": "land_played",
           "polarity": "does_not_fire",
           "delta": "Instead of casting Rampant Growth, A plays a Forest from hand first.",
-          "expected": "Playing the second Forest from hand is not legal; it stays in hand."
+          "expected": "Playing the second Forest from hand is not legal; it stays in hand.",
+          "operation": {
+            "unclassifiable": "The player plays a land instead of casting the spell; no fork operation changes a player's decisions."
+          }
         }
       ],
       "cards": [

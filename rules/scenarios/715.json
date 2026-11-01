@@ -55,13 +55,19 @@
           "label": "stomp_one_mana",
           "polarity": "other",
           "delta": "A has only one Mountain on the battlefield.",
-          "expected": "Not legal: Stomp's {1}{R} cost cannot be paid with one land."
+          "expected": "Not legal: Stomp's {1}{R} cost cannot be paid with one land.",
+          "operation": {
+            "unclassifiable": "A land is removed from the battlefield; no fork operation removes a permanent."
+          }
         },
         {
           "label": "normal_cast",
           "polarity": "does_not_fire",
           "delta": "A attempts to cast Bonecrusher Giant as a creature instead of as an Adventure.",
-          "expected": "Not legal: the creature half costs {2}{R} and has sorcery timing, and A has two Mountains and it is B's upkeep."
+          "expected": "Not legal: the creature half costs {2}{R} and has sorcery timing, and A has two Mountains and it is B's upkeep.",
+          "operation": {
+            "unclassifiable": "The player chooses to cast the card's other face; no fork operation changes how a spell is cast."
+          }
         }
       ],
       "cards": [
@@ -124,7 +130,10 @@
           "label": "cast_as_creature",
           "polarity": "does_not_fire",
           "delta": "A casts Bonecrusher Giant as a creature (tapping three Mountains) instead of as an Adventure.",
-          "expected": "The spell on the stack has the card's normal characteristics and is a creature spell. Essence Scatter can legally target it and counters it; Bonecrusher Giant goes to A's graveyard."
+          "expected": "The spell on the stack has the card's normal characteristics and is a creature spell. Essence Scatter can legally target it and counters it; Bonecrusher Giant goes to A's graveyard.",
+          "operation": {
+            "unclassifiable": "The player casts the card's creature face instead of its Adventure; no fork operation changes how a spell is cast."
+          }
         }
       ],
       "cards": [
@@ -133,7 +142,17 @@
         "Bonecrusher Giant",
         "Essence Scatter"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate that targets a stack object has no legal target because the stack object lacks the characteristic the targeting clause needs.",
+        "near_miss": "A candidate whose targeting clause has a legal target.",
+        "params": {
+          "bit": "has_legal_target"
+        },
+        "needs": []
+      }
     },
     {
       "id": "715.3c-1",
@@ -188,13 +207,19 @@
           "label": "no_copy",
           "polarity": "does_not_fire",
           "delta": "A does not cast Twincast.",
-          "expected": "Only the original Stomp resolves: Grizzly Bears dies, B stays at 20 life, and the Bonecrusher Giant card is exiled."
+          "expected": "Only the original Stomp resolves: Grizzly Bears dies, B stays at 20 life, and the Bonecrusher Giant card is exiled.",
+          "operation": {
+            "unclassifiable": "The copy spell is not cast; no fork operation removes a spell or an action."
+          }
         },
         {
           "label": "copy_of_creature_spell",
           "polarity": "other",
           "delta": "A casts Bonecrusher Giant as a creature (tapping three Mountains) and then tries to cast Twincast on it.",
-          "expected": "Twincast cannot be cast: a creature spell is not an instant or sorcery spell, so there is no legal target."
+          "expected": "Twincast cannot be cast: a creature spell is not an instant or sorcery spell, so there is no legal target.",
+          "operation": {
+            "unclassifiable": "The original is cast as its creature face and the copy spell then has no target; no fork operation changes how a spell is cast."
+          }
         }
       ],
       "cards": [
@@ -204,7 +229,18 @@
         "Bonecrusher Giant",
         "Twincast"
       ],
-      "forge_notes": "The copy's use of Stomp's alternative characteristics is also what 715.2b makes copiable."
+      "forge_notes": "The copy's use of Stomp's alternative characteristics is also what 715.2b makes copiable.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A copy-spell resolution holds a spell_copied event.",
+        "near_miss": "A CopySpellAbility resolution that produced no copy.",
+        "params": {
+          "event": "spell_copied",
+          "api": "CopySpellAbility"
+        },
+        "needs": []
+      }
     },
     {
       "id": "715.3d-1",
@@ -265,7 +301,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "In response to Stomp, B casts Cancel (tapping three Islands) targeting it.",
-          "expected": "Stomp is countered and the Bonecrusher Giant card goes to A's graveyard, not exile. Grizzly Bears survives. A cannot cast the card from exile because it is not there."
+          "expected": "Stomp is countered and the Bonecrusher Giant card goes to A's graveyard, not exile. Grizzly Bears survives. A cannot cast the card from exile because it is not there.",
+          "operation": {
+            "unclassifiable": "The opponent casts a counterspell in response; no fork operation adds a spell or an action."
+          }
         }
       ],
       "cards": [
@@ -275,7 +314,19 @@
         "Bonecrusher Giant",
         "Cancel"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolving spell moves from the stack to exile rather than the graveyard.",
+        "near_miss": "Not counted: an Adventure spell's acting line has no single api, so only the fires side is tagged.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "exile"
+        },
+        "needs": []
+      }
     },
     {
       "id": "715.2c-1",
@@ -326,7 +377,10 @@
           "label": "giant_and_island",
           "polarity": "other",
           "delta": "B's hand holds Bonecrusher Giant and Island.",
-          "expected": "B discards both cards: the graveyard holds exactly Bonecrusher Giant and Island, two cards in total, which is all Mind Rot asks for."
+          "expected": "B discards both cards: the graveyard holds exactly Bonecrusher Giant and Island, two cards in total, which is all Mind Rot asks for.",
+          "operation": {
+            "unclassifiable": "A card is added to a player's hand; no fork operation changes a hand."
+          }
         }
       ],
       "cards": [
@@ -335,7 +389,18 @@
         "Bonecrusher Giant",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A discard resolution holds a card_discarded event counting the cards actually discarded.",
+        "near_miss": "A Discard resolution that discarded nothing.",
+        "params": {
+          "event": "card_discarded",
+          "api": "Discard"
+        },
+        "needs": []
+      }
     },
     {
       "id": "715.4-1",
@@ -385,7 +450,10 @@
           "label": "instant_in_graveyard",
           "polarity": "other",
           "delta": "The card in A's graveyard is Shock instead of Bonecrusher Giant.",
-          "expected": "Shock is not a creature card, so Reanimate has no legal target and cannot be cast; nothing changes."
+          "expected": "Shock is not a creature card, so Reanimate has no legal target and cannot be cast; nothing changes.",
+          "operation": {
+            "unclassifiable": "A different card is in the graveyard; replace_card swaps permanents only, and no fork operation changes a graveyard."
+          }
         }
       ],
       "cards": [
@@ -394,7 +462,20 @@
         "Bonecrusher Giant",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A card is put from a graveyard onto the battlefield by a zone-change effect, so it was a legal target by its graveyard characteristics.",
+        "near_miss": "A ChangeZone resolution that moved no card from a graveyard to the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "graveyard",
+          "to_zone": "battlefield",
+          "api": "ChangeZone"
+        },
+        "needs": []
+      }
     }
   ]
 }

@@ -55,19 +55,28 @@
           "label": "horsemanship_blocks_horsemanship",
           "polarity": "does_not_fire",
           "delta": "B declares Wu Light Cavalry blocking Shu Cavalry instead (Grizzly Bears does not block).",
-          "expected": "The block is legal: Wu Light Cavalry has horsemanship and blocks Shu Cavalry."
+          "expected": "The block is legal: Wu Light Cavalry has horsemanship and blocks Shu Cavalry.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         },
         {
           "label": "horsemanship_blocks_plain",
           "polarity": "other",
           "delta": "B declares Wu Light Cavalry blocking Hill Giant instead (Grizzly Bears does not block).",
-          "expected": "The block is legal: a creature with horsemanship can block a creature without it."
+          "expected": "The block is legal: a creature with horsemanship can block a creature without it.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         },
         {
           "label": "plain_blocks_plain",
           "polarity": "other",
           "delta": "B declares Grizzly Bears blocking Hill Giant instead (Wu Light Cavalry does not block).",
-          "expected": "The block is legal: neither creature involved has horsemanship."
+          "expected": "The block is legal: neither creature involved has horsemanship.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -76,7 +85,18 @@
         "Wu Light Cavalry",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature that cannot legally block an attacker with an evasion restriction is among the forbidden blockers.",
+        "near_miss": "A creature that satisfies the restriction is among the legal blockers.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.31c-1",
@@ -133,7 +153,10 @@
           "label": "horsemanship_blocker",
           "polarity": "does_not_fire",
           "delta": "B declares Wu Light Cavalry blocking Shu Cavalry instead (Grizzly Bears does not block).",
-          "expected": "The block is legal: Wu Light Cavalry has horsemanship."
+          "expected": "The block is legal: Wu Light Cavalry has horsemanship.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -143,7 +166,18 @@
         "Grizzly Bears",
         "Plains"
       ],
-      "forge_notes": "Riding Red Hare is a sorcery cast in main1; the setup step is main1 and combat follows within the same decisions."
+      "forge_notes": "Riding Red Hare is a sorcery cast in main1; the setup step is main1 and combat follows within the same decisions.",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature that cannot legally block an attacker with an evasion restriction is among the forbidden blockers, however many instances of the ability the attacker has.",
+        "near_miss": "A creature that satisfies the restriction is among the legal blockers.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside"
+        },
+        "needs": []
+      }
     }
   ]
 }

@@ -58,7 +58,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B responds with Counterspell (tapping both Islands) and counters Blastoderm.",
-          "expected": "Blastoderm is countered and goes to A's graveyard; it never enters the battlefield, so no fade counters are put on anything."
+          "expected": "Blastoderm is countered and goes to A's graveyard; it never enters the battlefield, so no fade counters are put on anything.",
+          "operation": {
+            "unclassifiable": "A different spell cast."
+          }
         }
       ],
       "cards": [
@@ -67,7 +70,18 @@
         "Forest",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution puts fade counters on a permanent or removes them: a fading permanent entering with its fade counters, or a fading upkeep trigger removing one.",
+        "near_miss": "A fading permanent spell that never enters the battlefield gets no fade counters; not counted, since a permanent spell has no acting line to give an api.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "fade"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.32a-2",
@@ -115,25 +129,40 @@
           "label": "last_counter",
           "polarity": "other",
           "delta": "Blastoderm has 1 fade counter.",
-          "expected": "The last fade counter is removed: Blastoderm has 0 fade counters and stays on the battlefield (it is sacrificed only when no counter can be removed)."
+          "expected": "The last fade counter is removed: Blastoderm has 0 fade counters and stays on the battlefield (it is sacrificed only when no counter can be removed).",
+          "operation": "counters"
         },
         {
           "label": "no_counters",
           "polarity": "other",
           "delta": "Blastoderm has no fade counters.",
-          "expected": "No counter can be removed, so Blastoderm is sacrificed and is in A's graveyard."
+          "expected": "No counter can be removed, so Blastoderm is sacrificed and is in A's graveyard.",
+          "operation": "counters"
         },
         {
           "label": "opponents_upkeep",
           "polarity": "does_not_fire",
           "delta": "It is B's upkeep: B is the active player.",
-          "expected": "The fading trigger does not fire: Blastoderm keeps its 2 fade counters and stays on the battlefield."
+          "expected": "The fading trigger does not fire: Blastoderm keeps its 2 fade counters and stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "Changes the turn."
+          }
         }
       ],
       "cards": [
         "Blastoderm"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A fading trigger is evaluated at the beginning of an upkeep and fires in its controller's upkeep.",
+        "near_miss": "A fading trigger evaluated in another player's upkeep, not fired.",
+        "params": {
+          "keyword": "Fading"
+        },
+        "needs": []
+      }
     }
   ]
 }

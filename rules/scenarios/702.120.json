@@ -57,13 +57,19 @@
           "label": "one_mode",
           "polarity": "does_not_fire",
           "delta": "A chooses only the +3/+0 mode.",
-          "expected": "No escalate cost is added: the total cost is {R}, one Mountain is tapped and three stay untapped. Grizzly Bears is 5/2 without first strike until end of turn."
+          "expected": "No escalate cost is added: the total cost is {R}, one Mountain is tapped and three stay untapped. Grizzly Bears is 5/2 without first strike until end of turn.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         },
         {
           "label": "two_modes_three_lands",
           "polarity": "fires",
           "delta": "A controls three Mountains instead of four, and chooses both modes.",
-          "expected": "The total cost is {3}{R}, four mana, and A has only three lands. Casting Borrowed Hostility with both modes is not legal; the spell stays in A's hand."
+          "expected": "The total cost is {3}{R}, four mana, and A has only three lands. Casting Borrowed Hostility with both modes is not legal; the spell stays in A's hand.",
+          "operation": {
+            "unclassifiable": "adds, removes, attaches or changes the controller of a permanent, which no fork operation does"
+          }
         }
       ],
       "cards": [

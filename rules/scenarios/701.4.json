@@ -64,7 +64,10 @@
           "label": "not_beheld",
           "polarity": "does_not_fire",
           "delta": "A does not pay the optional behold cost when casting Dispelling Exhale.",
-          "expected": "No Dragon was beheld, so the unless-cost is {2}. B pays {2} with the untapped Swamp and Mountain and Llanowar Elves resolves onto the battlefield. Shivan Dragon is still destroyed by Doom Blade."
+          "expected": "No Dragon was beheld, so the unless-cost is {2}. B pays {2} with the untapped Swamp and Mountain and Llanowar Elves resolves onto the battlefield. Shivan Dragon is still destroyed by Doom Blade.",
+          "operation": {
+            "unclassifiable": "a different choice or decision by a player"
+          }
         }
       ],
       "cards": [

@@ -55,19 +55,24 @@
           "label": "one_island_tapped",
           "polarity": "fires",
           "delta": "One of A's Islands is tapped, so only {U} is available.",
-          "expected": "A cannot pay the whole {U}{U}; a partial payment is not allowed. Illusionary Wall moves to A's graveyard (sacrificed) and no mana is spent."
+          "expected": "A cannot pay the whole {U}{U}; a partial payment is not allowed. Illusionary Wall moves to A's graveyard (sacrificed) and no mana is spent.",
+          "operation": "tap"
         },
         {
           "label": "declines_to_pay",
           "polarity": "fires",
           "delta": "A chooses not to pay although both Islands are untapped.",
-          "expected": "Illusionary Wall moves to A's graveyard (sacrificed). Both Islands stay untapped."
+          "expected": "Illusionary Wall moves to A's graveyard (sacrificed). Both Islands stay untapped.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         },
         {
           "label": "no_prior_counters",
           "polarity": "other",
           "delta": "Illusionary Wall has no age counters before the trigger.",
-          "expected": "Illusionary Wall gets its first age counter (1 counter) and A pays only {U} (one Island tapped); Illusionary Wall stays on the battlefield."
+          "expected": "Illusionary Wall gets its first age counter (1 counter) and A pays only {U} (one Island tapped); Illusionary Wall stays on the battlefield.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -128,13 +133,17 @@
           "label": "one_island_tapped",
           "polarity": "fires",
           "delta": "One of A's three Islands is tapped at the start of the upkeep.",
-          "expected": "The first trigger resolves and is paid ({U}, 1 counter). The second trigger puts the 2nd counter, needs {1}{1} but only one Island is untapped, so A cannot pay and Illusionary Wall moves to A's graveyard (sacrificed)."
+          "expected": "The first trigger resolves and is paid ({U}, 1 counter). The second trigger puts the 2nd counter, needs {1}{1} but only one Island is untapped, so A cannot pay and Illusionary Wall moves to A's graveyard (sacrificed).",
+          "operation": "tap"
         },
         {
           "label": "single_instance",
           "polarity": "other",
           "delta": "Mana Chains is not on the battlefield, so Illusionary Wall has only its own instance.",
-          "expected": "Only one trigger: Illusionary Wall gets 1 age counter, A pays {U}, and Illusionary Wall stays on the battlefield with 1 age counter."
+          "expected": "Only one trigger: Illusionary Wall gets 1 age counter, A pays {U}, and Illusionary Wall stays on the battlefield with 1 age counter.",
+          "operation": {
+            "unclassifiable": "Removes a permanent from the battlefield."
+          }
         }
       ],
       "cards": [

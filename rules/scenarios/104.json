@@ -56,13 +56,19 @@
           "label": "angel",
           "polarity": "fires",
           "delta": "B also controls Platinum Angel, which says B's opponents can't win the game.",
-          "expected": "B still leaves the game by conceding and A still wins immediately; Platinum Angel's effect does not stop it."
+          "expected": "B still leaves the game by conceding and A still wins immediately; Platinum Angel's effect does not stop it.",
+          "operation": {
+            "unclassifiable": "adds a permanent (a can't-win static) to B's battlefield"
+          }
         },
         {
           "label": "no_concession",
           "polarity": "does_not_fire",
           "delta": "B does not concede; both players keep passing priority with an empty stack and B stays at 20 life.",
-          "expected": "No player has left the game, nobody wins, and the game continues."
+          "expected": "No player has left the game, nobody wins, and the game continues.",
+          "operation": {
+            "unclassifiable": "a different decision by B: B does not concede"
+          }
         }
       ],
       "cards": [
@@ -70,7 +76,17 @@
         "Forest",
         "Platinum Angel"
       ],
-      "forge_notes": "In the angel variant Platinum Angel is on B's battlefield from the start of that variant. Player.hasWon() in Forge returns false while cantWin() holds, so with Platinum Angel on B's side Forge may report the game as not won even though B conceded; the angel variant records the Comprehensive Rules result and may be where Forge deviates."
+      "forge_notes": "In the angel variant Platinum Angel is on B's battlefield from the start of that variant. Player.hasWon() in Forge returns false while cantWin() holds, so with Platinum Angel on B's side Forge may report the game as not won even though B conceded; the angel variant records the Comprehensive Rules result and may be where Forge deviates.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "The game ends with one player still in it, every opponent having left, and the record holds a player_won event naming that player.",
+        "near_miss": "No near miss is counted: without an API to restrict to, every resolution without a player_won would count.",
+        "params": {
+          "event": "player_won"
+        },
+        "needs": []
+      }
     },
     {
       "id": "104.2b-1",
@@ -119,7 +135,8 @@
           "label": "one_short",
           "polarity": "does_not_fire",
           "delta": "A has 39 life instead of 40.",
-          "expected": "Felidar Sovereign's trigger does not fire; nobody wins and the game proceeds to the draw step, where A draws Plains."
+          "expected": "Felidar Sovereign's trigger does not fire; nobody wins and the game proceeds to the draw step, where A draws Plains.",
+          "operation": "life"
         }
       ],
       "cards": [
@@ -127,7 +144,18 @@
         "Forest",
         "Plains"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "The resolution of an effect that states a player wins the game holds a player_won event naming that player.",
+        "near_miss": "A win-the-game resolution with no player_won: no player won, as when a static says that player can't win.",
+        "params": {
+          "event": "player_won",
+          "api": "WinsGame"
+        },
+        "needs": []
+      }
     },
     {
       "id": "104.3b-1",
@@ -177,7 +205,8 @@
           "label": "one_more_life",
           "polarity": "does_not_fire",
           "delta": "B has 4 life instead of 3.",
-          "expected": "B's life total goes from 4 to 1; B stays in the game and the game continues."
+          "expected": "B's life total goes from 4 to 1; B stays in the game and the game continues.",
+          "operation": "life"
         }
       ],
       "cards": [
@@ -185,7 +214,17 @@
         "Forest",
         "Lightning Bolt"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_game_loss",
+        "record_kind": "resolution",
+        "outcome": "A player whose life total, after the record's own life changes or damage, is 0 or less loses the game.",
+        "near_miss": "A player who lost life in the record and stays above 0.",
+        "params": {
+          "check": "life_zero"
+        },
+        "needs": []
+      }
     },
     {
       "id": "104.3c-1",
@@ -240,7 +279,10 @@
           "label": "enough_cards",
           "polarity": "does_not_fire",
           "delta": "A's library holds two cards (Mountain on top of Swamp) instead of one.",
-          "expected": "A draws both cards and the library is empty, but A attempted no draw from an empty library, so A stays in the game."
+          "expected": "A draws both cards and the library is empty, but A attempted no draw from an empty library, so A stays in the game.",
+          "operation": {
+            "unclassifiable": "changes A's library (adds a card), which no fork operation does"
+          }
         }
       ],
       "cards": [
@@ -302,7 +344,8 @@
           "label": "eight",
           "polarity": "does_not_fire",
           "delta": "B has 8 poison counters instead of 9.",
-          "expected": "B goes from 8 to 9 poison counters and A from 0 to 1; nobody loses and the game continues."
+          "expected": "B goes from 8 to 9 poison counters and A from 0 to 1; nobody loses and the game continues.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -310,7 +353,17 @@
         "Forest",
         "Ichor Rats"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_game_loss",
+        "record_kind": "resolution",
+        "outcome": "A player whose poison counters, after the record's poison changes, number ten or more loses the game.",
+        "near_miss": "A player who got poison counters in the record and stays at nine or fewer.",
+        "params": {
+          "check": "poison_ten"
+        },
+        "needs": []
+      }
     },
     {
       "id": "104.3e-1",
@@ -371,7 +424,10 @@
           "label": "cast_from_hand",
           "polarity": "does_not_fire",
           "delta": "A casts Phage the Untouchable from hand, tapping seven Swamps, instead of casting Zombify.",
-          "expected": "Phage was cast from A's hand, so its enters trigger does not fire; A stays in the game with Phage on the battlefield."
+          "expected": "Phage was cast from A's hand, so its enters trigger does not fire; A stays in the game with Phage on the battlefield.",
+          "operation": {
+            "unclassifiable": "a different spell cast: A casts the creature from hand instead of reanimating it"
+          }
         }
       ],
       "cards": [
@@ -380,7 +436,18 @@
         "Phage the Untouchable",
         "Zombify"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "The resolution of an effect that states a player loses the game holds a player_won event naming that player's opponent: the game ends against the losing player. No resolution carries player_lost, which the connector writes only on a GameLoss replacement's rewrite record.",
+        "near_miss": "A lose-the-game resolution with no player_won: the player did not lose, as when a static says that player can't lose.",
+        "params": {
+          "event": "player_won",
+          "api": "LosesGame"
+        },
+        "needs": []
+      }
     },
     {
       "id": "104.4a-1",
@@ -430,7 +497,8 @@
           "label": "b_has_more",
           "polarity": "does_not_fire",
           "delta": "B has 5 life instead of 4.",
-          "expected": "A goes to 0 life and loses; B goes to 1 life and stays in the game, so B wins and the game is not a draw."
+          "expected": "A goes to 0 life and loses; B goes to 1 life and stays in the game, so B wins and the game is not a draw.",
+          "operation": "life"
         }
       ],
       "cards": [
@@ -492,7 +560,10 @@
           "label": "other_target",
           "polarity": "does_not_fire",
           "delta": "Before casting Lightning Bolt, A casts Grizzly Bears (tapping both Forests) and it resolves; B then targets Grizzly Bears with the Reckoner trigger.",
-          "expected": "Grizzly Bears is not a Dragon, so no further trigger happens; the trigger resolves and destroys Grizzly Bears, then Lightning Bolt deals 3 damage to B's Reckoner, which survives as a 4/4; the game goes on."
+          "expected": "Grizzly Bears is not a Dragon, so no further trigger happens; the trigger resolves and destroys Grizzly Bears, then Lightning Bolt deals 3 damage to B's Reckoner, which survives as a 4/4; the game goes on.",
+          "operation": {
+            "unclassifiable": "a different spell cast and a different target: A casts another creature first and B's trigger targets it"
+          }
         }
       ],
       "cards": [
@@ -502,7 +573,10 @@
         "Lightning Bolt",
         "Grizzly Bears"
       ],
-      "forge_notes": "Forge ends such a game as a draw only once the stack exceeds 999 objects (MagicStack.add)."
+      "forge_notes": "Forge ends such a game as a draw only once the stack exceeds 999 objects (MagicStack.add).",
+      "detector": {
+        "none": "A loop draw is written in no record field: game_drawn is in KNOWN_UNEMITTED (tests/unit/effects/domain/test_event_schema_completeness.py, no emitter), player_won is not filed on a draw (BusEvents.gameOutcome returns null without a winner), and Forge's loop check (stack over 999 objects in MagicStack.add) leaves no trace in a resolution, trigger or gen-3 turn_action record; the looping triggers' own records look like any trigger."
+      }
     },
     {
       "id": "104.4c-1",
@@ -557,7 +631,8 @@
           "label": "two_counters",
           "polarity": "does_not_fire",
           "delta": "Divine Intervention has two intervention counters instead of one.",
-          "expected": "One counter is removed and one remains; the second trigger does not fire, the game is not a draw and proceeds to the draw step, where A draws Plains."
+          "expected": "One counter is removed and one remains; the second trigger does not fire, the game is not a draw and proceeds to the draw step, where A draws Plains.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -619,13 +694,17 @@
           "label": "not_exiled_with_karn",
           "polarity": "other",
           "delta": "Grizzly Bears was exiled by another effect instead of by Karn Liberated's second ability.",
-          "expected": "The game restarts as in the base, but neither exiled card returns to the battlefield; both go to A's library with the rest of A's cards."
+          "expected": "The game restarts as in the base, but neither exiled card returns to the battlefield; both go to A's library with the rest of A's cards.",
+          "operation": {
+            "unclassifiable": "changes which effect exiled a card in exile, a card history no fork operation sets"
+          }
         },
         {
           "label": "loyalty_13",
           "polarity": "does_not_fire",
           "delta": "Karn Liberated has 13 loyalty counters instead of 14.",
-          "expected": "A cannot pay the minus-14 cost, so the ability cannot be activated; the game does not restart."
+          "expected": "A cannot pay the minus-14 cost, so the ability cannot be activated; the game does not restart.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -635,7 +714,20 @@
         "Hill Giant",
         "Mountain"
       ],
-      "forge_notes": "Forge's RestartGame effect shuffles every non-exempt card into its owner's library and leaves the new hands to the phase handler. Whether a mulligan prompt appears for the AI is outside the scenario."
+      "forge_notes": "Forge's RestartGame effect shuffles every non-exempt card into its owner's library and leaves the new hands to the phase handler. Whether a mulligan prompt appears for the AI is outside the scenario.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "The resolution of a restart-the-game effect moves the players' cards from the battlefield into their owners' libraries (zone_change to library), the restart's own moves; game_restarted has no emitter.",
+        "near_miss": "A restart-the-game resolution that moved no permanent to a library.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "library",
+          "api": "RestartGame"
+        },
+        "needs": []
+      }
     }
   ]
 }

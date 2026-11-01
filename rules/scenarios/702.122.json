@@ -58,7 +58,10 @@
           "label": "not_enough_power",
           "polarity": "does_not_fire",
           "delta": "A taps Ornithopter (power 0) instead of Mons's Goblin Raiders.",
-          "expected": "Total power 0 is less than 1, so the crew ability cannot be activated. Smuggler's Copter stays a noncreature artifact and Ornithopter stays untapped."
+          "expected": "Total power 0 is less than 1, so the crew ability cannot be activated. Smuggler's Copter stays a noncreature artifact and Ornithopter stays untapped.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         }
       ],
       "cards": [
@@ -125,7 +128,10 @@
           "label": "other_creature_taps",
           "polarity": "does_not_fire",
           "delta": "A taps Grizzly Bears (power 2, not enchanted) instead of Mons's Goblin Raiders.",
-          "expected": "Grizzly Bears can crew. The crew ability is activated and resolves: Smuggler's Copter is a 3/3 flying artifact creature until end of turn and Grizzly Bears is tapped."
+          "expected": "Grizzly Bears can crew. The crew ability is activated and resolves: Smuggler's Copter is a 3/3 flying artifact creature until end of turn and Grizzly Bears is tapped.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         }
       ],
       "cards": [
@@ -134,7 +140,10 @@
         "Grizzly Bears",
         "Revoke Privileges"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "A creature that can't crew is never tapped for a crew cost, so the rule shows only as an absence: a crew activation's cost half lists the creatures that did pay (costs.tapped), and no decision, legality or cost field, gen-2 or gen-3, lists the creatures a restriction excluded from paying a cost."
+      }
     },
     {
       "id": "702.122e-1",
@@ -199,7 +208,10 @@
           "label": "crew_countered",
           "polarity": "does_not_fire",
           "delta": "B responds by casting Stifle with the Island, targeting the crew ability.",
-          "expected": "The crew ability is countered, so it never resolves and the trigger does not fire. Mobilizer Mech and Smuggler's Copter stay noncreature artifacts. Grizzly Bears and Mons's Goblin Raiders stay tapped as a paid cost. Stifle is in B's graveyard."
+          "expected": "The crew ability is countered, so it never resolves and the trigger does not fire. Mobilizer Mech and Smuggler's Copter stay noncreature artifacts. Grizzly Bears and Mons's Goblin Raiders stay tapped as a paid cost. Stifle is in B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different spell or ability is cast"
+          }
         }
       ],
       "cards": [
@@ -210,7 +222,17 @@
         "Island",
         "Stifle"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger with Mode$ BecomesCrewed is evaluated when a crew ability resolves and fires.",
+        "near_miss": "The same trigger evaluated and not fired because its condition (an intervening-if clause or the crew ability not resolving) fails.",
+        "params": {
+          "mode": "BecomesCrewed"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.122e-2",
@@ -269,7 +291,10 @@
           "label": "three_crew",
           "polarity": "does_not_fire",
           "delta": "A also taps Mons's Goblin Raiders as part of the crew cost, so three creatures (total power 5) crew it.",
-          "expected": "Mighty Servant of Leuk-o is a 6/6 trample artifact creature until end of turn, but its becomes-crewed trigger does not fire because three creatures crewed it. It does not gain the draw ability. Both Grizzly Bears and Mons's Goblin Raiders are tapped."
+          "expected": "Mighty Servant of Leuk-o is a 6/6 trample artifact creature until end of turn, but its becomes-crewed trigger does not fire because three creatures crewed it. It does not gain the draw ability. Both Grizzly Bears and Mons's Goblin Raiders are tapped.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         }
       ],
       "cards": [
@@ -277,7 +302,17 @@
         "Grizzly Bears",
         "Mons's Goblin Raiders"
       ],
-      "forge_notes": "Forge checks the clause through ValidCrewAmount on the creatures paid for the resolving crew ability."
+      "forge_notes": "Forge checks the clause through ValidCrewAmount on the creatures paid for the resolving crew ability.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger with Mode$ BecomesCrewed is evaluated when a crew ability resolves and fires.",
+        "near_miss": "The same trigger evaluated and not fired because its condition (an intervening-if clause or the crew ability not resolving) fails.",
+        "params": {
+          "mode": "BecomesCrewed"
+        },
+        "needs": []
+      }
     }
   ]
 }

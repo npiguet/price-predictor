@@ -44,7 +44,10 @@
           "label": "unsolved",
           "polarity": "does_not_fire",
           "delta": "The Case is not solved.",
-          "expected": "Grizzly Bears is a 2/2."
+          "expected": "Grizzly Bears is a 2/2.",
+          "operation": {
+            "unclassifiable": "Removes the solved designation from the Case; no fork operation sets or clears a designation."
+          }
         }
       ],
       "cards": [
@@ -103,7 +106,10 @@
           "label": "unsolved",
           "polarity": "does_not_fire",
           "delta": "The Case is not solved.",
-          "expected": "The Case's ability does not trigger. A's hand is still Shock and Mountain, the graveyard is empty and the library is unchanged."
+          "expected": "The Case's ability does not trigger. A's hand is still Shock and Mountain, the graveyard is empty and the library is unchanged.",
+          "operation": {
+            "unclassifiable": "Removes the solved designation from the Case; no fork operation sets or clears a designation."
+          }
         }
       ],
       "cards": [
@@ -160,14 +166,31 @@
           "label": "unsolved",
           "polarity": "does_not_fire",
           "delta": "The Case is not solved.",
-          "expected": "Activating the ability is not legal."
+          "expected": "Activating the ability is not legal.",
+          "operation": {
+            "unclassifiable": "Removes the solved designation from the Case; no fork operation sets or clears a designation."
+          }
         }
       ],
       "cards": [
         "Case of the Stashed Skeleton",
         "Swamp"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An activated ability restricted by a script condition on its own source (an Activation$ condition such as solved) is a candidate whose script_condition check passes.",
+        "near_miss": "A candidate whose script_condition check failed: the condition is not met.",
+        "params": {
+          "bit": "failed_check",
+          "check": "script_condition",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     }
   ]
 }

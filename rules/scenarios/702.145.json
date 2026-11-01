@@ -64,7 +64,10 @@
           "label": "stays_day",
           "polarity": "does_not_fire",
           "delta": "A does not cast Into the Night and passes priority.",
-          "expected": "It stays day during this turn. Hound Tamer stays front face up as a 3/3 Human Werewolf with trample and daybound."
+          "expected": "It stays day during this turn. Hound Tamer stays front face up as a 3/3 Human Werewolf with trample and daybound.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         }
       ],
       "cards": [
@@ -121,7 +124,10 @@
           "label": "day",
           "polarity": "does_not_fire",
           "delta": "It is day instead of night.",
-          "expected": "Hound Tamer enters front face up as a 3/3 Human Werewolf with trample. It is still day."
+          "expected": "Hound Tamer enters front face up as a 3/3 Human Werewolf with trample. It is still day.",
+          "operation": {
+            "unclassifiable": "changes the global day or night state"
+          }
         }
       ],
       "cards": [
@@ -179,7 +185,10 @@
           "label": "spell_cast",
           "polarity": "does_not_fire",
           "delta": "In main phase 1 A casts Shock targeting B, tapping the Mountain, and it resolves.",
-          "expected": "B takes 2 damage (life 18). As B's turn begins it stays day. Hound Tamer stays front face up as a 3/3."
+          "expected": "B takes 2 damage (life 18). As B's turn begins it stays day. Hound Tamer stays front face up as a 3/3.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         }
       ],
       "cards": [
@@ -236,7 +245,10 @@
           "label": "night",
           "polarity": "does_not_fire",
           "delta": "It is already night instead of neither day nor night.",
-          "expected": "It does not become day: it stays night and Hound Tamer enters transformed as Untamed Pup, a 4/4 Werewolf with trample."
+          "expected": "It does not become day: it stays night and Hound Tamer enters transformed as Untamed Pup, a 4/4 Werewolf with trample.",
+          "operation": {
+            "unclassifiable": "changes the global day or night state"
+          }
         }
       ],
       "cards": [
@@ -298,7 +310,10 @@
           "label": "one_spell",
           "polarity": "does_not_fire",
           "delta": "A casts only one Shock; the second Shock stays in hand.",
-          "expected": "B takes 2 damage (life 18). As B's turn begins it stays night. The permanent stays Untamed Pup, a 4/4 Werewolf with trample."
+          "expected": "B takes 2 damage (life 18). As B's turn begins it stays night. The permanent stays Untamed Pup, a 4/4 Werewolf with trample.",
+          "operation": {
+            "unclassifiable": "a different number of spells cast"
+          }
         }
       ],
       "cards": [
@@ -351,7 +366,8 @@
           "label": "no_nightbound",
           "polarity": "does_not_fire",
           "delta": "A's permanent is Grizzly Bears instead of Hound Tamer.",
-          "expected": "It stays neither day nor night. Grizzly Bears is a 2/2."
+          "expected": "It stays neither day nor night. Grizzly Bears is a 2/2.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -410,7 +426,8 @@
           "label": "no_daybound",
           "polarity": "does_not_fire",
           "delta": "A's creature is Gatstaf Shepherd (a Human Werewolf double-faced card without daybound) instead of Hound Tamer.",
-          "expected": "Moonmist resolves and Gatstaf Shepherd transforms into Gatstaf Howler, a 3/3 Werewolf with intimidate."
+          "expected": "Moonmist resolves and Gatstaf Shepherd transforms into Gatstaf Howler, a 3/3 Werewolf with intimidate.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -419,7 +436,19 @@
         "Forest",
         "Gatstaf Shepherd"
       ],
-      "forge_notes": "Forge implements the third daybound ability as a CantTransform static excepting the daybound cause. In the no_daybound variant nothing sets day or night, which does not affect the outcome."
+      "forge_notes": "Forge implements the third daybound ability as a CantTransform static excepting the daybound cause. In the no_daybound variant nothing sets day or night, which does not affect the outcome.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A transform resolution turns nothing over (no face_change event), as when the permanent's daybound or nightbound forbids any transform but its own.",
+        "near_miss": "A transform resolution turns a double-faced permanent over (a face_change event names it).",
+        "params": {
+          "event": "face_change",
+          "api": "SetState",
+          "absent": true
+        },
+        "needs": []
+      }
     }
   ]
 }

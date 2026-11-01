@@ -61,7 +61,10 @@
           "label": "hard_cast",
           "polarity": "does_not_fire",
           "delta": "A casts Overlord of the Floodpits for its mana cost {3}{U}{U}, tapping all five Islands, instead of its impending cost.",
-          "expected": "Overlord of the Floodpits enters with no time counters and is a 5/3 Enchantment Creature with flying. Its enters trigger also resolves as in the base case."
+          "expected": "Overlord of the Floodpits enters with no time counters and is a 5/3 Enchantment Creature with flying. Its enters trigger also resolves as in the base case.",
+          "operation": {
+            "unclassifiable": "A different casting choice: the card is cast for its mana cost rather than its impending cost; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -69,7 +72,18 @@
         "Overlord of the Floodpits",
         "Plains"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static ability removes the creature type from a permanent on the battlefield, as impending does while the permanent has a time counter.",
+        "near_miss": "The static applies to the board and removes no creature type.",
+        "params": {
+          "field": "types",
+          "value": "-creature"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.176a-2",
@@ -116,19 +130,33 @@
           "label": "last_counter",
           "polarity": "fires",
           "delta": "Overlord of the Floodpits starts with 1 time counter instead of 2.",
-          "expected": "The trigger fires and removes the last time counter: Overlord of the Floodpits has no time counters and becomes a 5/3 Enchantment Creature with flying."
+          "expected": "The trigger fires and removes the last time counter: Overlord of the Floodpits has no time counters and becomes a 5/3 Enchantment Creature with flying.",
+          "operation": "counters"
         },
         {
           "label": "opponents_end_step",
           "polarity": "does_not_fire",
           "delta": "It is B's turn (B is the active player) and B's end step instead of A's.",
-          "expected": "The trigger does not fire. Overlord of the Floodpits keeps 2 time counters and is still not a creature."
+          "expected": "The trigger does not fire. Overlord of the Floodpits keeps 2 time counters and is still not a creature.",
+          "operation": {
+            "unclassifiable": "Changes the active player, so whose turn it is; no fork operation changes the turn."
+          }
         }
       ],
       "cards": [
         "Overlord of the Floodpits"
       ],
-      "forge_notes": "The start state (cast for impending, 2 counters) needs puzzle-style setup or a prior turn; Forge tracks the impending status on the card."
+      "forge_notes": "The start state (cast for impending, 2 counters) needs puzzle-style setup or a prior turn; Forge tracks the impending status on the card.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "The impending end-step trigger (keyword-generated) is evaluated at its controller's end step and fires, removing a time counter.",
+        "near_miss": "The same impending trigger evaluated and not fired: not its controller's end step, or no time counter is left.",
+        "params": {
+          "keyword": "Impending"
+        },
+        "needs": []
+      }
     }
   ]
 }

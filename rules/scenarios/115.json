@@ -60,13 +60,19 @@
           "label": "no-permanent",
           "polarity": "fires",
           "delta": "Grizzly Bears is not on the battlefield, so the only creature is Runeclaw Bear in the graveyard.",
-          "expected": "Giant Growth has no legal target (the graveyard card is not a permanent); has_legal_target is false and can_play is false."
+          "expected": "Giant Growth has no legal target (the graveyard card is not a permanent); has_legal_target is false and can_play is false.",
+          "operation": {
+            "unclassifiable": "removes a permanent from the battlefield"
+          }
         },
         {
           "label": "graveyard-spell",
           "polarity": "does_not_fire",
           "delta": "The candidate spell is Raise Dead (target creature card in your graveyard) instead of Giant Growth.",
-          "expected": "Raise Dead's legal target list is exactly Runeclaw Bear in the graveyard; Grizzly Bears on the battlefield is not offered; can_play is true."
+          "expected": "Raise Dead's legal target list is exactly Runeclaw Bear in the graveyard; Grizzly Bears on the battlefield is not offered; can_play is true.",
+          "operation": {
+            "unclassifiable": "a different spell is the candidate"
+          }
         }
       ],
       "cards": [
@@ -129,7 +135,10 @@
           "label": "distinct",
           "polarity": "does_not_fire",
           "delta": "The two targets are Grizzly Bears (2 damage) and Llanowar Elves (1 damage).",
-          "expected": "The target list [Grizzly Bears, Llanowar Elves] is legal and Arc Lightning can be cast with it."
+          "expected": "The target list [Grizzly Bears, Llanowar Elves] is legal and Arc Lightning can be cast with it.",
+          "operation": {
+            "unclassifiable": "a different target choice by a player"
+          }
         }
       ],
       "cards": [
@@ -138,7 +147,10 @@
         "Grizzly Bears",
         "Llanowar Elves"
       ],
-      "forge_notes": "Forge builds divided-damage targets one at a time, so the verdict shows up as the second pick not being offered."
+      "forge_notes": "Forge builds divided-damage targets one at a time, so the verdict shows up as the second pick not being offered.",
+      "detector": {
+        "none": "Forge never offers an illegal target list, so no record holds a rejected repeat choice: a decision candidate's legal_targets is the union over its targeting clauses, and a stack object's stack_extras.targets lists only the targets actually chosen."
+      }
     },
     {
       "id": "115.3-2",
@@ -190,7 +202,10 @@
           "label": "different",
           "polarity": "does_not_fire",
           "delta": "The -0/-3 instance targets Llanowar Elves instead of Grizzly Bears.",
-          "expected": "Grizzly Bears becomes -1/2 until end of turn and stays on the battlefield; Llanowar Elves becomes 1/-2 and moves to B's graveyard."
+          "expected": "Grizzly Bears becomes -1/2 until end of turn and stays on the battlefield; Llanowar Elves becomes 1/-2 and moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different target choice by a player"
+          }
         }
       ],
       "cards": [
@@ -200,7 +215,10 @@
         "Grizzly Bears",
         "Llanowar Elves"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "No record field shows one object chosen by separate instances of 'target': refs.targets and stack_extras.targets read only the root ability's targets, not a sub-ability's, and no event names a per-instance target."
+      }
     },
     {
       "id": "115.4-1",
@@ -251,19 +269,28 @@
           "label": "creature",
           "polarity": "does_not_fire",
           "delta": "The chosen target is Grizzly Bears.",
-          "expected": "Grizzly Bears is a legal target of Lightning Bolt."
+          "expected": "Grizzly Bears is a legal target of Lightning Bolt.",
+          "operation": {
+            "unclassifiable": "a different target choice by a player"
+          }
         },
         {
           "label": "player",
           "polarity": "does_not_fire",
           "delta": "The chosen target is player B.",
-          "expected": "Player B is a legal target of Lightning Bolt."
+          "expected": "Player B is a legal target of Lightning Bolt.",
+          "operation": {
+            "unclassifiable": "a different target choice by a player"
+          }
         },
         {
           "label": "planeswalker",
           "polarity": "does_not_fire",
           "delta": "The chosen target is Jace Beleren.",
-          "expected": "Jace Beleren is a legal target of Lightning Bolt."
+          "expected": "Jace Beleren is a legal target of Lightning Bolt.",
+          "operation": {
+            "unclassifiable": "a different target choice by a player"
+          }
         }
       ],
       "cards": [
@@ -324,7 +351,10 @@
           "label": "other-spell",
           "polarity": "does_not_fire",
           "delta": "Lightning Bolt controlled by A, targeting Grizzly Bears, is on the stack.",
-          "expected": "Counterspell's legal target list is exactly Lightning Bolt; Counterspell itself is not offered; can_play is true."
+          "expected": "Counterspell's legal target list is exactly Lightning Bolt; Counterspell itself is not offered; can_play is true.",
+          "operation": {
+            "unclassifiable": "adds a spell to the stack"
+          }
         }
       ],
       "cards": [
@@ -334,7 +364,18 @@
         "Counterspell",
         "Lightning Bolt"
       ],
-      "forge_notes": "In the second variant the stack object is placed on the stack in setup as {\"card\": \"Lightning Bolt\", \"controller\": \"A\", \"targets\": [\"Grizzly Bears\"]}."
+      "forge_notes": "In the second variant the stack object is placed on the stack in setup as {\"card\": \"Lightning Bolt\", \"controller\": \"A\", \"targets\": [\"Grizzly Bears\"]}.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate that targets spells has no legal target when no other spell is on the stack: a spell is never a legal target for itself.",
+        "near_miss": "A spell-targeting candidate has a legal target: another spell is on the stack.",
+        "params": {
+          "bit": "has_legal_target",
+          "fires_when": false
+        },
+        "needs": []
+      }
     },
     {
       "id": "115.7a-1",
@@ -392,7 +433,8 @@
           "label": "no-other-target",
           "polarity": "does_not_fire",
           "delta": "A's other creature is Typhoid Rats (black) instead of Hill Giant.",
-          "expected": "Typhoid Rats is not a legal target of Doom Blade, so no other legal target exists and the original target is unchanged; Grizzly Bears moves to B's graveyard and Typhoid Rats stays on the battlefield."
+          "expected": "Typhoid Rats is not a legal target of Doom Blade, so no other legal target exists and the original target is unchanged; Grizzly Bears moves to B's graveyard and Typhoid Rats stays on the battlefield.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -460,13 +502,19 @@
           "label": "already-target",
           "polarity": "does_not_fire",
           "delta": "Arc Trail's second target is Spellskite instead of Llanowar Elves.",
-          "expected": "Changing the first target to Spellskite would leave both targets as Spellskite, which is illegal, so no target changes: Grizzly Bears is dealt 2 damage and moves to B's graveyard, Spellskite is dealt 1 damage and survives, Llanowar Elves is undamaged."
+          "expected": "Changing the first target to Spellskite would leave both targets as Spellskite, which is illegal, so no target changes: Grizzly Bears is dealt 2 damage and moves to B's graveyard, Spellskite is dealt 1 damage and survives, Llanowar Elves is undamaged.",
+          "operation": {
+            "unclassifiable": "a different target choice when the spell was cast"
+          }
         },
         {
           "label": "second-target",
           "polarity": "fires",
           "delta": "B changes the second target (Llanowar Elves) to Spellskite instead of the first.",
-          "expected": "Only the second target changes: Grizzly Bears is dealt 2 damage and moves to B's graveyard, Spellskite is dealt 1 damage and survives, Llanowar Elves is undamaged."
+          "expected": "Only the second target changes: Grizzly Bears is dealt 2 damage and moves to B's graveyard, Spellskite is dealt 1 damage and survives, Llanowar Elves is undamaged.",
+          "operation": {
+            "unclassifiable": "a different retargeting choice by the player resolving the target change"
+          }
         }
       ],
       "cards": [
@@ -537,13 +585,19 @@
           "label": "both",
           "polarity": "fires",
           "delta": "B changes the first target to Hill Giant and the second target to Grizzly Bears.",
-          "expected": "Both targets changed: Hill Giant becomes tapped, Grizzly Bears becomes tapped, Llanowar Elves stays untapped."
+          "expected": "Both targets changed: Hill Giant becomes tapped, Grizzly Bears becomes tapped, Llanowar Elves stays untapped.",
+          "operation": {
+            "unclassifiable": "a different retargeting choice by the player resolving the target change"
+          }
         },
         {
           "label": "illegal-change",
           "polarity": "does_not_fire",
           "delta": "B tries to change the first target to Llanowar Elves and leaves the second target Llanowar Elves.",
-          "expected": "The final target set (Llanowar Elves twice) is illegal for Toils of Night and Day's 'another target', so no target changes: Grizzly Bears and Llanowar Elves become tapped, Hill Giant stays untapped."
+          "expected": "The final target set (Llanowar Elves twice) is illegal for Toils of Night and Day's 'another target', so no target changes: Grizzly Bears and Llanowar Elves become tapped, Hill Giant stays untapped.",
+          "operation": {
+            "unclassifiable": "a different retargeting choice by the player resolving the target change"
+          }
         }
       ],
       "cards": [
@@ -617,7 +671,10 @@
           "label": "illegal-new-target",
           "polarity": "does_not_fire",
           "delta": "B tries to change the second target to Sol Ring instead of player A.",
-          "expected": "Sol Ring is not a legal target for 'any other target', so the change is not made and the targets stay Grizzly Bears and Llanowar Elves: Grizzly Bears is not dealt damage (illegal), Llanowar Elves is dealt 1 damage and moves to B's graveyard."
+          "expected": "Sol Ring is not a legal target for 'any other target', so the change is not made and the targets stay Grizzly Bears and Llanowar Elves: Grizzly Bears is not dealt damage (illegal), Llanowar Elves is dealt 1 damage and moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different retargeting choice by the player resolving the target change"
+          }
         }
       ],
       "cards": [
@@ -689,7 +746,10 @@
           "label": "same-twice",
           "polarity": "does_not_fire",
           "delta": "B chooses Llanowar Elves as the new first target and leaves the second target Llanowar Elves.",
-          "expected": "The final set (Llanowar Elves twice) is illegal for 'any other target', so no target changes: Grizzly Bears is dealt 2 damage and moves to B's graveyard, Llanowar Elves is dealt 1 damage and moves to B's graveyard."
+          "expected": "The final set (Llanowar Elves twice) is illegal for 'any other target', so no target changes: Grizzly Bears is dealt 2 damage and moves to B's graveyard, Llanowar Elves is dealt 1 damage and moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different retargeting choice by the player resolving the target change"
+          }
         }
       ],
       "cards": [
@@ -759,13 +819,19 @@
           "label": "second-slot",
           "polarity": "fires",
           "delta": "B changes the second target (Llanowar Elves) to player A instead.",
-          "expected": "The 1-damage share moves with the second target: Grizzly Bears is dealt 2 damage and moves to B's graveyard, player A is dealt 1 damage (life 19), Llanowar Elves is undamaged."
+          "expected": "The 1-damage share moves with the second target: Grizzly Bears is dealt 2 damage and moves to B's graveyard, player A is dealt 1 damage (life 19), Llanowar Elves is undamaged.",
+          "operation": {
+            "unclassifiable": "a different retargeting choice by the player resolving the target change"
+          }
         },
         {
           "label": "declines",
           "polarity": "other",
           "delta": "B chooses to leave both targets unchanged.",
-          "expected": "Nothing is retargeted: Grizzly Bears is dealt 2 damage and moves to B's graveyard, Llanowar Elves is dealt 1 damage and moves to B's graveyard, player A's life stays 20."
+          "expected": "Nothing is retargeted: Grizzly Bears is dealt 2 damage and moves to B's graveyard, Llanowar Elves is dealt 1 damage and moves to B's graveyard, player A's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different choice: the player declines to change targets"
+          }
         }
       ],
       "cards": [
@@ -838,7 +904,10 @@
           "label": "other-mode-target",
           "polarity": "does_not_fire",
           "delta": "B tries to choose player A as the new target instead of Mind Stone.",
-          "expected": "Player A is a legal target only of the unchosen graveyard-exile mode, so the target is not changed: Sol Ring moves to B's graveyard, Mind Stone stays on the battlefield, Grizzly Bears stays in A's graveyard."
+          "expected": "Player A is a legal target only of the unchosen graveyard-exile mode, so the target is not changed: Sol Ring moves to B's graveyard, Mind Stone stays on the battlefield, Grizzly Bears stays in A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different retargeting choice by the player resolving the target change"
+          }
         }
       ],
       "cards": [
@@ -907,13 +976,19 @@
           "label": "two-targets-same-creature",
           "polarity": "does_not_fire",
           "delta": "A casts Agony Warp (tapping Island and Swamp) choosing Grizzly Bears as the target of both instances instead of casting Shock.",
-          "expected": "The spell has two targets even though both are the same creature, so Spinerock Tyrant's trigger does not fire; Grizzly Bears gets -3/-0 and -0/-3 and moves to B's graveyard, Llanowar Elves is untouched."
+          "expected": "The spell has two targets even though both are the same creature, so Spinerock Tyrant's trigger does not fire; Grizzly Bears gets -3/-0 and -0/-3 and moves to B's graveyard, Llanowar Elves is untouched.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         },
         {
           "label": "two-different-targets",
           "polarity": "does_not_fire",
           "delta": "A casts Agony Warp choosing Grizzly Bears for -3/-0 and Llanowar Elves for -0/-3 instead of casting Shock.",
-          "expected": "The spell has two targets, so the trigger does not fire; Grizzly Bears becomes -1/2 and stays, Llanowar Elves moves to B's graveyard."
+          "expected": "The spell has two targets, so the trigger does not fire; Grizzly Bears becomes -1/2 and stays, Llanowar Elves moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         }
       ],
       "cards": [
@@ -984,13 +1059,19 @@
           "label": "target-leaves",
           "polarity": "does_not_fire",
           "delta": "After B casts Rebuff the Wicked and passes, A casts Unsummon with Island on Grizzly Bears, and Grizzly Bears returns to B's hand before Rebuff resolves.",
-          "expected": "Shock no longer targets a permanent B controls (the departed target is ignored), so Rebuff the Wicked's target is illegal and it fizzles; Shock then fizzles because its target is gone; both go to the graveyard and no damage is dealt."
+          "expected": "Shock no longer targets a permanent B controls (the departed target is ignored), so Rebuff the Wicked's target is illegal and it fizzles; Shock then fizzles because its target is gone; both go to the graveyard and no damage is dealt.",
+          "operation": {
+            "unclassifiable": "an extra spell cast and resolved before the checked spell resolves"
+          }
         },
         {
           "label": "target-illegal-but-present",
           "polarity": "fires",
           "delta": "Before casting Rebuff the Wicked, B casts Vines of Vastwood with Forest on Grizzly Bears and it resolves, so A's Shock can no longer legally target Grizzly Bears.",
-          "expected": "Grizzly Bears is still on the battlefield, so Shock still targets a permanent B controls and Rebuff the Wicked is legal and resolves: Shock is countered (not fizzled) and goes to A's graveyard; Grizzly Bears is undamaged."
+          "expected": "Grizzly Bears is still on the battlefield, so Shock still targets a permanent B controls and Rebuff the Wicked is legal and resolves: Shock is countered (not fizzled) and goes to A's graveyard; Grizzly Bears is undamaged.",
+          "operation": {
+            "unclassifiable": "an extra spell cast and resolved before the checking spell is cast"
+          }
         }
       ],
       "cards": [
@@ -1058,7 +1139,10 @@
           "label": "two-objects",
           "polarity": "does_not_fire",
           "delta": "Agony Warp's -0/-3 instance targets Llanowar Elves instead of Mirrorwing Dragon.",
-          "expected": "The spell targets two different objects, so the trigger does not fire and no copy is made: Mirrorwing Dragon becomes 1/5 and stays, Llanowar Elves moves to B's graveyard, Grizzly Bears is untouched."
+          "expected": "The spell targets two different objects, so the trigger does not fire and no copy is made: Mirrorwing Dragon becomes 1/5 and stays, Llanowar Elves moves to B's graveyard, Grizzly Bears is untouched.",
+          "operation": {
+            "unclassifiable": "a different target choice by a player"
+          }
         }
       ],
       "cards": [

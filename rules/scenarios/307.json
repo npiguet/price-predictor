@@ -53,31 +53,46 @@
           "label": "main2_empty_stack",
           "polarity": "fires",
           "delta": "The step is main2 instead of main1.",
-          "expected": "Casting Lava Spike is legal: can_play is true and B is a legal target."
+          "expected": "Casting Lava Spike is legal: can_play is true and B is a legal target.",
+          "operation": {
+            "unclassifiable": "Changes the phase or step, not a property a fork operation sets."
+          }
         },
         {
           "label": "combat_step",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "Casting Lava Spike is not legal: can_play is false."
+          "expected": "Casting Lava Spike is not legal: can_play is false.",
+          "operation": {
+            "unclassifiable": "Changes the phase or step, not a property a fork operation sets."
+          }
         },
         {
           "label": "opponents_turn",
           "polarity": "does_not_fire",
           "delta": "The active player is B (step main1; B has passed priority so A holds it) instead of A.",
-          "expected": "Casting Lava Spike is not legal: can_play is false."
+          "expected": "Casting Lava Spike is not legal: can_play is false.",
+          "operation": {
+            "unclassifiable": "Changes whose turn it is, which no fork operation does."
+          }
         },
         {
           "label": "stack_not_empty",
           "polarity": "does_not_fire",
           "delta": "Lightning Bolt, cast by A and targeting B, is on the stack and A has just received priority.",
-          "expected": "Casting Lava Spike is not legal: can_play is false."
+          "expected": "Casting Lava Spike is not legal: can_play is false.",
+          "operation": {
+            "unclassifiable": "Puts an object on the stack, which no fork operation does."
+          }
         },
         {
           "label": "from_graveyard",
           "polarity": "does_not_fire",
           "delta": "Lava Spike is in A's graveyard instead of A's hand.",
-          "expected": "Casting Lava Spike is not legal: it is not offered as a castable card."
+          "expected": "Casting Lava Spike is not legal: it is not offered as a castable card.",
+          "operation": {
+            "unclassifiable": "Changes a hand, graveyard or library, not a property a fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -85,7 +100,20 @@
         "Lava Spike",
         "Lightning Bolt"
       ],
-      "forge_notes": "The stack_not_empty variant needs Lightning Bolt already on the stack with A holding priority, a state that must be built as a puzzle state or an interventional fork."
+      "forge_notes": "The stack_not_empty variant needs Lightning Bolt already on the stack with A holding priority, a state that must be built as a puzzle state or an interventional fork.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A sorcery cast candidate whose timing is legal: main phase of its owner's turn, empty stack.",
+        "near_miss": "A candidate in another step, another player's turn or with a non-empty stack has timing false.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "307.2-1",
@@ -138,7 +166,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B casts Counterspell targeting Lava Spike, tapping both Islands, instead of passing.",
-          "expected": "Counterspell resolves and Lava Spike is countered. Its text is not followed: B stays at 20. Lava Spike is put into A's graveyard as it is countered and Counterspell into B's graveyard."
+          "expected": "Counterspell resolves and Lava Spike is countered. Its text is not followed: B stays at 20. Lava Spike is put into A's graveyard as it is countered and Counterspell into B's graveyard.",
+          "operation": {
+            "unclassifiable": "B casts Counterspell, a different spell cast and decision."
+          }
         }
       ],
       "cards": [
@@ -147,7 +178,19 @@
         "Lava Spike",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolved instant or sorcery moves from the stack to its owner's graveyard (zone_change) in its resolution's effect half.",
+        "near_miss": "A spell that did not resolve (countered) shows no effect half; not counted without an api.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "graveyard"
+        },
+        "needs": []
+      }
     },
     {
       "id": "307.4-1",
@@ -208,7 +251,10 @@
           "label": "creature_elf",
           "polarity": "does_not_fire",
           "delta": "A's graveyard holds Llanowar Elves instead of Elvish Promenade.",
-          "expected": "Llanowar Elves moves from A's graveyard to the battlefield. The graveyard keeps the three milled Forests."
+          "expected": "Llanowar Elves moves from A's graveyard to the battlefield. The graveyard keeps the three milled Forests.",
+          "operation": {
+            "unclassifiable": "Changes a hand, graveyard or library, not a property a fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -218,7 +264,10 @@
         "Elvish Promenade",
         "Llanowar Elves"
       ],
-      "forge_notes": "Harald's chapter I uses a hidden-origin ChangeZone with ChangeType Elf.YouOwn. Whether Forge offers the Kindred Sorcery as a choice or filters it out before the move is unverified; either way it ends in the graveyard."
+      "forge_notes": "Harald's chapter I uses a hidden-origin ChangeZone with ChangeType Elf.YouOwn. Whether Forge offers the Kindred Sorcery as a choice or filters it out before the move is unverified; either way it ends in the graveyard.",
+      "detector": {
+        "none": "A sorcery card that stays in its previous zone produces no event: no zone_change and no rewrite record is written for a move that never happens. Looked in the resolution effect half, rewrite records and EVENT_PARAMS."
+      }
     },
     {
       "id": "307.5-1",
@@ -273,25 +322,37 @@
           "label": "sorceries_allowed",
           "polarity": "fires",
           "delta": "Archon of Valor's Reach entered with the chosen type enchantment instead of sorcery.",
-          "expected": "Equipping Bonesplitter to Grizzly Bears is legal. Casting Lava Spike is also legal."
+          "expected": "Equipping Bonesplitter to Grizzly Bears is legal. Casting Lava Spike is also legal.",
+          "operation": {
+            "unclassifiable": "Changes a choice made as a permanent entered the battlefield, not a property a fork operation sets."
+          }
         },
         {
           "label": "combat_step",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "Equipping Bonesplitter is not legal (can_play false)."
+          "expected": "Equipping Bonesplitter is not legal (can_play false).",
+          "operation": {
+            "unclassifiable": "Changes the phase or step, not a property a fork operation sets."
+          }
         },
         {
           "label": "stack_not_empty",
           "polarity": "does_not_fire",
           "delta": "Lightning Bolt, cast by A and targeting B, is on the stack and A has just received priority.",
-          "expected": "Equipping Bonesplitter is not legal (can_play false)."
+          "expected": "Equipping Bonesplitter is not legal (can_play false).",
+          "operation": {
+            "unclassifiable": "Puts an object on the stack, which no fork operation does."
+          }
         },
         {
           "label": "opponents_turn",
           "polarity": "does_not_fire",
           "delta": "The active player is B (step main1; B has passed priority so A holds it) instead of A.",
-          "expected": "Equipping Bonesplitter is not legal (can_play false)."
+          "expected": "Equipping Bonesplitter is not legal (can_play false).",
+          "operation": {
+            "unclassifiable": "Changes whose turn it is, which no fork operation does."
+          }
         }
       ],
       "cards": [
@@ -302,7 +363,20 @@
         "Archon of Valor's Reach",
         "Lightning Bolt"
       ],
-      "forge_notes": "Archon's chosen type is made as it enters (an ETBReplacement ChooseType), so the state must be reached by casting it or through a puzzle file that sets the chosen type. The stack_not_empty variant needs Lightning Bolt already on the stack with A holding priority."
+      "forge_notes": "Archon's chosen type is made as it enters (an ETBReplacement ChooseType), so the state must be reached by casting it or through a puzzle file that sets the chosen type. The stack_not_empty variant needs Lightning Bolt already on the stack with A holding priority.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An only-as-a-sorcery action candidate whose timing is legal: main phase of own turn, empty stack.",
+        "near_miss": "A candidate in another step, another player's turn or with a non-empty stack has timing false.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "307.5a-1",
@@ -357,19 +431,28 @@
           "label": "beginning_of_combat",
           "polarity": "fires",
           "delta": "Soar is cast in the beginning_of_combat step instead of main1.",
-          "expected": "Grizzly Bears is 2/3 with flying until the next cleanup step, when A sacrifices Soar and it moves to A's graveyard."
+          "expected": "Grizzly Bears is 2/3 with flying until the next cleanup step, when A sacrifices Soar and it moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "Changes the phase or step, not a property a fork operation sets."
+          }
         },
         {
           "label": "bolt_on_stack",
           "polarity": "fires",
           "delta": "Soar is cast in main1 while B's Lightning Bolt targeting A is on the stack.",
-          "expected": "Soar resolves onto Grizzly Bears, then Bolt deals 3 damage to A (17). At the next cleanup step A sacrifices Soar and it moves to A's graveyard."
+          "expected": "Soar resolves onto Grizzly Bears, then Bolt deals 3 damage to A (17). At the next cleanup step A sacrifices Soar and it moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "Puts an object on the stack, which no fork operation does."
+          }
         },
         {
           "label": "opponents_turn",
           "polarity": "fires",
           "delta": "The active player is B (step main1; B has passed priority so A holds it) instead of A, so Soar is cast during B's main phase.",
-          "expected": "Soar enchants Grizzly Bears (2/3 with flying) until the cleanup step of B's turn, when A, its controller, sacrifices Soar and it moves to A's graveyard."
+          "expected": "Soar enchants Grizzly Bears (2/3 with flying) until the cleanup step of B's turn, when A, its controller, sacrifices Soar and it moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "Changes whose turn it is, which no fork operation does."
+          }
         }
       ],
       "cards": [

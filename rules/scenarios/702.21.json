@@ -58,13 +58,19 @@
           "label": "pays_ward",
           "polarity": "does_not_fire",
           "delta": "At the ward trigger's resolution A pays {2}, tapping the other two Mountains, instead of declining.",
-          "expected": "The ward trigger resolves and does not counter Shock. Shock resolves and deals 2 damage to Tomakul Honor Guard (3/1), which is destroyed and moves to B's graveyard. All three of A's Mountains are tapped."
+          "expected": "The ward trigger resolves and does not counter Shock. Shock resolves and deals 2 damage to Tomakul Honor Guard (3/1), which is destroyed and moves to B's graveyard. All three of A's Mountains are tapped.",
+          "operation": {
+            "unclassifiable": "A different choice by a player."
+          }
         },
         {
           "label": "own_creature",
           "polarity": "does_not_fire",
           "delta": "Tomakul Honor Guard is on A's battlefield instead of B's, and A casts Shock targeting their own creature.",
-          "expected": "Ward does not trigger, because the spell is not controlled by an opponent of the permanent's controller. Shock resolves and deals 2 damage to Tomakul Honor Guard, which is destroyed and moves to A's graveyard. No payment is asked; two of A's Mountains stay untapped."
+          "expected": "Ward does not trigger, because the spell is not controlled by an opponent of the permanent's controller. Shock resolves and deals 2 damage to Tomakul Honor Guard, which is destroyed and moves to A's graveyard. No payment is asked; two of A's Mountains stay untapped.",
+          "operation": {
+            "unclassifiable": "The permanent is under a different player's control: moving a permanent between players."
+          }
         }
       ],
       "cards": [
@@ -72,7 +78,21 @@
         "Tomakul Honor Guard",
         "Shock"
       ],
-      "forge_notes": "In own_creature the creature moves to A's side of the battlefield and B's side is empty; the decision to decline payment never comes up."
+      "forge_notes": "In own_creature the creature moves to A's side of the battlefield and B's side is empty; the decision to decline payment never comes up.",
+      "detector": {
+        "family": "resolution_outcome",
+        "record_kind": "resolution",
+        "outcome": "A spell or ability with a target is countered on the stack, as ward counters one whose controller does not pay the ward cost.",
+        "near_miss": "A spell or ability with a target resolves.",
+        "params": {
+          "outcome": "countered",
+          "near": [
+            "resolved"
+          ],
+          "targeted": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.21a-2",
@@ -127,7 +147,10 @@
           "label": "pays_ward",
           "polarity": "does_not_fire",
           "delta": "At the ward trigger's resolution A pays {2}, tapping both Islands, instead of declining.",
-          "expected": "The ward trigger resolves and does not counter the ability. The ability resolves and deals 1 damage to Tomakul Honor Guard (3/1), which is destroyed and moves to B's graveyard. Both Islands are tapped."
+          "expected": "The ward trigger resolves and does not counter the ability. The ability resolves and deals 1 damage to Tomakul Honor Guard (3/1), which is destroyed and moves to B's graveyard. Both Islands are tapped.",
+          "operation": {
+            "unclassifiable": "A different choice by a player."
+          }
         }
       ],
       "cards": [
@@ -135,7 +158,21 @@
         "Island",
         "Tomakul Honor Guard"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "resolution_outcome",
+        "record_kind": "resolution",
+        "outcome": "A spell or ability with a target is countered on the stack, as ward counters one whose controller does not pay the ward cost.",
+        "near_miss": "A spell or ability with a target resolves.",
+        "params": {
+          "outcome": "countered",
+          "near": [
+            "resolved"
+          ],
+          "targeted": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.21b-1",
@@ -191,7 +228,10 @@
           "label": "giant_growth_in_response",
           "polarity": "fires",
           "delta": "B casts Giant Growth on Raubahn in response to the ward trigger.",
-          "expected": "Raubahn is 5/5 when the ward trigger resolves, so the ward cost is 5 life. A has only 4 life and cannot pay, so Lightning Bolt is countered and put into A's graveyard. A stays at 4 life. Raubahn stays on the battlefield as a 5/5 with no damage."
+          "expected": "Raubahn is 5/5 when the ward trigger resolves, so the ward cost is 5 life. A has only 4 life and cannot pay, so Lightning Bolt is countered and put into A's graveyard. A stays at 4 life. Raubahn stays on the battlefield as a 5/5 with no damage.",
+          "operation": {
+            "unclassifiable": "A different spell is cast or activated, or none: a different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -201,7 +241,10 @@
         "Lightning Bolt",
         "Giant Growth"
       ],
-      "forge_notes": "Raubahn's ward is Ward:PayLife<X/...> with X = Count$CardPower, evaluated when the cost is paid."
+      "forge_notes": "Raubahn's ward is Ward:PayLife<X/...> with X = Count$CardPower, evaluated when the cost is paid.",
+      "detector": {
+        "none": "The ward cost's X value is not a record field: ward is a keyword-derived trigger, the payment shows only as the stack object's outcome or a life_change, and neither carries the value the cost took at resolution (looked at EVENT_PARAMS life_change and x_changed, and the resolution payloads)."
+      }
     }
   ]
 }

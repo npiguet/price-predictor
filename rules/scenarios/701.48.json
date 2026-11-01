@@ -59,13 +59,19 @@
           "label": "empty_hand",
           "polarity": "does_not_fire",
           "delta": "A's hand holds only Cram Session, so after it is cast A has no other card to discard.",
-          "expected": "A's life is 24. A has no card to discard, so nothing is discarded and nothing is drawn. A's hand is empty and Mountain stays on top of A's library. No Lesson is fetched because A has none outside the game."
+          "expected": "A's life is 24. A has no card to discard, so nothing is discarded and nothing is drawn. A's hand is empty and Mountain stays on top of A's library. No Lesson is fetched because A has none outside the game.",
+          "operation": {
+            "unclassifiable": "The hand's contents change; no fork operation changes a hand."
+          }
         },
         {
           "label": "declined",
           "polarity": "other",
           "delta": "A chooses not to discard Grizzly Bears when Learn resolves.",
-          "expected": "A's life is 24. No card is discarded and none is drawn. Grizzly Bears stays in A's hand and Mountain stays on top of A's library. No Lesson is fetched because A has none outside the game."
+          "expected": "A's life is 24. No card is discarded and none is drawn. Grizzly Bears stays in A's hand and Mountain stays on top of A's library. No Lesson is fetched because A has none outside the game.",
+          "operation": {
+            "unclassifiable": "The player declines to discard, a decision."
+          }
         }
       ],
       "cards": [
@@ -74,7 +80,18 @@
         "Grizzly Bears",
         "Mountain"
       ],
-      "forge_notes": "Forge's learnLesson offers sideboard Lessons and hand cards together; with an empty sideboard only the discard-and-draw branch and the no-op remain. The Lesson branch is 701.48a-2."
+      "forge_notes": "Forge's learnLesson offers sideboard Lessons and hand cards together; with an empty sideboard only the discard-and-draw branch and the no-op remain. The Lesson branch is 701.48a-2.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Learn resolution discards a card (and then draws).",
+        "near_miss": "A Learn resolution discards no card.",
+        "params": {
+          "event": "card_discarded",
+          "api": "Learn"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.48a-2",
@@ -127,7 +144,10 @@
           "label": "no_lesson",
           "polarity": "does_not_fire",
           "delta": "A's sideboard is empty.",
-          "expected": "A's life is 24. No card moves to A's hand and nothing is discarded or drawn; A's hand is empty and Mountain stays on top of A's library."
+          "expected": "A's life is 24. No card moves to A's hand and nothing is discarded or drawn; A's hand is empty and Mountain stays on top of A's library.",
+          "operation": {
+            "unclassifiable": "The sideboard's contents change; no fork operation changes cards outside the game."
+          }
         }
       ],
       "cards": [
@@ -136,7 +156,19 @@
         "Environmental Sciences",
         "Mountain"
       ],
-      "forge_notes": "Player.learnLesson reads Lesson cards from the Sideboard zone; the match must be started with Environmental Sciences in A's sideboard."
+      "forge_notes": "Player.learnLesson reads Lesson cards from the Sideboard zone; the match must be started with Environmental Sciences in A's sideboard.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Learn resolution with no discard puts a card into its controller's hand.",
+        "near_miss": "A Learn resolution puts no card into a hand.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "hand",
+          "api": "Learn"
+        },
+        "needs": []
+      }
     }
   ]
 }

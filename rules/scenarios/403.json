@@ -60,7 +60,10 @@
           "label": "in_hand",
           "polarity": "does_not_fire",
           "delta": "Grizzly Bears is a card in B's hand instead of on the battlefield.",
-          "expected": "Wrath of God destroys nothing; Grizzly Bears stays in B's hand and Centaur Courser stays in the graveyard."
+          "expected": "Wrath of God destroys nothing; Grizzly Bears stays in B's hand and Centaur Courser stays in the graveyard.",
+          "operation": {
+            "unclassifiable": "moves a card to a hand"
+          }
         }
       ],
       "cards": [
@@ -69,7 +72,20 @@
         "Grizzly Bears",
         "Centaur Courser"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A mass-destruction effect moves permanents from the battlefield to the graveyard and touches no card in another zone.",
+        "near_miss": "A DestroyAll resolution that moved no permanent from the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "graveyard",
+          "api": "DestroyAll"
+        },
+        "needs": []
+      }
     },
     {
       "id": "403.2-2",
@@ -118,7 +134,10 @@
           "label": "creature_on_battlefield",
           "polarity": "does_not_fire",
           "delta": "Grizzly Bears is on A's battlefield instead of in the graveyard.",
-          "expected": "Giant Growth has a legal target, Grizzly Bears, and A can cast it."
+          "expected": "Giant Growth has a legal target, Grizzly Bears, and A can cast it.",
+          "operation": {
+            "unclassifiable": "moves a card out of the graveyard and adds a permanent"
+          }
         }
       ],
       "cards": [
@@ -126,7 +145,18 @@
         "Giant Growth",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A card outside the battlefield is not a legal target: a targeting spell's candidate has no legal target.",
+        "near_miss": "A candidate with a legal target.",
+        "params": {
+          "bit": "has_legal_target",
+          "fires_when": false
+        },
+        "needs": []
+      }
     },
     {
       "id": "403.4-1",
@@ -191,13 +221,17 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B responds with Counterspell, tapping both Islands, and it counters Cloudshift.",
-          "expected": "Cloudshift is countered; Grizzly Bears never leaves the battlefield and keeps its +1/+1 counter and 1 damage as a 3/3."
+          "expected": "Cloudshift is countered; Grizzly Bears never leaves the battlefield and keeps its +1/+1 counter and 1 damage as a 3/3.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         },
         {
           "label": "etb_creature",
           "polarity": "other",
           "delta": "The creature is Elvish Visionary (1/1) with a +1/+1 counter and 1 damage instead of Grizzly Bears.",
-          "expected": "Elvish Visionary returns as a new 1/1 with no counter or damage and its enters trigger fires, so A draws Forest."
+          "expected": "Elvish Visionary returns as a new 1/1 with no counter or damage and its enters trigger fires, so A draws Forest.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -209,7 +243,20 @@
         "Elvish Visionary",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent is exiled and returned to the battlefield by a resolution, re-entering as a new object.",
+        "near_miss": "A ChangeZone resolution that does not return an exiled permanent to the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "exile",
+          "to_zone": "battlefield",
+          "api": "ChangeZone"
+        },
+        "needs": []
+      }
     }
   ]
 }

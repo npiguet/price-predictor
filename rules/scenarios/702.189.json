@@ -52,20 +52,36 @@
           "label": "does_not_attack",
           "polarity": "does_not_fire",
           "delta": "A does not attack with Fire Sages.",
-          "expected": "No firebending trigger fires and no mana is added. A cannot pay {1}{R}{R} with two Mountains, so Fire Sages gets no counter and B's life stays 20."
+          "expected": "No firebending trigger fires and no mana is added. A cannot pay {1}{R}{R} with two Mountains, so Fire Sages gets no counter and B's life stays 20.",
+          "operation": {
+            "unclassifiable": "A different choice by a player: no attack declared"
+          }
         },
         {
           "label": "mana_not_used_in_combat",
           "polarity": "does_not_fire",
           "delta": "A does not spend the firebending mana during combat and tries the activation in the second main phase.",
-          "expected": "The firebending trigger fires and A adds {R}, but the mana empties at the end of combat. In the second main phase A cannot pay {1}{R}{R} with two Mountains, so Fire Sages gets no counter. Fire Sages deals 2 combat damage to B (18)."
+          "expected": "The firebending trigger fires and A adds {R}, but the mana empties at the end of combat. In the second main phase A cannot pay {1}{R}{R} with two Mountains, so Fire Sages gets no counter. Fire Sages deals 2 combat damage to B (18).",
+          "operation": {
+            "unclassifiable": "A different choice by a player: when to use the mana"
+          }
         }
       ],
       "cards": [
         "Fire Sages",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A firebending trigger is evaluated as its creature attacks and fires, adding red mana.",
+        "near_miss": "A firebending trigger is evaluated and does not fire.",
+        "params": {
+          "keyword": "Firebending"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.189b-1",
@@ -127,7 +143,10 @@
           "label": "firebending_countered",
           "polarity": "does_not_fire",
           "delta": "In response to the firebending trigger, B casts Stifle, tapping Island, targeting the firebending trigger.",
-          "expected": "Stifle counters the firebending trigger, so A adds no {R}, and Avatar Aang's trigger does not fire. A draws no card (hand 0, library 2)."
+          "expected": "Stifle counters the firebending trigger, so A adds no {R}, and Avatar Aang's trigger does not fire. A draws no card (hand 0, library 2).",
+          "operation": {
+            "unclassifiable": "Casts an additional spell"
+          }
         }
       ],
       "cards": [
@@ -137,7 +156,17 @@
         "Stifle",
         "Forest"
       ],
-      "forge_notes": "Forge fires the Firebend trigger from the mana effect of the firebending ability (ManaEffect.java)."
+      "forge_notes": "Forge fires the Firebend trigger from the mana effect of the firebending ability (ManaEffect.java).",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on a player firebending is evaluated and fires when the firebending ability resolves.",
+        "near_miss": "The trigger is evaluated and does not fire.",
+        "params": {
+          "mode": "Firebend"
+        },
+        "needs": []
+      }
     }
   ]
 }

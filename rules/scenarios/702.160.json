@@ -53,7 +53,10 @@
           "label": "full_cost",
           "polarity": "does_not_fire",
           "delta": "A casts Boulderbranch Golem for its normal mana cost {7}, tapping all seven Forests.",
-          "expected": "Boulderbranch Golem is a colorless 6/5 with mana value 7. Its enters trigger gains A 6 life: A is at 26."
+          "expected": "Boulderbranch Golem is a colorless 6/5 with mana value 7. Its enters trigger gains A 6 life: A is at 26.",
+          "operation": {
+            "unclassifiable": "a different cast choice"
+          }
         }
       ],
       "cards": [
@@ -108,20 +111,40 @@
           "label": "three_forests",
           "polarity": "does_not_fire",
           "delta": "A controls three Forests, not four.",
-          "expected": "Neither casting is legal: the prototyped cost {3}{G} needs four mana."
+          "expected": "Neither casting is legal: the prototyped cost {3}{G} needs four mana.",
+          "operation": {
+            "unclassifiable": "removing a permanent"
+          }
         },
         {
           "label": "seven_forests",
           "polarity": "other",
           "delta": "A controls seven Forests.",
-          "expected": "Both castings are legal: prototyped for {3}{G} and for the full {7}."
+          "expected": "Both castings are legal: prototyped for {3}{G} and for the full {7}.",
+          "operation": {
+            "unclassifiable": "adding permanents"
+          }
         }
       ],
       "cards": [
         "Forest",
         "Boulderbranch Golem"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A card with an alternative cost is a legal candidate when its cost is payable.",
+        "near_miss": "The same card is a candidate rejected because the cost cannot be paid.",
+        "params": {
+          "bit": "failed_check",
+          "check": "cost",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     }
   ]
 }

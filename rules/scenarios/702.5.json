@@ -62,7 +62,10 @@
           "label": "target_land",
           "polarity": "does_not_fire",
           "delta": "A targets the untapped Forest instead of Grizzly Bears.",
-          "expected": "The cast is legal. Wild Growth resolves and enters attached to that Forest."
+          "expected": "The cast is legal. Wild Growth resolves and enters attached to that Forest.",
+          "operation": {
+            "unclassifiable": "A different target chosen for the Aura spell (a land instead of the creature); no fork operation changes a targeting choice."
+          }
         }
       ],
       "cards": [
@@ -116,7 +119,10 @@
           "label": "creature_present",
           "polarity": "does_not_fire",
           "delta": "B controls Grizzly Bears.",
-          "expected": "Guard Duty has Grizzly Bears as its only legal target; the cast is legal and Guard Duty resolves attached to Grizzly Bears."
+          "expected": "Guard Duty has Grizzly Bears as its only legal target; the cast is legal and Guard Duty resolves attached to Grizzly Bears.",
+          "operation": {
+            "unclassifiable": "A creature is added to B's battlefield; no fork operation adds a permanent."
+          }
         }
       ],
       "cards": [
@@ -124,7 +130,18 @@
         "Guard Duty",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell with a target requirement has no legal target on the board, so its has_legal_target verdict is false.",
+        "near_miss": "The spell has a legal target and has_legal_target is true.",
+        "params": {
+          "bit": "has_legal_target",
+          "fires_when": false
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.5d-1",
@@ -177,7 +194,10 @@
           "label": "target_creature",
           "polarity": "does_not_fire",
           "delta": "A targets Grizzly Bears instead of player B.",
-          "expected": "The cast is illegal: Grizzly Bears is not a legal target for an Aura that enchants a player."
+          "expected": "The cast is illegal: Grizzly Bears is not a legal target for an Aura that enchants a player.",
+          "operation": {
+            "unclassifiable": "A different target chosen for the Aura spell (a creature instead of a player); no fork operation changes a targeting choice."
+          }
         }
       ],
       "cards": [

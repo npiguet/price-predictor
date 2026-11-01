@@ -6,19 +6,41 @@
   "scenarios": [
     {
       "id": "114.2-1",
-      "rules": ["114.2"],
+      "rules": [
+        "114.2"
+      ],
       "title": "An ability that says 'you get an emblem' puts a player-owned emblem in the command zone",
       "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {
-          "A": [{"card": "Gideon, Ally of Zendikar", "counters": {"loyalty": 4}}, "Grizzly Bears"],
-          "B": ["Island", "Grizzly Bears"]
+        "life": {
+          "A": 20,
+          "B": 20
         },
-        "hand": {"B": ["Stifle"]},
-        "graveyard": {}, "library": {}, "exile": {},
+        "battlefield": {
+          "A": [
+            {
+              "card": "Gideon, Ally of Zendikar",
+              "counters": {
+                "loyalty": 4
+              }
+            },
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Island",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "B": [
+            "Stifle"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": "Neither player has an emblem. A has not activated a loyalty ability this turn. Gideon is not summoning sick in any relevant way (planeswalker abilities have no tap cost)."
       },
       "decisions": [
@@ -29,27 +51,67 @@
         "In the 'countered' variant, B instead casts Stifle by tapping Island, targeting the [-4] ability on the stack; A passes priority and Stifle resolves first."
       ],
       "variants": [
-        {"label": "base", "polarity": "fires", "delta": "", "expected": "The ability resolves. A has one emblem in the command zone, owned and controlled by A and with no types, mana cost or color. A's Grizzly Bears is 3/3 and B's Grizzly Bears stays 2/2. Gideon is in A's graveyard (0 loyalty) and the emblem remains."},
-        {"label": "countered", "polarity": "does_not_fire", "delta": "B responds by casting Stifle on the [-4] ability.", "expected": "The ability is countered and does not resolve. Neither player has an emblem. A's Grizzly Bears stays 2/2 and B's Grizzly Bears stays 2/2. Gideon is in A's graveyard (0 loyalty, the cost was already paid) and Stifle is in B's graveyard."}
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The ability resolves. A has one emblem in the command zone, owned and controlled by A and with no types, mana cost or color. A's Grizzly Bears is 3/3 and B's Grizzly Bears stays 2/2. Gideon is in A's graveyard (0 loyalty) and the emblem remains."
+        },
+        {
+          "label": "countered",
+          "polarity": "does_not_fire",
+          "delta": "B responds by casting Stifle on the [-4] ability.",
+          "expected": "The ability is countered and does not resolve. Neither player has an emblem. A's Grizzly Bears stays 2/2 and B's Grizzly Bears stays 2/2. Gideon is in A's graveyard (0 loyalty, the cost was already paid) and Stifle is in B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different decision: the opponent casts a spell in response"
+          }
+        }
       ],
-      "cards": ["Gideon, Ally of Zendikar", "Grizzly Bears", "Island", "Stifle"],
+      "cards": [
+        "Gideon, Ally of Zendikar",
+        "Grizzly Bears",
+        "Island",
+        "Stifle"
+      ],
       "forge_notes": "Forge implements the emblem as an Effect object (Duration$ Permanent) named 'Emblem — Gideon, Ally of Zendikar' in the command zone. Stifle can target it because its ValidTgts includes Card and Emblem."
     },
     {
       "id": "114.4-1",
-      "rules": ["114.4"],
+      "rules": [
+        "114.4"
+      ],
       "title": "A triggered ability of an emblem triggers from the command zone",
       "record_kind": "trigger",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {
-          "A": [{"card": "Chandra, Torch of Defiance", "counters": {"loyalty": 7}}, "Mountain"],
-          "B": ["Grizzly Bears"]
+        "life": {
+          "A": 20,
+          "B": 20
         },
-        "hand": {"A": ["Shock", "Mountain"]},
-        "graveyard": {}, "library": {}, "exile": {},
+        "battlefield": {
+          "A": [
+            {
+              "card": "Chandra, Torch of Defiance",
+              "counters": {
+                "loyalty": 7
+              }
+            },
+            "Mountain"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Shock",
+            "Mountain"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": "A has not yet played a land this turn. Neither player has an emblem at the start."
       },
       "decisions": [
@@ -61,26 +123,62 @@
         "In the 'land' variant, A does not cast Shock; A plays the Mountain from hand as a land drop instead, and no further actions are taken."
       ],
       "variants": [
-        {"label": "base", "polarity": "fires", "delta": "", "expected": "The emblem's ability triggers when Shock is cast, even though Chandra is no longer on the battlefield. The trigger deals 5 damage to B (B at 15) and then Shock resolves: Grizzly Bears takes 2 damage and moves to B's graveyard."},
-        {"label": "land", "polarity": "does_not_fire", "delta": "A plays a land from hand instead of casting a spell.", "expected": "The emblem's ability does not trigger because no spell was cast. B stays at 20 life, Grizzly Bears is undamaged, and Shock stays in A's hand."}
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The emblem's ability triggers when Shock is cast, even though Chandra is no longer on the battlefield. The trigger deals 5 damage to B (B at 15) and then Shock resolves: Grizzly Bears takes 2 damage and moves to B's graveyard."
+        },
+        {
+          "label": "land",
+          "polarity": "does_not_fire",
+          "delta": "A plays a land from hand instead of casting a spell.",
+          "expected": "The emblem's ability does not trigger because no spell was cast. B stays at 20 life, Grizzly Bears is undamaged, and Shock stays in A's hand.",
+          "operation": {
+            "unclassifiable": "a different decision: the player plays a land instead of casting a spell"
+          }
+        }
       ],
-      "cards": ["Chandra, Torch of Defiance", "Mountain", "Shock", "Grizzly Bears"],
+      "cards": [
+        "Chandra, Torch of Defiance",
+        "Mountain",
+        "Shock",
+        "Grizzly Bears"
+      ],
       "forge_notes": "Chandra's script has Cost$ SubCounter<7/LOYALTY>; the setup needs a loyalty counters override of 7 on the battlefield card. The emblem is an Effect in the command zone whose Triggers$ TrigSpellCast has ValidActivatingPlayer$ You."
     },
     {
       "id": "114.4-2",
-      "rules": ["114.4"],
+      "rules": [
+        "114.4"
+      ],
       "title": "A static ability of an emblem applies from the command zone after its source has left",
       "record_kind": "continuous",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {
-          "A": [{"card": "Gideon, Ally of Zendikar", "counters": {"loyalty": 4}}, "Grizzly Bears"],
-          "B": ["Grizzly Bears"]
+        "life": {
+          "A": 20,
+          "B": 20
         },
-        "hand": {}, "graveyard": {}, "library": {}, "exile": {},
+        "battlefield": {
+          "A": [
+            {
+              "card": "Gideon, Ally of Zendikar",
+              "counters": {
+                "loyalty": 4
+              }
+            },
+            "Grizzly Bears"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": "Neither player has an emblem at the start. The two Grizzly Bears are the only creatures on the battlefield."
       },
       "decisions": [
@@ -89,10 +187,26 @@
         "Read the board in the same main phase, with the stack empty. The variant 'opponents creature' reads B's Grizzly Bears instead of A's."
       ],
       "variants": [
-        {"label": "base", "polarity": "fires", "delta": "", "expected": "With Gideon already in the graveyard, the emblem's static ability applies from the command zone: A's Grizzly Bears is 3/3."},
-        {"label": "opponents_creature", "polarity": "does_not_fire", "delta": "The creature read is B's Grizzly Bears instead of A's.", "expected": "B's Grizzly Bears is 2/2; the emblem's ability affects only creatures its controller (A) controls."}
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "With Gideon already in the graveyard, the emblem's static ability applies from the command zone: A's Grizzly Bears is 3/3."
+        },
+        {
+          "label": "opponents_creature",
+          "polarity": "does_not_fire",
+          "delta": "The creature read is B's Grizzly Bears instead of A's.",
+          "expected": "B's Grizzly Bears is 2/2; the emblem's ability affects only creatures its controller (A) controls.",
+          "operation": {
+            "unclassifiable": "changes which creature the outcome is read on, not a fact of the game"
+          }
+        }
       ],
-      "cards": ["Gideon, Ally of Zendikar", "Grizzly Bears"],
+      "cards": [
+        "Gideon, Ally of Zendikar",
+        "Grizzly Bears"
+      ],
       "forge_notes": "The static ability lives on an Effect object in the command zone (StaticAbilities$ STPump with AffectedZone$ Battlefield)."
     }
   ]

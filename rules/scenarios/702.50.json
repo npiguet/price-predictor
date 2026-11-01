@@ -79,7 +79,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B casts Counterspell on Undying Flames, paying {U}{U} with both Islands, instead of passing priority.",
-          "expected": "Undying Flames is countered and moves to A's graveyard. No card is exiled from A's library, B's life total stays 20 and no epic delayed trigger is created, so nothing is put on the stack at A's next upkeep."
+          "expected": "Undying Flames is countered and moves to A's graveyard. No card is exiled from A's library, B's life total stays 20 and no epic delayed trigger is created, so nothing is put on the stack at A's next upkeep.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -161,7 +164,10 @@
           "label": "epic_countered",
           "polarity": "does_not_fire",
           "delta": "B casts Counterspell on Undying Flames, paying {U}{U} with both Islands, instead of passing priority.",
-          "expected": "Undying Flames is countered. Casting Shock targeting B is legal for A with the seventh Mountain."
+          "expected": "Undying Flames is countered. Casting Shock targeting B is legal for A with the seventh Mountain.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -174,7 +180,21 @@
         "Centaur Courser",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell candidate fails the static_prohibition check because a static effect stops its controller from casting spells.",
+        "near_miss": "A candidate of the same kind passing the check.",
+        "params": {
+          "bit": "failed_check",
+          "check": "static_prohibition",
+          "responsible_static": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     }
   ]
 }

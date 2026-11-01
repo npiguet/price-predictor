@@ -59,19 +59,28 @@
           "label": "remove",
           "polarity": "fires",
           "delta": "A chooses to remove a time counter instead of adding one.",
-          "expected": "Calciderm has 0 time counters; vanishing's trigger sacrifices it, and Calciderm is in A's graveyard."
+          "expected": "Calciderm has 0 time counters; vanishing's trigger sacrifices it, and Calciderm is in A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different choice by a player"
+          }
         },
         {
           "label": "choose_nothing",
           "polarity": "does_not_fire",
           "delta": "A chooses no permanent to time travel.",
-          "expected": "Calciderm still has 1 time counter and stays on the battlefield."
+          "expected": "Calciderm still has 1 time counter and stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "a different choice by a player"
+          }
         },
         {
           "label": "opponents_permanent",
           "polarity": "does_not_fire",
           "delta": "Calciderm is on B's battlefield instead of A's, with the same one time counter; A has no permanent to choose.",
-          "expected": "Calciderm still has 1 time counter on B's battlefield; time travel affects only permanents the caster controls."
+          "expected": "Calciderm still has 1 time counter on B's battlefield; time travel affects only permanents the caster controls.",
+          "operation": {
+            "unclassifiable": "moves a permanent to another controller"
+          }
         }
       ],
       "cards": [
@@ -79,7 +88,19 @@
         "Calciderm",
         "Island"
       ],
-      "forge_notes": "Forge's TimeTravelEffect offers the caster's exiled cards that have suspend and the caster's battlefield permanents with a time counter."
+      "forge_notes": "Forge's TimeTravelEffect offers the caster's exiled cards that have suspend and the caster's battlefield permanents with a time counter.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A TimeTravel resolution adds or removes a time counter on a permanent its controller controls or a suspended card its controller owns (counter_change of type time).",
+        "near_miss": "A TimeTravel resolution that changes no time counter: the player chose no object, or had none to choose.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "time",
+          "api": "TimeTravel"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.56a-2",
@@ -140,13 +161,19 @@
           "label": "add",
           "polarity": "does_not_fire",
           "delta": "A chooses to add a time counter instead of removing one (and casts nothing).",
-          "expected": "Rift Bolt has 2 time counters and stays in exile; B stays at 20."
+          "expected": "Rift Bolt has 2 time counters and stays in exile; B stays at 20.",
+          "operation": {
+            "unclassifiable": "a different choice by a player"
+          }
         },
         {
           "label": "choose_nothing",
           "polarity": "does_not_fire",
           "delta": "A chooses no card to time travel (and casts nothing).",
-          "expected": "Rift Bolt still has 1 time counter in exile; B stays at 20."
+          "expected": "Rift Bolt still has 1 time counter in exile; B stays at 20.",
+          "operation": {
+            "unclassifiable": "a different choice by a player"
+          }
         }
       ],
       "cards": [
@@ -154,7 +181,20 @@
         "Rift Bolt",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A TimeTravel resolution removes a time counter from a suspended card its controller owns or a permanent its controller controls (counter_change of type time, delta -1).",
+        "near_miss": "A TimeTravel resolution that removes no time counter: the player added one instead, or chose no object.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "time",
+          "delta": -1,
+          "api": "TimeTravel"
+        },
+        "needs": []
+      }
     }
   ]
 }

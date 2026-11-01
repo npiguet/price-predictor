@@ -67,7 +67,10 @@
           "label": "other_detained",
           "polarity": "does_not_fire",
           "delta": "Arrester's trigger targets Elite Vanguard instead of Grizzly Bears.",
-          "expected": "Elite Vanguard is not a legal blocker. Grizzly Bears is a legal blocker."
+          "expected": "Elite Vanguard is not a legal blocker. Grizzly Bears is a legal blocker.",
+          "operation": {
+            "unclassifiable": "The trigger takes a different target; no fork operation changes a target."
+          }
         }
       ],
       "cards": [
@@ -77,7 +80,18 @@
         "Grizzly Bears",
         "Elite Vanguard"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature an effect forbids from blocking, as detain does, stands outside the legal blockers list.",
+        "near_miss": "A creature nothing forbids from blocking stands inside the legal blockers list.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.35a-2",
@@ -146,7 +160,10 @@
           "label": "detainer_next_turn",
           "polarity": "does_not_fire",
           "delta": "B makes no attack and passes the turn; the check is made in A's next upkeep, with B holding priority.",
-          "expected": "B can activate Prodigal Pyromancer's {T} ability (can_play true)."
+          "expected": "B can activate Prodigal Pyromancer's {T} ability (can_play true).",
+          "operation": {
+            "unclassifiable": "The check moves to the detaining player's next turn; no fork operation changes the turn or step."
+          }
         }
       ],
       "cards": [
@@ -156,7 +173,18 @@
         "Elite Vanguard",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate action a restriction forbids, such as a detained permanent's activated ability before its detainer's next turn, has can_play false.",
+        "near_miss": "A candidate action no restriction forbids has can_play true.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": false
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.35a-3",
@@ -218,7 +246,10 @@
           "label": "bears_detained",
           "polarity": "does_not_fire",
           "delta": "Arrester's trigger targets Grizzly Bears instead of Prodigal Pyromancer.",
-          "expected": "B can activate Prodigal Pyromancer's {T} ability (can_play true)."
+          "expected": "B can activate Prodigal Pyromancer's {T} ability (can_play true).",
+          "operation": {
+            "unclassifiable": "The trigger takes a different target; no fork operation changes a target."
+          }
         }
       ],
       "cards": [
@@ -228,7 +259,18 @@
         "Prodigal Pyromancer",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An activated ability a restriction forbids, such as a detained permanent's, has can_play false.",
+        "near_miss": "An activated ability no restriction forbids has can_play true.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": false
+        },
+        "needs": []
+      }
     }
   ]
 }

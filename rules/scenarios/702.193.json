@@ -53,13 +53,19 @@
           "label": "entered_on_earlier_turn",
           "polarity": "does_not_fire",
           "delta": "Hulk entered the battlefield on an earlier turn (not summoning sick).",
-          "expected": "The activation is not legal: the cost stays {6}{R}{G} and three Forests cannot pay it. Hulk gets no counters."
+          "expected": "The activation is not legal: the cost stays {6}{R}{G} and three Forests cannot pay it. Hulk gets no counters.",
+          "operation": {
+            "unclassifiable": "Changes when the permanent entered, a history fact"
+          }
         },
         {
           "label": "already_activated",
           "polarity": "does_not_fire",
           "delta": "Hulk's power-up ability was already activated once (Hulk has five +1/+1 counters).",
-          "expected": "The activation is not legal: a power-up ability can be activated only once. Hulk keeps its five counters (11/10)."
+          "expected": "The activation is not legal: a power-up ability can be activated only once. Hulk keeps its five counters (11/10).",
+          "operation": {
+            "unclassifiable": "Changes the activation history"
+          }
         }
       ],
       "cards": [
@@ -114,7 +120,8 @@
           "label": "gamma_grotesque_extra_green",
           "polarity": "does_not_fire",
           "delta": "A's creature is Gamma Grotesque (mana cost {2}{G}, power-up {4}{G}{G}), also entered this turn, instead of Hulk.",
-          "expected": "The cost after adjustment is {2}{G}: Gamma Grotesque's {G} removes one {G} and its {2} removes only generic mana, so one {G} remains. Three Plains cannot pay {G}, so the activation is not legal."
+          "expected": "The cost after adjustment is {2}{G}: Gamma Grotesque's {G} removes one {G} and its {2} removes only generic mana, so one {G} remains. Three Plains cannot pay {G}, so the activation is not legal.",
+          "operation": "replace_card"
         }
       ],
       "cards": [

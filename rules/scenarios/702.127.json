@@ -53,7 +53,10 @@
           "label": "from_hand",
           "polarity": "does_not_fire",
           "delta": "The split card Cut // Ribbons is in A's hand instead of A's graveyard.",
-          "expected": "Ribbons can't be cast from any zone other than a graveyard, so casting it from hand is not legal. The card stays in A's hand and B's life stays 20."
+          "expected": "Ribbons can't be cast from any zone other than a graveyard, so casting it from hand is not legal. The card stays in A's hand and B's life stays 20.",
+          "operation": {
+            "unclassifiable": "changes a hand or library or the zone a card starts in"
+          }
         }
       ],
       "cards": [
@@ -62,7 +65,21 @@
         "Cut",
         "Ribbons"
       ],
-      "forge_notes": "Forge lists the split card under the name of its first half; variant from_hand moves it to A's hand."
+      "forge_notes": "Forge lists the split card under the name of its first half; variant from_hand moves it to A's hand.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell candidate passes the zone check: it is in a zone it may be cast from, as an aftermath half is in its owner's graveyard.",
+        "near_miss": "A candidate that fails the zone check, such as an aftermath half in a hand.",
+        "params": {
+          "bit": "failed_check",
+          "check": "zone",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "702.127a-2",
@@ -128,13 +145,19 @@
           "label": "cut_from_hand",
           "polarity": "does_not_fire",
           "delta": "A casts the Cut half from the hand copy, targeting Grizzly Bears, tapping the Mountain and a Swamp, instead of casting Ribbons.",
-          "expected": "Cut resolves and deals 4 damage to Grizzly Bears, which is destroyed. The hand copy moves to A's graveyard, not to exile. The graveyard copy is untouched and B's life stays 20."
+          "expected": "Cut resolves and deals 4 damage to Grizzly Bears, which is destroyed. The hand copy moves to A's graveyard, not to exile. The graveyard copy is untouched and B's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different spell or ability is cast"
+          }
         },
         {
           "label": "ribbons_countered",
           "polarity": "fires",
           "delta": "B responds by casting Counterspell with both Islands, targeting Ribbons.",
-          "expected": "Ribbons is countered and does not resolve; B's life stays 20. The graveyard copy is exiled instead of staying in the graveyard: it is in exile and A's graveyard is empty."
+          "expected": "Ribbons is countered and does not resolve; B's life stays 20. The graveyard copy is exiled instead of staying in the graveyard: it is in exile and A's graveyard is empty.",
+          "operation": {
+            "unclassifiable": "a different spell or ability is cast"
+          }
         }
       ],
       "cards": [
@@ -146,7 +169,19 @@
         "Island",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A spell that resolves or is countered after being cast under an exile-on-leaving rule moves from the stack to exile instead of the graveyard.",
+        "near_miss": "Not counted: without api only the fires side is tagged (the near miss would be such a spell leaving the stack for its owner's graveyard).",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "exile"
+        },
+        "needs": []
+      }
     }
   ]
 }

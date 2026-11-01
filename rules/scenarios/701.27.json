@@ -61,7 +61,8 @@
           "label": "not_double_faced",
           "polarity": "does_not_fire",
           "delta": "A controls Elite Vanguard (a Human, not double-faced) instead of Delver of Secrets.",
-          "expected": "Elite Vanguard stays a 2/1 white Human Soldier; it has no other face to show. Moonmist is in A's graveyard."
+          "expected": "Elite Vanguard stays a 2/1 white Human Soldier; it has no other face to show. Moonmist is in A's graveyard.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -70,7 +71,18 @@
         "Moonmist",
         "Elite Vanguard"
       ],
-      "forge_notes": "Moonmist selects Humans with Defined$ Valid Creature.Human; the non-double-faced Human is simply skipped by SetState."
+      "forge_notes": "Moonmist selects Humans with Defined$ Valid Creature.Human; the non-double-faced Human is simply skipped by SetState.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution turns a double-faced permanent over (a face_change event names it).",
+        "near_miss": "A transform resolution that produced no face_change.",
+        "params": {
+          "event": "face_change",
+          "api": "SetState"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.27b-1",
@@ -132,7 +144,10 @@
           "label": "turn_face_up",
           "polarity": "fires",
           "delta": "Instead of casting Moonmist, A turns Daru Lancer face up by paying its morph cost {2}{W}{W} with all four lands.",
-          "expected": "Daru Lancer is face up (3/4 first strike). Aven Farseer's trigger fires and resolves: Aven Farseer has one +1/+1 counter and is 2/2. Delver of Secrets stays on its front face."
+          "expected": "Daru Lancer is face up (3/4 first strike). Aven Farseer's trigger fires and resolves: Aven Farseer has one +1/+1 counter and is 2/2. Delver of Secrets stays on its front face.",
+          "operation": {
+            "unclassifiable": "The player takes a different action (a morph turned face up instead of a spell cast); no fork operation changes a player's action."
+          }
         }
       ],
       "cards": [
@@ -143,7 +158,17 @@
         "Daru Lancer",
         "Moonmist"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A turned-face-up trigger fires when a permanent it watches is turned face up.",
+        "near_miss": "A turned-face-up trigger evaluated against a face-up turn it does not watch does not fire; a transform is no face-up turn and evaluates no turned-face-up trigger.",
+        "params": {
+          "mode": "TurnFaceUp"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.27e-1",
@@ -199,7 +224,8 @@
           "label": "into_human",
           "polarity": "does_not_fire",
           "delta": "A controls Delver of Secrets instead of Villagers of Estwald.",
-          "expected": "Delver of Secrets is Insectile Aberration, a Human Insect. Cult of the Waxing Moon's trigger does not fire and A has no Wolf token."
+          "expected": "Delver of Secrets is Insectile Aberration, a Human Insect. Cult of the Waxing Moon's trigger does not fire and A has no Wolf token.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -209,7 +235,17 @@
         "Delver of Secrets",
         "Moonmist"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A transformed trigger fires when a permanent transforms and its new face meets the trigger's condition.",
+        "near_miss": "A transformed trigger evaluated against a transform whose new face does not meet the condition.",
+        "params": {
+          "mode": "Transformed"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.27e-2",
@@ -269,7 +305,10 @@
           "label": "converts_to_non_creature",
           "polarity": "does_not_fire",
           "delta": "It is B's turn (B's main phase 1), and A activates Arcee's ability at instant speed after B passes priority.",
-          "expected": "Grizzly Bears has 1 damage marked. Arcee is Arcee, Acrobatic Coupe, a Vehicle that is not a creature on B's turn. Cult's trigger does not fire and A has no Wolf token."
+          "expected": "Grizzly Bears has 1 damage marked. Arcee is Arcee, Acrobatic Coupe, a Vehicle that is not a creature on B's turn. Cult's trigger does not fire and A has no Wolf token.",
+          "operation": {
+            "unclassifiable": "The turn changes to B's, with the ability activated at instant speed; no fork operation changes the turn."
+          }
         }
       ],
       "cards": [
@@ -278,7 +317,17 @@
         "Arcee, Sharpshooter",
         "Grizzly Bears"
       ],
-      "forge_notes": "Forge fires its Transformed trigger for Mode$ Transform whatever the effect's wording. Arcee's living metal makes it a creature only on A's turn."
+      "forge_notes": "Forge fires its Transformed trigger for Mode$ Transform whatever the effect's wording. Arcee's living metal makes it a creature only on A's turn.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A transformed trigger fires when a permanent transforms or converts and its new face meets the trigger's condition.",
+        "near_miss": "A transformed trigger evaluated against a transform whose new face does not meet the condition.",
+        "params": {
+          "mode": "Transformed"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.27f-1",
@@ -334,7 +383,10 @@
           "label": "transformed_in_response",
           "polarity": "does_not_fire",
           "delta": "With the trigger on the stack, A casts Moonmist in response (tapping both Forests) and it resolves first; then the trigger resolves, A revealing Lightning Bolt.",
-          "expected": "Moonmist transforms Delver of Secrets to Insectile Aberration. The trigger resolves, Lightning Bolt is revealed, and the transform instruction is ignored: Insectile Aberration stays face up and does not turn back into Delver of Secrets."
+          "expected": "Moonmist transforms Delver of Secrets to Insectile Aberration. The trigger resolves, Lightning Bolt is revealed, and the transform instruction is ignored: Insectile Aberration stays face up and does not turn back into Delver of Secrets.",
+          "operation": {
+            "unclassifiable": "An additional spell is cast in response; no fork operation casts a spell."
+          }
         }
       ],
       "cards": [
@@ -343,7 +395,18 @@
         "Moonmist",
         "Lightning Bolt"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution turns a double-faced permanent over (a face_change event names it).",
+        "near_miss": "A transform resolution that produced no face_change.",
+        "params": {
+          "event": "face_change",
+          "api": "SetState"
+        },
+        "needs": []
+      }
     }
   ]
 }

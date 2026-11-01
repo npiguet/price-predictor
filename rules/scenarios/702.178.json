@@ -52,7 +52,10 @@
           "label": "speed_3",
           "polarity": "does_not_fire",
           "delta": "A's speed is 3 instead of 4.",
-          "expected": "Gastal Raider is a 2/1 without menace."
+          "expected": "Gastal Raider is a 2/1 without menace.",
+          "operation": {
+            "unclassifiable": "changes a player's speed, which no fork operation sets"
+          }
         }
       ],
       "cards": [
@@ -111,7 +114,10 @@
           "label": "creature_target",
           "polarity": "does_not_fire",
           "delta": "Shock targets B's Grizzly Bears instead of player B.",
-          "expected": "Grizzly Bears is dealt 2 damage and moves to B's graveyard. B's life stays 20. A's speed stays 3 and Gastal Raider is a 2/1 without menace."
+          "expected": "Grizzly Bears is dealt 2 damage and moves to B's graveyard. B's life stays 20. A's speed stays 3 and Gastal Raider is a 2/1 without menace.",
+          "operation": {
+            "unclassifiable": "a different target for the spell, a player's choice no fork operation makes"
+          }
         }
       ],
       "cards": [
@@ -172,13 +178,19 @@
           "label": "speed_3_in_graveyard",
           "polarity": "does_not_fire",
           "delta": "A's speed is 3 instead of 4.",
-          "expected": "The activation is not legal: Goblin Surveyor has no such ability. It stays in A's graveyard and A's hand stays empty."
+          "expected": "The activation is not legal: Goblin Surveyor has no such ability. It stays in A's graveyard and A's hand stays empty.",
+          "operation": {
+            "unclassifiable": "changes a player's speed, which no fork operation sets"
+          }
         },
         {
           "label": "speed_4_on_battlefield",
           "polarity": "does_not_fire",
           "delta": "Goblin Surveyor is on A's battlefield instead of in A's graveyard.",
-          "expected": "The activation is not legal. Goblin Surveyor stays on the battlefield and A's hand stays empty."
+          "expected": "The activation is not legal. Goblin Surveyor stays on the battlefield and A's hand stays empty.",
+          "operation": {
+            "unclassifiable": "moves a card from the graveyard to the battlefield, adding a permanent, which no fork operation does"
+          }
         }
       ],
       "cards": [
@@ -186,7 +198,21 @@
         "Mountain",
         "Forest"
       ],
-      "forge_notes": "Variant speed_4_on_battlefield moves the card from the graveyard to the battlefield, so A's graveyard is empty in that variant."
+      "forge_notes": "Variant speed_4_on_battlefield moves the card from the graveyard to the battlefield, so A's graveyard is empty in that variant.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate ability that states it functions from a zone other than the battlefield passes the zone check while its card is in that zone.",
+        "near_miss": "A candidate ability activated from a zone it does not function from fails the zone check.",
+        "params": {
+          "bit": "failed_check",
+          "check": "zone",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     }
   ]
 }

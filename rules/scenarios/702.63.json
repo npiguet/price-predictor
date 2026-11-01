@@ -57,13 +57,19 @@
           "label": "vanishing_4",
           "polarity": "fires",
           "delta": "A casts Calciderm (Vanishing 4), tapping Plains, Plains, Swamp, Swamp, instead of Waning Wurm.",
-          "expected": "Calciderm enters with four time counters."
+          "expected": "Calciderm enters with four time counters.",
+          "operation": {
+            "unclassifiable": "a different spell is cast; no fork operation changes the cast"
+          }
         },
         {
           "label": "no_vanishing",
           "polarity": "does_not_fire",
           "delta": "A casts Walking Corpse, tapping Swamp and Swamp, instead of Waning Wurm.",
-          "expected": "Walking Corpse enters with no time counters."
+          "expected": "Walking Corpse enters with no time counters.",
+          "operation": {
+            "unclassifiable": "a different spell is cast; no fork operation changes the cast"
+          }
         }
       ],
       "cards": [
@@ -73,7 +79,18 @@
         "Calciderm",
         "Walking Corpse"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent with vanishing enters the battlefield with time counters put on it as it enters.",
+        "near_miss": "A permanent without vanishing enters with no time counters.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "time"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.63a-2",
@@ -121,19 +138,33 @@
           "label": "two_counters",
           "polarity": "does_not_fire",
           "delta": "Waning Wurm has two time counters.",
-          "expected": "The upkeep trigger fires and removes one time counter. Waning Wurm stays on the battlefield with one time counter and no sacrifice trigger fires."
+          "expected": "The upkeep trigger fires and removes one time counter. Waning Wurm stays on the battlefield with one time counter and no sacrifice trigger fires.",
+          "operation": "counters"
         },
         {
           "label": "opponents_upkeep",
           "polarity": "does_not_fire",
           "delta": "It is B's upkeep (B is the active player) instead of A's.",
-          "expected": "The vanishing trigger does not fire. Waning Wurm stays on the battlefield with one time counter."
+          "expected": "The vanishing trigger does not fire. Waning Wurm stays on the battlefield with one time counter.",
+          "operation": {
+            "unclassifiable": "changes the phase or turn"
+          }
         }
       ],
       "cards": [
         "Waning Wurm"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A vanishing trigger is evaluated at its controller's upkeep, or when the last time counter is removed, and fires.",
+        "near_miss": "A vanishing trigger is evaluated against an event it does not match, such as another player's upkeep, and does not fire.",
+        "params": {
+          "keyword": "vanishing"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.63b-1",
@@ -181,13 +212,24 @@
           "label": "two_counters",
           "polarity": "does_not_fire",
           "delta": "Maelstrom Djinn has two time counters.",
-          "expected": "The upkeep trigger fires and removes one time counter. Maelstrom Djinn stays on the battlefield with one time counter and no sacrifice trigger fires."
+          "expected": "The upkeep trigger fires and removes one time counter. Maelstrom Djinn stays on the battlefield with one time counter and no sacrifice trigger fires.",
+          "operation": "counters"
         }
       ],
       "cards": [
         "Maelstrom Djinn"
       ],
-      "forge_notes": "Vanishing is gained permanently by the Djinn's turned-face-up trigger; a puzzle setup must grant it explicitly. Tidewalker is the printed no-number vanishing creature but its power and toughness equal its time counters, which would confound the sacrifice."
+      "forge_notes": "Vanishing is gained permanently by the Djinn's turned-face-up trigger; a puzzle setup must grant it explicitly. Tidewalker is the printed no-number vanishing creature but its power and toughness equal its time counters, which would confound the sacrifice.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A vanishing trigger of a permanent with vanishing without a number is evaluated at its controller's upkeep, or when the last time counter is removed, and fires.",
+        "near_miss": "A vanishing trigger is evaluated against an event it does not match and does not fire.",
+        "params": {
+          "keyword": "vanishing"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.63c-1",
@@ -235,14 +277,25 @@
           "label": "one_instance",
           "polarity": "does_not_fire",
           "delta": "Maelstrom Djinn has one instance of vanishing.",
-          "expected": "One upkeep trigger fires and removes one time counter. Maelstrom Djinn stays on the battlefield with one time counter."
+          "expected": "One upkeep trigger fires and removes one time counter. Maelstrom Djinn stays on the battlefield with one time counter.",
+          "operation": "keyword"
         }
       ],
       "cards": [
         "Maelstrom Djinn",
         "Backslide"
       ],
-      "forge_notes": "Reached with Backslide turning the Djinn face down and its morph turning it face up again. Whether Forge keeps the first Permanent-duration Pump of Vanishing across the face-down period needs checking; a puzzle setup may have to grant both instances explicitly."
+      "forge_notes": "Reached with Backslide turning the Djinn face down and its morph turning it face up again. Whether Forge keeps the first Permanent-duration Pump of Vanishing across the face-down period needs checking; a puzzle setup may have to grant both instances explicitly.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "Each vanishing instance of one permanent is evaluated and fires separately.",
+        "near_miss": "A vanishing trigger is evaluated against an event it does not match and does not fire.",
+        "params": {
+          "keyword": "vanishing"
+        },
+        "needs": []
+      }
     }
   ]
 }

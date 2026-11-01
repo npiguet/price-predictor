@@ -51,13 +51,17 @@
           "label": "plain_attacker",
           "polarity": "does_not_fire",
           "delta": "A's attacker is Fugitive Wizard (1/1, no abilities) instead of Cinderbones.",
-          "expected": "Fugitive Wizard deals 1 damage to Grizzly Bears, which has 1 damage marked, no counters, and stays a 2/2. Grizzly Bears deals 2 damage to Fugitive Wizard, which is destroyed. B's life stays 20."
+          "expected": "Fugitive Wizard deals 1 damage to Grizzly Bears, which has 1 damage marked, no counters, and stays a 2/2. Grizzly Bears deals 2 damage to Fugitive Wizard, which is destroyed. B's life stays 20.",
+          "operation": "replace_card"
         },
         {
           "label": "unblocked",
           "polarity": "other",
           "delta": "B declares no blockers.",
-          "expected": "Cinderbones deals 1 damage to player B, whose life becomes 19. No -1/-1 counters are placed anywhere; Grizzly Bears is unchanged."
+          "expected": "Cinderbones deals 1 damage to player B, whose life becomes 19. No -1/-1 counters are placed anywhere; Grizzly Bears is unchanged.",
+          "operation": {
+            "unclassifiable": "a different block decision by B"
+          }
         }
       ],
       "cards": [
@@ -65,7 +69,17 @@
         "Grizzly Bears",
         "Fugitive Wizard"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "keyword_combat",
+        "record_kind": "combat",
+        "outcome": "A combat in which a creature with wither deals damage.",
+        "near_miss": "A damage-step probe fork that stripped wither from its carrier.",
+        "params": {
+          "keyword": "wither"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.80b-1",
@@ -118,7 +132,10 @@
           "label": "mentor_absent",
           "polarity": "does_not_fire",
           "delta": "Corrosive Mentor is not on A's battlefield.",
-          "expected": "Footlight Fiend had no wither as it left the battlefield. Its 1 damage is marked on Grizzly Bears: a 2/2 with 1 damage marked and no counters."
+          "expected": "Footlight Fiend had no wither as it left the battlefield. Its 1 damage is marked on Grizzly Bears: a 2/2 with 1 damage marked and no counters.",
+          "operation": {
+            "unclassifiable": "removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -128,7 +145,19 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": "Relies on Forge using the dead source's last known information for its keywords: Corrosive Mentor still affects black creatures on the battlefield but no longer the card in the graveyard."
+      "forge_notes": "Relies on Forge using the dead source's last known information for its keywords: Corrosive Mentor still affects black creatures on the battlefield but no longer the card in the graveyard.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A damage-dealing resolution puts -1/-1 counters on a creature, as damage from a source with wither (or infect) does, instead of marking damage.",
+        "near_miss": "A DealDamage resolution that puts no -1/-1 counter: its damage is marked.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "-1/-1",
+          "api": "DealDamage"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.80c-1",
@@ -180,13 +209,19 @@
           "label": "plain_spell",
           "polarity": "does_not_fire",
           "delta": "A casts Lightning Bolt (tapping one Mountain) targeting Craw Wurm instead of Puncture Blast.",
-          "expected": "Lightning Bolt deals 3 damage to Craw Wurm, which has 3 damage marked, no counters, and stays a 6/4."
+          "expected": "Lightning Bolt deals 3 damage to Craw Wurm, which has 3 damage marked, no counters, and stays a 6/4.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         },
         {
           "label": "player_target",
           "polarity": "other",
           "delta": "Puncture Blast targets player B instead of Craw Wurm.",
-          "expected": "B loses 3 life and has 17 life. B has no poison counters. Craw Wurm is unchanged."
+          "expected": "B loses 3 life and has 17 life. B has no poison counters. Craw Wurm is unchanged.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -195,7 +230,19 @@
         "Lightning Bolt",
         "Craw Wurm"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A damage-dealing resolution puts -1/-1 counters on a creature, as damage from a source with wither (or infect) does, instead of marking damage.",
+        "near_miss": "A DealDamage resolution that puts no -1/-1 counter: its damage is marked.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "-1/-1",
+          "api": "DealDamage"
+        },
+        "needs": []
+      }
     }
   ]
 }

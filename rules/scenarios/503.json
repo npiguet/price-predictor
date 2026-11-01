@@ -63,7 +63,8 @@
           "label": "nothing_untaps",
           "polarity": "does_not_fire",
           "delta": "Mountain is untapped at the start of the untap step, so nothing untaps.",
-          "expected": "When A first receives priority in the upkeep step the stack holds only Juzám Djinn's trigger; A's library stays at 5 cards and, after it resolves, A's life is 19."
+          "expected": "When A first receives priority in the upkeep step the stack holds only Juzám Djinn's trigger; A's library stays at 5 cards and, after it resolves, A's life is 19.",
+          "operation": "tap"
         }
       ],
       "cards": [
@@ -72,7 +73,17 @@
         "Mountain",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger with Mode$ Untaps is evaluated against a permanent becoming untapped and fires; one that fires in the untap step is held until the upkeep step, where it goes on the stack before the active player gets priority.",
+        "near_miss": "An Untaps trigger evaluated against an untapping permanent its condition does not match, which does not fire.",
+        "params": {
+          "mode": "Untaps"
+        },
+        "needs": []
+      }
     },
     {
       "id": "503.2-1",
@@ -133,7 +144,10 @@
           "label": "first_upkeep",
           "polarity": "does_not_fire",
           "delta": "A attempts it in B's first upkeep step, after Paradox Haze's trigger resolved and before that step ends.",
-          "expected": "Casting Reset is not legal (can_play false): B's first upkeep step has not ended."
+          "expected": "Casting Reset is not legal (can_play false): B's first upkeep step has not ended.",
+          "operation": {
+            "unclassifiable": "Changes which upkeep step of the turn is observed."
+          }
         }
       ],
       "cards": [

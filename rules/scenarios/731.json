@@ -56,20 +56,36 @@
           "label": "already_night",
           "polarity": "does_not_fire",
           "delta": "The game already has the night designation before A casts Brimstone Vandal.",
-          "expected": "Brimstone Vandal enters the battlefield and the game stays night; it does not become day. The day-or-night change trigger does not fire and B stays at 20 life."
+          "expected": "Brimstone Vandal enters the battlefield and the game stays night; it does not become day. The day-or-night change trigger does not fire and B stays at 20 life.",
+          "operation": {
+            "unclassifiable": "Gives the game the night designation; day/night is a game designation, none of the seven operations."
+          }
         },
         {
           "label": "already_day",
           "polarity": "does_not_fire",
           "delta": "The game already has the day designation before A casts Brimstone Vandal.",
-          "expected": "Brimstone Vandal enters the battlefield and the game stays day, with exactly one designation. The trigger does not fire and B stays at 20 life."
+          "expected": "Brimstone Vandal enters the battlefield and the game stays day, with exactly one designation. The trigger does not fire and B stays at 20 life.",
+          "operation": {
+            "unclassifiable": "Gives the game the day designation; day/night is a game designation, none of the seven operations."
+          }
         }
       ],
       "cards": [
         "Mountain",
         "Brimstone Vandal"
       ],
-      "forge_notes": "Forge stores the designation as a nullable boolean on the game (null is neither); Brimstone Vandal's replacement effect is gated by DayTime$ Neither."
+      "forge_notes": "Forge stores the designation as a nullable boolean on the game (null is neither); Brimstone Vandal's replacement effect is gated by DayTime$ Neither.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution makes it day or night: its effect half holds a day_night_changed event.",
+        "near_miss": "A resolution that holds no day_night_changed event; with no api set this side is not counted, since no single API type makes it day or night (a DayTime spell, a daybound or enters-as-day replacement during a permanent spell's resolution).",
+        "params": {
+          "event": "day_night_changed"
+        },
+        "needs": []
+      }
     },
     {
       "id": "731.1a-1",
@@ -131,13 +147,19 @@
           "label": "already_night",
           "polarity": "does_not_fire",
           "delta": "The game already has the night designation before Into the Night resolves.",
-          "expected": "Into the Night resolves and the game stays night; no designation changes hands. Brimstone Vandal's trigger does not fire and B stays at 20. A draws one card."
+          "expected": "Into the Night resolves and the game stays night; no designation changes hands. Brimstone Vandal's trigger does not fire and B stays at 20. A draws one card.",
+          "operation": {
+            "unclassifiable": "Changes the game's designation from day to night; day/night is a game designation, none of the seven operations."
+          }
         },
         {
           "label": "neither",
           "polarity": "other",
           "delta": "The game has neither designation before Into the Night resolves.",
-          "expected": "Into the Night resolves and the game gains the night designation, so it is night. Night did not replace day, so Brimstone Vandal's trigger does not fire and B stays at 20. A draws one card."
+          "expected": "Into the Night resolves and the game gains the night designation, so it is night. Night did not replace day, so Brimstone Vandal's trigger does not fire and B stays at 20. A draws one card.",
+          "operation": {
+            "unclassifiable": "Removes the game's day designation; day/night is a game designation, none of the seven operations."
+          }
         }
       ],
       "cards": [
@@ -211,13 +233,19 @@
           "label": "a_cast_one",
           "polarity": "does_not_fire",
           "delta": "In main2, A casts Savannah Lions, tapping Plains, before passing; it resolves.",
-          "expected": "Savannah Lions is on the battlefield. In B's untap step the game stays day, since A cast a spell during A's turn. Brimstone Vandal's trigger does not fire and B stays at 20."
+          "expected": "Savannah Lions is on the battlefield. In B's untap step the game stays day, since A cast a spell during A's turn. Brimstone Vandal's trigger does not fire and B stays at 20.",
+          "operation": {
+            "unclassifiable": "A casts a spell, a player's decision; no operation changes what a player casts."
+          }
         },
         {
           "label": "b_cast_one",
           "polarity": "fires",
           "delta": "In A's end step, B casts Opt, tapping Island; it resolves, B scries 1 keeping the card on top, then draws it.",
-          "expected": "A still cast no spells; B's spell does not count. In B's untap step day becomes night, Brimstone Vandal's trigger fires and deals 1 damage to B (B at 19). The game is night."
+          "expected": "A still cast no spells; B's spell does not count. In B's untap step day becomes night, Brimstone Vandal's trigger fires and deals 1 damage to B (B at 19). The game is night.",
+          "operation": {
+            "unclassifiable": "B casts a spell, a player's decision; no operation changes what a player casts."
+          }
         }
       ],
       "cards": [
@@ -294,13 +322,19 @@
           "label": "a_cast_one",
           "polarity": "does_not_fire",
           "delta": "A casts only the first Savannah Lions and does not cast the second.",
-          "expected": "One Savannah Lions is on the battlefield and the other is still in A's hand. In B's untap step the game stays night, since A cast only one spell. Brimstone Vandal's trigger does not fire and B stays at 20."
+          "expected": "One Savannah Lions is on the battlefield and the other is still in A's hand. In B's untap step the game stays night, since A cast only one spell. Brimstone Vandal's trigger does not fire and B stays at 20.",
+          "operation": {
+            "unclassifiable": "A does not cast a spell, a player's decision; no operation changes what a player casts."
+          }
         },
         {
           "label": "b_cast_second",
           "polarity": "does_not_fire",
           "delta": "The second spell is cast by B instead of A: after the first Savannah Lions resolves, A passes priority and B casts Opt, tapping Island; it resolves, B keeping the scried card on top and drawing it.",
-          "expected": "One Savannah Lions is on the battlefield; A cast one spell, and B's Opt does not count toward A's total. In B's untap step the game stays night, Brimstone Vandal's trigger does not fire and B stays at 20."
+          "expected": "One Savannah Lions is on the battlefield; A cast one spell, and B's Opt does not count toward A's total. In B's untap step the game stays night, Brimstone Vandal's trigger does not fire and B stays at 20.",
+          "operation": {
+            "unclassifiable": "B casts a spell instead of A, player decisions; no operation changes what a player casts."
+          }
         }
       ],
       "cards": [
@@ -371,13 +405,19 @@
           "label": "a_casts_vandal",
           "polarity": "other",
           "delta": "In main2, A casts the second Brimstone Vandal from hand, tapping the three Mountains; it resolves.",
-          "expected": "The second Brimstone Vandal enters and, because it was neither, the game becomes day; the first Vandal's trigger does not fire. In B's untap step the game is day and A cast one spell, so it stays day; no trigger fires and B stays at 20."
+          "expected": "The second Brimstone Vandal enters and, because it was neither, the game becomes day; the first Vandal's trigger does not fire. In B's untap step the game is day and A cast one spell, so it stays day; no trigger fires and B stays at 20.",
+          "operation": {
+            "unclassifiable": "A casts a spell, a player's decision; no operation changes what a player casts."
+          }
         },
         {
           "label": "day",
           "polarity": "does_not_fire",
           "delta": "The game has the day designation instead of neither.",
-          "expected": "In B's untap step, because A cast no spells, day becomes night. Brimstone Vandal's trigger fires and deals 1 damage to B (B at 19). The game is night."
+          "expected": "In B's untap step, because A cast no spells, day becomes night. Brimstone Vandal's trigger fires and deals 1 damage to B (B at 19). The game is night.",
+          "operation": {
+            "unclassifiable": "Gives the game the day designation; day/night is a game designation, none of the seven operations."
+          }
         }
       ],
       "cards": [

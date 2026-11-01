@@ -61,13 +61,19 @@
           "label": "declines_extort",
           "polarity": "does_not_fire",
           "delta": "A chooses not to pay {W/B} when the extort trigger resolves.",
-          "expected": "The extort trigger resolves with no payment: life totals stay 20 and 20. Shock resolves and Grizzly Bears is destroyed. Swamp stays untapped."
+          "expected": "The extort trigger resolves with no payment: life totals stay 20 and 20. Shock resolves and Grizzly Bears is destroyed. Swamp stays untapped.",
+          "operation": {
+            "unclassifiable": "A different choice by A."
+          }
         },
         {
           "label": "opponent_casts",
           "polarity": "does_not_fire",
           "delta": "A casts no spell; B casts its own Shock targeting A, tapping Mountain.",
-          "expected": "Basilica Screecher's extort does not trigger because its controller did not cast the spell. Shock resolves: A's life is 18, B's life is 20."
+          "expected": "Basilica Screecher's extort does not trigger because its controller did not cast the spell. Shock resolves: A's life is 18, B's life is 20.",
+          "operation": {
+            "unclassifiable": "A different player casts a different spell."
+          }
         }
       ],
       "cards": [
@@ -77,7 +83,17 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An extort trigger fires when its controller casts a spell.",
+        "near_miss": "An extort trigger is evaluated against a spell another player casts and does not fire.",
+        "params": {
+          "keyword": "extort"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.101b-1",
@@ -135,7 +151,10 @@
           "label": "one_instance",
           "polarity": "does_not_fire",
           "delta": "Pontiff of Blight is not on the battlefield, so Basilica Screecher has a single instance of extort.",
-          "expected": "One extort trigger resolves and A pays once: B loses 1 life (19) and A gains 1 life (21). Grizzly Bears is destroyed."
+          "expected": "One extort trigger resolves and A pays once: B loses 1 life (19) and A gains 1 life (21). Grizzly Bears is destroyed.",
+          "operation": {
+            "unclassifiable": "Removes a permanent from the battlefield."
+          }
         }
       ],
       "cards": [

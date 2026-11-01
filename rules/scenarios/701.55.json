@@ -72,13 +72,19 @@
           "label": "choose_discard",
           "polarity": "fires",
           "delta": "B chooses the option 'that player discards a card' instead of 'You draw a card'.",
-          "expected": "The Dalek token is created. B discards Grizzly Bears (B's graveyard: Grizzly Bears, B's hand empty). A does not draw; A's hand is empty and A's library is unchanged."
+          "expected": "The Dalek token is created. B discards Grizzly Bears (B's graveyard: Grizzly Bears, B's hand empty). A does not draw; A's hand is empty and A's library is unchanged.",
+          "operation": {
+            "unclassifiable": "a different choice by a player"
+          }
         },
         {
           "label": "lost_only_2",
           "polarity": "does_not_fire",
           "delta": "A casts Shock instead of Lightning Bolt (Shock replaces Lightning Bolt in A's hand).",
-          "expected": "B lost only 2 life (B at 18), so no Dalek token is created and B does not face a villainous choice: A does not draw and B keeps Grizzly Bears."
+          "expected": "B lost only 2 life (B at 18), so no Dalek token is created and B does not face a villainous choice: A does not draw and B keeps Grizzly Bears.",
+          "operation": {
+            "unclassifiable": "a different spell is cast and a hand changes"
+          }
         }
       ],
       "cards": [
@@ -153,7 +159,10 @@
           "label": "empty_hand",
           "polarity": "does_not_fire",
           "delta": "B's hand is empty (Grizzly Bears is not in B's hand).",
-          "expected": "B lost 3 life (B at 17). The Dalek token is created. B chose an impossible option and discards nothing; the choice is still faced and performed as far as possible, so B's hand and graveyard stay empty. A does not draw (the draw option was not chosen)."
+          "expected": "B lost 3 life (B at 17). The Dalek token is created. B chose an impossible option and discards nothing; the choice is still faced and performed as far as possible, so B's hand and graveyard stay empty. A does not draw (the draw option was not chosen).",
+          "operation": {
+            "unclassifiable": "changes a hand"
+          }
         }
       ],
       "cards": [
@@ -165,7 +174,10 @@
         "Island",
         "Forest"
       ],
-      "forge_notes": "Forge may refuse to offer an option that cannot be performed; the scenario needs the discard option to be selectable when B's hand is empty."
+      "forge_notes": "Forge may refuse to offer an option that cannot be performed; the scenario needs the discard option to be selectable when B's hand is empty.",
+      "detector": {
+        "none": "Which option a player chose is in no record field: ApiEvents wires no choice_made rule for VillainousChoice (choiceRules covers the Choose* APIs and GenericChoice only) and its options carry no option component (CharmModes keys Charm only), so a resolution that performed none of an impossible option cannot be told from one whose chosen option did nothing else; the performed actions' events are all the effect half holds."
+      }
     },
     {
       "id": "701.55c-1",
@@ -234,13 +246,19 @@
           "label": "valeyard_controlled_by_B",
           "polarity": "does_not_fire",
           "delta": "The Valeyard is on B's battlefield instead of A's.",
-          "expected": "The Valeyard only affects the opponents of its controller, which is A, so B faces the choice once and takes 3 damage: B ends at 17 life with three cards in hand."
+          "expected": "The Valeyard only affects the opponents of its controller, which is A, so B faces the choice once and takes 3 damage: B ends at 17 life with three cards in hand.",
+          "operation": {
+            "unclassifiable": "moves a permanent to another controller"
+          }
         },
         {
           "label": "different_choices",
           "polarity": "other",
           "delta": "B chooses 'discard your hand, then draw that many cards minus one' the first time and the damage option the second time.",
-          "expected": "First choice: B discards Grizzly Bears, Shock and Lightning Bolt and draws 2 Islands. Second choice: Sycorax Commander deals damage equal to the 2 cards in B's hand, so B ends at 18 life with two Islands in hand and the three discarded cards in the graveyard."
+          "expected": "First choice: B discards Grizzly Bears, Shock and Lightning Bolt and draws 2 Islands. Second choice: Sycorax Commander deals damage equal to the 2 cards in B's hand, so B ends at 18 life with two Islands in hand and the three discarded cards in the graveyard.",
+          "operation": {
+            "unclassifiable": "different choices by a player"
+          }
         }
       ],
       "cards": [
@@ -254,7 +272,10 @@
         "Island",
         "Plains"
       ],
-      "forge_notes": "Forge's VillainousChoiceEffect collects all of a player's choices before resolving any of them, so the second choice is made before the first resolves; the expected outcomes assume B's choices are fixed in advance as listed."
+      "forge_notes": "Forge's VillainousChoiceEffect collects all of a player's choices before resolving any of them, so the second choice is made before the first resolves; the expected outcomes assume B's choices are fixed in advance as listed.",
+      "detector": {
+        "none": "How many times a player faced the choice is in no record field: VillainousChoice emits no choice_made, the extra time comes from a player-affecting static (AdditionalVillainousChoice$) that makes no rewrite record and contributes no pt, keyword, type or colour to a continuous record, and the effect half's events are not grouped per iteration."
+      }
     }
   ]
 }

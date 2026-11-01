@@ -12,7 +12,7 @@
         "702.110a"
       ],
       "title": "Exploit lets the controller sacrifice a creature as the enters trigger resolves",
-      "record_kind": "trigger",
+      "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "main1",
@@ -62,13 +62,19 @@
           "label": "decline",
           "polarity": "does_not_fire",
           "delta": "A declines to sacrifice a creature as the trigger resolves.",
-          "expected": "Grizzly Bears stays on the battlefield and Vulturous Aven stays too. A draws no cards and loses no life, and stays at 20."
+          "expected": "Grizzly Bears stays on the battlefield and Vulturous Aven stays too. A draws no cards and loses no life, and stays at 20.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         },
         {
           "label": "sacrifice-itself",
           "polarity": "fires",
           "delta": "A sacrifices Vulturous Aven itself instead of Grizzly Bears.",
-          "expected": "Vulturous Aven goes to A's graveyard, Grizzly Bears stays on the battlefield, and the Aven's trigger still counts as exploiting a creature: A draws two cards and is at 18."
+          "expected": "Vulturous Aven goes to A's graveyard, Grizzly Bears stays on the battlefield, and the Aven's trigger still counts as exploiting a creature: A draws two cards and is at 18.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         }
       ],
       "cards": [
@@ -134,7 +140,10 @@
           "label": "sacrificed-elsewhere",
           "polarity": "does_not_fire",
           "delta": "With the exploit trigger on the stack, A sacrifices Grizzly Bears to Bloodthrone Vampire's ability instead.",
-          "expected": "Grizzly Bears goes to A's graveyard and Bloodthrone Vampire is 3/3 until end of turn. The exploit trigger resolves with no sacrifice and the exploits-a-creature trigger does not fire: A draws no cards and stays at 20."
+          "expected": "Grizzly Bears goes to A's graveyard and Bloodthrone Vampire is 3/3 until end of turn. The exploit trigger resolves with no sacrifice and the exploits-a-creature trigger does not fire: A draws no cards and stays at 20.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         }
       ],
       "cards": [
@@ -143,7 +152,17 @@
         "Grizzly Bears",
         "Bloodthrone Vampire"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A 'when this creature exploits a creature' trigger fires because its source's exploit ability sacrificed a creature as it resolved.",
+        "near_miss": "Such a trigger is evaluated against a sacrifice made by another creature's exploit ability and does not fire.",
+        "params": {
+          "mode": "Exploited"
+        },
+        "needs": []
+      }
     }
   ]
 }

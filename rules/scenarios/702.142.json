@@ -57,7 +57,10 @@
           "label": "liberator_stayed_home",
           "polarity": "does_not_fire",
           "delta": "A declares only Grizzly Bears as an attacker; Fearless Liberator does not attack.",
-          "expected": "The boast activation is not legal (Fearless Liberator did not attack this turn). No token is created and the Mountains stay untapped."
+          "expected": "The boast activation is not legal (Fearless Liberator did not attack this turn). No token is created and the Mountains stay untapped.",
+          "operation": {
+            "unclassifiable": "a different attack declaration"
+          }
         }
       ],
       "cards": [
@@ -65,7 +68,21 @@
         "Grizzly Bears",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A restricted activated ability is a legal candidate when its script restriction passes.",
+        "near_miss": "The same ability is a candidate the restriction rejects.",
+        "params": {
+          "bit": "failed_check",
+          "check": "script_restriction",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "702.142a-2",
@@ -119,14 +136,31 @@
           "label": "second_activation",
           "polarity": "does_not_fire",
           "delta": "After the first boast ability resolves, A tries to activate it a second time this turn, tapping the other three Mountains.",
-          "expected": "The second activation is not legal (boast was already activated this turn). A still has exactly one Dwarf Berserker token and three untapped Mountains."
+          "expected": "The second activation is not legal (boast was already activated this turn). A still has exactly one Dwarf Berserker token and three untapped Mountains.",
+          "operation": {
+            "unclassifiable": "a second activation decision"
+          }
         }
       ],
       "cards": [
         "Fearless Liberator",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An ability limited per turn is a legal candidate while its activation limit is unspent.",
+        "near_miss": "The same ability is a candidate rejected because its limit is spent.",
+        "params": {
+          "bit": "failed_check",
+          "check": "activation_limit",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     }
   ]
 }

@@ -55,7 +55,8 @@
           "label": "has_counter",
           "polarity": "does_not_fire",
           "delta": "Young Wolf already has one +1/+1 counter (it is 2/2).",
-          "expected": "Young Wolf is dealt 2 damage and is destroyed. It had a +1/+1 counter, so undying does not trigger. Young Wolf stays in A's graveyard."
+          "expected": "Young Wolf is dealt 2 damage and is destroyed. It had a +1/+1 counter, so undying does not trigger. Young Wolf stays in A's graveyard.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -63,7 +64,17 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An undying trigger fires when its creature dies with no +1/+1 counter on it.",
+        "near_miss": "An undying trigger is evaluated for its creature dying with a +1/+1 counter on it and does not fire.",
+        "params": {
+          "keyword": "undying"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.93a-2",
@@ -116,13 +127,17 @@
           "label": "owned_by_B",
           "polarity": "other",
           "delta": "Young Wolf is owned and controlled by B.",
-          "expected": "Young Wolf is destroyed and goes to B's graveyard. The undying trigger resolves and Young Wolf returns to the battlefield under B's control with a +1/+1 counter (2/2)."
+          "expected": "Young Wolf is destroyed and goes to B's graveyard. The undying trigger resolves and Young Wolf returns to the battlefield under B's control with a +1/+1 counter (2/2).",
+          "operation": {
+            "unclassifiable": "Changes who owns and controls the creature; no fork operation sets owner or controller."
+          }
         },
         {
           "label": "has_counter",
           "polarity": "does_not_fire",
           "delta": "Young Wolf already has one +1/+1 counter (it is 2/2).",
-          "expected": "Young Wolf is destroyed and goes to A's graveyard, its owner's. It had a +1/+1 counter, so undying does not trigger and it stays there."
+          "expected": "Young Wolf is destroyed and goes to A's graveyard, its owner's. It had a +1/+1 counter, so undying does not trigger and it stays there.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -130,7 +145,17 @@
         "Young Wolf",
         "Shock"
       ],
-      "forge_notes": "Control of a card owned by the other player is hard to reach in a puzzle setup; it may need an Aura or control-changing effect played first."
+      "forge_notes": "Control of a card owned by the other player is hard to reach in a puzzle setup; it may need an Aura or control-changing effect played first.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An undying trigger fires when its creature dies with no +1/+1 counter on it, whoever controlled the creature.",
+        "near_miss": "An undying trigger is evaluated for its creature dying with a +1/+1 counter on it and does not fire.",
+        "params": {
+          "keyword": "undying"
+        },
+        "needs": []
+      }
     }
   ]
 }

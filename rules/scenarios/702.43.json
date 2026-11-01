@@ -60,13 +60,15 @@
           "label": "no_artifact_creature",
           "polarity": "does_not_fire",
           "delta": "A controls Grizzly Bears instead of Ornithopter.",
-          "expected": "Arcbound Worker dies. The trigger has no legal target (Grizzly Bears is not an artifact creature) and is not put on the stack; Grizzly Bears stays a 2/2."
+          "expected": "Arcbound Worker dies. The trigger has no legal target (Grizzly Bears is not an artifact creature) and is not put on the stack; Grizzly Bears stays a 2/2.",
+          "operation": "replace_card"
         },
         {
           "label": "three_counters",
           "polarity": "fires",
           "delta": "Arcbound Worker has three +1/+1 counters, a 3/3 that Lightning Bolt still kills.",
-          "expected": "Arcbound Worker dies and Ornithopter gets three +1/+1 counters, a 3/5."
+          "expected": "Arcbound Worker dies and Ornithopter gets three +1/+1 counters, a 3/5.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -76,7 +78,17 @@
         "Mountain",
         "Lightning Bolt"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A modular trigger fires when its permanent is put into a graveyard from the battlefield.",
+        "near_miss": "A modular trigger is evaluated against a zone change it does not meet, such as its permanent leaving the battlefield for another zone, and does not fire.",
+        "params": {
+          "keyword": "Modular"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.43a-2",
@@ -126,19 +138,28 @@
           "label": "modular_3",
           "polarity": "fires",
           "delta": "The card in hand is Arcbound Bruiser (modular 3), cast for {5}.",
-          "expected": "Arcbound Bruiser enters with three +1/+1 counters, a 3/3."
+          "expected": "Arcbound Bruiser enters with three +1/+1 counters, a 3/3.",
+          "operation": {
+            "unclassifiable": "changes a hand or library card, not a fork operation"
+          }
         },
         {
           "label": "counters_prevented",
           "polarity": "does_not_fire",
           "delta": "B controls Solemnity, and the card in hand is Arcbound Worker.",
-          "expected": "Arcbound Worker enters without its counter, a 0/0, and dies in the state-based check; nothing is left on the battlefield."
+          "expected": "Arcbound Worker enters without its counter, a 0/0, and dies in the state-based check; nothing is left on the battlefield.",
+          "operation": {
+            "unclassifiable": "adds a permanent, not a fork operation"
+          }
         },
         {
           "label": "no_modular",
           "polarity": "other",
           "delta": "The card in hand is Memnite, cast for {0}.",
-          "expected": "Memnite enters as a 1/1 with no counters; modular is not involved."
+          "expected": "Memnite enters as a 1/1 with no counters; modular is not involved.",
+          "operation": {
+            "unclassifiable": "changes a hand or library card, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -196,7 +217,10 @@
           "label": "one_instance",
           "polarity": "does_not_fire",
           "delta": "A does not control Blaster, Combat DJ.",
-          "expected": "Arcbound Worker enters with one +1/+1 counter, a 1/1."
+          "expected": "Arcbound Worker enters with one +1/+1 counter, a 1/1.",
+          "operation": {
+            "unclassifiable": "removes a permanent, not a fork operation"
+          }
         }
       ],
       "cards": [

@@ -59,13 +59,19 @@
           "label": "tap_grizzly_bears",
           "polarity": "other",
           "delta": "A taps Grizzly Bears (power 2) as the cost instead of Hill Giant.",
-          "expected": "Grizzly Bears becomes tapped. Galvanizing Sawship gets 2 charge counters and, being below station 3, remains a noncreature artifact. Hill Giant stays untapped."
+          "expected": "Grizzly Bears becomes tapped. Galvanizing Sawship gets 2 charge counters and, being below station 3, remains a noncreature artifact. Hill Giant stays untapped.",
+          "operation": {
+            "unclassifiable": "A different cost choice: which creature to tap"
+          }
         },
         {
           "label": "tap_wall_of_wood",
           "polarity": "does_not_fire",
           "delta": "A taps Wall of Wood (power 0) as the cost instead of Hill Giant.",
-          "expected": "Wall of Wood becomes tapped. The ability resolves and puts 0 charge counters on Galvanizing Sawship, which stays a noncreature artifact with no counters."
+          "expected": "Wall of Wood becomes tapped. The ability resolves and puts 0 charge counters on Galvanizing Sawship, which stays a noncreature artifact with no counters.",
+          "operation": {
+            "unclassifiable": "A different cost choice: which creature to tap"
+          }
         }
       ],
       "cards": [
@@ -120,19 +126,26 @@
           "label": "creature_already_tapped",
           "polarity": "does_not_fire",
           "delta": "Hill Giant is already tapped.",
-          "expected": "The activation is not legal: A controls no other untapped creature to tap."
+          "expected": "The activation is not legal: A controls no other untapped creature to tap.",
+          "operation": "tap"
         },
         {
           "label": "not_sorcery_timing",
           "polarity": "does_not_fire",
           "delta": "The step is A's end step instead of main1.",
-          "expected": "The activation is not legal: station can be activated only as a sorcery, and it is not a main phase."
+          "expected": "The activation is not legal: station can be activated only as a sorcery, and it is not a main phase.",
+          "operation": {
+            "unclassifiable": "Changes the step of the turn"
+          }
         },
         {
           "label": "creature_controlled_by_opponent",
           "polarity": "does_not_fire",
           "delta": "Hill Giant is on B's battlefield instead of A's.",
-          "expected": "The activation is not legal: A controls no other untapped creature to tap."
+          "expected": "The activation is not legal: A controls no other untapped creature to tap.",
+          "operation": {
+            "unclassifiable": "Moves a permanent to the other player's battlefield"
+          }
         }
       ],
       "cards": [
@@ -187,7 +200,10 @@
           "label": "warden_under_opponents_control",
           "polarity": "does_not_fire",
           "delta": "Tapestry Warden is on B's battlefield instead of A's.",
-          "expected": "Wall of Wood becomes tapped. Galvanizing Sawship gets 0 charge counters (Wall of Wood's power) and stays a noncreature artifact."
+          "expected": "Wall of Wood becomes tapped. Galvanizing Sawship gets 0 charge counters (Wall of Wood's power) and stays a noncreature artifact.",
+          "operation": {
+            "unclassifiable": "Moves a permanent to the other player's battlefield"
+          }
         }
       ],
       "cards": [

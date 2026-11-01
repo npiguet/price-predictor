@@ -64,19 +64,28 @@
           "label": "combat-step",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "Casting Glorious Anthem is not legal: can_play is false and the card stays in A's hand."
+          "expected": "Casting Glorious Anthem is not legal: can_play is false and the card stays in A's hand.",
+          "operation": {
+            "unclassifiable": "changes the step"
+          }
         },
         {
           "label": "opponent-turn",
           "polarity": "does_not_fire",
           "delta": "B is the active player in main1 instead of A, and A holds priority after B passes.",
-          "expected": "Casting Glorious Anthem is not legal: can_play is false, because it is not A's turn."
+          "expected": "Casting Glorious Anthem is not legal: can_play is false, because it is not A's turn.",
+          "operation": {
+            "unclassifiable": "changes the active player and turn"
+          }
         },
         {
           "label": "stack-not-empty",
           "polarity": "does_not_fire",
           "delta": "A first casts Shock targeting B with the Mountain, and A holds priority with Shock still on the stack.",
-          "expected": "Casting Glorious Anthem is not legal: can_play is false while Shock is on the stack, and no mana from the Plains is spent."
+          "expected": "Casting Glorious Anthem is not legal: can_play is false while Shock is on the stack, and no mana from the Plains is spent.",
+          "operation": {
+            "unclassifiable": "a different spell cast first, putting an object on the stack"
+          }
         }
       ],
       "cards": [
@@ -85,7 +94,20 @@
         "Glorious Anthem",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A decision candidate's timing bit is true: for an enchantment or any other spell without flash, its controller has priority in a main phase of their own turn with an empty stack.",
+        "near_miss": "A decision candidate whose timing bit is false: another step, another player's turn, or a non-empty stack.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "303.2-1",
@@ -141,7 +163,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "After A passes priority B casts Counterspell targeting Glorious Anthem, tapping both Islands, then both players pass.",
-          "expected": "Glorious Anthem is countered and goes from the stack to A's graveyard without entering the battlefield; Counterspell goes to B's graveyard; Grizzly Bears stays a 2/2."
+          "expected": "Glorious Anthem is countered and goes from the stack to A's graveyard without entering the battlefield; Counterspell goes to B's graveyard; Grizzly Bears stays a 2/2.",
+          "operation": {
+            "unclassifiable": "a different spell cast by the opponent"
+          }
         }
       ],
       "cards": [
@@ -151,7 +176,19 @@
         "Glorious Anthem",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolving permanent spell moves from the stack to the battlefield.",
+        "near_miss": "A permanent spell that leaves the stack without entering the battlefield (countered); not counted: a permanent spell's implicit trait has no line, so no api can be set.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "303.4-1",
@@ -203,7 +240,10 @@
           "label": "target-gone",
           "polarity": "does_not_fire",
           "delta": "Holding priority after casting Pacifism, A casts Shock targeting Grizzly Bears, tapping the Mountain, then both players pass until both spells have resolved.",
-          "expected": "Shock resolves first and Grizzly Bears moves to B's graveyard; Pacifism has no legal target, does not enter the battlefield and goes from the stack to A's graveyard."
+          "expected": "Shock resolves first and Grizzly Bears moves to B's graveyard; Pacifism has no legal target, does not enter the battlefield and goes from the stack to A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different spell cast that removes the target"
+          }
         }
       ],
       "cards": [
@@ -213,7 +253,17 @@
         "Pacifism",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An Aura entering the battlefield from a resolution is attached to an object or player as it enters: an attached event in the effect half.",
+        "near_miss": "An Aura spell that leaves the stack without entering attached (its target became illegal); not counted: an Aura spell's implicit permanent trait has no line, so no api can be set.",
+        "params": {
+          "event": "attached"
+        },
+        "needs": []
+      }
     },
     {
       "id": "303.4a-1",
@@ -262,13 +312,17 @@
           "label": "no-creature",
           "polarity": "does_not_fire",
           "delta": "B controls no creature, so Grizzly Bears is absent from the battlefield.",
-          "expected": "Casting Pacifism is not legal: has_legal_target is false, there are no legal targets and can_play is false."
+          "expected": "Casting Pacifism is not legal: has_legal_target is false, there are no legal targets and can_play is false.",
+          "operation": {
+            "unclassifiable": "removes a permanent"
+          }
         },
         {
           "label": "protection",
           "polarity": "does_not_fire",
           "delta": "B's only creature is Black Knight (protection from white) instead of Grizzly Bears.",
-          "expected": "Casting Pacifism is not legal: Black Knight is not a legal target of the white Aura, has_legal_target is false and can_play is false."
+          "expected": "Casting Pacifism is not legal: Black Knight is not a legal target of the white Aura, has_legal_target is false and can_play is false.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -277,7 +331,18 @@
         "Black Knight",
         "Pacifism"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A targeted spell candidate has a legal target, so it is playable.",
+        "near_miss": "A targeted spell candidate with no legal target.",
+        "params": {
+          "bit": "has_legal_target",
+          "fires_when": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "303.4c-1",
@@ -330,7 +395,8 @@
           "label": "tougher",
           "polarity": "does_not_fire",
           "delta": "B's creature is Centaur Courser (3/3), the Aura's enchanted object, instead of Grizzly Bears.",
-          "expected": "Centaur Courser stays on the battlefield with 2 damage marked and Pacifism stays attached to it."
+          "expected": "Centaur Courser stays on the battlefield with 2 damage marked and Pacifism stays attached to it.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -340,7 +406,17 @@
         "Centaur Courser",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "An Aura whose host left the battlefield in the record moves to its owner's graveyard in the state-based check.",
+        "near_miss": "An Aura whose host the record touched and which stayed attached on the battlefield.",
+        "params": {
+          "check": "aura_illegal"
+        },
+        "needs": []
+      }
     },
     {
       "id": "303.4c-2",
@@ -397,7 +473,10 @@
           "label": "other-color",
           "polarity": "does_not_fire",
           "delta": "B chooses the color red instead of white.",
-          "expected": "Grizzly Bears gains protection from red until end of turn and Pacifism stays on the battlefield attached to it."
+          "expected": "Grizzly Bears gains protection from red until end of turn and Pacifism stays on the battlefield attached to it.",
+          "operation": {
+            "unclassifiable": "a different choice by a player"
+          }
         }
       ],
       "cards": [
@@ -463,7 +542,10 @@
           "label": "no-lattice",
           "polarity": "does_not_fire",
           "delta": "Mycosynth Lattice is absent from A's battlefield.",
-          "expected": "Pacifism is not an artifact, does not become a creature and stays attached to Grizzly Bears; the Islands stay on the battlefield."
+          "expected": "Pacifism is not an artifact, does not become a creature and stays attached to Grizzly Bears; the Islands stay on the battlefield.",
+          "operation": {
+            "unclassifiable": "removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -523,7 +605,10 @@
           "label": "creature-controller",
           "polarity": "does_not_fire",
           "delta": "The candidate is B, the controller of the enchanted creature, activating the same ability and paying {R} with B's Mountain.",
-          "expected": "The activation is not legal: can_play is false for B, because B does not control Crown of Flames."
+          "expected": "The activation is not legal: can_play is false for B, because B does not control Crown of Flames.",
+          "operation": {
+            "unclassifiable": "a different player is the candidate"
+          }
         }
       ],
       "cards": [
@@ -531,7 +616,18 @@
         "Crown of Flames",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "The controller of an Aura can activate the Aura's own ability: the candidate's can_play bit is true.",
+        "near_miss": "A player who does not control the Aura has a false can_play bit for its ability.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "303.4e-2",
@@ -589,7 +685,10 @@
           "label": "aura-controller",
           "polarity": "does_not_fire",
           "delta": "The candidate is A, who controls Archery Training but not Grizzly Bears, attempting the same activation.",
-          "expected": "The activation is not legal: can_play is false for A, because the granted ability belongs to Grizzly Bears and A does not control it."
+          "expected": "The activation is not legal: can_play is false for A, because the granted ability belongs to Grizzly Bears and A does not control it.",
+          "operation": {
+            "unclassifiable": "a different player is the candidate"
+          }
         }
       ],
       "cards": [
@@ -597,7 +696,18 @@
         "Grizzly Bears",
         "Centaur Courser"
       ],
-      "forge_notes": "Centaur Courser must be set up as a declared attacker, which a tapped flag alone does not express."
+      "forge_notes": "Centaur Courser must be set up as a declared attacker, which a tapped flag alone does not express.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "The controller of the enchanted creature can activate an ability the Aura grants it: can_play is true.",
+        "near_miss": "A player who does not control the enchanted creature has a false can_play bit for the granted ability.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "303.4e-3",
@@ -655,7 +765,10 @@
           "label": "creature-controller",
           "polarity": "does_not_fire",
           "delta": "The candidate is A, the new controller of the enchanted creature, activating the same ability and paying {R} with A's fourth Mountain.",
-          "expected": "The activation is not legal: can_play is false for A, because control of Crown of Flames did not change."
+          "expected": "The activation is not legal: can_play is false for A, because control of Crown of Flames did not change.",
+          "operation": {
+            "unclassifiable": "a different player is the candidate"
+          }
         }
       ],
       "cards": [
@@ -664,7 +777,18 @@
         "Grizzly Bears",
         "Act of Treason"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "The Aura's controller can still activate its ability after control of the enchanted permanent changed: can_play is true.",
+        "near_miss": "The player who gained the enchanted permanent has a false can_play bit for the Aura's ability.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "303.4g-1",
@@ -718,7 +842,10 @@
           "label": "creature-present",
           "polarity": "does_not_fire",
           "delta": "B controls a Grizzly Bears, and A chooses it as the object Pacifism enters attached to.",
-          "expected": "Pacifism moves from A's graveyard to the battlefield attached to Grizzly Bears; Replenish goes to A's graveyard."
+          "expected": "Pacifism moves from A's graveyard to the battlefield attached to Grizzly Bears; Replenish goes to A's graveyard.",
+          "operation": {
+            "unclassifiable": "adds a permanent and a different choice by a player"
+          }
         }
       ],
       "cards": [
@@ -727,7 +854,10 @@
         "Pacifism",
         "Grizzly Bears"
       ],
-      "forge_notes": "Whether Forge leaves an Aura with nothing to enchant in the graveyard when Replenish resolves is the behaviour under test; the base has no creature on either side."
+      "forge_notes": "Whether Forge leaves an Aura with nothing to enchant in the graveyard when Replenish resolves is the behaviour under test; the base has no creature on either side.",
+      "detector": {
+        "none": "No record field or event shows the outcome: the Aura stays where it was, so the resolution holds no zone_change or attached event for it, indistinguishable from any resolution that does not touch it (looked at EVENT_PARAMS zone_change and attached, and the effect half)."
+      }
     },
     {
       "id": "303.4g-2",
@@ -785,7 +915,10 @@
           "label": "creature-aura",
           "polarity": "does_not_fire",
           "delta": "The Aura card in A's graveyard is Pacifism instead of Wild Growth.",
-          "expected": "Pacifism moves from A's graveyard to the battlefield attached to Grizzly Bears; Retether goes to A's graveyard."
+          "expected": "Pacifism moves from A's graveyard to the battlefield attached to Grizzly Bears; Retether goes to A's graveyard.",
+          "operation": {
+            "unclassifiable": "changes a card in a graveyard, not a permanent"
+          }
         }
       ],
       "cards": [
@@ -796,7 +929,10 @@
         "Pacifism",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "No record field or event shows the outcome: the Aura stays where it was, so the resolution holds no zone_change or attached event for it, indistinguishable from any resolution that does not touch it (looked at EVENT_PARAMS zone_change and attached, and the effect half)."
+      }
     },
     {
       "id": "303.4i-1",
@@ -847,7 +983,10 @@
           "label": "creature-aura",
           "polarity": "does_not_fire",
           "delta": "The Aura card in A's hand is Holy Strength instead of Wild Growth.",
-          "expected": "Holy Strength moves from A's hand to the battlefield attached to Academy Researchers, which is a 3/4."
+          "expected": "Holy Strength moves from A's hand to the battlefield attached to Academy Researchers, which is a 3/4.",
+          "operation": {
+            "unclassifiable": "changes a card in a hand"
+          }
         }
       ],
       "cards": [
@@ -856,7 +995,10 @@
         "Wild Growth",
         "Holy Strength"
       ],
-      "forge_notes": "Forge offers only Auras that can enchant Academy Researchers (ChangeType$ Aura.CanEnchantSource), so in the base no card is offered and Wild Growth stays in hand."
+      "forge_notes": "Forge offers only Auras that can enchant Academy Researchers (ChangeType$ Aura.CanEnchantSource), so in the base no card is offered and Wild Growth stays in hand.",
+      "detector": {
+        "none": "No record field or event shows the outcome: the Aura stays where it was, so the resolution holds no zone_change or attached event for it, indistinguishable from any resolution that does not touch it (looked at EVENT_PARAMS zone_change and attached, and the effect half)."
+      }
     },
     {
       "id": "303.4j-1",
@@ -910,7 +1052,8 @@
           "label": "legal-creature",
           "polarity": "does_not_fire",
           "delta": "B's other creature is Centaur Courser instead of Black Knight.",
-          "expected": "Pacifism moves from Grizzly Bears to Centaur Courser; Enchantment Alteration goes to A's graveyard."
+          "expected": "Pacifism moves from Grizzly Bears to Centaur Courser; Enchantment Alteration goes to A's graveyard.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -921,7 +1064,19 @@
         "Centaur Courser",
         "Black Knight"
       ],
-      "forge_notes": "Forge may offer only permanents Pacifism can enchant; with Black Knight as the only other creature it then offers none, and Pacifism still does not move."
+      "forge_notes": "Forge may offer only permanents Pacifism can enchant; with Black Knight as the only other creature it then offers none, and Pacifism still does not move.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An attach effect resolves without moving its Aura, because the object or player it would attach to can't legally be enchanted: the attach resolution's effect half holds no attached event.",
+        "near_miss": "An attach effect resolves and moves the Aura to its new object or player: an attached event in the effect half.",
+        "params": {
+          "event": "attached",
+          "api": "Attach",
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "303.7a-1",
@@ -976,7 +1131,10 @@
           "label": "other-controller",
           "polarity": "does_not_fire",
           "delta": "B casts B's own Monstrous Rage targeting Grizzly Bears, tapping B's Mountain, instead of A casting the second one; the second Role token is B's.",
-          "expected": "Each Role is controlled by a different player, so both Monster Role tokens stay attached to Grizzly Bears, which is an 8/4 with trample until end of turn."
+          "expected": "Each Role is controlled by a different player, so both Monster Role tokens stay attached to Grizzly Bears, which is an 8/4 with trample until end of turn.",
+          "operation": {
+            "unclassifiable": "a different spell cast by a different player"
+          }
         }
       ],
       "cards": [

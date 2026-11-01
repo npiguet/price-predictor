@@ -60,7 +60,10 @@
           "label": "same_bearer",
           "polarity": "does_not_fire",
           "delta": "A chooses Grizzly Bears again.",
-          "expected": "The Ring has tempted A twice. Grizzly Bears is still A's Ring-bearer and Runeclaw Bear is not. A drew Forest."
+          "expected": "The Ring has tempted A twice. Grizzly Bears is still A's Ring-bearer and Runeclaw Bear is not. A drew Forest.",
+          "operation": {
+            "unclassifiable": "a different choice by a player"
+          }
         }
       ],
       "cards": [
@@ -70,7 +73,18 @@
         "Birthday Escape",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A RingTemptsYou resolution emits ring_tempts naming the tempted player and, when one was chosen, the creature that is now that player's Ring-bearer.",
+        "near_miss": "A RingTemptsYou resolution emitting no ring_tempts; every tempting emits one, so in practice only the fires side is tagged.",
+        "params": {
+          "event": "ring_tempts",
+          "api": "RingTemptsYou"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.54c-1",
@@ -122,13 +136,17 @@
           "label": "equal_power",
           "polarity": "does_not_fire",
           "delta": "B's creature is Runeclaw Bear (2/2) instead of Hill Giant.",
-          "expected": "Runeclaw Bear (power 2, not greater than 2) can legally block Grizzly Bears."
+          "expected": "Runeclaw Bear (power 2, not greater than 2) can legally block Grizzly Bears.",
+          "operation": "replace_card"
         },
         {
           "label": "not_bearer",
           "polarity": "other",
           "delta": "A attacks with Runeclaw Bear, which is not the Ring-bearer, and B's creature is Hill Giant.",
-          "expected": "Runeclaw Bear has no Ring evasion: Hill Giant can legally block it."
+          "expected": "Runeclaw Bear has no Ring evasion: Hill Giant can legally block it.",
+          "operation": {
+            "unclassifiable": "a different attacker is chosen"
+          }
         }
       ],
       "cards": [
@@ -194,13 +212,19 @@
           "label": "one_temptation",
           "polarity": "does_not_fire",
           "delta": "The Ring has tempted A only once.",
-          "expected": "No trigger fires. A's hand stays [Forest] and Island stays on top of the library."
+          "expected": "No trigger fires. A's hand stays [Forest] and Island stays on top of the library.",
+          "operation": {
+            "unclassifiable": "the Ring's temptation count is neither a counter nor a permanent fact a fork can set"
+          }
         },
         {
           "label": "not_bearer",
           "polarity": "other",
           "delta": "A attacks with Runeclaw Bear, which is not the Ring-bearer.",
-          "expected": "No trigger fires. A's hand stays [Forest] and Island stays on top of the library."
+          "expected": "No trigger fires. A's hand stays [Forest] and Island stays on top of the library.",
+          "operation": {
+            "unclassifiable": "a different attacker is chosen"
+          }
         }
       ],
       "cards": [
@@ -262,7 +286,10 @@
           "label": "two_temptations",
           "polarity": "does_not_fire",
           "delta": "The Ring has tempted A only twice.",
-          "expected": "Grizzly Bears' attack makes A draw Island and discard it. Wall of Wood takes 2 damage and survives combat. Nothing is sacrificed: it stays on the battlefield with 2 damage marked until the cleanup step."
+          "expected": "Grizzly Bears' attack makes A draw Island and discard it. Wall of Wood takes 2 damage and survives combat. Nothing is sacrificed: it stays on the battlefield with 2 damage marked until the cleanup step.",
+          "operation": {
+            "unclassifiable": "the Ring's temptation count is not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -321,7 +348,10 @@
           "label": "three_temptations",
           "polarity": "does_not_fire",
           "delta": "The Ring has tempted A only three times.",
-          "expected": "Grizzly Bears' attack makes A draw Island and discard it. Grizzly Bears deals 2 combat damage to B and no trigger fires: B's life is 18."
+          "expected": "Grizzly Bears' attack makes A draw Island and discard it. Grizzly Bears deals 2 combat damage to B and no trigger fires: B's life is 18.",
+          "operation": {
+            "unclassifiable": "the Ring's temptation count is not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -384,7 +414,10 @@
           "label": "has_creature",
           "polarity": "other",
           "delta": "A controls Grizzly Bears, which A chooses as Ring-bearer.",
-          "expected": "A gets the Ring emblem and Grizzly Bears becomes A's Ring-bearer (legendary). Ringwraiths' trigger fires and Ringwraiths returns to A's hand. A drew Forest."
+          "expected": "A gets the Ring emblem and Grizzly Bears becomes A's Ring-bearer (legendary). Ringwraiths' trigger fires and Ringwraiths returns to A's hand. A drew Forest.",
+          "operation": {
+            "unclassifiable": "adds a permanent and a player choice"
+          }
         }
       ],
       "cards": [
@@ -394,7 +427,17 @@
         "Forest",
         "Grizzly Bears"
       ],
-      "forge_notes": "701.54d has no does_not_fire branch: completing the actions of 701.54a always counts as the Ring tempting the player."
+      "forge_notes": "701.54d has no does_not_fire branch: completing the actions of 701.54a always counts as the Ring tempting the player.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger with Mode$ RingTemptsYou is evaluated when the Ring tempts a player and fires.",
+        "near_miss": "The same trigger is evaluated and does not fire.",
+        "params": {
+          "mode": "RingTemptsYou"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.54e-1",
@@ -447,7 +490,10 @@
           "label": "other_creature_stolen",
           "polarity": "does_not_fire",
           "delta": "B targets Runeclaw Bear with Act of Treason.",
-          "expected": "Grizzly Bears stays A's Ring-bearer and legendary. Runeclaw Bear is controlled by B until end of turn and is not a Ring-bearer."
+          "expected": "Grizzly Bears stays A's Ring-bearer and legendary. Runeclaw Bear is controlled by B until end of turn and is not a Ring-bearer.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -456,7 +502,10 @@
         "Mountain",
         "Act of Treason"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The Ring-bearer designation is in no snapshot entity field; ring_tempts names the bearer only when it is chosen, and no event marks the designation ending: a control_change shows the steal but not that the creature stopped being a Ring-bearer."
+      }
     },
     {
       "id": "701.54b-1",
@@ -508,7 +557,8 @@
           "label": "printed_legendary",
           "polarity": "other",
           "delta": "A's Ring-bearer is Isamaru, Hound of Konda (a printed legendary 2/2) instead of Grizzly Bears.",
-          "expected": "Clone enters as Isamaru, Hound of Konda, legendary because that supertype is copiable, but not a Ring-bearer. The legend rule puts the Clone into A's graveyard; the original Isamaru stays A's Ring-bearer."
+          "expected": "Clone enters as Isamaru, Hound of Konda, legendary because that supertype is copiable, but not a Ring-bearer. The legend rule puts the Clone into A's graveyard; the original Isamaru stays A's Ring-bearer.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -517,7 +567,10 @@
         "Clone",
         "Isamaru, Hound of Konda"
       ],
-      "forge_notes": "701.54b has no does_not_fire branch: the designation is never copied. The printed_legendary variant contrasts it with a copiable supertype."
+      "forge_notes": "701.54b has no does_not_fire branch: the designation is never copied. The printed_legendary variant contrasts it with a copiable supertype.",
+      "detector": {
+        "none": "Whether a permanent is a Ring-bearer, and that a copy lacks the designation, shows in no record field or event; copiable values appear only as characteristics."
+      }
     }
   ]
 }

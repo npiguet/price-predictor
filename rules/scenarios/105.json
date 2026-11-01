@@ -46,25 +46,29 @@
           "label": "multicolor",
           "polarity": "fires",
           "delta": "A's permanent is Watchwolf (mana cost {G}{W}) instead of Grizzly Bears.",
-          "expected": "Watchwolf is green and white (multicolored)."
+          "expected": "Watchwolf is green and white (multicolored).",
+          "operation": "replace_card"
         },
         {
           "label": "colorless_cost",
           "polarity": "does_not_fire",
           "delta": "A's permanent is Wurmcoil Engine (mana cost {6}, an artifact) instead of Grizzly Bears.",
-          "expected": "Wurmcoil Engine has no color symbol in its mana cost and is colorless."
+          "expected": "Wurmcoil Engine has no color symbol in its mana cost and is colorless.",
+          "operation": "replace_card"
         },
         {
           "label": "color_indicator",
           "polarity": "fires",
           "delta": "A's permanent is Dryad Arbor (no mana cost, color indicator green) instead of Grizzly Bears.",
-          "expected": "Dryad Arbor is green even though it has no mana cost."
+          "expected": "Dryad Arbor is green even though it has no mana cost.",
+          "operation": "replace_card"
         },
         {
           "label": "cda",
           "polarity": "fires",
           "delta": "A's permanent is Transguild Courier (mana cost {4}, characteristic-defining ability making it all colors) instead of Grizzly Bears.",
-          "expected": "Transguild Courier is white, blue, black, red and green."
+          "expected": "Transguild Courier is white, blue, black, red and green.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -129,19 +133,28 @@
           "label": "in_addition",
           "polarity": "does_not_fire",
           "delta": "A casts Painter's Servant (tapping two Islands) and chooses blue, instead of casting Prismatic Lace.",
-          "expected": "Grizzly Bears is green and blue; its green is kept because the new color is added in addition."
+          "expected": "Grizzly Bears is green and blue; its green is kept because the new color is added in addition.",
+          "operation": {
+            "unclassifiable": "a different spell cast: A casts a creature with a colour-adding static instead of the colour-setting instant, which also adds a permanent"
+          }
         },
         {
           "label": "colorless",
           "polarity": "other",
           "delta": "A casts Moonlace targeting Grizzly Bears, tapping one Island, instead of casting Prismatic Lace.",
-          "expected": "Grizzly Bears becomes colorless and loses green."
+          "expected": "Grizzly Bears becomes colorless and loses green.",
+          "operation": {
+            "unclassifiable": "a different spell cast: A casts a make-colourless instant instead"
+          }
         },
         {
           "label": "colorless_target",
           "polarity": "fires",
           "delta": "Prismatic Lace targets Ornithopter and A chooses blue.",
-          "expected": "Ornithopter, a colorless artifact creature, becomes blue."
+          "expected": "Ornithopter, a colorless artifact creature, becomes blue.",
+          "operation": {
+            "unclassifiable": "a different target for the same spell"
+          }
         }
       ],
       "cards": [
@@ -153,7 +166,18 @@
         "Moonlace",
         "Painter's Servant"
       ],
-      "forge_notes": "Prismatic Lace and Moonlace apply an Animate effect with permanent duration. Painter's Servant's static ability colors every permanent, so once it enters Ornithopter and Painter's Servant itself are blue too."
+      "forge_notes": "Prismatic Lace and Moonlace apply an Animate effect with permanent duration. Painter's Servant's static ability colors every permanent, so once it enters Ornithopter and Painter's Servant itself are blue too.",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A continuous effect sets an entity's colours outright (a '=' colour line), replacing every colour it had.",
+        "near_miss": "A continuous effect that applies to the board and sets no colour, such as one adding a colour in addition to the others.",
+        "params": {
+          "field": "colors",
+          "value": "="
+        },
+        "needs": []
+      }
     }
   ]
 }

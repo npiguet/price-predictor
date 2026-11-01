@@ -54,20 +54,36 @@
           "label": "blocked",
           "polarity": "does_not_fire",
           "delta": "B declares its Grizzly Bears as a blocker of Topan Freeblade instead of declaring no blockers.",
-          "expected": "Topan Freeblade deals its 2 damage to Grizzly Bears, not to a player; B's life stays 20 and the renown trigger does not fire. Grizzly Bears and Topan Freeblade each take lethal damage and both go to their owners' graveyards in the state-based check."
+          "expected": "Topan Freeblade deals its 2 damage to Grizzly Bears, not to a player; B's life stays 20 and the renown trigger does not fire. Grizzly Bears and Topan Freeblade each take lethal damage and both go to their owners' graveyards in the state-based check.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         },
         {
           "label": "already_renowned",
           "polarity": "does_not_fire",
           "delta": "Topan Freeblade is already renowned and carries one +1/+1 counter (3/3) from an earlier combat.",
-          "expected": "Topan Freeblade deals 3 combat damage to B (life 17). The renown trigger does not fire because the creature is renowned; it keeps exactly one +1/+1 counter and stays 3/3."
+          "expected": "Topan Freeblade deals 3 combat damage to B (life 17). The renown trigger does not fire because the creature is renowned; it keeps exactly one +1/+1 counter and stays 3/3.",
+          "operation": {
+            "unclassifiable": "sets a renowned designation as well as a counter; no operation sets a designation"
+          }
         }
       ],
       "cards": [
         "Topan Freeblade",
         "Grizzly Bears"
       ],
-      "forge_notes": "The renowned designation is a flag on the permanent that the engine tracks (IsRenowned); the already_renowned variant needs it set in the puzzle state."
+      "forge_notes": "The renowned designation is a flag on the permanent that the engine tracks (IsRenowned); the already_renowned variant needs it set in the puzzle state.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A renown trigger fires when its creature, not renowned, deals combat damage to a player.",
+        "near_miss": "A renown trigger is evaluated and does not fire: its creature dealt no combat damage to a player, or is already renowned.",
+        "params": {
+          "keyword": "Renown"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.112b-1",
@@ -134,7 +150,10 @@
           "label": "not_flickered",
           "polarity": "does_not_fire",
           "delta": "A does not cast Cloudshift; Topan Freeblade stays on the battlefield.",
-          "expected": "Topan Freeblade attacks as a 4/4 and deals 4 combat damage to B (life 16). The renown trigger does not fire because it is still renowned; it keeps its two +1/+1 counters."
+          "expected": "Topan Freeblade attacks as a 4/4 and deals 4 combat damage to B (life 16). The renown trigger does not fire because it is still renowned; it keeps its two +1/+1 counters.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         }
       ],
       "cards": [
@@ -193,13 +212,19 @@
           "label": "single_instance",
           "polarity": "other",
           "delta": "Aragorn, Hornburg Hero is not on the battlefield, so Topan Freeblade has one instance of renown.",
-          "expected": "Topan Freeblade deals 2 combat damage to B (life 18). One renown trigger fires and resolves: one +1/+1 counter, Topan Freeblade is 3/3 and renowned."
+          "expected": "Topan Freeblade deals 2 combat damage to B (life 18). One renown trigger fires and resolves: one +1/+1 counter, Topan Freeblade is 3/3 and renowned.",
+          "operation": {
+            "unclassifiable": "adds or removes a permanent"
+          }
         },
         {
           "label": "blocked",
           "polarity": "does_not_fire",
           "delta": "B declares its Grizzly Bears as a blocker of Topan Freeblade instead of declaring no blockers.",
-          "expected": "Topan Freeblade deals its first-strike damage to Grizzly Bears, which dies. No combat damage is dealt to a player, neither renown trigger fires, and Topan Freeblade has no counters."
+          "expected": "Topan Freeblade deals its first-strike damage to Grizzly Bears, which dies. No combat damage is dealt to a player, neither renown trigger fires, and Topan Freeblade has no counters.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         }
       ],
       "cards": [

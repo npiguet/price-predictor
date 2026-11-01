@@ -49,13 +49,26 @@
           "label": "stays_home",
           "polarity": "does_not_fire",
           "delta": "A declares no attackers.",
-          "expected": "Nothing is sacrificed. Rot-Curse Rakshasa stays on the battlefield and B's life stays 20."
+          "expected": "Nothing is sacrificed. Rot-Curse Rakshasa stays on the battlefield and B's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different attack declaration"
+          }
         }
       ],
       "cards": [
         "Rot-Curse Rakshasa"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A decayed creature's attack trigger fires when that creature attacks, setting up its sacrifice at end of combat.",
+        "near_miss": "A decayed creature's attack trigger is evaluated against another creature's attack and does not fire.",
+        "params": {
+          "keyword": "Decayed"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.147a-2",
@@ -104,7 +117,8 @@
           "label": "ordinary_blocker",
           "polarity": "does_not_fire",
           "delta": "B's creature is Hill Giant instead of Rot-Curse Rakshasa.",
-          "expected": "The block is legal. Hill Giant deals 3 damage to Grizzly Bears, which is destroyed, and takes 2 damage. B's life stays 20."
+          "expected": "The block is legal. Hill Giant deals 3 damage to Grizzly Bears, which is destroyed, and takes 2 damage. B's life stays 20.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -112,7 +126,19 @@
         "Rot-Curse Rakshasa",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature that a static ability forbids from blocking sits outside the legal blockers.",
+        "near_miss": "A creature that no static forbids sits among the legal blockers.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside",
+          "responsible_static": true
+        },
+        "needs": []
+      }
     }
   ]
 }

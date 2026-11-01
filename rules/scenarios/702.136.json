@@ -50,13 +50,19 @@
           "label": "haste_choice",
           "polarity": "does_not_fire",
           "delta": "A chooses haste for riot instead of the counter.",
-          "expected": "Zhur-Taa Goblin enters with no counter: it is a 2/2 with haste."
+          "expected": "Zhur-Taa Goblin enters with no counter: it is a 2/2 with haste.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         },
         {
           "label": "no_riot",
           "polarity": "other",
           "delta": "A casts Grizzly Bears instead of Zhur-Taa Goblin.",
-          "expected": "Grizzly Bears has no riot: it enters as a 2/2 with no counter and no haste."
+          "expected": "Grizzly Bears has no riot: it enters as a 2/2 with no counter and no haste.",
+          "operation": {
+            "unclassifiable": "a different spell or ability is cast"
+          }
         }
       ],
       "cards": [
@@ -113,7 +119,10 @@
           "label": "counter_choice",
           "polarity": "does_not_fire",
           "delta": "A chooses the +1/+1 counter for riot instead of haste.",
-          "expected": "Zhur-Taa Goblin has no haste and is summoning sick: it is not a legal attacker this turn."
+          "expected": "Zhur-Taa Goblin has no haste and is summoning sick: it is not a legal attacker this turn.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         }
       ],
       "cards": [
@@ -169,19 +178,28 @@
           "label": "one_instance",
           "polarity": "does_not_fire",
           "delta": "Rhythm of the Wild is not on the battlefield.",
-          "expected": "Only the printed riot applies: Zhur-Taa Goblin enters with one +1/+1 counter as a 3/3, without haste."
+          "expected": "Only the printed riot applies: Zhur-Taa Goblin enters with one +1/+1 counter as a 3/3, without haste.",
+          "operation": {
+            "unclassifiable": "adds, removes, attaches or changes the controller of a permanent, which no fork operation does"
+          }
         },
         {
           "label": "counter_and_haste",
           "polarity": "other",
           "delta": "A chooses the counter for one instance and haste for the other.",
-          "expected": "Zhur-Taa Goblin enters with one +1/+1 counter and has haste: it is a 3/3 with haste."
+          "expected": "Zhur-Taa Goblin enters with one +1/+1 counter and has haste: it is a 3/3 with haste.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         },
         {
           "label": "two_haste",
           "polarity": "other",
           "delta": "A chooses haste for both instances.",
-          "expected": "Zhur-Taa Goblin enters with no counter and has haste: it is a 2/2 with haste."
+          "expected": "Zhur-Taa Goblin enters with no counter and has haste: it is a 2/2 with haste.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         }
       ],
       "cards": [

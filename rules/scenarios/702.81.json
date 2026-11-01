@@ -54,13 +54,17 @@
           "label": "no_land_in_hand",
           "polarity": "does_not_fire",
           "delta": "A's hand holds Grizzly Bears instead of Mountain.",
-          "expected": "A has no land card to discard, so casting Flame Jab from the graveyard is not legal (can_play false)."
+          "expected": "A has no land card to discard, so casting Flame Jab from the graveyard is not legal (can_play false).",
+          "operation": {
+            "unclassifiable": "changes the contents of A's hand"
+          }
         },
         {
           "label": "mana_unavailable",
           "polarity": "other",
           "delta": "The Mountain on A's battlefield is tapped.",
-          "expected": "A cannot pay {R}, so casting Flame Jab from the graveyard is not legal (can_play false), although a land card is in hand."
+          "expected": "A cannot pay {R}, so casting Flame Jab from the graveyard is not legal (can_play false), although a land card is in hand.",
+          "operation": "tap"
         }
       ],
       "cards": [
@@ -68,7 +72,21 @@
         "Grizzly Bears",
         "Flame Jab"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A cast candidate with an additional cost passes the cost check, so it is castable (retrace: cast from the graveyard by discarding a land card).",
+        "near_miss": "The candidate fails the cost check because its additional or mana cost cannot be paid.",
+        "params": {
+          "bit": "failed_check",
+          "check": "cost",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     }
   ]
 }

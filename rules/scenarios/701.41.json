@@ -56,13 +56,19 @@
           "label": "one_target",
           "polarity": "other",
           "delta": "Lead by Example targets only Grizzly Bears.",
-          "expected": "Lead by Example resolves. Grizzly Bears gets a +1/+1 counter (3/3). Hill Giant stays 3/3 with no counter."
+          "expected": "Lead by Example resolves. Grizzly Bears gets a +1/+1 counter (3/3). Hill Giant stays 3/3 with no counter.",
+          "operation": {
+            "unclassifiable": "The spell is cast with a different set of targets, a player's choice."
+          }
         },
         {
           "label": "no_target",
           "polarity": "does_not_fire",
           "delta": "Lead by Example is cast with no targets.",
-          "expected": "Lead by Example resolves with no targets. No counter is put on any creature; Grizzly Bears is 2/2 and Hill Giant is 3/3."
+          "expected": "Lead by Example resolves with no targets. No counter is put on any creature; Grizzly Bears is 2/2 and Hill Giant is 3/3.",
+          "operation": {
+            "unclassifiable": "The spell is cast with no targets, a player's choice."
+          }
         }
       ],
       "cards": [
@@ -121,7 +127,10 @@
           "label": "no_other_creature",
           "polarity": "does_not_fire",
           "delta": "A controls no creature other than Aerie Auxiliary (no Grizzly Bears).",
-          "expected": "Aerie Auxiliary is not a legal target for its own support ability, so the ability targets no creature. No +1/+1 counter is put on any creature and Aerie Auxiliary stays 3/3."
+          "expected": "Aerie Auxiliary is not a legal target for its own support ability, so the ability targets no creature. No +1/+1 counter is put on any creature and Aerie Auxiliary stays 3/3.",
+          "operation": {
+            "unclassifiable": "A creature is removed from the battlefield; removing a permanent is no fork operation."
+          }
         }
       ],
       "cards": [

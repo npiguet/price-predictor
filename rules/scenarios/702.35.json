@@ -61,19 +61,28 @@
           "label": "declined",
           "polarity": "other",
           "delta": "A chooses not to cast Fiery Temper when the madness trigger resolves.",
-          "expected": "Fiery Temper is exiled when discarded, then put into A's graveyard by the trigger. B's life stays 20. A draws two cards."
+          "expected": "Fiery Temper is exiled when discarded, then put into A's graveyard by the trigger. B's life stays 20. A draws two cards.",
+          "operation": {
+            "unclassifiable": "A different decision by the player (not casting the card)."
+          }
         },
         {
           "label": "cost_unpayable",
           "polarity": "other",
           "delta": "A controls only two Mountains, both used for Tormenting Voice.",
-          "expected": "Fiery Temper is exiled when discarded; the madness cost {R} cannot be paid, so it is put into A's graveyard. B's life stays 20."
+          "expected": "Fiery Temper is exiled when discarded; the madness cost {R} cannot be paid, so it is put into A's graveyard. B's life stays 20.",
+          "operation": {
+            "unclassifiable": "Removes a permanent (a Mountain) from the battlefield."
+          }
         },
         {
           "label": "no_madness",
           "polarity": "does_not_fire",
           "delta": "A's hand holds Shock instead of Fiery Temper and A discards Shock.",
-          "expected": "Shock goes directly to A's graveyard: it is not exiled and no madness trigger exists. B's life stays 20."
+          "expected": "Shock goes directly to A's graveyard: it is not exiled and no madness trigger exists. B's life stays 20.",
+          "operation": {
+            "unclassifiable": "Changes the card in a hand and the discarded card, not a permanent on the battlefield."
+          }
         }
       ],
       "cards": [
@@ -145,13 +154,19 @@
           "label": "cast_with_madness",
           "polarity": "does_not_fire",
           "delta": "When the madness trigger resolves, A casts Fiery Temper for {R} (tapping the third Mountain) targeting player B; it resolves before Containment Construct's trigger.",
-          "expected": "Fiery Temper deals 3 damage to B (life 20 to 17) and is put into A's graveyard as a new object; Containment Construct's trigger cannot find the discarded card and exiles nothing. Fiery Temper stays in A's graveyard. A draws two cards."
+          "expected": "Fiery Temper deals 3 damage to B (life 20 to 17) and is put into A's graveyard as a new object; Containment Construct's trigger cannot find the discarded card and exiles nothing. Fiery Temper stays in A's graveyard. A draws two cards.",
+          "operation": {
+            "unclassifiable": "A different decision by the player (casting the card, targeting B)."
+          }
         },
         {
           "label": "construct_trigger_first",
           "polarity": "does_not_fire",
           "delta": "A orders the triggers the other way: Containment Construct's trigger is on top and resolves before the madness trigger.",
-          "expected": "When Containment Construct's trigger resolves Fiery Temper is still in exile, not in the graveyard, so nothing is exiled from the graveyard. The madness trigger then resolves, A does not cast Fiery Temper, and it is put into A's graveyard, where it stays. A draws two cards."
+          "expected": "When Containment Construct's trigger resolves Fiery Temper is still in exile, not in the graveyard, so nothing is exiled from the graveyard. The madness trigger then resolves, A does not cast Fiery Temper, and it is put into A's graveyard, where it stays. A draws two cards.",
+          "operation": {
+            "unclassifiable": "A different trigger ordering decision by the player."
+          }
         }
       ],
       "cards": [

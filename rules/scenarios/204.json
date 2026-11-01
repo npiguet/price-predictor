@@ -46,19 +46,22 @@
           "label": "back_face",
           "polarity": "fires",
           "delta": "A's permanent is Delver of Secrets already transformed into Insectile Aberration (no mana cost, blue color indicator) instead of Dryad Arbor.",
-          "expected": "Insectile Aberration is blue."
+          "expected": "Insectile Aberration is blue.",
+          "operation": "replace_card"
         },
         {
           "label": "no_indicator",
           "polarity": "does_not_fire",
           "delta": "A's permanent is Forest (no mana cost, no color indicator) instead of Dryad Arbor.",
-          "expected": "Forest is colorless."
+          "expected": "Forest is colorless.",
+          "operation": "replace_card"
         },
         {
           "label": "mana_cost_not_indicator",
           "polarity": "does_not_fire",
           "delta": "A's permanent is Ornithopter (mana cost {0}, no color indicator) instead of Dryad Arbor.",
-          "expected": "Ornithopter is colorless."
+          "expected": "Ornithopter is colorless.",
+          "operation": "replace_card"
         }
       ],
       "cards": [

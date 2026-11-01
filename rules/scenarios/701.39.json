@@ -54,7 +54,8 @@
           "label": "lions_lowest",
           "polarity": "other",
           "delta": "A controls Savannah Lions (2/1) instead of Wall of Wood.",
-          "expected": "Savannah Lions (toughness 1) gets three +1/+1 counters and is a 5/4. Grizzly Bears gets no counters and stays 2/2. Cached Defenses is in A's graveyard."
+          "expected": "Savannah Lions (toughness 1) gets three +1/+1 counters and is a 5/4. Grizzly Bears gets no counters and stays 2/2. Cached Defenses is in A's graveyard.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -117,7 +118,10 @@
           "label": "no_creature",
           "polarity": "does_not_fire",
           "delta": "A controls no creature (Grizzly Bears is not on the battlefield).",
-          "expected": "Cached Defenses resolves and no counters are put on anything: Savannah Lions stays 2/1 with no counters. Cached Defenses is in A's graveyard."
+          "expected": "Cached Defenses resolves and no counters are put on anything: Savannah Lions stays 2/1 with no counters. Cached Defenses is in A's graveyard.",
+          "operation": {
+            "unclassifiable": "A permanent is removed from the battlefield; no fork operation removes a permanent."
+          }
         }
       ],
       "cards": [

@@ -61,7 +61,10 @@
           "label": "dungeon_in_progress",
           "polarity": "does_not_fire",
           "delta": "A already has Lost Mine of Phandelver in the command zone with the venture marker on Cave Entrance.",
-          "expected": "No new dungeon enters the command zone. The marker moves from Cave Entrance to the adjacent room Goblin Lair (A chose it over Mine Tunnels), whose ability creates a 1/1 red Goblin token under A's control. No scry happens."
+          "expected": "No new dungeon enters the command zone. The marker moves from Cave Entrance to the adjacent room Goblin Lair (A chose it over Mine Tunnels), whose ability creates a 1/1 red Goblin token under A's control. No scry happens.",
+          "operation": {
+            "unclassifiable": "A dungeon with a venture marker is put in the command zone; no fork operation changes the command zone."
+          }
         }
       ],
       "cards": [
@@ -124,13 +127,19 @@
           "label": "mine_tunnels",
           "polarity": "other",
           "delta": "A follows the other arrow out of Cave Entrance, to Mine Tunnels.",
-          "expected": "The venture marker moves from Cave Entrance to Mine Tunnels. Mine Tunnels' room ability creates a Treasure token under A's control. No Goblin token is created."
+          "expected": "The venture marker moves from Cave Entrance to Mine Tunnels. Mine Tunnels' room ability creates a Treasure token under A's control. No Goblin token is created.",
+          "operation": {
+            "unclassifiable": "The player follows a different arrow, a decision."
+          }
         },
         {
           "label": "bottom_room",
           "polarity": "does_not_fire",
           "delta": "The venture marker is on Temple of Dumathoin, the bottommost room.",
-          "expected": "The marker does not move to an adjacent room (Temple of Dumathoin has no arrow out). Lost Mine of Phandelver is removed from the game and A has completed a dungeon. Tomb of Annihilation enters the command zone with the marker on Trapped Entry, which makes each player lose 1 life: A 19, B 19."
+          "expected": "The marker does not move to an adjacent room (Temple of Dumathoin has no arrow out). Lost Mine of Phandelver is removed from the game and A has completed a dungeon. Tomb of Annihilation enters the command zone with the marker on Trapped Entry, which makes each player lose 1 life: A 19, B 19.",
+          "operation": {
+            "unclassifiable": "The venture marker is in a different room; no fork operation changes dungeon progress."
+          }
         }
       ],
       "cards": [
@@ -193,7 +202,10 @@
           "label": "one_room_above",
           "polarity": "does_not_fire",
           "delta": "The venture marker is on Dark Pool, the room above Temple of Dumathoin.",
-          "expected": "The marker moves to Temple of Dumathoin, whose ability makes A draw Forest. Lost Mine of Phandelver stays in the command zone, no dungeon is completed, and no life is lost: A 20, B 20."
+          "expected": "The marker moves to Temple of Dumathoin, whose ability makes A draw Forest. Lost Mine of Phandelver stays in the command zone, no dungeon is completed, and no life is lost: A 20, B 20.",
+          "operation": {
+            "unclassifiable": "The venture marker is in a different room; no fork operation changes dungeon progress."
+          }
         }
       ],
       "cards": [
@@ -258,7 +270,10 @@
           "label": "dungeon_in_progress",
           "polarity": "does_not_fire",
           "delta": "A already has Lost Mine of Phandelver in the command zone with the venture marker on Cave Entrance.",
-          "expected": "Undercity does not enter. The marker in Lost Mine of Phandelver moves from Cave Entrance to Goblin Lair (A's choice), creating a 1/1 red Goblin token. No land is fetched. A has the initiative."
+          "expected": "Undercity does not enter. The marker in Lost Mine of Phandelver moves from Cave Entrance to Goblin Lair (A's choice), creating a 1/1 red Goblin token. No land is fetched. A has the initiative.",
+          "operation": {
+            "unclassifiable": "A dungeon with a venture marker is put in the command zone; no fork operation changes the command zone."
+          }
         }
       ],
       "cards": [

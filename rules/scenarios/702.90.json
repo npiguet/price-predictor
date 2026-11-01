@@ -60,14 +60,27 @@
           "label": "plain_attacker",
           "polarity": "does_not_fire",
           "delta": "A attacks with Grizzly Bears (2/2) instead of Contagious Nim.",
-          "expected": "B loses 2 life, so B's life becomes 18. B has no poison counters."
+          "expected": "B loses 2 life, so B's life becomes 18. B has no poison counters.",
+          "operation": {
+            "unclassifiable": "a different attack declaration by A (Grizzly Bears is already on the battlefield)"
+          }
         }
       ],
       "cards": [
         "Contagious Nim",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "keyword_combat",
+        "record_kind": "combat",
+        "outcome": "A combat in which a creature with infect deals damage.",
+        "near_miss": "A damage-step probe fork that stripped infect from its carrier.",
+        "params": {
+          "keyword": "infect"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.90c-1",
@@ -120,7 +133,10 @@
           "label": "plain_attacker",
           "polarity": "does_not_fire",
           "delta": "A attacks with Grizzly Bears (2/2) instead of Contagious Nim, and Hill Giant blocks it.",
-          "expected": "Grizzly Bears deals 2 damage to Hill Giant, which has 2 damage marked, no counters, and stays a 3/3. Hill Giant deals 3 damage to Grizzly Bears, which is destroyed. B's life stays 20."
+          "expected": "Grizzly Bears deals 2 damage to Hill Giant, which has 2 damage marked, no counters, and stays a 3/3. Hill Giant deals 3 damage to Grizzly Bears, which is destroyed. B's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different attack declaration by A and a different block by B"
+          }
         }
       ],
       "cards": [
@@ -128,7 +144,17 @@
         "Grizzly Bears",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "keyword_combat",
+        "record_kind": "combat",
+        "outcome": "A combat in which a creature with infect deals damage.",
+        "near_miss": "A damage-step probe fork that stripped infect from its carrier.",
+        "params": {
+          "keyword": "infect"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.90d-1",
@@ -183,13 +209,19 @@
           "label": "not_granted",
           "polarity": "does_not_fire",
           "delta": "A does not cast Tainted Strike.",
-          "expected": "Mogg Fanatic had no infect. Hill Giant has 1 damage marked, no counters, and stays a 3/3."
+          "expected": "Mogg Fanatic had no infect. Hill Giant has 1 damage marked, no counters, and stays a 3/3.",
+          "operation": {
+            "unclassifiable": "a different spell cast (none)"
+          }
         },
         {
           "label": "player_target",
           "polarity": "fires",
           "delta": "Mogg Fanatic's ability targets player B instead of Hill Giant.",
-          "expected": "B receives 1 poison counter and B's life stays 20. Hill Giant is unchanged."
+          "expected": "B receives 1 poison counter and B's life stays 20. Hill Giant is unchanged.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -199,7 +231,19 @@
         "Tainted Strike",
         "Hill Giant"
       ],
-      "forge_notes": "Relies on Forge using the last known information of the sacrificed Mogg Fanatic for infect; the sacrifice cost is paid before the ability resolves."
+      "forge_notes": "Relies on Forge using the last known information of the sacrificed Mogg Fanatic for infect; the sacrifice cost is paid before the ability resolves.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A damage-dealing resolution puts -1/-1 counters on a creature, as damage from a source with infect (or wither) does, instead of marking damage.",
+        "near_miss": "A DealDamage resolution that puts no -1/-1 counter: its damage is marked.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "-1/-1",
+          "api": "DealDamage"
+        },
+        "needs": []
+      }
     }
   ]
 }

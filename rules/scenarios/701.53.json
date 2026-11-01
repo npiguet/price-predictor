@@ -65,13 +65,19 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B casts Counterspell in response, tapping two Islands.",
-          "expected": "Eyes of Gitaxias is countered and moves to A's graveyard. No Incubator token is created and A draws no card; Forest stays on top of A's library."
+          "expected": "Eyes of Gitaxias is countered and moves to A's graveyard. No Incubator token is created and A draws no card; Forest stays on top of A's library.",
+          "operation": {
+            "unclassifiable": "The opponent casts a counterspell, a different decision and spell."
+          }
         },
         {
           "label": "transformed",
           "polarity": "other",
           "delta": "After Eyes of Gitaxias resolves, A pays {2} (the two remaining Islands) to transform the Incubator token.",
-          "expected": "The token transforms into a Phyrexian Token, a 0/0 colorless Phyrexian artifact creature, keeping its three +1/+1 counters and so a 3/3. A draws Forest."
+          "expected": "The token transforms into a Phyrexian Token, a 0/0 colorless Phyrexian artifact creature, keeping its three +1/+1 counters and so a 3/3. A draws Forest.",
+          "operation": {
+            "unclassifiable": "The player activates the token's transform ability, a different decision."
+          }
         }
       ],
       "cards": [
@@ -80,7 +86,19 @@
         "Counterspell",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An Incubate resolution creates an Incubator token.",
+        "near_miss": "An Incubate resolution creates no Incubator token.",
+        "params": {
+          "event": "token_created",
+          "token_kind": "Incubator",
+          "api": "Incubate"
+        },
+        "needs": []
+      }
     }
   ]
 }

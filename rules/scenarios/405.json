@@ -57,7 +57,10 @@
           "label": "activate_ability",
           "polarity": "does_not_fire",
           "delta": "A activates Prodigal Pyromancer targeting Grizzly Bears instead of casting Shock.",
-          "expected": "The stack holds an ability with no card; Prodigal Pyromancer stays on the battlefield tapped and Shock stays in A's hand."
+          "expected": "The stack holds an ability with no card; Prodigal Pyromancer stays on the battlefield tapped and Shock stays in A's hand.",
+          "operation": {
+            "unclassifiable": "a different spell or ability activated"
+          }
         }
       ],
       "cards": [
@@ -120,7 +123,10 @@
           "label": "no_response",
           "polarity": "does_not_fire",
           "delta": "B does not cast Giant Growth while Shock is on the stack.",
-          "expected": "Shock resolves and Grizzly Bears dies in the state-based check before B receives priority, so Giant Growth has no target and cannot be cast."
+          "expected": "Shock resolves and Grizzly Bears dies in the state-based check before B receives priority, so Giant Growth has no target and cannot be cast.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         }
       ],
       "cards": [
@@ -183,13 +189,19 @@
           "label": "b_active",
           "polarity": "other",
           "delta": "B is the active player instead of A.",
-          "expected": "B's trigger goes on the stack first and A's on top of it. A's trigger resolves first: B loses 1 life and A gains 1 (A at 2). B is at 0 life and loses the game before B's trigger resolves."
+          "expected": "B's trigger goes on the stack first and A's on top of it. A's trigger resolves first: B loses 1 life and A gains 1 (A at 2). B is at 0 life and loses the game before B's trigger resolves.",
+          "operation": {
+            "unclassifiable": "changing the turn"
+          }
         },
         {
           "label": "single_trigger",
           "polarity": "does_not_fire",
           "delta": "Blood Artist is absent from B's battlefield, so only A's trigger is put on the stack.",
-          "expected": "Only A's trigger is on the stack, targeting B; it resolves: B loses 1 life (0) and A gains 1 (2), and B loses the game in the next state-based check."
+          "expected": "Only A's trigger is on the stack, targeting B; it resolves: B loses 1 life (0) and A gains 1 (2), and B loses the game in the next state-based check.",
+          "operation": {
+            "unclassifiable": "removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -253,7 +265,10 @@
           "label": "ability",
           "polarity": "does_not_fire",
           "delta": "A activates Prodigal Pyromancer targeting B instead of casting Grizzly Bears.",
-          "expected": "The ability on the stack has no card characteristics and is not a creature spell, so Essence Scatter has no legal target and B cannot cast it."
+          "expected": "The ability on the stack has no card characteristics and is not a creature spell, so Essence Scatter has no legal target and B cannot cast it.",
+          "operation": {
+            "unclassifiable": "a different ability activated"
+          }
         }
       ],
       "cards": [
@@ -318,7 +333,10 @@
           "label": "own",
           "polarity": "does_not_fire",
           "delta": "Control Magic is absent, so A controls Blood Artist, and A targets B with the trigger.",
-          "expected": "The trigger is controlled by A: B loses 1 life (19) and A gains 1 (21). Blood Artist goes to A's graveyard."
+          "expected": "The trigger is controlled by A: B loses 1 life (19) and A gains 1 (21). Blood Artist goes to A's graveyard.",
+          "operation": {
+            "unclassifiable": "removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -381,13 +399,19 @@
           "label": "b_responds",
           "polarity": "does_not_fire",
           "delta": "B casts Giant Growth targeting Grizzly Bears instead of passing.",
-          "expected": "Not all players passed in succession, so Shock does not resolve yet; Giant Growth goes on top of the stack and resolves first after both players pass, then Shock resolves and Grizzly Bears survives as a 5/5 with 2 damage."
+          "expected": "Not all players passed in succession, so Shock does not resolve yet; Giant Growth goes on top of the stack and resolves first after both players pass, then Shock resolves and Grizzly Bears survives as a 5/5 with 2 damage.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         },
         {
           "label": "empty_stack",
           "polarity": "other",
           "delta": "A casts nothing, so the stack is empty when both players pass in succession.",
-          "expected": "The main phase ends and the beginning of combat step begins."
+          "expected": "The main phase ends and the beginning of combat step begins.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         }
       ],
       "cards": [
@@ -397,7 +421,20 @@
         "Giant Growth",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "resolution_outcome",
+        "record_kind": "resolution",
+        "outcome": "With all players passing in succession the top stack object resolves.",
+        "near_miss": "A player responds instead of passing and the stack object is countered rather than resolving.",
+        "params": {
+          "outcome": "resolved",
+          "near": [
+            "countered"
+          ]
+        },
+        "needs": []
+      }
     },
     {
       "id": "405.6a-1",
@@ -455,7 +492,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B responds with Counterspell, tapping both Islands, and it counters Eerie Interlude.",
-          "expected": "Eerie Interlude does not resolve, so no delayed trigger is created; Grizzly Bears stays on the battlefield and nothing is put on the stack at the end step."
+          "expected": "Eerie Interlude does not resolve, so no delayed trigger is created; Grizzly Bears stays on the battlefield and nothing is put on the stack at the end step.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         }
       ],
       "cards": [
@@ -465,7 +505,17 @@
         "Eerie Interlude",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolving effect creates a delayed trigger and puts nothing on the stack itself.",
+        "near_miss": "A resolution that creates no delayed trigger (not counted: no API restriction).",
+        "params": {
+          "event": "delayed_trigger_created"
+        },
+        "needs": []
+      }
     },
     {
       "id": "405.6b-1",
@@ -521,7 +571,10 @@
           "label": "anthem_countered",
           "polarity": "does_not_fire",
           "delta": "B responds with Counterspell, tapping both Islands, and it counters Glorious Anthem.",
-          "expected": "Glorious Anthem never enters the battlefield and Grizzly Bears stays 2/2."
+          "expected": "Glorious Anthem never enters the battlefield and Grizzly Bears stays 2/2.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         }
       ],
       "cards": [
@@ -531,7 +584,17 @@
         "Glorious Anthem",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static ability contributes a power/toughness boost to the board with nothing put on the stack.",
+        "near_miss": "The static applies and contributes no P/T boost.",
+        "params": {
+          "field": "pt"
+        },
+        "needs": []
+      }
     },
     {
       "id": "405.6c-1",
@@ -577,13 +640,19 @@
           "label": "colorless_mana",
           "polarity": "does_not_fire",
           "delta": "A activates the first ability of Adarkar Wastes to add {C}.",
-          "expected": "{C} is added and A stays at 20 life; nothing is put on the stack."
+          "expected": "{C} is added and A stays at 20 life; nothing is put on the stack.",
+          "operation": {
+            "unclassifiable": "a different ability activated"
+          }
         },
         {
           "label": "non_mana_ability",
           "polarity": "other",
           "delta": "A activates Prodigal Pyromancer targeting Grizzly Bears instead of a land.",
-          "expected": "The ability goes on the stack and B may respond; no damage is dealt until it resolves."
+          "expected": "The ability goes on the stack and B may respond; no damage is dealt until it resolves.",
+          "operation": {
+            "unclassifiable": "a different ability activated"
+          }
         }
       ],
       "cards": [
@@ -591,7 +660,18 @@
         "Prodigal Pyromancer",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A mana ability's resolution adds mana at once.",
+        "near_miss": "A Mana-API resolution that produced no mana.",
+        "params": {
+          "event": "mana_produced",
+          "api": "Mana"
+        },
+        "needs": []
+      }
     },
     {
       "id": "405.6d-1",
@@ -639,7 +719,8 @@
           "label": "cannot_pay",
           "polarity": "does_not_fire",
           "delta": "One of the four Plains is already tapped.",
-          "expected": "A cannot pay {2}{W}{W} with three untapped Plains; turning Exalted Angel face up is not legal and it stays a face-down 2/2."
+          "expected": "A cannot pay {2}{W}{W} with three untapped Plains; turning Exalted Angel face up is not legal and it stays a face-down 2/2.",
+          "operation": "tap"
         }
       ],
       "cards": [
@@ -693,7 +774,10 @@
           "label": "skipped_draw",
           "polarity": "does_not_fire",
           "delta": "A controls Necropotence, which skips A's draw step.",
-          "expected": "A draws nothing; Forest stays on top of A's library and the hand stays empty."
+          "expected": "A draws nothing; Forest stays on top of A's library and the hand stays empty.",
+          "operation": {
+            "unclassifiable": "adds a permanent"
+          }
         }
       ],
       "cards": [
@@ -756,13 +840,17 @@
           "label": "survives",
           "polarity": "does_not_fire",
           "delta": "B's creature is Centaur Courser (3/3) instead of Grizzly Bears.",
-          "expected": "No state-based action applies; Centaur Courser stays on the battlefield with 2 damage."
+          "expected": "No state-based action applies; Centaur Courser stays on the battlefield with 2 damage.",
+          "operation": "replace_card"
         },
         {
           "label": "respond_early",
           "polarity": "other",
           "delta": "B casts Giant Growth on Grizzly Bears while Shock is still on the stack.",
-          "expected": "Giant Growth resolves first and Grizzly Bears survives Shock as a 5/5 with 2 damage."
+          "expected": "Giant Growth resolves first and Grizzly Bears survives Shock as a 5/5 with 2 damage.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         }
       ],
       "cards": [
@@ -773,7 +861,17 @@
         "Grizzly Bears",
         "Centaur Courser"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "A creature with lethal damage dies in the state-based check right after the resolution, before priority.",
+        "near_miss": "A creature dealt damage short of its toughness stays on the battlefield.",
+        "params": {
+          "check": "lethal_damage"
+        },
+        "needs": []
+      }
     }
   ]
 }

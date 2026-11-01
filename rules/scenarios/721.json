@@ -58,7 +58,8 @@
           "label": "one_counter",
           "polarity": "does_not_fire",
           "delta": "Lumen-Class Frigate has 1 charge counter instead of 2.",
-          "expected": "Lumen-Class Frigate has 1 charge counter, below STATION 2+, and gives no anthem: Grizzly Bears is 2/2. Lumen-Class Frigate is not a creature."
+          "expected": "Lumen-Class Frigate has 1 charge counter, below STATION 2+, and gives no anthem: Grizzly Bears is 2/2. Lumen-Class Frigate is not a creature.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -66,7 +67,17 @@
         "Grizzly Bears",
         "Hill Giant"
       ],
-      "forge_notes": "Forge implements the station symbol as a static ability with Affected$ Card.Self+counters_GE2_CHARGE."
+      "forge_notes": "Forge implements the station symbol as a static ability with Affected$ Card.Self+counters_GE2_CHARGE.",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static ability that applies only while its permanent has enough counters contributes a power/toughness boost to the permanents it affects.",
+        "near_miss": "A static ability applies to the board and contributes no power/toughness boost.",
+        "params": {
+          "field": "pt"
+        },
+        "needs": []
+      }
     },
     {
       "id": "721.2b-1",
@@ -116,14 +127,26 @@
           "label": "nine_counters",
           "polarity": "does_not_fire",
           "delta": "Rescue Skiff has 9 charge counters instead of 10.",
-          "expected": "Rescue Skiff has 9 charge counters, below STATION 10+: it is a noncreature artifact Spacecraft with no power or toughness in play and no flying. It stays on the battlefield."
+          "expected": "Rescue Skiff has 9 charge counters, below STATION 10+: it is a noncreature artifact Spacecraft with no power or toughness in play and no flying. It stays on the battlefield.",
+          "operation": "counters"
         }
       ],
       "cards": [
         "Rescue Skiff",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static ability adds the creature type to the permanent it affects, making it a creature in addition to its other types.",
+        "near_miss": "A static ability applies to the board and adds no creature type.",
+        "params": {
+          "field": "types",
+          "value": "Creature"
+        },
+        "needs": []
+      }
     },
     {
       "id": "721.4-1",
@@ -176,13 +199,15 @@
           "label": "zero_counters",
           "polarity": "fires",
           "delta": "Debris Field Crusher has 0 charge counters instead of 7.",
-          "expected": "The station ability is legal to activate (can_play true). The {1}{R} pump ability is not available (can_play false)."
+          "expected": "The station ability is legal to activate (can_play true). The {1}{R} pump ability is not available (can_play false).",
+          "operation": "counters"
         },
         {
           "label": "eight_counters",
           "polarity": "other",
           "delta": "Debris Field Crusher has 8 charge counters instead of 7.",
-          "expected": "The station ability is legal to activate (can_play true) and the {1}{R} pump ability is also available (can_play true, payable with the two Mountains), because STATION 8+ is met."
+          "expected": "The station ability is legal to activate (can_play true) and the {1}{R} pump ability is also available (can_play true, payable with the two Mountains), because STATION 8+ is met.",
+          "operation": "counters"
         }
       ],
       "cards": [

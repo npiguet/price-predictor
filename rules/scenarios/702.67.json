@@ -58,7 +58,10 @@
           "label": "target_leaves_in_response",
           "polarity": "does_not_fire",
           "delta": "After the fortify ability is on the stack, A taps and sacrifices Evolving Wilds (fetching a Forest from the library) before passing priority.",
-          "expected": "The fortify ability fizzles because its only target is gone. Darksteel Garrison stays on the battlefield unattached. Evolving Wilds is in A's graveyard and A's Forest enters tapped."
+          "expected": "The fortify ability fizzles because its only target is gone. Darksteel Garrison stays on the battlefield unattached. Evolving Wilds is in A's graveyard and A's Forest enters tapped.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         }
       ],
       "cards": [
@@ -115,7 +118,10 @@
           "label": "during_combat",
           "polarity": "does_not_fire",
           "delta": "The step is declare_attackers instead of main1.",
-          "expected": "The activation is not legal (can_play false), because fortify may be activated only as a sorcery."
+          "expected": "The activation is not legal (can_play false), because fortify may be activated only as a sorcery.",
+          "operation": {
+            "unclassifiable": "changes the phase or turn"
+          }
         }
       ],
       "cards": [

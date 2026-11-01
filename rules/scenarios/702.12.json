@@ -64,13 +64,19 @@
           "label": "no_response",
           "polarity": "does_not_fire",
           "delta": "B passes without casting Sheltering Light.",
-          "expected": "Shock deals 2 damage to Grizzly Bears, which dies in the state-based check and moves to B's graveyard."
+          "expected": "Shock deals 2 damage to Grizzly Bears, which dies in the state-based check and moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "B does not cast the response spell the base casts; a different decision, which no fork operation makes."
+          }
         },
         {
           "label": "other_creature_protected",
           "polarity": "other",
           "delta": "Sheltering Light targets Hill Giant instead of Grizzly Bears.",
-          "expected": "Grizzly Bears takes 2 damage and dies; Hill Giant gains indestructible and stays untouched."
+          "expected": "Grizzly Bears takes 2 damage and dies; Hill Giant gains indestructible and stays untouched.",
+          "operation": {
+            "unclassifiable": "B's response spell targets a different creature; no fork operation changes a targeting choice."
+          }
         }
       ],
       "cards": [
@@ -137,7 +143,10 @@
           "label": "no_response",
           "polarity": "does_not_fire",
           "delta": "B passes without casting Sheltering Light.",
-          "expected": "Doom Blade resolves and Grizzly Bears is destroyed and moves to B's graveyard."
+          "expected": "Doom Blade resolves and Grizzly Bears is destroyed and moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "B does not cast the response spell the base casts; a different decision, which no fork operation makes."
+          }
         }
       ],
       "cards": [
@@ -201,13 +210,19 @@
           "label": "shock_ordinary",
           "polarity": "does_not_fire",
           "delta": "Shock targets Myr Servitor (1/1) instead of Darksteel Myr.",
-          "expected": "Shock deals 2 damage to Myr Servitor, which dies and moves to B's graveyard."
+          "expected": "Shock deals 2 damage to Myr Servitor, which dies and moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "A's spell targets a different creature already on the battlefield; no fork operation changes a targeting choice."
+          }
         },
         {
           "label": "doom_blade_indestructible",
           "polarity": "fires",
           "delta": "A casts Doom Blade, tapping both Swamps, instead of Shock.",
-          "expected": "Doom Blade resolves and Darksteel Myr stays on the battlefield."
+          "expected": "Doom Blade resolves and Darksteel Myr stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "A casts a different spell from hand; a different spell cast, which no fork operation makes."
+          }
         }
       ],
       "cards": [

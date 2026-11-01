@@ -59,7 +59,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "Instead of passing, B responds by casting Counterspell targeting Raise the Alarm, tapping both Islands.",
-          "expected": "Raise the Alarm is countered and moves to A's graveyard. No tokens are created."
+          "expected": "Raise the Alarm is countered and moves to A's graveyard. No tokens are created.",
+          "operation": {
+            "unclassifiable": "a different spell is cast"
+          }
         }
       ],
       "cards": [
@@ -68,7 +71,18 @@
         "Raise the Alarm",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A token-creating resolution puts the tokens onto the battlefield (a token_created event).",
+        "near_miss": "A Token resolution that creates no token.",
+        "params": {
+          "event": "token_created",
+          "api": "Token"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.7b-1",
@@ -116,7 +130,10 @@
           "label": "no_march",
           "polarity": "does_not_fire",
           "delta": "March of the Machines is not on the battlefield.",
-          "expected": "The Treasure token enters as a noncreature artifact with no +1/+1 counter and stays on the battlefield."
+          "expected": "The Treasure token enters as a noncreature artifact with no +1/+1 counter and stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "adds or removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -125,7 +142,19 @@
         "Grumgully, the Generous",
         "Strike It Rich"
       ],
-      "forge_notes": "The token must be seen as a creature by the entering replacement; confirm Forge applies the static type change to the token before evaluating the ETBReplacement."
+      "forge_notes": "The token must be seen as a creature by the entering replacement; confirm Forge applies the static type change to the token before evaluating the ETBReplacement.",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A replacement effect on a permanent entering the battlefield modifies it (result updated), applying after continuous effects.",
+        "near_miss": "The entering event meets the effect and is not modified.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "battlefield",
+          "result": "updated"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.7b-2",
@@ -176,7 +205,10 @@
           "label": "soldiers",
           "polarity": "fires",
           "delta": "A casts Raise the Alarm instead of Strike It Rich, tapping both Plains.",
-          "expected": "The two tokens are creature tokens as created, so Divine Visitation replaces them: two 4/4 white Angel creature tokens with flying and vigilance enter instead of the Soldiers."
+          "expected": "The two tokens are creature tokens as created, so Divine Visitation replaces them: two 4/4 white Angel creature tokens with flying and vigilance enter instead of the Soldiers.",
+          "operation": {
+            "unclassifiable": "a different spell is cast"
+          }
         }
       ],
       "cards": [
@@ -187,7 +219,18 @@
         "Strike It Rich",
         "Raise the Alarm"
       ],
-      "forge_notes": "Confirm Forge evaluates ValidToken$ Creature.YouCtrl on the token before static abilities apply."
+      "forge_notes": "Confirm Forge evaluates ValidToken$ Creature.YouCtrl on the token before static abilities apply.",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A replacement effect on token creation rewrites the creation (a token_created event, result updated), judged on the token's characteristics before continuous effects modify it.",
+        "near_miss": "A token creation meets a replacement effect and is not replaced.",
+        "params": {
+          "event": "token_created",
+          "result": "updated"
+        },
+        "needs": []
+      }
     }
   ]
 }

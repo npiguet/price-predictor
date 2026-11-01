@@ -63,19 +63,28 @@
           "label": "ground_blocks_flier",
           "polarity": "fires",
           "delta": "B's blocker is Grizzly Bears instead of Wind Drake.",
-          "expected": "Illegal: Grizzly Bears is not among the legal blockers of Wind Drake."
+          "expected": "Illegal: Grizzly Bears is not among the legal blockers of Wind Drake.",
+          "operation": {
+            "unclassifiable": "B declares a different blocker already on the battlefield; a different block declaration, which no fork operation makes."
+          }
         },
         {
           "label": "reach_blocks_flier",
           "polarity": "does_not_fire",
           "delta": "B's blocker is Giant Spider (reach) instead of Wind Drake.",
-          "expected": "Legal: Giant Spider is among the legal blockers of Wind Drake."
+          "expected": "Legal: Giant Spider is among the legal blockers of Wind Drake.",
+          "operation": {
+            "unclassifiable": "B declares a different blocker already on the battlefield; a different block declaration, which no fork operation makes."
+          }
         },
         {
           "label": "flier_blocks_ground",
           "polarity": "other",
           "delta": "B's Wind Drake blocks Hill Giant instead of A's Wind Drake.",
-          "expected": "Legal: B's Wind Drake is among the legal blockers of Hill Giant."
+          "expected": "Legal: B's Wind Drake is among the legal blockers of Hill Giant.",
+          "operation": {
+            "unclassifiable": "B's creature blocks a different attacker; a different block declaration, which no fork operation makes."
+          }
         }
       ],
       "cards": [
@@ -84,7 +93,18 @@
         "Grizzly Bears",
         "Giant Spider"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature without flying or reach is forbidden from blocking a flying attacker.",
+        "near_miss": "A creature with flying or reach is listed among the legal blockers of the flying attacker.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside"
+        },
+        "needs": []
+      }
     }
   ]
 }

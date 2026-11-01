@@ -55,7 +55,10 @@
           "label": "two_lands",
           "polarity": "does_not_fire",
           "delta": "A controls two Plains instead of three.",
-          "expected": "The face-down cast is not possible because {3} cannot be paid. Daru Lancer stays in A's hand and nothing is put on the stack."
+          "expected": "The face-down cast is not possible because {3} cannot be paid. Daru Lancer stays in A's hand and nothing is put on the stack.",
+          "operation": {
+            "unclassifiable": "removes a permanent, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -109,7 +112,10 @@
           "label": "no_morph",
           "polarity": "does_not_fire",
           "delta": "The card in A's hand is Savannah Lions, which has no morph ability.",
-          "expected": "Casting Savannah Lions face down is not legal; it offers only the face-up cast for {W}."
+          "expected": "Casting Savannah Lions face down is not legal; it offers only the face-up cast for {W}.",
+          "operation": {
+            "unclassifiable": "changes a hand or library card, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -117,7 +123,10 @@
         "Daru Lancer",
         "Savannah Lions"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "A decision record lists a face-down cast only as a candidate of a card's morph line; a card without morph has no such line and so no candidate, verdict bit or failed check, and the rule's restriction leaves nothing in the record to read."
+      }
     },
     {
       "id": "702.37b-1",
@@ -168,7 +177,8 @@
           "label": "plain_morph",
           "polarity": "does_not_fire",
           "delta": "The face-down permanent is Daru Lancer, which A turns face up paying its morph cost {2}{W}{W} with both Plains and two Forests.",
-          "expected": "Daru Lancer is face up as a 3/4 with first strike and no counters. Two Forests stay untapped."
+          "expected": "Daru Lancer is face up as a 3/4 with first strike and no counters. Two Forests stay untapped.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -243,13 +253,19 @@
           "label": "no_flip",
           "polarity": "does_not_fire",
           "delta": "A does not turn Daru Lancer face up and just passes priority.",
-          "expected": "Shock deals 2 damage to the 2/2 face-down creature and it dies; Daru Lancer goes to A's graveyard face up."
+          "expected": "Shock deals 2 damage to the 2/2 face-down creature and it dies; Daru Lancer goes to A's graveyard face up.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         },
         {
           "label": "not_enough_mana",
           "polarity": "does_not_fire",
           "delta": "A controls only one Forest (three lands), so the morph cost cannot be paid.",
-          "expected": "The turn-face-up action is not possible; the permanent stays a face-down 2/2, Shock deals 2 damage and it dies."
+          "expected": "The turn-face-up action is not possible; the permanent stays a face-down 2/2, Shock deals 2 damage and it dies.",
+          "operation": {
+            "unclassifiable": "removes a permanent, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -310,13 +326,19 @@
           "label": "x_is_1",
           "polarity": "fires",
           "delta": "A chooses X = 1 and pays {1}{1}{R}, leaving two Mountains untapped.",
-          "expected": "One 1/1 red Goblin creature token is created."
+          "expected": "One 1/1 red Goblin creature token is created.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         },
         {
           "label": "x_is_0",
           "polarity": "does_not_fire",
           "delta": "A chooses X = 0 and pays only {R}.",
-          "expected": "No tokens are created; Warbreak Trumpeter is face up as a 1/1."
+          "expected": "No tokens are created; Warbreak Trumpeter is face up as a 1/1.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -378,7 +400,10 @@
           "label": "cast_face_down",
           "polarity": "does_not_fire",
           "delta": "Instead of turning the face-down Daru Lancer face up, A casts the Daru Lancer in hand face down for {3} with both Plains and one Forest, and it resolves.",
-          "expected": "A second face-down 2/2 creature enters the battlefield. Soul Warden's ability triggers and resolves; A's life is 21."
+          "expected": "A second face-down 2/2 creature enters the battlefield. Soul Warden's ability triggers and resolves; A's life is 21.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation (a spell cast and a card moved from hand)"
+          }
         }
       ],
       "cards": [
@@ -387,7 +412,10 @@
         "Soul Warden",
         "Daru Lancer"
       ],
-      "forge_notes": "Soul Warden triggers on a zone change to the battlefield; Forge's TurnFaceUp is a separate event, so it should not fire."
+      "forge_notes": "Soul Warden triggers on a zone change to the battlefield; Forge's TurnFaceUp is a separate event, so it should not fire.",
+      "detector": {
+        "none": "Trigger records are written for evaluations of triggers whose mode matches an event that happens; turning a permanent face up is no zone change, so no enters-the-battlefield trigger is evaluated and no trigger record shows that it did not fire."
+      }
     }
   ]
 }

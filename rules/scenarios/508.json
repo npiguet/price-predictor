@@ -62,19 +62,34 @@
           "label": "tapped",
           "polarity": "does_not_fire",
           "delta": "Grizzly Bears is tapped when the declare attackers step begins (it was tapped earlier in the turn).",
-          "expected": "Declaring Grizzly Bears as an attacker is illegal; it is not a legal attacker."
+          "expected": "Declaring Grizzly Bears as an attacker is illegal; it is not a legal attacker.",
+          "operation": "tap"
         },
         {
           "label": "summoning_sick",
           "polarity": "does_not_fire",
           "delta": "Grizzly Bears came under A's control this turn (summoning sick) and is untapped.",
-          "expected": "Declaring Grizzly Bears as an attacker is illegal; it is not a legal attacker."
+          "expected": "Declaring Grizzly Bears as an attacker is illegal; it is not a legal attacker.",
+          "operation": {
+            "unclassifiable": "Whether a creature has been controlled since the turn began is not a fact any fork operation sets."
+          }
         }
       ],
       "cards": [
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "An untapped creature the attacking player has controlled since the turn began (or that has haste) is listed among the legal attackers.",
+        "near_miss": "A tapped or summoning-sick creature without haste is listed as forbidden from attacking.",
+        "params": {
+          "list": "legal_attackers",
+          "fires_when": "inside"
+        },
+        "needs": []
+      }
     },
     {
       "id": "508.1a-2",
@@ -122,14 +137,28 @@
           "label": "no_haste",
           "polarity": "does_not_fire",
           "delta": "A declares Grizzly Bears (no haste) as the attacker instead of Raging Goblin.",
-          "expected": "Declaring Grizzly Bears as an attacker is illegal; it has not been controlled since the turn began and has no haste."
+          "expected": "Declaring Grizzly Bears as an attacker is illegal; it has not been controlled since the turn began and has no haste.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         }
       ],
       "cards": [
         "Raging Goblin",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "An untapped creature the attacking player has controlled since the turn began (or that has haste) is listed among the legal attackers.",
+        "near_miss": "A tapped or summoning-sick creature without haste is listed as forbidden from attacking.",
+        "params": {
+          "list": "legal_attackers",
+          "fires_when": "inside"
+        },
+        "needs": []
+      }
     },
     {
       "id": "508.1c-1",
@@ -177,20 +206,29 @@
           "label": "with_partner",
           "polarity": "does_not_fire",
           "delta": "A declares Mogg Flunkies and Grizzly Bears as attackers.",
-          "expected": "The declaration is legal; both creatures become attacking creatures."
+          "expected": "The declaration is legal; both creatures become attacking creatures.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         },
         {
           "label": "partner_alone",
           "polarity": "other",
           "delta": "A declares only Grizzly Bears.",
-          "expected": "The declaration is legal; Grizzly Bears is the only attacking creature."
+          "expected": "The declaration is legal; Grizzly Bears is the only attacking creature.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         }
       ],
       "cards": [
         "Mogg Flunkies",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "A can't-attack-alone restriction is checked against the whole declaration; the legality records list creatures individually (payload.legal_attackers, payload.forbidden) and a declaration that breaks it is never made, so no record field shows it."
+      }
     },
     {
       "id": "508.1c-2",
@@ -238,7 +276,8 @@
           "label": "island",
           "polarity": "does_not_fire",
           "delta": "B controls an Island instead of a Mountain.",
-          "expected": "Declaring Dandân is legal; it becomes an attacking creature."
+          "expected": "Declaring Dandân is legal; it becomes an attacking creature.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -246,7 +285,19 @@
         "Island",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature under a can't-attack-unless restriction whose condition is unmet is listed as forbidden from attacking, with a static responsible.",
+        "near_miss": "The same creature with the condition met is listed among the legal attackers.",
+        "params": {
+          "list": "legal_attackers",
+          "fires_when": "outside",
+          "responsible_static": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "508.1d-1",
@@ -294,13 +345,17 @@
           "label": "requirement_met",
           "polarity": "does_not_fire",
           "delta": "A declares Juggernaut and Grizzly Bears.",
-          "expected": "The declaration is legal."
+          "expected": "The declaration is legal.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         },
         {
           "label": "juggernaut_tapped",
           "polarity": "does_not_fire",
           "delta": "Juggernaut is tapped when the declare attackers step begins (it was tapped earlier in the turn), and A declares only Grizzly Bears.",
-          "expected": "The declaration is legal; a tapped Juggernaut is not able to attack, so the requirement does not apply."
+          "expected": "The declaration is legal; a tapped Juggernaut is not able to attack, so the requirement does not apply.",
+          "operation": "tap"
         }
       ],
       "cards": [
@@ -361,19 +416,28 @@
           "label": "wrong_one",
           "polarity": "does_not_fire",
           "delta": "A declares only Grizzly Bears.",
-          "expected": "The declaration is illegal: zero requirements are obeyed while one could be."
+          "expected": "The declaration is illegal: zero requirements are obeyed while one could be.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         },
         {
           "label": "both",
           "polarity": "does_not_fire",
           "delta": "A declares Juggernaut and Grizzly Bears.",
-          "expected": "The declaration is illegal: two attackers break the restriction that no more than one creature can attack."
+          "expected": "The declaration is illegal: two attackers break the restriction that no more than one creature can attack.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         },
         {
           "label": "none",
           "polarity": "does_not_fire",
           "delta": "A declares no attackers.",
-          "expected": "The declaration is illegal: Juggernaut's requirement could be obeyed and is not."
+          "expected": "The declaration is illegal: Juggernaut's requirement could be obeyed and is not.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         }
       ],
       "cards": [
@@ -430,13 +494,19 @@
           "label": "pay",
           "polarity": "other",
           "delta": "A declares Juggernaut as an attacker against B and pays {2} with both Mountains.",
-          "expected": "The declaration is legal; Juggernaut becomes an attacking creature and both Mountains are tapped."
+          "expected": "The declaration is legal; Juggernaut becomes an attacking creature and both Mountains are tapped.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         },
         {
           "label": "cannot_pay",
           "polarity": "does_not_fire",
           "delta": "Both Mountains are tapped and A declares Juggernaut as an attacker against B.",
-          "expected": "The declaration is illegal: the {2} cost can't be paid."
+          "expected": "The declaration is illegal: the {2} cost can't be paid.",
+          "operation": {
+            "unclassifiable": "Tapping both Mountains and declaring Juggernaut are two facts, and the declaration is a decision."
+          }
         }
       ],
       "cards": [
@@ -444,7 +514,10 @@
         "Mountain",
         "Propaganda"
       ],
-      "forge_notes": "Propaganda's cost is an optional attack payment in Forge; check that declaring no attackers is accepted while Juggernaut could pay."
+      "forge_notes": "Propaganda's cost is an optional attack payment in Forge; check that declaring no attackers is accepted while Juggernaut could pay.",
+      "detector": {
+        "none": "Whether a player declined an optional attack cost is not recorded: the attackers legality record lists must_attack and legal_defenders but no cost payment, and the declaration made is the only trace; searched playability attackers payload and attackers_declared events."
+      }
     },
     {
       "id": "508.1f-1",
@@ -493,13 +566,19 @@
           "label": "vigilance",
           "polarity": "does_not_fire",
           "delta": "A declares Serra Angel as the only attacker instead of Grizzly Bears.",
-          "expected": "Serra Angel is an attacking creature and stays untapped. Grizzly Bears stays untapped."
+          "expected": "Serra Angel is an attacking creature and stays untapped. Grizzly Bears stays untapped.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         },
         {
           "label": "not_declared",
           "polarity": "does_not_fire",
           "delta": "A declares no attackers.",
-          "expected": "Neither creature becomes tapped."
+          "expected": "Neither creature becomes tapped.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         }
       ],
       "cards": [
@@ -555,7 +634,10 @@
           "label": "giant_not_chosen",
           "polarity": "does_not_fire",
           "delta": "A declares only Grizzly Bears; Hill Giant is not chosen.",
-          "expected": "Only Grizzly Bears is an attacking creature; Hill Giant is not attacking. B takes 2 combat damage (life 18)."
+          "expected": "Only Grizzly Bears is an attacking creature; Hill Giant is not attacking. B takes 2 combat damage (life 18).",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         }
       ],
       "cards": [
@@ -622,13 +704,19 @@
           "label": "no_response",
           "polarity": "fires",
           "delta": "A does not cast Giant Growth; A passes priority with the trigger on the stack.",
-          "expected": "The trigger resolves and deals 4 damage to Grizzly Bears (2/2), which dies in the state-based check. B takes no combat damage (life 20)."
+          "expected": "The trigger resolves and deals 4 damage to Grizzly Bears (2/2), which dies in the state-based check. B takes no combat damage (life 20).",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         },
         {
           "label": "no_flying",
           "polarity": "does_not_fire",
           "delta": "A does not cast Jump, so Grizzly Bears does not have flying when declared.",
-          "expected": "Raking Canopy's trigger does not fire. Grizzly Bears deals 2 combat damage to B (life 18)."
+          "expected": "Raking Canopy's trigger does not fire. Grizzly Bears deals 2 combat damage to B (life 18).",
+          "operation": {
+            "unclassifiable": "A different spell is cast (or none) before combat."
+          }
         }
       ],
       "cards": [
@@ -639,7 +727,17 @@
         "Jump",
         "Giant Growth"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An attack trigger is evaluated and fires when a creature is declared as an attacker.",
+        "near_miss": "The attack trigger is evaluated and does not fire because the declared attacker does not meet its condition.",
+        "params": {
+          "mode": "Attacks"
+        },
+        "needs": []
+      }
     },
     {
       "id": "508.2a-1",
@@ -692,7 +790,10 @@
           "label": "flying_before_declaration",
           "polarity": "fires",
           "delta": "A casts Jump in the first main phase, before combat, and then declares Grizzly Bears.",
-          "expected": "Grizzly Bears has flying when declared, so Raking Canopy's trigger fires and deals 4 damage to it. Grizzly Bears dies; B's life stays 20."
+          "expected": "Grizzly Bears has flying when declared, so Raking Canopy's trigger fires and deals 4 damage to it. Grizzly Bears dies; B's life stays 20.",
+          "operation": {
+            "unclassifiable": "A spell is cast at a different time, before combat."
+          }
         }
       ],
       "cards": [
@@ -701,7 +802,17 @@
         "Raking Canopy",
         "Jump"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An attack trigger fires only for a creature that meets its condition at the moment it is declared.",
+        "near_miss": "The trigger is evaluated at declaration and does not fire for a creature that does not yet meet its condition.",
+        "params": {
+          "mode": "Attacks"
+        },
+        "needs": []
+      }
     },
     {
       "id": "508.3a-1",
@@ -756,7 +867,10 @@
           "label": "declared_creature",
           "polarity": "fires",
           "delta": "A declares Brimaz and Grizzly Bears as attackers.",
-          "expected": "Hellrider triggers twice, for Brimaz and for Grizzly Bears (2 damage to B), and not for the token. Combat damage is 3 + 2 + 1: B's life is 12."
+          "expected": "Hellrider triggers twice, for Brimaz and for Grizzly Bears (2 damage to B), and not for the token. Combat damage is 3 + 2 + 1: B's life is 12.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         }
       ],
       "cards": [
@@ -764,7 +878,17 @@
         "Brimaz, King of Oreskos",
         "Grizzly Bears"
       ],
-      "forge_notes": "The Cat Soldier token enters attacking without being declared; the count of Hellrider triggers is the observable."
+      "forge_notes": "The Cat Soldier token enters attacking without being declared; the count of Hellrider triggers is the observable.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An attack trigger fires for a creature declared as an attacker.",
+        "near_miss": "An attack trigger is evaluated for a declared attacker that does not meet its condition and does not fire; a creature put onto the battlefield attacking is never evaluated.",
+        "params": {
+          "mode": "Attacks"
+        },
+        "needs": []
+      }
     },
     {
       "id": "508.3b-1",
@@ -817,13 +941,19 @@
           "label": "attack_planeswalker",
           "polarity": "does_not_fire",
           "delta": "A declares both creatures as attackers against Jace Beleren instead of B.",
-          "expected": "Curse of Vitality does not trigger, because B was not attacked. A's life stays 20."
+          "expected": "Curse of Vitality does not trigger, because B was not attacked. A's life stays 20.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         },
         {
           "label": "no_attackers",
           "polarity": "does_not_fire",
           "delta": "A declares no attackers.",
-          "expected": "Curse of Vitality does not trigger. A's life stays 20."
+          "expected": "Curse of Vitality does not trigger. A's life stays 20.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         }
       ],
       "cards": [
@@ -832,7 +962,17 @@
         "Curse of Vitality",
         "Jace Beleren"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on a player being attacked fires when creatures are declared attacking that player.",
+        "near_miss": "The trigger is not fired when no creature attacks that player, such as attackers aimed at a planeswalker.",
+        "params": {
+          "mode": "AttackersDeclared"
+        },
+        "needs": []
+      }
     },
     {
       "id": "508.3c-1",
@@ -881,20 +1021,36 @@
           "label": "only_bear_attacks",
           "polarity": "does_not_fire",
           "delta": "A declares Grizzly Bears as the only attacker instead of Hired Claw.",
-          "expected": "No Lizard is declared, so Hired Claw's trigger does not fire. B's life is 20 before combat damage."
+          "expected": "No Lizard is declared, so Hired Claw's trigger does not fire. B's life is 20 before combat damage.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         },
         {
           "label": "lizard_and_bear",
           "polarity": "fires",
           "delta": "A declares Hired Claw and Grizzly Bears.",
-          "expected": "Hired Claw's trigger fires once and deals 1 damage to B; B's life is 19 when the trigger has resolved."
+          "expected": "Hired Claw's trigger fires once and deals 1 damage to B; B's life is 19 when the trigger has resolved.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         }
       ],
       "cards": [
         "Hired Claw",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on a player attacking with a qualifying creature fires when such a creature is declared.",
+        "near_miss": "The trigger is not fired when only non-qualifying creatures are declared.",
+        "params": {
+          "mode": "AttackersDeclared"
+        },
+        "needs": []
+      }
     },
     {
       "id": "508.3d-1",
@@ -946,13 +1102,19 @@
           "label": "one_attacker",
           "polarity": "fires",
           "delta": "A declares only Grizzly Bears.",
-          "expected": "Ancestor Dragon triggers once and A gains 1 life: A's life is 21."
+          "expected": "Ancestor Dragon triggers once and A gains 1 life: A's life is 21.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         },
         {
           "label": "no_attackers",
           "polarity": "does_not_fire",
           "delta": "A declares no attackers.",
-          "expected": "Ancestor Dragon does not trigger. A's life stays 20."
+          "expected": "Ancestor Dragon does not trigger. A's life stays 20.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         }
       ],
       "cards": [
@@ -960,7 +1122,17 @@
         "Grizzly Bears",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A whenever-a-player-attacks trigger fires once when one or more of that player's creatures are declared.",
+        "near_miss": "The trigger is evaluated against an attack declaration by a player its condition does not name, and does not fire.",
+        "params": {
+          "mode": "AttackersDeclared"
+        },
+        "needs": []
+      }
     },
     {
       "id": "508.3e-1",
@@ -1011,13 +1183,19 @@
           "label": "attack_planeswalker",
           "polarity": "does_not_fire",
           "delta": "A declares Grizzly Bears as an attacker against Jace Beleren instead of B.",
-          "expected": "Horizon Explorer's trigger does not fire; A creates no Lander token."
+          "expected": "Horizon Explorer's trigger does not fire; A creates no Lander token.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         },
         {
           "label": "no_attackers",
           "polarity": "does_not_fire",
           "delta": "A declares no attackers.",
-          "expected": "Horizon Explorer's trigger does not fire; A creates no Lander token."
+          "expected": "Horizon Explorer's trigger does not fire; A creates no Lander token.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         }
       ],
       "cards": [
@@ -1025,7 +1203,17 @@
         "Grizzly Bears",
         "Jace Beleren"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on a player attacking another player fires when that player's creatures are declared attacking a player.",
+        "near_miss": "The trigger is evaluated against a declaration whose attackers attack only planeswalkers or battles, and does not fire.",
+        "params": {
+          "mode": "AttackersDeclaredOneTarget"
+        },
+        "needs": []
+      }
     },
     {
       "id": "508.3f-1",
@@ -1077,14 +1265,27 @@
           "label": "blocked",
           "polarity": "does_not_fire",
           "delta": "B blocks Crypt Cobra with Hill Giant.",
-          "expected": "Crypt Cobra's trigger does not fire. B has no poison counters."
+          "expected": "Crypt Cobra's trigger does not fire. B has no poison counters.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         }
       ],
       "cards": [
         "Crypt Cobra",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An attacks-and-isn't-blocked trigger fires in the declare blockers step for an unblocked attacker.",
+        "near_miss": "The trigger is evaluated in the declare blockers step for an unblocked attacker its condition does not cover, and does not fire.",
+        "params": {
+          "mode": "AttackerUnblocked"
+        },
+        "needs": []
+      }
     },
     {
       "id": "508.4a-1",
@@ -1144,7 +1345,10 @@
           "label": "planeswalker_present",
           "polarity": "does_not_fire",
           "delta": "A does not cast Lightning Bolt.",
-          "expected": "Ninja of the Deep Hours enters tapped and attacking Jace Beleren and deals 2 combat damage to it; Jace Beleren has loyalty 1. B's life stays 20."
+          "expected": "Ninja of the Deep Hours enters tapped and attacking Jace Beleren and deals 2 combat damage to it; Jace Beleren has loyalty 1. B's life stays 20.",
+          "operation": {
+            "unclassifiable": "A spell is not cast."
+          }
         }
       ],
       "cards": [
@@ -1211,7 +1415,10 @@
           "label": "second_declared",
           "polarity": "does_not_fire",
           "delta": "A declares Brimaz and Grizzly Bears as attackers.",
-          "expected": "The declaration is illegal: two declared attackers break Silent Arbiter's restriction."
+          "expected": "The declaration is illegal: two declared attackers break Silent Arbiter's restriction.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         }
       ],
       "cards": [
@@ -1278,13 +1485,19 @@
           "label": "no_ninjutsu",
           "polarity": "other",
           "delta": "A does not activate ninjutsu.",
-          "expected": "Grizzly Bears stays unblocked and deals 2 combat damage to B (life 18). Ninja of the Deep Hours stays in A's hand and A draws no card."
+          "expected": "Grizzly Bears stays unblocked and deals 2 combat damage to B (life 18). Ninja of the Deep Hours stays in A's hand and A draws no card.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         },
         {
           "label": "blocked",
           "polarity": "other",
           "delta": "B blocks Grizzly Bears with Hill Giant.",
-          "expected": "Ninjutsu can't be activated because Grizzly Bears is blocked. Hill Giant deals 3 damage to Grizzly Bears, which dies; B's life stays 20."
+          "expected": "Ninjutsu can't be activated because Grizzly Bears is blocked. Hill Giant deals 3 damage to Grizzly Bears, which dies; B's life stays 20.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         }
       ],
       "cards": [
@@ -1346,7 +1559,10 @@
           "label": "no_block",
           "polarity": "other",
           "delta": "B declares no blockers.",
-          "expected": "The token and Brimaz are unblocked and deal 4 combat damage to B (life 16)."
+          "expected": "The token and Brimaz are unblocked and deal 4 combat damage to B (life 16).",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         }
       ],
       "cards": [
@@ -1407,19 +1623,28 @@
           "label": "attacks_player",
           "polarity": "fires",
           "delta": "A declares Crypt Cobra as an attacker against B instead of Jace Beleren.",
-          "expected": "The defending player is B: B gets 1 poison counter and A gets none."
+          "expected": "The defending player is B: B gets 1 poison counter and A gets none.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         },
         {
           "label": "removed_before_resolution",
           "polarity": "fires",
           "delta": "With Crypt Cobra's trigger on the stack, B casts Lightning Bolt targeting Crypt Cobra, tapping Mountain.",
-          "expected": "Lightning Bolt resolves first and Crypt Cobra (3/3) dies, so it is no longer attacking. The trigger still refers to the controller of the planeswalker it was attacking: B gets 1 poison counter."
+          "expected": "Lightning Bolt resolves first and Crypt Cobra (3/3) dies, so it is no longer attacking. The trigger still refers to the controller of the planeswalker it was attacking: B gets 1 poison counter.",
+          "operation": {
+            "unclassifiable": "A different spell is cast."
+          }
         },
         {
           "label": "killed_before_blockers",
           "polarity": "other",
           "delta": "In the declare attackers step, before blockers are declared, B casts Lightning Bolt targeting Crypt Cobra, tapping Mountain.",
-          "expected": "Crypt Cobra dies before blockers are declared, so it never attacks unblocked and its trigger does not fire. B has no poison counters."
+          "expected": "Crypt Cobra dies before blockers are declared, so it never attacks unblocked and its trigger does not fire. B has no poison counters.",
+          "operation": {
+            "unclassifiable": "A different spell is cast."
+          }
         }
       ],
       "cards": [
@@ -1489,7 +1714,10 @@
           "label": "no_reselect",
           "polarity": "does_not_fire",
           "delta": "A does not cast Portal Mage.",
-          "expected": "Grizzly Bears keeps attacking Jace Beleren and deals 2 damage to it. Jace Beleren has 0 loyalty after the Hellrider damage and combat damage and dies; B's life stays 20."
+          "expected": "Grizzly Bears keeps attacking Jace Beleren and deals 2 damage to it. Jace Beleren has 0 loyalty after the Hellrider damage and combat damage and dies; B's life stays 20.",
+          "operation": {
+            "unclassifiable": "A spell is not cast."
+          }
         }
       ],
       "cards": [
@@ -1559,7 +1787,10 @@
           "label": "declare_at_player",
           "polarity": "does_not_fire",
           "delta": "A declares Grizzly Bears as an attacker against B instead of Jace Beleren.",
-          "expected": "The declaration is illegal: Blazing Archon says creatures can't attack B."
+          "expected": "The declaration is illegal: Blazing Archon says creatures can't attack B.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         }
       ],
       "cards": [
@@ -1626,13 +1857,19 @@
           "label": "reselect_own_planeswalker",
           "polarity": "does_not_fire",
           "delta": "The chosen new defender is A's own Chandra Nalaar.",
-          "expected": "Choosing Chandra Nalaar is illegal; it is not controlled by an opponent of the attacking creature's controller."
+          "expected": "Choosing Chandra Nalaar is illegal; it is not controlled by an opponent of the attacking creature's controller.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         },
         {
           "label": "reselect_self",
           "polarity": "does_not_fire",
           "delta": "The chosen new defender is A.",
-          "expected": "Choosing A is illegal; A is not an opponent of the attacking creature's controller."
+          "expected": "Choosing A is illegal; A is not an opponent of the attacking creature's controller.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         }
       ],
       "cards": [
@@ -1642,7 +1879,10 @@
         "Jace Beleren",
         "Portal Mage"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "A reselection's legal choices are in no playability record: attackers legality records are written before attackers are declared (gen-2 once per defender, gen-3 legal_defenders the declaration's defenders, rule 508.1b), and a reselection shows only as a removed_from_combat event on a ChangeCombatants resolution, which names the creature, never the options it could not take; looked in the attackers payload of both schemas and EVENT_PARAMS."
+      }
     },
     {
       "id": "508.8-1",
@@ -1698,7 +1938,10 @@
           "label": "one_attacker",
           "polarity": "does_not_fire",
           "delta": "A declares Grizzly Bears as an attacker against B.",
-          "expected": "The declare blockers step happens, and casting False Orders targeting Hill Giant is legal there."
+          "expected": "The declare blockers step happens, and casting False Orders targeting Hill Giant is legal there.",
+          "operation": {
+            "unclassifiable": "A different decision by a player, not a change of any board fact."
+          }
         }
       ],
       "cards": [
@@ -1707,7 +1950,10 @@
         "Mountain",
         "False Orders"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "A skipped declare blockers step leaves no record: the absence of blockers and blocker legality records is not a field; looked in attackers_declared events (none declared), blockers playability records and the combat payload."
+      }
     }
   ]
 }

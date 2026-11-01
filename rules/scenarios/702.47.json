@@ -62,7 +62,10 @@
           "label": "not_spliced",
           "polarity": "does_not_fire",
           "delta": "A does not reveal Glacial Ray and pays only {U} with the Island.",
-          "expected": "Only the Island is tapped. Reach Through Mists resolves: A draws Forest. Grizzly Bears is undamaged on the battlefield and Glacial Ray is in A's hand."
+          "expected": "Only the Island is tapped. Reach Through Mists resolves: A draws Forest. Grizzly Bears is undamaged on the battlefield and Glacial Ray is in A's hand.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -133,7 +136,10 @@
           "label": "no_legal_target",
           "polarity": "does_not_fire",
           "delta": "The creature card in A's graveyard is Grizzly Bears (not legendary) instead of Isao, Enlightened Bushi.",
-          "expected": "Splicing Goryo's Vengeance is not legal because it has no legal target. Only Reach Through Mists can be cast, for {U}; A draws Forest and Grizzly Bears stays in the graveyard."
+          "expected": "Splicing Goryo's Vengeance is not legal because it has no legal target. Only Reach Through Mists can be cast, for {U}; A draws Forest and Grizzly Bears stays in the graveyard.",
+          "operation": {
+            "unclassifiable": "changes a graveyard card, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -145,7 +151,10 @@
         "Grizzly Bears",
         "Forest"
       ],
-      "forge_notes": "Goryo's Vengeance exiles the returned creature at the beginning of the next end step."
+      "forge_notes": "Goryo's Vengeance exiles the returned creature at the beginning of the next end step.",
+      "detector": {
+        "none": "Splicing is chosen while a spell is cast, not offered as a playability candidate: a decision record's candidates, verdict bits and failed_checks name the spell, and none says whether a card in hand could be spliced onto it."
+      }
     },
     {
       "id": "702.47b-2",
@@ -206,7 +215,10 @@
           "label": "one_ray",
           "polarity": "does_not_fire",
           "delta": "A splices only one Glacial Ray and pays {U}{1}{R}, leaving two Mountains untapped.",
-          "expected": "Reach Through Mists resolves: A draws Forest and Craw Wurm is dealt 2 damage once and stays on the battlefield with 2 damage marked. Both Glacial Rays are still in A's hand."
+          "expected": "Reach Through Mists resolves: A draws Forest and Craw Wurm is dealt 2 damage once and stays on the battlefield with 2 damage marked. Both Glacial Rays are still in A's hand.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -275,7 +287,10 @@
           "label": "red_main_spell",
           "polarity": "does_not_fire",
           "delta": "A casts Lava Spike (red) as the main spell, targeting B, and splices Glacial Ray onto it instead of Reach Through Mists.",
-          "expected": "Knights of Thorn is not a legal target for the spliced text because the spell is red. Knights of Thorn stays on the battlefield undamaged; the spliced text can target only B or other permanents."
+          "expected": "Knights of Thorn is not a legal target for the spliced text because the spell is red. Knights of Thorn stays on the battlefield undamaged; the spliced text can target only B or other permanents.",
+          "operation": {
+            "unclassifiable": "a different spell cast, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -287,7 +302,10 @@
         "Glacial Ray",
         "Forest"
       ],
-      "forge_notes": "In the red_main_spell variant A pays {R} for Lava Spike with one Mountain and the splice cost {1}{R} with the other Mountain and the Island."
+      "forge_notes": "In the red_main_spell variant A pays {R} for Lava Spike with one Mountain and the splice cost {1}{R} with the other Mountain and the Island.",
+      "detector": {
+        "none": "A decision record's legal_targets belong to the candidate spell before anything is spliced onto it; no decision candidate carries the spliced text's targets, so a protection check against the main spell's colour leaves no listed entity."
+      }
     },
     {
       "id": "702.47d-1",
@@ -348,7 +366,10 @@
           "label": "target_stays",
           "polarity": "does_not_fire",
           "delta": "B passes priority instead of casting Unsummon.",
-          "expected": "Reach Through Mists resolves: A draws Forest and Grizzly Bears is dealt 2 damage and moves to B's graveyard. Unsummon stays in B's hand."
+          "expected": "Reach Through Mists resolves: A draws Forest and Grizzly Bears is dealt 2 damage and moves to B's graveyard. Unsummon stays in B's hand.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -360,7 +381,21 @@
         "Unsummon",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "resolution_outcome",
+        "record_kind": "resolution",
+        "outcome": "A spell or ability leaves the stack fizzled because all its targets became illegal (608.2b).",
+        "near_miss": "A targeted spell or ability that resolves.",
+        "params": {
+          "outcome": "fizzled",
+          "near": [
+            "resolved"
+          ],
+          "targeted": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.47e-1",
@@ -425,7 +460,10 @@
           "label": "recast_spliced_again",
           "polarity": "other",
           "delta": "On the second cast A also splices Glacial Ray again, targeting Savannah Lions, and pays {1}{R} with the two remaining Mountains.",
-          "expected": "The second cast resolves: A draws a Forest and Savannah Lions is dealt 2 damage and moves to B's graveyard. Glacial Ray is still in A's hand."
+          "expected": "The second cast resolves: A draws a Forest and Savannah Lions is dealt 2 damage and moves to B's graveyard. Glacial Ray is still in A's hand.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         }
       ],
       "cards": [

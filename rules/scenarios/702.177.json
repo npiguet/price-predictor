@@ -50,14 +50,31 @@
           "label": "already_activated",
           "polarity": "does_not_fire",
           "delta": "The exhaust ability was already activated on an earlier turn.",
-          "expected": "Activating the exhaust ability is not legal, even with four untapped Forests."
+          "expected": "Activating the exhaust ability is not legal, even with four untapped Forests.",
+          "operation": {
+            "unclassifiable": "changes the game's history (the ability was activated on an earlier turn), which no fork operation sets"
+          }
         }
       ],
       "cards": [
         "Afterburner Expert",
         "Forest"
       ],
-      "forge_notes": "Forge tracks the Exhaust$ True parameter with an activation limit on the ability; the earlier activation needs puzzle-style setup."
+      "forge_notes": "Forge tracks the Exhaust$ True parameter with an activation limit on the ability; the earlier activation needs puzzle-style setup.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate activated ability limited to one activation passes the activation-limit check while it has not yet been activated.",
+        "near_miss": "An ability limited to one activation that was already activated fails the activation-limit check and is not playable.",
+        "params": {
+          "bit": "failed_check",
+          "check": "activation_limit",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "702.177b-1",
@@ -111,7 +128,10 @@
           "label": "expert_activated_first",
           "polarity": "does_not_fire",
           "delta": "Earlier this turn A activated Afterburner Expert's exhaust ability {2}{G}{G} (tapping four Forests), and it resolved.",
-          "expected": "Activating Elvish Refueler's exhaust ability is not legal, even with two untapped Forests: an exhaust ability has already been activated this turn, so the static ability no longer applies."
+          "expected": "Activating Elvish Refueler's exhaust ability is not legal, even with two untapped Forests: an exhaust ability has already been activated this turn, so the static ability no longer applies.",
+          "operation": {
+            "unclassifiable": "changes the game's history (another exhaust ability activated earlier this turn), which no fork operation sets"
+          }
         }
       ],
       "cards": [
@@ -119,7 +139,21 @@
         "Afterburner Expert",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An already-used activate-only-once ability passes the activation-limit check because an effect lets it be activated again while no such ability has been activated this turn.",
+        "near_miss": "The permitting effect's condition is unmet (such an ability was already activated this turn), so the already-used ability fails the activation-limit check.",
+        "params": {
+          "bit": "failed_check",
+          "check": "activation_limit",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     }
   ]
 }

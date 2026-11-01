@@ -56,7 +56,10 @@
           "label": "husk_destroyed_in_response",
           "polarity": "does_not_fire",
           "delta": "With the living weapon trigger on the stack, B casts Disenchant targeting Flayer Husk, tapping both Plains; Disenchant resolves first.",
-          "expected": "Flayer Husk is destroyed and goes to A's graveyard. The living weapon trigger still resolves and creates the Germ token, but there is no Equipment to attach. The Germ is 0/0 and is put into the graveyard by the state-based check, then ceases to exist."
+          "expected": "Flayer Husk is destroyed and goes to A's graveyard. The living weapon trigger still resolves and creates the Germ token, but there is no Equipment to attach. The Germ is 0/0 and is put into the graveyard by the state-based check, then ceases to exist.",
+          "operation": {
+            "unclassifiable": "B casts a spell in response, a different spell cast."
+          }
         }
       ],
       "cards": [
@@ -65,7 +68,17 @@
         "Flayer Husk",
         "Disenchant"
       ],
-      "forge_notes": "Check that Forge still creates the Germ when the Equipment has left the battlefield before the trigger resolves."
+      "forge_notes": "Check that Forge still creates the Germ when the Equipment has left the battlefield before the trigger resolves.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A living weapon trigger fires when its Equipment enters the battlefield.",
+        "near_miss": "A living weapon trigger is evaluated against another permanent entering and does not fire.",
+        "params": {
+          "keyword": "living weapon"
+        },
+        "needs": []
+      }
     }
   ]
 }

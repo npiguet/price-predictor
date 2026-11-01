@@ -57,7 +57,8 @@
           "label": "no_other_goblin",
           "polarity": "does_not_fire",
           "delta": "A controls Grizzly Bears instead of Goblin Piker.",
-          "expected": "A controls no other Goblin to exile, so Boggart Mob is sacrificed and goes to A's graveyard. Grizzly Bears stays on the battlefield."
+          "expected": "A controls no other Goblin to exile, so Boggart Mob is sacrificed and goes to A's graveyard. Grizzly Bears stays on the battlefield.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -126,7 +127,10 @@
           "label": "champion_stays",
           "polarity": "does_not_fire",
           "delta": "B does not cast Unsummon.",
-          "expected": "Boggart Mob stays on the battlefield and the leaves-the-battlefield trigger does not fire. Goblin Piker stays in exile."
+          "expected": "Boggart Mob stays on the battlefield and the leaves-the-battlefield trigger does not fire. Goblin Piker stays in exile.",
+          "operation": {
+            "unclassifiable": "a different action: a spell is not cast"
+          }
         }
       ],
       "cards": [
@@ -136,7 +140,17 @@
         "Island",
         "Unsummon"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A champion trigger is evaluated when its permanent enters or leaves the battlefield and fires.",
+        "near_miss": "A champion trigger is evaluated against a zone change it does not match and does not fire.",
+        "params": {
+          "keyword": "champion"
+        },
+        "needs": []
+      }
     }
   ]
 }

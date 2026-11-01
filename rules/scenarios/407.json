@@ -72,7 +72,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "In response, B casts Counterspell tapping both Islands, and it resolves first.",
-          "expected": "Contract from Below is countered and goes to A's graveyard; Shock stays in A's hand, the ante zone is empty and A's library still has ten cards."
+          "expected": "Contract from Below is countered and goes to A's graveyard; Shock stays in A's hand, the ante zone is empty and A's library still has ten cards.",
+          "operation": {
+            "unclassifiable": "A different spell cast: B casts Counterspell in response, a player decision no fork operation makes."
+          }
         }
       ],
       "cards": [
@@ -87,7 +90,18 @@
         "Grizzly Bears",
         "Centaur Courser"
       ],
-      "forge_notes": "Contract from Below requires a game played for ante; Forge has an ante zone but collection decks do not use it, so this needs a hand-built game state."
+      "forge_notes": "Contract from Below requires a game played for ante; Forge has an ante zone but collection decks do not use it, so this needs a hand-built game state.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution antes an object: it moves from its zone to the ante zone.",
+        "near_miss": "No clean near miss: an ante effect that is countered leaves no resolution, so only the fires side is tagged.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "ante"
+        },
+        "needs": []
+      }
     },
     {
       "id": "407.4-2",
@@ -139,7 +153,10 @@
           "label": "stolen-bird",
           "polarity": "does_not_fire",
           "delta": "Jeweled Bird is owned by B; A controls it through Steal Artifact, which A controls and which is attached to it.",
-          "expected": "Jeweled Bird is not anted and stays on the battlefield tapped under A's control. Mountain and Swamp stay in the ante zone and A draws no card."
+          "expected": "Jeweled Bird is not anted and stays on the battlefield tapped under A's control. Mountain and Swamp stay in the ante zone and A draws no card.",
+          "operation": {
+            "unclassifiable": "Changes the artifact's owner and adds a control-changing Aura attached to it: no operation changes ownership, and adding a permanent is not an operation."
+          }
         }
       ],
       "cards": [

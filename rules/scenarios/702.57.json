@@ -51,13 +51,19 @@
           "label": "on_battlefield",
           "polarity": "does_not_fire",
           "delta": "Spirit en-Dal is on A's battlefield instead of in A's hand.",
-          "expected": "Activating the forecast ability is not legal."
+          "expected": "Activating the forecast ability is not legal.",
+          "operation": {
+            "unclassifiable": "moves the card to another zone"
+          }
         },
         {
           "label": "in_graveyard",
           "polarity": "does_not_fire",
           "delta": "Spirit en-Dal is in A's graveyard instead of in A's hand.",
-          "expected": "Activating the forecast ability is not legal."
+          "expected": "Activating the forecast ability is not legal.",
+          "operation": {
+            "unclassifiable": "moves the card to another zone"
+          }
         }
       ],
       "cards": [
@@ -65,7 +71,21 @@
         "Grizzly Bears",
         "Spirit en-Dal"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A hand-only ability candidate passes the zone check: its card is in its controller's hand.",
+        "near_miss": "A hand-only ability candidate fails the zone check: its card is in another zone.",
+        "params": {
+          "bit": "failed_check",
+          "check": "zone",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "702.57b-1",
@@ -114,13 +134,19 @@
           "label": "draw_step",
           "polarity": "does_not_fire",
           "delta": "The step is draw instead of upkeep.",
-          "expected": "Activating the forecast ability is not legal."
+          "expected": "Activating the forecast ability is not legal.",
+          "operation": {
+            "unclassifiable": "changes the phase"
+          }
         },
         {
           "label": "opponent_upkeep",
           "polarity": "does_not_fire",
           "delta": "B is the active player and it is B's upkeep.",
-          "expected": "Activating the forecast ability is not legal."
+          "expected": "Activating the forecast ability is not legal.",
+          "operation": {
+            "unclassifiable": "changes the turn"
+          }
         }
       ],
       "cards": [
@@ -128,7 +154,21 @@
         "Grizzly Bears",
         "Spirit en-Dal"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An upkeep-only ability candidate passes the phase check during the upkeep step.",
+        "near_miss": "An upkeep-only ability candidate fails the phase check outside the upkeep step.",
+        "params": {
+          "bit": "failed_check",
+          "check": "phase",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "702.57b-2",
@@ -179,7 +219,10 @@
           "label": "second_activation",
           "polarity": "does_not_fire",
           "delta": "A already activated the forecast ability of Spirit en-Dal earlier this turn (two Plains are already tapped for it; two remain untapped).",
-          "expected": "Activating the forecast ability a second time this turn is not legal."
+          "expected": "Activating the forecast ability a second time this turn is not legal.",
+          "operation": {
+            "unclassifiable": "more than one fact: a prior activation and tapped lands"
+          }
         }
       ],
       "cards": [
@@ -187,7 +230,21 @@
         "Grizzly Bears",
         "Spirit en-Dal"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A once-each-turn ability candidate passes the activation_limit check: it has not been activated this turn.",
+        "near_miss": "A once-each-turn ability candidate fails the activation_limit check after its first activation this turn.",
+        "params": {
+          "bit": "failed_check",
+          "check": "activation_limit",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     }
   ]
 }

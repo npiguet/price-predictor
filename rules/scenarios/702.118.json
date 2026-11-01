@@ -50,13 +50,15 @@
           "label": "equal_power",
           "polarity": "does_not_fire",
           "delta": "B's creature is Grizzly Bears (power 2) instead of Centaur Courser (power 3).",
-          "expected": "The block is legal: Grizzly Bears has power equal to Furtive Homunculus's, which skulk does not restrict."
+          "expected": "The block is legal: Grizzly Bears has power equal to Furtive Homunculus's, which skulk does not restrict.",
+          "operation": "replace_card"
         },
         {
           "label": "lesser_power",
           "polarity": "does_not_fire",
           "delta": "B's creature is Llanowar Elves (power 1) instead of Centaur Courser (power 3).",
-          "expected": "The block is legal: Llanowar Elves has less power than Furtive Homunculus."
+          "expected": "The block is legal: Llanowar Elves has less power than Furtive Homunculus.",
+          "operation": "replace_card"
         }
       ],
       "cards": [

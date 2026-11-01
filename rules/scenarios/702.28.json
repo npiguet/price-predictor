@@ -51,14 +51,28 @@
           "label": "shadow_blocker",
           "polarity": "does_not_fire",
           "delta": "B considers declaring its Dauthi Marauder as the blocker instead.",
-          "expected": "Declaring B's Dauthi Marauder as a blocker is legal."
+          "expected": "Declaring B's Dauthi Marauder as a blocker is legal.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         }
       ],
       "cards": [
         "Dauthi Marauder",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature that cannot legally block an attacker with an evasion restriction is listed among the forbidden entities of the blockers record.",
+        "near_miss": "A creature that satisfies the restriction is listed among the legal blockers.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.28b-2",
@@ -111,13 +125,19 @@
           "label": "nonshadow_blocks_nonshadow",
           "polarity": "does_not_fire",
           "delta": "B considers declaring Hill Giant as the blocker instead.",
-          "expected": "Declaring Hill Giant as a blocker of Grizzly Bears is legal."
+          "expected": "Declaring Hill Giant as a blocker of Grizzly Bears is legal.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         },
         {
           "label": "shadow_attacker",
           "polarity": "does_not_fire",
           "delta": "A attacks with Dauthi Marauder instead of Grizzly Bears.",
-          "expected": "Declaring Dauthi Marauder as a blocker of A's Dauthi Marauder is legal."
+          "expected": "Declaring Dauthi Marauder as a blocker of A's Dauthi Marauder is legal.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -125,7 +145,18 @@
         "Grizzly Bears",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature restricted to blocking only creatures with a matching evasion ability is among the forbidden blockers against an attacker that lacks it.",
+        "near_miss": "A creature allowed to block that attacker is among the legal blockers.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.28c-1",
@@ -178,13 +209,19 @@
           "label": "two_instances_shadow_blocker",
           "polarity": "does_not_fire",
           "delta": "B considers declaring its Dauthi Marauder (one instance of shadow) as the blocker.",
-          "expected": "Declaring B's Dauthi Marauder as a blocker is legal; the blocker needs shadow, not two instances."
+          "expected": "Declaring B's Dauthi Marauder as a blocker is legal; the blocker needs shadow, not two instances.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         },
         {
           "label": "one_instance",
           "polarity": "fires",
           "delta": "A does not activate Dauthi Embrace; Dauthi Marauder has one instance of shadow.",
-          "expected": "Declaring Grizzly Bears as a blocker is illegal, as with two instances."
+          "expected": "Declaring Grizzly Bears as a blocker is illegal, as with two instances.",
+          "operation": {
+            "unclassifiable": "A different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -193,7 +230,18 @@
         "Swamp",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature that cannot legally block an attacker with an evasion restriction is among the forbidden blockers, however many instances of the ability the attacker has.",
+        "near_miss": "A creature that satisfies the restriction is among the legal blockers.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside"
+        },
+        "needs": []
+      }
     }
   ]
 }

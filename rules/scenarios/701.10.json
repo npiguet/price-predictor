@@ -13,7 +13,7 @@
         "701.10a"
       ],
       "title": "Doubling modifies power instead of setting it, so a later base-power effect still shows the bonus",
-      "record_kind": "continuous",
+      "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "main1",
@@ -62,7 +62,10 @@
           "label": "humble_then_fury",
           "polarity": "does_not_fire",
           "delta": "A casts and resolves Humble first, then Unleash Fury.",
-          "expected": "After Humble, Grizzly Bears is 0/1. Unleash Fury doubles a power of 0, giving +0/+0. Grizzly Bears is 0/1."
+          "expected": "After Humble, Grizzly Bears is 0/1. Unleash Fury doubles a power of 0, giving +0/+0. Grizzly Bears is 0/1.",
+          "operation": {
+            "unclassifiable": "The same actions happen in a different order; no fork operation reorders a player's decisions."
+          }
         }
       ],
       "cards": [
@@ -80,7 +83,7 @@
         "701.10b"
       ],
       "title": "Doubling a creature's power adds its power as the spell resolves",
-      "record_kind": "continuous",
+      "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "main1",
@@ -130,19 +133,28 @@
           "label": "zero_power",
           "polarity": "does_not_fire",
           "delta": "Unleash Fury targets B's Wall of Wood (0/3) instead of Grizzly Bears.",
-          "expected": "Wall of Wood gets +0/+0 and stays 0/3."
+          "expected": "Wall of Wood gets +0/+0 and stays 0/3.",
+          "operation": {
+            "unclassifiable": "A different target is chosen; no fork operation changes a target."
+          }
         },
         {
           "label": "pump_in_response",
           "polarity": "fires",
           "delta": "With Unleash Fury on the stack, A casts Giant Growth targeting Grizzly Bears, tapping Forest. Giant Growth resolves first.",
-          "expected": "Grizzly Bears is 5/5 when Unleash Fury resolves, so it gets +5/+0. Grizzly Bears is 10/5 until end of turn."
+          "expected": "Grizzly Bears is 5/5 when Unleash Fury resolves, so it gets +5/+0. Grizzly Bears is 10/5 until end of turn.",
+          "operation": {
+            "unclassifiable": "An extra spell is cast in response; no fork operation casts a spell."
+          }
         },
         {
           "label": "pump_after",
           "polarity": "other",
           "delta": "A casts Giant Growth targeting Grizzly Bears, tapping Forest, only after Unleash Fury has resolved.",
-          "expected": "Unleash Fury resolves on a 2/2 and gives +2/+0 (4/2). Giant Growth then gives +3/+3. Grizzly Bears is 7/5 until end of turn."
+          "expected": "Unleash Fury resolves on a 2/2 and gives +2/+0 (4/2). Giant Growth then gives +3/+3. Grizzly Bears is 7/5 until end of turn.",
+          "operation": {
+            "unclassifiable": "An extra spell is cast after the doubling resolves; no fork operation casts a spell."
+          }
         }
       ],
       "cards": [
@@ -161,7 +173,7 @@
         "701.10b"
       ],
       "title": "Doubling power and toughness together gives +X/+Y with X the power and Y the toughness",
-      "record_kind": "continuous",
+      "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "main1",
@@ -207,13 +219,19 @@
           "label": "double_power_only",
           "polarity": "other",
           "delta": "A casts Unleash Fury targeting Hill Giant, tapping both Mountains, instead of Tifa's Limit Break.",
-          "expected": "Hill Giant gets +3/+0 and is 6/3 until end of turn. Toughness is unchanged."
+          "expected": "Hill Giant gets +3/+0 and is 6/3 until end of turn. Toughness is unchanged.",
+          "operation": {
+            "unclassifiable": "A different spell is cast; no fork operation changes which spell a player casts."
+          }
         },
         {
           "label": "flat_bonus_tier",
           "polarity": "does_not_fire",
           "delta": "A casts Tifa's Limit Break choosing the Somersault tier ({0}) instead of Meteor Strikes, paying only {G} with Forest.",
-          "expected": "Hill Giant gets +2/+2 and is 5/5 until end of turn: nothing is doubled."
+          "expected": "Hill Giant gets +2/+2 and is 5/5 until end of turn: nothing is doubled.",
+          "operation": {
+            "unclassifiable": "A different mode (tier) of the spell is chosen; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -231,7 +249,7 @@
         "701.10c"
       ],
       "title": "Doubling a negative power gives a further negative modifier",
-      "record_kind": "continuous",
+      "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "main1",
@@ -280,13 +298,19 @@
           "label": "zero_power",
           "polarity": "does_not_fire",
           "delta": "Dead Weight is not on the battlefield, so Wall of Wood is 0/3.",
-          "expected": "Wall of Wood gets +0/+0 and stays 0/3."
+          "expected": "Wall of Wood gets +0/+0 and stays 0/3.",
+          "operation": {
+            "unclassifiable": "A permanent is removed from the battlefield; no fork operation removes a permanent."
+          }
         },
         {
           "label": "mixed_signs",
           "polarity": "other",
           "delta": "A casts Tifa's Limit Break choosing the Meteor Strikes tier ({2}) instead of Unleash Fury, paying {G}{2} with Forest and both Mountains.",
-          "expected": "Power -2 doubles to -2/-0 and toughness 1 doubles to +0/+1. Wall of Wood is -4/2 until end of turn."
+          "expected": "Power -2 doubles to -2/-0 and toughness 1 doubles to +0/+1. Wall of Wood is -4/2 until end of turn.",
+          "operation": {
+            "unclassifiable": "A different spell is cast; no fork operation changes which spell a player casts."
+          }
         }
       ],
       "cards": [
@@ -349,13 +373,19 @@
           "label": "target_opponent",
           "polarity": "fires",
           "delta": "Beacon of Immortality targets B instead of A.",
-          "expected": "B's life total goes from 9 to 18. A's life stays 15. Beacon of Immortality is shuffled into A's library."
+          "expected": "B's life total goes from 9 to 18. A's life stays 15. Beacon of Immortality is shuffled into A's library.",
+          "operation": {
+            "unclassifiable": "A different target is chosen; no fork operation changes a target."
+          }
         },
         {
           "label": "cannot_gain_life",
           "polarity": "does_not_fire",
           "delta": "Everlasting Torment is on the battlefield under B's control (players can't gain life).",
-          "expected": "A's life total stays 15. Beacon of Immortality is still shuffled into A's library."
+          "expected": "A's life total stays 15. Beacon of Immortality is still shuffled into A's library.",
+          "operation": {
+            "unclassifiable": "A permanent is added to the battlefield; no fork operation adds a permanent."
+          }
         }
       ],
       "cards": [
@@ -420,13 +450,17 @@
           "label": "no_counters",
           "polarity": "does_not_fire",
           "delta": "Grizzly Bears has no counters.",
-          "expected": "Grizzly Bears has no counters and stays 2/2."
+          "expected": "Grizzly Bears has no counters and stays 2/2.",
+          "operation": "counters"
         },
         {
           "label": "player_counters",
           "polarity": "fires",
           "delta": "A chooses the mode that doubles the counters A has instead of targeting a permanent.",
-          "expected": "A's energy counters go from 2 to 4. Grizzly Bears' counters are unchanged (4/4)."
+          "expected": "A's energy counters go from 2 to 4. Grizzly Bears' counters are unchanged (4/4).",
+          "operation": {
+            "unclassifiable": "A different mode of the ability is chosen; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -434,7 +468,18 @@
         "Forest",
         "Grizzly Bears"
       ],
-      "forge_notes": "Players' energy counters may have to be set through Forge's puzzle format."
+      "forge_notes": "Players' energy counters may have to be set through Forge's puzzle format.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A counter-multiplying resolution gives a permanent more counters of a kind it already has.",
+        "near_miss": "A counter-multiplying resolution that changes no permanent's counters, the permanent having none to double.",
+        "params": {
+          "event": "counter_change",
+          "api": "MultiplyCounter"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.10f-1",
@@ -491,7 +536,10 @@
           "label": "empty_pool",
           "polarity": "does_not_fire",
           "delta": "A activates Doubling Cube first, with an empty pool, and only then taps Mountain for {R}.",
-          "expected": "Doubling Cube adds nothing. A has only {R}, so only the first Shock is cast. B takes 2 damage and is at 18. The second Shock stays in A's hand."
+          "expected": "Doubling Cube adds nothing. A has only {R}, so only the first Shock is cast. B takes 2 damage and is at 18. The second Shock stays in A's hand.",
+          "operation": {
+            "unclassifiable": "The same actions happen in a different order; no fork operation reorders a player's decisions."
+          }
         }
       ],
       "cards": [
@@ -552,7 +600,10 @@
           "label": "spell_source",
           "polarity": "does_not_fire",
           "delta": "A does not attack; A casts Shock targeting B, tapping Mountain, and Shock resolves.",
-          "expected": "Shock is not a creature, so its damage is not doubled. B takes 2 damage and is at 18."
+          "expected": "Shock is not a creature, so its damage is not doubled. B takes 2 damage and is at 18.",
+          "operation": {
+            "unclassifiable": "The player casts a spell instead of attacking; no fork operation changes a player's decisions."
+          }
         }
       ],
       "cards": [
@@ -561,7 +612,18 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A damage event meeting a replacement that changes its amount, such as doubling it, goes on with the updated amount.",
+        "near_miss": "A damage event meets the replacement and is not replaced.",
+        "params": {
+          "event": "damage_dealt",
+          "result": "updated"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.10g-2",
@@ -611,13 +673,19 @@
           "label": "without_furnace",
           "polarity": "does_not_fire",
           "delta": "Furnace of Rath is not on the battlefield.",
-          "expected": "Shock deals 2 damage. Hill Giant stays on the battlefield with 2 damage marked."
+          "expected": "Shock deals 2 damage. Hill Giant stays on the battlefield with 2 damage marked.",
+          "operation": {
+            "unclassifiable": "A permanent is removed from the battlefield; no fork operation removes a permanent."
+          }
         },
         {
           "label": "player_target",
           "polarity": "fires",
           "delta": "Shock targets B instead of Hill Giant.",
-          "expected": "Shock deals 4 damage to B, who is at 16. Hill Giant is untouched."
+          "expected": "Shock deals 4 damage to B, who is at 16. Hill Giant is untouched.",
+          "operation": {
+            "unclassifiable": "A different target is chosen; no fork operation changes a target."
+          }
         }
       ],
       "cards": [
@@ -626,7 +694,18 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A damage event meeting a replacement that changes its amount, such as doubling it, goes on with the updated amount.",
+        "near_miss": "A damage event meets the replacement and is not replaced.",
+        "params": {
+          "event": "damage_dealt",
+          "result": "updated"
+        },
+        "needs": []
+      }
     }
   ]
 }

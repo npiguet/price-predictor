@@ -53,7 +53,10 @@
           "label": "cast_for_mana_cost",
           "polarity": "does_not_fire",
           "delta": "A casts Memorial Team Leader for its mana cost {3}{R}, tapping four Mountains, instead of for its warp cost.",
-          "expected": "Memorial Team Leader (4/3) stays on the battlefield through the end step. No delayed trigger exiles it."
+          "expected": "Memorial Team Leader (4/3) stays on the battlefield through the end step. No delayed trigger exiles it.",
+          "operation": {
+            "unclassifiable": "Casts the spell a different way"
+          }
         }
       ],
       "cards": [
@@ -109,13 +112,19 @@
           "label": "exiled_by_other_effect",
           "polarity": "does_not_fire",
           "delta": "Memorial Team Leader is in exile because another effect exiled it, not because its warp delayed trigger did.",
-          "expected": "Casting Memorial Team Leader from exile is not legal."
+          "expected": "Casting Memorial Team Leader from exile is not legal.",
+          "operation": {
+            "unclassifiable": "Changes how the card came to be in exile, a history fact"
+          }
         },
         {
           "label": "two_mountains",
           "polarity": "does_not_fire",
           "delta": "A controls only two Mountains.",
-          "expected": "Casting Memorial Team Leader from exile is not legal: the warp cost {1}{R} can be used only when casting from hand, so only the mana cost {3}{R} applies from exile."
+          "expected": "Casting Memorial Team Leader from exile is not legal: the warp cost {1}{R} can be used only when casting from hand, so only the mana cost {3}{R} applies from exile.",
+          "operation": {
+            "unclassifiable": "Removes permanents from the battlefield"
+          }
         }
       ],
       "cards": [
@@ -184,7 +193,10 @@
           "label": "spell_not_warped",
           "polarity": "does_not_fire",
           "delta": "A casts Memorial Team Leader for its mana cost {3}{R}, tapping four Mountains, instead of for its warp cost.",
-          "expected": "Decode Transmissions resolves with its void condition false (no spell was warped and no nonland permanent left the battlefield): A draws two cards and A loses 2 life (18). B's life stays 20."
+          "expected": "Decode Transmissions resolves with its void condition false (no spell was warped and no nonland permanent left the battlefield): A draws two cards and A loses 2 life (18). B's life stays 20.",
+          "operation": {
+            "unclassifiable": "Casts the spell a different way"
+          }
         }
       ],
       "cards": [

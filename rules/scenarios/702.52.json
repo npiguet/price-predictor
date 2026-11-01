@@ -51,7 +51,10 @@
           "label": "draw_instead",
           "polarity": "does_not_fire",
           "delta": "A declines to dredge and draws normally.",
-          "expected": "Forest moves from the library to A's hand. Life from the Loam stays in A's graveyard and no card is milled."
+          "expected": "Forest moves from the library to A's hand. Life from the Loam stays in A's graveyard and no card is milled.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         }
       ],
       "cards": [
@@ -62,7 +65,18 @@
         "Plains",
         "Swamp"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A card draw is replaced by an optional replacement (dredge: mill N cards and return the dredge card to hand instead).",
+        "near_miss": "A card draw meets the replacement and is not replaced: the player declines it and draws.",
+        "params": {
+          "event": "card_drawn",
+          "result": "replaced"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.52b-1",
@@ -109,7 +123,10 @@
           "label": "two_cards",
           "polarity": "does_not_fire",
           "delta": "A's library is Forest, Island (2 cards).",
-          "expected": "Dredging is not available: the library holds fewer than 3 cards. A draws Forest normally and Life from the Loam stays in the graveyard."
+          "expected": "Dredging is not available: the library holds fewer than 3 cards. A draws Forest normally and Life from the Loam stays in the graveyard.",
+          "operation": {
+            "unclassifiable": "changes the library contents"
+          }
         }
       ],
       "cards": [
@@ -118,7 +135,10 @@
         "Island",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The rule's outcome is that the dredge option is not offered. Dredge is not a playability candidate, so no decision candidate or verdict bit (gen-2 or gen-3 failed_checks) carries it; Forge's replacement handler drops a replacement whose condition fails before any choice, so no rewrite record shows the refused dredge, and the draw that follows (card_drawn, or a gen-3 turn_action draw record) is indistinguishable from a player declining to dredge."
+      }
     }
   ]
 }

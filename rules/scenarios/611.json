@@ -57,7 +57,10 @@
           "label": "after_cleanup",
           "polarity": "does_not_fire",
           "delta": "The board is read after the cleanup step of the same turn instead of at the end step.",
-          "expected": "Grizzly Bears is 2/2 again: the 'until end of turn' effect ended in the cleanup step."
+          "expected": "Grizzly Bears is 2/2 again: the 'until end of turn' effect ended in the cleanup step.",
+          "operation": {
+            "unclassifiable": "Changes when the board is read."
+          }
         }
       ],
       "cards": [
@@ -119,7 +122,10 @@
           "label": "until_end_of_turn",
           "polarity": "does_not_fire",
           "delta": "A casts Crimson Wisps targeting Grizzly Bears, tapping Mountain, instead of Chaoslace.",
-          "expected": "A draws Forest. At B's upkeep Grizzly Bears is green again and has no haste: Crimson Wisps' 'until end of turn' color change ended in A's cleanup step."
+          "expected": "A draws Forest. At B's upkeep Grizzly Bears is green again and has no haste: Crimson Wisps' 'until end of turn' color change ended in A's cleanup step.",
+          "operation": {
+            "unclassifiable": "A different spell is cast."
+          }
         }
       ],
       "cards": [
@@ -187,7 +193,10 @@
           "label": "no_response",
           "polarity": "does_not_fire",
           "delta": "B does not cast Lightning Bolt; both players pass and the trigger resolves with Master Thief still on the battlefield.",
-          "expected": "The trigger resolves and A gains control of Ornithopter for as long as A controls Master Thief; Ornithopter is on A's side of the battlefield."
+          "expected": "The trigger resolves and A gains control of Ornithopter for as long as A controls Master Thief; Ornithopter is on A's side of the battlefield.",
+          "operation": {
+            "unclassifiable": "Omits a spell cast."
+          }
         }
       ],
       "cards": [
@@ -197,7 +206,19 @@
         "Ornithopter",
         "Lightning Bolt"
       ],
-      "forge_notes": "Master Thief uses GainControl with LoseControl$ LeavesPlay,LoseControl; Forge should skip the effect when the host has already left the battlefield."
+      "forge_notes": "Master Thief uses GainControl with LoseControl$ LeavesPlay,LoseControl; Forge should skip the effect when the host has already left the battlefield.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A control-gaining resolution lasting for as long as a condition holds, whose duration already ended before it resolved, produces no control change.",
+        "near_miss": "A control-gaining resolution whose duration has not ended, producing the control change.",
+        "params": {
+          "event": "control_change",
+          "api": "GainControl",
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "611.2c-1",
@@ -250,7 +271,10 @@
           "label": "viper_first",
           "polarity": "does_not_fire",
           "delta": "A casts and resolves Ambush Viper first, then Glorious Charge.",
-          "expected": "Grizzly Bears is 3/3 and Ambush Viper is 3/2: it was on the battlefield when Glorious Charge resolved."
+          "expected": "Grizzly Bears is 3/3 and Ambush Viper is 3/2: it was on the battlefield when Glorious Charge resolved.",
+          "operation": {
+            "unclassifiable": "Changes the order of spells cast."
+          }
         }
       ],
       "cards": [
@@ -314,7 +338,10 @@
           "label": "no_holy_day",
           "polarity": "other",
           "delta": "B does not cast Holy Day and keeps its Plains untapped; the rest is unchanged.",
-          "expected": "Grizzly Bears deals 2 damage to Ambush Viper (toughness 1) and Ambush Viper deals deathtouch damage to Grizzly Bears: both creatures die."
+          "expected": "Grizzly Bears deals 2 damage to Ambush Viper (toughness 1) and Ambush Viper deals deathtouch damage to Grizzly Bears: both creatures die.",
+          "operation": {
+            "unclassifiable": "Omits a spell cast."
+          }
         }
       ],
       "cards": [
@@ -324,7 +351,18 @@
         "Holy Day",
         "Ambush Viper"
       ],
-      "forge_notes": "Holy Day is the Fog effect; Forge implements prevention as a replacement effect, so it should apply to a blocker that entered after resolution."
+      "forge_notes": "Holy Day is the Fog effect; Forge implements prevention as a replacement effect, so it should apply to a blocker that entered after resolution.",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A damage event meets a resolved prevention effect (a rules-modifying effect) and is prevented, including damage from creatures that entered after it resolved.",
+        "near_miss": "A damage event meets the effect and is not prevented.",
+        "params": {
+          "event": "damage_dealt",
+          "result": "prevented"
+        },
+        "needs": []
+      }
     },
     {
       "id": "611.2d-1",
@@ -383,7 +421,10 @@
           "label": "in_response",
           "polarity": "other",
           "delta": "B casts Lightning Bolt in response to Chorus of Might, before it resolves, instead of after.",
-          "expected": "Grizzly Bears dies first, so Chorus of Might resolves with X = 1: Hill Giant is 4/4 with trample."
+          "expected": "Grizzly Bears dies first, so Chorus of Might resolves with X = 1: Hill Giant is 4/4 with trample.",
+          "operation": {
+            "unclassifiable": "Changes when a spell is cast."
+          }
         }
       ],
       "cards": [
@@ -451,7 +492,10 @@
           "label": "zombify",
           "polarity": "does_not_fire",
           "delta": "A casts Zombify instead of Rise from the Grave, tapping four Swamps.",
-          "expected": "Grizzly Bears enters as a green Bear only; Champion of the Perished's trigger does not fire and Champion of the Perished stays 1/1 with no counter."
+          "expected": "Grizzly Bears enters as a green Bear only; Champion of the Perished's trigger does not fire and Champion of the Perished stays 1/1 with no counter.",
+          "operation": {
+            "unclassifiable": "A different spell is cast."
+          }
         }
       ],
       "cards": [
@@ -461,7 +505,18 @@
         "Zombify",
         "Grizzly Bears"
       ],
-      "forge_notes": "Rise from the Grave applies its Zombie type through StaticEffect$ Animate; check that Forge applies it before the enters trigger is evaluated."
+      "forge_notes": "Rise from the Grave applies its Zombie type through StaticEffect$ Animate; check that Forge applies it before the enters trigger is evaluated.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An enters-the-battlefield trigger is evaluated and fires for a permanent whose characteristic was set by a resolving effect as it entered.",
+        "near_miss": "An enters trigger evaluated for a permanent that lacks the characteristic and does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "611.2f-1",
@@ -525,7 +580,10 @@
           "label": "second_creature",
           "polarity": "does_not_fire",
           "delta": "A first casts Runeclaw Bear, tapping two Forests, and B passes so it resolves; A then casts Grizzly Bears, tapping two Forests, and B casts Counterspell on it.",
-          "expected": "Runeclaw Bear took Insist's effect when it was cast; Grizzly Bears has no such effect and is countered, moving to A's graveyard."
+          "expected": "Runeclaw Bear took Insist's effect when it was cast; Grizzly Bears has no such effect and is countered, moving to A's graveyard.",
+          "operation": {
+            "unclassifiable": "Adds a spell cast."
+          }
         }
       ],
       "cards": [
@@ -588,13 +646,19 @@
           "label": "turns_red",
           "polarity": "does_not_fire",
           "delta": "A casts Chaoslace targeting Grizzly Bears, tapping Mountain, instead of Purelace.",
-          "expected": "Grizzly Bears becomes red, not white, and gets no bonus: it stays 2/2. Savannah Lions stays 3/2."
+          "expected": "Grizzly Bears becomes red, not white, and gets no bonus: it stays 2/2. Savannah Lions stays 3/2.",
+          "operation": {
+            "unclassifiable": "A different spell is cast."
+          }
         },
         {
           "label": "loses_white",
           "polarity": "does_not_fire",
           "delta": "A casts Chaoslace targeting Savannah Lions, tapping Mountain, instead of Purelace on Grizzly Bears.",
-          "expected": "Savannah Lions becomes red and loses Crusade's bonus: it is 2/1. Grizzly Bears stays 2/2."
+          "expected": "Savannah Lions becomes red and loses Crusade's bonus: it is 2/1. Grizzly Bears stays 2/2.",
+          "operation": {
+            "unclassifiable": "A different spell with a different target."
+          }
         }
       ],
       "cards": [
@@ -606,7 +670,17 @@
         "Purelace",
         "Chaoslace"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static ability contributes a P/T boost to whatever currently matches its text.",
+        "near_miss": "The static applies to the board and contributes no boost to an entity that does not match.",
+        "params": {
+          "field": "pt"
+        },
+        "needs": []
+      }
     },
     {
       "id": "611.3b-1",
@@ -656,7 +730,10 @@
           "label": "destroyed",
           "polarity": "does_not_fire",
           "delta": "A passes priority in main1 and B casts Disenchant targeting Crusade, tapping two Plains; A passes; it resolves; the board is read afterwards in main1.",
-          "expected": "Crusade is destroyed and moves to A's graveyard; Savannah Lions loses the bonus and is 2/1."
+          "expected": "Crusade is destroyed and moves to A's graveyard; Savannah Lions loses the bonus and is 2/1.",
+          "operation": {
+            "unclassifiable": "Adds a spell cast."
+          }
         }
       ],
       "cards": [
@@ -665,7 +742,17 @@
         "Savannah Lions",
         "Disenchant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static ability on the battlefield contributes a P/T boost to the entities its text indicates.",
+        "near_miss": "The static applies and contributes nothing to an entity its text does not indicate.",
+        "params": {
+          "field": "pt"
+        },
+        "needs": []
+      }
     },
     {
       "id": "611.3c-1",
@@ -719,7 +806,8 @@
           "label": "no_anthem",
           "polarity": "does_not_fire",
           "delta": "Gaea's Anthem is not on the battlefield (A controls a third Forest instead).",
-          "expected": "Grizzly Bears enters as a 2/2; Garruk's Packleader's trigger does not fire and A draws nothing."
+          "expected": "Grizzly Bears enters as a 2/2; Garruk's Packleader's trigger does not fire and A draws nothing.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -728,7 +816,18 @@
         "Garruk's Packleader",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An enters-the-battlefield trigger is evaluated for a permanent that entered with a static characteristic change already applied, and fires.",
+        "near_miss": "An enters trigger evaluated for a permanent without the change and does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "611.3d-1",
@@ -790,7 +889,10 @@
           "label": "normal_cast",
           "polarity": "does_not_fire",
           "delta": "A casts Hill Giant for its mana cost instead of its blitz cost.",
-          "expected": "Hill Giant has no haste and cannot be declared as an attacker; B stays at 20 life. At the end step Hill Giant stays on the battlefield and A draws nothing."
+          "expected": "Hill Giant has no haste and cannot be declared as an attacker; B stays at 20 life. At the end step Hill Giant stays on the battlefield and A draws nothing.",
+          "operation": {
+            "unclassifiable": "A different way of casting the spell."
+          }
         }
       ],
       "cards": [

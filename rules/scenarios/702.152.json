@@ -60,13 +60,19 @@
           "label": "hard_cast",
           "polarity": "does_not_fire",
           "delta": "A casts Riveteers Requisitioner for its mana cost {1}{R}, tapping two Mountains, instead of its blitz cost.",
-          "expected": "Riveteers Requisitioner has no haste and cannot be declared as an attacker (summoning sick). B stays at 20. It is not sacrificed at the end step, stays on the battlefield and A draws no card."
+          "expected": "Riveteers Requisitioner has no haste and cannot be declared as an attacker (summoning sick). B stays at 20. It is not sacrificed at the end step, stays on the battlefield and A draws no card.",
+          "operation": {
+            "unclassifiable": "a different cast choice"
+          }
         },
         {
           "label": "blitz_blocked",
           "polarity": "other",
           "delta": "B declares Barkweave Crusher as a blocker of Riveteers Requisitioner.",
-          "expected": "Barkweave Crusher deals 2 damage to the 3/1 Requisitioner, which dies in the combat damage step; A draws a card from the blitz dies-trigger at that moment and a Treasure token is created. Crusher survives with 3 damage. B stays at 20. At the end step there is nothing left to sacrifice."
+          "expected": "Barkweave Crusher deals 2 damage to the 3/1 Requisitioner, which dies in the combat damage step; A draws a card from the blitz dies-trigger at that moment and a Treasure token is created. Crusher survives with 3 damage. B stays at 20. At the end step there is nothing left to sacrifice.",
+          "operation": {
+            "unclassifiable": "adds a blocker declaration"
+          }
         }
       ],
       "cards": [
@@ -74,7 +80,17 @@
         "Riveteers Requisitioner",
         "Barkweave Crusher"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger blitz creates or grants fires: the blitzed permanent's dies trigger when it dies, or its sacrifice at the next end step.",
+        "near_miss": "A blitz trigger is evaluated against an event it does not watch (another permanent dying) and does not fire.",
+        "params": {
+          "keyword": "Blitz"
+        },
+        "needs": []
+      }
     }
   ]
 }

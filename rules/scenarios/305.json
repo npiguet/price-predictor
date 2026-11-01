@@ -48,20 +48,39 @@
           "label": "combat_phase",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "Playing Forest is illegal (can_play false): it is not a main phase. Forest stays in A's hand."
+          "expected": "Playing Forest is illegal (can_play false): it is not a main phase. Forest stays in A's hand.",
+          "operation": {
+            "unclassifiable": "Changes the phase or step, not a property a fork operation sets."
+          }
         },
         {
           "label": "stack_not_empty",
           "polarity": "does_not_fire",
           "delta": "A Shock spell controlled by A targeting B is on the stack.",
-          "expected": "Playing Forest is illegal (can_play false): the stack is not empty. Forest stays in A's hand."
+          "expected": "Playing Forest is illegal (can_play false): the stack is not empty. Forest stays in A's hand.",
+          "operation": {
+            "unclassifiable": "Puts an object on the stack, which no fork operation does."
+          }
         }
       ],
       "cards": [
         "Forest",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate play whose timing is legal: a main phase of its owner's turn with an empty stack.",
+        "near_miss": "A candidate of the same kind offered in another step or with a non-empty stack has timing false.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "305.2-1",
@@ -107,13 +126,19 @@
           "label": "no_land_played",
           "polarity": "does_not_fire",
           "delta": "The Forest on A's battlefield was not played this turn; A has played no land this turn.",
-          "expected": "Playing Forest is legal (can_play true) and it moves to the battlefield."
+          "expected": "Playing Forest is legal (can_play true) and it moves to the battlefield.",
+          "operation": {
+            "unclassifiable": "Changes a per-turn count (lands played) or turn state, not a counter on a permanent or player."
+          }
         },
         {
           "label": "exploration",
           "polarity": "does_not_fire",
           "delta": "A also controls Exploration on the battlefield.",
-          "expected": "Playing the second Forest is legal (can_play true): A may play an additional land this turn. The Forest moves to the battlefield."
+          "expected": "Playing the second Forest is legal (can_play true): A may play an additional land this turn. The Forest moves to the battlefield.",
+          "operation": {
+            "unclassifiable": "Adds or removes a permanent, which no fork operation does."
+          }
         }
       ],
       "cards": [
@@ -168,7 +193,10 @@
           "label": "allowed_2_played_2",
           "polarity": "does_not_fire",
           "delta": "Both Forests on the battlefield were played from hand this turn (lands played this turn: 2).",
-          "expected": "Playing Forest is illegal (can_play false): 2 allowed is not greater than 2 played. Forest stays in A's hand."
+          "expected": "Playing Forest is illegal (can_play false): 2 allowed is not greater than 2 played. Forest stays in A's hand.",
+          "operation": {
+            "unclassifiable": "Changes a per-turn count (lands played) or turn state, not a counter on a permanent or player."
+          }
         }
       ],
       "cards": [
@@ -234,7 +262,10 @@
           "label": "no_land_played",
           "polarity": "does_not_fire",
           "delta": "Neither Mountain was played this turn; A has played no land this turn.",
-          "expected": "Playing the exiled Forest is legal (can_play true); it moves from exile to the battlefield."
+          "expected": "Playing the exiled Forest is legal (can_play true); it moves from exile to the battlefield.",
+          "operation": {
+            "unclassifiable": "Changes a per-turn count (lands played) or turn state, not a counter on a permanent or player."
+          }
         }
       ],
       "cards": [
@@ -287,13 +318,30 @@
           "label": "own_turn",
           "polarity": "does_not_fire",
           "delta": "A is the active player instead of B (main1, empty stack, A holding priority).",
-          "expected": "Playing Forest is legal (can_play true) and it moves to the battlefield."
+          "expected": "Playing Forest is legal (can_play true) and it moves to the battlefield.",
+          "operation": {
+            "unclassifiable": "Changes whose turn it is, which no fork operation does."
+          }
         }
       ],
       "cards": [
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A land-play candidate is illegal because it is not the player's turn (failed check whose_turn).",
+        "near_miss": "A candidate in the player's own turn passes the whose_turn check.",
+        "params": {
+          "bit": "failed_check",
+          "check": "whose_turn",
+          "fires_when": false
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "305.4-1",
@@ -352,7 +400,10 @@
           "label": "played_from_hand_first",
           "polarity": "does_not_fire",
           "delta": "Instead of casting Rampant Growth, A plays one Forest from hand first, then attempts to play the second Forest from hand.",
-          "expected": "The first land play is legal. The second land play is illegal (can_play false): one land has been played this turn. The second Forest stays in A's hand."
+          "expected": "The first land play is legal. The second land play is illegal (can_play false): one land has been played this turn. The second Forest stays in A's hand.",
+          "operation": {
+            "unclassifiable": "A different decision or choice by a player, not a property a fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -411,7 +462,8 @@
           "label": "no_basic_type",
           "polarity": "does_not_fire",
           "delta": "A controls Wastes (a basic land without a basic land type, whose own ability adds only {C}) instead of Dryad Arbor.",
-          "expected": "Wastes can only add {C}; Giant Growth cannot be cast (can_play false) and stays in A's hand; Grizzly Bears stays 2/2."
+          "expected": "Wastes can only add {C}; Giant Growth cannot be cast (can_play false) and stays in A's hand; Grizzly Bears stays 2/2.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -420,7 +472,10 @@
         "Grizzly Bears",
         "Giant Growth"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "A land's intrinsic basic-type mana ability is not a continuous contribution (contributions carry only pt, keywords, types, colors) and no event or record field states it; looked in continuous payload.contributions and the ability_change event."
+      }
     },
     {
       "id": "305.7-1",
@@ -469,13 +524,17 @@
           "label": "no_blood_moon",
           "polarity": "does_not_fire",
           "delta": "Blood Moon is not on the battlefield.",
-          "expected": "Bayou is a Swamp Forest and taps for {G}; Giant Growth is cast and resolves, Grizzly Bears is 5/5 until end of turn."
+          "expected": "Bayou is a Swamp Forest and taps for {G}; Giant Growth is cast and resolves, Grizzly Bears is 5/5 until end of turn.",
+          "operation": {
+            "unclassifiable": "Adds or removes a permanent, which no fork operation does."
+          }
         },
         {
           "label": "urborg_instead",
           "polarity": "other",
           "delta": "Urborg, Tomb of Yawgmoth is on A's battlefield instead of Blood Moon.",
-          "expected": "Bayou keeps Swamp and Forest (Swamp is added in addition) and keeps its mana abilities; it taps for {G}. Giant Growth is cast and resolves, Grizzly Bears is 5/5 until end of turn."
+          "expected": "Bayou keeps Swamp and Forest (Swamp is added in addition) and keeps its mana abilities; it taps for {G}. Giant Growth is cast and resolves, Grizzly Bears is 5/5 until end of turn.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -485,7 +544,18 @@
         "Grizzly Bears",
         "Giant Growth"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static ability sets a land's subtype: its type contribution removes all land types (-all-land-types) beside the type it adds, taking away the land's old land types and their mana abilities.",
+        "near_miss": "A static applies to a land and only adds a land type, or contributes no type, so the land keeps its old types and abilities.",
+        "params": {
+          "field": "types",
+          "value": "-all-land-types"
+        },
+        "needs": []
+      }
     },
     {
       "id": "305.9-1",
@@ -532,14 +602,20 @@
           "label": "play_as_land",
           "polarity": "does_not_fire",
           "delta": "A attempts to play Dryad Arbor as a land instead of casting it.",
-          "expected": "Playing Dryad Arbor as a land is legal (can_play true); it moves to the battlefield without using the stack."
+          "expected": "Playing Dryad Arbor as a land is legal (can_play true); it moves to the battlefield without using the stack.",
+          "operation": {
+            "unclassifiable": "A different decision or choice by a player, not a property a fork operation sets."
+          }
         }
       ],
       "cards": [
         "Dryad Arbor",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "Forge offers no cast ability for a land card, so no playability candidate or verdict exists for the refused cast; looked in playability decision candidates (can_play, failed_checks) and events."
+      }
     }
   ]
 }

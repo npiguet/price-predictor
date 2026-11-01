@@ -10,16 +10,36 @@
   "scenarios": [
     {
       "id": "701.60d-1",
-      "rules": ["701.60d"],
+      "rules": [
+        "701.60d"
+      ],
       "title": "An already suspected creature can't become suspected again",
       "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {"A": ["Frantic Scapegoat", "Swamp", "Swamp", "Swamp", "Swamp"], "B": []},
-        "hand": {"A": ["Barbed Servitor"]},
-        "graveyard": {}, "library": {}, "exile": {},
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Frantic Scapegoat",
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Barbed Servitor"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": "Frantic Scapegoat entered on an earlier turn and is suspected (menace, cannot block)."
       },
       "decisions": [
@@ -30,24 +50,59 @@
         "Both players pass; Frantic Scapegoat's trigger resolves and A chooses to suspect Barbed Servitor."
       ],
       "variants": [
-        {"label": "base", "polarity": "fires", "delta": "", "expected": "Barbed Servitor is already suspected and does not become suspected again, so A did not suspect a creature. Frantic Scapegoat stays suspected (menace, cannot block) and Barbed Servitor is suspected (menace, cannot block)."},
-        {"label": "scapegoat_trigger_first", "polarity": "does_not_fire", "delta": "A puts Barbed Servitor's trigger on the stack first and Frantic Scapegoat's trigger on top of it, so Frantic Scapegoat's trigger resolves first.", "expected": "Frantic Scapegoat's trigger suspects Barbed Servitor, which was not yet suspected, and Frantic Scapegoat is no longer suspected (no menace, can block). Barbed Servitor's own trigger then does nothing; Barbed Servitor is suspected (menace, cannot block)."}
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Barbed Servitor is already suspected and does not become suspected again, so A did not suspect a creature. Frantic Scapegoat stays suspected (menace, cannot block) and Barbed Servitor is suspected (menace, cannot block)."
+        },
+        {
+          "label": "scapegoat_trigger_first",
+          "polarity": "does_not_fire",
+          "delta": "A puts Barbed Servitor's trigger on the stack first and Frantic Scapegoat's trigger on top of it, so Frantic Scapegoat's trigger resolves first.",
+          "expected": "Frantic Scapegoat's trigger suspects Barbed Servitor, which was not yet suspected, and Frantic Scapegoat is no longer suspected (no menace, can block). Barbed Servitor's own trigger then does nothing; Barbed Servitor is suspected (menace, cannot block).",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player, not a fact on the board"
+          }
+        }
       ],
-      "cards": ["Frantic Scapegoat", "Swamp", "Barbed Servitor"],
+      "cards": [
+        "Frantic Scapegoat",
+        "Swamp",
+        "Barbed Servitor"
+      ],
       "forge_notes": "Forge's Card.setSuspected returns true for a card that is already suspected, so Frantic Scapegoat's RememberAltered may record Barbed Servitor and end Frantic Scapegoat's suspicion in the base variant too; Forge is expected to diverge from the rules here."
     },
     {
       "id": "701.60a-1",
-      "rules": ["701.60a"],
+      "rules": [
+        "701.60a"
+      ],
       "title": "A suspected creature stops being suspected when an ability says so",
       "record_kind": "continuous",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {"A": ["Frantic Scapegoat", "Forest", "Forest"], "B": []},
-        "hand": {"A": ["Grizzly Bears"]},
-        "graveyard": {}, "library": {}, "exile": {},
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Frantic Scapegoat",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Grizzly Bears"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": "Frantic Scapegoat entered on an earlier turn and is suspected (menace, cannot block). It is not summoning sick."
       },
       "decisions": [
@@ -57,24 +112,65 @@
         "On resolution A chooses to suspect Grizzly Bears."
       ],
       "variants": [
-        {"label": "base", "polarity": "fires", "delta": "", "expected": "Grizzly Bears becomes suspected (menace, cannot block). Frantic Scapegoat is no longer suspected: it has no menace and can block."},
-        {"label": "declined", "polarity": "does_not_fire", "delta": "On resolution A chooses not to suspect Grizzly Bears.", "expected": "Frantic Scapegoat remains suspected (menace, cannot block) and Grizzly Bears is not suspected (no menace, can block)."}
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears becomes suspected (menace, cannot block). Frantic Scapegoat is no longer suspected: it has no menace and can block."
+        },
+        {
+          "label": "declined",
+          "polarity": "does_not_fire",
+          "delta": "On resolution A chooses not to suspect Grizzly Bears.",
+          "expected": "Frantic Scapegoat remains suspected (menace, cannot block) and Grizzly Bears is not suspected (no menace, can block).",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player, not a fact on the board"
+          }
+        }
       ],
-      "cards": ["Frantic Scapegoat", "Forest", "Grizzly Bears"],
+      "cards": [
+        "Frantic Scapegoat",
+        "Forest",
+        "Grizzly Bears"
+      ],
       "forge_notes": "Frantic Scapegoat's second trigger uses CheckSVar on its own suspected status, so the setup requires the Scapegoat to be suspected when Grizzly Bears enters."
     },
     {
       "id": "701.60a-2",
-      "rules": ["701.60a"],
+      "rules": [
+        "701.60a"
+      ],
       "title": "A creature stays suspected until it leaves the battlefield",
       "record_kind": "continuous",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {"A": ["Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Plains"], "B": ["Grizzly Bears"]},
-        "hand": {"A": ["Caught Red-Handed", "Cloudshift"]},
-        "graveyard": {}, "library": {}, "exile": {},
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Mountain",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Caught Red-Handed",
+            "Cloudshift"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": "Caught Red-Handed gains control of the target creature until end of turn and suspects it. Cloudshift is held in every variant and cast only in one."
       },
       "decisions": [
@@ -83,24 +179,64 @@
         "A does not cast Cloudshift; A attacks with nothing and passes through the turn to A's cleanup step."
       ],
       "variants": [
-        {"label": "base", "polarity": "does_not_fire", "delta": "", "expected": "At A's cleanup step control returns to B. Grizzly Bears never left the battlefield, so it is still suspected: B's Grizzly Bears has menace and cannot block."},
-        {"label": "flickered", "polarity": "fires", "delta": "After Caught Red-Handed resolves, A casts Cloudshift targeting Grizzly Bears, tapping Plains.", "expected": "Grizzly Bears is exiled and returns to the battlefield as a new object under A's control. It is not suspected: no menace and it can block. The until-end-of-turn control effect no longer applies to it, so it stays under A's control after the turn ends."}
+        {
+          "label": "base",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "At A's cleanup step control returns to B. Grizzly Bears never left the battlefield, so it is still suspected: B's Grizzly Bears has menace and cannot block."
+        },
+        {
+          "label": "flickered",
+          "polarity": "fires",
+          "delta": "After Caught Red-Handed resolves, A casts Cloudshift targeting Grizzly Bears, tapping Plains.",
+          "expected": "Grizzly Bears is exiled and returns to the battlefield as a new object under A's control. It is not suspected: no menace and it can block. The until-end-of-turn control effect no longer applies to it, so it stays under A's control after the turn ends.",
+          "operation": {
+            "unclassifiable": "a different spell is cast, not a fact on the board"
+          }
+        }
       ],
-      "cards": ["Mountain", "Plains", "Grizzly Bears", "Caught Red-Handed", "Cloudshift"],
+      "cards": [
+        "Mountain",
+        "Plains",
+        "Grizzly Bears",
+        "Caught Red-Handed",
+        "Cloudshift"
+      ],
       "forge_notes": "Cloudshift returns the card under its caster's control; the Caught Red-Handed control effect belongs to the old object."
     },
     {
       "id": "701.60b-1",
-      "rules": ["701.60b"],
+      "rules": [
+        "701.60b"
+      ],
       "title": "Suspected is not copiable",
       "record_kind": "continuous",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {"A": ["Island", "Island", "Island", "Island"], "B": ["Grizzly Bears"]},
-        "hand": {"A": ["Clone"]},
-        "graveyard": {}, "library": {}, "exile": {},
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Clone"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": "B's Grizzly Bears is suspected (menace, cannot block), put there on an earlier turn by a suspecting effect that is no longer on the stack."
       },
       "decisions": [
@@ -109,46 +245,127 @@
         "A chooses to have Clone enter as a copy of B's Grizzly Bears."
       ],
       "variants": [
-        {"label": "base", "polarity": "fires", "delta": "", "expected": "Clone enters as a 2/2 Grizzly Bears that is not suspected: no menace and it can block. B's original Grizzly Bears is still suspected."},
-        {"label": "copy_scapegoat", "polarity": "other", "delta": "B's creature is a suspected Frantic Scapegoat instead of a suspected Grizzly Bears.", "expected": "Clone enters as a Frantic Scapegoat and its copied enters trigger resolves, suspecting the Clone: it ends suspected because of its own ability, not because the designation was copied. B's original Frantic Scapegoat is still suspected."}
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Clone enters as a 2/2 Grizzly Bears that is not suspected: no menace and it can block. B's original Grizzly Bears is still suspected."
+        },
+        {
+          "label": "copy_scapegoat",
+          "polarity": "other",
+          "delta": "B's creature is a suspected Frantic Scapegoat instead of a suspected Grizzly Bears.",
+          "expected": "Clone enters as a Frantic Scapegoat and its copied enters trigger resolves, suspecting the Clone: it ends suspected because of its own ability, not because the designation was copied. B's original Frantic Scapegoat is still suspected.",
+          "operation": "replace_card"
+        }
       ],
-      "cards": ["Island", "Grizzly Bears", "Clone", "Frantic Scapegoat"],
+      "cards": [
+        "Island",
+        "Grizzly Bears",
+        "Clone",
+        "Frantic Scapegoat"
+      ],
       "forge_notes": "In the copy_scapegoat variant B's Frantic Scapegoat is on the battlefield instead of B's Grizzly Bears, and its other-creatures-enter trigger belongs to B, so A's Clone does not trigger it."
     },
     {
       "id": "701.60c-1",
-      "rules": ["701.60c"],
+      "rules": [
+        "701.60c"
+      ],
       "title": "A suspected creature can't block",
       "record_kind": "playability",
       "setup": {
         "active": "A",
         "step": "declare_blockers",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {"A": [{"card": "Grizzly Bears", "tapped": true}], "B": ["Repeat Offender"]},
-        "hand": {}, "graveyard": {}, "library": {}, "exile": {},
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "tapped": true
+            }
+          ],
+          "B": [
+            "Repeat Offender"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": "A's Grizzly Bears is attacking B. B's Repeat Offender is untapped and suspected in the base variant (B activated its ability on an earlier turn)."
       },
       "decisions": [
         "A attacked B with Grizzly Bears and it is the declare blockers step: B considers blocking Grizzly Bears with Repeat Offender."
       ],
       "variants": [
-        {"label": "base", "polarity": "fires", "delta": "", "expected": "Repeat Offender is not a legal blocker for Grizzly Bears: it is suspected and cannot block."},
-        {"label": "not_suspected", "polarity": "does_not_fire", "delta": "Repeat Offender is not suspected.", "expected": "Repeat Offender is a legal blocker for Grizzly Bears."}
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Repeat Offender is not a legal blocker for Grizzly Bears: it is suspected and cannot block."
+        },
+        {
+          "label": "not_suspected",
+          "polarity": "does_not_fire",
+          "delta": "Repeat Offender is not suspected.",
+          "expected": "Repeat Offender is a legal blocker for Grizzly Bears.",
+          "operation": {
+            "unclassifiable": "the suspected designation is not a pt, keyword, colour, type, counter, tap, life or card-replacement fact"
+          }
+        }
       ],
-      "cards": ["Grizzly Bears", "Repeat Offender"],
-      "forge_notes": "Repeat Offender is used because its suspected status is easy to reach by one of its own activations."
+      "cards": [
+        "Grizzly Bears",
+        "Repeat Offender"
+      ],
+      "forge_notes": "Repeat Offender is used because its suspected status is easy to reach by one of its own activations.",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature that can't block (a suspected creature) is forbidden from the legal blockers of an anchored attacker.",
+        "near_miss": "A creature that is a legal blocker of the attacker.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside",
+          "responsible_static": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.60c-2",
-      "rules": ["701.60c"],
+      "rules": [
+        "701.60c"
+      ],
       "title": "A suspected creature has menace",
       "record_kind": "playability",
       "setup": {
         "active": "A",
         "step": "declare_blockers",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {"A": [{"card": "Repeat Offender", "tapped": true}], "B": ["Grizzly Bears", "Grizzly Bears"]},
-        "hand": {}, "graveyard": {}, "library": {}, "exile": {},
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Repeat Offender",
+              "tapped": true
+            }
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
         "notes": "A's Repeat Offender is attacking B and is suspected (A activated its ability on an earlier turn). Both of B's Grizzly Bears are untapped."
       },
       "decisions": [
@@ -156,10 +373,26 @@
         "B declares one Grizzly Bears as the only blocker of Repeat Offender."
       ],
       "variants": [
-        {"label": "base", "polarity": "fires", "delta": "", "expected": "The block is illegal: a suspected creature has menace and cannot be blocked except by two or more creatures."},
-        {"label": "two_blockers", "polarity": "does_not_fire", "delta": "B declares both Grizzly Bears as blockers of Repeat Offender.", "expected": "The block is legal: Repeat Offender is blocked by two creatures."}
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The block is illegal: a suspected creature has menace and cannot be blocked except by two or more creatures."
+        },
+        {
+          "label": "two_blockers",
+          "polarity": "does_not_fire",
+          "delta": "B declares both Grizzly Bears as blockers of Repeat Offender.",
+          "expected": "The block is legal: Repeat Offender is blocked by two creatures.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player, not a fact on the board"
+          }
+        }
       ],
-      "cards": ["Repeat Offender", "Grizzly Bears"],
+      "cards": [
+        "Repeat Offender",
+        "Grizzly Bears"
+      ],
       "forge_notes": ""
     }
   ]

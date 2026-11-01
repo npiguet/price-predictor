@@ -65,7 +65,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "In response, B casts Counterspell tapping both Islands, and it resolves first.",
-          "expected": "Swords to Plowshares is countered and goes to A's graveyard; Grizzly Bears stays on the battlefield, the exile zone is empty and B's life stays 20."
+          "expected": "Swords to Plowshares is countered and goes to A's graveyard; Grizzly Bears stays on the battlefield, the exile zone is empty and B's life stays 20.",
+          "operation": {
+            "unclassifiable": "A different spell cast: B casts Counterspell in response, a player decision no fork operation makes."
+          }
         }
       ],
       "cards": [
@@ -75,7 +78,19 @@
         "Counterspell",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution exiles a permanent: it moves from the battlefield to the exile zone.",
+        "near_miss": "No clean near miss: an exile effect that is countered or fizzles leaves no resolution, and other ChangeZone resolutions are not exile effects, so only the fires side is tagged.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "exile"
+        },
+        "needs": []
+      }
     },
     {
       "id": "406.2-2",
@@ -126,7 +141,10 @@
           "label": "cards-in-hand",
           "polarity": "does_not_fire",
           "delta": "Grizzly Bears and Shock are in B's hand instead of B's graveyard.",
-          "expected": "The trigger resolves and exiles nothing; Grizzly Bears and Shock stay in B's hand and the exile zone is empty."
+          "expected": "The trigger resolves and exiles nothing; Grizzly Bears and Shock stay in B's hand and the exile zone is empty.",
+          "operation": {
+            "unclassifiable": "Moves two cards from B's graveyard to B's hand, a change of zone contents no fork operation makes."
+          }
         }
       ],
       "cards": [
@@ -134,7 +152,20 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A mass zone-change resolution exiles cards: they move from a graveyard to the exile zone.",
+        "near_miss": "A ChangeZoneAll resolution that moves no card from a graveyard to exile, such as an exile-a-graveyard effect finding the graveyard empty.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "graveyard",
+          "to_zone": "exile",
+          "api": "ChangeZoneAll"
+        },
+        "needs": []
+      }
     },
     {
       "id": "406.3a-1",
@@ -202,7 +233,10 @@
           "label": "cast-face-down",
           "polarity": "does_not_fire",
           "delta": "A casts the exiled card face down using morph for {3}, tapping three Swamps, instead of face up for {1}{U}.",
-          "expected": "The card is not turned face up: the spell on the stack is a face-down 2/2 colorless creature spell with no name and mana value 0, and it resolves as a face-down 2/2 creature under A's control. Fathom Seer's turned-face-up trigger does not fire."
+          "expected": "The card is not turned face up: the spell on the stack is a face-down 2/2 colorless creature spell with no name and mana value 0, and it resolves as a face-down 2/2 creature under A's control. Fathom Seer's turned-face-up trigger does not fire.",
+          "operation": {
+            "unclassifiable": "A different player choice: the exiled card is cast face down with morph instead of face up."
+          }
         }
       ],
       "cards": [
@@ -275,7 +309,10 @@
           "label": "noncreature-exiled",
           "polarity": "does_not_fire",
           "delta": "A exiles Shock face down instead of Grizzly Bears, and tries to cast it targeting B with the Mountain.",
-          "expected": "Casting the face-down Shock is not legal (can_play false): the resulting spell is not a creature spell. Shock stays face down in exile and B's life stays 20."
+          "expected": "Casting the face-down Shock is not legal (can_play false): the resulting spell is not a creature spell. Shock stays face down in exile and B's life stays 20.",
+          "operation": {
+            "unclassifiable": "A different player choice of which looked-at card to exile, and a different spell cast from exile."
+          }
         }
       ],
       "cards": [
@@ -351,7 +388,10 @@
           "label": "nothing-exiled",
           "polarity": "does_not_fire",
           "delta": "When J1's enters trigger is on the stack targeting Grizzly Bears, B casts Unsummon on Grizzly Bears, tapping the Island; Unsummon resolves first.",
-          "expected": "Grizzly Bears is in B's hand and J1's trigger fizzles, exiling nothing. After Disenchant destroys J1 its leaves trigger returns nothing: Centaur Courser stays in exile, Grizzly Bears stays in B's hand, and the battlefield gains no card."
+          "expected": "Grizzly Bears is in B's hand and J1's trigger fizzles, exiling nothing. After Disenchant destroys J1 its leaves trigger returns nothing: Centaur Courser stays in exile, Grizzly Bears stays in B's hand, and the battlefield gains no card.",
+          "operation": {
+            "unclassifiable": "A different spell cast: B casts Unsummon in response to the enters trigger, a player decision no fork operation makes."
+          }
         }
       ],
       "cards": [

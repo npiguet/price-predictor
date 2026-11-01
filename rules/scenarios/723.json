@@ -70,13 +70,19 @@
           "label": "end_step_of_next_turn",
           "polarity": "fires",
           "delta": "The Lightning Bolt is cast in B's end step of the first turn instead of its upkeep.",
-          "expected": "A still makes B's decisions in B's end step, the last step of the controlled turn: the Lightning Bolt cast is A's choice and kills Grizzly Bears. B makes its own decisions in B's second turn."
+          "expected": "A still makes B's decisions in B's end step, the last step of the controlled turn: the Lightning Bolt cast is A's choice and kills Grizzly Bears. B makes its own decisions in B's second turn.",
+          "operation": {
+            "unclassifiable": "The spell is cast in a different step, a player's choice of timing."
+          }
         },
         {
           "label": "second_turn",
           "polarity": "does_not_fire",
           "delta": "The Lightning Bolt is cast in B's second turn after the activation (upkeep) instead of the first; B takes no action in its first turn.",
-          "expected": "The control effect ended at the beginning of B's second turn: B itself makes B's decisions, and the cast of Lightning Bolt in that turn is B's own choice. Lightning Bolt kills Grizzly Bears all the same; Mindslaver is in A's graveyard."
+          "expected": "The control effect ended at the beginning of B's second turn: B itself makes B's decisions, and the cast of Lightning Bolt in that turn is B's own choice. Lightning Bolt kills Grizzly Bears all the same; Mindslaver is in A's graveyard.",
+          "operation": {
+            "unclassifiable": "The spell is cast in a different turn, a player's choice of timing."
+          }
         }
       ],
       "cards": [
@@ -86,7 +92,10 @@
         "Grizzly Bears",
         "Lightning Bolt"
       ],
-      "forge_notes": "The observable is which player supplies B's decisions; the physical outcome of the fixed Bolt cast is identical across variants."
+      "forge_notes": "The observable is which player supplies B's decisions; the physical outcome of the fixed Bolt cast is identical across variants.",
+      "detector": {
+        "none": "No event or state field records which player makes a controlled player's decisions: control_change is for permanents, actor_player names the player whose decision it is rather than who makes it, and no player-control event or field exists in EVENT_PARAMS or either record schema."
+      }
     },
     {
       "id": "723.1a-1",
@@ -154,13 +163,19 @@
           "label": "b_resolves_last",
           "polarity": "fires",
           "delta": "B activates its own Mindslaver only after A's ability has resolved and A has passed priority with an empty stack, instead of in response.",
-          "expected": "B's effect is created last and overwrites A's: B makes its own decisions in B's next turn and A makes none of them. Lightning Bolt kills Grizzly Bears; both Mindslavers are in their owners' graveyards."
+          "expected": "B's effect is created last and overwrites A's: B makes its own decisions in B's next turn and A makes none of them. Lightning Bolt kills Grizzly Bears; both Mindslavers are in their owners' graveyards.",
+          "operation": {
+            "unclassifiable": "An ability activated at a different time, a player's choice."
+          }
         },
         {
           "label": "single_effect",
           "polarity": "does_not_fire",
           "delta": "B does not activate its Mindslaver.",
-          "expected": "Only A's effect exists, so nothing is overwritten: A makes B's decisions in B's next turn. Lightning Bolt kills Grizzly Bears; B's Mindslaver is still on the battlefield."
+          "expected": "Only A's effect exists, so nothing is overwritten: A makes B's decisions in B's next turn. Lightning Bolt kills Grizzly Bears; B's Mindslaver is still on the battlefield.",
+          "operation": {
+            "unclassifiable": "An ability not activated, a player's choice."
+          }
         }
       ],
       "cards": [
@@ -171,7 +186,10 @@
         "Grizzly Bears",
         "Lightning Bolt"
       ],
-      "forge_notes": "The observable is which player supplies B's decisions."
+      "forge_notes": "The observable is which player supplies B's decisions.",
+      "detector": {
+        "none": "No event or state field records which player makes a controlled player's decisions: control_change is for permanents, actor_player names the player whose decision it is rather than who makes it, and no player-control event or field exists in EVENT_PARAMS or either record schema."
+      }
     },
     {
       "id": "723.1b-1",
@@ -242,7 +260,10 @@
           "label": "no_skip",
           "polarity": "does_not_fire",
           "delta": "B does not cast Meditate; B's Meditate stays in hand and B's next turn is not skipped.",
-          "expected": "The effect applies to B's very next turn: A makes B's decisions in B's upkeep and casts Lightning Bolt, and Grizzly Bears dies. The effect is used up: in the following B turn B makes its own decisions."
+          "expected": "The effect applies to B's very next turn: A makes B's decisions in B's upkeep and casts Lightning Bolt, and Grizzly Bears dies. The effect is used up: in the following B turn B makes its own decisions.",
+          "operation": {
+            "unclassifiable": "A spell not cast, a player's choice."
+          }
         }
       ],
       "cards": [
@@ -254,7 +275,10 @@
         "Lightning Bolt",
         "Meditate"
       ],
-      "forge_notes": "In turn_skipped the 'next turn actually taken' is two turns later than in no_skip, so the Lightning Bolt is cast later in the turn order; the observable is which player supplies B's decisions."
+      "forge_notes": "In turn_skipped the 'next turn actually taken' is two turns later than in no_skip, so the Lightning Bolt is cast later in the turn order; the observable is which player supplies B's decisions.",
+      "detector": {
+        "none": "No event or state field records which player makes a controlled player's decisions: control_change is for permanents, actor_player names the player whose decision it is rather than who makes it, and no player-control event or field exists in EVENT_PARAMS or either record schema."
+      }
     },
     {
       "id": "723.3-1",
@@ -326,7 +350,10 @@
           "label": "controller_casts_own",
           "polarity": "does_not_fire",
           "delta": "A tries to cast A's own Divination from A's hand, paying with A's Islands, instead of B's.",
-          "expected": "Not legal (can_play false): A is not the active player, and controlling B does not change that, so A cannot cast a sorcery in B's turn."
+          "expected": "Not legal (can_play false): A is not the active player, and controlling B does not change that, so A cannot cast a sorcery in B's turn.",
+          "operation": {
+            "unclassifiable": "A different spell cast, from a different player's hand: a player's choice."
+          }
         }
       ],
       "cards": [
@@ -334,7 +361,10 @@
         "Island",
         "Mindslaver"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "A controlled player staying the active player shows only as which player makes the controlled player's decisions, and no event or state field records that: control_change is for permanents and no player-control event or field exists in EVENT_PARAMS or either record schema; the playability verdicts are each player's ordinary timing ones."
+      }
     },
     {
       "id": "723.7-1",
@@ -392,7 +422,8 @@
           "label": "two_lands",
           "polarity": "does_not_fire",
           "delta": "B controls a second Forest instead of Llanowar Elves.",
-          "expected": "B pays {1}{G} with two Forests (can_play true) and plays Grizzly Bears, which enters B's battlefield. Word of Command is in A's graveyard."
+          "expected": "B pays {1}{G} with two Forests (can_play true) and plays Grizzly Bears, which enters B's battlefield. Word of Command is in A's graveyard.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -402,7 +433,10 @@
         "Llanowar Elves",
         "Grizzly Bears"
       ],
-      "forge_notes": "Forge implements the restriction with a CantBeActivated static on an effect owned by the targeted player."
+      "forge_notes": "Forge implements the restriction with a CantBeActivated static on an effect owned by the targeted player.",
+      "detector": {
+        "none": "The restricted play happens inside the controlling spell's resolution, where no player has priority and no playability decision record is written; no event or state field records that a player is controlled or which of their actions the controlling effect restricts (EVENT_PARAMS, both record schemas)."
+      }
     }
   ]
 }

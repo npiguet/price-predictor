@@ -58,7 +58,8 @@
           "label": "already-tapped",
           "polarity": "does_not_fire",
           "delta": "Compassionate Healer starts tapped.",
-          "expected": "Twiddle resolves and tapping does nothing: Compassionate Healer stays tapped, it does not become tapped again, its trigger does not fire and A's life stays 20."
+          "expected": "Twiddle resolves and tapping does nothing: Compassionate Healer stays tapped, it does not become tapped again, its trigger does not fire and A's life stays 20.",
+          "operation": "tap"
         }
       ],
       "cards": [
@@ -67,7 +68,17 @@
         "Twiddle",
         "Forest"
       ],
-      "forge_notes": "Forge's TapOrUntap prompt may not offer tap for an already tapped permanent; force the choice if so."
+      "forge_notes": "Forge's TapOrUntap prompt may not offer tap for an already tapped permanent; force the choice if so.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on a permanent becoming tapped fires when an untapped permanent is tapped.",
+        "near_miss": "A becomes-tapped trigger evaluated against a tap of a permanent it does not watch does not fire; an instruction to tap a permanent already tapped is no tap event and evaluates no trigger.",
+        "params": {
+          "mode": "Taps"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.26b-1",
@@ -119,7 +130,8 @@
           "label": "already-untapped",
           "polarity": "does_not_fire",
           "delta": "Servant of Tymaret starts untapped.",
-          "expected": "Twiddle resolves and untapping does nothing: Servant of Tymaret stays untapped, its trigger does not fire and life totals stay 20 and 20."
+          "expected": "Twiddle resolves and untapping does nothing: Servant of Tymaret stays untapped, its trigger does not fire and life totals stay 20 and 20.",
+          "operation": "tap"
         }
       ],
       "cards": [
@@ -127,7 +139,17 @@
         "Island",
         "Twiddle"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on a permanent becoming untapped fires when a tapped permanent is untapped.",
+        "near_miss": "A becomes-untapped trigger evaluated against an untap of a permanent it does not watch does not fire; an instruction to untap a permanent already untapped is no untap event and evaluates no trigger.",
+        "params": {
+          "mode": "Untaps"
+        },
+        "needs": []
+      }
     }
   ]
 }

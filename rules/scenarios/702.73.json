@@ -51,7 +51,8 @@
           "label": "non_goblin",
           "polarity": "does_not_fire",
           "delta": "A controls Grizzly Bears instead of Avian Changeling.",
-          "expected": "Grizzly Bears is a Bear, not a Goblin, so Goblin King's bonus does not apply. Grizzly Bears is 2/2 with no mountainwalk."
+          "expected": "Grizzly Bears is a Bear, not a Goblin, so Goblin King's bonus does not apply. Grizzly Bears is 2/2 with no mountainwalk.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -59,7 +60,18 @@
         "Avian Changeling",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static contributes every creature type to an object, as changeling's characteristic-defining ability does.",
+        "near_miss": "A static applies to the board and contributes no all-creature-types token.",
+        "params": {
+          "field": "types",
+          "value": "all-creature-types"
+        },
+        "needs": []
+      }
     }
   ]
 }

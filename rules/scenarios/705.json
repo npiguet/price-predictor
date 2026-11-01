@@ -49,13 +49,29 @@
           "label": "call misses",
           "polarity": "does_not_fire",
           "delta": "The coin lands tails instead of heads.",
-          "expected": "A loses the flip. Frenetic Efreet is sacrificed and moves to A's graveyard; it does not phase out."
+          "expected": "A loses the flip. Frenetic Efreet is sacrificed and moves to A's graveyard; it does not phase out.",
+          "operation": {
+            "unclassifiable": "The delta changes a random result (the coin lands tails instead of heads), which is no fork operation: none of pt, keyword, colour_type, counters, tap, life or replace_card sets a coin or die result."
+          }
         }
       ],
       "cards": [
         "Frenetic Efreet"
       ],
-      "forge_notes": "Forge asks the flipper to call heads or tails and compares the call with a random result; the scenario needs the result forced."
+      "forge_notes": "Forge asks the flipper to call heads or tails and compares the call with a random result; the scenario needs the result forced.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution flips one coin with a call and the caller wins the flip: its coin_flipped event's results are a single win.",
+        "near_miss": "A called flip the caller loses (results a single loss); not counted, since the declaration sets no api and so tags only the fires side.",
+        "params": {
+          "event": "coin_flipped",
+          "results": [
+            "win"
+          ]
+        },
+        "needs": []
+      }
     },
     {
       "id": "705.2-2",
@@ -114,13 +130,19 @@
           "label": "sentry tails",
           "polarity": "does_not_fire",
           "delta": "The coin lands tails instead of heads.",
-          "expected": "Molten Sentry enters as a 2/5 creature with defender. Toothy and Zndrsplt's win-a-flip trigger does not fire; it stays a 2/2 with no counters."
+          "expected": "Molten Sentry enters as a 2/5 creature with defender. Toothy and Zndrsplt's win-a-flip trigger does not fire; it stays a 2/2 with no counters.",
+          "operation": {
+            "unclassifiable": "The delta changes a random result (the coin lands tails instead of heads), which is no fork operation: none of pt, keyword, colour_type, counters, tap, life or replace_card sets a coin or die result."
+          }
         },
         {
           "label": "flip with a call",
           "polarity": "fires",
           "delta": "A does not cast Molten Sentry. Instead A activates Frenetic Efreet's {0} ability, calls heads, and the coin lands heads.",
-          "expected": "A wins the flip. Toothy and Zndrsplt's trigger fires and it gets a +1/+1 counter (3/3). Frenetic Efreet phases out. Molten Sentry stays in A's hand."
+          "expected": "A wins the flip. Toothy and Zndrsplt's trigger fires and it gets a +1/+1 counter (3/3). Frenetic Efreet phases out. Molten Sentry stays in A's hand.",
+          "operation": {
+            "unclassifiable": "The delta is a different decision by A: A activates a different permanent's ability and calls a flip instead of casting a spell, which also leaves a card in hand; a different spell or ability is no fork operation."
+          }
         }
       ],
       "cards": [
@@ -129,7 +151,17 @@
         "Frenetic Efreet",
         "Molten Sentry"
       ],
-      "forge_notes": "Forge's NoCall flips fire no FlippedCoin trigger; flips with a call fire one with Result true (win) or false (lose)."
+      "forge_notes": "Forge's NoCall flips fire no FlippedCoin trigger; flips with a call fire one with Result true (win) or false (lose).",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A flipped-coin (FlippedCoin) trigger fires on a flip that had a call and so a winner and a loser.",
+        "near_miss": "A FlippedCoin trigger evaluated against a called flip whose result its condition does not match does not fire; a flip with no call runs no FlippedCoin trigger at all, so it leaves no trigger record.",
+        "params": {
+          "mode": "FlippedCoin"
+        },
+        "needs": []
+      }
     },
     {
       "id": "705.3-1",
@@ -184,20 +216,29 @@
           "label": "no Edgar",
           "polarity": "other",
           "delta": "Edgar, King of Figaro is not on the battlefield.",
-          "expected": "The coin lands tails and A loses the flip. The first Frenetic Efreet is sacrificed and moves to A's graveyard."
+          "expected": "The coin lands tails and A loses the flip. The first Frenetic Efreet is sacrificed and moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "The delta removes a permanent (Edgar, King of Figaro is not on the battlefield); removing a permanent is no fork operation."
+          }
         },
         {
           "label": "second flip of the turn",
           "polarity": "does_not_fire",
           "delta": "After the first Efreet's ability resolves, A activates the second Frenetic Efreet's {0} ability, calls heads, and the coin would land tails.",
-          "expected": "The first Frenetic Efreet phases out (forced win). Edgar no longer applies, so the second flip is lost: the second Frenetic Efreet is sacrificed and moves to A's graveyard."
+          "expected": "The first Frenetic Efreet phases out (forced win). Edgar no longer applies, so the second flip is lost: the second Frenetic Efreet is sacrificed and moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "The delta adds a further activation by A of a second permanent's ability after the first resolves; a different decision is no fork operation."
+          }
         }
       ],
       "cards": [
         "Edgar, King of Figaro",
         "Frenetic Efreet"
       ],
-      "forge_notes": "Implemented as Mode$ FlipCoinMod with CheckSVar Count$YouFlipThisTurn EQ0; the natural result must be forced to tails."
+      "forge_notes": "Implemented as Mode$ FlipCoinMod with CheckSVar Count$YouFlipThisTurn EQ0; the natural result must be forced to tails.",
+      "detector": {
+        "none": "Forge applies a stated flip result through a FlipCoinMod static ability that FlipCoinEffect consults directly (StaticAbilityFlipCoinMod.fixedResult), not through a replacement effect, so no rewrite record is written; the resolution's coin_flipped event holds only the final win/loss labels and no natural result, so a stated result and a natural one read the same. Looked in rewrite records, coin_flipped's EVENT_PARAMS (results, called) and the record schemas."
+      }
     }
   ]
 }

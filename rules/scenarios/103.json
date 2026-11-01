@@ -55,14 +55,20 @@
           "label": "on_top_of_library",
           "polarity": "does_not_fire",
           "delta": "Leyline of Sanctity is the top card of A's library and the opening hand is seven Plains.",
-          "expected": "Leyline of Sanctity stays in A's library; nothing is put onto the battlefield before turn 1 and A does not have hexproof."
+          "expected": "Leyline of Sanctity stays in A's library; nothing is put onto the battlefield before turn 1 and A does not have hexproof.",
+          "operation": {
+            "unclassifiable": "Changes the opening hand and the library contents; no fork operation changes a hand or library."
+          }
         }
       ],
       "cards": [
         "Leyline of Sanctity",
         "Plains"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The opening-hand action happens before turn 1 and is not a stack resolution; no gen-2 record kind is written for it, and gen-3 excludes pre-game actions from its fields (rules/gen3-fields.json new:pregame_action), so no record or zone_change event shows a card beginning the game on the battlefield."
+      }
     },
     {
       "id": "103.8a-1",
@@ -115,13 +121,19 @@
           "label": "opponent_first_turn",
           "polarity": "does_not_fire",
           "delta": "It is B's first turn (turn 2) and B is the active player.",
-          "expected": "B draws Plains: B's hand is Mountain and Plains, B's library is Island."
+          "expected": "B draws Plains: B's hand is Mountain and Plains, B's library is Island.",
+          "operation": {
+            "unclassifiable": "Changes the turn number and the active player; no fork operation changes the turn."
+          }
         },
         {
           "label": "starting_player_second_turn",
           "polarity": "does_not_fire",
           "delta": "It is A's second turn (turn 3) instead of turn 1.",
-          "expected": "A draws Plains: A's hand is Mountain and Plains, A's library is Island."
+          "expected": "A draws Plains: A's hand is Mountain and Plains, A's library is Island.",
+          "operation": {
+            "unclassifiable": "Changes the turn number; no fork operation changes the turn."
+          }
         }
       ],
       "cards": [
@@ -129,7 +141,10 @@
         "Plains",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The skipped first draw is the absence of a turn-based action: no resolution happens, Forge does not skip the draw step (no phase_skipped event), and gen-3's turn_action/draw record is written only when a card is drawn, so no record or event shows the skip."
+      }
     }
   ]
 }

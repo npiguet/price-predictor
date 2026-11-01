@@ -65,7 +65,10 @@
           "label": "sacrifice_mv1",
           "polarity": "does_not_fire",
           "delta": "A chooses Mons's Goblin Raiders (mana value 1) as the creature to sacrifice instead of Grizzly Bears.",
-          "expected": "Casting Abundant Maw by sacrificing Mons's Goblin Raiders is not payable: the total cost is {6}{B} reduced by 1 to {5}{B}, six mana, and A has only five lands. Abundant Maw stays in A's hand, and nothing is sacrificed."
+          "expected": "Casting Abundant Maw by sacrificing Mons's Goblin Raiders is not payable: the total cost is {6}{B} reduced by 1 to {5}{B}, six mana, and A has only five lands. Abundant Maw stays in A's hand, and nothing is sacrificed.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         }
       ],
       "cards": [
@@ -139,13 +142,19 @@
           "label": "sacrifice_nonartifact",
           "polarity": "does_not_fire",
           "delta": "A tries to sacrifice Grizzly Bears (a mana value 2 creature that is not an artifact) instead of Bronze Sable.",
-          "expected": "Grizzly Bears is not a legal choice for emerge from artifact, so the emerge cost cannot be paid. Crabomination, costing {4}{B}{B} (six mana) with no emerge, cannot be cast with five lands and stays in A's hand."
+          "expected": "Grizzly Bears is not a legal choice for emerge from artifact, so the emerge cost cannot be paid. Crabomination, costing {4}{B}{B} (six mana) with no emerge, cannot be cast with five lands and stays in A's hand.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         },
         {
           "label": "sacrifice_artifact_mv0",
           "polarity": "does_not_fire",
           "delta": "A sacrifices Ornithopter (an artifact with mana value 0) instead of Bronze Sable.",
-          "expected": "The emerge cost is reduced by 0, so the total cost is {5}{B}{B}, seven mana, and A has only five lands. Crabomination stays in A's hand and nothing is sacrificed."
+          "expected": "The emerge cost is reduced by 0, so the total cost is {5}{B}{B}, seven mana, and A has only five lands. Crabomination stays in A's hand and nothing is sacrificed.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         }
       ],
       "cards": [

@@ -88,7 +88,10 @@
           "label": "land-instead",
           "polarity": "does_not_fire",
           "delta": "A plays Forest from hand instead of casting Grizzly Bears (a land, not a creature, enters).",
-          "expected": "Soul Warden does not trigger and nothing goes on the stack; A's life stays 20."
+          "expected": "Soul Warden does not trigger and nothing goes on the stack; A's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different card played (a land instead of a creature spell)"
+          }
         }
       ],
       "cards": [
@@ -96,7 +99,18 @@
         "Forest",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A zone-change trigger for a permanent entering the battlefield is evaluated against the entering event and fires.",
+        "near_miss": "The same kind of trigger is evaluated against an event and does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.2a-1",
@@ -151,7 +165,10 @@
           "label": "land-instead",
           "polarity": "does_not_fire",
           "delta": "After Silence resolves, A plays Forest from hand instead of casting Grizzly Bears.",
-          "expected": "No creature enters, so Soul Warden does not trigger; B's life stays 20."
+          "expected": "No creature enters, so Soul Warden does not trigger; B's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different card played"
+          }
         }
       ],
       "cards": [
@@ -161,7 +178,18 @@
         "Silence",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A zone-change trigger for a permanent entering the battlefield is evaluated against the entering event and fires.",
+        "near_miss": "The same kind of trigger is evaluated against an event and does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.2b-1",
@@ -214,13 +242,26 @@
           "label": "opponent-upkeep",
           "polarity": "does_not_fire",
           "delta": "It is B's upkeep (B is the active player), not A's.",
-          "expected": "Neither Phyrexian Arena triggers, since each reads 'your upkeep'; A draws nothing and A's life stays 20."
+          "expected": "Neither Phyrexian Arena triggers, since each reads 'your upkeep'; A draws nothing and A's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different turn and phase"
+          }
         }
       ],
       "cards": [
         "Phyrexian Arena"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A beginning-of-step trigger is evaluated as that step begins and fires.",
+        "near_miss": "The same kind of trigger is evaluated at a step it does not name and does not fire.",
+        "params": {
+          "mode": "Phase"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.2c-1",
@@ -276,13 +317,19 @@
           "label": "single-creature",
           "polarity": "other",
           "delta": "A casts Savannah Lions instead of Raise the Alarm (one creature enters).",
-          "expected": "Impact Tremors triggers once; B takes 1 damage (life 19)."
+          "expected": "Impact Tremors triggers once; B takes 1 damage (life 19).",
+          "operation": {
+            "unclassifiable": "a different spell cast (one creature spell instead of a spell creating two tokens)"
+          }
         },
         {
           "label": "opponent-creatures",
           "polarity": "does_not_fire",
           "delta": "A passes priority in main phase 1 with an empty stack, and B casts Raise the Alarm (tapping B's Plains) instead of A. B's two tokens enter under B's control.",
-          "expected": "Impact Tremors does not trigger, since the creatures enter under B's control; B's life stays 20."
+          "expected": "Impact Tremors does not trigger, since the creatures enter under B's control; B's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different player casts the spell"
+          }
         }
       ],
       "cards": [
@@ -291,7 +338,18 @@
         "Raise the Alarm",
         "Savannah Lions"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A zone-change trigger for a permanent entering the battlefield is evaluated against the entering event and fires.",
+        "near_miss": "The same kind of trigger is evaluated against an event and does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.2d-1",
@@ -347,7 +405,10 @@
           "label": "opponent-panharmonicon",
           "polarity": "does_not_fire",
           "delta": "Panharmonicon is on B's battlefield instead of A's.",
-          "expected": "Elvish Visionary's ability triggers once; A draws 1 card."
+          "expected": "Elvish Visionary's ability triggers once; A draws 1 card.",
+          "operation": {
+            "unclassifiable": "the permanent is on the other player's battlefield (a permanent added/removed)"
+          }
         }
       ],
       "cards": [
@@ -355,7 +416,18 @@
         "Forest",
         "Elvish Visionary"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A zone-change trigger for a permanent entering the battlefield is evaluated against the entering event and fires.",
+        "near_miss": "The same kind of trigger is evaluated against an event and does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.2e-1",
@@ -407,7 +479,10 @@
           "label": "enters-tapped",
           "polarity": "does_not_fire",
           "delta": "B does not pay the 2 life, so Temple Garden enters tapped, and B does not tap it afterwards.",
-          "expected": "Temple Garden enters tapped; it never becomes tapped, so Lifetap does not trigger; A's life stays 20 and B's life stays 20."
+          "expected": "Temple Garden enters tapped; it never becomes tapped, so Lifetap does not trigger; A's life stays 20 and B's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         }
       ],
       "cards": [
@@ -416,7 +491,17 @@
         "Forest",
         "Temple Garden"
       ],
-      "forge_notes": "Temple Garden has the Forest subtype, which Lifetap's trigger condition needs."
+      "forge_notes": "Temple Garden has the Forest subtype, which Lifetap's trigger condition needs.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A becomes-tapped trigger is evaluated when an untapped permanent becomes tapped and fires.",
+        "near_miss": "A becomes-tapped trigger evaluated against a permanent becoming tapped that its condition does not match does not fire; a permanent that enters tapped never becomes tapped, so no such trigger is evaluated for it.",
+        "params": {
+          "mode": "Taps"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.2g-1",
@@ -470,7 +555,10 @@
           "label": "damage-prevented",
           "polarity": "does_not_fire",
           "delta": "After A casts Shock, B responds with Healing Salve choosing the prevention mode targeting Jackal Pup, tapping Plains; Healing Salve resolves first, then Shock resolves.",
-          "expected": "Healing Salve's shield prevents all 2 damage from Shock, so Jackal Pup is not dealt damage and its ability does not trigger; Jackal Pup stays on the battlefield undamaged and B's life stays 20."
+          "expected": "Healing Salve's shield prevents all 2 damage from Shock, so Jackal Pup is not dealt damage and its ability does not trigger; Jackal Pup stays on the battlefield undamaged and B's life stays 20.",
+          "operation": {
+            "unclassifiable": "a spell cast in response"
+          }
         }
       ],
       "cards": [
@@ -480,7 +568,17 @@
         "Shock",
         "Healing Salve"
       ],
-      "forge_notes": "Jackal Pup dies to the damage in the base variant; its trigger still happens because it triggers as the damage is dealt."
+      "forge_notes": "Jackal Pup dies to the damage in the base variant; its trigger still happens because it triggers as the damage is dealt.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A damage-dealt trigger is evaluated against damage actually dealt and fires.",
+        "near_miss": "A damage-dealt trigger evaluated against dealt damage its condition does not match does not fire; damage that was prevented is never dealt, so no such trigger is evaluated for it.",
+        "params": {
+          "mode": "DamageDoneOnce"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.2h-1",
@@ -534,7 +632,10 @@
           "label": "declined-first",
           "polarity": "fires",
           "delta": "When the first Ancient Cornucopia trigger resolves, A chooses not to gain life.",
-          "expected": "A gains nothing from the first trigger; Ancient Cornucopia triggers again on Watchwolf (green and white) and A gains 2 life (life 22)."
+          "expected": "A gains nothing from the first trigger; Ancient Cornucopia triggers again on Watchwolf (green and white) and A gains 2 life (life 22).",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         }
       ],
       "cards": [
@@ -544,7 +645,17 @@
         "Grizzly Bears",
         "Watchwolf"
       ],
-      "forge_notes": "Forge scripts the clause as ResolvedLimit$ 1 on the trigger; check that a resolution where the optional gain was declined does not count toward the limit."
+      "forge_notes": "Forge scripts the clause as ResolvedLimit$ 1 on the trigger; check that a resolution where the optional gain was declined does not count toward the limit.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A cast trigger limited to once each turn is evaluated and fires when its action has not yet been taken this turn.",
+        "near_miss": "The same trigger evaluated after the limited action was taken this turn does not fire.",
+        "params": {
+          "mode": "SpellCast"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.3-1",
@@ -599,7 +710,10 @@
           "label": "stifled",
           "polarity": "does_not_fire",
           "delta": "With the trigger on the stack, B responds with Stifle targeting Kor Firewalker's trigger, tapping Island.",
-          "expected": "Stifle counters the trigger, so A gains no life (life stays 20); Shock then resolves and Grizzly Bears dies."
+          "expected": "Stifle counters the trigger, so A gains no life (life stays 20); Shock then resolves and Grizzly Bears dies.",
+          "operation": {
+            "unclassifiable": "a spell cast in response"
+          }
         }
       ],
       "cards": [
@@ -666,7 +780,10 @@
           "label": "no-steal",
           "polarity": "does_not_fire",
           "delta": "A does not cast Act of Treason; A only casts Grizzly Bears, so B still controls Soul Warden.",
-          "expected": "Soul Warden's trigger is controlled by B: B's life is 21 and A's life stays 20."
+          "expected": "Soul Warden's trigger is controlled by B: B's life is 21 and A's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         }
       ],
       "cards": [
@@ -676,7 +793,18 @@
         "Act of Treason",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A zone-change trigger for a permanent entering the battlefield is evaluated against the entering event and fires.",
+        "near_miss": "The same kind of trigger is evaluated against an event and does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.3c-1",
@@ -730,7 +858,10 @@
           "label": "no-opposing-creature",
           "polarity": "fires",
           "delta": "B controls no creatures (Savannah Lions is not on the battlefield).",
-          "expected": "Neither mode has a legal target, so no mode can be chosen and the trigger is removed from the stack; nothing happens and Downwind Ambusher stays on the battlefield."
+          "expected": "Neither mode has a legal target, so no mode can be chosen and the trigger is removed from the stack; nothing happens and Downwind Ambusher stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "a permanent removed from the battlefield"
+          }
         }
       ],
       "cards": [
@@ -738,7 +869,10 @@
         "Savannah Lions",
         "Downwind Ambusher"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "A modal trigger with no legal mode is never put on the stack: the trigger record shows only fired=true, and no resolution record or event is written for an ability removed before resolving, so nothing shows the removal."
+      }
     },
     {
       "id": "603.3d-1",
@@ -792,7 +926,8 @@
           "label": "only-black-creature",
           "polarity": "fires",
           "delta": "B's creature is Walking Corpse (a black 2/2) instead of Grizzly Bears.",
-          "expected": "No nonblack, nonartifact creature can be targeted (Nekrataal itself is black), so the trigger is removed from the stack without resolving; Walking Corpse stays on the battlefield."
+          "expected": "No nonblack, nonartifact creature can be targeted (Nekrataal itself is black), so the trigger is removed from the stack without resolving; Walking Corpse stays on the battlefield.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -801,7 +936,10 @@
         "Walking Corpse",
         "Nekrataal"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "A trigger with no legal target is removed without going on the stack: the trigger record shows only fired=true, and no resolution record or event is written for it (a fizzle outcome is for an ability that was on the stack), so nothing shows the removal."
+      }
     },
     {
       "id": "603.4-1",
@@ -851,13 +989,17 @@
           "label": "life-lost-in-response",
           "polarity": "does_not_fire",
           "delta": "With the trigger on the stack, B casts Shock targeting A (tapping Mountain); Shock resolves first, A's life becomes 38.",
-          "expected": "The ability triggered, but on resolution A has 38 life, so it is removed from the stack and does nothing; A does not win and A's life is 38."
+          "expected": "The ability triggered, but on resolution A has 38 life, so it is removed from the stack and does nothing; A does not win and A's life is 38.",
+          "operation": {
+            "unclassifiable": "a spell cast in response"
+          }
         },
         {
           "label": "one-life-short",
           "polarity": "does_not_fire",
           "delta": "A's life total is 39 as the upkeep begins.",
-          "expected": "The ability does not trigger and nothing goes on the stack; A does not win and A's life stays 39."
+          "expected": "The ability does not trigger and nothing goes on the stack; A does not win and A's life stays 39.",
+          "operation": "life"
         }
       ],
       "cards": [
@@ -865,7 +1007,17 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": "Check that Forge re-evaluates LifeTotal/LifeAmount on resolution (intervening if)."
+      "forge_notes": "Check that Forge re-evaluates LifeTotal/LifeAmount on resolution (intervening if).",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A beginning-of-step trigger with an intervening if clause is evaluated as the step begins and fires when the condition holds.",
+        "near_miss": "The same trigger evaluated when its intervening condition does not hold does not fire.",
+        "params": {
+          "mode": "Phase"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.5-1",
@@ -916,7 +1068,10 @@
           "label": "decline",
           "polarity": "does_not_fire",
           "delta": "On resolution A chooses not to gain 1 life.",
-          "expected": "The trigger still went on the stack and resolved, but A gains nothing; A's life stays 20."
+          "expected": "The trigger still went on the stack and resolved, but A gains nothing; A's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         }
       ],
       "cards": [
@@ -925,7 +1080,17 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An optional cast trigger is evaluated against a matching spell and fires, going on the stack whatever its controller will choose.",
+        "near_miss": "The same trigger evaluated against a spell that does not match does not fire.",
+        "params": {
+          "mode": "SpellCast"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.6-1",
@@ -983,7 +1148,10 @@
           "label": "exiled-in-response",
           "polarity": "does_not_fire",
           "delta": "With Rancor's trigger on the stack, B activates Tormod's Crypt targeting A (tapping and sacrificing it); the ability resolves first, exiling A's graveyard.",
-          "expected": "Rancor is in exile when the trigger resolves, so the trigger cannot find it and does nothing; Rancor stays in exile and A's hand is empty."
+          "expected": "Rancor is in exile when the trigger resolves, so the trigger cannot find it and does nothing; Rancor stays in exile and A's hand is empty.",
+          "operation": {
+            "unclassifiable": "an ability activated in response"
+          }
         }
       ],
       "cards": [
@@ -1053,7 +1221,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "When A casts Elvish Visionary, B responds with Counterspell, tapping both Islands, before it resolves.",
-          "expected": "Elvish Visionary never enters the battlefield, so neither ability triggers; A's life stays 20, A draws nothing, and Elvish Visionary is in A's graveyard."
+          "expected": "Elvish Visionary never enters the battlefield, so neither ability triggers; A's life stays 20, A draws nothing, and Elvish Visionary is in A's graveyard.",
+          "operation": {
+            "unclassifiable": "a spell cast in response"
+          }
         }
       ],
       "cards": [
@@ -1063,7 +1234,18 @@
         "Elvish Visionary",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A zone-change trigger for a permanent entering the battlefield is evaluated against the entering event and fires.",
+        "near_miss": "The same kind of trigger is evaluated against an event and does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.6b-1",
@@ -1117,7 +1299,10 @@
           "label": "no-humility",
           "polarity": "fires",
           "delta": "Humility is not on the battlefield.",
-          "expected": "Elvish Visionary's enters ability triggers and resolves; A draws 1 card."
+          "expected": "Elvish Visionary's enters ability triggers and resolves; A draws 1 card.",
+          "operation": {
+            "unclassifiable": "a permanent removed from the battlefield"
+          }
         }
       ],
       "cards": [
@@ -1125,7 +1310,18 @@
         "Forest",
         "Elvish Visionary"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A zone-change trigger for a permanent entering the battlefield is evaluated against the entering event and fires.",
+        "near_miss": "The same kind of trigger is evaluated against an event and does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.6b-2",
@@ -1175,7 +1371,10 @@
           "label": "no-living-plane",
           "polarity": "does_not_fire",
           "delta": "Living Plane is not on the battlefield.",
-          "expected": "The played Forest is only a land, so Soul Warden does not trigger; A's life stays 20."
+          "expected": "The played Forest is only a land, so Soul Warden does not trigger; A's life stays 20.",
+          "operation": {
+            "unclassifiable": "a permanent removed from the battlefield"
+          }
         }
       ],
       "cards": [
@@ -1183,7 +1382,18 @@
         "Living Plane",
         "Forest"
       ],
-      "forge_notes": "Check that Forge applies the Living Plane type change as the land enters, before checking triggers."
+      "forge_notes": "Check that Forge applies the Living Plane type change as the land enters, before checking triggers.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A zone-change trigger for a permanent entering the battlefield is evaluated against the entering event and fires.",
+        "near_miss": "The same kind of trigger is evaluated against an event and does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.6c-1",
@@ -1236,7 +1446,10 @@
           "label": "shock-instead",
           "polarity": "does_not_fire",
           "delta": "B casts Shock (tapping Mountain) targeting Grixis Slavedriver (4/4) instead of Unsummon.",
-          "expected": "Grixis Slavedriver stays on the battlefield with 2 damage marked and its ability does not trigger; A gets no Zombie token."
+          "expected": "Grixis Slavedriver stays on the battlefield with 2 damage marked and its ability does not trigger; A gets no Zombie token.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         }
       ],
       "cards": [
@@ -1246,7 +1459,18 @@
         "Unsummon",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A leaves-the-battlefield trigger is evaluated when the permanent moves from the battlefield to another zone and fires.",
+        "near_miss": "The same kind of trigger is evaluated against an event and does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "origin": "Battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.6d-1",
@@ -1299,7 +1523,10 @@
           "label": "triggered-tap",
           "polarity": "does_not_fire",
           "delta": "A casts Frost Lynx (tapping Swamp and both Islands) instead of Diregraf Ghoul.",
-          "expected": "Torpor Orb stops Frost Lynx's enters trigger from triggering; Grizzly Bears is not tapped."
+          "expected": "Torpor Orb stops Frost Lynx's enters trigger from triggering; Grizzly Bears is not tapped.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         }
       ],
       "cards": [
@@ -1370,7 +1597,10 @@
           "label": "bounced-instead",
           "polarity": "does_not_fire",
           "delta": "B casts Unsummon (tapping Island) targeting Grizzly Bears instead of Doom Blade.",
-          "expected": "Grizzly Bears returns to A's hand without dying, so the trigger does not trigger; Angelic Destiny stays in A's graveyard."
+          "expected": "Grizzly Bears returns to A's hand without dying, so the trigger does not trigger; Angelic Destiny stays in A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         }
       ],
       "cards": [
@@ -1450,7 +1680,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "When A casts Flare, B responds with Counterspell, tapping both Islands.",
-          "expected": "Flare is countered and never resolves, so no delayed ability is created: B's life stays 20 and A draws nothing at B's upkeep."
+          "expected": "Flare is countered and never resolves, so no delayed ability is created: B's life stays 20 and A draws nothing at B's upkeep.",
+          "operation": {
+            "unclassifiable": "a spell cast in response"
+          }
         }
       ],
       "cards": [
@@ -1514,7 +1747,10 @@
           "label": "end-step",
           "polarity": "does_not_fire",
           "delta": "A activates Sneak Attack during the end step, after the end step has begun.",
-          "expected": "The beginning of this turn's end step has already passed, so the delayed ability does not trigger this turn: Grizzly Bears stays on the battlefield for the rest of this turn and through B's turn, and is sacrificed at the beginning of B's end step."
+          "expected": "The beginning of this turn's end step has already passed, so the delayed ability does not trigger this turn: Grizzly Bears stays on the battlefield for the rest of this turn and through B's turn, and is sacrificed at the beginning of B's end step.",
+          "operation": {
+            "unclassifiable": "a different phase at which the ability is activated"
+          }
         }
       ],
       "cards": [
@@ -1578,13 +1814,19 @@
           "label": "flickered",
           "polarity": "does_not_fire",
           "delta": "After the ability resolves, A casts Cloudshift targeting Grizzly Bears, tapping Plains; it resolves, exiling Grizzly Bears and returning it to the battlefield.",
-          "expected": "The delayed ability triggers at the end step, but the returned Grizzly Bears is a new object, so it is not sacrificed and stays on the battlefield."
+          "expected": "The delayed ability triggers at the end step, but the returned Grizzly Bears is a new object, so it is not sacrificed and stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "a spell cast after the ability resolves"
+          }
         },
         {
           "label": "bounced",
           "polarity": "other",
           "delta": "After the ability resolves, B casts Unsummon targeting Grizzly Bears, tapping Island, returning it to A's hand.",
-          "expected": "The delayed ability triggers at the end step but Grizzly Bears is no longer on the battlefield, so it does nothing; Grizzly Bears stays in A's hand."
+          "expected": "The delayed ability triggers at the end step but Grizzly Bears is no longer on the battlefield, so it does nothing; Grizzly Bears stays in A's hand.",
+          "operation": {
+            "unclassifiable": "a spell cast after the ability resolves"
+          }
         }
       ],
       "cards": [
@@ -1650,13 +1892,17 @@
           "label": "stifled",
           "polarity": "fires",
           "delta": "With the trigger on the stack, B casts Stifle targeting it, tapping Island.",
-          "expected": "Stifle counters the first trigger; the state still matches and the Crocodile is still on the battlefield, so the trigger triggers a second time, resolves and A sacrifices Emperor Crocodile (two triggers in total)."
+          "expected": "Stifle counters the first trigger; the state still matches and the Crocodile is still on the battlefield, so the trigger triggers a second time, resolves and A sacrifices Emperor Crocodile (two triggers in total).",
+          "operation": {
+            "unclassifiable": "a spell cast in response"
+          }
         },
         {
           "label": "larger-creature",
           "polarity": "does_not_fire",
           "delta": "A's other creature is Centaur Courser (3/3) instead of Grizzly Bears.",
-          "expected": "Shock leaves Centaur Courser on the battlefield with 2 damage marked; A still controls another creature, so Emperor Crocodile does not trigger and stays on the battlefield."
+          "expected": "Shock leaves Centaur Courser on the battlefield with 2 damage marked; A still controls another creature, so Emperor Crocodile does not trigger and stays on the battlefield.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -1668,7 +1914,17 @@
         "Shock",
         "Stifle"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A state trigger is evaluated while the game state matches its condition and fires once, not again while it is on the stack.",
+        "near_miss": "The same state trigger evaluated while its condition does not hold, or while it is already on the stack, does not fire.",
+        "params": {
+          "mode": "Always"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.10-1",
@@ -1719,7 +1975,10 @@
           "label": "bastion-gone",
           "polarity": "does_not_fire",
           "delta": "Bastion of Remembrance is in A's graveyard instead of on the battlefield.",
-          "expected": "The two Grizzly Bears die with no Bastion of Remembrance to trigger; life totals stay 20 and 20."
+          "expected": "The two Grizzly Bears die with no Bastion of Remembrance to trigger; life totals stay 20 and 20.",
+          "operation": {
+            "unclassifiable": "a permanent moved from the battlefield to the graveyard"
+          }
         }
       ],
       "cards": [
@@ -1728,7 +1987,19 @@
         "Grizzly Bears",
         "Swamp"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A leaves-the-battlefield trigger of a permanent leaving at the same time as the permanents it watches is evaluated looking back in time and fires.",
+        "near_miss": "A dies trigger evaluated against a battlefield-to-graveyard move its condition does not match does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "origin": "Battlefield",
+          "destination": "Graveyard"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.10b-1",
@@ -1778,14 +2049,27 @@
           "label": "opponent-turn",
           "polarity": "does_not_fire",
           "delta": "It is B's upkeep (B is the active player) and Teferi's Imp is phased in on A's battlefield.",
-          "expected": "Teferi's Imp does not phase out on B's untap step; its ability does not trigger and A's hand stays Island."
+          "expected": "Teferi's Imp does not phase out on B's untap step; its ability does not trigger and A's hand stays Island.",
+          "operation": {
+            "unclassifiable": "a different turn and phase"
+          }
         }
       ],
       "cards": [
         "Teferi's Imp",
         "Island"
       ],
-      "forge_notes": "The phased-out state of a permanent set up before the upkeep may need to be reached by playing through the untap step."
+      "forge_notes": "The phased-out state of a permanent set up before the upkeep may need to be reached by playing through the untap step.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A phases-out trigger is evaluated as its permanent phases out and fires.",
+        "near_miss": "The same trigger evaluated against a permanent that is not phasing out does not fire.",
+        "params": {
+          "mode": "PhaseOut"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.10c-1",
@@ -1843,7 +2127,10 @@
           "label": "not-attached",
           "polarity": "does_not_fire",
           "delta": "Grafted Wargear is not attached to Grizzly Bears (it is unattached on the battlefield).",
-          "expected": "Grafted Wargear is destroyed without becoming unattached from anything; no trigger; Grizzly Bears stays on the battlefield."
+          "expected": "Grafted Wargear is destroyed without becoming unattached from anything; no trigger; Grizzly Bears stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "an attachment changed (equipment unattached)"
+          }
         }
       ],
       "cards": [
@@ -1852,7 +2139,17 @@
         "Mountain",
         "Shatter"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An unattached trigger is evaluated as an attached object becomes unattached and fires.",
+        "near_miss": "The same trigger evaluated for an object that was not attached does not fire.",
+        "params": {
+          "mode": "Unattached"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.10d-1",
@@ -1910,7 +2207,10 @@
           "label": "shock-the-creature",
           "polarity": "does_not_fire",
           "delta": "B's Shock targets Grizzly Bears instead of Coffin Queen.",
-          "expected": "Grizzly Bears dies and goes to A's graveyard; A keeps control of Coffin Queen, so nothing is exiled."
+          "expected": "Grizzly Bears dies and goes to A's graveyard; A keeps control of Coffin Queen, so nothing is exiled.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -1920,7 +2220,17 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A loses-control trigger is evaluated as a permanent leaves its controller's control and fires, looking back in time.",
+        "near_miss": "The same trigger evaluated when the permanent does not leave its controller's control does not fire.",
+        "params": {
+          "mode": "ChangesController"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.10e-1",
@@ -1981,7 +2291,10 @@
           "label": "not-countered",
           "polarity": "does_not_fire",
           "delta": "B does not cast Counterspell.",
-          "expected": "Grizzly Bears resolves and enters the battlefield; Multani's Presence does not trigger and A draws nothing."
+          "expected": "Grizzly Bears resolves and enters the battlefield; Multani's Presence does not trigger and A draws nothing.",
+          "operation": {
+            "unclassifiable": "a spell not cast"
+          }
         }
       ],
       "cards": [
@@ -1991,7 +2304,17 @@
         "Grizzly Bears",
         "Counterspell"
       ],
-      "forge_notes": "Multani's Presence is a permanent, so this does not stress the look-back part of the rule on its own; it covers the trigger on a countered spell."
+      "forge_notes": "Multani's Presence is a permanent, so this does not stress the look-back part of the rule on its own; it covers the trigger on a countered spell.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A spell-countered trigger is evaluated as a spell is countered and fires.",
+        "near_miss": "The same kind of trigger evaluated against a countered spell or ability its condition does not match does not fire.",
+        "params": {
+          "mode": "Countered"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.12-1",
@@ -2046,7 +2369,10 @@
           "label": "declined",
           "polarity": "does_not_fire",
           "delta": "A chooses not to sacrifice a creature.",
-          "expected": "No creature is sacrificed, so the reflexive ability does not trigger; Grizzly Bears stays on the battlefield and Savannah Lions takes no damage."
+          "expected": "No creature is sacrificed, so the reflexive ability does not trigger; Grizzly Bears stays on the battlefield and Savannah Lions takes no damage.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         }
       ],
       "cards": [
@@ -2114,7 +2440,10 @@
           "label": "none-sacrificed",
           "polarity": "does_not_fire",
           "delta": "A sacrifices no artifacts.",
-          "expected": "The reflexive ability does not trigger; neither Grizzly Bears is tapped and A draws no cards."
+          "expected": "The reflexive ability does not trigger; neither Grizzly Bears is tapped and A draws no cards.",
+          "operation": {
+            "unclassifiable": "a different decision by a player"
+          }
         }
       ],
       "cards": [

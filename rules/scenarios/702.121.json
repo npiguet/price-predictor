@@ -52,14 +52,27 @@
           "label": "melee_creature_stays_home",
           "polarity": "does_not_fire",
           "delta": "A attacks with Mons's Goblin Raiders only; Wings of the Guard does not attack.",
-          "expected": "The melee trigger does not fire. Wings of the Guard stays 1/1. B takes 1 combat damage and is at 19."
+          "expected": "The melee trigger does not fire. Wings of the Guard stays 1/1. B takes 1 combat damage and is at 19.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         }
       ],
       "cards": [
         "Wings of the Guard",
         "Mons's Goblin Raiders"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A melee trigger fires when its creature attacks.",
+        "near_miss": "A melee trigger is evaluated against an attack its creature is not part of and does not fire.",
+        "params": {
+          "keyword": "Melee"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.121b-1",
@@ -115,7 +128,10 @@
           "label": "one_instance",
           "polarity": "does_not_fire",
           "delta": "The Fang of the Pack trigger targets Mons's Goblin Raiders instead of Wings of the Guard.",
-          "expected": "Wings of the Guard has one instance of melee, so one melee trigger fires and it is 2/2 until end of turn. B takes 2 combat damage and is at 18."
+          "expected": "Wings of the Guard has one instance of melee, so one melee trigger fires and it is 2/2 until end of turn. B takes 2 combat damage and is at 18.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -123,7 +139,17 @@
         "Fang of the Pack",
         "Mons's Goblin Raiders"
       ],
-      "forge_notes": "Fang of the Pack grants melee as a keyword through a pump effect; Forge must keep the granted instance distinct from the printed one."
+      "forge_notes": "Fang of the Pack grants melee as a keyword through a pump effect; Forge must keep the granted instance distinct from the printed one.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "Each melee instance on an attacking creature is evaluated and fires as its own trigger.",
+        "near_miss": "A melee trigger evaluated and not fired; the detector does not count instances per event, and misses an instance another permanent's effect grants, which reads off that effect's line.",
+        "params": {
+          "keyword": "Melee"
+        },
+        "needs": []
+      }
     }
   ]
 }

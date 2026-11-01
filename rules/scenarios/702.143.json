@@ -56,13 +56,19 @@
           "label": "own_next_turn",
           "polarity": "fires",
           "delta": "A makes the cast attempt in the first main phase of A's next turn, after the turn in which Demon Bolt was foretold has ended.",
-          "expected": "The cast is legal for {R}. Demon Bolt deals 4 damage to Hill Giant, which is destroyed and moves to B's graveyard. Demon Bolt moves to A's graveyard."
+          "expected": "The cast is legal for {R}. Demon Bolt deals 4 damage to Hill Giant, which is destroyed and moves to B's graveyard. Demon Bolt moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different phase or turn"
+          }
         },
         {
           "label": "opponents_next_turn",
           "polarity": "fires",
           "delta": "A makes the cast attempt during B's next turn, with one Mountain still untapped from the foretelling turn.",
-          "expected": "The cast is legal for {R}. Demon Bolt deals 4 damage to Hill Giant, which is destroyed. Demon Bolt moves to A's graveyard."
+          "expected": "The cast is legal for {R}. Demon Bolt deals 4 damage to Hill Giant, which is destroyed. Demon Bolt moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different turn"
+          }
         }
       ],
       "cards": [
@@ -70,7 +76,21 @@
         "Hill Giant",
         "Mountain"
       ],
-      "forge_notes": "Only A's own untap step untaps the Mountains tapped for foretelling, so the opponents_next_turn variant uses one of the two Mountains that were not tapped for it."
+      "forge_notes": "Only A's own untap step untaps the Mountains tapped for foretelling, so the opponents_next_turn variant uses one of the two Mountains that were not tapped for it.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A card with an alternative-cast condition is a legal candidate when the condition holds.",
+        "near_miss": "The same card is a candidate the condition rejects.",
+        "params": {
+          "bit": "failed_check",
+          "check": "script_condition",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "702.143d-1",
@@ -129,7 +149,10 @@
           "label": "next_turn",
           "polarity": "fires",
           "delta": "A makes the cast attempt in the first main phase of A's next turn instead of main phase 2 of this turn.",
-          "expected": "The cast is legal for {G}. Grizzly Bears resolves and enters the battlefield under A's control."
+          "expected": "The cast is legal for {G}. Grizzly Bears resolves and enters the battlefield under A's control.",
+          "operation": {
+            "unclassifiable": "a different turn"
+          }
         }
       ],
       "cards": [
@@ -139,7 +162,21 @@
         "Island",
         "Plains"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A card with an alternative-cast condition is a legal candidate when the condition holds.",
+        "near_miss": "The same card is a candidate the condition rejects.",
+        "params": {
+          "bit": "failed_check",
+          "check": "script_condition",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "702.143a-2",
@@ -186,14 +223,31 @@
           "label": "opponents_turn",
           "polarity": "does_not_fire",
           "delta": "B is the active player; A tries the foretell action while holding priority in B's first main phase.",
-          "expected": "The foretell action is not legal: Demon Bolt stays in A's hand and both Mountains stay untapped."
+          "expected": "The foretell action is not legal: Demon Bolt stays in A's hand and both Mountains stay untapped.",
+          "operation": {
+            "unclassifiable": "a different active player"
+          }
         }
       ],
       "cards": [
         "Demon Bolt",
         "Mountain"
       ],
-      "forge_notes": "Foretelling is a special action, not a cast or activation; the playability record may need a candidate entry for it."
+      "forge_notes": "Foretelling is a special action, not a cast or activation; the playability record may need a candidate entry for it.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An action restricted to the owner's own turn is a legal candidate on that turn.",
+        "near_miss": "The same action is a candidate rejected on another player's turn.",
+        "params": {
+          "bit": "failed_check",
+          "check": "whose_turn",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     }
   ]
 }

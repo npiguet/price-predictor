@@ -59,7 +59,10 @@
           "label": "no_match",
           "polarity": "does_not_fire",
           "delta": "The library holds Centaur Courser (mana value 3) instead of Grizzly Bears.",
-          "expected": "Dimir Infiltrator is in A's graveyard. No card has mana value 2, so nothing moves to A's hand. The library is shuffled."
+          "expected": "Dimir Infiltrator is in A's graveyard. No card has mana value 2, so nothing moves to A's hand. The library is shuffled.",
+          "operation": {
+            "unclassifiable": "changes the library contents"
+          }
         }
       ],
       "cards": [
@@ -71,7 +74,19 @@
         "Grizzly Bears",
         "Centaur Courser"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution moves a card from its owner's library to their hand (a search that finds a card).",
+        "near_miss": "A search finds no qualifying card and moves nothing to the hand. Not counted: the transmute ability is a keyword line, whose API type (Keyword) is shared by every keyword ability, so no api restricts the near miss.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "library",
+          "to_zone": "hand"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.53a-2",
@@ -124,19 +139,28 @@
           "label": "combat",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "Activating transmute is not legal: it is not a main phase."
+          "expected": "Activating transmute is not legal: it is not a main phase.",
+          "operation": {
+            "unclassifiable": "changes the phase"
+          }
         },
         {
           "label": "stack_not_empty",
           "polarity": "does_not_fire",
           "delta": "B's Shock targeting A is on the stack.",
-          "expected": "Activating transmute is not legal: the stack is not empty."
+          "expected": "Activating transmute is not legal: the stack is not empty.",
+          "operation": {
+            "unclassifiable": "adds a spell to the stack"
+          }
         },
         {
           "label": "on_battlefield",
           "polarity": "does_not_fire",
           "delta": "Dimir Infiltrator is on A's battlefield instead of in A's hand.",
-          "expected": "Activating transmute is not legal: the card is not in a hand."
+          "expected": "Activating transmute is not legal: the card is not in a hand.",
+          "operation": {
+            "unclassifiable": "moves the card to another zone"
+          }
         }
       ],
       "cards": [
@@ -147,7 +171,21 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A sorcery-speed ability candidate passes the casting_speed check (its controller's main phase, empty stack).",
+        "near_miss": "A sorcery-speed ability candidate fails the casting_speed check.",
+        "params": {
+          "bit": "failed_check",
+          "check": "casting_speed",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "702.53b-1",
@@ -155,7 +193,7 @@
         "702.53b"
       ],
       "title": "A transmute land counts as having a non-mana activated ability on the battlefield",
-      "record_kind": "continuous",
+      "record_kind": "rewrite",
       "setup": {
         "active": "B",
         "step": "cleanup",
@@ -194,7 +232,8 @@
           "label": "plain_land",
           "polarity": "does_not_fire",
           "delta": "A's land is a tapped Island instead of Tolaria West.",
-          "expected": "Island untaps: it has only a mana ability."
+          "expected": "Island untaps: it has only a mana ability.",
+          "operation": "replace_card"
         }
       ],
       "cards": [

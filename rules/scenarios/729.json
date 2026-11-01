@@ -61,7 +61,10 @@
           "label": "b_wins",
           "polarity": "does_not_fire",
           "delta": "B's library has 20 Mountains instead of 3.",
-          "expected": "A loses the subgame and B wins. A loses 10 life (10) and B's life stays 15."
+          "expected": "A loses the subgame and B wins. A loses 10 life (10) and B's life stays 15.",
+          "operation": {
+            "unclassifiable": "Adds 17 cards to B's library; no operation changes library contents."
+          }
         }
       ],
       "cards": [
@@ -69,7 +72,10 @@
         "Plains",
         "Mountain"
       ],
-      "forge_notes": "A subgame draw leaves both players not winning; Forge treats isWinner as false for both."
+      "forge_notes": "A subgame draw leaves both players not winning; Forge treats isWinner as false for both.",
+      "detector": {
+        "none": "No event type or record field covers subgames: EVENT_PARAMS has no subgame event, and rules/gen3-fields.json drops new:subgame_boundary, so no gen-2 or gen-3 record marks a subgame's start, end or zones."
+      }
     },
     {
       "id": "729.2-1",
@@ -146,7 +152,10 @@
           "label": "bears_in_library",
           "polarity": "fires",
           "delta": "Grizzly Bears is in A's library (replacing one Plains) instead of on the battlefield.",
-          "expected": "Grizzly Bears is part of the subgame's library, so it may be drawn there. When the subgame ends it is back in A's main-game library, not on the battlefield, and B loses 10 life (10)."
+          "expected": "Grizzly Bears is part of the subgame's library, so it may be drawn there. When the subgame ends it is back in A's main-game library, not on the battlefield, and B loses 10 life (10).",
+          "operation": {
+            "unclassifiable": "Moves a permanent from the battlefield into the library; no operation changes zone contents."
+          }
         }
       ],
       "cards": [
@@ -156,7 +165,10 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": "Which player goes first in the subgame is random and not asserted here."
+      "forge_notes": "Which player goes first in the subgame is random and not asserted here.",
+      "detector": {
+        "none": "No event type or record field covers subgames: EVENT_PARAMS has no subgame event, and rules/gen3-fields.json drops new:subgame_boundary, so no gen-2 or gen-3 record marks a subgame's start, end or zones."
+      }
     },
     {
       "id": "729.2a-1",
@@ -221,7 +233,10 @@
           "label": "stand_on_main_battlefield",
           "polarity": "does_not_fire",
           "delta": "Concession Stand is on A's main-game battlefield, opened earlier, instead of in A's main-game Attraction deck.",
-          "expected": "A's subgame Attraction deck is empty, so opening an Attraction puts nothing onto the battlefield. After the subgame Concession Stand is still on A's main-game battlefield and A's Attraction deck is empty. B loses 10 life (10)."
+          "expected": "A's subgame Attraction deck is empty, so opening an Attraction puts nothing onto the battlefield. After the subgame Concession Stand is still on A's main-game battlefield and A's Attraction deck is empty. B loses 10 life (10).",
+          "operation": {
+            "unclassifiable": "Moves an Attraction from the Attraction deck to the battlefield; no operation adds a permanent or changes a deck."
+          }
         }
       ],
       "cards": [
@@ -231,7 +246,10 @@
         "Forest",
         "Mountain"
       ],
-      "forge_notes": "Forge's SubgameEffect copies the main-game Attraction deck into the subgame's AttractionDeck zone and leaves the main-game deck untouched; at the end it discards the subgame copies, so the main-game deck still holds the original Concession Stand rather than a card moved back face down. A one-card Attraction deck is a puzzle-style setup."
+      "forge_notes": "Forge's SubgameEffect copies the main-game Attraction deck into the subgame's AttractionDeck zone and leaves the main-game deck untouched; at the end it discards the subgame copies, so the main-game deck still holds the original Concession Stand rather than a card moved back face down. A one-card Attraction deck is a puzzle-style setup.",
+      "detector": {
+        "none": "No event type or record field covers subgames: EVENT_PARAMS has no subgame event, and rules/gen3-fields.json drops new:subgame_boundary, so no gen-2 or gen-3 record marks a subgame's start, end or zones."
+      }
     },
     {
       "id": "729.3-1",
@@ -305,7 +323,10 @@
           "label": "exactly_seven",
           "polarity": "does_not_fire",
           "delta": "B's library has 7 Mountains instead of 3.",
-          "expected": "B draws all seven cards and is not eliminated at the first upkeep. B loses later by drawing from an empty library, and still loses 10 life (10) once the subgame ends."
+          "expected": "B draws all seven cards and is not eliminated at the first upkeep. B loses later by drawing from an empty library, and still loses 10 life (10) once the subgame ends.",
+          "operation": {
+            "unclassifiable": "Adds four cards to B's library; no operation changes library contents."
+          }
         }
       ],
       "cards": [
@@ -313,7 +334,10 @@
         "Plains",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "No event type or record field covers subgames: EVENT_PARAMS has no subgame event, and rules/gen3-fields.json drops new:subgame_boundary, so no gen-2 or gen-3 record marks a subgame's start, end or zones."
+      }
     },
     {
       "id": "729.4a-1",
@@ -376,7 +400,10 @@
           "label": "no_leave_trigger",
           "polarity": "does_not_fire",
           "delta": "A chooses Grizzly Bears from outside the game instead of Tocasia's Onulet.",
-          "expected": "Grizzly Bears leaves the main-game battlefield and no trigger goes on the stack. B loses 10 life (10), A's life stays 20, and Grizzly Bears is in A's main-game library."
+          "expected": "Grizzly Bears leaves the main-game battlefield and no trigger goes on the stack. B loses 10 life (10), A's life stays 20, and Grizzly Bears is in A's main-game library.",
+          "operation": {
+            "unclassifiable": "A different choice of card from outside the game, a player's decision; no operation changes a choice."
+          }
         }
       ],
       "cards": [
@@ -387,7 +414,10 @@
         "Tocasia's Onulet",
         "Grizzly Bears"
       ],
-      "forge_notes": "Forge builds the subgame Sideboard zone from the main game's hand, battlefield, graveyard, exile and stack cards, and moves the original to its Subgame zone."
+      "forge_notes": "Forge builds the subgame Sideboard zone from the main game's hand, battlefield, graveyard, exile and stack cards, and moves the original to its Subgame zone.",
+      "detector": {
+        "none": "No event type or record field covers subgames: EVENT_PARAMS has no subgame event, and rules/gen3-fields.json drops new:subgame_boundary, so no gen-2 or gen-3 record marks a subgame's start, end or zones."
+      }
     },
     {
       "id": "729.4b-1",
@@ -451,13 +481,17 @@
           "label": "no_main_counters",
           "polarity": "fires",
           "delta": "A has no rad counters in the main game instead of 3.",
-          "expected": "A's subgame rad counter does not survive: A has 0 rad counters in the main game afterwards. B loses 10 life (10)."
+          "expected": "A's subgame rad counter does not survive: A has 0 rad counters in the main game afterwards. B loses 10 life (10).",
+          "operation": "counters"
         },
         {
           "label": "no_subgame_counters",
           "polarity": "does_not_fire",
           "delta": "A does not cast Contaminated Drink and gets no rad counter in the subgame.",
-          "expected": "A has exactly 3 rad counters in the main game afterwards and B loses 10 life (10)."
+          "expected": "A has exactly 3 rad counters in the main game afterwards and B loses 10 life (10).",
+          "operation": {
+            "unclassifiable": "A does not cast a spell, a different decision; no operation changes what a player casts."
+          }
         }
       ],
       "cards": [
@@ -467,7 +501,10 @@
         "Swamp",
         "Mountain"
       ],
-      "forge_notes": "Setup lists subgame zones; main-game state is in notes."
+      "forge_notes": "Setup lists subgame zones; main-game state is in notes.",
+      "detector": {
+        "none": "No event type or record field covers subgames: EVENT_PARAMS has no subgame event, and rules/gen3-fields.json drops new:subgame_boundary, so no gen-2 or gen-3 record marks a subgame's start, end or zones."
+      }
     },
     {
       "id": "729.5-1",
@@ -541,13 +578,19 @@
           "label": "long_subgame",
           "polarity": "fires",
           "delta": "B's library has 20 Mountains instead of 3.",
-          "expected": "Whatever happens in the subgame, once it ends both main-game libraries again hold 20 cards, no subgame object remains, and Shahrazad finishes resolving."
+          "expected": "Whatever happens in the subgame, once it ends both main-game libraries again hold 20 cards, no subgame object remains, and Shahrazad finishes resolving.",
+          "operation": {
+            "unclassifiable": "Adds 17 cards to B's library; no operation changes library contents."
+          }
         },
         {
           "label": "outside_cards_stay",
           "polarity": "does_not_fire",
           "delta": "B has Hill Giant in its main-game graveyard.",
-          "expected": "Hill Giant is outside the subgame and is not put into B's library: it stays in B's graveyard and B's library holds 3 cards. B loses 10 life (10)."
+          "expected": "Hill Giant is outside the subgame and is not put into B's library: it stays in B's graveyard and B's library holds 3 cards. B loses 10 life (10).",
+          "operation": {
+            "unclassifiable": "Adds a card to B's graveyard; no operation changes graveyard contents."
+          }
         }
       ],
       "cards": [
@@ -556,7 +599,10 @@
         "Mountain",
         "Hill Giant"
       ],
-      "forge_notes": "Forge leaves the main-game library cards in place and discards the subgame's copies, so the main-game library keeps the same card count, though the card objects differ."
+      "forge_notes": "Forge leaves the main-game library cards in place and discards the subgame's copies, so the main-game library keeps the same card count, though the card objects differ.",
+      "detector": {
+        "none": "No event type or record field covers subgames: EVENT_PARAMS has no subgame event, and rules/gen3-fields.json drops new:subgame_boundary, so no gen-2 or gen-3 record marks a subgame's start, end or zones."
+      }
     },
     {
       "id": "729.6-1",
@@ -637,13 +683,19 @@
           "label": "both_short",
           "polarity": "other",
           "delta": "A's library has 3 Plains instead of 20.",
-          "expected": "Both players lose the nested subgame, so it is a draw. A and B each lose 10 first-subgame life (10 and 10). The main game's life totals stay 20 and 20."
+          "expected": "Both players lose the nested subgame, so it is a draw. A and B each lose 10 first-subgame life (10 and 10). The main game's life totals stay 20 and 20.",
+          "operation": {
+            "unclassifiable": "Removes 17 cards from A's library; no operation changes library contents."
+          }
         },
         {
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B casts Counterspell on Shahrazad, tapping its two Islands.",
-          "expected": "Shahrazad is countered and no nested subgame starts. Both first-subgame life totals stay 20 and both libraries keep their cards."
+          "expected": "Shahrazad is countered and no nested subgame starts. Both first-subgame life totals stay 20 and both libraries keep their cards.",
+          "operation": {
+            "unclassifiable": "B casts a spell, a different decision; no operation changes what a player casts."
+          }
         }
       ],
       "cards": [
@@ -653,7 +705,10 @@
         "Mountain",
         "Counterspell"
       ],
-      "forge_notes": "Forge SubgameEffect builds a Game with the first subgame as parent; nested use has no card script exercising it."
+      "forge_notes": "Forge SubgameEffect builds a Game with the first subgame as parent; nested use has no card script exercising it.",
+      "detector": {
+        "none": "No event type or record field covers subgames: EVENT_PARAMS has no subgame event, and rules/gen3-fields.json drops new:subgame_boundary, so no gen-2 or gen-3 record marks a subgame's start, end or zones."
+      }
     }
   ]
 }

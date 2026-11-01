@@ -53,7 +53,8 @@
           "label": "without_exalted",
           "polarity": "does_not_fire",
           "delta": "A's other creature is Savannah Lions (2/1, no abilities) instead of Akrasan Squire.",
-          "expected": "No exalted trigger. Grizzly Bears stays a 2/2 and deals 2 damage to B, whose life becomes 18."
+          "expected": "No exalted trigger. Grizzly Bears stays a 2/2 and deals 2 damage to B, whose life becomes 18.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -61,7 +62,17 @@
         "Grizzly Bears",
         "Savannah Lions"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An exalted trigger fires when a creature its controller controls attacks alone.",
+        "near_miss": "An exalted trigger evaluated against an attack and not fired.",
+        "params": {
+          "keyword": "exalted"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.83a-2",
@@ -116,7 +127,10 @@
           "label": "one_instance",
           "polarity": "does_not_fire",
           "delta": "Aven Squire is not on A's battlefield.",
-          "expected": "Exalted triggers once. Grizzly Bears is a 3/3 until end of turn and deals 3 damage to B, whose life becomes 17."
+          "expected": "Exalted triggers once. Grizzly Bears is a 3/3 until end of turn and deals 3 damage to B, whose life becomes 17.",
+          "operation": {
+            "unclassifiable": "removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -124,7 +138,17 @@
         "Aven Squire",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "Each exalted instance fires as its own trigger when a creature its controller controls attacks alone.",
+        "near_miss": "An exalted trigger evaluated and not fired; the detector does not count instances per attack.",
+        "params": {
+          "keyword": "exalted"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.83b-1",
@@ -174,14 +198,27 @@
           "label": "two_attackers",
           "polarity": "does_not_fire",
           "delta": "A attacks player B with Grizzly Bears and Akrasan Squire instead of Grizzly Bears only.",
-          "expected": "Neither creature attacks alone, so exalted does not trigger. Grizzly Bears (2/2) and Akrasan Squire (1/1) deal 3 damage in total; B's life becomes 17 and neither creature gets a bonus."
+          "expected": "Neither creature attacks alone, so exalted does not trigger. Grizzly Bears (2/2) and Akrasan Squire (1/1) deal 3 damage in total; B's life becomes 17 and neither creature gets a bonus.",
+          "operation": {
+            "unclassifiable": "a different attack declaration by A"
+          }
         }
       ],
       "cards": [
         "Akrasan Squire",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An exalted trigger fires because exactly one creature was declared as an attacker.",
+        "near_miss": "An exalted trigger evaluated against an attack with two or more attackers and not fired.",
+        "params": {
+          "keyword": "exalted"
+        },
+        "needs": []
+      }
     }
   ]
 }

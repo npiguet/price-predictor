@@ -71,7 +71,10 @@
           "label": "no_hydrosurge",
           "polarity": "does_not_fire",
           "delta": "A does not cast Hydrosurge, so Chameleon Colossus is a 4/4 when the ability is activated.",
-          "expected": "X is 4 and Chameleon Colossus becomes an 8/8 until end of turn."
+          "expected": "X is 4 and Chameleon Colossus becomes an 8/8 until end of turn.",
+          "operation": {
+            "unclassifiable": "A does not cast a spell; a different spell cast."
+          }
         }
       ],
       "cards": [
@@ -131,13 +134,19 @@
           "label": "growth_first",
           "polarity": "fires",
           "delta": "Before attacking, A also casts Giant Growth on Grizzly Bears, tapping Forest; it resolves.",
-          "expected": "Power is -3 + 3 = 0 and toughness 5, so Grizzly Bears is a 0/5, assigns no combat damage and B's life total stays 20 (not 17)."
+          "expected": "Power is -3 + 3 = 0 and toughness 5, so Grizzly Bears is a 0/5, assigns no combat damage and B's life total stays 20 (not 17).",
+          "operation": {
+            "unclassifiable": "An additional spell is cast."
+          }
         },
         {
           "label": "no_hydrosurge",
           "polarity": "does_not_fire",
           "delta": "A does not cast Hydrosurge, so Grizzly Bears is a 2/2 when it attacks.",
-          "expected": "Grizzly Bears deals 2 combat damage to B and B's life total is 18."
+          "expected": "Grizzly Bears deals 2 combat damage to B and B's life total is 18.",
+          "operation": {
+            "unclassifiable": "A does not cast Hydrosurge; a different spell cast."
+          }
         }
       ],
       "cards": [
@@ -200,7 +209,10 @@
           "label": "no_response",
           "polarity": "does_not_fire",
           "delta": "A does not cast Giant Growth; the ability resolves with nothing in response.",
-          "expected": "The ability resolves with X = 4 and Chameleon Colossus is an 8/8 until end of turn; Giant Growth stays in A's hand."
+          "expected": "The ability resolves with X = 4 and Chameleon Colossus is an 8/8 until end of turn; Giant Growth stays in A's hand.",
+          "operation": {
+            "unclassifiable": "A does not cast a spell in response; a different decision."
+          }
         }
       ],
       "cards": [
@@ -259,13 +271,19 @@
           "label": "x_three",
           "polarity": "fires",
           "delta": "A casts Blaze with X = 3, tapping all four Mountains.",
-          "expected": "Zaxara's trigger fires and the Hydra token has 3 +1/+1 counters (a 3/3); Blaze deals 3 damage and B's life total is 17."
+          "expected": "Zaxara's trigger fires and the Hydra token has 3 +1/+1 counters (a 3/3); Blaze deals 3 damage and B's life total is 17.",
+          "operation": {
+            "unclassifiable": "A different X is chosen when casting."
+          }
         },
         {
           "label": "x_zero",
           "polarity": "other",
           "delta": "A casts Blaze with X = 0, tapping one Mountain.",
-          "expected": "Zaxara's trigger fires and the Hydra token gets 0 +1/+1 counters, so the 0/0 token moves to the graveyard in the state-based check; Blaze deals 0 damage and B's life total stays 20."
+          "expected": "Zaxara's trigger fires and the Hydra token gets 0 +1/+1 counters, so the 0/0 token moves to the graveyard in the state-based check; Blaze deals 0 damage and B's life total stays 20.",
+          "operation": {
+            "unclassifiable": "A different X is chosen when casting."
+          }
         }
       ],
       "cards": [
@@ -331,13 +349,19 @@
           "label": "no_x_card",
           "polarity": "other",
           "delta": "The creature card in A's graveyard is Grizzly Bears instead of Jadelight Spelunker.",
-          "expected": "Grizzly Bears has mana value 2, so A loses 2 life (life total 18) and Grizzly Bears enters the battlefield."
+          "expected": "Grizzly Bears has mana value 2, so A loses 2 life (life total 18) and Grizzly Bears enters the battlefield.",
+          "operation": {
+            "unclassifiable": "Changes a card in the graveyard, not a permanent."
+          }
         },
         {
           "label": "on_the_stack",
           "polarity": "does_not_fire",
           "delta": "Jadelight Spelunker's mana value is checked while it is a spell on the stack instead of a card in the graveyard: A casts it from hand with X = 1 (tapping both Forests) instead of casting Reanimate, and B responds with Spell Snare, tapping Island.",
-          "expected": "As a spell on the stack Jadelight Spelunker has mana value 2 (X = 1 counts), so Spell Snare is legal and counters it; the countered Jadelight Spelunker moves to A's graveyard and A's life total stays 20."
+          "expected": "As a spell on the stack Jadelight Spelunker has mana value 2 (X = 1 counts), so Spell Snare is legal and counters it; the countered Jadelight Spelunker moves to A's graveyard and A's life total stays 20.",
+          "operation": {
+            "unclassifiable": "A different spell is cast and the sequence of plays changes."
+          }
         }
       ],
       "cards": [
@@ -396,7 +420,10 @@
           "label": "no_x_card",
           "polarity": "other",
           "delta": "The creature card in A's graveyard is Grizzly Bears instead of Jadelight Spelunker.",
-          "expected": "Not legal: the cost is {1}{G} and A has only one untapped land."
+          "expected": "Not legal: the cost is {1}{G} and A has only one untapped land.",
+          "operation": {
+            "unclassifiable": "Changes a card in the graveyard, not a permanent."
+          }
         }
       ],
       "cards": [
@@ -460,7 +487,10 @@
           "label": "x_zero",
           "polarity": "other",
           "delta": "A activates the gained ability with X = 0.",
-          "expected": "Gigantoplasm's base power and toughness become 0/0 and it moves to A's graveyard in the state-based check."
+          "expected": "Gigantoplasm's base power and toughness become 0/0 and it moves to A's graveyard in the state-based check.",
+          "operation": {
+            "unclassifiable": "A different X is chosen."
+          }
         }
       ],
       "cards": [
@@ -523,13 +553,19 @@
           "label": "x_one",
           "polarity": "fires",
           "delta": "A announces X = 1 for the activation, tapping one Mountain and removing one counter.",
-          "expected": "The ability's X is 1: Grizzly Bears has 1 damage marked and stays on the battlefield, and Chamber Sentry keeps 2 counters (a 2/2, tapped)."
+          "expected": "The ability's X is 1: Grizzly Bears has 1 damage marked and stays on the battlefield, and Chamber Sentry keeps 2 counters (a 2/2, tapped).",
+          "operation": {
+            "unclassifiable": "A different X is announced, changing costs paid."
+          }
         },
         {
           "label": "x_four",
           "polarity": "does_not_fire",
           "delta": "A tries to announce X = 4 for the activation.",
-          "expected": "Not legal: the cost requires removing four +1/+1 counters and Chamber Sentry has only three; the cast-time X of 3 does not supply the value."
+          "expected": "Not legal: the cost requires removing four +1/+1 counters and Chamber Sentry has only three; the cast-time X of 3 does not supply the value.",
+          "operation": {
+            "unclassifiable": "A different announced X."
+          }
         }
       ],
       "cards": [
@@ -591,7 +627,10 @@
           "label": "reanimated",
           "polarity": "does_not_fire",
           "delta": "A does not cast the Big Bertha in hand; A casts Reanimate (tapping Swamp) targeting the Big Bertha in A's graveyard instead.",
-          "expected": "The permanent was never a spell, so its X is 0: Big Bertha enters with no counters as a 1/1 with vigilance and A loses 1 life (life total 19)."
+          "expected": "The permanent was never a spell, so its X is 0: Big Bertha enters with no counters as a 1/1 with vigilance and A loses 1 life (life total 19).",
+          "operation": {
+            "unclassifiable": "A casts a different spell."
+          }
         }
       ],
       "cards": [
@@ -661,7 +700,10 @@
           "label": "reanimated",
           "polarity": "does_not_fire",
           "delta": "A does not cast the Jadelight Spelunker in hand; A casts Reanimate (tapping Swamp) targeting the one in A's graveyard instead.",
-          "expected": "The permanent was never a spell, so its X is 0: the enters trigger explores 0 times, no card is revealed, Jadelight Spelunker is a 1/1 and A loses 1 life (life total 19)."
+          "expected": "The permanent was never a spell, so its X is 0: the enters trigger explores 0 times, no card is revealed, Jadelight Spelunker is a 1/1 and A loses 1 life (life total 19).",
+          "operation": {
+            "unclassifiable": "A casts a different spell."
+          }
         }
       ],
       "cards": [
@@ -724,13 +766,19 @@
           "label": "x_one",
           "polarity": "fires",
           "delta": "A casts Storm King's Thunder with X = 1, tapping four Mountains.",
-          "expected": "The delayed trigger copies Shock once; two Shocks deal 4 damage and B's life total is 16."
+          "expected": "The delayed trigger copies Shock once; two Shocks deal 4 damage and B's life total is 16.",
+          "operation": {
+            "unclassifiable": "A different X is chosen."
+          }
         },
         {
           "label": "x_zero",
           "polarity": "other",
           "delta": "A casts Storm King's Thunder with X = 0, tapping three Mountains.",
-          "expected": "The delayed trigger fires on Shock and copies it 0 times; one Shock deals 2 damage and B's life total is 18."
+          "expected": "The delayed trigger fires on Shock and copies it 0 times; one Shock deals 2 damage and B's life total is 18.",
+          "operation": {
+            "unclassifiable": "A different X is chosen."
+          }
         }
       ],
       "cards": [
@@ -782,13 +830,17 @@
           "label": "nonsnow_lands",
           "polarity": "does_not_fire",
           "delta": "The two lands are plain Forests instead of Snow-Covered Forests.",
-          "expected": "Not legal: the mana comes from nonsnow sources and cannot pay {S}{S}."
+          "expected": "Not legal: the mana comes from nonsnow sources and cannot pay {S}{S}.",
+          "operation": {
+            "unclassifiable": "Two permanents change; more than one fact."
+          }
         },
         {
           "label": "one_snow",
           "polarity": "does_not_fire",
           "delta": "One land is a Snow-Covered Forest and the other a plain Forest.",
-          "expected": "Not legal: only one of the two {S} can be paid."
+          "expected": "Not legal: only one of the two {S} can be paid.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -842,13 +894,17 @@
           "label": "summoning_sick",
           "polarity": "does_not_fire",
           "delta": "Llanowar Elves came under A's control this turn (summoning_sick true).",
-          "expected": "Not legal: the creature has not been under A's control since the turn began, so {T} cannot be paid."
+          "expected": "Not legal: the creature has not been under A's control since the turn began, so {T} cannot be paid.",
+          "operation": {
+            "unclassifiable": "Control timing of the permanent (summoning sickness) is not a fork operation."
+          }
         },
         {
           "label": "already_tapped",
           "polarity": "does_not_fire",
           "delta": "Llanowar Elves is tapped.",
-          "expected": "Not legal: a tapped permanent cannot be tapped again to pay the cost."
+          "expected": "Not legal: a tapped permanent cannot be tapped again to pay the cost.",
+          "operation": "tap"
         }
       ],
       "cards": [
@@ -900,7 +956,8 @@
           "label": "creature",
           "polarity": "does_not_fire",
           "delta": "The permanent is Llanowar Elves (summoning_sick true) instead of Mind Stone, and A tries to activate its {T}: Add {G} ability.",
-          "expected": "Not legal: the creature has not been under A's control since the turn began."
+          "expected": "Not legal: the creature has not been under A's control since the turn began.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -955,13 +1012,17 @@
           "label": "untapped",
           "polarity": "does_not_fire",
           "delta": "Farmstead Gleaner is untapped.",
-          "expected": "Not legal: an untapped permanent cannot be untapped again to pay the cost."
+          "expected": "Not legal: an untapped permanent cannot be untapped again to pay the cost.",
+          "operation": "tap"
         },
         {
           "label": "summoning_sick",
           "polarity": "does_not_fire",
           "delta": "Farmstead Gleaner came under A's control this turn (summoning_sick true) and is tapped.",
-          "expected": "Not legal: the creature has not been under A's control since the turn began, so {Q} cannot be paid."
+          "expected": "Not legal: the creature has not been under A's control since the turn began, so {Q} cannot be paid.",
+          "operation": {
+            "unclassifiable": "Control timing of the permanent is not a fork operation."
+          }
         }
       ],
       "cards": [
@@ -1024,20 +1085,29 @@
           "label": "minus_one",
           "polarity": "fires",
           "delta": "A activates the [-1] ability instead, targeting A.",
-          "expected": "One loyalty counter is removed as the cost (loyalty 2); A draws a card and B does not."
+          "expected": "One loyalty counter is removed as the cost (loyalty 2); A draws a card and B does not.",
+          "operation": {
+            "unclassifiable": "A different ability is activated."
+          }
         },
         {
           "label": "minus_ten",
           "polarity": "does_not_fire",
           "delta": "A tries to activate the [-10] ability instead, targeting B.",
-          "expected": "Not legal: ten loyalty counters cannot be removed from a planeswalker with 3 loyalty; loyalty stays 3 and nobody mills."
+          "expected": "Not legal: ten loyalty counters cannot be removed from a planeswalker with 3 loyalty; loyalty stays 3 and nobody mills.",
+          "operation": {
+            "unclassifiable": "A different ability is activated."
+          }
         }
       ],
       "cards": [
         "Jace Beleren",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "A loyalty cost's counter change happens while the cost is paid. The cost half's costs hold only mana_by_color, tapped, life, sacrificed, discarded and exiled; the bracket collector files no event published during payment (Cause.PAYMENT in BusBracketCollector), so no counter_change reaches any record; and both halves' snapshots are taken after payment, so no field shows the counters put on or removed as the cost."
+      }
     },
     {
       "id": "107.8a-1",
@@ -1084,19 +1154,22 @@
           "label": "level_six",
           "polarity": "fires",
           "delta": "Student of Warfare has 6 level counters.",
-          "expected": "At the top of the range it is still a 3/3 with first strike and no double strike."
+          "expected": "At the top of the range it is still a 3/3 with first strike and no double strike.",
+          "operation": "counters"
         },
         {
           "label": "level_one",
           "polarity": "does_not_fire",
           "delta": "Student of Warfare has 1 level counter.",
-          "expected": "Below the range it is a 1/1 with no first strike."
+          "expected": "Below the range it is a 1/1 with no first strike.",
+          "operation": "counters"
         },
         {
           "label": "level_seven",
           "polarity": "other",
           "delta": "Student of Warfare has 7 level counters.",
-          "expected": "Above the range it is a 4/4 with double strike and no longer takes the 3/3 first strike values."
+          "expected": "Above the range it is a 4/4 with double strike and no longer takes the 3/3 first strike values.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -1149,13 +1222,15 @@
           "label": "level_ten",
           "polarity": "fires",
           "delta": "Student of Warfare has 10 level counters.",
-          "expected": "Above N3 it is still a 4/4 with double strike."
+          "expected": "Above N3 it is still a 4/4 with double strike.",
+          "operation": "counters"
         },
         {
           "label": "level_six",
           "polarity": "does_not_fire",
           "delta": "Student of Warfare has 6 level counters.",
-          "expected": "One counter short it is a 3/3 with first strike and no double strike."
+          "expected": "One counter short it is a 3/3 with first strike and no double strike.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -1206,19 +1281,24 @@
           "label": "four_energy",
           "polarity": "fires",
           "delta": "A has 4 energy counters.",
-          "expected": "Two energy counters are removed (A keeps 2) and Longtusk Cub gets a +1/+1 counter (a 3/3)."
+          "expected": "Two energy counters are removed (A keeps 2) and Longtusk Cub gets a +1/+1 counter (a 3/3).",
+          "operation": "counters"
         },
         {
           "label": "one_energy",
           "polarity": "does_not_fire",
           "delta": "A has 1 energy counter.",
-          "expected": "Not legal: A cannot pay {E}{E}; A keeps 1 energy counter and Longtusk Cub stays a 2/2."
+          "expected": "Not legal: A cannot pay {E}{E}; A keeps 1 energy counter and Longtusk Cub stays a 2/2.",
+          "operation": "counters"
         }
       ],
       "cards": [
         "Longtusk Cub"
       ],
-      "forge_notes": "Player energy counters are set through puzzle or setup notes; they are not a card state."
+      "forge_notes": "Player energy counters are set through puzzle or setup notes; they are not a card state.",
+      "detector": {
+        "none": "Paying {E} removes the player's energy counters while the cost is paid. The cost half's costs hold no energy entry, gen-3 costs_paid holds mana only, and the bracket collector files no event published during payment (Cause.PAYMENT in BusBracketCollector), so no energy_change reaches any record; both halves' snapshots are taken after payment."
+      }
     },
     {
       "id": "107.15a-1",
@@ -1270,7 +1350,8 @@
           "label": "chapter_three",
           "polarity": "does_not_fire",
           "delta": "History of Benalia starts with 2 lore counters.",
-          "expected": "The count goes from 2 to 3: chapter III triggers (Silver Knight is a 4/3 until end of turn) but chapter II does not trigger again and no Knight token is created; History of Benalia is sacrificed after chapter III resolves."
+          "expected": "The count goes from 2 to 3: chapter III triggers (Silver Knight is a 4/3 until end of turn) but chapter II does not trigger again and no Knight token is created; History of Benalia is sacrificed after chapter III resolves.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -1324,13 +1405,19 @@
           "label": "level_three",
           "polarity": "fires",
           "delta": "Ranger Class is level 3.",
-          "expected": "Level 3 still has the level 2 ability: the trigger fires and Grizzly Bears gets a +1/+1 counter (a 3/3)."
+          "expected": "Level 3 still has the level 2 ability: the trigger fires and Grizzly Bears gets a +1/+1 counter (a 3/3).",
+          "operation": {
+            "unclassifiable": "A Class level is not a counter; no fork operation sets it."
+          }
         },
         {
           "label": "level_one",
           "polarity": "does_not_fire",
           "delta": "Ranger Class is level 1.",
-          "expected": "The trigger does not fire and Grizzly Bears stays a 2/2."
+          "expected": "The trigger does not fire and Grizzly Bears stays a 2/2.",
+          "operation": {
+            "unclassifiable": "A Class level is not a counter; no fork operation sets it."
+          }
         }
       ],
       "cards": [
@@ -1383,13 +1470,19 @@
           "label": "combat",
           "polarity": "does_not_fire",
           "delta": "It is the beginning of combat step instead of the precombat main phase.",
-          "expected": "Not legal: a class level bar can be activated only as a sorcery; Ranger Class stays level 1."
+          "expected": "Not legal: a class level bar can be activated only as a sorcery; Ranger Class stays level 1.",
+          "operation": {
+            "unclassifiable": "Changes the phase."
+          }
         },
         {
           "label": "skip_level",
           "polarity": "does_not_fire",
           "delta": "A tries to activate the {3}{G}: Level 3 bar instead, tapping all four Forests.",
-          "expected": "Not legal: it can be activated only if the Class is level 2; Ranger Class stays level 1."
+          "expected": "Not legal: it can be activated only if the Class is level 2; Ranger Class stays level 1.",
+          "operation": {
+            "unclassifiable": "A different ability is activated."
+          }
         }
       ],
       "cards": [
@@ -1447,7 +1540,10 @@
           "label": "paid",
           "polarity": "does_not_fire",
           "delta": "A casts Blaze paying its mana cost, announcing X = 3 and tapping all four Mountains.",
-          "expected": "X is 3: Blaze deals 3 damage and B's life total is 17."
+          "expected": "X is 3: Blaze deals 3 damage and B's life total is 17.",
+          "operation": {
+            "unclassifiable": "A different way of casting the spell, with a different announced X."
+          }
         }
       ],
       "cards": [
@@ -1503,7 +1599,8 @@
           "label": "no_colorless_source",
           "polarity": "does_not_fire",
           "delta": "A's Wastes is a Forest instead.",
-          "expected": "Not legal: three green mana cannot pay {C}; Matter Reshaper stays in A's hand."
+          "expected": "Not legal: three green mana cannot pay {C}; Matter Reshaper stays in A's hand.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -1557,13 +1654,15 @@
           "label": "green",
           "polarity": "fires",
           "delta": "A's land is a Forest instead of a Plains.",
-          "expected": "Legal: green mana pays {G/W}; Dryad Militant enters the battlefield."
+          "expected": "Legal: green mana pays {G/W}; Dryad Militant enters the battlefield.",
+          "operation": "replace_card"
         },
         {
           "label": "blue",
           "polarity": "does_not_fire",
           "delta": "A's land is an Island instead of a Plains.",
-          "expected": "Not legal: blue mana pays neither half of {G/W}; Dryad Militant stays in A's hand."
+          "expected": "Not legal: blue mana pays neither half of {G/W}; Dryad Militant stays in A's hand.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -1623,13 +1722,17 @@
           "label": "five_islands",
           "polarity": "does_not_fire",
           "delta": "A controls five Islands instead of six.",
-          "expected": "Not legal: five blue mana cannot pay three {2/W} without white mana; Spectral Procession stays in A's hand."
+          "expected": "Not legal: five blue mana cannot pay three {2/W} without white mana; Spectral Procession stays in A's hand.",
+          "operation": {
+            "unclassifiable": "Removes a permanent."
+          }
         },
         {
           "label": "one_plains",
           "polarity": "fires",
           "delta": "One of A's six Islands is a Plains instead, and A taps only the Plains and four Islands.",
-          "expected": "Legal: the Plains pays one {2/W} with {W} and four blue mana pay the other two; A creates three Spirit tokens and one Island stays untapped."
+          "expected": "Legal: the Plains pays one {2/W} with {W} and four blue mana pay the other two; A creates three Spirit tokens and one Island stays untapped.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -1687,7 +1790,8 @@
           "label": "life_one",
           "polarity": "does_not_fire",
           "delta": "A's life total is 1.",
-          "expected": "Not legal: A cannot pay 2 life with a life total of 1 and has no green mana; Mutagenic Growth stays in A's hand and A's life total stays 1."
+          "expected": "Not legal: A cannot pay 2 life with a life total of 1 and has no green mana; Mutagenic Growth stays in A's hand and A's life total stays 1.",
+          "operation": "life"
         }
       ],
       "cards": [

@@ -52,13 +52,19 @@
           "label": "reach_blocker",
           "polarity": "does_not_fire",
           "delta": "B declares Giant Spider (reach) as the blocker instead of Grizzly Bears.",
-          "expected": "Declaring Giant Spider as a blocker of A's Wind Drake is legal."
+          "expected": "Declaring Giant Spider as a blocker of A's Wind Drake is legal.",
+          "operation": {
+            "unclassifiable": "A different blocker is declared: a different decision by a player."
+          }
         },
         {
           "label": "flying_blocker",
           "polarity": "does_not_fire",
           "delta": "B declares its own Wind Drake (flying) as the blocker instead of Grizzly Bears.",
-          "expected": "Declaring B's Wind Drake as a blocker of A's Wind Drake is legal."
+          "expected": "Declaring B's Wind Drake as a blocker of A's Wind Drake is legal.",
+          "operation": {
+            "unclassifiable": "A different blocker is declared: a different decision by a player."
+          }
         }
       ],
       "cards": [
@@ -66,7 +72,18 @@
         "Grizzly Bears",
         "Giant Spider"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A potential blocker is outside the legal-blockers list for an attacker because of an evasion or protection restriction on the attacker.",
+        "near_miss": "The potential blocker is inside the legal-blockers list for the attacker.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside"
+        },
+        "needs": []
+      }
     }
   ]
 }

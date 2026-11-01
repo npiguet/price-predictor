@@ -74,7 +74,10 @@
           "label": "scry_zero",
           "polarity": "does_not_fire",
           "delta": "A pays for Graven Lore with the five non-snow Islands, so X is 0 and A scries 0.",
-          "expected": "No scry event occurs and Flamespeaker Adept's trigger does not fire: it stays 2/3 without first strike. A still draws three cards."
+          "expected": "No scry event occurs and Flamespeaker Adept's trigger does not fire: it stays 2/3 without first strike. A still draws three cards.",
+          "operation": {
+            "unclassifiable": "a different payment, hence a different X chosen by the player"
+          }
         }
       ],
       "cards": [
@@ -84,7 +87,17 @@
         "Forest",
         "Graven Lore"
       ],
-      "forge_notes": "GameAction.scry returns before any event when the scry number is 0."
+      "forge_notes": "GameAction.scry returns before any event when the scry number is 0.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger watching for a scry event fires after a player scries N>0.",
+        "near_miss": "A scry trigger is evaluated against an event it does not watch (another player's scry) and does not fire. A scry of 0 produces no event, so no trigger record exists.",
+        "params": {
+          "mode": "Scry"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.22d-1",
@@ -135,14 +148,27 @@
           "label": "opponent_controls_adept",
           "polarity": "does_not_fire",
           "delta": "Flamespeaker Adept is controlled by B instead of A.",
-          "expected": "A scries but the trigger watches its controller's scries only: Flamespeaker Adept's trigger does not fire and it stays 2/3 without first strike."
+          "expected": "A scries but the trigger watches its controller's scries only: Flamespeaker Adept's trigger does not fire and it stays 2/3 without first strike.",
+          "operation": {
+            "unclassifiable": "changes which player controls a permanent (not one of the seven operations)"
+          }
         }
       ],
       "cards": [
         "Flamespeaker Adept",
         "Temple of Mystery"
       ],
-      "forge_notes": "GameAction.scry keeps a player with an empty library among the scrying players and runs the Scry trigger with ScryNum 0 after the (empty) arrangement."
+      "forge_notes": "GameAction.scry keeps a player with an empty library among the scrying players and runs the Scry trigger with ScryNum 0 after the (empty) arrangement.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger watching for a scry event fires after the scry, even when the scry looked at no cards.",
+        "near_miss": "A scry trigger is evaluated against another player's scry and does not fire.",
+        "params": {
+          "mode": "Scry"
+        },
+        "needs": []
+      }
     }
   ]
 }

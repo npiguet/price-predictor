@@ -61,7 +61,8 @@
           "label": "protected_host",
           "polarity": "does_not_fire",
           "delta": "A's other creature is Black Knight (protection from white) instead of Hill Giant.",
-          "expected": "A gains control of Pacifism, but a white Aura can't be attached to Black Knight, so Pacifism does not move: it stays attached to Grizzly Bears, which still can't attack or block. Black Knight is unaffected. Aura Graft resolved and is in A's graveyard."
+          "expected": "A gains control of Pacifism, but a white Aura can't be attached to Black Knight, so Pacifism does not move: it stays attached to Grizzly Bears, which still can't attack or block. Black Knight is unaffected. Aura Graft resolved and is in A's graveyard.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -72,7 +73,18 @@
         "Pacifism",
         "Aura Graft"
       ],
-      "forge_notes": "Aura Graft's Attach sub-ability uses Choices$ Permanent; confirm Forge filters the choice by what the Aura can enchant (including protection) so no illegal host is offered."
+      "forge_notes": "Aura Graft's Attach sub-ability uses Choices$ Permanent; confirm Forge filters the choice by what the Aura can enchant (including protection) so no illegal host is offered.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An effect moves an Aura or Equipment to a permanent it could enchant or equip (an attached event).",
+        "near_miss": "An attach effect resolves and attaches nothing.",
+        "params": {
+          "event": "attached",
+          "api": "Attach"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.3b-1",
@@ -119,7 +131,10 @@
           "label": "other_host",
           "polarity": "does_not_fire",
           "delta": "The equip ability targets Hill Giant instead of Grizzly Bears.",
-          "expected": "Grafted Wargear moves to Hill Giant (6/5). Its becomes-unattached trigger fires and Grizzly Bears is sacrificed, moving to A's graveyard."
+          "expected": "Grafted Wargear moves to Hill Giant (6/5). Its becomes-unattached trigger fires and Grizzly Bears is sacrificed, moving to A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -127,7 +142,19 @@
         "Hill Giant",
         "Grafted Wargear"
       ],
-      "forge_notes": "The rule's other branch, an object that is not an Aura, Equipment or Fortification being attached, needs a second effect that changes the object's types in response and has no simple card in Forge."
+      "forge_notes": "The rule's other branch, an object that is not an Aura, Equipment or Fortification being attached, needs a second effect that changes the object's types in response and has no simple card in Forge.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An attach effect resolves and attaches nothing (no attached event): the object is already attached to the chosen object or cannot be attached to it, so it does not move.",
+        "near_miss": "An attach effect resolves and attaches the object (an attached event).",
+        "params": {
+          "event": "attached",
+          "api": "Attach",
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.3c-1",
@@ -181,7 +208,10 @@
           "label": "equip_before_aura",
           "polarity": "does_not_fire",
           "delta": "The two actions swap order: A first activates equip (Swiftfoot Boots moves to Hill Giant), then casts Darksteel Mutation targeting Hill Giant.",
-          "expected": "Darksteel Mutation's timestamp is later than Swiftfoot Boots', so it removes the granted keywords: Hill Giant is a 0/1 indestructible Insect artifact creature with no haste and no hexproof."
+          "expected": "Darksteel Mutation's timestamp is later than Swiftfoot Boots', so it removes the granted keywords: Hill Giant is a 0/1 indestructible Insect artifact creature with no haste and no hexproof.",
+          "operation": {
+            "unclassifiable": "a different order of actions by the player"
+          }
         }
       ],
       "cards": [
@@ -244,13 +274,19 @@
           "label": "host_destroyed",
           "polarity": "fires",
           "delta": "Instead of equipping, A casts Doom Blade targeting Grizzly Bears, tapping both Swamps.",
-          "expected": "Grizzly Bears is destroyed and moves to A's graveyard. Grafted Wargear stays on the battlefield, unattached, and its becomes-unattached trigger fires; there is nothing left to sacrifice. Hill Giant stays 3/3."
+          "expected": "Grizzly Bears is destroyed and moves to A's graveyard. Grafted Wargear stays on the battlefield, unattached, and its becomes-unattached trigger fires; there is nothing left to sacrifice. Hill Giant stays 3/3.",
+          "operation": {
+            "unclassifiable": "a different spell and decision; destroys a permanent"
+          }
         },
         {
           "label": "never_attached",
           "polarity": "does_not_fire",
           "delta": "Grafted Wargear starts unattached, and A equips it to Hill Giant.",
-          "expected": "Grafted Wargear attaches to Hill Giant (6/5). No becomes-unattached trigger fires and Grizzly Bears stays on the battlefield."
+          "expected": "Grafted Wargear attaches to Hill Giant (6/5). No becomes-unattached trigger fires and Grizzly Bears stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "changes attachment, which is not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -260,7 +296,17 @@
         "Grafted Wargear",
         "Doom Blade"
       ],
-      "forge_notes": "Confirm Forge fires the Unattached trigger when the host leaves the battlefield (state-based unattach), not only when an equip ability moves the Equipment."
+      "forge_notes": "Confirm Forge fires the Unattached trigger when the host leaves the battlefield (state-based unattach), not only when an equip ability moves the Equipment.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A becomes-unattached trigger is evaluated and fires when an Equipment stops being attached.",
+        "near_miss": "The same trigger is evaluated and does not fire.",
+        "params": {
+          "mode": "Unattached"
+        },
+        "needs": []
+      }
     }
   ]
 }

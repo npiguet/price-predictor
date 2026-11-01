@@ -62,19 +62,26 @@
           "label": "all_lands",
           "polarity": "other",
           "delta": "The top three cards of A's library are Mountains instead of Grizzly Bears, Mountain and Shock.",
-          "expected": "The trigger fires and A mills three Mountains. A loses no life (20) and keeps all 3 rad counters."
+          "expected": "The trigger fires and A mills three Mountains. A loses no life (20) and keeps all 3 rad counters.",
+          "operation": {
+            "unclassifiable": "Changes the top cards of A's library; no operation changes library contents."
+          }
         },
         {
           "label": "all_nonland",
           "polarity": "fires",
           "delta": "The top three cards of A's library are Grizzly Bears, Shock and Hill Giant.",
-          "expected": "A mills all three nonland cards, loses 3 life (17) and has no rad counters left."
+          "expected": "A mills all three nonland cards, loses 3 life (17) and has no rad counters left.",
+          "operation": {
+            "unclassifiable": "Changes the top cards of A's library; no operation changes library contents."
+          }
         },
         {
           "label": "opponent_only",
           "polarity": "does_not_fire",
           "delta": "A has no rad counters (B still has 3).",
-          "expected": "The trigger does not fire for A during A's precombat main phase and B's counters do nothing. A's library is untouched, A's life stays 20 and B still has 3 rad counters."
+          "expected": "The trigger does not fire for A during A's precombat main phase and B's counters do nothing. A's library is untouched, A's life stays 20 and B still has 3 rad counters.",
+          "operation": "counters"
         }
       ],
       "cards": [

@@ -60,20 +60,29 @@
           "label": "in_untap_step",
           "polarity": "does_not_fire",
           "delta": "The board is observed in A's untap step, before the upkeep step begins.",
-          "expected": "Sol Ring is still a 1/1 artifact creature: A's upkeep has not begun, so the effect has not ended."
+          "expected": "Sol Ring is still a 1/1 artifact creature: A's upkeep has not begun, so the effect has not ended.",
+          "operation": {
+            "unclassifiable": "Changes the phase or step the board is observed in."
+          }
         },
         {
           "label": "poltergeist_is_Bs",
           "polarity": "does_not_fire",
           "delta": "Xenic Poltergeist is B's: B activated it targeting Sol Ring during A's previous turn, so the effect lasts until B's next upkeep.",
-          "expected": "Sol Ring is still a 1/1 artifact creature when A first receives priority in A's upkeep step: the effect waits for B's upkeep, not A's."
+          "expected": "Sol Ring is still a 1/1 artifact creature when A first receives priority in A's upkeep step: the effect waits for B's upkeep, not A's.",
+          "operation": {
+            "unclassifiable": "Changes which player controls and activated the ability, a different history."
+          }
         }
       ],
       "cards": [
         "Xenic Poltergeist",
         "Sol Ring"
       ],
-      "forge_notes": "Uses Duration$ UntilYourNextUpkeep. Check Forge removes the animation at the start of the upkeep step, not at the start of the untap step."
+      "forge_notes": "Uses Duration$ UntilYourNextUpkeep. Check Forge removes the animation at the start of the upkeep step, not at the start of the untap step.",
+      "detector": {
+        "none": "An effect lasting until a player's next upkeep expiring is a removal: no event type reports an effect ending (EVENT_PARAMS has continuous_effect_created but no expiry), and no record is written at the moment of expiry; gen-3 floating_effects in the snapshot only show the effect present or absent."
+      }
     },
     {
       "id": "500.5-1",
@@ -119,7 +128,10 @@
           "label": "green_mana",
           "polarity": "does_not_fire",
           "delta": "A taps Forest for {G} instead of Swamp for {B}.",
-          "expected": "The {G} is still in A's mana pool at the beginning of combat step because Omnath says A does not lose unspent green mana, so Omnath is a 2/2."
+          "expected": "The {G} is still in A's mana pool at the beginning of combat step because Omnath says A does not lose unspent green mana, so Omnath is a 2/2.",
+          "operation": {
+            "unclassifiable": "A different choice by a player (which land is tapped for mana)."
+          }
         }
       ],
       "cards": [
@@ -127,7 +139,10 @@
         "Swamp",
         "Forest"
       ],
-      "forge_notes": "Omnath uses Mode$ UnspentMana; check Forge empties the pool at the end of each step and phase, not once per turn."
+      "forge_notes": "Omnath uses Mode$ UnspentMana; check Forge empties the pool at the end of each step and phase, not once per turn.",
+      "detector": {
+        "none": "Mana emptying at a phase's end is no event of any record: mana_lost is emitted only by the LoseMana API (RunParamNormalizer, ApiEvents), and the turn-based pool emptying files no turn_action record (subkinds are draw, cleanup_discard, untap, phasing, day_night, lore_counter)."
+      }
     },
     {
       "id": "500.5a-1",
@@ -175,13 +190,19 @@
           "label": "end_of_combat_step",
           "polarity": "does_not_fire",
           "delta": "The board is observed while A holds priority in the end of combat step, before the combat phase ends.",
-          "expected": "Battering Ram still has banding in the end of combat step: the effect lasts until the end of the combat phase, not the beginning of that step."
+          "expected": "Battering Ram still has banding in the end of combat step: the effect lasts until the end of the combat phase, not the beginning of that step.",
+          "operation": {
+            "unclassifiable": "Changes the phase or step."
+          }
         }
       ],
       "cards": [
         "Battering Ram"
       ],
-      "forge_notes": "Uses Duration$ UntilEndOfCombat. Check that Forge removes the keyword when the end of combat step ends and not when it begins."
+      "forge_notes": "Uses Duration$ UntilEndOfCombat. Check that Forge removes the keyword when the end of combat step ends and not when it begins.",
+      "detector": {
+        "none": "An until-end-of-combat effect expiring is a removal with no event and no record at the moment of expiry; gen-2 and gen-3 records show only the snapshot where the effect is present or gone, not the expiry."
+      }
     },
     {
       "id": "500.6-1",
@@ -224,19 +245,35 @@
           "label": "opponents_djinn",
           "polarity": "does_not_fire",
           "delta": "Juzám Djinn is on B's battlefield instead of A's, so it is A's upkeep but not its controller's.",
-          "expected": "No trigger: the stack stays empty and both life totals stay at 20."
+          "expected": "No trigger: the stack stays empty and both life totals stay at 20.",
+          "operation": {
+            "unclassifiable": "Moves a permanent to the other player's battlefield."
+          }
         },
         {
           "label": "opponents_turn",
           "polarity": "does_not_fire",
           "delta": "Juzám Djinn is A's but the active player is B, so it is B's upkeep.",
-          "expected": "No trigger: the condition 'your upkeep' is not met in B's upkeep, so the stack stays empty and A's life stays 20."
+          "expected": "No trigger: the condition 'your upkeep' is not met in B's upkeep, so the stack stays empty and A's life stays 20.",
+          "operation": {
+            "unclassifiable": "Changes whose turn it is."
+          }
         }
       ],
       "cards": [
         "Juzám Djinn"
       ],
-      "forge_notes": "Variant opponents_turn has B as active player (setup.active B)."
+      "forge_notes": "Variant opponents_turn has B as active player (setup.active B).",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger with Mode$ Phase (\"at the beginning of\" a step or phase) is evaluated as that step or phase begins and fires.",
+        "near_miss": "A Phase trigger is evaluated as a step or phase begins that its condition excludes (another player's turn, another step or phase) and does not fire.",
+        "params": {
+          "mode": "Phase"
+        },
+        "needs": []
+      }
     },
     {
       "id": "500.6-2",
@@ -285,13 +322,26 @@
           "label": "postcombat_main",
           "polarity": "does_not_fire",
           "delta": "The phase that begins is A's postcombat main phase (setup.step end_of_combat, combat has just ended with no attackers declared), not the precombat main phase.",
-          "expected": "No trigger fired and A's mana pool stays empty."
+          "expected": "No trigger fired and A's mana pool stays empty.",
+          "operation": {
+            "unclassifiable": "Changes the phase or step."
+          }
         }
       ],
       "cards": [
         "Abstract Paintmage"
       ],
-      "forge_notes": "The Paintmage's trigger checks Phase$ Main1. In the postcombat variant the main2 phase begins."
+      "forge_notes": "The Paintmage's trigger checks Phase$ Main1. In the postcombat variant the main2 phase begins.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger with Mode$ Phase (\"at the beginning of\" a step or phase) is evaluated as that step or phase begins and fires.",
+        "near_miss": "A Phase trigger is evaluated as a step or phase begins that its condition excludes (another player's turn, another step or phase) and does not fire.",
+        "params": {
+          "mode": "Phase"
+        },
+        "needs": []
+      }
     },
     {
       "id": "500.7-1",
@@ -367,19 +417,28 @@
           "label": "nexus_after",
           "polarity": "fires",
           "delta": "After Time Walk resolves, A passes priority and B casts Nexus of Fate, tapping seven Islands; it resolves.",
-          "expected": "B's extra turn was created after A's, so it is taken first. The turns that follow this one are: B (extra turn), A (extra turn), B, A."
+          "expected": "B's extra turn was created after A's, so it is taken first. The turns that follow this one are: B (extra turn), A (extra turn), B, A.",
+          "operation": {
+            "unclassifiable": "A different spell cast by the other player."
+          }
         },
         {
           "label": "nexus_in_response",
           "polarity": "fires",
           "delta": "B casts Nexus of Fate in response to Time Walk, tapping seven Islands. Nexus resolves first, then Time Walk.",
-          "expected": "Time Walk's extra turn was created last, so it is taken first. The turns that follow this one are: A (extra turn), B (extra turn), B, A."
+          "expected": "Time Walk's extra turn was created last, so it is taken first. The turns that follow this one are: A (extra turn), B (extra turn), B, A.",
+          "operation": {
+            "unclassifiable": "A different spell cast by the other player."
+          }
         },
         {
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B casts Counterspell on Time Walk, tapping two Islands.",
-          "expected": "Time Walk is countered and no extra turn is added. The turns that follow this one are: B, A."
+          "expected": "Time Walk is countered and no extra turn is added. The turns that follow this one are: B, A.",
+          "operation": {
+            "unclassifiable": "A different spell cast by the other player."
+          }
         }
       ],
       "cards": [
@@ -388,7 +447,17 @@
         "Counterspell",
         "Island"
       ],
-      "forge_notes": "Nexus of Fate shuffles itself into its owner's library instead of going to the graveyard; this does not affect turn order."
+      "forge_notes": "Nexus of Fate shuffles itself into its owner's library instead of going to the graveyard; this does not affect turn order.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution's effect half holds a turn_added event: an effect gave a player an extra turn.",
+        "near_miss": "A resolution whose effect half holds no turn_added event. outcome_event counts a near miss only with api set; this detector tags the fires side alone. api is left out because many extra-turn effects are a sub-ability, and the acting line's API is its root's.",
+        "params": {
+          "event": "turn_added"
+        },
+        "needs": []
+      }
     },
     {
       "id": "500.8-1",
@@ -445,13 +514,19 @@
           "label": "main2",
           "polarity": "fires",
           "delta": "A casts Relentless Assault in the postcombat main phase instead (setup.step main2).",
-          "expected": "Relentless Assault resolves. The remaining phases of the turn in order are: additional combat phase, additional postcombat main phase, ending phase."
+          "expected": "Relentless Assault resolves. The remaining phases of the turn in order are: additional combat phase, additional postcombat main phase, ending phase.",
+          "operation": {
+            "unclassifiable": "Changes the phase or step."
+          }
         },
         {
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B casts Counterspell on Relentless Assault, tapping both Islands.",
-          "expected": "Relentless Assault is countered and no phase is added. The remaining phases are: combat phase, postcombat main phase, ending phase."
+          "expected": "Relentless Assault is countered and no phase is added. The remaining phases are: combat phase, postcombat main phase, ending phase.",
+          "operation": {
+            "unclassifiable": "A different spell cast by the other player."
+          }
         }
       ],
       "cards": [
@@ -460,7 +535,17 @@
         "Mountain",
         "Island"
       ],
-      "forge_notes": "Relentless Assault uses AddPhase with ConditionPhases$ Main1,Main2; check that casting it in main2 adds the phases after main2."
+      "forge_notes": "Relentless Assault uses AddPhase with ConditionPhases$ Main1,Main2; check that casting it in main2 adds the phases after main2.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution's effect half holds a phase_added event: an effect added a phase to the turn.",
+        "near_miss": "A resolution whose effect half holds no phase_added event. outcome_event counts a near miss only with api set; this detector tags the fires side alone. api is left out because most phase-adding spells carry AddPhase as a sub-ability, so the acting line's API is another.",
+        "params": {
+          "event": "phase_added"
+        },
+        "needs": []
+      }
     },
     {
       "id": "500.9-1",
@@ -515,7 +600,10 @@
           "label": "haze_on_b",
           "polarity": "does_not_fire",
           "delta": "Paradox Haze enchants B instead of A.",
-          "expected": "A's upkeep is not B's first upkeep, so no step is added: A has only one upkeep step, Juzám Djinn triggers once, and A's life is 19."
+          "expected": "A's upkeep is not B's first upkeep, so no step is added: A has only one upkeep step, Juzám Djinn triggers once, and A's life is 19.",
+          "operation": {
+            "unclassifiable": "Attaches the Aura to a different player."
+          }
         }
       ],
       "cards": [
@@ -574,7 +662,10 @@
           "label": "double_blocked",
           "polarity": "does_not_fire",
           "delta": "Both Grizzly Bears block Obeka (menace allows two blockers).",
-          "expected": "Obeka deals no damage to a player (one Grizzly Bears dies, the other is undamaged; Obeka has 4 damage and survives). The trigger does not fire, no extra upkeep step occurs, and both life totals are 20."
+          "expected": "Obeka deals no damage to a player (one Grizzly Bears dies, the other is undamaged; Obeka has 4 damage and survives). The trigger does not fire, no extra upkeep step occurs, and both life totals are 20.",
+          "operation": {
+            "unclassifiable": "A different blocking decision by a player."
+          }
         }
       ],
       "cards": [
@@ -634,14 +725,20 @@
           "label": "no_eon_hub",
           "polarity": "does_not_fire",
           "delta": "Eon Hub is not on the battlefield.",
-          "expected": "The upkeep step happens, Juzám Djinn's trigger resolves and A's life is 19."
+          "expected": "The upkeep step happens, Juzám Djinn's trigger resolves and A's life is 19.",
+          "operation": {
+            "unclassifiable": "Removes a permanent from the battlefield."
+          }
         }
       ],
       "cards": [
         "Juzám Djinn",
         "Eon Hub"
       ],
-      "forge_notes": "Eon Hub is a BeginPhase replacement effect with Skip$ True."
+      "forge_notes": "Eon Hub is a BeginPhase replacement effect with Skip$ True.",
+      "detector": {
+        "none": "A skipped step is shown by absence only: phase_skipped is emitted by the SkipPhase API alone, while a static skip effect such as 'Players skip their upkeep steps' files no event and no record, and the triggers of the skipped step are never evaluated, so no trigger record exists for it."
+      }
     },
     {
       "id": "500.11-2",
@@ -706,14 +803,27 @@
           "label": "no_meditate",
           "polarity": "does_not_fire",
           "delta": "A does not cast Meditate.",
-          "expected": "Nothing is skipped and A draws no extra cards. The turns that follow this one are: B, A, B."
+          "expected": "Nothing is skipped and A draws no extra cards. The turns that follow this one are: B, A, B.",
+          "operation": {
+            "unclassifiable": "A different spell cast (no spell is cast)."
+          }
         }
       ],
       "cards": [
         "Meditate",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution's effect half holds a turn_skipped event: an effect made a player skip a turn.",
+        "near_miss": "A resolution whose effect half holds no turn_skipped event. outcome_event counts a near miss only with api set; this detector tags the fires side alone. api is left out because no card script carries SkipTurn as its root API; it is always a sub-ability.",
+        "params": {
+          "event": "turn_skipped"
+        },
+        "needs": []
+      }
     }
   ]
 }

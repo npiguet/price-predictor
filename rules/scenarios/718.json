@@ -56,13 +56,19 @@
           "label": "two_mountains",
           "polarity": "does_not_fire",
           "delta": "A controls two Mountains instead of three.",
-          "expected": "Neither is legal: {2}{R} and {7} both exceed the available mana."
+          "expected": "Neither is legal: {2}{R} and {7} both exceed the available mana.",
+          "operation": {
+            "unclassifiable": "A land is removed from the battlefield; no fork operation removes a permanent."
+          }
         },
         {
           "label": "three_plains",
           "polarity": "does_not_fire",
           "delta": "A controls three Plains instead of three Mountains.",
-          "expected": "Neither is legal: {2}{R} cannot be paid without red mana, and {7} exceeds the available mana."
+          "expected": "Neither is legal: {2}{R} cannot be paid without red mana, and {7} exceeds the available mana.",
+          "operation": {
+            "unclassifiable": "Three lands are replaced, more than one fact; replace_card replaces one permanent."
+          }
         }
       ],
       "cards": [
@@ -123,7 +129,10 @@
           "label": "cast_normally",
           "polarity": "does_not_fire",
           "delta": "A casts Blitz Automaton normally, paying {7} with all seven Mountains.",
-          "expected": "Blitz Automaton on the battlefield is a colorless 6/4 artifact creature with mana value 7 and haste."
+          "expected": "Blitz Automaton on the battlefield is a colorless 6/4 artifact creature with mana value 7 and haste.",
+          "operation": {
+            "unclassifiable": "The player casts the card normally instead of prototyped; no fork operation changes how a spell is cast."
+          }
         }
       ],
       "cards": [
@@ -191,7 +200,10 @@
           "label": "cast_normally_colorless",
           "polarity": "does_not_fire",
           "delta": "A casts Blitz Automaton normally, paying {7} with all seven Mountains.",
-          "expected": "Blitz Automaton is a colorless spell: Hydroblast resolves and does nothing. Blitz Automaton then resolves and a 6/4 enters the battlefield."
+          "expected": "Blitz Automaton is a colorless spell: Hydroblast resolves and does nothing. Blitz Automaton then resolves and a 6/4 enters the battlefield.",
+          "operation": {
+            "unclassifiable": "The player casts the card normally instead of prototyped; no fork operation changes how a spell is cast."
+          }
         }
       ],
       "cards": [
@@ -200,7 +212,18 @@
         "Blitz Automaton",
         "Hydroblast"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A spell is countered by a resolution whose condition reads the spell's characteristics.",
+        "near_miss": "A Counter resolution that countered nothing.",
+        "params": {
+          "event": "spell_countered",
+          "api": "Counter"
+        },
+        "needs": []
+      }
     },
     {
       "id": "718.3c-1",
@@ -257,7 +280,10 @@
           "label": "cast_normally",
           "polarity": "does_not_fire",
           "delta": "A casts Blitz Automaton normally, paying {7} with the seven Mountains.",
-          "expected": "A controls two permanents: the original and a token copy. Both are colorless 6/4 artifact creatures with mana value 7."
+          "expected": "A controls two permanents: the original and a token copy. Both are colorless 6/4 artifact creatures with mana value 7.",
+          "operation": {
+            "unclassifiable": "The player casts the card normally instead of prototyped; no fork operation changes how a spell is cast."
+          }
         }
       ],
       "cards": [
@@ -267,7 +293,18 @@
         "Blitz Automaton",
         "Double Major"
       ],
-      "forge_notes": "Double Major copies the creature spell; the copy becomes a token on resolution."
+      "forge_notes": "Double Major copies the creature spell; the copy becomes a token on resolution.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A copy-spell resolution holds a spell_copied event.",
+        "near_miss": "A CopySpellAbility resolution that produced no copy.",
+        "params": {
+          "event": "spell_copied",
+          "api": "CopySpellAbility"
+        },
+        "needs": []
+      }
     },
     {
       "id": "718.3d-1",
@@ -326,7 +363,10 @@
           "label": "normal_original",
           "polarity": "does_not_fire",
           "delta": "A casts Blitz Automaton normally, paying {7} with all seven Mountains.",
-          "expected": "The Clone is a colorless 6/4 artifact creature Construct with mana value 7 and haste, like the original."
+          "expected": "The Clone is a colorless 6/4 artifact creature Construct with mana value 7 and haste, like the original.",
+          "operation": {
+            "unclassifiable": "The player casts the original normally instead of prototyped; no fork operation changes how a spell is cast."
+          }
         }
       ],
       "cards": [
@@ -384,7 +424,10 @@
           "label": "ordinary_creature_in_graveyard",
           "polarity": "does_not_fire",
           "delta": "The creature card in A's graveyard is Grizzly Bears (mana value 2) instead of Blitz Automaton.",
-          "expected": "Grizzly Bears is a legal target: Unearth can be cast and returns it to the battlefield."
+          "expected": "Grizzly Bears is a legal target: Unearth can be cast and returns it to the battlefield.",
+          "operation": {
+            "unclassifiable": "A different card is in the graveyard; replace_card swaps permanents only, and no fork operation changes a graveyard."
+          }
         }
       ],
       "cards": [
@@ -393,7 +436,17 @@
         "Blitz Automaton",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate that targets a card in a graveyard has no legal target because the card's characteristics there fail the targeting condition.",
+        "near_miss": "A candidate whose targeting clause has a legal target.",
+        "params": {
+          "bit": "has_legal_target"
+        },
+        "needs": []
+      }
     },
     {
       "id": "718.5-1",
@@ -451,7 +504,10 @@
           "label": "cast_normally",
           "polarity": "does_not_fire",
           "delta": "A casts Combat Thresher normally, paying {7} with all seven Plains.",
-          "expected": "Combat Thresher is a colorless 3/3 artifact creature Construct with double strike. A drew one card: types, keyword and trigger match the prototyped case."
+          "expected": "Combat Thresher is a colorless 3/3 artifact creature Construct with double strike. A drew one card: types, keyword and trigger match the prototyped case.",
+          "operation": {
+            "unclassifiable": "The player casts the card normally instead of prototyped; no fork operation changes how a spell is cast."
+          }
         }
       ],
       "cards": [

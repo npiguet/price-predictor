@@ -62,7 +62,8 @@
           "label": "ii_already_passed",
           "polarity": "does_not_fire",
           "delta": "History of Benalia starts with 2 lore counters instead of 1.",
-          "expected": "The count goes from 2 to 4. Only chapter III triggers; chapter II does not trigger again because the count was not below 2. No Knight token is created, chapter III resolves with no Knights to pump, and History of Benalia is then sacrificed to A's graveyard."
+          "expected": "The count goes from 2 to 4. Only chapter III triggers; chapter II does not trigger again because the count was not below 2. No Knight token is created, chapter III resolves with no Knights to pump, and History of Benalia is then sacrificed to A's graveyard.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -70,7 +71,17 @@
         "Storyweave",
         "History of Benalia"
       ],
-      "forge_notes": "Forge implements chapters as lore-counter triggers with a crossing check; confirm that both chapters trigger on a two-counter jump and that the controller orders them."
+      "forge_notes": "Forge implements chapters as lore-counter triggers with a crossing check; confirm that both chapters trigger on a two-counter jump and that the controller orders them.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A Saga's chapter ability (a trigger the Chapter keyword generates) fires because the lore counters put on the Saga took the count from below its chapter number to at least that number, one trigger per chapter number crossed.",
+        "near_miss": "A chapter ability evaluated when lore counters were added but its chapter number was already reached before or is still not reached, and it does not fire.",
+        "params": {
+          "keyword": "Chapter"
+        },
+        "needs": []
+      }
     },
     {
       "id": "714.2c-1",
@@ -122,14 +133,25 @@
           "label": "chapter_iii",
           "polarity": "does_not_fire",
           "delta": "History of Benalia starts with 2 lore counters instead of 1, so the new counter makes it 3 and chapter III triggers instead.",
-          "expected": "Chapter III triggers and resolves: Knights A controls get +2/+1 until end of turn. No Knight token is created, since the Knight-creating text belongs to chapters I and II only. History of Benalia is then sacrificed."
+          "expected": "Chapter III triggers and resolves: Knights A controls get +2/+1 until end of turn. No Knight token is created, since the Knight-creating text belongs to chapters I and II only. History of Benalia is then sacrificed.",
+          "operation": "counters"
         }
       ],
       "cards": [
         "Plains",
         "History of Benalia"
       ],
-      "forge_notes": "Chapter I of this card is covered by 714.3a-1."
+      "forge_notes": "Chapter I of this card is covered by 714.3a-1.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A chapter ability whose effect is listed under several chapter numbers fires when the lore count crosses any one of them, as a separate chapter ability for each number would.",
+        "near_miss": "A chapter ability evaluated when the lore count crosses a chapter number its symbol does not list, and it does not fire.",
+        "params": {
+          "keyword": "Chapter"
+        },
+        "needs": []
+      }
     },
     {
       "id": "714.3a-1",
@@ -180,13 +202,19 @@
           "label": "read_ahead_saga",
           "polarity": "does_not_fire",
           "delta": "A casts Love Song of Night and Day (read ahead) instead, choosing 2.",
-          "expected": "Love Song of Night and Day enters with the chosen 2 lore counters, not 1 (714.3b decides this). Chapter II triggers and creates a 1/1 white Bird token with flying; chapter I does not trigger."
+          "expected": "Love Song of Night and Day enters with the chosen 2 lore counters, not 1 (714.3b decides this). Chapter II triggers and creates a 1/1 white Bird token with flying; chapter I does not trigger.",
+          "operation": {
+            "unclassifiable": "A different spell is cast (a read ahead Saga instead of one without it), and its controller chooses a number; no fork operation changes what is cast."
+          }
         },
         {
           "label": "not_a_saga",
           "polarity": "other",
           "delta": "A casts Savannah Lions instead.",
-          "expected": "Savannah Lions enters as a 2/1 with no counters of any kind; the lore counter replacement applies to Sagas only."
+          "expected": "Savannah Lions enters as a 2/1 with no counters of any kind; the lore counter replacement applies to Sagas only.",
+          "operation": {
+            "unclassifiable": "A different spell is cast (a creature instead of a Saga); no fork operation changes what is cast."
+          }
         }
       ],
       "cards": [
@@ -195,7 +223,18 @@
         "Love Song of Night and Day",
         "Savannah Lions"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution's effect half puts a lore counter on a permanent, as a Saga entering the battlefield with its lore counter does.",
+        "near_miss": "Not counted: no api singles out a Saga's permanent spell, so only the fires side is tagged.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "lore"
+        },
+        "needs": []
+      }
     },
     {
       "id": "714.3b-1",
@@ -256,13 +295,19 @@
           "label": "choose_one",
           "polarity": "does_not_fire",
           "delta": "A chooses 1 instead of 2.",
-          "expected": "Love Song enters with 1 lore counter, which is what a Saga without read ahead has. Chapter I triggers and resolves: A and B each draw two cards (hand sizes 2 and 2). No Bird token is created. Love Song stays with 1 lore counter."
+          "expected": "Love Song enters with 1 lore counter, which is what a Saga without read ahead has. Chapter I triggers and resolves: A and B each draw two cards (hand sizes 2 and 2). No Bird token is created. Love Song stays with 1 lore counter.",
+          "operation": {
+            "unclassifiable": "A different choice by the player (the read ahead number chosen); no fork operation changes a choice."
+          }
         },
         {
           "label": "choose_three",
           "polarity": "other",
           "delta": "A chooses 3 instead of 2.",
-          "expected": "Love Song enters with 3 lore counters. Chapters I and II are skipped: no cards are drawn and no Bird is created. Chapter III triggers, A targets Savannah Lions, which gets a +1/+1 counter and becomes 3/2. Love Song is then sacrificed to A's graveyard."
+          "expected": "Love Song enters with 3 lore counters. Chapters I and II are skipped: no cards are drawn and no Bird is created. Chapter III triggers, A targets Savannah Lions, which gets a +1/+1 counter and becomes 3/2. Love Song is then sacrificed to A's graveyard.",
+          "operation": {
+            "unclassifiable": "A different choice by the player (the read ahead number chosen); no fork operation changes a choice."
+          }
         }
       ],
       "cards": [
@@ -322,7 +367,10 @@
           "label": "opponents_saga",
           "polarity": "does_not_fire",
           "delta": "Love Song of Night and Day is controlled by B instead of A.",
-          "expected": "No lore counter is added at the start of A's precombat main phase: Love Song stays at 1 lore counter and no chapter ability triggers. No Bird token is created."
+          "expected": "No lore counter is added at the start of A's precombat main phase: Love Song stays at 1 lore counter and no chapter ability triggers. No Bird token is created.",
+          "operation": {
+            "unclassifiable": "The Saga's controller changes from the active player to the opponent; no fork operation changes control."
+          }
         }
       ],
       "cards": [
@@ -389,13 +437,17 @@
           "label": "not_final_yet",
           "polarity": "does_not_fire",
           "delta": "History of Benalia starts with 1 lore counter instead of 2.",
-          "expected": "The new counter makes it 2, below the final chapter number 3. Chapter II triggers and creates a Knight token; History of Benalia is not sacrificed and stays with 2 lore counters."
+          "expected": "The new counter makes it 2, below the final chapter number 3. Chapter II triggers and creates a Knight token; History of Benalia is not sacrificed and stays with 2 lore counters.",
+          "operation": "counters"
         },
         {
           "label": "response_on_stack",
           "polarity": "does_not_fire",
           "delta": "With chapter III on the stack, B casts Shock targeting A's face (tapping Mountain) and both players pass until Shock resolves.",
-          "expected": "Shock resolves (A at 18 life) while chapter III is still on the stack, and History of Benalia, with 3 lore counters, is still on the battlefield because it is the source of a chapter ability that has not left the stack. Only after chapter III resolves is History of Benalia sacrificed."
+          "expected": "Shock resolves (A at 18 life) while chapter III is still on the stack, and History of Benalia, with 3 lore counters, is still on the battlefield because it is the source of a chapter ability that has not left the stack. Only after chapter III resolves is History of Benalia sacrificed.",
+          "operation": {
+            "unclassifiable": "The opponent casts an additional spell while the chapter ability is on the stack; no fork operation adds a spell or an action."
+          }
         }
       ],
       "cards": [

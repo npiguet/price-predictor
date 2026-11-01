@@ -57,7 +57,10 @@
           "label": "not_entwined",
           "polarity": "does_not_fire",
           "delta": "A does not pay the entwine cost, chooses only the creature mode, and pays {2}{R} with three Mountains.",
-          "expected": "Only the creature mode happens. Grizzly Bears dies; B's life stays 20."
+          "expected": "Only the creature mode happens. Grizzly Bears dies; B's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -117,7 +120,10 @@
           "label": "four_lands",
           "polarity": "does_not_fire",
           "delta": "A controls four Mountains instead of five.",
-          "expected": "Casting with both modes is not legal because the five mana cannot be paid; casting with a single mode for {2}{R} is legal."
+          "expected": "Casting with both modes is not legal because the five mana cannot be paid; casting with a single mode for {2}{R} is legal.",
+          "operation": {
+            "unclassifiable": "removes a permanent, not a fork operation"
+          }
         }
       ],
       "cards": [
@@ -125,7 +131,10 @@
         "Grizzly Bears",
         "Barbed Lightning"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "Decision records give each candidate card or ability its can_play, affordable and has_legal_target bits; whether an optional additional cost such as entwine could be paid is no candidate and no bit, so no field separates the two situations."
+      }
     },
     {
       "id": "702.42b-1",
@@ -176,7 +185,10 @@
           "label": "tokens_only",
           "polarity": "does_not_fire",
           "delta": "A does not pay the entwine cost and chooses only the tokens mode, paying {3}{R} with four Mountains.",
-          "expected": "A has three 1/1 red Goblin tokens without haste."
+          "expected": "A has three 1/1 red Goblin tokens without haste.",
+          "operation": {
+            "unclassifiable": "a different decision by a player, not a fork operation"
+          }
         }
       ],
       "cards": [

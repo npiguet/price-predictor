@@ -51,20 +51,40 @@
           "label": "front_face",
           "polarity": "does_not_fire",
           "delta": "A tries to cast Mourning Patrol front face up from the graveyard for its mana cost {2}{W}.",
-          "expected": "The cast is not legal: a card in the graveyard can be cast only through disturb. Mourning Patrol stays in the graveyard and no Plains are tapped."
+          "expected": "The cast is not legal: a card in the graveyard can be cast only through disturb. Mourning Patrol stays in the graveyard and no Plains are tapped.",
+          "operation": {
+            "unclassifiable": "a different cast choice"
+          }
         },
         {
           "label": "one_land_short",
           "polarity": "does_not_fire",
           "delta": "A controls only three Plains.",
-          "expected": "The disturb cast is not legal because {3}{W} cannot be paid. Mourning Patrol stays in the graveyard."
+          "expected": "The disturb cast is not legal because {3}{W} cannot be paid. Mourning Patrol stays in the graveyard.",
+          "operation": {
+            "unclassifiable": "removing a permanent"
+          }
         }
       ],
       "cards": [
         "Mourning Patrol",
         "Plains"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A card with an alternative graveyard-casting permission is a legal candidate in the graveyard.",
+        "near_miss": "The same card is a candidate rejected for casting from the graveyard by its normal cost.",
+        "params": {
+          "bit": "failed_check",
+          "check": "zone",
+          "fires_when": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "702.146b-1",
@@ -118,7 +138,10 @@
           "label": "cast_from_hand",
           "polarity": "does_not_fire",
           "delta": "A casts the Mourning Patrol in hand front face up for its mana cost {2}{W} instead.",
-          "expected": "The spell resolves and enters the battlefield front face up as Mourning Patrol, a 2/3 white Human Soldier with vigilance."
+          "expected": "The spell resolves and enters the battlefield front face up as Mourning Patrol, a 2/3 white Human Soldier with vigilance.",
+          "operation": {
+            "unclassifiable": "a different cast choice"
+          }
         }
       ],
       "cards": [

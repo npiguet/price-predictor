@@ -85,13 +85,17 @@
           "label": "casualty_declined",
           "polarity": "does_not_fire",
           "delta": "A does not pay the casualty cost and sacrifices nothing.",
-          "expected": "No casualty trigger fires and no copy is created. Grizzly Bears stays on the battlefield. Cut Your Losses makes B mill 10: B's library holds 10 cards."
+          "expected": "No casualty trigger fires and no copy is created. Grizzly Bears stays on the battlefield. Cut Your Losses makes B mill 10: B's library holds 10 cards.",
+          "operation": {
+            "unclassifiable": "a different payment choice"
+          }
         },
         {
           "label": "power_too_low",
           "polarity": "does_not_fire",
           "delta": "A controls Memnite (power 1) instead of Grizzly Bears (power 2).",
-          "expected": "Memnite is not a legal sacrifice for casualty 2, so the casualty cost cannot be paid and A casts Cut Your Losses without it. No casualty trigger fires and no copy is created. Memnite stays on the battlefield. Cut Your Losses makes B mill 10: B's library holds 10 cards."
+          "expected": "Memnite is not a legal sacrifice for casualty 2, so the casualty cost cannot be paid and A casts Cut Your Losses without it. No casualty trigger fires and no copy is created. Memnite stays on the battlefield. Cut Your Losses makes B mill 10: B's library holds 10 cards.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -100,7 +104,17 @@
         "Memnite",
         "Cut Your Losses"
       ],
-      "forge_notes": "The scenario fixes the copy's target as B. Forge's casualty is an optional additional cost."
+      "forge_notes": "The scenario fixes the copy's target as B. Forge's casualty is an optional additional cost.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A casualty trigger fires when its spell is cast with the casualty cost paid, copying the spell.",
+        "near_miss": "A casualty trigger is evaluated for its spell cast without the casualty cost paid and does not fire.",
+        "params": {
+          "keyword": "Casualty"
+        },
+        "needs": []
+      }
     }
   ]
 }

@@ -56,13 +56,19 @@
           "label": "land_revealed",
           "polarity": "does_not_fire",
           "delta": "The library order is Forest, then Grizzly Bears.",
-          "expected": "Forest is revealed and goes to A's hand. Merfolk Branchwalker gets no counter and stays 2/1. A's library holds only Grizzly Bears."
+          "expected": "Forest is revealed and goes to A's hand. Merfolk Branchwalker gets no counter and stays 2/1. A's library holds only Grizzly Bears.",
+          "operation": {
+            "unclassifiable": "The library's contents change; no fork operation changes a library."
+          }
         },
         {
           "label": "nonland_kept_on_top",
           "polarity": "other",
           "delta": "A leaves the revealed Grizzly Bears on top of the library instead of putting it into the graveyard.",
-          "expected": "Merfolk Branchwalker gets a +1/+1 counter (3/2). Grizzly Bears stays on top of A's library and A's graveyard is empty."
+          "expected": "Merfolk Branchwalker gets a +1/+1 counter (3/2). Grizzly Bears stays on top of A's library and A's graveyard is empty.",
+          "operation": {
+            "unclassifiable": "The player chooses to leave the revealed card on top, a decision."
+          }
         }
       ],
       "cards": [
@@ -70,7 +76,18 @@
         "Merfolk Branchwalker",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An Explore resolution reveals a nonland card and puts a +1/+1 counter on the exploring permanent.",
+        "near_miss": "An Explore resolution puts no counter on the exploring permanent (a land was revealed and put into the hand).",
+        "params": {
+          "event": "counter_change",
+          "api": "Explore"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.44b-1",
@@ -126,13 +143,19 @@
           "label": "land_on_top",
           "polarity": "fires",
           "delta": "A's library holds one card, Forest.",
-          "expected": "Forest is revealed and goes to A's hand; Merfolk Branchwalker gets no counter (2/1). Wildgrowth Walker's trigger still fires: Walker is 2/4 and A is at 23."
+          "expected": "Forest is revealed and goes to A's hand; Merfolk Branchwalker gets no counter (2/1). Wildgrowth Walker's trigger still fires: Walker is 2/4 and A is at 23.",
+          "operation": {
+            "unclassifiable": "The library's contents change; no fork operation changes a library."
+          }
         },
         {
           "label": "explore_countered",
           "polarity": "does_not_fire",
           "delta": "B casts Stifle targeting the explore trigger, tapping Island, instead of passing.",
-          "expected": "The explore trigger is countered and Merfolk Branchwalker does not explore: it stays 2/1 with no counter. Wildgrowth Walker's trigger does not fire: Walker stays 1/3 and A's life stays 20."
+          "expected": "The explore trigger is countered and Merfolk Branchwalker does not explore: it stays 2/1 with no counter. Wildgrowth Walker's trigger does not fire: Walker stays 1/3 and A's life stays 20.",
+          "operation": {
+            "unclassifiable": "The opponent casts a spell in response, a different decision and spell."
+          }
         }
       ],
       "cards": [
@@ -142,7 +165,17 @@
         "Wildgrowth Walker",
         "Stifle"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An explores trigger is evaluated and fires when a permanent explores, whether or not the reveal was possible.",
+        "near_miss": "An explores trigger is evaluated and does not fire.",
+        "params": {
+          "mode": "Explores"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.44c-1",
@@ -204,19 +237,28 @@
           "label": "no_response",
           "polarity": "other",
           "delta": "B does not cast Shock.",
-          "expected": "Merfolk Branchwalker explores and gets a +1/+1 counter (3/2); Grizzly Bears goes to A's graveyard. Wildgrowth Walker's trigger fires: Walker is 2/4 and A is at 23."
+          "expected": "Merfolk Branchwalker explores and gets a +1/+1 counter (3/2); Grizzly Bears goes to A's graveyard. Wildgrowth Walker's trigger fires: Walker is 2/4 and A is at 23.",
+          "operation": {
+            "unclassifiable": "The opponent does not cast a spell, a different decision."
+          }
         },
         {
           "label": "land_on_top_killed",
           "polarity": "fires",
           "delta": "The library order is Forest, then Grizzly Bears (Branchwalker still killed in response).",
-          "expected": "Merfolk Branchwalker is in A's graveyard. The trigger still explores: Forest is revealed and goes to A's hand. Wildgrowth Walker's trigger fires: Walker is 2/4 and A is at 23."
+          "expected": "Merfolk Branchwalker is in A's graveyard. The trigger still explores: Forest is revealed and goes to A's hand. Wildgrowth Walker's trigger fires: Walker is 2/4 and A is at 23.",
+          "operation": {
+            "unclassifiable": "The library's contents change; no fork operation changes a library."
+          }
         },
         {
           "label": "trigger_countered",
           "polarity": "does_not_fire",
           "delta": "B casts Stifle targeting the explore trigger with Island instead of casting Shock.",
-          "expected": "The explore trigger is countered. Nothing is revealed, Merfolk Branchwalker stays 2/1 with no counter, Wildgrowth Walker's trigger does not fire (1/3, A at 20), and A's library is unchanged."
+          "expected": "The explore trigger is countered. Nothing is revealed, Merfolk Branchwalker stays 2/1 with no counter, Wildgrowth Walker's trigger does not fire (1/3, A at 20), and A's library is unchanged.",
+          "operation": {
+            "unclassifiable": "The opponent casts a different spell, a different decision and spell."
+          }
         }
       ],
       "cards": [
@@ -283,13 +325,17 @@
           "label": "branchwalker_first",
           "polarity": "other",
           "delta": "A chooses Merfolk Branchwalker to explore first and Hakbal second.",
-          "expected": "Branchwalker explores first: Forest goes to A's hand and Branchwalker gets no counter (2/1). Hakbal explores second: Shock goes to A's graveyard and Hakbal gets a +1/+1 counter (4/4)."
+          "expected": "Branchwalker explores first: Forest goes to A's hand and Branchwalker gets no counter (2/1). Hakbal explores second: Shock goes to A's graveyard and Hakbal gets a +1/+1 counter (4/4).",
+          "operation": {
+            "unclassifiable": "The player chooses a different explore order, a decision."
+          }
         },
         {
           "label": "only_one_merfolk",
           "polarity": "does_not_fire",
           "delta": "The second permanent is Grizzly Bears, which is not a Merfolk.",
-          "expected": "Only Hakbal explores: Forest goes to A's hand and Hakbal gets no counter (3/3). Grizzly Bears does not explore and Shock stays on top of A's library."
+          "expected": "Only Hakbal explores: Forest goes to A's hand and Hakbal gets no counter (3/3). Grizzly Bears does not explore and Shock stays on top of A's library.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -299,7 +345,19 @@
         "Shock",
         "Grizzly Bears"
       ],
-      "forge_notes": "Forge sorts the exploring permanents by owner and lets the controller order them; both permanents share one controller here, so the order is A's choice."
+      "forge_notes": "Forge sorts the exploring permanents by owner and lets the controller order them; both permanents share one controller here, so the order is A's choice.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An Explore resolution instructing several permanents to explore reveals two or more cards, one exploration at a time.",
+        "near_miss": "An Explore resolution reveals fewer than two cards.",
+        "params": {
+          "event": "card_revealed",
+          "min_count": 2,
+          "api": "Explore"
+        },
+        "needs": []
+      }
     }
   ]
 }

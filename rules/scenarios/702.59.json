@@ -60,13 +60,19 @@
           "label": "decline_payment",
           "polarity": "other",
           "delta": "A does not pay {2}{B} when the recover trigger resolves.",
-          "expected": "The recover trigger fires, no cost is paid, and Grim Harvest moves from A's graveyard to exile."
+          "expected": "The recover trigger fires, no cost is paid, and Grim Harvest moves from A's graveyard to exile.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         },
         {
           "label": "opponents_creature",
           "polarity": "does_not_fire",
           "delta": "Shock targets B's Grizzly Bears instead of A's.",
-          "expected": "B's Grizzly Bears is put into B's graveyard. The recover trigger does not fire and Grim Harvest stays in A's graveyard."
+          "expected": "B's Grizzly Bears is put into B's graveyard. The recover trigger does not fire and Grim Harvest stays in A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -76,7 +82,17 @@
         "Shock",
         "Grim Harvest"
       ],
-      "forge_notes": "Recover is a triggered ability that works from the graveyard; the pay-or-exile choice is fixed in the decisions."
+      "forge_notes": "Recover is a triggered ability that works from the graveyard; the pay-or-exile choice is fixed in the decisions.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A recover trigger on a card in a graveyard is evaluated when a creature is put into its owner's graveyard from the battlefield and fires.",
+        "near_miss": "A recover trigger is evaluated against a zone change it does not match, such as a creature going to another player's graveyard, and does not fire.",
+        "params": {
+          "keyword": "recover"
+        },
+        "needs": []
+      }
     }
   ]
 }

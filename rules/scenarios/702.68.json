@@ -51,14 +51,28 @@
           "label": "blocked",
           "polarity": "does_not_fire",
           "delta": "B blocks Frenzy Sliver with Grizzly Bears.",
-          "expected": "The frenzy trigger does not fire. Frenzy Sliver stays 1/1, deals 1 damage to Grizzly Bears and dies to its 2 damage. B's life stays 20."
+          "expected": "The frenzy trigger does not fire. Frenzy Sliver stays 1/1, deals 1 damage to Grizzly Bears and dies to its 2 damage. B's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         }
       ],
       "cards": [
         "Frenzy Sliver",
         "Grizzly Bears"
       ],
-      "forge_notes": "Frenzy Sliver gives every Sliver, itself included, an AttackerUnblocked trigger rather than a Frenzy keyword."
+      "forge_notes": "Frenzy Sliver gives every Sliver, itself included, an AttackerUnblocked trigger rather than a Frenzy keyword.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A creature's own attacks-and-isn't-blocked trigger is evaluated when it becomes unblocked and fires.",
+        "near_miss": "The trigger is evaluated when the creature is blocked, or for another attacker, and does not fire.",
+        "params": {
+          "mode": "AttackerUnblocked",
+          "selector": "Card.Self"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.68b-1",
@@ -111,20 +125,37 @@
           "label": "one_instance",
           "polarity": "other",
           "delta": "A controls only one Frenzy Sliver (the attacker).",
-          "expected": "The attacking Frenzy Sliver has one frenzy 1 instance. It triggers once. It is 2/1 until end of turn and deals 2 damage to B (life 18)."
+          "expected": "The attacking Frenzy Sliver has one frenzy 1 instance. It triggers once. It is 2/1 until end of turn and deals 2 damage to B (life 18).",
+          "operation": {
+            "unclassifiable": "adds or removes a permanent"
+          }
         },
         {
           "label": "blocked",
           "polarity": "does_not_fire",
           "delta": "B blocks the attacking Frenzy Sliver with Grizzly Bears.",
-          "expected": "Neither frenzy instance triggers. The attacker stays 1/1, deals 1 damage to Grizzly Bears and dies. B's life stays 20."
+          "expected": "Neither frenzy instance triggers. The attacker stays 1/1, deals 1 damage to Grizzly Bears and dies. B's life stays 20.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         }
       ],
       "cards": [
         "Frenzy Sliver",
         "Grizzly Bears"
       ],
-      "forge_notes": "Each Frenzy Sliver grants the trigger to every Sliver, so two of them give the attacker two separate triggers; confirm Forge does not merge identical granted triggers."
+      "forge_notes": "Each Frenzy Sliver grants the trigger to every Sliver, so two of them give the attacker two separate triggers; confirm Forge does not merge identical granted triggers.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "Each attacks-and-isn't-blocked trigger of one unblocked creature is evaluated and fires separately.",
+        "near_miss": "The trigger is evaluated when the creature is blocked, or for another attacker, and does not fire.",
+        "params": {
+          "mode": "AttackerUnblocked",
+          "selector": "Card.Self"
+        },
+        "needs": []
+      }
     }
   ]
 }

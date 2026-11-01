@@ -68,7 +68,10 @@
           "label": "one_warden",
           "polarity": "does_not_fire",
           "delta": "A controls only one Soul Warden.",
-          "expected": "One Soul Warden trigger resolves; A ends at 21 life."
+          "expected": "One Soul Warden trigger resolves; A ends at 21 life.",
+          "operation": {
+            "unclassifiable": "removes a permanent (one of the two trigger-bearing creatures) from the battlefield; no fork operation removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -129,14 +132,30 @@
           "label": "other_permanent",
           "polarity": "does_not_fire",
           "delta": "The second activation offered is Chandra Nalaar's +1 targeting B instead.",
-          "expected": "Chandra Nalaar's +1 is playable (no loyalty ability of Chandra Nalaar was activated this turn); it resolves, Chandra Nalaar has 7 loyalty and B has 19 life."
+          "expected": "Chandra Nalaar's +1 is playable (no loyalty ability of Chandra Nalaar was activated this turn); it resolves, Chandra Nalaar has 7 loyalty and B has 19 life.",
+          "operation": {
+            "unclassifiable": "a different decision: the second loyalty activation offered is another permanent's ability, not a change to the board"
+          }
         }
       ],
       "cards": [
         "Jace Beleren",
         "Chandra Nalaar"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An activated ability whose per-turn activation limit is already used (a loyalty ability of a permanent after one of that permanent's loyalty abilities was activated this turn) is not playable: its activation-limit check fails.",
+        "near_miss": "An activated-ability candidate whose activation-limit check passes.",
+        "params": {
+          "bit": "failed_check",
+          "check": "activation_limit"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "113.6a-1",
@@ -195,7 +214,10 @@
           "label": "green_card_in_hand",
           "polarity": "does_not_fire",
           "delta": "The second card in A's hand is Grizzly Bears (green) instead of Transguild Courier.",
-          "expected": "Force of Will is not castable: A has no blue card to exile and no mana for its mana cost."
+          "expected": "Force of Will is not castable: A has no blue card to exile and no mana for its mana cost.",
+          "operation": {
+            "unclassifiable": "changes a card in a player's hand; fork operations act only on permanents and players"
+          }
         }
       ],
       "cards": [
@@ -251,7 +273,10 @@
           "label": "in_hand",
           "polarity": "does_not_fire",
           "delta": "Bloodghast is in A's hand instead of A's graveyard.",
-          "expected": "Bloodghast's landfall ability does not function in the hand: no trigger fires and Bloodghast stays in A's hand."
+          "expected": "Bloodghast's landfall ability does not function in the hand: no trigger fires and Bloodghast stays in A's hand.",
+          "operation": {
+            "unclassifiable": "moves the trigger's source card to a different zone (hand instead of graveyard)"
+          }
         }
       ],
       "cards": [
@@ -305,7 +330,10 @@
           "label": "one_mountain",
           "polarity": "does_not_fire",
           "delta": "A controls only one Mountain.",
-          "expected": "Fireblast is not castable: the alternative cost (sacrifice two Mountains) cannot be paid and neither can the {4}{R}{R} mana cost."
+          "expected": "Fireblast is not castable: the alternative cost (sacrifice two Mountains) cannot be paid and neither can the {4}{R}{R} mana cost.",
+          "operation": {
+            "unclassifiable": "removes a permanent (one of the lands the alternative cost sacrifices) from the battlefield"
+          }
         }
       ],
       "cards": [
@@ -361,7 +389,8 @@
           "label": "power_eight",
           "polarity": "does_not_fire",
           "delta": "Earth Elemental is replaced by Grizzly Bears (power 2).",
-          "expected": "Total power is 8, so the cost after adjustment is {2}{G}{G}; with two Forests Ghalta is not castable."
+          "expected": "Total power is 8, so the cost after adjustment is {2}{G}{G}; with two Forests Ghalta is not castable.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -422,7 +451,10 @@
           "label": "declare_blockers_step",
           "polarity": "does_not_fire",
           "delta": "B has declared no blockers and A has priority in the declare blockers step instead (setup step declare_blockers).",
-          "expected": "Fog Patch is castable; it resolves and Grizzly Bears becomes blocked."
+          "expected": "Fog Patch is castable; it resolves and Grizzly Bears becomes blocked.",
+          "operation": {
+            "unclassifiable": "changes the step the candidate is offered in, not a fact about a permanent or player"
+          }
         }
       ],
       "cards": [
@@ -430,7 +462,20 @@
         "Grizzly Bears",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell with a casting-timing restriction is not castable outside its permitted phase (phase check fails).",
+        "near_miss": "A candidate whose phase check passes.",
+        "params": {
+          "bit": "failed_check",
+          "check": "phase"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "113.6f-1",
@@ -479,7 +524,10 @@
           "label": "in_graveyard",
           "polarity": "does_not_fire",
           "delta": "Misthollow Griffin is in A's graveyard instead of exile.",
-          "expected": "Misthollow Griffin is not castable from the graveyard."
+          "expected": "Misthollow Griffin is not castable from the graveyard.",
+          "operation": {
+            "unclassifiable": "moves the card to a different non-battlefield zone (graveyard instead of exile)"
+          }
         }
       ],
       "cards": [
@@ -543,7 +591,10 @@
           "label": "doom_blade",
           "polarity": "does_not_fire",
           "delta": "A casts Doom Blade targeting Grizzly Bears (tapping Swamp and Forest) instead of Abrupt Decay.",
-          "expected": "Counterspell counters Doom Blade, which moves to A's graveyard; Grizzly Bears stays on the battlefield."
+          "expected": "Counterspell counters Doom Blade, which moves to A's graveyard; Grizzly Bears stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "a different spell cast by the player"
+          }
         }
       ],
       "cards": [
@@ -604,7 +655,10 @@
           "label": "grizzly_bears",
           "polarity": "does_not_fire",
           "delta": "A casts Grizzly Bears, tapping Forest and Forest, instead of Diregraf Ghoul.",
-          "expected": "Grizzly Bears enters the battlefield untapped."
+          "expected": "Grizzly Bears enters the battlefield untapped.",
+          "operation": {
+            "unclassifiable": "a different spell cast by the player"
+          }
         }
       ],
       "cards": [
@@ -613,7 +667,19 @@
         "Swamp",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A replacement effect modifies a permanent's zone change to the battlefield as it enters (result updated, e.g. enters tapped).",
+        "near_miss": "A zone change to the battlefield that met the replacement and was not modified.",
+        "params": {
+          "event": "zone_change",
+          "result": "updated",
+          "to_zone": "battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "113.6i-1",
@@ -664,7 +730,10 @@
           "label": "bears_target",
           "polarity": "does_not_fire",
           "delta": "Dragonscale Boon targets Grizzly Bears instead.",
-          "expected": "Two +1/+1 counters are put on Grizzly Bears, which is 4/4."
+          "expected": "Two +1/+1 counters are put on Grizzly Bears, which is 4/4.",
+          "operation": {
+            "unclassifiable": "a different target chosen for the spell"
+          }
         }
       ],
       "cards": [
@@ -719,13 +788,19 @@
           "label": "on_battlefield",
           "polarity": "does_not_fire",
           "delta": "Barkhide Mauler is on the battlefield instead of A's hand.",
-          "expected": "Cycling is not playable: its cost (discard this card) cannot be paid from the battlefield."
+          "expected": "Cycling is not playable: its cost (discard this card) cannot be paid from the battlefield.",
+          "operation": {
+            "unclassifiable": "moves the card to a different zone (battlefield instead of hand)"
+          }
         },
         {
           "label": "in_graveyard",
           "polarity": "does_not_fire",
           "delta": "Barkhide Mauler is in A's graveyard instead of A's hand.",
-          "expected": "Cycling is not playable from the graveyard: the card cannot be discarded from there."
+          "expected": "Cycling is not playable from the graveyard: the card cannot be discarded from there.",
+          "operation": {
+            "unclassifiable": "moves the card to a different zone (graveyard instead of hand)"
+          }
         }
       ],
       "cards": [
@@ -785,7 +860,10 @@
           "label": "discarded",
           "polarity": "does_not_fire",
           "delta": "A casts Tormenting Voice (tapping both Mountains) discarding Gempalm Incinerator instead of cycling it.",
-          "expected": "Gempalm Incinerator is discarded, not cycled: no trigger fires and Grizzly Bears stays on the battlefield undamaged."
+          "expected": "Gempalm Incinerator is discarded, not cycled: no trigger fires and Grizzly Bears stays on the battlefield undamaged.",
+          "operation": {
+            "unclassifiable": "a different decision: the card is discarded by another spell instead of cycled"
+          }
         }
       ],
       "cards": [
@@ -796,7 +874,18 @@
         "Grizzly Bears",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A self-referential Cycled trigger, which can trigger only from the zone a card is cycled from, is evaluated when that card is cycled and fires.",
+        "near_miss": "The same kind of trigger evaluated against a cycling event it does not match (another card cycled), not fired.",
+        "params": {
+          "mode": "Cycled",
+          "selector": "Card.Self"
+        },
+        "needs": []
+      }
     },
     {
       "id": "113.6m-1",
@@ -842,13 +931,19 @@
           "label": "on_battlefield",
           "polarity": "does_not_fire",
           "delta": "Reassembling Skeleton is on the battlefield instead of A's graveyard.",
-          "expected": "The ability is not playable: it functions only in the graveyard."
+          "expected": "The ability is not playable: it functions only in the graveyard.",
+          "operation": {
+            "unclassifiable": "moves the card to a different zone (battlefield instead of graveyard)"
+          }
         },
         {
           "label": "in_hand",
           "polarity": "does_not_fire",
           "delta": "Reassembling Skeleton is in A's hand instead of A's graveyard.",
-          "expected": "The ability is not playable from the hand."
+          "expected": "The ability is not playable from the hand.",
+          "operation": {
+            "unclassifiable": "moves the card to a different zone (hand instead of graveyard)"
+          }
         }
       ],
       "cards": [
@@ -906,7 +1001,10 @@
           "label": "knight_token",
           "polarity": "does_not_fire",
           "delta": "A activates Gideon's 0 (create a 2/2 Knight Ally token) instead.",
-          "expected": "No emblem is created; Grizzly Bears stays 2/2, A has a 2/2 Knight Ally token, and Gideon stays on the battlefield with 4 loyalty."
+          "expected": "No emblem is created; Grizzly Bears stays 2/2, A has a 2/2 Knight Ally token, and Gideon stays on the battlefield with 4 loyalty.",
+          "operation": {
+            "unclassifiable": "a different decision: another loyalty ability of the planeswalker is activated"
+          }
         }
       ],
       "cards": [
@@ -968,7 +1066,10 @@
           "label": "no_response",
           "polarity": "other",
           "delta": "B does not cast Lightning Bolt.",
-          "expected": "The ability resolves with the Yeti on the battlefield: Hill Giant is dealt 3 damage and the Yeti is dealt 3 damage in return; both die."
+          "expected": "The ability resolves with the Yeti on the battlefield: Hill Giant is dealt 3 damage and the Yeti is dealt 3 damage in return; both die.",
+          "operation": {
+            "unclassifiable": "a different decision: the opponent casts no spell in response"
+          }
         }
       ],
       "cards": [
@@ -1033,7 +1134,10 @@
           "label": "stifle",
           "polarity": "does_not_fire",
           "delta": "B casts Stifle (tapping one Island) targeting the ability instead of Counterspell.",
-          "expected": "Stifle counters the ability; it doesn't resolve and B stays at 20 life."
+          "expected": "Stifle counters the ability; it doesn't resolve and B stays at 20 life.",
+          "operation": {
+            "unclassifiable": "a different spell cast by the opponent"
+          }
         }
       ],
       "cards": [
@@ -1092,7 +1196,10 @@
           "label": "no_removal",
           "polarity": "does_not_fire",
           "delta": "A does not cast Turn to Frog.",
-          "expected": "Wind Drake is a 2/2 Drake with flying (its printed instance and Jump's instance)."
+          "expected": "Wind Drake is a 2/2 Drake with flying (its printed instance and Jump's instance).",
+          "operation": {
+            "unclassifiable": "a different decision: the second spell is not cast"
+          }
         }
       ],
       "cards": [
@@ -1101,7 +1208,18 @@
         "Turn to Frog",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static removes an ability (keyword) from an object.",
+        "near_miss": "A static contributes no keyword removal.",
+        "params": {
+          "field": "keywords",
+          "value": "-flying"
+        },
+        "needs": []
+      }
     },
     {
       "id": "113.10c-1",
@@ -1151,7 +1269,10 @@
           "label": "remove_last",
           "polarity": "does_not_fire",
           "delta": "A casts Jump first and then Turn to Frog.",
-          "expected": "Grizzly Bears is a 1/1 blue Frog with no flying: the later effect (Turn to Frog) prevails."
+          "expected": "Grizzly Bears is a 1/1 blue Frog with no flying: the later effect (Turn to Frog) prevails.",
+          "operation": {
+            "unclassifiable": "a different decision: the two spells are cast in the opposite order"
+          }
         }
       ],
       "cards": [
@@ -1204,14 +1325,28 @@
           "label": "own_creature",
           "polarity": "does_not_fire",
           "delta": "B controls Archetype of Imagination instead of A.",
-          "expected": "Wind Drake has flying."
+          "expected": "Wind Drake has flying.",
+          "operation": {
+            "unclassifiable": "changes which player controls a permanent; no fork operation changes control"
+          }
         }
       ],
       "cards": [
         "Archetype of Imagination",
         "Wind Drake"
       ],
-      "forge_notes": "Archetype of Imagination also says opponents' creatures lose flying, so this scenario shows the loss jointly with that clause; 113.11-2 isolates the can't-have clause."
+      "forge_notes": "Archetype of Imagination also says opponents' creatures lose flying, so this scenario shows the loss jointly with that clause; 113.11-2 isolates the can't-have clause.",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static makes opposing objects lose a keyword.",
+        "near_miss": "A static contributes no keyword removal.",
+        "params": {
+          "field": "keywords",
+          "value": "-flying"
+        },
+        "needs": []
+      }
     },
     {
       "id": "113.11-2",
@@ -1261,7 +1396,10 @@
           "label": "archetype_absent",
           "polarity": "does_not_fire",
           "delta": "Archetype of Imagination is in A's graveyard instead of on the battlefield.",
-          "expected": "Grizzly Bears gains flying until end of turn."
+          "expected": "Grizzly Bears gains flying until end of turn.",
+          "operation": {
+            "unclassifiable": "removes a permanent from the battlefield (it is in the graveyard instead)"
+          }
         }
       ],
       "cards": [
@@ -1270,7 +1408,18 @@
         "Jump",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static prevents objects from having a keyword (a removal is contributed).",
+        "near_miss": "A static contributes no keyword removal.",
+        "params": {
+          "field": "keywords",
+          "value": "-flying"
+        },
+        "needs": []
+      }
     },
     {
       "id": "113.12-1",
@@ -1320,7 +1469,10 @@
           "label": "gains_flying",
           "polarity": "does_not_fire",
           "delta": "A casts Jump targeting Grizzly Bears, tapping Island, instead of Chaoslace.",
-          "expected": "Grizzly Bears gains flying, now has an ability, and is 2/2."
+          "expected": "Grizzly Bears gains flying, now has an ability, and is 2/2.",
+          "operation": {
+            "unclassifiable": "a different spell cast by the player"
+          }
         }
       ],
       "cards": [

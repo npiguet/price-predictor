@@ -54,7 +54,8 @@
           "label": "survives",
           "polarity": "does_not_fire",
           "delta": "Blind Hunter has a +1/+1 counter (3/3).",
-          "expected": "Blind Hunter survives with 2 damage; no haunt trigger fires and nothing is exiled."
+          "expected": "Blind Hunter survives with 2 damage; no haunt trigger fires and nothing is exiled.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -63,7 +64,17 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A haunt trigger fires: the permanent with haunt is put into a graveyard from the battlefield.",
+        "near_miss": "A haunt trigger is evaluated against an event and does not fire.",
+        "params": {
+          "keyword": "Haunt"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.55a-2",
@@ -119,7 +130,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B instead responds by casting Counterspell on Cry of Contrition, tapping two Islands.",
-          "expected": "Cry of Contrition is countered and stays in A's graveyard. No haunt trigger fires, and B discards nothing."
+          "expected": "Cry of Contrition is countered and stays in A's graveyard. No haunt trigger fires, and B discards nothing.",
+          "operation": {
+            "unclassifiable": "a different spell cast"
+          }
         }
       ],
       "cards": [
@@ -130,7 +144,17 @@
         "Forest",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A haunt trigger fires: the instant or sorcery with haunt is put into a graveyard during its resolution.",
+        "near_miss": "A haunt trigger is evaluated against an event and does not fire.",
+        "params": {
+          "keyword": "Haunt"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.55b-1",
@@ -190,7 +214,10 @@
           "label": "other_permanent",
           "polarity": "does_not_fire",
           "delta": "Vindicate targets Runeclaw Bear instead.",
-          "expected": "Runeclaw Bear is destroyed. Blind Hunter does not trigger because the haunted permanent did not die; life totals stay 20 and 20."
+          "expected": "Runeclaw Bear is destroyed. Blind Hunter does not trigger because the haunted permanent did not die; life totals stay 20 and 20.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -202,7 +229,17 @@
         "Vindicate",
         "Blind Hunter"
       ],
-      "forge_notes": "Forge's haunt trigger matches Creature.HauntedBy, so it may not fire when the haunted card is a non-creature land when it dies. The rules text says it does."
+      "forge_notes": "Forge's haunt trigger matches Creature.HauntedBy, so it may not fire when the haunted card is a non-creature land when it dies. The rules text says it does.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A haunt-granted trigger fires from exile when the object its card haunts is put into a graveyard, whether or not that object is still a creature.",
+        "near_miss": "A haunt-granted trigger is evaluated against an event and does not fire.",
+        "params": {
+          "keyword": "Haunt"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.55c-1",
@@ -256,7 +293,10 @@
           "label": "other_dies",
           "polarity": "does_not_fire",
           "delta": "Shock targets Runeclaw Bear instead.",
-          "expected": "Runeclaw Bear dies. The haunted creature is unaffected and Blind Hunter does not trigger; life totals stay 20 and 20."
+          "expected": "Runeclaw Bear dies. The haunted creature is unaffected and Blind Hunter does not trigger; life totals stay 20 and 20.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -266,7 +306,17 @@
         "Shock",
         "Blind Hunter"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A haunt-granted trigger fires while its card is in exile, when the creature it haunts dies.",
+        "near_miss": "A haunt-granted trigger is evaluated against an event and does not fire.",
+        "params": {
+          "keyword": "Haunt"
+        },
+        "needs": []
+      }
     }
   ]
 }

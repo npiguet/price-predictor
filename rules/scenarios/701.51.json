@@ -56,7 +56,10 @@
           "label": "no_attraction_deck",
           "polarity": "does_not_fire",
           "delta": "A is playing without an Attraction deck.",
-          "expected": "A cannot open an Attraction: nothing enters the battlefield other than Complaints Clerk, which still resolves and enters."
+          "expected": "A cannot open an Attraction: nothing enters the battlefield other than Complaints Clerk, which still resolves and enters.",
+          "operation": {
+            "unclassifiable": "The player has no Attraction deck; no fork operation changes a player's decks."
+          }
         }
       ],
       "cards": [
@@ -65,7 +68,19 @@
         "Kiddie Coaster",
         "Balloon Stand"
       ],
-      "forge_notes": "Attraction decks need a deck file with an Attractions section; the Attraction variant (lit numbers) is chosen by the deck list."
+      "forge_notes": "Attraction decks need a deck file with an Attractions section; the Attraction variant (lit numbers) is chosen by the deck list.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An OpenAttraction resolution puts an Attraction onto the battlefield.",
+        "near_miss": "An OpenAttraction resolution puts nothing onto the battlefield (the player has no Attraction deck or it is empty).",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "battlefield",
+          "api": "OpenAttraction"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.51c-1",
@@ -116,7 +131,10 @@
           "label": "empty_attraction_deck",
           "polarity": "does_not_fire",
           "delta": "A's Attraction deck is empty.",
-          "expected": "No Attraction enters the battlefield, so the open-an-Attraction trigger does not fire. The Most Dangerous Gamer has no counter and is a 2/2."
+          "expected": "No Attraction enters the battlefield, so the open-an-Attraction trigger does not fire. The Most Dangerous Gamer has no counter and is a 2/2.",
+          "operation": {
+            "unclassifiable": "The Attraction deck is emptied; no fork operation changes a player's decks."
+          }
         }
       ],
       "cards": [
@@ -125,7 +143,19 @@
         "The Most Dangerous Gamer",
         "Kiddie Coaster"
       ],
-      "forge_notes": "The prevented/replaced-entry branch of 701.51c cannot be illustrated: no Forge card prevents or replaces an Attraction entering, so the non-entering case is shown with an empty Attraction deck."
+      "forge_notes": "The prevented/replaced-entry branch of 701.51c cannot be illustrated: no Forge card prevents or replaces an Attraction entering, so the non-entering case is shown with an empty Attraction deck.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on an Attraction moving from the Attraction deck to the battlefield (an opens-an-Attraction trigger) is evaluated and fires.",
+        "near_miss": "The same trigger is evaluated and does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "origin": "AttractionDeck",
+          "destination": "Battlefield"
+        },
+        "needs": []
+      }
     }
   ]
 }

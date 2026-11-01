@@ -9,17 +9,49 @@
   "scenarios": [
     {
       "id": "701.61a-1",
-      "rules": ["701.61a"],
+      "rules": [
+        "701.61a"
+      ],
       "title": "Foraging exiles three cards from the forager's graveyard",
       "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
-        "battlefield": {"A": ["Forest", "Forest", "Forest", "Forest"], "B": []},
-        "hand": {"A": ["Treetop Sentries"]},
-        "graveyard": {"A": ["Grizzly Bears", "Grizzly Bears", "Grizzly Bears"]},
-        "library": {"A": ["Forest", "Forest"], "B": ["Forest", "Forest"]},
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Treetop Sentries"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Grizzly Bears"
+          ]
+        },
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Forest",
+            "Forest"
+          ]
+        },
         "exile": {},
         "notes": "A controls no Food, so exiling three graveyard cards is the only way to forage."
       },
@@ -40,37 +72,77 @@
           "label": "two_cards",
           "polarity": "does_not_fire",
           "delta": "A's graveyard holds only two Grizzly Bears instead of three.",
-          "expected": "Foraging is impossible: A's two Grizzly Bears stay in the graveyard, nothing is exiled, A draws no card and A's hand is empty. Treetop Sentries is on the battlefield."
+          "expected": "Foraging is impossible: A's two Grizzly Bears stay in the graveyard, nothing is exiled, A draws no card and A's hand is empty. Treetop Sentries is on the battlefield.",
+          "operation": {
+            "unclassifiable": "changes the contents of a graveyard, which no fork operation does"
+          }
         },
         {
           "label": "opponent_graveyard",
           "polarity": "does_not_fire",
           "delta": "The three Grizzly Bears are in B's graveyard instead of A's; A's graveyard is empty.",
-          "expected": "Foraging is impossible: the three Grizzly Bears stay in B's graveyard, nothing is exiled, A draws no card and A's hand is empty. Treetop Sentries is on the battlefield."
+          "expected": "Foraging is impossible: the three Grizzly Bears stay in B's graveyard, nothing is exiled, A draws no card and A's hand is empty. Treetop Sentries is on the battlefield.",
+          "operation": {
+            "unclassifiable": "changes the contents of a graveyard, which no fork operation does"
+          }
         }
       ],
-      "cards": ["Forest", "Treetop Sentries", "Grizzly Bears"],
+      "cards": [
+        "Forest",
+        "Treetop Sentries",
+        "Grizzly Bears"
+      ],
       "forge_notes": "Treetop Sentries implements the forage as an optional Cost$ Forage on an AB$ Draw inside its enters trigger. Forge's Forage cost lets the payer choose between exiling three graveyard cards and sacrificing a Food; with no Food only the exile branch is offered."
     },
     {
       "id": "701.61a-2",
-      "rules": ["701.61a"],
+      "rules": [
+        "701.61a"
+      ],
       "title": "Foraging sacrifices a Food",
       "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
+        "life": {
+          "A": 20,
+          "B": 20
+        },
         "battlefield": {
           "A": [
-            "Forest", "Forest", "Forest", "Forest",
-            {"card": "Food", "token": true, "summoning_sick": false}
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            {
+              "card": "Food",
+              "token": true,
+              "summoning_sick": false
+            }
           ],
           "B": []
         },
-        "hand": {"A": ["Treetop Sentries"]},
-        "graveyard": {"A": ["Grizzly Bears", "Grizzly Bears"]},
-        "library": {"A": ["Forest", "Forest"], "B": ["Forest", "Forest"]},
+        "hand": {
+          "A": [
+            "Treetop Sentries"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Grizzly Bears",
+            "Grizzly Bears"
+          ]
+        },
+        "library": {
+          "A": [
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Forest",
+            "Forest"
+          ]
+        },
         "exile": {},
         "notes": "The Food is a Food artifact token (Forge script c_a_food_sac, named Food Token). A's graveyard holds only two cards, so exiling three is not possible and sacrificing the Food is the only way to forage."
       },
@@ -91,34 +163,67 @@
           "label": "no_food",
           "polarity": "does_not_fire",
           "delta": "A controls no Food token.",
-          "expected": "Foraging is impossible: A's two Grizzly Bears stay in the graveyard, nothing is exiled, A draws no card and A's hand is empty. Treetop Sentries is on the battlefield."
+          "expected": "Foraging is impossible: A's two Grizzly Bears stay in the graveyard, nothing is exiled, A draws no card and A's hand is empty. Treetop Sentries is on the battlefield.",
+          "operation": {
+            "unclassifiable": "adds, removes or moves a permanent, which no fork operation does"
+          }
         },
         {
           "label": "opponent_food",
           "polarity": "does_not_fire",
           "delta": "The Food token is controlled by B instead of A.",
-          "expected": "Foraging is impossible: B's Food token stays on the battlefield, A's two Grizzly Bears stay in the graveyard, nothing is exiled, A draws no card and A's hand is empty. Treetop Sentries is on the battlefield."
+          "expected": "Foraging is impossible: B's Food token stays on the battlefield, A's two Grizzly Bears stay in the graveyard, nothing is exiled, A draws no card and A's hand is empty. Treetop Sentries is on the battlefield.",
+          "operation": {
+            "unclassifiable": "adds, removes or moves a permanent, which no fork operation does"
+          }
         }
       ],
-      "cards": ["Forest", "Treetop Sentries", "Grizzly Bears"],
+      "cards": [
+        "Forest",
+        "Treetop Sentries",
+        "Grizzly Bears"
+      ],
       "forge_notes": "The Food token is not listed in cards because tokens are not in the cardsfolder. In Forge the token's script is c_a_food_sac (Name: Food Token, Types: Artifact Food)."
     },
     {
       "id": "701.61a-3",
-      "rules": ["701.61a"],
+      "rules": [
+        "701.61a"
+      ],
       "title": "An activated ability with forage in its cost needs three graveyard cards or a Food",
       "record_kind": "playability",
       "setup": {
         "active": "A",
         "step": "main1",
-        "life": {"A": 20, "B": 20},
+        "life": {
+          "A": 20,
+          "B": 20
+        },
         "battlefield": {
-          "A": [{"card": "Thornvault Forager", "summoning_sick": false}],
+          "A": [
+            {
+              "card": "Thornvault Forager",
+              "summoning_sick": false
+            }
+          ],
           "B": []
         },
         "hand": {},
-        "graveyard": {"A": ["Grizzly Bears", "Grizzly Bears", "Grizzly Bears"]},
-        "library": {"A": ["Forest"], "B": ["Forest"]},
+        "graveyard": {
+          "A": [
+            "Grizzly Bears",
+            "Grizzly Bears",
+            "Grizzly Bears"
+          ]
+        },
+        "library": {
+          "A": [
+            "Forest"
+          ],
+          "B": [
+            "Forest"
+          ]
+        },
         "exile": {},
         "notes": "A controls no Food and no other permanent. The ability in question is Thornvault Forager's '{T}, Forage: Add two mana in any combination of colors.'"
       },
@@ -136,10 +241,16 @@
           "label": "two_cards",
           "polarity": "does_not_fire",
           "delta": "A's graveyard holds only two Grizzly Bears instead of three.",
-          "expected": "The activation is not legal: the forage cost cannot be paid with two graveyard cards and no Food. The Forager's plain '{T}: Add {G}.' ability remains legal."
+          "expected": "The activation is not legal: the forage cost cannot be paid with two graveyard cards and no Food. The Forager's plain '{T}: Add {G}.' ability remains legal.",
+          "operation": {
+            "unclassifiable": "changes the contents of a graveyard, which no fork operation does"
+          }
         }
       ],
-      "cards": ["Thornvault Forager", "Grizzly Bears"],
+      "cards": [
+        "Thornvault Forager",
+        "Grizzly Bears"
+      ],
       "forge_notes": "Thornvault Forager's second mana ability has Cost$ T Forage."
     }
   ]

@@ -66,13 +66,19 @@
           "label": "choose_one",
           "polarity": "does_not_fire",
           "delta": "A chooses 1 for read ahead.",
-          "expected": "The Saga enters with 1 lore counter. Only chapter I triggers (nothing to cast, A's hand is empty). Chapter II does not trigger and B's library holds 10 cards. The Saga stays on the battlefield."
+          "expected": "The Saga enters with 1 lore counter. Only chapter I triggers (nothing to cast, A's hand is empty). Chapter II does not trigger and B's library holds 10 cards. The Saga stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "a different player choice"
+          }
         },
         {
           "label": "choose_three",
           "polarity": "other",
           "delta": "A chooses 3 for read ahead.",
-          "expected": "The Saga enters with 3 lore counters. Only chapter III triggers; chapters I and II do not. B's library holds 10 cards. A's graveyard holds no instant or sorcery card, so chapter III has no legal target and is removed from the stack without resolving. With 3 lore counters and no chapter ability on the stack, the Saga is sacrificed and moves to A's graveyard."
+          "expected": "The Saga enters with 3 lore counters. Only chapter III triggers; chapters I and II do not. B's library holds 10 cards. A's graveyard holds no instant or sorcery card, so chapter III has no legal target and is removed from the stack without resolving. With 3 lore counters and no chapter ability on the stack, the Saga is sacrificed and moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "a different player choice"
+          }
         }
       ],
       "cards": [

@@ -49,13 +49,27 @@
           "label": "opponent_controls",
           "polarity": "does_not_fire",
           "delta": "Prodigal Sorcerer is on B's battlefield instead and A considers activating it.",
-          "expected": "A does not control Prodigal Sorcerer, so A cannot activate its ability (can_play false)."
+          "expected": "A does not control Prodigal Sorcerer, so A cannot activate its ability (can_play false).",
+          "operation": {
+            "unclassifiable": "control change of a permanent is not a fork operation"
+          }
         }
       ],
       "cards": [
         "Prodigal Sorcerer"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A player with priority can activate an ability of an object they control (a candidate with can_play true).",
+        "near_miss": "A candidate the player cannot activate (can_play false).",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.2a-2",
@@ -107,7 +121,10 @@
           "label": "opponent_hand",
           "polarity": "does_not_fire",
           "delta": "Lonely Sandbar is in B's hand instead of A's.",
-          "expected": "A neither controls nor owns Lonely Sandbar, so A cannot activate its cycling (can_play false)."
+          "expected": "A neither controls nor owns Lonely Sandbar, so A cannot activate its cycling (can_play false).",
+          "operation": {
+            "unclassifiable": "moves a card between hands"
+          }
         }
       ],
       "cards": [
@@ -158,7 +175,8 @@
           "label": "controller_only",
           "polarity": "does_not_fire",
           "delta": "A's creature is Prodigal Sorcerer instead (ready to tap), and B considers activating its ability.",
-          "expected": "Prodigal Sorcerer does not say another player may activate it, so B cannot activate it (can_play false)."
+          "expected": "Prodigal Sorcerer does not say another player may activate it, so B cannot activate it (can_play false).",
+          "operation": "replace_card"
         }
       ],
       "cards": [

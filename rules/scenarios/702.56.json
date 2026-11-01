@@ -58,13 +58,19 @@
           "label": "paid_once",
           "polarity": "fires",
           "delta": "The replicate cost is paid once; four Mountains are tapped.",
-          "expected": "One copy is created. Pyromatics and the copy deal 2 damage in total; Centaur Courser survives with 2 damage."
+          "expected": "One copy is created. Pyromatics and the copy deal 2 damage in total; Centaur Courser survives with 2 damage.",
+          "operation": {
+            "unclassifiable": "a different choice by a player"
+          }
         },
         {
           "label": "not_paid",
           "polarity": "does_not_fire",
           "delta": "The replicate cost is not paid; two Mountains are tapped.",
-          "expected": "No replicate trigger fires and no copy is created. Pyromatics deals 1 damage; Centaur Courser survives with 1 damage."
+          "expected": "No replicate trigger fires and no copy is created. Pyromatics deals 1 damage; Centaur Courser survives with 1 damage.",
+          "operation": {
+            "unclassifiable": "a different choice by a player"
+          }
         }
       ],
       "cards": [
@@ -72,7 +78,17 @@
         "Centaur Courser",
         "Pyromatics"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution copies a spell on the stack (spell_copied event).",
+        "near_miss": "No copy is made. Not counted: the replicate trigger is a keyword line, whose API type (Keyword) is shared by every keyword ability, so no api restricts the near miss.",
+        "params": {
+          "event": "spell_copied"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.56b-1",
@@ -127,7 +143,10 @@
           "label": "granted_unpaid",
           "polarity": "does_not_fire",
           "delta": "Djinn Illuminatus's replicate cost is not paid; four Mountains are tapped.",
-          "expected": "Only the native replicate instance's trigger fires and creates one copy; the granted instance creates none. 2 damage total; Centaur Courser survives with 2 damage."
+          "expected": "Only the native replicate instance's trigger fires and creates one copy; the granted instance creates none. 2 damage total; Centaur Courser survives with 2 damage.",
+          "operation": {
+            "unclassifiable": "a different choice by a player"
+          }
         }
       ],
       "cards": [
@@ -136,7 +155,17 @@
         "Centaur Courser",
         "Pyromatics"
       ],
-      "forge_notes": "Djinn Illuminatus grants Replicate:CardManaCost on the stack; check that Forge offers both instances' payments separately at casting."
+      "forge_notes": "Djinn Illuminatus grants Replicate:CardManaCost on the stack; check that Forge offers both instances' payments separately at casting.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A replicate trigger fires when its spell is cast with that instance's replicate cost paid.",
+        "near_miss": "A replicate trigger is evaluated and does not fire: that instance's replicate cost was not paid.",
+        "params": {
+          "keyword": "Replicate"
+        },
+        "needs": []
+      }
     }
   ]
 }

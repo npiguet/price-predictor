@@ -59,13 +59,19 @@
           "label": "one_damage_source",
           "polarity": "fires",
           "delta": "A activates Prodigal Sorcerer ({T}: 1 damage) targeting Lymph Sliver instead of casting Shock.",
-          "expected": "Absorb 1 prevents the whole 1 damage. Lymph Sliver has 0 damage marked."
+          "expected": "Absorb 1 prevents the whole 1 damage. Lymph Sliver has 0 damage marked.",
+          "operation": {
+            "unclassifiable": "a different source: an ability is activated instead of a spell cast"
+          }
         },
         {
           "label": "no_absorb",
           "polarity": "does_not_fire",
           "delta": "Shock targets B's Grizzly Bears (which has no absorb) instead of Lymph Sliver.",
-          "expected": "No damage is prevented. Grizzly Bears is dealt 2 damage and moves to B's graveyard."
+          "expected": "No damage is prevented. Grizzly Bears is dealt 2 damage and moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different target"
+          }
         }
       ],
       "cards": [
@@ -75,7 +81,18 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A damage event meets a prevention effect that prevents part of it: the handler lowers the amount and reports updated.",
+        "near_miss": "A damage event meets the prevention effect and is not reduced by it.",
+        "params": {
+          "event": "damage_dealt",
+          "result": "updated"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.64b-1",
@@ -126,7 +143,10 @@
           "label": "one_source",
           "polarity": "does_not_fire",
           "delta": "B blocks Lymph Sliver with Rumbling Baloth alone instead of the two Grizzly Bears, and A assigns all 3 damage to it.",
-          "expected": "Rumbling Baloth deals 4 damage and absorb prevents only 1 of it, so Lymph Sliver has 3 damage marked and is destroyed. Rumbling Baloth has 3 damage marked and survives."
+          "expected": "Rumbling Baloth deals 4 damage and absorb prevents only 1 of it, so Lymph Sliver has 3 damage marked and is destroyed. Rumbling Baloth has 3 damage marked and survives.",
+          "operation": {
+            "unclassifiable": "a different block declaration"
+          }
         }
       ],
       "cards": [
@@ -187,7 +207,10 @@
           "label": "single_hit",
           "polarity": "does_not_fire",
           "delta": "B attacks with Rumbling Baloth (4/4, no double strike) instead of Mirran Crusader.",
-          "expected": "Rumbling Baloth deals 4 damage at one time and absorb prevents only 1 of it, so Lymph Sliver has 3 damage marked and is destroyed. Rumbling Baloth has 3 damage marked and survives."
+          "expected": "Rumbling Baloth deals 4 damage at one time and absorb prevents only 1 of it, so Lymph Sliver has 3 damage marked and is destroyed. Rumbling Baloth has 3 damage marked and survives.",
+          "operation": {
+            "unclassifiable": "a different attack declaration: another creature already on the battlefield attacks"
+          }
         }
       ],
       "cards": [
@@ -245,7 +268,10 @@
           "label": "one_instance",
           "polarity": "does_not_fire",
           "delta": "B controls only one Lymph Sliver.",
-          "expected": "The target has one instance of absorb 1, which prevents 1 damage. The Lymph Sliver has 1 damage marked."
+          "expected": "The target has one instance of absorb 1, which prevents 1 damage. The Lymph Sliver has 1 damage marked.",
+          "operation": {
+            "unclassifiable": "adds or removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -253,7 +279,18 @@
         "Lymph Sliver",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A damage event meets a prevention effect that prevents part of it: the handler lowers the amount and reports updated.",
+        "near_miss": "A damage event meets the prevention effect and is not reduced by it.",
+        "params": {
+          "event": "damage_dealt",
+          "result": "updated"
+        },
+        "needs": []
+      }
     }
   ]
 }

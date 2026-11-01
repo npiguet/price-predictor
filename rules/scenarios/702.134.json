@@ -51,13 +51,17 @@
           "label": "equal_power",
           "polarity": "does_not_fire",
           "delta": "A's second attacker is Hill Giant (3/3) instead of Grizzly Bears.",
-          "expected": "Hill Giant's power is not less than Blade Instructor's, so the mentor trigger has no legal target and puts no counter on anything; Hill Giant stays a 3/3."
+          "expected": "Hill Giant's power is not less than Blade Instructor's, so the mentor trigger has no legal target and puts no counter on anything; Hill Giant stays a 3/3.",
+          "operation": "replace_card"
         },
         {
           "label": "mentor_alone",
           "polarity": "does_not_fire",
           "delta": "Grizzly Bears does not attack; Blade Instructor attacks alone.",
-          "expected": "The mentor trigger has no legal target (the only attacker is Blade Instructor itself) and no counter is put on anything; Grizzly Bears has no counter."
+          "expected": "The mentor trigger has no legal target (the only attacker is Blade Instructor itself) and no counter is put on anything; Grizzly Bears has no counter.",
+          "operation": {
+            "unclassifiable": "a different decision or choice by a player"
+          }
         }
       ],
       "cards": [
@@ -65,7 +69,17 @@
         "Grizzly Bears",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A mentor trigger fires when its creature attacks.",
+        "near_miss": "A mentor trigger is evaluated against an attack it does not match and does not fire.",
+        "params": {
+          "keyword": "Mentor"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.134b-1",
@@ -118,7 +132,10 @@
           "label": "one_instance",
           "polarity": "does_not_fire",
           "delta": "Nyxborn Unicorn is not on the battlefield.",
-          "expected": "Blade Instructor (3/1) has one mentor trigger and Fugitive Wizard ends with one +1/+1 counter as a 2/2."
+          "expected": "Blade Instructor (3/1) has one mentor trigger and Fugitive Wizard ends with one +1/+1 counter as a 2/2.",
+          "operation": {
+            "unclassifiable": "adds, removes, attaches or changes the controller of a permanent, which no fork operation does"
+          }
         }
       ],
       "cards": [
@@ -126,7 +143,17 @@
         "Nyxborn Unicorn",
         "Fugitive Wizard"
       ],
-      "forge_notes": "Bestow is a setup that Forge may not reach directly; the Aura could instead be cast with bestow in an earlier step."
+      "forge_notes": "Bestow is a setup that Forge may not reach directly; the Aura could instead be cast with bestow in an earlier step.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "Each mentor instance on an attacking creature is evaluated and fires as its own trigger.",
+        "near_miss": "A mentor trigger evaluated and not fired; the detector does not count instances per event, and misses an instance another permanent's effect grants, which reads off that effect's line.",
+        "params": {
+          "keyword": "Mentor"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.134c-1",
@@ -187,7 +214,10 @@
           "label": "mentor_fizzles",
           "polarity": "does_not_fire",
           "delta": "In response to the mentor trigger, B casts Shock targeting Fugitive Wizard, tapping the Mountain.",
-          "expected": "Shock resolves first and Fugitive Wizard dies. The mentor trigger has no legal target when it resolves and fizzles, so no mentor ability resolves and the mentored trigger does not fire; no counter is placed."
+          "expected": "Shock resolves first and Fugitive Wizard dies. The mentor trigger has no legal target when it resolves and fizzles, so no mentor ability resolves and the mentored trigger does not fire; no counter is placed.",
+          "operation": {
+            "unclassifiable": "a different spell or ability is cast"
+          }
         }
       ],
       "cards": [
@@ -197,7 +227,17 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger with Mode$ Mentored is evaluated when a mentor ability resolves and fires.",
+        "near_miss": "The same trigger evaluated and not fired because no mentor ability resolved.",
+        "params": {
+          "mode": "Mentored"
+        },
+        "needs": []
+      }
     }
   ]
 }

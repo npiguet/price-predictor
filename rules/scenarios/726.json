@@ -66,7 +66,10 @@
           "label": "no_initiative_taken",
           "polarity": "does_not_fire",
           "delta": "A casts Grizzly Bears (with two of the four Forests) instead of Undermountain Adventurer, so no player takes the initiative.",
-          "expected": "Nobody has the initiative. No venture trigger fires, A has not entered any dungeon, and Plains is still in A's library."
+          "expected": "Nobody has the initiative. No venture trigger fires, A has not entered any dungeon, and Plains is still in A's library.",
+          "operation": {
+            "unclassifiable": "A different spell cast, a player's choice."
+          }
         }
       ],
       "cards": [
@@ -123,13 +126,19 @@
           "label": "opponent_holds_it",
           "polarity": "does_not_fire",
           "delta": "B has the initiative instead of A (B took it from A by combat damage, and B's venture marker is on Secret Entrance).",
-          "expected": "No initiative trigger fires in A's upkeep. A's marker stays on Secret Entrance and Grizzly Bears stays 2/2 with no counters. B still has the initiative."
+          "expected": "No initiative trigger fires in A's upkeep. A's marker stays on Secret Entrance and Grizzly Bears stays 2/2 with no counters. B still has the initiative.",
+          "operation": {
+            "unclassifiable": "Moves the initiative designation and dungeon progress, which no fork operation sets."
+          }
         },
         {
           "label": "never_taken",
           "polarity": "other",
           "delta": "The initiative has never entered this game: nobody holds it and A has no dungeon progress.",
-          "expected": "No initiative trigger fires in A's upkeep. A is in no dungeon and Grizzly Bears stays 2/2 with no counters."
+          "expected": "No initiative trigger fires in A's upkeep. A is in no dungeon and Grizzly Bears stays 2/2 with no counters.",
+          "operation": {
+            "unclassifiable": "Removes the initiative designation and dungeon progress, which no fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -188,13 +197,19 @@
           "label": "blocked",
           "polarity": "does_not_fire",
           "delta": "B's Grizzly Bears blocks A's Grizzly Bears.",
-          "expected": "B stays at 20 life; both Grizzly Bears die. No damage trigger fires, B keeps the initiative, and A has not entered any dungeon."
+          "expected": "B stays at 20 life; both Grizzly Bears die. No damage trigger fires, B keeps the initiative, and A has not entered any dungeon.",
+          "operation": {
+            "unclassifiable": "A different block declaration, a player's choice."
+          }
         },
         {
           "label": "never_taken",
           "polarity": "other",
           "delta": "The initiative has never entered this game: nobody holds it and B has no dungeon progress.",
-          "expected": "B is at 18 life. No initiative trigger fires, nobody has the initiative, and A has not entered any dungeon; Plains stays in A's library."
+          "expected": "B is at 18 life. No initiative trigger fires, nobody has the initiative, and A has not entered any dungeon; Plains stays in A's library.",
+          "operation": {
+            "unclassifiable": "Removes the initiative designation and dungeon progress, which no fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -259,13 +274,19 @@
           "label": "no_take",
           "polarity": "does_not_fire",
           "delta": "A casts Grizzly Bears (with two of the four Forests) instead of Undermountain Adventurer, so nobody takes the initiative.",
-          "expected": "B still has the initiative and A does not. A has not entered any dungeon and Plains stays in A's library."
+          "expected": "B still has the initiative and A does not. A has not entered any dungeon and Plains stays in A's library.",
+          "operation": {
+            "unclassifiable": "A different spell cast, a player's choice."
+          }
         },
         {
           "label": "no_previous_holder",
           "polarity": "other",
           "delta": "The initiative has never entered this game before Undermountain Adventurer's trigger: nobody holds it and B has no dungeon progress.",
-          "expected": "A has the initiative; nobody lost it. A enters Secret Entrance and takes Plains into hand."
+          "expected": "A has the initiative; nobody lost it. A enters Secret Entrance and takes Plains into hand.",
+          "operation": {
+            "unclassifiable": "Removes the initiative designation and dungeon progress, which no fork operation sets."
+          }
         }
       ],
       "cards": [
@@ -275,7 +296,17 @@
         "Undermountain Adventurer",
         "Grizzly Bears"
       ],
-      "forge_notes": "Needs the initiative designation set directly on B."
+      "forge_notes": "Needs the initiative designation set directly on B.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A take-the-initiative resolution holds an initiative_taken event naming the new holder, who alone has the initiative from then on.",
+        "near_miss": "(No clean near miss: every take-the-initiative resolution emits the event, so only the fires side is tagged.)",
+        "params": {
+          "event": "initiative_taken"
+        },
+        "needs": []
+      }
     },
     {
       "id": "726.5-1",
@@ -335,13 +366,19 @@
           "label": "no_take",
           "polarity": "does_not_fire",
           "delta": "A's hand holds a second Grizzly Bears (cast with two of the four Forests) instead of Undermountain Adventurer, so no take-the-initiative instruction is performed.",
-          "expected": "No venture trigger fires. A stays in Secret Entrance and the original Grizzly Bears has no counters."
+          "expected": "No venture trigger fires. A stays in Secret Entrance and the original Grizzly Bears has no counters.",
+          "operation": {
+            "unclassifiable": "Changes A's hand and the spell cast, a player's choice."
+          }
         },
         {
           "label": "opponent_holds_it",
           "polarity": "other",
           "delta": "B has the initiative instead of A (B took it from A by combat damage, and B's venture marker is on Secret Entrance); A's marker is still on Secret Entrance.",
-          "expected": "A takes the initiative from B; the venture trigger fires and A moves to Forge, with Grizzly Bears becoming 4/4. B no longer has the initiative."
+          "expected": "A takes the initiative from B; the venture trigger fires and A moves to Forge, with Grizzly Bears becoming 4/4. B no longer has the initiative.",
+          "operation": {
+            "unclassifiable": "Moves the initiative designation, which no fork operation sets."
+          }
         }
       ],
       "cards": [

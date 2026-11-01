@@ -58,13 +58,19 @@
           "label": "non_outlaw_only",
           "polarity": "does_not_fire",
           "delta": "A chooses only the second mode (2 damage to each non-outlaw creature) instead of the first.",
-          "expected": "Grizzly Bears is dealt 2 damage and moves to B's graveyard. Assassin Initiate is not dealt damage and stays on the battlefield. Three Mountains are tapped."
+          "expected": "Grizzly Bears is dealt 2 damage and moves to B's graveyard. Assassin Initiate is not dealt damage and stays on the battlefield. Three Mountains are tapped.",
+          "operation": {
+            "unclassifiable": "A different mode choice by the caster; no fork operation changes a choice."
+          }
         },
         {
           "label": "both_modes",
           "polarity": "fires",
           "delta": "A chooses both modes and pays {R}{R} plus {1} plus {1} by tapping four Mountains.",
-          "expected": "Assassin Initiate and Grizzly Bears are each dealt 2 damage and move to their owners' graveyards. All four Mountains are tapped."
+          "expected": "Assassin Initiate and Grizzly Bears are each dealt 2 damage and move to their owners' graveyards. All four Mountains are tapped.",
+          "operation": {
+            "unclassifiable": "A different mode choice by the caster; no fork operation changes a choice."
+          }
         }
       ],
       "cards": [
@@ -120,20 +126,29 @@
           "label": "two_modes",
           "polarity": "does_not_fire",
           "delta": "A considers choosing both modes instead of one.",
-          "expected": "Casting Caught in the Crossfire with both modes is not legal: the total cost is {R}{R}{1}{1}, which three Mountains cannot pay."
+          "expected": "Casting Caught in the Crossfire with both modes is not legal: the total cost is {R}{R}{1}{1}, which three Mountains cannot pay.",
+          "operation": {
+            "unclassifiable": "A different mode choice by the caster; no fork operation changes a choice."
+          }
         },
         {
           "label": "no_mode",
           "polarity": "other",
           "delta": "A considers choosing no mode instead of one.",
-          "expected": "Casting Caught in the Crossfire with no mode chosen is not legal: a spree spell requires at least one mode."
+          "expected": "Casting Caught in the Crossfire with no mode chosen is not legal: a spree spell requires at least one mode.",
+          "operation": {
+            "unclassifiable": "A different mode choice by the caster; no fork operation changes a choice."
+          }
         }
       ],
       "cards": [
         "Mountain",
         "Caught in the Crossfire"
       ],
-      "forge_notes": "Forge builds the spree choice as a Charm with MinCharmNum$ 1 and per-mode ModeCost$ values that are added to the spell's cost."
+      "forge_notes": "Forge builds the spree choice as a Charm with MinCharmNum$ 1 and per-mode ModeCost$ values that are added to the spell's cost.",
+      "detector": {
+        "none": "Which spree modes the caster chooses and their summed cost are not recorded on a playability decision candidate; only cost_after_adjustment from effects and the verdict bits are, and the mode choice appears in no field before the cast."
+      }
     }
   ]
 }

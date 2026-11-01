@@ -63,19 +63,26 @@
           "label": "counter_on_token",
           "polarity": "other",
           "delta": "The Soldier token has one +1/+1 counter.",
-          "expected": "A controls a 2/2 Soldier token with the counter and a new 1/1 Soldier token without a counter."
+          "expected": "A controls a 2/2 Soldier token with the counter and a new 1/1 Soldier token without a counter.",
+          "operation": "counters"
         },
         {
           "label": "opponent_controls_token",
           "polarity": "does_not_fire",
           "delta": "B controls the Soldier token instead of A.",
-          "expected": "No token is created. B controls the one Soldier token; A controls Grizzly Bears. Rootborn Defenses resolves and is in A's graveyard."
+          "expected": "No token is created. B controls the one Soldier token; A controls Grizzly Bears. Rootborn Defenses resolves and is in A's graveyard.",
+          "operation": {
+            "unclassifiable": "The token changes controller; no fork operation sets a permanent's controller."
+          }
         },
         {
           "label": "two_kinds",
           "polarity": "other",
           "delta": "A also controls a 2/2 green Wolf token, and A chooses the Wolf.",
-          "expected": "A controls the Soldier token, the Wolf token and a new 2/2 green Wolf token."
+          "expected": "A controls the Soldier token, the Wolf token and a new 2/2 green Wolf token.",
+          "operation": {
+            "unclassifiable": "A token is added to the battlefield and the player's populate choice changes; no fork operation adds a permanent or changes a decision."
+          }
         }
       ],
       "cards": [
@@ -83,7 +90,18 @@
         "Rootborn Defenses",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A populate resolution creates a copy of a creature token (a permanent_copied event).",
+        "near_miss": "A populate resolution that created no copy.",
+        "params": {
+          "event": "permanent_copied",
+          "api": "CopyPermanent"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.36b-1",
@@ -136,19 +154,28 @@
           "label": "treasure_only",
           "polarity": "fires",
           "delta": "A controls a Treasure token (an artifact, not a creature).",
-          "expected": "No token is created; A controls Grizzly Bears and the Treasure token."
+          "expected": "No token is created; A controls Grizzly Bears and the Treasure token.",
+          "operation": {
+            "unclassifiable": "A token is added to the battlefield; no fork operation adds a permanent."
+          }
         },
         {
           "label": "opponent_token",
           "polarity": "fires",
           "delta": "B controls a Soldier creature token.",
-          "expected": "No token is created for A: populate copies only a creature token its controller controls."
+          "expected": "No token is created for A: populate copies only a creature token its controller controls.",
+          "operation": {
+            "unclassifiable": "A token is added to the battlefield; no fork operation adds a permanent."
+          }
         },
         {
           "label": "creature_token",
           "polarity": "does_not_fire",
           "delta": "A controls a Soldier creature token.",
-          "expected": "A creates a new 1/1 white Soldier creature token."
+          "expected": "A creates a new 1/1 white Soldier creature token.",
+          "operation": {
+            "unclassifiable": "A token is added to the battlefield; no fork operation adds a permanent."
+          }
         }
       ],
       "cards": [
@@ -156,7 +183,19 @@
         "Rootborn Defenses",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A populate or copy-permanent resolution creates no copy (no permanent_copied event), as when its controller controls no creature token.",
+        "near_miss": "A populate or copy-permanent resolution that created a copy (a permanent_copied event).",
+        "params": {
+          "event": "permanent_copied",
+          "api": "CopyPermanent",
+          "absent": true
+        },
+        "needs": []
+      }
     }
   ]
 }

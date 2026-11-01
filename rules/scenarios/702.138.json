@@ -53,13 +53,19 @@
           "label": "too_few_cards",
           "polarity": "does_not_fire",
           "delta": "A's graveyard holds only two other cards besides Phoenix of Ash.",
-          "expected": "Casting Phoenix of Ash from A's graveyard is not legal: three other cards cannot be exiled."
+          "expected": "Casting Phoenix of Ash from A's graveyard is not legal: three other cards cannot be exiled.",
+          "operation": {
+            "unclassifiable": "removes cards from a graveyard"
+          }
         },
         {
           "label": "too_little_mana",
           "polarity": "does_not_fire",
           "delta": "A controls three Mountains instead of four.",
-          "expected": "Casting Phoenix of Ash from A's graveyard is not legal: {2}{R}{R} cannot be paid."
+          "expected": "Casting Phoenix of Ash from A's graveyard is not legal: {2}{R}{R} cannot be paid.",
+          "operation": {
+            "unclassifiable": "removes a land permanent"
+          }
         }
       ],
       "cards": [
@@ -124,13 +130,19 @@
           "label": "hard_cast",
           "polarity": "does_not_fire",
           "delta": "Pharika's Spawn starts in A's hand instead of the graveyard and is cast for its mana cost {3}{B}.",
-          "expected": "Pharika's Spawn enters as a 3/4 with no counters; it did not escape, so no enters-this-way trigger fires and B keeps Grizzly Bears."
+          "expected": "Pharika's Spawn enters as a 3/4 with no counters; it did not escape, so no enters-this-way trigger fires and B keeps Grizzly Bears.",
+          "operation": {
+            "unclassifiable": "moves the card to another zone and changes how it is cast"
+          }
         },
         {
           "label": "no_counters_added",
           "polarity": "fires",
           "delta": "Solemnity is on B's battlefield.",
-          "expected": "Pharika's Spawn enters as a 3/4 with no counters, but the enters-this-way trigger still fires: B sacrifices Grizzly Bears."
+          "expected": "Pharika's Spawn enters as a 3/4 with no counters, but the enters-this-way trigger still fires: B sacrifices Grizzly Bears.",
+          "operation": {
+            "unclassifiable": "adds a permanent"
+          }
         }
       ],
       "cards": [
@@ -193,7 +205,10 @@
           "label": "hard_cast",
           "polarity": "does_not_fire",
           "delta": "Skyway Robber starts in A's hand instead of the graveyard and is cast for its mana cost {3}{U}.",
-          "expected": "Skyway Robber (3/3 flying) is on the battlefield without the combat-damage triggered ability, because it did not escape."
+          "expected": "Skyway Robber (3/3 flying) is on the battlefield without the combat-damage triggered ability, because it did not escape.",
+          "operation": {
+            "unclassifiable": "moves the card to another zone and changes how it is cast"
+          }
         }
       ],
       "cards": [

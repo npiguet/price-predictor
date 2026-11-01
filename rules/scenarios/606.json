@@ -60,25 +60,37 @@
           "label": "second_activation",
           "polarity": "does_not_fire",
           "delta": "A already activated Jace Beleren's -1 earlier this turn (it resolved).",
-          "expected": "Activating +2 is illegal (can_play false): Jace already activated a loyalty ability this turn."
+          "expected": "Activating +2 is illegal (can_play false): Jace already activated a loyalty ability this turn.",
+          "operation": {
+            "unclassifiable": "an earlier activation this turn is history, not a board fact"
+          }
         },
         {
           "label": "opponents_turn",
           "polarity": "does_not_fire",
           "delta": "B is the active player in main1; A holds priority.",
-          "expected": "Activating +2 is illegal (can_play false): it is not A's turn."
+          "expected": "Activating +2 is illegal (can_play false): it is not A's turn.",
+          "operation": {
+            "unclassifiable": "changes whose turn it is"
+          }
         },
         {
           "label": "stack_not_empty",
           "polarity": "does_not_fire",
           "delta": "A Runeclaw Bear spell controlled by A is on the stack.",
-          "expected": "Activating +2 is illegal (can_play false): the stack is not empty."
+          "expected": "Activating +2 is illegal (can_play false): the stack is not empty.",
+          "operation": {
+            "unclassifiable": "adds a spell to the stack"
+          }
         },
         {
           "label": "combat_phase",
           "polarity": "does_not_fire",
           "delta": "The step is beginning_of_combat instead of main1.",
-          "expected": "Activating +2 is illegal (can_play false): it is not a main phase."
+          "expected": "Activating +2 is illegal (can_play false): it is not a main phase.",
+          "operation": {
+            "unclassifiable": "changes the phase"
+          }
         }
       ],
       "cards": [
@@ -87,7 +99,20 @@
         "Island",
         "Runeclaw Bear"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A loyalty ability candidate fails the activation-limit check because a loyalty ability of that permanent was already activated this turn.",
+        "near_miss": "A decision in which every candidate, loyalty abilities included, passes the activation-limit check.",
+        "params": {
+          "bit": "failed_check",
+          "check": "activation_limit"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "606.4-1",
@@ -135,20 +160,27 @@
           "label": "minus_two",
           "polarity": "fires",
           "delta": "A activates the -2 targeting B's tapped Grizzly Bears instead.",
-          "expected": "Gideon Jura has 4 loyalty counters and the tapped Grizzly Bears moves to B's graveyard."
+          "expected": "Gideon Jura has 4 loyalty counters and the tapped Grizzly Bears moves to B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different ability choice and target"
+          }
         },
         {
           "label": "zero",
           "polarity": "does_not_fire",
           "delta": "A activates the 0 ability instead.",
-          "expected": "Gideon Jura still has 6 loyalty counters (the cost adds none) and becomes a 6/6 creature until end of turn."
+          "expected": "Gideon Jura still has 6 loyalty counters (the cost adds none) and becomes a 6/6 creature until end of turn.",
+          "operation": {
+            "unclassifiable": "a different ability choice"
+          }
         }
       ],
       "cards": [
         "Gideon Jura",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": null
     },
     {
       "id": "606.5-1",
@@ -203,13 +235,19 @@
           "label": "minus_one",
           "polarity": "fires",
           "delta": "A activates the -1 (create a Beast) instead, its cost combined with Carth's +1.",
-          "expected": "Garruk has 3 loyalty counters (the combined cost is a net change of zero) and a 3/3 Beast token is created."
+          "expected": "Garruk has 3 loyalty counters (the combined cost is a net change of zero) and a 3/3 Beast token is created.",
+          "operation": {
+            "unclassifiable": "a different ability choice"
+          }
         },
         {
           "label": "no_carth",
           "polarity": "does_not_fire",
           "delta": "Carth the Lion is not on the battlefield.",
-          "expected": "Garruk has 4 loyalty counters and both Forests untap."
+          "expected": "Garruk has 4 loyalty counters and both Forests untap.",
+          "operation": {
+            "unclassifiable": "removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -269,14 +307,28 @@
           "label": "one_counter",
           "polarity": "does_not_fire",
           "delta": "Gideon Jura has 1 loyalty counter instead of 2.",
-          "expected": "Activating -2 is illegal (can_play false): there are not enough counters to remove."
+          "expected": "Activating -2 is illegal (can_play false): there are not enough counters to remove.",
+          "operation": "counters"
         }
       ],
       "cards": [
         "Gideon Jura",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A loyalty ability candidate fails the cost check because its negative loyalty cost, additional loyalty costs included, removes more counters than the permanent has.",
+        "near_miss": "A decision in which every candidate passes the cost check, a negative loyalty cost the permanent has enough loyalty counters for included.",
+        "params": {
+          "bit": "failed_check",
+          "check": "cost"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "606.6-2",
@@ -323,7 +375,10 @@
           "label": "without_carth",
           "polarity": "does_not_fire",
           "delta": "Carth the Lion is not on the battlefield.",
-          "expected": "Activating -4 is illegal (can_play false): the cost removes 4 counters and Garruk has only 3."
+          "expected": "Activating -4 is illegal (can_play false): the cost removes 4 counters and Garruk has only 3.",
+          "operation": {
+            "unclassifiable": "removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -331,7 +386,20 @@
         "Garruk Wildspeaker",
         "Runeclaw Bear"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A loyalty ability candidate fails the cost check because its negative loyalty cost, additional loyalty costs included, removes more counters than the permanent has.",
+        "near_miss": "A decision in which every candidate passes the cost check, a negative loyalty cost the permanent has enough loyalty counters for included.",
+        "params": {
+          "bit": "failed_check",
+          "check": "cost"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     }
   ]
 }

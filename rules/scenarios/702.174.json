@@ -59,7 +59,10 @@
           "label": "not_promised",
           "polarity": "does_not_fire",
           "delta": "A does not choose an opponent, so the gift is not promised.",
-          "expected": "B creates no Food token. Grizzly Bears gets +2/+2 (4/4) until end of turn and does not gain indestructible. Crumb and Get It moves to A's graveyard."
+          "expected": "B creates no Food token. Grizzly Bears gets +2/+2 (4/4) until end of turn and does not gain indestructible. Crumb and Get It moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -67,7 +70,18 @@
         "Grizzly Bears",
         "Crumb and Get It"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution creates a Food token, a token_created event with a Food token in the effect half, as a promised Food gift does.",
+        "near_miss": "Not counted: with no api the family tags only the fires side; a spell resolving with its gift unpromised carries no field that marks it as such.",
+        "params": {
+          "event": "token_created",
+          "token_kind": "Food"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.174b-1",
@@ -129,13 +143,19 @@
           "label": "not_promised",
           "polarity": "does_not_fire",
           "delta": "A does not choose an opponent, so the gift is not promised.",
-          "expected": "Neither trigger fires. Sol Ring stays on B's battlefield and B's hand stays Counterspell only."
+          "expected": "Neither trigger fires. Sol Ring stays on B's battlefield and B's hand stays Counterspell only.",
+          "operation": {
+            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+          }
         },
         {
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "A promises the gift, but B casts Counterspell on Scrapshooter, tapping both Islands.",
-          "expected": "Scrapshooter is countered and moves to A's graveyard. It never enters, so neither trigger fires, B draws no card and Sol Ring stays on the battlefield. B's hand is empty because Counterspell was cast."
+          "expected": "Scrapshooter is countered and moves to A's graveyard. It never enters, so neither trigger fires, B draws no card and Sol Ring stays on the battlefield. B's hand is empty because Counterspell was cast.",
+          "operation": {
+            "unclassifiable": "An opponent casts a counterspell in response, a different spell cast; no fork operation casts a spell."
+          }
         }
       ],
       "cards": [
@@ -146,7 +166,17 @@
         "Counterspell",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A gift enters trigger (keyword-generated, with an intervening if on the gift being promised) is evaluated as its permanent enters and fires.",
+        "near_miss": "The same gift trigger evaluated on entering and not fired: the gift was not promised.",
+        "params": {
+          "keyword": "Gift"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.174c-1",
@@ -216,13 +246,19 @@
           "label": "not_promised",
           "polarity": "does_not_fire",
           "delta": "A does not choose an opponent, so the gift is not promised.",
-          "expected": "Crumb and Get It resolves without a gift. Jolly Gerbils' trigger does not fire and A draws no card."
+          "expected": "Crumb and Get It resolves without a gift. Jolly Gerbils' trigger does not fire and A draws no card.",
+          "operation": {
+            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+          }
         },
         {
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "A promises the gift, but B casts Counterspell on Crumb and Get It, tapping both Islands.",
-          "expected": "Crumb and Get It is countered, so no gift is given: B creates no Food token, Jolly Gerbils' trigger does not fire and A draws no card."
+          "expected": "Crumb and Get It is countered, so no gift is given: B creates no Food token, Jolly Gerbils' trigger does not fire and A draws no card.",
+          "operation": {
+            "unclassifiable": "An opponent casts a counterspell in response, a different spell cast; no fork operation casts a spell."
+          }
         }
       ],
       "cards": [
@@ -235,7 +271,17 @@
         "Forest",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A 'whenever a player gives a gift' trigger is evaluated against a gift being given and fires (fired true).",
+        "near_miss": "The same trigger evaluated and not fired.",
+        "params": {
+          "mode": "GiveGift"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.174c-2",
@@ -298,7 +344,10 @@
           "label": "not_promised",
           "polarity": "does_not_fire",
           "delta": "A does not choose an opponent, so the gift is not promised.",
-          "expected": "No gift triggered ability resolves. Jolly Gerbils' trigger does not fire and A draws no card. Sol Ring stays on the battlefield."
+          "expected": "No gift triggered ability resolves. Jolly Gerbils' trigger does not fire and A draws no card. Sol Ring stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -309,7 +358,17 @@
         "Plains",
         "Mountain"
       ],
-      "forge_notes": "Forge implements the permanent's gift as a GiftAbility SVar that may not raise the GiveGift trigger; this scenario tests whether it does."
+      "forge_notes": "Forge implements the permanent's gift as a GiftAbility SVar that may not raise the GiveGift trigger; this scenario tests whether it does.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A 'whenever a player gives a gift' trigger is evaluated against a gift being given and fires (fired true).",
+        "near_miss": "The same trigger evaluated and not fired.",
+        "params": {
+          "mode": "GiveGift"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.174e-1",
@@ -367,7 +426,10 @@
           "label": "not_promised",
           "polarity": "does_not_fire",
           "delta": "A does not choose an opponent, so the gift is not promised.",
-          "expected": "B draws no card (hand empty). A and each permanent A controls (both Plains and Grizzly Bears) gain hexproof until end of turn; no permanent gains indestructible."
+          "expected": "B draws no card (hand empty). A and each permanent A controls (both Plains and Grizzly Bears) gain hexproof until end of turn; no permanent gains indestructible.",
+          "operation": {
+            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -376,7 +438,17 @@
         "Dawn's Truce",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution makes a player draw a card, a card_drawn event in the effect half, as a promised card gift does.",
+        "near_miss": "Not counted: with no api the family tags only the fires side; a spell resolving with its gift unpromised carries no field that marks it as such.",
+        "params": {
+          "event": "card_drawn"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.174f-1",
@@ -430,7 +502,10 @@
           "label": "not_promised",
           "polarity": "does_not_fire",
           "delta": "A does not choose an opponent, so the gift is not promised.",
-          "expected": "B creates no Fish. Grizzly Bears is exiled, then returns to the battlefield under B's control at the beginning of the next end step with a +1/+1 counter (3/3)."
+          "expected": "B creates no Fish. Grizzly Bears is exiled, then returns to the battlefield under B's control at the beginning of the next end step with a +1/+1 counter (3/3).",
+          "operation": {
+            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -438,7 +513,18 @@
         "Grizzly Bears",
         "Parting Gust"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution creates a Fish token, a token_created event with a Fish token in the effect half, as a promised tapped Fish gift does.",
+        "near_miss": "Not counted: with no api the family tags only the fires side; a spell resolving with its gift unpromised carries no field that marks it as such.",
+        "params": {
+          "event": "token_created",
+          "token_kind": "Fish"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.174g-1",
@@ -500,7 +586,10 @@
           "label": "not_promised",
           "polarity": "does_not_fire",
           "delta": "A does not choose an opponent, so the gift is not promised.",
-          "expected": "B receives no extra turn. After A's turn ends, B takes one turn and then A takes the next. A created four 2/2 blue Bird tokens with flying, which stay on the battlefield phased in, and Perch Protection is exiled."
+          "expected": "B receives no extra turn. After A's turn ends, B takes one turn and then A takes the next. A created four 2/2 blue Bird tokens with flying, which stay on the battlefield phased in, and Perch Protection is exiled.",
+          "operation": {
+            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -508,7 +597,17 @@
         "Island",
         "Perch Protection"
       ],
-      "forge_notes": "Both variants also exile Perch Protection and create the four Birds. The promised-gift phasing and protection effects are not what this scenario checks."
+      "forge_notes": "Both variants also exile Perch Protection and create the four Birds. The promised-gift phasing and protection effects are not what this scenario checks.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution gives a player an extra turn, a turn_added event in the effect half, as a promised extra turn gift does.",
+        "near_miss": "Not counted: with no api the family tags only the fires side; a spell resolving with its gift unpromised carries no field that marks it as such.",
+        "params": {
+          "event": "turn_added"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.174h-1",
@@ -562,7 +661,10 @@
           "label": "not_promised",
           "polarity": "does_not_fire",
           "delta": "A does not choose an opponent, so the gift is not promised.",
-          "expected": "B creates no Treasure. Grizzly Bears takes 2 damage and moves to B's graveyard. B's life stays 20."
+          "expected": "B creates no Treasure. Grizzly Bears takes 2 damage and moves to B's graveyard. B's life stays 20.",
+          "operation": {
+            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -570,7 +672,18 @@
         "Grizzly Bears",
         "Blooming Blast"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution creates a Treasure token, a token_created event with a Treasure token in the effect half, as a promised Treasure gift does.",
+        "near_miss": "Not counted: with no api the family tags only the fires side; a spell resolving with its gift unpromised carries no field that marks it as such.",
+        "params": {
+          "event": "token_created",
+          "token_kind": "Treasure"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.174i-1",
@@ -622,7 +735,10 @@
           "label": "not_promised",
           "polarity": "does_not_fire",
           "delta": "A does not choose an opponent, so the gift is not promised.",
-          "expected": "No gift trigger fires and B has no Octopus. Octomancer (3/3) is on A's battlefield."
+          "expected": "No gift trigger fires and B has no Octopus. Octomancer (3/3) is on A's battlefield.",
+          "operation": {
+            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+          }
         }
       ],
       "cards": [
@@ -630,7 +746,17 @@
         "Island",
         "Octomancer"
       ],
-      "forge_notes": "Observe immediately after the gift trigger resolves: at the beginning of the end step Octomancer's own trigger copies an Octopus token that entered this turn."
+      "forge_notes": "Observe immediately after the gift trigger resolves: at the beginning of the end step Octomancer's own trigger copies an Octopus token that entered this turn.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A gift enters trigger (keyword-generated, with an intervening if on the gift being promised) is evaluated as its permanent enters and fires.",
+        "near_miss": "The same gift trigger evaluated on entering and not fired: the gift was not promised.",
+        "params": {
+          "keyword": "Gift"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.174j-1",
@@ -690,13 +816,19 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B casts Counterspell on Parting Gust, tapping both Islands, before it resolves.",
-          "expected": "Parting Gust is countered and moves to A's graveyard. B creates no Fish and Grizzly Bears stays on the battlefield."
+          "expected": "Parting Gust is countered and moves to A's graveyard. B creates no Fish and Grizzly Bears stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "An opponent casts a counterspell in response, a different spell cast; no fork operation casts a spell."
+          }
         },
         {
           "label": "fizzles",
           "polarity": "does_not_fire",
           "delta": "A responds by casting Shock on Grizzly Bears, tapping the Mountain, before Parting Gust resolves.",
-          "expected": "Shock resolves first and Grizzly Bears moves to B's graveyard. Parting Gust fizzles with no legal target and moves to A's graveyard. B creates no Fish."
+          "expected": "Shock resolves first and Grizzly Bears moves to B's graveyard. Parting Gust fizzles with no legal target and moves to A's graveyard. B creates no Fish.",
+          "operation": {
+            "unclassifiable": "The caster casts a second spell in response, a different spell cast; no fork operation casts a spell."
+          }
         }
       ],
       "cards": [
@@ -708,7 +840,21 @@
         "Shock",
         "Counterspell"
       ],
-      "forge_notes": "A fizzled spell never resolves, so Forge must skip the GiftAbility sub-effect; verify."
+      "forge_notes": "A fizzled spell never resolves, so Forge must skip the GiftAbility sub-effect; verify.",
+      "detector": {
+        "family": "resolution_outcome",
+        "record_kind": "resolution",
+        "outcome": "A spell leaves the stack by resolving, so its effects, a gift effect included, happen.",
+        "near_miss": "A spell that leaves the stack countered or fizzled, so none of its effects, the gift included, happen.",
+        "params": {
+          "outcome": "resolved",
+          "near": [
+            "countered",
+            "fizzled"
+          ]
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.174m-1",
@@ -771,7 +917,10 @@
           "label": "not_promised",
           "polarity": "does_not_fire",
           "delta": "A does not choose an opponent, so the gift is not promised and no second target is chosen.",
-          "expected": "B creates no Fish. A draws three cards. Grizzly Bears stays untapped with no counters; Mind Spiral had only one target."
+          "expected": "B creates no Fish. A draws three cards. Grizzly Bears stays untapped with no counters; Mind Spiral had only one target.",
+          "operation": {
+            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice. The spell also has one target fewer."
+          }
         }
       ],
       "cards": [

@@ -56,13 +56,17 @@
           "label": "on_battlefield",
           "polarity": "does_not_fire",
           "delta": "Lonely Sandbar is on A's battlefield (untapped) instead of in A's hand.",
-          "expected": "Activating the cycling ability is illegal (can_play false): Lonely Sandbar stays on the battlefield, nothing is discarded, nothing is drawn, Island stays untapped."
+          "expected": "Activating the cycling ability is illegal (can_play false): Lonely Sandbar stays on the battlefield, nothing is discarded, nothing is drawn, Island stays untapped.",
+          "operation": {
+            "unclassifiable": "Moves a card between zones."
+          }
         },
         {
           "label": "cost_unpayable",
           "polarity": "does_not_fire",
           "delta": "Island is tapped.",
-          "expected": "Activating the cycling ability is illegal (can_play false) because {U} cannot be paid: Lonely Sandbar stays in A's hand and nothing is drawn."
+          "expected": "Activating the cycling ability is illegal (can_play false) because {U} cannot be paid: Lonely Sandbar stays in A's hand and nothing is drawn.",
+          "operation": "tap"
         }
       ],
       "cards": [
@@ -118,7 +122,8 @@
           "label": "plain_land",
           "polarity": "does_not_fire",
           "delta": "The tapped land is Island instead of Lonely Sandbar.",
-          "expected": "Island has only a mana ability, so Tsabo's Web does not affect it: Island is untapped after A's untap step."
+          "expected": "Island has only a mana ability, so Tsabo's Web does not affect it: Island is untapped after A's untap step.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -186,7 +191,10 @@
           "label": "discarded",
           "polarity": "does_not_fire",
           "delta": "Instead of cycling, A casts Tormenting Voice (paying {1}{R} with the two Mountains) and discards Gempalm Avenger as its additional cost.",
-          "expected": "Gempalm Avenger is in A's graveyard but no trigger fires: it was discarded, not cycled. Glory Seeker stays a 2/2 with no first strike. A draws Plains and Mountain."
+          "expected": "Gempalm Avenger is in A's graveyard but no trigger fires: it was discarded, not cycled. Glory Seeker stays a 2/2 with no first strike. A draws Plains and Mountain.",
+          "operation": {
+            "unclassifiable": "A different spell cast."
+          }
         }
       ],
       "cards": [
@@ -196,7 +204,17 @@
         "Plains",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on a card being cycled is evaluated and fires when its controller cycles it.",
+        "near_miss": "The same trigger evaluated against another event and not fired.",
+        "params": {
+          "mode": "Cycled"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.29d-1",
@@ -254,7 +272,10 @@
           "label": "discarded",
           "polarity": "other",
           "delta": "Instead of cycling, A casts Tormenting Voice (paying {1}{R} with the two Mountains) and discards Lonely Sandbar as its additional cost; A pays Drake Haven's {1} with an Island.",
-          "expected": "Drake Haven triggers exactly once for the one card discarded: A creates exactly one 2/2 blue Drake token with flying, and Tormenting Voice draws A two cards (Island, Island)."
+          "expected": "Drake Haven triggers exactly once for the one card discarded: A creates exactly one 2/2 blue Drake token with flying, and Tormenting Voice draws A two cards (Island, Island).",
+          "operation": {
+            "unclassifiable": "A different spell cast."
+          }
         }
       ],
       "cards": [
@@ -264,7 +285,17 @@
         "Island",
         "Mountain"
       ],
-      "forge_notes": "702.29d is a count (one trigger, not two), so it has no does_not_fire branch: no legal situation makes a cycled card trigger a 'cycles or discards' ability zero or two times. The discarded variant shows a cycle and a plain discard trigger it the same single time."
+      "forge_notes": "702.29d is a count (one trigger, not two), so it has no does_not_fire branch: no legal situation makes a cycled card trigger a 'cycles or discards' ability zero or two times. The discarded variant shows a cycle and a plain discard trigger it the same single time.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on a card being discarded fires once for a cycled card, since cycling discards.",
+        "near_miss": "The same trigger evaluated against an event it does not fire for.",
+        "params": {
+          "mode": "Discarded"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.29e-1",
@@ -318,7 +349,10 @@
           "label": "no_plains",
           "polarity": "does_not_fire",
           "delta": "A's library is [Island, Swamp] with no Plains.",
-          "expected": "Eternal Dragon is in A's graveyard. The search finds nothing: A's hand is empty and the library is shuffled."
+          "expected": "Eternal Dragon is in A's graveyard. The search finds nothing: A's hand is empty and the library is shuffled.",
+          "operation": {
+            "unclassifiable": "Changes the library."
+          }
         }
       ],
       "cards": [
@@ -379,7 +413,10 @@
           "label": "without_stabilizer",
           "polarity": "does_not_fire",
           "delta": "Stabilizer is not on the battlefield.",
-          "expected": "The activation is legal (can_play true); Eternal Dragon is discarded as a cost."
+          "expected": "The activation is legal (can_play true); Eternal Dragon is discarded as a cost.",
+          "operation": {
+            "unclassifiable": "Removes a permanent from the battlefield."
+          }
         }
       ],
       "cards": [
@@ -388,7 +425,19 @@
         "Island",
         "Plains"
       ],
-      "forge_notes": "Stabilizer is implemented as CantBeActivated for ValidSA$ Activated.Cycling; check that Forge's Cycling filter includes TypeCycling abilities."
+      "forge_notes": "Stabilizer is implemented as CantBeActivated for ValidSA$ Activated.Cycling; check that Forge's Cycling filter includes TypeCycling abilities.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate ability that a restricting static forbids has can_play false.",
+        "near_miss": "A candidate ability of the same kind that the player can play.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": false,
+          "responsible_static": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.29f-2",
@@ -446,7 +495,10 @@
           "label": "discarded",
           "polarity": "does_not_fire",
           "delta": "Instead of typecycling, A casts Tormenting Voice (paying {1}{R}) and discards Eternal Dragon as its additional cost.",
-          "expected": "Lightning Rift does not trigger: Eternal Dragon was discarded, not cycled. B's life stays 20. A draws Plains and Mountain."
+          "expected": "Lightning Rift does not trigger: Eternal Dragon was discarded, not cycled. B's life stays 20. A draws Plains and Mountain.",
+          "operation": {
+            "unclassifiable": "A different spell cast."
+          }
         }
       ],
       "cards": [
@@ -456,7 +508,17 @@
         "Mountain",
         "Plains"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger on a player cycling a card is evaluated and fires when a card is cycled.",
+        "near_miss": "The same trigger evaluated against another event and not fired.",
+        "params": {
+          "mode": "Cycled"
+        },
+        "needs": []
+      }
     }
   ]
 }

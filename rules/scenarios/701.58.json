@@ -55,13 +55,19 @@
           "label": "noncreature_card",
           "polarity": "fires",
           "delta": "The top card of A's library is Lightning Bolt instead of Serra Angel.",
-          "expected": "Lightning Bolt enters A's battlefield face down as a 2/2 colorless creature with no name, no subtypes, no mana cost and ward {2}; it is a creature, not an instant."
+          "expected": "Lightning Bolt enters A's battlefield face down as a 2/2 colorless creature with no name, no subtypes, no mana cost and ward {2}; it is a creature, not an instant.",
+          "operation": {
+            "unclassifiable": "changes the library"
+          }
         },
         {
           "label": "empty_library",
           "polarity": "does_not_fire",
           "delta": "A's library is empty.",
-          "expected": "Ransom Note is sacrificed and its ability resolves, but there is no card to cloak: A controls no face-down creature."
+          "expected": "Ransom Note is sacrificed and its ability resolves, but there is no card to cloak: A controls no face-down creature.",
+          "operation": {
+            "unclassifiable": "changes the library"
+          }
         }
       ],
       "cards": [
@@ -71,7 +77,10 @@
         "Forest",
         "Lightning Bolt"
       ],
-      "forge_notes": "The cloaked permanent gets ward {2} from the cloak effect (Forge adds Ward:2 to the face-down state)."
+      "forge_notes": "The cloaked permanent gets ward {2} from the cloak effect (Forge adds Ward:2 to the face-down state).",
+      "detector": {
+        "none": "No continuous record carries a cloaked permanent's face-down characteristics: Forge makes them a card state (Card.cloak turns the card to its FaceDown state and adds Ward:2 to that state as an intrinsic keyword), not a static ability, so there is no contribution for continuous_contribution to read, whose pt field would instead tag any P/T boost. The cloak itself shows on a resolution record (a Cloak resolution's zone_change to the battlefield, outcome_event), a record kind this scenario does not name."
+      }
     },
     {
       "id": "701.58a-2",
@@ -124,7 +133,10 @@
           "label": "pays_ward",
           "polarity": "does_not_fire",
           "delta": "B controls two additional Mountains and pays {2} with them.",
-          "expected": "Ward triggers but B pays {2}, so Shock resolves and deals 2 damage to the 2/2 face-down creature; it dies and is put into A's graveyard face up as Serra Angel."
+          "expected": "Ward triggers but B pays {2}, so Shock resolves and deals 2 damage to the 2/2 face-down creature; it dies and is put into A's graveyard face up as Serra Angel.",
+          "operation": {
+            "unclassifiable": "adds permanents so the player can pay"
+          }
         }
       ],
       "cards": [
@@ -132,7 +144,21 @@
         "Mountain",
         "Serra Angel"
       ],
-      "forge_notes": "A pre-built cloaked permanent may not carry the Ward:2 that cloaking normally adds; reach the state by cloaking the card during the scenario if Forge's setup loses it."
+      "forge_notes": "A pre-built cloaked permanent may not carry the Ward:2 that cloaking normally adds; reach the state by cloaking the card during the scenario if Forge's setup loses it.",
+      "detector": {
+        "family": "resolution_outcome",
+        "record_kind": "resolution",
+        "outcome": "A targeted spell or ability leaves the stack countered, as when a ward trigger's cost is not paid.",
+        "near_miss": "A targeted spell or ability resolves.",
+        "params": {
+          "outcome": "countered",
+          "near": [
+            "resolved"
+          ],
+          "targeted": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.58b-1",
@@ -180,7 +206,8 @@
           "label": "instant_card",
           "polarity": "does_not_fire",
           "delta": "The cloaked card is Shock instead of Grizzly Bears.",
-          "expected": "Turning the permanent face up for its mana cost is not legal although Mountain could pay {R}. It stays a face-down colorless 2/2 creature with ward {2} and no name."
+          "expected": "Turning the permanent face up for its mana cost is not legal although Mountain could pay {R}. It stays a face-down colorless 2/2 creature with ward {2} and no name.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -189,7 +216,10 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": "Forge offers turning a cloaked card face up as an ability of the face-down card, so the verdict appears as that candidate's can_play."
+      "forge_notes": "Forge offers turning a cloaked card face up as an ability of the face-down card, so the verdict appears as that candidate's can_play.",
+      "detector": {
+        "none": "The cloak turn-face-up ability is engine-built (CardState.getCloakUp, CardFactoryUtil.abilityTurnFaceUp), so a decision candidate for it keys to no line, and Card.getAllPossibleAbilities offers it only for a creature card with a mana cost, so the near miss (a cloaked non-creature card) produces no candidate at all; face_change records a turn face up that happened, not its legality."
+      }
     },
     {
       "id": "701.58c-1",
@@ -239,7 +269,8 @@
           "label": "no_morph",
           "polarity": "does_not_fire",
           "delta": "The cloaked card is Serra Angel (mana cost {3}{W}{W}, no morph) instead of Exalted Angel.",
-          "expected": "No way to turn the permanent face up is legal: Serra Angel has no morph cost and A's four Plains cannot pay {3}{W}{W}. It stays a face-down colorless 2/2 with ward {2}."
+          "expected": "No way to turn the permanent face up is legal: Serra Angel has no morph cost and A's four Plains cannot pay {3}{W}{W}. It stays a face-down colorless 2/2 with ward {2}.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -247,7 +278,10 @@
         "Exalted Angel",
         "Serra Angel"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "A cloaked permanent cannot be told from a morphed or manifested one in any record: the snapshot has only face_down (gen-3: face_state face_down), so a decision candidate keyed to the Morph keyword line on a face-down permanent does not show that the permanent was cloaked, and verdict_bit cannot restrict candidates to that line."
+      }
     },
     {
       "id": "701.58d-1",
@@ -298,7 +332,8 @@
           "label": "no_disguise",
           "polarity": "does_not_fire",
           "delta": "The cloaked card is Craw Wurm (mana cost {4}{G}{G}, no disguise) instead of Bolrac-Clan Basher.",
-          "expected": "No way to turn the permanent face up is legal: Craw Wurm has no disguise cost and A's five Mountains cannot pay {4}{G}{G}. It stays a face-down colorless 2/2 with ward {2}."
+          "expected": "No way to turn the permanent face up is legal: Craw Wurm has no disguise cost and A's five Mountains cannot pay {4}{G}{G}. It stays a face-down colorless 2/2 with ward {2}.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -306,7 +341,10 @@
         "Bolrac-Clan Basher",
         "Craw Wurm"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "A cloaked permanent cannot be told from a disguised one in any record: the snapshot has only face_down (gen-3: face_state face_down), so a decision candidate keyed to the Disguise keyword line on a face-down permanent does not show that the permanent was cloaked, and verdict_bit cannot restrict candidates to that line."
+      }
     },
     {
       "id": "701.58e-1",
@@ -365,13 +403,19 @@
           "label": "one_card_library",
           "polarity": "other",
           "delta": "A's library is only Serra Angel.",
-          "expected": "Only Serra Angel can be cloaked: one face-down 2/2 creature with ward {2} enters, and A's library is empty."
+          "expected": "Only Serra Angel can be cloaked: one face-down 2/2 creature with ward {2} enters, and A's library is empty.",
+          "operation": {
+            "unclassifiable": "changes the library"
+          }
         },
         {
           "label": "empty_library",
           "polarity": "does_not_fire",
           "delta": "A's library is empty.",
-          "expected": "Nothing is cloaked: A controls no face-down creature."
+          "expected": "Nothing is cloaked: A controls no face-down creature.",
+          "operation": {
+            "unclassifiable": "changes the library"
+          }
         }
       ],
       "cards": [
@@ -383,7 +427,21 @@
         "Plains",
         "Mountain"
       ],
-      "forge_notes": "The one-at-a-time entry is only visible as two separate enter-the-battlefield events."
+      "forge_notes": "The one-at-a-time entry is only visible as two separate enter-the-battlefield events.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Cloak resolution puts two or more cards onto the battlefield, each as its own zone_change from the library.",
+        "near_miss": "A Cloak resolution that puts fewer than two cards onto the battlefield from the library.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "library",
+          "to_zone": "battlefield",
+          "min_count": 2,
+          "api": "Cloak"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.58f-1",
@@ -436,7 +494,10 @@
           "label": "cage_in_hand",
           "polarity": "does_not_fire",
           "delta": "Grafdigger's Cage is in B's hand instead of on B's battlefield.",
-          "expected": "Nothing prohibits the entry: Serra Angel enters A's battlefield face down as a 2/2 colorless creature with ward {2}. A's library is Forest, Forest."
+          "expected": "Nothing prohibits the entry: Serra Angel enters A's battlefield face down as a 2/2 colorless creature with ward {2}. A's library is Forest, Forest.",
+          "operation": {
+            "unclassifiable": "moves a permanent to a hand"
+          }
         }
       ],
       "cards": [
@@ -446,7 +507,20 @@
         "Forest",
         "Grafdigger's Cage"
       ],
-      "forge_notes": "Grafdigger's Cage is a Moved replacement keyed on the entering object being a creature; cloaking turns the card face down before it moves, so Forge should see a creature. In the cage_in_hand variant put Grafdigger's Cage in B's hand."
+      "forge_notes": "Grafdigger's Cage is a Moved replacement keyed on the entering object being a creature; cloaking turns the card face down before it moves, so Forge should see a creature. In the cage_in_hand variant put Grafdigger's Cage in B's hand.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Cloak resolution puts no card onto the battlefield: the card it would cloak stays in its previous zone.",
+        "near_miss": "A Cloak resolution that puts a card onto the battlefield (zone_change to battlefield).",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "battlefield",
+          "api": "Cloak",
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.58g-1",
@@ -499,7 +573,8 @@
           "label": "creature_card",
           "polarity": "does_not_fire",
           "delta": "The cloaked card is Serra Angel instead of Lightning Bolt.",
-          "expected": "Serra Angel turns face up and is a 4/4 flying, vigilance Serra Angel again. Aven Farseer's trigger fires and Aven Farseer gets a +1/+1 counter (2/2)."
+          "expected": "Serra Angel turns face up and is a 4/4 flying, vigilance Serra Angel again. Aven Farseer's trigger fires and Aven Farseer gets a +1/+1 counter (2/2).",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -509,7 +584,19 @@
         "Mountain",
         "Serra Angel"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A SetState resolution changes no permanent's face: the permanent it would turn face up stays face down.",
+        "near_miss": "A SetState resolution that emits a face_change.",
+        "params": {
+          "event": "face_change",
+          "api": "SetState",
+          "absent": true
+        },
+        "needs": []
+      }
     }
   ]
 }

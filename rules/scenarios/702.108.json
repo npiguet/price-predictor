@@ -57,13 +57,19 @@
           "label": "creature-spell",
           "polarity": "does_not_fire",
           "delta": "A casts Grizzly Bears (tapping Forest and Mountain) instead of Shock.",
-          "expected": "Prowess does not trigger: Monastery Swiftspear stays 1/2. Grizzly Bears enters the battlefield."
+          "expected": "Prowess does not trigger: Monastery Swiftspear stays 1/2. Grizzly Bears enters the battlefield.",
+          "operation": {
+            "unclassifiable": "a different spell is cast, a decision by a player"
+          }
         },
         {
           "label": "opponent-casts",
           "polarity": "does_not_fire",
           "delta": "A casts nothing; B casts Shock targeting A, tapping Mountain.",
-          "expected": "Prowess does not trigger on B's spell: Monastery Swiftspear stays 1/2. A takes 2 damage and is at 18."
+          "expected": "Prowess does not trigger on B's spell: Monastery Swiftspear stays 1/2. A takes 2 damage and is at 18.",
+          "operation": {
+            "unclassifiable": "a different spell is cast, a decision by a player"
+          }
         }
       ],
       "cards": [
@@ -73,7 +79,17 @@
         "Shock",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A prowess trigger is evaluated against a noncreature spell its controller casts and fires.",
+        "near_miss": "A prowess trigger is evaluated against a spell cast that does not qualify (a creature spell, or an opponent's spell) and does not fire.",
+        "params": {
+          "keyword": "Prowess"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.108b-1",
@@ -125,7 +141,10 @@
           "label": "single-instance",
           "polarity": "does_not_fire",
           "delta": "Triton Wavebreaker is not on the battlefield.",
-          "expected": "One prowess trigger resolves: Monastery Swiftspear is 2/3 until end of turn. B is at 18."
+          "expected": "One prowess trigger resolves: Monastery Swiftspear is 2/3 until end of turn. B is at 18.",
+          "operation": {
+            "unclassifiable": "adds or removes a permanent"
+          }
         }
       ],
       "cards": [
