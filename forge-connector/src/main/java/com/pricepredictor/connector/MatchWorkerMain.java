@@ -269,6 +269,9 @@ public class MatchWorkerMain {
                     + ", probability=" + caps.randomSeatProbability()
                     + " (random-seat matches write effect records only)");
         }
+        caps.aimedAt().ifPresent(rules -> System.out.println(
+                "Aimed at: " + (rules.isEmpty() ? "no rule" : String.join(",", rules))
+                        + " (every record carries aimed_at)"));
         // The worker loops until the supervisor terminates it, so close()
         // is never reached on the normal path. Without this the block in
         // flight — up to a few hundred records — is lost on every stop.

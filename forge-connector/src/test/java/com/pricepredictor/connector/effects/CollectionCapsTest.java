@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -98,5 +99,25 @@ class CollectionCapsTest {
         }
         assertEquals(0.0, CollectionCaps.defaults().randomSeatShare());
         assertFalse(CollectionCaps.defaults().randomSeatEnabled());
+    }
+
+    /**
+     * {@code effect.aimed.at} is read by its presence (FR-009a): unset, the run
+     * aims at nothing; set blank, at no rule in particular, which a coverage
+     * run with no {@code --directed-fork-rules} is; set, at its rules.
+     */
+    @Test
+    void theAimedAtRulesAreReadByThePropertysPresence() {
+        assertEquals(Optional.empty(), CollectionCaps.fromSystemProperties().aimedAt());
+        try {
+            System.setProperty(CollectionCaps.AIMED_AT, "");
+            assertEquals(Optional.of(List.of()), CollectionCaps.fromSystemProperties().aimedAt());
+            System.setProperty(CollectionCaps.AIMED_AT, "704.5f, 702.19b");
+            assertEquals(Optional.of(List.of("704.5f", "702.19b")),
+                    CollectionCaps.fromSystemProperties().aimedAt());
+        } finally {
+            System.clearProperty(CollectionCaps.AIMED_AT);
+        }
+        assertEquals(Optional.empty(), CollectionCaps.defaults().aimedAt());
     }
 }

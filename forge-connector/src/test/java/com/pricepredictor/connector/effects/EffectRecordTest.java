@@ -3,7 +3,9 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.effects.directed.DirectedTag;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -16,6 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * escaping: the parts of a record that need no game.
  */
 class EffectRecordTest {
+
+    @TempDir
+    Path tempDir;
 
     // ── the record envelope ─────────────────────────────────────────────
 
@@ -84,6 +89,60 @@ class EffectRecordTest {
                 fork);
     }
 
+    /**
+     * The context stamps the run's {@code aimed_at} on every record it writes
+     * (FR-009a): a coverage or variant run's rules, an empty list where it
+     * names none, and nothing at all on a run aimed at nothing, which is every
+     * {@code match-outcomes} run. A directed fork's record keeps the one rule
+     * it forked for.
+     */
+    @Test
+    void theContextStampsTheRunsAimedAtOnEveryRecord() throws Exception {
+        assertEquals(List.of("\"aimed_at\":[]", "\"aimed_at\":[]"),
+                aimedAtWritten(List.of(), null));
+        assertEquals(List.of("\"aimed_at\":[\"704.5f\",\"702.19b\"]",
+                        "\"aimed_at\":[\"704.5f\",\"702.19b\"]"),
+                aimedAtWritten(List.of("704.5f", "702.19b"), null));
+        assertEquals(List.of("", ""), aimedAtWritten(null, null));
+        // The directed fork's own rule outranks the run's list, and a
+        // match-outcomes run writes it on that record alone.
+        assertEquals(List.of("\"aimed_at\":[\"704.5f\",\"702.19b\"]", "\"aimed_at\":[\"704.5f\"]"),
+                aimedAtWritten(List.of("704.5f", "702.19b"), "704.5f"));
+        assertEquals(List.of("", "\"aimed_at\":[\"704.5f\"]"), aimedAtWritten(null, "704.5f"));
+    }
+
+    /**
+     * The {@code aimed_at} member of the two records a context over {@code
+     * runAimedAt} writes — a resolution half, then a combat record, which is
+     * a directed fork's for {@code forkRule} when that is set — or "" for a
+     * record without one.
+     */
+    private List<String> aimedAtWritten(List<String> runAimedAt, String forkRule)
+            throws Exception {
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        try {
+            CollectorContext context = new CollectorContext(
+                    writer, "run.0-l1.0", AttributionMode.DEGRADED, null, runAimedAt);
+            context.emit(context.newResolution(Moment.RESOLUTION));
+            EffectRecord combat = context.newRecord(RecordKind.COMBAT);
+            if (forkRule != null) {
+                combat.fork(true).aimedAt(List.of(forkRule))
+                        .directed(new DirectedTag("tougher", ForkOperation.PT));
+            }
+            context.emit(combat);
+        } finally {
+            writer.close();
+        }
+        List<String> written = ShardRun.readShard(writer.path()).stream()
+                .map(line -> {
+                    int start = line.indexOf("\"aimed_at\":");
+                    return start < 0 ? "" : line.substring(start, line.indexOf(']', start) + 1);
+                })
+                .toList();
+        java.nio.file.Files.delete(writer.path());
+        return written;
+    }
+
     /** The directed-fork signature: a non-interventional fork naming its rule. */
     @Test
     void aDirectedTagNeedsAnAimedNonInterventionalFork() {
@@ -134,7 +193,14 @@ class EffectRecordTest {
         assertTrue(combat.contains(
                 "\"kind\":\"combat\",\"moment\":null,\"subkind\":null"), combat);
 
-        for (RecordKind qualified : List.of(RecordKind.RESOLUTION, RecordKind.PLAYABILITY)) {
+        String draw = EffectRecord.turnAction(
+                "run.0.1", "run", "2026-09-07T00:00:00Z", "run.0.0", TurnActionSubkind.DRAW,
+                AttributionMode.DEGRADED).toJson();
+        assertTrue(draw.contains(
+                "\"kind\":\"turn_action\",\"moment\":null,\"subkind\":\"draw\""), draw);
+
+        for (RecordKind qualified : List.of(
+                RecordKind.RESOLUTION, RecordKind.PLAYABILITY, RecordKind.TURN_ACTION)) {
             assertThrows(IllegalArgumentException.class, () -> record(qualified), qualified.wireName());
         }
     }

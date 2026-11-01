@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * A {@link CollectionCaps} for a test: the defaults, with only what the test
@@ -16,6 +17,7 @@ public final class TestCaps {
     private List<String> probeKeywords;
     private double randomSeatShare;
     private double randomSeatProbability;
+    private Optional<List<String>> aimedAt;
 
     private TestCaps(CollectionCaps from) {
         manaCap = from.manaCap();
@@ -25,6 +27,7 @@ public final class TestCaps {
         probeKeywords = from.probeKeywords();
         randomSeatShare = from.randomSeatShare();
         randomSeatProbability = from.randomSeatProbability();
+        aimedAt = from.aimedAt();
     }
 
     /** {@link CollectionCaps#defaults()}, to be varied. */
@@ -63,8 +66,14 @@ public final class TestCaps {
         return this;
     }
 
+    /** A coverage or variant run aimed at {@code rules}, possibly none. */
+    public TestCaps aimedAt(String... rules) {
+        aimedAt = Optional.of(List.of(rules));
+        return this;
+    }
+
     public CollectionCaps build() {
         return new CollectionCaps(manaCap, playabilityRate, interventions, probes,
-                probeKeywords, randomSeatShare, randomSeatProbability);
+                probeKeywords, randomSeatShare, randomSeatProbability, aimedAt);
     }
 }

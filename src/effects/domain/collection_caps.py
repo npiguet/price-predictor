@@ -37,10 +37,22 @@ class CollectionCaps:
     random_seat_share: float = DEFAULT_RANDOM_SEAT_SHARE
     #: ``P``: the chance the random seat draws uniformly from the legal options.
     random_seat_probability: float = DEFAULT_RANDOM_SEAT_PROBABILITY
+    #: The rules a ``collect-coverage`` or ``collect-variants`` run aims at,
+    #: stamped on every record as ``aimed_at`` (FR-009a); empty for a run aimed
+    #: at no rule in particular, None for a run whose records carry no
+    #: ``aimed_at`` at all. Travels by its presence: None sends no property.
+    aimed_at: tuple[str, ...] | None = None
 
     def as_system_properties(self) -> dict[str, str]:
         """The `-D effect.*` properties the worker reads them back from."""
-        return {
-            f"effect.{field.name.replace('_', '.')}": str(getattr(self, field.name))
-            for field in fields(self)
+        properties = {
+            _property_name(field.name): str(getattr(self, field.name))
+            for field in fields(self) if field.name != "aimed_at"
         }
+        if self.aimed_at is not None:
+            properties[_property_name("aimed_at")] = ",".join(self.aimed_at)
+        return properties
+
+
+def _property_name(field_name: str) -> str:
+    return f"effect.{field_name.replace('_', '.')}"

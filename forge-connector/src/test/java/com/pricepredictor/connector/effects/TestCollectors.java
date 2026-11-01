@@ -28,7 +28,8 @@ final class TestCollectors {
     /** The same, for a match whose random seat is {@code randomSeatPlayerId}. */
     static CollectorContext context(
             RecordShardWriter writer, String gameId, String randomSeatPlayerId) {
-        return new CollectorContext(writer, gameId, AttributionMode.detect(), randomSeatPlayerId);
+        return new CollectorContext(
+                writer, gameId, AttributionMode.detect(), randomSeatPlayerId, null);
     }
 
     /** A bracket writing to {@code writer}, which nothing is told a combat record of. */

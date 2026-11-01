@@ -127,9 +127,27 @@ class TestTheJvmReadsExactlyWhatThePythonSideWrites:
         not _JAVA_CAPS.exists(), reason="the connector source is not checked out"
     )
     def test_neither_side_names_a_property_the_other_does_not(self):
+        """Every property, ``effect.aimed.at`` included, which only an aimed
+        run sends."""
         assert self._java_property_names() == set(
-            CollectionCaps().as_system_properties()
+            CollectionCaps(aimed_at=()).as_system_properties()
         )
+
+
+class TestTheAimedAtRules:
+    """FR-009a: ``effect.aimed.at`` travels by its presence; the worker reads
+    an unset property as a run aimed at nothing and a blank one as a run aimed
+    at no rule in particular."""
+
+    def test_a_run_aimed_at_nothing_sends_no_property(self):
+        assert "effect.aimed.at" not in CollectionCaps().as_system_properties()
+
+    def test_a_run_aimed_at_no_rule_sends_it_blank(self):
+        assert CollectionCaps(aimed_at=()).as_system_properties()["effect.aimed.at"] == ""
+
+    def test_the_rules_travel_comma_separated(self):
+        properties = CollectionCaps(aimed_at=("704.5f", "702.19b")).as_system_properties()
+        assert properties["effect.aimed.at"] == "704.5f,702.19b"
 
 
 class TestNoSnapshotDepthKnob:

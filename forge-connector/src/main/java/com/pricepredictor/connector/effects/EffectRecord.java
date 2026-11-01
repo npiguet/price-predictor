@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.WireNamed;
 import com.pricepredictor.connector.effects.directed.DirectedTag;
 import com.pricepredictor.connector.json.Json;
 import java.util.List;
@@ -32,7 +33,8 @@ public final class EffectRecord {
     private final String gameId;
     private final RecordKind kind;
     private final Moment moment;
-    private final PlayabilitySubkind subkind;
+    /** A {@link PlayabilitySubkind} or a {@link TurnActionSubkind}; null on every other kind. */
+    private final WireNamed subkind;
     private final AttributionMode mode;
     private String linkId;
     private String mirrorOf;
@@ -76,16 +78,17 @@ public final class EffectRecord {
      * A record of one of the four kinds that take neither a moment nor a
      * subkind.
      *
-     * <p>The other two are made by {@link #resolution} and {@link #playability}:
-     * a resolution record needs its moment and a playability record its
-     * subkind, and taking them at construction is what makes a record missing
-     * one impossible to build rather than merely wrong.
+     * <p>The other three are made by {@link #resolution}, {@link #playability}
+     * and {@link #turnAction}: a resolution record needs its moment and the
+     * other two their subkind, and taking them at construction is what makes
+     * a record missing one impossible to build rather than merely wrong.
      */
     public EffectRecord(
             String recordId, String runId, String timestamp, String gameId,
             RecordKind kind, AttributionMode mode) {
         this(recordId, runId, timestamp, gameId, kind, null, null, mode);
-        if (kind == RecordKind.RESOLUTION || kind == RecordKind.PLAYABILITY) {
+        if (kind == RecordKind.RESOLUTION || kind == RecordKind.PLAYABILITY
+                || kind == RecordKind.TURN_ACTION) {
             throw new IllegalArgumentException(
                     "a " + kind.wireName() + " record is made with its moment or subkind");
         }
@@ -93,7 +96,7 @@ public final class EffectRecord {
 
     private EffectRecord(
             String recordId, String runId, String timestamp, String gameId,
-            RecordKind kind, Moment moment, PlayabilitySubkind subkind,
+            RecordKind kind, Moment moment, WireNamed subkind,
             AttributionMode mode) {
         this.recordId = recordId;
         this.runId = runId;
@@ -118,6 +121,14 @@ public final class EffectRecord {
             String recordId, String runId, String timestamp, String gameId,
             PlayabilitySubkind subkind, AttributionMode mode) {
         return new EffectRecord(recordId, runId, timestamp, gameId, RecordKind.PLAYABILITY,
+                null, Objects.requireNonNull(subkind, "subkind"), mode);
+    }
+
+    /** A {@code turn_action} record: the events of one turn-based action (FR-036). */
+    public static EffectRecord turnAction(
+            String recordId, String runId, String timestamp, String gameId,
+            TurnActionSubkind subkind, AttributionMode mode) {
+        return new EffectRecord(recordId, runId, timestamp, gameId, RecordKind.TURN_ACTION,
                 null, Objects.requireNonNull(subkind, "subkind"), mode);
     }
 
@@ -164,6 +175,11 @@ public final class EffectRecord {
     public EffectRecord aimedAt(List<String> rules) {
         this.aimedAt = rules == null ? null : List.copyOf(rules);
         return this;
+    }
+
+    /** Whether this record already names the rules it was collected for. */
+    boolean isAimed() {
+        return aimedAt != null;
     }
 
     /** A directed fork's variant and operation; null leaves the member out. */

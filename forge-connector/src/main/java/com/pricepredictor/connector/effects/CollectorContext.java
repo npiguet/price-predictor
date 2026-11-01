@@ -1,10 +1,13 @@
 package com.pricepredictor.connector.effects;
 
+import java.util.List;
+
 /**
  * What a collector of one game writes its records through.
  *
  * <p>The envelope fields every record of a game shares — the run, the game, the
- * attribution mode, the random seat — and the stamp applied at the write, so
+ * attribution mode, the random seat, the rules the run aimed at — and the
+ * stamp applied at the write, so
  * the three collectors build and emit a record the same way rather than each
  * keeping a copy that can drift. Each collector has its own context: they
  * count their records separately.
@@ -22,14 +25,23 @@ final class CollectorContext {
      * whenever it is applied.
      */
     private final String randomSeatPlayerId;
+    /**
+     * The rules the run aimed at (FR-009a), or null for a run that aimed at
+     * none: a {@code collect-coverage} or {@code collect-variants} run stamps
+     * them, possibly none, on every record it writes; a {@code match-outcomes}
+     * run stamps nothing, and only a directed fork's records carry the rule it
+     * forked for.
+     */
+    private final List<String> aimedAt;
 
     CollectorContext(
             RecordShardWriter writer, String gameId, AttributionMode mode,
-            String randomSeatPlayerId) {
+            String randomSeatPlayerId, List<String> aimedAt) {
         this.writer = writer;
         this.gameId = gameId;
         this.mode = mode;
         this.randomSeatPlayerId = randomSeatPlayerId;
+        this.aimedAt = aimedAt == null ? null : List.copyOf(aimedAt);
     }
 
     AttributionMode mode() {
@@ -41,9 +53,9 @@ final class CollectorContext {
     }
 
     /**
-     * A record of {@code kind}, with an id and a timestamp taken now; the two
-     * kinds that need more say so through {@link #newResolution} and
-     * {@link #newPlayability}.
+     * A record of {@code kind}, with an id and a timestamp taken now; the
+     * three kinds that need more say so through {@link #newResolution},
+     * {@link #newPlayability} and {@link #newTurnAction}.
      */
     EffectRecord newRecord(RecordKind kind) {
         return new EffectRecord(
@@ -75,6 +87,13 @@ final class CollectorContext {
                 gameId, subkind, mode);
     }
 
+    /** A turn-based action of {@code subkind}, with an id and a timestamp taken now. */
+    EffectRecord newTurnAction(TurnActionSubkind subkind) {
+        return EffectRecord.turnAction(
+                writer.nextRecordId(), writer.runId(), RecordShardWriter.timestamp(),
+                gameId, subkind, mode);
+    }
+
     /** An id for a record built later, by {@link #newResolution(Moment, String, String)}. */
     String nextRecordId() {
         return writer.nextRecordId();
@@ -99,10 +118,18 @@ final class CollectorContext {
         return true;
     }
 
-    /** Stamp {@code random_seat} and write. */
+    /**
+     * Stamp {@code random_seat} and the run's {@code aimed_at}, and write.
+     *
+     * <p>A record already aimed keeps its own: a directed fork names the one
+     * rule it forked for, which is narrower than the run's list.
+     */
     void emit(EffectRecord record) {
         record.randomSeat(
                 randomSeatPlayerId != null && randomSeatPlayerId.equals(record.actorPlayer()));
+        if (aimedAt != null && !record.isAimed()) {
+            record.aimedAt(aimedAt);
+        }
         writer.write(record.toJson());
     }
 }

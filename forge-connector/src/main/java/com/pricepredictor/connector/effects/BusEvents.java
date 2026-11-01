@@ -7,6 +7,7 @@ import forge.game.event.GameEventCardAttachment;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardCounters;
 import forge.game.event.GameEventCardDamaged;
+import forge.game.event.GameEventCardPhased;
 import forge.game.event.GameEventCardRegenerated;
 import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventDayTimeChanged;
@@ -255,6 +256,23 @@ final class BusEvents {
                 .subject(Refs.of(event.card()))
                 .param("counter_type", CardSpelling.counterName(event.type()))
                 .param("delta", event.newValue() - event.oldValue());
+    }
+
+    /**
+     * A permanent phasing in or out, and which: {@code out} is the state it
+     * reached, as {@code Card.phase} publishes it once the switch is made.
+     *
+     * <p>Fired for each permanent that phases, the ones phasing indirectly
+     * with what they are attached to included, and whatever phased it — the
+     * untap step's turn-based action or a phasing effect resolving.
+     */
+    static EffectEvent phased(GameEventCardPhased event) {
+        if (event.card() == null) {
+            return null;
+        }
+        return new EffectEvent(EventType.PHASED)
+                .subject(Refs.of(event.card()))
+                .param("out", event.phaseState());
     }
 
     static EffectEvent tapped(GameEventCardTapped event) {

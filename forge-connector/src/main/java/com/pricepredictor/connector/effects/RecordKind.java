@@ -3,7 +3,7 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.WireNamed;
 
 /**
- * The six record kinds, as a record's {@code kind} spells them.
+ * The seven record kinds, as a record's {@code kind} spells them.
  *
  * <p>The reader's {@code RecordKind} in {@code records.py} is the other half
  * of this vocabulary and refuses a kind it does not have, so a spelling is
@@ -17,7 +17,12 @@ public enum RecordKind implements WireNamed {
     COMBAT("combat"),
     TRIGGER("trigger"),
     /** A rules verdict; which question it answers is its {@link PlayabilitySubkind}. */
-    PLAYABILITY("playability");
+    PLAYABILITY("playability"),
+    /**
+     * A turn-based action no ability caused; which one is its {@link
+     * TurnActionSubkind}. Collected only: never written to a curated stratum.
+     */
+    TURN_ACTION("turn_action");
 
     private final String wireName;
 

@@ -99,6 +99,20 @@ public final class WorkerProperties {
         return csv(System.getProperty(name));
     }
 
+    /**
+     * A comma-separated property whose presence is itself the fact: empty when
+     * unset, and the empty list when set blank.
+     *
+     * <p>The one exception to a blank value reading as unset, for a property
+     * that says what a run is as well as what it holds — a coverage run aimed
+     * at no rule in particular is still aimed, and says so by passing the
+     * property with nothing in it.
+     */
+    public static Optional<List<String>> presentListProperty(String name) {
+        String value = System.getProperty(name);
+        return value == null ? Optional.empty() : Optional.of(csv(value));
+    }
+
     /** The trimmed, non-empty items of a comma-separated value; empty for null or blank. */
     static List<String> csv(String value) {
         if (value == null || value.isBlank()) {

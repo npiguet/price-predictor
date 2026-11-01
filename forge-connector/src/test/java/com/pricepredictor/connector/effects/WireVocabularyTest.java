@@ -28,7 +28,8 @@ class WireVocabularyTest {
     @Test
     void recordKinds() {
         assertEquals(
-                List.of("resolution", "rewrite", "continuous", "combat", "trigger", "playability"),
+                List.of("resolution", "rewrite", "continuous", "combat", "trigger", "playability",
+                        "turn_action"),
                 wireNames(RecordKind.class));
     }
 
@@ -44,6 +45,14 @@ class WireVocabularyTest {
     void playabilitySubkinds() {
         assertEquals(List.of("decision", "attackers", "blockers"),
                 wireNames(PlayabilitySubkind.class));
+    }
+
+    /** {@code TurnActionSubkind} in {@code records.py}. */
+    @Test
+    void turnActionSubkinds() {
+        assertEquals(
+                List.of("draw", "cleanup_discard", "untap", "phasing", "day_night", "lore_counter"),
+                wireNames(TurnActionSubkind.class));
     }
 
     /** {@code ResolutionOutcome} in {@code records.py}. */

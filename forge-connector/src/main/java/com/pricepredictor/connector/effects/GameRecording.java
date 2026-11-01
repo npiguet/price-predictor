@@ -13,7 +13,8 @@ import java.util.function.Supplier;
  * <p>A game is recorded by three collectors: the bracket on the event bus,
  * the patched collectors on the engine's static hooks, and stage three's
  * forks. They describe the same game, so they share its id, its attribution
- * mode and the match's random seat, and each is handed those in a context of
+ * mode, the match's random seat and the rules the run aimed at, and each is
+ * handed those in a context of
  * its own when it is built. Nothing is set after construction, so no
  * collector can be wired in the wrong order or miss a seat another one learnt.
  *
@@ -51,7 +52,8 @@ public final class GameRecording implements AutoCloseable {
         AttributionMode mode = AttributionMode.detect();
         // One context per collector, because each counts its own records.
         Supplier<CollectorContext> context =
-                () -> new CollectorContext(writer, gameId, mode, randomSeatPlayerId);
+                () -> new CollectorContext(
+                        writer, gameId, mode, randomSeatPlayerId, caps.aimedAt().orElse(null));
         // Stage three. Nothing is copied unless a budget says so, because a
         // fork costs a game copy and a stack resolution, and nothing on a
         // stock checkout, where no fork could be attributed. Both kinds share

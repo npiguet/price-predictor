@@ -46,6 +46,11 @@ import java.util.Set;
  * first-strike combat writes two records — the only way a keyword that acts by
  * splitting the step is visible in the corpus at all.
  *
+ * <p>The turn-based actions that begin a step — the untap, the draw, the
+ * cleanup's discard — get a window of their own ({@link TurnActionWindow}),
+ * from the phase event to the next priority or phase event, and a {@code
+ * turn_action} record per action.
+ *
  * <p>This class is the {@code @Subscribe} facade: each handler is the sequence
  * of steps an event means, and the state those steps change is owned by the
  * collaborator named for it — {@link StackBrackets} the stack's brackets and
@@ -75,6 +80,9 @@ public final class BusBracketCollector extends BusEventReader {
     /** The damage step's combat record, gathered until the step ends. */
     private final CombatStepBracket combatStep;
 
+    /** The step's turn-based actions, gathered until anyone gets priority. */
+    private final TurnActionWindow turnActions;
+
     /**
      * @param onCombatRecord told the id of each {@code combat} record as it is
      *                       written. A damage-step probe forks before the step
@@ -96,6 +104,7 @@ public final class BusBracketCollector extends BusEventReader {
         this.castsUnderWay = new CastsUnderWay(game, ledger::holds);
         this.combatStep = new CombatStepBracket(
                 game, context, snapshots, heldResolution, onCombatRecord);
+        this.turnActions = new TurnActionWindow(game, context, snapshots);
     }
 
     /**
@@ -235,18 +244,23 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
-     * A phase change closes the combat bracket, if one is open.
+     * A phase change closes the combat bracket, if one is open, and the last
+     * step's turn-action window, and opens this step's.
      *
      * <p>One record per damage step: first strike and regular damage are
      * separate phases, so the phase boundary is exactly the step boundary.
+     * Forge publishes the phase event before the step's turn-based actions,
+     * so the window opened last sees all of them.
      */
     @Subscribe
     public void onPhase(GameEventTurnPhase event) {
+        turnActions.close();
         onStepBoundary();
         // An effect that empties the stack -- ending the turn, ending combat --
         // resolves nothing afterwards, so a phase boundary is the last chance
         // to notice what it swept away.
         reconcilePending();
+        turnActions.open(event.phase());
     }
 
     /**
@@ -356,7 +370,8 @@ public final class BusBracketCollector extends BusEventReader {
      * <p>State-based-action deaths arrive with no ability resolving, after the
      * bracket that caused them has closed. The ones it caused never reach
      * here: {@link #fileMove} files them into its held effect half.
-     * The rest are routed by {@link #now} like any other event.
+     * The rest are routed by {@link #now} like any other event, a turn-based
+     * action's into its window ({@link TurnActionWindow}).
      */
     private void record(EffectEvent event) {
         fileOutcome(event, null);
@@ -542,11 +557,12 @@ public final class BusBracketCollector extends BusEventReader {
             case CAST -> castsUnderWay.hold(now.casting(), event, namedCause);
             case ACTION -> brackets.closeForAction();
             case CONSEQUENCE -> {
-                EventAttribution.stamp(event, brackets.resolving(), namedCause);
                 if (mayBeCombat && combatStep.takesEventsNow()) {
-                    combatStep.file(event);
-                } else {
-                    brackets.filing().file(event);
+                    combatStep.file(
+                            EventAttribution.stamp(event, brackets.resolving(), namedCause));
+                } else if (!turnActions.take(event, namedCause)) {
+                    brackets.filing().file(
+                            EventAttribution.stamp(event, brackets.resolving(), namedCause));
                 }
             }
             case RESOLUTION ->
@@ -573,11 +589,13 @@ public final class BusBracketCollector extends BusEventReader {
     /**
      * A priority: no cast is under way across one. A card still in the stack
      * zone with no stack item is a cast given up — a copy that failed its
-     * targeting — and no longer counts as being cast.
+     * targeting — and no longer counts as being cast. The step's turn-based
+     * actions are over: Forge gives priority only after them.
      */
     @Subscribe
     public void onPriority(GameEventPlayerPriority event) {
         castsUnderWay.abandonAll();
+        turnActions.close();
     }
 
     @Override
@@ -699,8 +717,12 @@ public final class BusBracketCollector extends BusEventReader {
      * @return how many held casts were abandoned rather than written
      */
     long finishGame(Set<Integer> onStack) {
-        // First, because it is the oldest: the resolution it describes ended
-        // before anything the two below hold. The winner is not one of its
+        // A game can end in a step no priority followed: its turn-based
+        // actions are written as any other step's. Nothing is held below
+        // across the phase event that opened the window.
+        turnActions.close();
+        // Next, because it is the oldest of the rest: the resolution it
+        // describes ended before anything the two below hold. The winner is not one of its
         // consequences -- player_won is not a permanent leaving the
         // battlefield -- so it stays where flushOrphanedEvents puts it, in a
         // record of its own after this one.

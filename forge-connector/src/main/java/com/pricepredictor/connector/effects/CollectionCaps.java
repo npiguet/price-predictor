@@ -4,8 +4,16 @@ import com.pricepredictor.connector.WorkerProperties;
 import com.pricepredictor.connector.WorkerProperties.OnMalformed;
 
 import java.util.List;
+import java.util.Optional;
 
-/** The caps and budgets every collecting supervisor shares (FR-028). */
+/**
+ * The caps and budgets every collecting supervisor shares (FR-028).
+ *
+ * @param aimedAt the rules a {@code collect-coverage} or {@code
+ *                collect-variants} run aims at (FR-009a), stamped on every
+ *                record it writes as {@code aimed_at}, possibly empty; absent
+ *                on a {@code match-outcomes} run, whose records carry none
+ */
 public record CollectionCaps(
         int manaCap,
         double playabilityRate,
@@ -13,11 +21,12 @@ public record CollectionCaps(
         int probesPerGame,
         List<String> probeKeywords,
         double randomSeatShare,
-        double randomSeatProbability) {
+        double randomSeatProbability,
+        Optional<List<String>> aimedAt) {
 
     public static CollectionCaps defaults() {
         return new CollectionCaps(
-                1, 0.1, 2, 2, List.of(), 0.0, 0.0);
+                1, 0.1, 2, 2, List.of(), 0.0, 0.0, Optional.empty());
     }
 
     public static final String MANA_CAP = "effect.mana.cap";
@@ -27,6 +36,7 @@ public record CollectionCaps(
     public static final String PROBE_KEYWORDS = "effect.probe.keywords";
     public static final String RANDOM_SEAT_SHARE = "effect.random.seat.share";
     public static final String RANDOM_SEAT_PROBABILITY = "effect.random.seat.probability";
+    public static final String AIMED_AT = "effect.aimed.at";
 
     /**
      * Read from the {@code effect.*} system properties the supervisor sets.
@@ -56,7 +66,11 @@ public record CollectionCaps(
                 WorkerProperties.doubleProperty(
                         RANDOM_SEAT_SHARE, defaults.randomSeatShare(), policy),
                 WorkerProperties.doubleProperty(
-                        RANDOM_SEAT_PROBABILITY, defaults.randomSeatProbability(), policy));
+                        RANDOM_SEAT_PROBABILITY, defaults.randomSeatProbability(), policy),
+                // Present, even blank, on every coverage and variant run and
+                // on no other: its presence is what marks the run's records
+                // aimed (FR-009a), its value the rules they were aimed at.
+                WorkerProperties.presentListProperty(AIMED_AT));
     }
 
     /** Whether any match of this run may seat a random player at all. */

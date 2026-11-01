@@ -8,6 +8,7 @@ import forge.game.event.GameEventCardAttachment;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardCounters;
 import forge.game.event.GameEventCardDamaged;
+import forge.game.event.GameEventCardPhased;
 import forge.game.event.GameEventCardRegenerated;
 import forge.game.event.GameEventCardStatsChanged;
 import forge.game.event.GameEventCardTapped;
@@ -218,6 +219,12 @@ abstract class BusEventReader {
     @Subscribe
     public void onTapped(GameEventCardTapped event) {
         file(BusEvents.tapped(event), null);
+    }
+
+    /** A permanent phasing. No named cause: the bus names none. */
+    @Subscribe
+    public void onPhased(GameEventCardPhased event) {
+        file(BusEvents.phased(event), null);
     }
 
     /**

@@ -352,7 +352,8 @@ class RecordCharacterizationTest {
         RecordShardWriter writer = ShardRun.writer(tempDir);
         try {
             BusBracketCollector bracket = new BusBracketCollector(board.game,
-                    new CollectorContext(writer, ShardRun.GAME_ID, AttributionMode.DEGRADED, null),
+                    new CollectorContext(
+                            writer, ShardRun.GAME_ID, AttributionMode.DEGRADED, null, null),
                     recordId -> { });
             board.game.subscribeToEvents(bracket);
             bracket.beginBracket(charm);
