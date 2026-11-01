@@ -44,6 +44,7 @@ public final class PatchHooks {
     static final String COMBAT = "forge.game.combat.Combat";
     static final String PLAYER_CONTROLLER_AI = "forge.ai.PlayerControllerAi";
     static final String EFFECT_RECORD_HOOK = "forge.game.ability.EffectRecordHook";
+    static final String PHASE_HANDLER = "forge.game.phase.PhaseHandler";
 
     /**
      * One method the engine patch adds, and what having it buys.
@@ -132,7 +133,10 @@ public final class PatchHooks {
         ON_CLAUSE_RESOLVED("onClauseResolved", 1),
         ON_MANA_PRODUCED("onManaProduced", 3),
         ON_CONFIRM("onConfirm", 2),
-        ON_OUTCOME("onOutcome", 3);
+        ON_OUTCOME("onOutcome", 3),
+        ON_STATE_BASED_LOOP_BEGIN("onStateBasedLoopBegin", 1),
+        ON_STATE_BASED_LOOP_END("onStateBasedLoopEnd", 1),
+        ON_PRIORITY_SETTLED("onPrioritySettled", 2);
 
         private final String methodName;
         private final int arity;
@@ -286,6 +290,20 @@ public final class PatchHooks {
             "the outcomes an effect computes and discards: a coin's "
             + "result, a clash's winner, a vote's tally, a pile's size",
             List.of(Callback.ON_OUTCOME));
+    static final Hook PENDING_DELAYED_TRIGGERS = new Hook(
+            TRIGGER_HANDLER, "getPendingDelayedTriggers",
+            "a snapshot's delayed_triggers and the links naming what each "
+            + "is pending on; a fork copy's delayed triggers");
+    static final Hook STATE_BASED_LOOP_LISTENER = new Hook(
+            PHASE_HANDLER, "setEffectRecordStateBasedLoopListener",
+            "the state-based loop's extent: a resolution's held effect half "
+            + "spans it, and every death inside it is filed there",
+            List.of(Callback.ON_STATE_BASED_LOOP_BEGIN, Callback.ON_STATE_BASED_LOOP_END));
+    static final Hook PRIORITY_SETTLED_LISTENER = new Hook(
+            PHASE_HANDLER, "setEffectRecordPrioritySettledListener",
+            "the moment both seats' decision candidates are enumerated, "
+            + "before the priority holder chooses",
+            List.of(Callback.ON_PRIORITY_SETTLED));
 
     /**
      * Every hook the collectors need, and the specification of the patch.
@@ -321,7 +339,8 @@ public final class PatchHooks {
             PLAYABILITY_LISTENER, COMBAT_LISTENER, CANT_ATTACK_STATIC,
             CANT_BLOCK_BY_STATIC, MANA_LISTENER, CHANGED_TYPES_BY_STATIC,
             CHANGED_COLORS_BY_STATIC, TYPE_WITHOUT, COLOR_WITHOUT, KEYWORDS_WITHOUT,
-            CHANGED_NAMES, ASSIGNED_DAMAGE, CONFIRM_LISTENER, OUTCOME_LISTENER);
+            CHANGED_NAMES, ASSIGNED_DAMAGE, CONFIRM_LISTENER, OUTCOME_LISTENER,
+            PENDING_DELAYED_TRIGGERS, STATE_BASED_LOOP_LISTENER, PRIORITY_SETTLED_LISTENER);
 
     /**
      * The components of the two layer records {@link #CHANGED_COLORS_BY_STATIC}

@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import forge.game.Game;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.player.Player;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -27,7 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * What the patched collectors decide across their channels: which hooks get
  * installed, how deep a snapshot goes, and which game a trigger, playability,
- * combat or mana report is admitted from.
+ * combat or mana report, or a state-based-loop or priority-settled signal, is
+ * admitted from.
  *
  * <p>The channels have tests of their own: {@link TriggerRecordTest},
  * {@link RewriteContractTest}, {@link OutcomeHandlerTest},
@@ -47,6 +50,12 @@ class PatchedCollectorTest {
             HookShapes.method(HookShapes.CombatLegality.class, "onAttackersDeclarable");
     private static final Method ON_MANA_PRODUCED =
             HookShapes.method(HookShapes.Mana.class, "onManaProduced");
+    private static final Method ON_STATE_BASED_LOOP_BEGIN =
+            HookShapes.method(HookShapes.StateBasedLoop.class, "onStateBasedLoopBegin");
+    private static final Method ON_STATE_BASED_LOOP_END =
+            HookShapes.method(HookShapes.StateBasedLoop.class, "onStateBasedLoopEnd");
+    private static final Method ON_PRIORITY_SETTLED =
+            HookShapes.method(HookShapes.PrioritySettled.class, "onPrioritySettled");
 
     // ── the snapshot depth is the same on every record ─────────────────
 
@@ -241,5 +250,72 @@ class PatchedCollectorTest {
                         new Object[]{liveAbility, livePlayer, "G"}));
         assertTrue(lines.stream().anyMatch(l -> l.contains("mana_produced")),
                 "live mana production must reach the shard: " + lines);
+    }
+
+    // ── the phase signals ───────────────────────────────────────────────
+    //
+    // They write no record, so they are driven on a PhaseSignals of their
+    // own, over a sink that keeps what reached it.
+
+    /** The signals delivered to a sink, in order. */
+    private static final class Delivered implements PhaseSignals.Sink {
+        private final List<String> seen = new ArrayList<>();
+
+        @Override
+        public void stateBasedLoopBegan() {
+            seen.add("begin");
+        }
+
+        @Override
+        public void stateBasedLoopEnded() {
+            seen.add("end");
+        }
+
+        @Override
+        public void prioritySettled(Player priorityPlayer) {
+            seen.add("settled " + priorityPlayer.getName());
+        }
+    }
+
+    @Test
+    void theLiveGameIsInsideItsStateBasedLoopFromItsBeginToItsEnd() throws Throwable {
+        Delivered sink = new Delivered();
+        PhaseSignals signals = new PhaseSignals(new LiveGame(TestCards.game()), sink);
+        PatchHooks.Listener handler = signals.stateBasedLoopHandler();
+
+        handler.invoke(null, ON_STATE_BASED_LOOP_BEGIN, new Object[]{TestCards.game()});
+        boolean inside = signals.inStateBasedLoop();
+        handler.invoke(null, ON_STATE_BASED_LOOP_END, new Object[]{TestCards.game()});
+
+        assertTrue(inside, "between the begin and the end");
+        assertFalse(signals.inStateBasedLoop(), "after the end");
+        assertEquals(List.of("begin", "end"), sink.seen);
+    }
+
+    /** A fork's phase handler runs its own loop, through the same JVM-static hook. */
+    @Test
+    void aStateBasedLoopInAnotherGameLeavesTheLiveGameOutsideOne() throws Throwable {
+        Delivered sink = new Delivered();
+        PhaseSignals signals = new PhaseSignals(new LiveGame(TestCards.game()), sink);
+
+        signals.stateBasedLoopHandler().invoke(null, ON_STATE_BASED_LOOP_BEGIN,
+                new Object[]{TestBoard.anotherGame()});
+
+        assertFalse(signals.inStateBasedLoop());
+        assertEquals(List.of(), sink.seen);
+    }
+
+    @Test
+    void priorityThatSettlesInAnotherGameIsNotDeliveredAndTheLiveGamesIs() throws Throwable {
+        Delivered sink = new Delivered();
+        PhaseSignals signals = new PhaseSignals(new LiveGame(TestCards.game()), sink);
+        PatchHooks.Listener handler = signals.prioritySettledHandler();
+        Game fork = TestBoard.anotherGame();
+
+        handler.invoke(null, ON_PRIORITY_SETTLED, new Object[]{fork, new Player("fork-seat", fork, 92303)});
+        handler.invoke(null, ON_PRIORITY_SETTLED,
+                new Object[]{TestCards.game(), new Player("live-seat", TestCards.game(), 93103)});
+
+        assertEquals(List.of("settled live-seat"), sink.seen);
     }
 }

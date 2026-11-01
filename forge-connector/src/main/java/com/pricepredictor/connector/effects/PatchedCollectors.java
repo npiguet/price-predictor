@@ -15,6 +15,9 @@ import java.util.List;
  * on the inline path. Each is installed reflectively and simply does not run on
  * an unpatched checkout. {@code continuous} records need the patch's layer
  * accessors rather than a hook, and are collected at each phase boundary.
+ * The state-based-loop and priority-settled hooks write no record of their
+ * own: {@link PhaseSignals} tells the game's collectors where each loop runs
+ * and when priority settles.
  *
  * <p>The one owner of a game's listener hooks, the bracket's confirm listener
  * included: they are JVM statics with no game of their own, and installing
@@ -82,7 +85,9 @@ final class PatchedCollectors implements AutoCloseable {
                 channels.mana().handler(),
                 channels.playability().legalityHandler(),
                 channels.clauses().clauseHandler(),
-                channels.clauses().outcomeHandler());
+                channels.clauses().outcomeHandler(),
+                channels.phase().stateBasedLoopHandler(),
+                channels.phase().prioritySettledHandler());
     }
 
     /** The decision and legality channel, which the random seat also writes through. */

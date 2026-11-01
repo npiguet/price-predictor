@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import forge.game.Game;
 import forge.game.GameEntity;
 import forge.game.ability.AbilityKey;
 import forge.game.card.Card;
@@ -93,6 +94,18 @@ final class HookShapes {
         void onConfirm(SpellAbility sa, boolean confirmed);
     }
 
+    /** {@code PhaseHandler.EffectRecordStateBasedLoopListener}. */
+    interface StateBasedLoop {
+        void onStateBasedLoopBegin(Game game);
+
+        void onStateBasedLoopEnd(Game game);
+    }
+
+    /** {@code PhaseHandler.EffectRecordPrioritySettledListener}. */
+    interface PrioritySettled {
+        void onPrioritySettled(Game game, Player priorityPlayer);
+    }
+
     /**
      * A listener setter, the stand-in for what it takes, and any older shape a
      * worker still accepts in its place.
@@ -116,7 +129,9 @@ final class HookShapes {
                 new Declared(PatchHooks.MANA_LISTENER, Mana.class, List.of()),
                 new Declared(PatchHooks.REPLACEMENT_LISTENER, Replacement.class,
                         List.of(OlderReplacement.class)),
-                new Declared(PatchHooks.CONFIRM_LISTENER, Confirm.class, List.of()));
+                new Declared(PatchHooks.CONFIRM_LISTENER, Confirm.class, List.of()),
+                new Declared(PatchHooks.STATE_BASED_LOOP_LISTENER, StateBasedLoop.class, List.of()),
+                new Declared(PatchHooks.PRIORITY_SETTLED_LISTENER, PrioritySettled.class, List.of()));
     }
 
     /** The method {@code shape} declares under {@code name}. */

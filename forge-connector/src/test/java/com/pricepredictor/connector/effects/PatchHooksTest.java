@@ -1,6 +1,10 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.collect.Multimap;
 import com.pricepredictor.connector.ForgeExtension;
+import forge.game.card.Card;
+import forge.game.trigger.Trigger;
+import forge.game.trigger.TriggerHandler;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -80,6 +84,31 @@ class PatchHooksTest {
     @Test
     void theSubAbilityHookReadsNullOutsideAResolution() {
         assertNull(PatchHooks.currentSubAbility());
+    }
+
+    /**
+     * The pending delayed triggers read back through the accessor, one list
+     * per kind, each reachable by name off the record the accessor returns.
+     *
+     * <p>Read the way a collector reads it, reflectively: the record's own
+     * accessors are the contract as much as the accessor's name. Skipped on a
+     * checkout without the accessor.
+     */
+    @Test
+    void aRegisteredDelayedTriggerReadsBackThroughTheAccessor() {
+        Assumptions.assumeTrue(PatchHooks.PENDING_DELAYED_TRIGGERS.present(),
+                "the checkout lacks " + PatchHooks.PENDING_DELAYED_TRIGGERS);
+        Card host = TestBoard.cardInAnotherGame("Paralyze");
+        Trigger trigger = host.getCurrentState().getTriggers().get(0);
+        TriggerHandler handler = host.getGame().getTriggerHandler();
+        handler.registerThisTurnDelayedTrigger(trigger);
+
+        Object pending = PatchHooks.PENDING_DELAYED_TRIGGERS.read(handler);
+
+        assertEquals(List.of(trigger), PatchHooks.read(pending, "delayed"));
+        assertEquals(List.of(trigger), PatchHooks.read(pending, "thisTurn"));
+        assertTrue(PatchHooks.read(pending, "playerDefined") instanceof Multimap<?, ?> byPlayer
+                && byPlayer.isEmpty(), String.valueOf(pending));
     }
 
     // ── the listener shapes ─────────────────────────────────────────────

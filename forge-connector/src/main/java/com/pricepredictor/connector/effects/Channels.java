@@ -24,7 +24,8 @@ record Channels(
         PlayabilityChannel playability,
         ManaChannel mana,
         ClauseOutcomeRouter clauses,
-        ContinuousChannel continuous) implements AutoCloseable {
+        ContinuousChannel continuous,
+        PhaseSignals phase) implements AutoCloseable {
 
     /**
      * @param seed    seeds the game's sampling stream
@@ -42,7 +43,8 @@ record Channels(
                 new PlayabilityChannel(live, context, dedup, sampler, caps.playabilityRate()),
                 new ManaChannel(live, context, new ManaReservoir(caps.manaCap(), sampler)),
                 new ClauseOutcomeRouter(live, bracket),
-                new ContinuousChannel(live, context, dedup));
+                new ContinuousChannel(live, context, dedup),
+                new PhaseSignals(live, PhaseSignals.IGNORED));
     }
 
     @Override
