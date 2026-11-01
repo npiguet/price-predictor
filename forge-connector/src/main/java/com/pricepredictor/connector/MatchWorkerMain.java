@@ -2,6 +2,7 @@ package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.AttributionMode;
+import com.pricepredictor.connector.effects.GameRecording;
 import com.pricepredictor.connector.effects.PatchHooks;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 
@@ -51,6 +52,11 @@ import java.util.Optional;
  *       and its progress line, never a sealed row (FR-025). Read with the
  *       other {@code effect.*} caps; echoed at startup when the share is
  *       above zero.</li>
+ *   <li>{@code -Deffect.count.dropped.events=true} — after each game, append
+ *       the counts of its events that reached no record, by event type and
+ *       engine phase, to {@code {run_id}.{worker}-{lifetime}.dropped-events.tsv}
+ *       beside the shard, for the supervisor to sum when the run ends
+ *       (FR-041). Default {@code false}; echoed at startup when set.</li>
  *   <li>{@code -Dsealed.progress.file=<path>} — when set, one line is appended
  *       to this file per completed match via {@link ProgressWriter}, so a
  *       caller that never touches {@code output.file} (records-only mode) can
@@ -272,6 +278,10 @@ public class MatchWorkerMain {
         caps.aimedAt().ifPresent(rules -> System.out.println(
                 "Aimed at: " + (rules.isEmpty() ? "no rule" : String.join(",", rules))
                         + " (every record carries aimed_at)"));
+        if (caps.countDroppedEvents()) {
+            System.out.println("Dropped events: counted per game into "
+                    + GameRecording.droppedEventsFile(effectRecords));
+        }
         // The worker loops until the supervisor terminates it, so close()
         // is never reached on the normal path. Without this the block in
         // flight — up to a few hundred records — is lost on every stop.

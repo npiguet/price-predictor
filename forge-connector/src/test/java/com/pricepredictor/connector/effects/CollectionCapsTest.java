@@ -2,7 +2,10 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.StdStreams;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -119,5 +122,56 @@ class CollectionCapsTest {
             System.clearProperty(CollectionCaps.AIMED_AT);
         }
         assertEquals(Optional.empty(), CollectionCaps.defaults().aimedAt());
+    }
+
+    /**
+     * {@code effect.count.dropped.events} (FR-041): off unless the supervisor
+     * passes {@code --count-dropped-events}, which sends it {@code true}.
+     */
+    @Test
+    void theDroppedEventCountIsOffUnlessThePropertySaysTrue() {
+        assertFalse(CollectionCaps.defaults().countDroppedEvents());
+        assertFalse(CollectionCaps.fromSystemProperties().countDroppedEvents());
+        try {
+            System.setProperty(CollectionCaps.COUNT_DROPPED_EVENTS, "true");
+            assertTrue(CollectionCaps.fromSystemProperties().countDroppedEvents());
+            System.setProperty(CollectionCaps.COUNT_DROPPED_EVENTS, "false");
+            assertFalse(CollectionCaps.fromSystemProperties().countDroppedEvents());
+        } finally {
+            System.clearProperty(CollectionCaps.COUNT_DROPPED_EVENTS);
+        }
+    }
+
+    /**
+     * A game's counts are appended as one {@code event_type, phase, count}
+     * line each, so a lifetime's file is the concatenation of its games and
+     * the supervisor sums the lines.
+     */
+    @Test
+    void aGamesDroppedEventsAppendOneTabSeparatedLinePerTypeAndPhase(@TempDir Path dir)
+            throws Exception {
+        Path file = dir.resolve("run.0-l1" + DroppedEvents.SUFFIX);
+        DroppedEvents first = new DroppedEvents();
+        first.count(EventType.ZONE_CHANGE, "upkeep");
+        first.count(EventType.ZONE_CHANGE, "upkeep");
+        first.count(EventType.MANA_PRODUCED, "main1");
+        first.appendTo(file);
+        DroppedEvents second = new DroppedEvents();
+        second.count(EventType.ZONE_CHANGE, "upkeep");
+        second.appendTo(file);
+        // A game that dropped nothing appends nothing.
+        new DroppedEvents().appendTo(file);
+
+        assertEquals(List.of(
+                        "zone_change\tupkeep\t2", "mana_produced\tmain1\t1",
+                        "zone_change\tupkeep\t1"),
+                Files.readAllLines(file));
+    }
+
+    /** Before a game has a phase, an event is counted under {@code none}. */
+    @Test
+    void anEventBeforeAnyPhaseIsCountedUnderNone() {
+        assertEquals(DroppedEvents.NO_PHASE, DroppedEvents.phaseOf(null));
+        assertEquals("none", DroppedEvents.NO_PHASE);
     }
 }

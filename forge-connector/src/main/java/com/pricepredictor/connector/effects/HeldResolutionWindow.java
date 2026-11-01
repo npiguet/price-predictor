@@ -16,12 +16,18 @@ import forge.game.spellability.SpellAbility;
  * damage and never the death, which a combat record, whose bracket stays
  * open until the step ends, does hold.
  *
- * <p>So the halves are held from the resolution until the next real action
- * begins ({@link #close}) — a bracket opening for a cast or a trigger,
- * another resolution ending, a combat bracket opening, a step or phase
- * boundary, a land played, the end of the game — and written then, exactly
- * once. One resolution at most is held: the next one's end is itself such an
- * action.
+ * <p>So the halves are held from the resolution until the end of the
+ * state-based loop that follows it ({@code PhaseHandler.checkStateBasedEffects},
+ * whose end signal {@link PhaseSignals} delivers), and written then, exactly
+ * once ({@link #close}). The loop is the whole check: each pass, and the
+ * triggers it puts on the stack between two passes, which open brackets of
+ * their own without ending this one (FR-028). On a worker without the loop
+ * hook the window ends at the next real action instead — a bracket opening
+ * for a cast or a trigger, another resolution ending, a combat bracket
+ * opening, a step or phase boundary, a land played, the end of the game —
+ * and those stay as the fallback with the hook too, for a resolution no loop
+ * follows. One resolution at most is held: the next one's end is itself such
+ * an action.
  */
 final class HeldResolutionWindow {
 
@@ -98,8 +104,9 @@ final class HeldResolutionWindow {
      * the legend rule, the Aura that falls off a creature the resolution
      * killed. The static's own stat change stays out; it is the static's
      * continuous record, and only the move it causes is the resolution's.
-     * The window closes at the next action, so a check after a land or a new
-     * cast is not this resolution's.
+     * The window closes at the loop's end (or, without the hook, at the next
+     * action), so a check after a land or a new cast is not this
+     * resolution's.
      *
      * <p>A modal resolution files the move into the half whose events named
      * the permanent, the last of them when several did — the mode that was
@@ -125,8 +132,9 @@ final class HeldResolutionWindow {
     }
 
     /**
-     * A new action has begun, so the held resolution's state-based
-     * consequences are over: write its effect halves, if one is held.
+     * The state-based loop has ended, or a new action has begun, so the held
+     * resolution's state-based consequences are over: write its effect
+     * halves, if one is held.
      */
     void close() {
         if (held == null) {

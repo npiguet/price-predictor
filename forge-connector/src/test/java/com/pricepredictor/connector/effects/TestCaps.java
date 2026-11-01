@@ -18,6 +18,7 @@ public final class TestCaps {
     private double randomSeatShare;
     private double randomSeatProbability;
     private Optional<List<String>> aimedAt;
+    private boolean countDroppedEvents;
 
     private TestCaps(CollectionCaps from) {
         manaCap = from.manaCap();
@@ -28,6 +29,7 @@ public final class TestCaps {
         randomSeatShare = from.randomSeatShare();
         randomSeatProbability = from.randomSeatProbability();
         aimedAt = from.aimedAt();
+        countDroppedEvents = from.countDroppedEvents();
     }
 
     /** {@link CollectionCaps#defaults()}, to be varied. */
@@ -72,8 +74,15 @@ public final class TestCaps {
         return this;
     }
 
+    /** A run that writes each game's dropped-event counts beside its shard (FR-041). */
+    public TestCaps countDroppedEvents() {
+        countDroppedEvents = true;
+        return this;
+    }
+
     public CollectionCaps build() {
         return new CollectionCaps(manaCap, playabilityRate, interventions, probes,
-                probeKeywords, randomSeatShare, randomSeatProbability, aimedAt);
+                probeKeywords, randomSeatShare, randomSeatProbability, aimedAt,
+                countDroppedEvents);
     }
 }

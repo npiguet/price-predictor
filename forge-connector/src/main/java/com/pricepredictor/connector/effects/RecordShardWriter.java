@@ -84,6 +84,14 @@ public final class RecordShardWriter implements AutoCloseable {
         return path;
     }
 
+    /**
+     * A file beside the shard that belongs to the same worker lifetime:
+     * {@code {run_id}.{worker}-{lifetime}{suffix}}.
+     */
+    public Path sibling(String suffix) {
+        return path.resolveSibling(runId + "." + shard + suffix);
+    }
+
     /** Start a new game; returns its {@code game_id}. */
     public String nextGameId() {
         return runId + "." + shard + "." + gameCounter++;

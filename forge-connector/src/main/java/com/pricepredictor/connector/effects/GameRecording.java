@@ -4,6 +4,8 @@ import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
 import forge.game.event.GameEventTurnPhase;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -32,6 +34,11 @@ public final class GameRecording implements AutoCloseable {
     private final Optional<InterventionScheduler> interventions;
     /** Stage three's damage-step probes, when the run takes any. */
     private final Optional<ProbeScheduler> probes;
+    /** Where the game's dropped-event counts go when it ends, or null when the run counts none. */
+    private final Path droppedEventsFile;
+
+    /** Said once per worker: a counts file that cannot be written is no reason to stop collecting. */
+    private static final OnceWarning DROPPED_EVENTS_UNWRITABLE = new OnceWarning();
 
     /**
      * Build one game's collectors.
@@ -75,6 +82,15 @@ public final class GameRecording implements AutoCloseable {
         this.bracket = new BusBracketCollector(game, context.get(),
                 recordId -> probes.ifPresent(probe -> probe.writeHeldProbes(recordId)));
         this.patched = new PatchedCollectors(game, context.get(), caps, seed, bracket);
+        this.droppedEventsFile = caps.countDroppedEvents() ? droppedEventsFile(writer) : null;
+    }
+
+    /**
+     * The file a worker lifetime's dropped-event counts are appended to,
+     * beside its shard (FR-041).
+     */
+    public static Path droppedEventsFile(RecordShardWriter writer) {
+        return writer.sibling(DroppedEvents.SUFFIX);
     }
 
     /**
@@ -111,7 +127,8 @@ public final class GameRecording implements AutoCloseable {
     }
 
     /**
-     * Stop recording: write what is still held and take every hook down.
+     * Stop recording: write what is still held and take every hook down,
+     * then append the game's dropped-event counts when the run counts them.
      *
      * <p>Called once the game is over, which is the moment the mana reservoir
      * is decided. Every hook comes down even when writing what is held throws,
@@ -120,7 +137,24 @@ public final class GameRecording implements AutoCloseable {
      */
     @Override
     public void close() {
-        patched.close();
+        try {
+            patched.close();
+        } finally {
+            appendDroppedEvents();
+        }
+    }
+
+    /** Append the game's dropped-event counts to the lifetime's file, when the run counts them. */
+    private void appendDroppedEvents() {
+        if (droppedEventsFile == null) {
+            return;
+        }
+        try {
+            bracket.droppedEvents().appendTo(droppedEventsFile);
+        } catch (IOException e) {
+            DROPPED_EVENTS_UNWRITABLE.raise(() -> "cannot append dropped-event counts to "
+                    + droppedEventsFile + ": " + e);
+        }
     }
 
     /** Where the random seat writes the decisions its own draws made (FR-022d). */

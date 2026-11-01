@@ -42,7 +42,8 @@ import java.util.function.Supplier;
  * something resolves, the resolving item's ({@link #followResolving}). It
  * changes only through the transitions below; which events it takes is the
  * collector's cause to say. What is filed while none is open is kept as the
- * orphans.
+ * orphans, and counted as dropped when it is discarded rather than rescued
+ * ({@link DroppedEvents}).
  */
 final class StackBrackets {
 
@@ -68,6 +69,15 @@ final class StackBrackets {
      * resolution empties it again — the ordinary place of a win.
      */
     private final EventBuffer orphans = new EventBuffer();
+    /** The engine phase each orphan arrived in, in the orphans' order. */
+    private final List<String> orphanPhases = new ArrayList<>();
+
+    /** Where a discarded orphan is counted. */
+    private final DroppedEvents dropped;
+
+    StackBrackets(DroppedEvents dropped) {
+        this.dropped = dropped;
+    }
 
     /** The open bracket, or null when none is open. */
     OpenResolution open() {
@@ -79,9 +89,17 @@ final class StackBrackets {
         return open == null ? null : open.ability;
     }
 
-    /** Where an event filed now goes: the open bracket's buffer, or the orphans. */
-    EventBuffer filing() {
-        return open == null ? orphans : open.modes.buffer();
+    /**
+     * File an event where it goes now: the open bracket's buffer, or the
+     * orphans, noting the phase it arrived in for the count it joins if it is
+     * discarded.
+     */
+    void file(EffectEvent event, String phase) {
+        if (open != null) {
+            open.modes.buffer().file(event);
+        } else if (orphans.file(event)) {
+            orphanPhases.add(phase);
+        }
     }
 
     /**
@@ -99,9 +117,19 @@ final class StackBrackets {
         return !orphans.isEmpty();
     }
 
-    /** What was filed while no bracket was open, no longer kept. */
+    /** What was filed while no bracket was open, no longer kept: rescued, so not dropped. */
     List<EffectEvent> drainOrphans() {
+        orphanPhases.clear();
         return orphans.drain();
+    }
+
+    /** What was filed while no bracket was open, discarded: every one is dropped. */
+    private void discardOrphans() {
+        List<EffectEvent> discarded = orphans.drain();
+        for (int i = 0; i < discarded.size(); i++) {
+            dropped.count(discarded.get(i).type(), orphanPhases.get(i));
+        }
+        orphanPhases.clear();
     }
 
     /**
@@ -117,7 +145,7 @@ final class StackBrackets {
         // Nothing is cast before Forge has finished the last resolution, and
         // the id it watched may be cast again from here on.
         finishing = null;
-        orphans.clear();
+        discardOrphans();
         if (cast != null) {
             items.add(cast);
         }
@@ -184,7 +212,7 @@ final class StackBrackets {
         items.addAll(waiting);
         waiting.clear();
         open = null;
-        orphans.clear();
+        discardOrphans();
         finishing = abilityId;
         return resolved;
     }

@@ -74,6 +74,12 @@ class StackItemBracketTest {
         priorityWithTriggers(game);
     }
 
+    /** The moves the collector has counted as reaching no record in the first main phase. */
+    private static long droppedMoves(BusBracketCollector collector) {
+        return collector.droppedEvents().counts()
+                .getOrDefault(new DroppedEvents.Key("zone_change", "main1"), 0L);
+    }
+
     /** The cost half and the effect half through {@code script}, linked to each other. */
     private static String linkedHalf(List<String> all, String script) {
         String cost = only(all, "activation", script);
@@ -130,10 +136,11 @@ class StackItemBracketTest {
 
     /**
      * Maro's power and toughness are the cards in its controller's hand, so
-     * casting the last of them leaves a 0/0 that dies in the state-based
-     * check before prowess goes on the stack. The death is the cast's
-     * consequence and stays in the Bolt's half when the trigger goes above
-     * it.
+     * casting the last of them shrinks it as the Bolt leaves the hand, before
+     * prowess goes on the stack. The shrink is the cast's consequence and
+     * stays in the Bolt's half when the trigger goes above it. The 0/0 then
+     * dies in the state-based check with no resolution held and no damage
+     * step open, so that death reaches no record and is counted (FR-029).
      */
     @Test
     void whatASpellGatheredBeforeATriggerWentAboveItStaysInItsHalf() throws Throwable {
@@ -141,24 +148,32 @@ class StackItemBracketTest {
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
         TestBoard.inPlay(game, caster, "Monastery Swiftspear");
-        Card maro = TestBoard.inPlay(game, caster, "Maro");
         Card bolt = inHand(game, caster, "Lightning Bolt");
+        Card[] maro = new Card[1];
 
         List<String> all = ShardRun.observed(tempDir, game, collector -> {
+            // Entered under the collector's eye, so its shrink has a reading
+            // to differ from (FirstStatChangeTest).
+            maro[0] = TestBoard.inPlay(game, caster, "Maro");
+            game.getAction().checkStateEffects(false);
             cast(game, bolt, caster, opponent);
+            long movesDroppedBefore = droppedMoves(collector);
             priorityWithTriggers(game);
-            assertEquals(ZoneType.Graveyard, game.getZoneOf(game.getCardState(maro)).getZoneType(),
+            assertEquals(ZoneType.Graveyard,
+                    game.getZoneOf(game.getCardState(maro[0])).getZoneType(),
                     "Maro died with no card left in hand");
             assertEquals(2, game.getStack().size(), "prowess went on the stack above the Bolt");
+            assertEquals(1L, droppedMoves(collector) - movesDroppedBefore,
+                    "the death is counted: " + collector.droppedEvents().counts());
             resolve(game);
             resolve(game);
             nextStep(game);
         });
 
         String boltHalf = linkedHalf(all, BOLT);
-        assertTrue(boltHalf.contains("\"subjects\":[\"E" + maro.getId()
-                + "\"],\"params\":{\"from_zone\":\"battlefield\",\"to_zone\":\"graveyard\""), boltHalf);
-        assertEquals(List.of("zone_change", "damage_dealt", "life_change"), eventTypes(boltHalf),
+        assertTrue(boltHalf.contains("{\"type\":\"pt_change\",\"subjects\":[\"E"
+                + maro[0].getId() + "\"]"), boltHalf);
+        assertEquals(List.of("pt_change", "damage_dealt", "life_change"), eventTypes(boltHalf),
                 boltHalf);
     }
 
@@ -371,8 +386,10 @@ class StackItemBracketTest {
      * that controller answers a Shock with the Lightning Bolt that is the
      * last of them. Moving the Bolt to the stack zone shrinks Maro before the
      * Bolt is cast — {@code GameAction.changeZone} runs the static check
-     * then — and the 0/0 dies in the check after the cast. Both are the
-     * Bolt's consequences, in the Bolt's half; the Shock's is its damage.
+     * then — and the 0/0 dies in the check after the cast. The shrink is the
+     * Bolt's consequence, in the Bolt's half; the Shock's is its damage. The
+     * death is a state-based one with no resolution held and no damage step
+     * open, so it reaches no record and is counted (FR-029).
      */
     @Test
     void whatAResponsesMoveOntoTheStackSetsOffIsTheResponses() throws Throwable {
@@ -390,10 +407,13 @@ class StackItemBracketTest {
             game.getAction().checkStateEffects(false);
             cast(game, shock, caster, opponent);
             cast(game, bolt, opponent, caster);
+            long movesDroppedBefore = droppedMoves(collector);
             priorityWithTriggers(game);
             assertEquals(ZoneType.Graveyard,
                     game.getZoneOf(game.getCardState(maro[0])).getZoneType(),
                     "Maro died with no card left in hand");
+            assertEquals(1L, droppedMoves(collector) - movesDroppedBefore,
+                    "the death is counted: " + collector.droppedEvents().counts());
             resolve(game);
             resolve(game);
             nextStep(game);
@@ -404,11 +424,13 @@ class StackItemBracketTest {
         String maroRef = "\"subjects\":[\"E" + maro[0].getId() + "\"]";
         assertTrue(boltHalf.contains("{\"type\":\"pt_change\"," + maroRef),
                 "the shrink as the Bolt left the hand: " + boltHalf);
-        assertTrue(boltHalf.contains("{\"type\":\"zone_change\"," + maroRef
-                + ",\"params\":{\"from_zone\":\"battlefield\",\"to_zone\":\"graveyard\""),
-                "the death in the check after the cast: " + boltHalf);
-        assertEquals(List.of("pt_change", "zone_change", "damage_dealt", "life_change"),
+        assertEquals(List.of("pt_change", "damage_dealt", "life_change"),
                 eventTypes(boltHalf), boltHalf);
+        for (String record : all) {
+            assertFalse(record.contains("{\"type\":\"zone_change\"," + maroRef
+                    + ",\"params\":{\"from_zone\":\"battlefield\""),
+                    "the death reached a record: " + record);
+        }
     }
 
     // ── a player's action at priority ───────────────────────────────────
@@ -540,8 +562,9 @@ class StackItemBracketTest {
 
     /**
      * The Maro response with an abandoned cast's card in the stack zone: the
-     * Bolt's half holds the shrink and the death exactly as it does without
-     * it ({@link #whatAResponsesMoveOntoTheStackSetsOffIsTheResponses}).
+     * Bolt's half holds the shrink exactly as it does without it, and the
+     * death is counted rather than swallowed by the stuck card's cast
+     * ({@link #whatAResponsesMoveOntoTheStackSetsOffIsTheResponses}).
      */
     @Test
     void aCardLeftInTheStackZoneDoesNotSwallowADeath() throws Throwable {
@@ -559,17 +582,20 @@ class StackItemBracketTest {
             game.getAction().moveToStack(stuck, null);
             cast(game, shock, caster, opponent);
             cast(game, bolt, opponent, caster);
+            long movesDroppedBefore = droppedMoves(collector);
             priorityWithTriggers(game);
             assertEquals(ZoneType.Graveyard,
                     game.getZoneOf(game.getCardState(maro[0])).getZoneType(),
                     "Maro died with no card left in hand");
+            assertEquals(1L, droppedMoves(collector) - movesDroppedBefore,
+                    "the death is counted: " + collector.droppedEvents().counts());
             resolve(game);
             resolve(game);
             nextStep(game);
         });
 
         assertEquals(DAMAGE, eventTypes(linkedHalf(all, SHOCK)), all.toString());
-        assertEquals(List.of("pt_change", "zone_change", "damage_dealt", "life_change"),
+        assertEquals(List.of("pt_change", "damage_dealt", "life_change"),
                 eventTypes(linkedHalf(all, BOLT)), all.toString());
     }
 

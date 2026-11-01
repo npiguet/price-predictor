@@ -423,12 +423,14 @@ class ForkRecordsTest {
 
     /**
      * A death in the state-based check between the cast and the resolution
-     * is the forced spell's, as live files it into the spell's bracket. Maro
-     * counts its caster's hand, and casting Pyroclasm, the hand's one card,
-     * leaves it 0/0 before Pyroclasm resolves.
+     * is nobody's, forced as live (FR-029): no resolution is held and no
+     * damage step open, so live counts it and files it nowhere, the fork
+     * refuses it, and the two records agree. Maro counts its caster's hand,
+     * and casting Pyroclasm, the hand's one card, leaves it 0/0 before
+     * Pyroclasm resolves; its shrink is still the cast's.
      */
     @Test
-    void aDeathInTheCheckBeforeTheResolutionIsTheForcedSpells() throws Throwable {
+    void aDeathInTheCheckBeforeTheResolutionIsNobodys() throws Throwable {
         Game observedGame = maroBoard();
         String observed = payloadOf(
                 observedEffectHalf(observedGame, firstSpellInHand(observedGame)));
@@ -438,9 +440,10 @@ class ForkRecordsTest {
                 .filter(card -> card.getName().equals("Maro")).findFirst().orElseThrow();
         String forced = payloadOf(forcedRecord(forkedGame, firstSpellInHand(forkedGame), 1L));
 
-        assertTrue(forced.contains("\"subjects\":[\"" + Refs.of(maro)
-                + "\"],\"params\":{\"from_zone\":\"battlefield\",\"to_zone\":\"graveyard\""),
-                forced);
+        assertTrue(forced.contains("{\"type\":\"pt_change\",\"subjects\":[\"" + Refs.of(maro)
+                + "\"]"), forced);
+        assertFalse(forced.contains("\"subjects\":[\"" + Refs.of(maro)
+                + "\"],\"params\":{\"from_zone\":\"battlefield\""), forced);
         assertEquals(observed, forced);
     }
 

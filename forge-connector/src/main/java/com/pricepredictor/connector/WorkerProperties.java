@@ -131,7 +131,7 @@ public final class WorkerProperties {
      * A boolean property, false when unset. Any value but {@code true} reads
      * as false, so there is no malformed value to apply a policy to.
      */
-    static boolean flag(String name) {
+    public static boolean flag(String name) {
         return Boolean.parseBoolean(System.getProperty(name, "false"));
     }
 

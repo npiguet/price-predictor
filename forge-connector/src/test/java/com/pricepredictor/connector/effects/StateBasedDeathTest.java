@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.card.CounterEnumType;
 import forge.game.event.GameEventGameOutcome;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
@@ -20,9 +22,11 @@ import static com.pricepredictor.connector.effects.RecordLines.count;
 import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
 import static com.pricepredictor.connector.effects.RecordLines.eventsNaming;
 import static com.pricepredictor.connector.effects.RecordLines.linkOf;
+import static com.pricepredictor.connector.effects.RecordLines.only;
 import static com.pricepredictor.connector.effects.RecordLines.optionOf;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
 import static com.pricepredictor.connector.effects.RecordLines.records;
+import static com.pricepredictor.connector.effects.RecordLines.scriptOf;
 import static com.pricepredictor.connector.effects.RecordLines.withEventOfType;
 import static com.pricepredictor.connector.effects.TestBoard.castAndResolve;
 import static com.pricepredictor.connector.effects.TestBoard.nextStep;
@@ -424,6 +428,220 @@ class StateBasedDeathTest {
             assertEquals(i == lastTouching ? 1 : 0, count(halves.get(i), deathOf(elves)),
                     "half " + i + " of " + halves);
         }
+    }
+
+    // ── the state-based loop (FR-028, FR-029) ───────────────────────────
+
+    private static final String BOLT = "cardsfolder/l/lightning_bolt.txt";
+    private static final String FESTERING_GOBLIN = "cardsfolder/f/festering_goblin.txt";
+    private static final String DOOMED_DISSENTER = "cardsfolder/d/doomed_dissenter.txt";
+
+    /**
+     * The board's dies triggers armed: a card moved onto the battlefield by
+     * hand is not in the last-state battlefield a look-back trigger reads.
+     */
+    private static void armTriggers(Game game) {
+        game.getTriggerHandler().resetActiveTriggers(false, null);
+        game.copyLastState();
+    }
+
+    private static boolean inGraveyard(Game game, Card card) {
+        return game.getCardsIn(ZoneType.Graveyard).stream().anyMatch(c -> c.getId() == card.getId());
+    }
+
+    /**
+     * Play the real main loop until {@code card} has died: a step that gives
+     * priority runs the state-based loop, with its signals, before anyone
+     * acts. Two AI seats with nothing to cast pass.
+     */
+    private static void stepUntilDead(Game game, Card card) {
+        for (int step = 0; step < 20 && !inGraveyard(game, card); step++) {
+            game.getPhaseHandler().mainLoopStep();
+        }
+        assertTrue(inGraveyard(game, card), card + " died");
+    }
+
+    /**
+     * Acceptance 7, on the real loop: a Lightning Bolt kills Festering Goblin,
+     * whose dies trigger reaches the stack between two passes of the check.
+     * The death sits in the Bolt's effect half; the trigger opens its own
+     * bracket, whose records hold no death of that check (SC-004). The
+     * trigger's -1/-1 then kills the Llanowar Elves in the check after its
+     * own resolution, outside the first one, and that death is the trigger's.
+     */
+    @Test
+    void aBurnSpellKeepsItsKillAndTheDiesTriggerKeepsTheLaterOne() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card goblin = TestBoard.onBattlefield(game, opponent, "Festering Goblin");
+        // The trigger's only legal target once the goblin has died.
+        Card elves = TestBoard.onBattlefield(game, caster, "Llanowar Elves");
+        SpellAbility bolt = targeting(
+                spellOf(TestBoard.inHand(game, caster, "Lightning Bolt"), caster), goblin);
+        armTriggers(game);
+
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, game, "for the state-based loop's signals", () -> {
+                    game.getStack().add(bolt);
+                    game.getStack().resolveStack();
+                    // The loop kills the goblin and puts its trigger on the
+                    // stack; once both players pass the trigger resolves,
+                    // and the next loop kills the elves.
+                    stepUntilDead(game, elves);
+                    assertTrue(inGraveyard(game, goblin), "the goblin died");
+                    nextStep(game);
+                });
+
+        String boltHalf = only(records, "resolution", BOLT);
+        assertTrue(boltHalf.contains(deathOf(goblin)), "the kill is the Bolt's: " + boltHalf);
+        assertFalse(boltHalf.contains(deathOf(elves)), boltHalf);
+        // The trigger's own bracket: a cost half and an effect half, linked.
+        String triggerCost = only(records, "activation", FESTERING_GOBLIN, "trigger");
+        String triggerHalf = only(records, "resolution", FESTERING_GOBLIN, "trigger");
+        assertEquals(linkOf(triggerCost), linkOf(triggerHalf), triggerHalf);
+        for (String record : records) {
+            if (FESTERING_GOBLIN.equals(scriptOf(record))) {
+                assertFalse(record.contains(deathOf(goblin)),
+                        "a trigger record holds a death of its check: " + record);
+            }
+        }
+        assertTrue(triggerHalf.contains(deathOf(elves)),
+                "the later death is the trigger's: " + triggerHalf);
+    }
+
+    /**
+     * The loop's later passes: a death in the pass after a dies trigger went
+     * on the stack is still the check's, so it joins the held half rather
+     * than the trigger's bracket, which is open by then. The loop's signals
+     * are given by hand around the engine's own passes, so the second pass
+     * has a death to find: lethal damage marked between the two, standing in
+     * for whatever the first pass's outcome leaves for the next.
+     */
+    @Test
+    void aDeathInALaterPassOfTheLoopJoinsTheHeldHalfNotTheTrigger() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card dissenter = TestBoard.onBattlefield(game, opponent, "Doomed Dissenter");
+        Card bears = TestBoard.onBattlefield(game, opponent, "Grizzly Bears");
+        SpellAbility bolt = targeting(
+                spellOf(TestBoard.inHand(game, caster, "Lightning Bolt"), caster), dissenter);
+        armTriggers(game);
+
+        List<String> records = ShardRun.observed(tempDir, game, collector -> {
+            game.getStack().add(bolt);
+            game.getStack().resolveStack();
+            collector.phaseSink().stateBasedLoopBegan();
+            game.getAction().checkStateEffects(false);
+            assertTrue(game.getStack().addAllTriggeredAbilitiesToStack(),
+                    "the dies trigger went on the stack between the passes");
+            bears.setDamage(2);
+            game.getAction().checkStateEffects(false);
+            collector.phaseSink().stateBasedLoopEnded();
+            assertTrue(inGraveyard(game, bears), "the second pass killed the bears");
+            // The trigger resolves and makes its Zombie; the priority after.
+            game.getStack().resolveStack();
+            collector.phaseSink().stateBasedLoopBegan();
+            game.getAction().checkStateEffects(false);
+            collector.phaseSink().stateBasedLoopEnded();
+            nextStep(game);
+        });
+
+        String boltHalf = only(records, "resolution", BOLT);
+        assertTrue(boltHalf.contains(deathOf(dissenter)), boltHalf);
+        assertTrue(boltHalf.contains(deathOf(bears)), "the second pass is the check's: " + boltHalf);
+        String triggerHalf = only(records, "resolution", DOOMED_DISSENTER);
+        assertTrue(triggerHalf.contains("\"to_zone\":\"battlefield\""),
+                "the Zombie is the trigger's: " + triggerHalf);
+        for (String record : records) {
+            if (DOOMED_DISSENTER.equals(scriptOf(record))) {
+                assertFalse(record.contains(deathOf(dissenter)), record);
+                assertFalse(record.contains(deathOf(bears)), record);
+            }
+        }
+    }
+
+    /**
+     * FR-029: a state-based death with no held resolution and no open damage
+     * step reaches no record and is counted. A -1/-1 counter put on Llanowar
+     * Elves during the upkeep, as an upkeep cost would, while a Shock is on
+     * the stack: the check after kills the elves, and the death is neither
+     * the Shock's — the open bracket, whose cast did not leave the board in
+     * that state — nor anyone else's.
+     */
+    @Test
+    void aStateBasedDeathNothingHeldReachesNoRecordAndIsCounted() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.UPKEEP);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card elves = TestBoard.onBattlefield(game, caster, "Llanowar Elves");
+        SpellAbility shock = targeting(
+                spellOf(TestBoard.inHand(game, caster, "Shock"), caster),
+                TestBoard.onBattlefield(game, opponent, "Hill Giant"));
+
+        List<String> records = ShardRun.observed(tempDir, game, collector -> {
+            game.getStack().add(shock);
+            elves.addCounterInternal(CounterEnumType.M1M1, 1, caster, false, null, null);
+            collector.phaseSink().stateBasedLoopBegan();
+            game.getAction().checkStateEffects(false);
+            collector.phaseSink().stateBasedLoopEnded();
+            assertTrue(inGraveyard(game, elves), "the elves died");
+            assertEquals(1L, collector.droppedEvents().counts().get(
+                            new DroppedEvents.Key("zone_change", "upkeep")),
+                    "the death is counted: " + collector.droppedEvents().counts());
+            game.getStack().resolveStack();
+            nextStep(game);
+        });
+
+        assertFalse(records.isEmpty(), "the Shock wrote its halves");
+        for (String record : records) {
+            assertFalse(record.contains(deathOf(elves)), "the death reached a record: " + record);
+        }
+    }
+
+    /**
+     * Under {@code effect.count.dropped.events} a recorded game appends its
+     * counts beside its shard when it ends (FR-041), the loop's signals
+     * coming from the engine itself: the priority's loop kills the elves the
+     * -1/-1 counter left at 0 toughness, with nothing held.
+     */
+    @Test
+    void aCountingRunAppendsTheGamesDroppedEventsBesideItsShard() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.UPKEEP);
+        Player caster = game.getPlayers().get(0);
+        Card elves = TestBoard.onBattlefield(game, caster, "Llanowar Elves");
+        CollectionCaps counting = TestCaps.caps().interventions(0).probes(0)
+                .countDroppedEvents().build();
+
+        RecordShardWriter writer = ShardRun.recordedWithClauseHook(
+                tempDir, game, counting, "for the state-based loop's signals", () -> {
+                    elves.addCounterInternal(CounterEnumType.M1M1, 1, caster, false, null, null);
+                    stepUntilDead(game, elves);
+                });
+
+        Path counts = GameRecording.droppedEventsFile(writer);
+        assertEquals(writer.path().getParent(), counts.getParent());
+        List<String> lines = Files.readAllLines(counts);
+        assertTrue(lines.stream().anyMatch(line -> line.matches("zone_change\t[a-z0-9_]+\t1")),
+                "the death's line: " + lines);
+    }
+
+    /** Without the property nothing is appended: the counts are the run's to ask for. */
+    @Test
+    void aRunThatCountsNothingWritesNoCountsFile() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.UPKEEP);
+        Player caster = game.getPlayers().get(0);
+        Card elves = TestBoard.onBattlefield(game, caster, "Llanowar Elves");
+        CollectionCaps silent = TestCaps.caps().interventions(0).probes(0).build();
+
+        RecordShardWriter writer = ShardRun.recordedWithClauseHook(
+                tempDir, game, silent, "for the state-based loop's signals", () -> {
+                    elves.addCounterInternal(CounterEnumType.M1M1, 1, caster, false, null, null);
+                    stepUntilDead(game, elves);
+                });
+
+        assertFalse(Files.exists(GameRecording.droppedEventsFile(writer)));
     }
 
     // ── the end of the game ─────────────────────────────────────────────

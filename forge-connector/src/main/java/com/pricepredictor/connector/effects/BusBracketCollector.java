@@ -51,6 +51,12 @@ import java.util.Set;
  * from the phase event to the next priority or phase event, and a {@code
  * turn_action} record per action.
  *
+ * <p>The state-based loop Forge runs before each priority is told by its
+ * begin and end signals ({@link #phaseSink}, FR-028). A resolution's effect
+ * half is held across the whole loop and written at its end; a trigger put on
+ * the stack between two passes opens its own bracket without ending it. What
+ * reaches no record is counted ({@link DroppedEvents}, FR-029, FR-041).
+ *
  * <p>This class is the {@code @Subscribe} facade: each handler is the sequence
  * of steps an event means, and the state those steps change is owned by the
  * collaborator named for it — {@link StackBrackets} the stack's brackets and
@@ -65,8 +71,11 @@ public final class BusBracketCollector extends BusEventReader {
     private final CollectorContext context;
     private final SnapshotBuilder snapshots;
 
+    /** What this game's records never took, by event type and engine phase. */
+    private final DroppedEvents dropped = new DroppedEvents();
+
     /** One bracket per stack item this collector saw cast, and the open one. */
-    private final StackBrackets brackets = new StackBrackets();
+    private final StackBrackets brackets = new StackBrackets(dropped);
 
     /** The cast on its way onto the stack, if one is, and what it set off ({@link Cause#CAST}). */
     private final CastsUnderWay castsUnderWay;
@@ -82,6 +91,29 @@ public final class BusBracketCollector extends BusEventReader {
 
     /** The step's turn-based actions, gathered until anyone gets priority. */
     private final TurnActionWindow turnActions;
+
+    /**
+     * Whether the engine is between a state-based loop's begin and end
+     * signals. Never set on a worker without the loop hook, where the held
+     * half keeps its fallback window ({@link HeldResolutionWindow}).
+     */
+    private boolean inStateBasedLoop;
+
+    /** Whether something went on the stack during the state-based loop running now. */
+    private boolean stackUsedInLoop;
+
+    /** Where this game's {@link PhaseSignals} deliver the loop's two signals. */
+    private final PhaseSignals.Sink phaseSink = new PhaseSignals.Sink() {
+        @Override
+        public void stateBasedLoopBegan() {
+            beginStateBasedLoop();
+        }
+
+        @Override
+        public void stateBasedLoopEnded() {
+            endStateBasedLoop();
+        }
+    };
 
     /**
      * @param onCombatRecord told the id of each {@code combat} record as it is
@@ -138,12 +170,21 @@ public final class BusBracketCollector extends BusEventReader {
      * against a real ability without a game in progress.
      */
     void beginBracket(SpellAbility ability) {
-        // A cast, an activation or a trigger reaching the stack is the next
-        // action: whatever the held resolution killed has died by now.
-        onNextAction();
-        // And whatever the combat damage killed: state-based actions run
-        // before anything goes on the stack.
-        combatStep.closeWindow();
+        if (inStateBasedLoop) {
+            // A trigger reaching the stack between two passes of the
+            // state-based check (FR-028). It opens its own bracket below, and
+            // the check goes on: the held half and the damage step's record
+            // take its deaths until the loop's end signal.
+            stackUsedInLoop = true;
+        } else {
+            // A cast, an activation or a trigger reaching the stack is the
+            // next action: whatever the held resolution killed has died by
+            // now.
+            onNextAction();
+            // And whatever the combat damage killed: state-based actions run
+            // before anything goes on the stack.
+            combatStep.closeWindow();
+        }
         if (ability != null) {
             writeOffEarlierCast(ability.getId());
         }
@@ -303,6 +344,45 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
+     * Where this game's state-based-loop signals go: {@link Channels} hands
+     * it to the game's {@link PhaseSignals}.
+     */
+    PhaseSignals.Sink phaseSink() {
+        return phaseSink;
+    }
+
+    /**
+     * The state-based loop has begun: from here to its end, every permanent
+     * leaving the battlefield is one of its deaths, frozen tracker or not;
+     * the triggers it puts on the stack go there between two passes, with
+     * the tracker thawed.
+     */
+    void beginStateBasedLoop() {
+        inStateBasedLoop = true;
+        stackUsedInLoop = false;
+    }
+
+    /**
+     * The state-based loop has ended: the held resolution's consequences are
+     * over and its effect halves are written; and, if a trigger went on the
+     * stack during the loop, so is a damage step's record, since what
+     * resolves for the rest of the step is not the combat's.
+     */
+    void endStateBasedLoop() {
+        inStateBasedLoop = false;
+        onNextAction();
+        if (stackUsedInLoop) {
+            combatStep.closeWindow();
+        }
+        stackUsedInLoop = false;
+    }
+
+    /** This game's events that reached no record so far. */
+    DroppedEvents droppedEvents() {
+        return dropped;
+    }
+
+    /**
      * A step or phase has ended: the step's combat record is written and the
      * next damage step starts with its window open again.
      */
@@ -331,47 +411,58 @@ public final class BusBracketCollector extends BusEventReader {
             EventAttribution.stamp(damage, brackets.resolving(), namedCause);
             combatStep.file(damage);
         } else {
-            route(damage, namedCause, false);
+            route(damage, namedCause, Filing.NON_COMBAT_DAMAGE);
         }
     }
 
     /**
-     * A move a state-based check made while a resolution is held is that
+     * A state-based death made while a resolution is held is that
      * resolution's consequence, filed into it
-     * ({@link HeldResolutionWindow#fileDeath}); any other move is routed.
+     * ({@link HeldResolutionWindow#fileDeath}); one made while none is held
+     * is a damage step's, or nobody's (FR-029); any other move is routed.
      *
-     * <p>Two conditions, each closing a way an unrelated move could join:
+     * <p>A state-based death is a move with two properties, each closing a
+     * way an unrelated move could join:
      * <ul>
      *   <li>it leaves the <b>battlefield</b> — a death, an exile instead of a
      *   death, a token ceasing to exist, an Aura falling off; a card arriving
      *   anywhere is not a consequence of this kind; and</li>
-     *   <li>a state-based check is running, read as the game's view tracker
+     *   <li>it is made inside the state-based loop, between its begin and
+     *   end signals, every pass included; on a worker without the loop hook,
+     *   while a state-based check runs, read as the game's view tracker
      *   being frozen, which {@code GameAction.checkStateEffects} holds for
-     *   its whole loop. Between the check and the next cast event the player
-     *   acts, and the costs of that action are paid before the cast is
-     *   announced: a Treasure the resolution made, sacrificed for mana to
-     *   cast the next spell, leaves the battlefield in this same window and
-     *   is that spell's cost, not this resolution's consequence. Outside a
-     *   resolution nothing else freezes the tracker while a card moves.</li>
+     *   each pass. After the loop the player acts, and the costs of that
+     *   action are paid before the cast is announced: a Treasure the
+     *   resolution made, sacrificed for mana to cast the next spell, leaves
+     *   the battlefield after the loop and is that spell's cost, not this
+     *   resolution's consequence. Outside a resolution nothing else freezes
+     *   the tracker while a card moves.</li>
      * </ul>
      */
     @Override
     void fileMove(GameEventCardChangeZone event, EffectEvent moved) {
-        if (heldResolution.isHolding() && isStateBasedLeave(event)) {
+        if (!isStateBasedDeath(event)) {
+            record(moved);
+        } else if (heldResolution.isHolding()) {
             heldResolution.fileDeath(moved, event.card());
         } else {
-            record(moved);
+            route(moved, null, Filing.STATE_BASED_DEATH);
         }
+    }
+
+    /** Whether a move is a death of the state-based check running now ({@link #fileMove}). */
+    private boolean isStateBasedDeath(GameEventCardChangeZone event) {
+        return inStateBasedLoop ? leavesBattlefield(event) : isStateBasedLeave(event);
     }
 
     /**
      * Route an event into whichever bracket it is a consequence of.
      *
      * <p>State-based-action deaths arrive with no ability resolving, after the
-     * bracket that caused them has closed. The ones it caused never reach
-     * here: {@link #fileMove} files them into its held effect half.
-     * The rest are routed by {@link #now} like any other event, a turn-based
-     * action's into its window ({@link TurnActionWindow}).
+     * bracket that caused them has closed. None reaches here: {@link
+     * #fileMove} files the held resolution's into its effect half and routes
+     * the rest as deaths. Every other event is routed by {@link #now}, a
+     * turn-based action's into its window ({@link TurnActionWindow}).
      */
     private void record(EffectEvent event) {
         fileOutcome(event, null);
@@ -385,7 +476,7 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Override
     void fileOutcome(EffectEvent event, String namedCause) {
-        route(event, namedCause, true);
+        route(event, namedCause, Filing.OUTCOME);
     }
 
     /**
@@ -434,9 +525,10 @@ public final class BusBracketCollector extends BusEventReader {
          * with no push and no cast event — a mana ability activated outside
          * any payment, or an activation being announced. Every one goes
          * through {@code ComputerUtil.handlePlayingSpellAbility}, which names
-         * it to the stack. Nobody's record: the event goes nowhere, and the
-         * action ends the last cast's consequences, so the state-based check
-         * after it is nobody's either ({@link #onAnyEvent}).
+         * it to the stack. Nobody's record: the event goes nowhere and is
+         * counted as dropped, and the action ends the last cast's
+         * consequences, so the state-based check after it is nobody's either
+         * ({@link #onAnyEvent}).
          */
         ACTION,
         /**
@@ -446,9 +538,27 @@ public final class BusBracketCollector extends BusEventReader {
          * or resolution has ended its consequences — or the orphans'; in a
          * combat damage step before anything used the stack, the combat's. A
          * land played and a turn-based action fall here too, and find no
-         * bracket open: neither happens with anything on the stack.
+         * bracket open: neither happens with anything on the stack. A
+         * state-based death nothing held is never the open bracket's: the
+         * combat's, or nobody's (FR-029).
          */
         CONSEQUENCE
+    }
+
+    /** What kind of event {@link #route} is filing, which narrows where it may go. */
+    private enum Filing {
+        /** An outcome: in a combat damage step before anything used the stack, the combat's. */
+        OUTCOME,
+        /** A damage the bus says is not combat damage: never the combat's. */
+        NON_COMBAT_DAMAGE,
+        /**
+         * A permanent leaving the battlefield in a state-based check while no
+         * resolution is held ({@link #fileMove}): as a consequence, a combat
+         * damage step's or nobody's, counted as dropped; never the open
+         * bracket's, whose cast did not leave the board in that state
+         * (FR-029).
+         */
+        STATE_BASED_DEATH
     }
 
     /**
@@ -536,12 +646,14 @@ public final class BusBracketCollector extends BusEventReader {
      * itself — what caused it are properties of the bracket it landed in,
      * and only this side knows that.
      *
-     * @param mayBeCombat whether a consequence in a combat damage step joins
-     *                    the combat's record: any outcome does, while a damage
-     *                    the bus says is not combat damage goes to the open
-     *                    bracket ({@link #fileDamage})
+     * <p>An event that arrives while no record is open — at a player's action
+     * at priority, for the orphans, or a state-based death nothing takes — is
+     * counted as dropped ({@link DroppedEvents}); an orphan only once it is
+     * discarded rather than rescued at the game's end ({@link StackBrackets}).
+     *
+     * @param filing what kind of event it is, which narrows where it may go
      */
-    private void route(EffectEvent event, String namedCause, boolean mayBeCombat) {
+    private void route(EffectEvent event, String namedCause, Filing filing) {
         Now now = classifyNow();
         if (now.cause() != Cause.CAST && now.cause() != Cause.PAYMENT) {
             // The cast under way has been announced or abandoned: what its
@@ -555,19 +667,25 @@ public final class BusBracketCollector extends BusEventReader {
                 }
             }
             case CAST -> castsUnderWay.hold(now.casting(), event, namedCause);
-            case ACTION -> brackets.closeForAction();
+            case ACTION -> {
+                brackets.closeForAction();
+                dropped.count(event.type(), DroppedEvents.phaseOf(game));
+            }
             case CONSEQUENCE -> {
-                if (mayBeCombat && combatStep.takesEventsNow()) {
+                if (filing != Filing.NON_COMBAT_DAMAGE && combatStep.takesEventsNow()) {
                     combatStep.file(
                             EventAttribution.stamp(event, brackets.resolving(), namedCause));
+                } else if (filing == Filing.STATE_BASED_DEATH) {
+                    dropped.count(event.type(), DroppedEvents.phaseOf(game));
                 } else if (!turnActions.take(event, namedCause)) {
-                    brackets.filing().file(
-                            EventAttribution.stamp(event, brackets.resolving(), namedCause));
+                    brackets.file(
+                            EventAttribution.stamp(event, brackets.resolving(), namedCause),
+                            DroppedEvents.phaseOf(game));
                 }
             }
-            case RESOLUTION ->
-                    brackets.filing().file(
-                            EventAttribution.stamp(event, brackets.resolving(), namedCause));
+            case RESOLUTION -> brackets.file(
+                    EventAttribution.stamp(event, brackets.resolving(), namedCause),
+                    DroppedEvents.phaseOf(game));
         }
     }
 

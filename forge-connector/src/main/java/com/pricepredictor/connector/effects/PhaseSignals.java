@@ -31,10 +31,6 @@ final class PhaseSignals {
         }
     }
 
-    /** A sink that takes the signals and does nothing with them. */
-    static final Sink IGNORED = new Sink() {
-    };
-
     private final LiveGame live;
     private final Sink sink;
     private boolean inStateBasedLoop;

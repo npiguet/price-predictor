@@ -13,6 +13,9 @@ import java.util.Optional;
  *                collect-variants} run aims at (FR-009a), stamped on every
  *                record it writes as {@code aimed_at}, possibly empty; absent
  *                on a {@code match-outcomes} run, whose records carry none
+ * @param countDroppedEvents whether each game's events that reached no record
+ *                are written beside the shard for the supervisor to sum
+ *                (FR-041, {@link DroppedEvents})
  */
 public record CollectionCaps(
         int manaCap,
@@ -22,11 +25,12 @@ public record CollectionCaps(
         List<String> probeKeywords,
         double randomSeatShare,
         double randomSeatProbability,
-        Optional<List<String>> aimedAt) {
+        Optional<List<String>> aimedAt,
+        boolean countDroppedEvents) {
 
     public static CollectionCaps defaults() {
         return new CollectionCaps(
-                1, 0.1, 2, 2, List.of(), 0.0, 0.0, Optional.empty());
+                1, 0.1, 2, 2, List.of(), 0.0, 0.0, Optional.empty(), false);
     }
 
     public static final String MANA_CAP = "effect.mana.cap";
@@ -37,6 +41,7 @@ public record CollectionCaps(
     public static final String RANDOM_SEAT_SHARE = "effect.random.seat.share";
     public static final String RANDOM_SEAT_PROBABILITY = "effect.random.seat.probability";
     public static final String AIMED_AT = "effect.aimed.at";
+    public static final String COUNT_DROPPED_EVENTS = "effect.count.dropped.events";
 
     /**
      * Read from the {@code effect.*} system properties the supervisor sets.
@@ -70,7 +75,8 @@ public record CollectionCaps(
                 // Present, even blank, on every coverage and variant run and
                 // on no other: its presence is what marks the run's records
                 // aimed (FR-009a), its value the rules they were aimed at.
-                WorkerProperties.presentListProperty(AIMED_AT));
+                WorkerProperties.presentListProperty(AIMED_AT),
+                WorkerProperties.flag(COUNT_DROPPED_EVENTS));
     }
 
     /** Whether any match of this run may seat a random player at all. */

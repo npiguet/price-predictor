@@ -146,17 +146,26 @@ final class ShardRun {
      */
     static List<String> recordsWithClauseHook(Path dir, Game game, String why, Played body)
             throws Throwable {
-        assumeClauseHook(why);
         CollectionCaps noForks = TestCaps.caps().interventions(0).probes(0).build();
+        return readShard(recordedWithClauseHook(dir, game, noForks, why, body).path());
+    }
+
+    /**
+     * The same under caps of the test's choosing, returning the closed writer
+     * unread, for a test about the shard or the files beside it.
+     */
+    static RecordShardWriter recordedWithClauseHook(
+            Path dir, Game game, CollectionCaps caps, String why, Played body) throws Throwable {
+        assumeClauseHook(why);
         RecordShardWriter writer = writer(dir);
         try (GameRecording recording =
-                new GameRecording(game, writer, GAME_ID, noForks, SEED, null)) {
+                new GameRecording(game, writer, GAME_ID, caps, SEED, null)) {
             recording.open();
             body.run();
         } finally {
             writer.close();
         }
-        return readShard(writer.path());
+        return writer;
     }
 
     // ── observed off the bus ────────────────────────────────────────────

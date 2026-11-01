@@ -98,9 +98,12 @@ abstract class BusEventReader {
      * observed death and a forced one are recognised by the same rule.
      */
     final boolean isStateBasedLeave(GameEventCardChangeZone event) {
-        return event.from() != null
-                && event.from().zoneType() == ZoneType.Battlefield
-                && game != null && game.getTracker().isFrozen();
+        return leavesBattlefield(event) && game != null && game.getTracker().isFrozen();
+    }
+
+    /** Whether this move takes a permanent off the battlefield. */
+    static boolean leavesBattlefield(GameEventCardChangeZone event) {
+        return event.from() != null && event.from().zoneType() == ZoneType.Battlefield;
     }
 
     /**

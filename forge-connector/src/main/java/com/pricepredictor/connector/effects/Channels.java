@@ -29,7 +29,8 @@ record Channels(
 
     /**
      * @param seed    seeds the game's sampling stream
-     * @param bracket where the clause and outcome hooks file their events
+     * @param bracket where the clause and outcome hooks file their events,
+     *                and the state-based loop's signals go
      */
     static Channels of(
             Game game, CollectorContext context, CollectionCaps caps, long seed,
@@ -44,7 +45,7 @@ record Channels(
                 new ManaChannel(live, context, new ManaReservoir(caps.manaCap(), sampler)),
                 new ClauseOutcomeRouter(live, bracket),
                 new ContinuousChannel(live, context, dedup),
-                new PhaseSignals(live, PhaseSignals.IGNORED));
+                new PhaseSignals(live, bracket.phaseSink()));
     }
 
     @Override

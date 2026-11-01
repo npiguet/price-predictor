@@ -87,7 +87,9 @@ final class ForkEventSink extends BusEventReader {
      *   <li>{@link #BEFORE}: between the cast and the resolution, what is
      *   published while the forced ability is the top of the fork's stack is
      *   filed, as live files the state-based check before priority into the
-     *   spell's bracket. While anything sits above it — a cast trigger:
+     *   spell's bracket — all but a permanent leaving the battlefield in that
+     *   check, which live sends to no record, since no resolution is held
+     *   and no damage step open (FR-029). While anything sits above it — a cast trigger:
      *   prowess, a "whenever you cast" or becomes-target trigger, storm,
      *   cascade — nothing is: that is the item's own record live. What was
      *   filed before an item was pushed above is kept.</li>
@@ -329,7 +331,7 @@ final class ForkEventSink extends BusEventReader {
         noticeResolutionStart();
         return switch (phase) {
             case PRE_CAST -> true;
-            case BEFORE -> forcedOnTop();
+            case BEFORE -> forcedOnTop() && !(move != null && isStateBasedLeave(move));
             // Everything but the payment for a spell the forced ability
             // casts, which is that spell's cost and which live leaves out too.
             case RESOLVING -> !payingForACast(acting);
@@ -384,11 +386,12 @@ final class ForkEventSink extends BusEventReader {
      * GameEventSpellResolved}, which is what holds the halves.
      *
      * <p>Only an intervention's death in {@link Phase#HELD} joins a half that
-     * way. One in the check before the forced ability resolves, or one while
-     * the tracker is frozen mid-resolution, is filed as an ordinary event,
-     * checked for a repeat in its span: live files either into the open
-     * bracket like any other event, so on a modal resolution it rides with
-     * the mode in whose span it fell. A probe's is ordinary too: a damage
+     * way. One in the check before the forced ability resolves is refused
+     * ({@link #admits}), as live counts it and files it nowhere; one while
+     * the tracker is frozen mid-resolution is filed as an ordinary event,
+     * checked for a repeat in its span: live files it into the open bracket
+     * like any other event, so on a modal resolution it rides with the mode
+     * in whose span it fell. A probe's is ordinary too: a damage
      * step is one record, as the observed combat bracket is.
      */
     @Override
