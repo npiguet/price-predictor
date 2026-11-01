@@ -116,10 +116,36 @@ def _timed(steps, task: ShardTask, of: int):
         yield message, time.perf_counter() - waiting
 
 
-def _optimizer_step(optimizer) -> dict[str, torch.Tensor]:
+def relation_tables(model) -> dict[str, list[torch.Tensor]]:
+    """Every layer's relation key and value tables, as trained parameters
+    (the value tables only under relation values on)."""
+    tables: dict[str, list[torch.Tensor]] = {"rel_k_norm": [], "rel_v_norm": []}
+    for name, param in model.named_parameters():
+        for table in ("rel_k", "rel_v"):
+            if name.endswith(f".{table}"):
+                tables[f"{table}_norm"].append(param)
+    return {name: params for name, params in tables.items() if params}
+
+
+def _table_norms(tables: dict[str, list[torch.Tensor]]) -> dict[str, torch.Tensor]:
+    """Each table set's pre-clip gradient norm, left on the device (FR-067)."""
+    norms = {}
+    for name, params in tables.items():
+        grads = [p.grad for p in params if p.grad is not None]
+        if grads:
+            norms[name] = torch.linalg.vector_norm(
+                torch.stack([torch.linalg.vector_norm(g) for g in grads]))
+    return norms
+
+
+def _optimizer_step(optimizer, tables=None) -> dict[str, torch.Tensor]:
     """Clip each group, step and zero; the pre-clip norms unread, since each
-    read stalls until the GPU drains."""
+    read stalls until the GPU drains. The relation tables' norms are taken
+    before the clip and reported beside the groups; the head group's norm
+    still includes them."""
+    table_norms = _table_norms(tables) if tables else {}
     norms = clip_per_group(optimizer, max_norm=MAX_GRAD_NORM, read=False)
+    norms = {**norms, **table_norms}
     optimizer.step()
     optimizer.zero_grad(set_to_none=True)
     return norms
@@ -138,6 +164,7 @@ class TrainingLoop:
         validation_samples: Mapping[str, Path],
     ) -> None:
         self.config = config
+        self._relation_tables: dict[str, list[torch.Tensor]] | None = None
         #: Processes preparing steps; 0 prepares them in this one. Not a
         #: training setting: it moves where the host half runs, not what it
         #: computes.
@@ -379,7 +406,9 @@ class TrainingLoop:
         # Counted within the epoch, not by run.step: each epoch drops any
         # partial accumulation, so the run's step would misplace boundaries.
         if (tally.taken + 1) % self.config.grad_accum == 0:
-            stats.unread_norms = _optimizer_step(run.optimizer)
+            if self._relation_tables is None:
+                self._relation_tables = relation_tables(run.model)
+            stats.unread_norms = _optimizer_step(run.optimizer, self._relation_tables)
         if due:
             stats.norms = read_back(stats.unread_norms)
         tally.add_step(computed)

@@ -24,10 +24,10 @@ def test_every_epoch_steps_the_optimizer_on_its_own_accumulation_boundary(monkey
     updates: list[tuple[int, int]] = []
     monkeypatch.setattr(
         loop_module, "_optimizer_step",
-        lambda optimizer: updates.append((epoch, tally.taken)) or {},
+        lambda optimizer, tables=None: updates.append((epoch, tally.taken)) or {},
     )
     run = SimpleNamespace(
-        step=0, encoder=None, model=None, optimizer=None, training=None,
+        step=0, encoder=None, model=torch.nn.Module(), optimizer=None, training=None,
     )
     for epoch in (1, 2):
         tally = EpochTally(running=torch.zeros(()))
@@ -46,7 +46,7 @@ def test_a_shard_ending_between_boundaries_still_reports_its_last_norms(monkeypa
     weight = torch.nn.Parameter(torch.ones(()))
     loop.losses = StubLosses(lambda prepared: weight * 2.0)
     run = SimpleNamespace(
-        step=0, encoder=None, model=None, training=None,
+        step=0, encoder=None, model=torch.nn.Module(), training=None,
         optimizer=torch.optim.SGD([{"params": [weight], "name": "head"}], lr=0.1),
     )
     tally = EpochTally(running=torch.zeros(()))
