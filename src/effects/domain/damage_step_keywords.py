@@ -132,7 +132,7 @@ def combat_participant(
         carrier=carrier,
         opponents=opponents,
         defending_player=(
-            _defending_player(state, carrier)
+            defending_player(state, carrier)
             if combat.attacking is not None else None
         ),
         combat_substep=state.global_.combat_substep,
@@ -147,7 +147,7 @@ _CARD_DEFENDER = re.compile(r" \(\d+\)$")
 _NO_DEFENDER = "<Nothing>"
 
 
-def _defending_player(
+def defending_player(
     state: StateSnapshot, carrier: EntityState,
 ) -> str | None:
     """Which player the carrier is attacking.
