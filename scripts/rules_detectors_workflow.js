@@ -105,14 +105,14 @@ const files = units => units.map(u => `rules/scenarios/${u}.json (rule texts: ru
 
 const declarePrompt = batch => `${COMMON}
 
-Your units: ${batch.units.join(', ')}. Files: ${files(batch.units)}. Work through them one unit at a time; each unit has its own request file and its own validate run.
+Your units: ${batch.units.join(', ')}. Files: ${files(batch.units)}. Other agents work beside you in the same scratchpad: name every scratch file you write with the prefix ${batch.id}-declare-, and never run a script you did not write. Work through them one unit at a time; each unit has its own request file and its own validate run.
 ${SCOPE}
 ${TASK}
 Return the counts (for the scenarios in scope) and any notes.`
 
 const verifyPrompt = (batch, declared) => `${COMMON}
 
-Your units: ${batch.units.join(', ')}. Another agent has just worked on ${files(batch.units)} and their rules/detector-requests/<unit>.jsonl files. ${SCOPE} Its summary: ${JSON.stringify(declared)}.
+Your units: ${batch.units.join(', ')}. Other agents work beside you in the same scratchpad: name every scratch file you write with the prefix ${batch.id}-verify-, and never run a script you did not write. Another agent has just worked on ${files(batch.units)} and their rules/detector-requests/<unit>.jsonl files. ${SCOPE} Its summary: ${JSON.stringify(declared)}.
 
 Verify every declaration, operation and request in that scope against the rules below and fix what is wrong in place. Check in particular:
 - generality: a detector tied to the scenario's cards or board (a parameter, an outcome or near_miss sentence naming the scenario's cards, a selector naming a card) is wrong; rewrite it to the rule's general condition;
