@@ -44,9 +44,9 @@ Shapes follow `rules/gen3-fields.json`; the collector writes the field names bel
 | Where | Field | Shape |
 |---|---|---|
 | entity | `owner` | player ref |
-| card | `lines` | list of `{keys, kind, granted, active?, cast_with?, chosen?}`; `kind` ∈ `spell`, `activated`, `trigger`, `static`, `replacement`, `keyword`; `active` on statics |
+| card | `lines` | list of `{keys, kind, granted, active?, cast_with?, chosen?, fragment?}`; `kind` ∈ `spell`, `activated`, `trigger`, `static`, `replacement`, `keyword`; `active` on statics, and `false` on every line of a face not up |
 | card | `face_state` | `front` \| `back` \| `flipped` \| `melded` \| `face_down` |
-| card | `base_pt`, `pt_boosts` | `[p, t]`; boosts `{temporary: [p, t], counters: [p, t]}` |
+| card | `base_pt`, `pt_boosts` | `[p, t]`; boosts `{temporary: [p, t], counters: [p, t]}`; both `null` on a non-creature; base + temporary + counters = net P/T |
 | card | `counters` | `{type: n}` over every named type |
 | card | `designations`, `x_paid`, `chosen`, `costs_paid`, `history`, `order_rank`, `real_face`, `printed_loyalty`, `printed_defense`, `mana_cost` | as `rules/gen3-fields.json` |
 | player | `speed`, `city_blessing`, `rad`, `monarch`, `initiative`, `turn_counts` | |
@@ -56,7 +56,25 @@ Shapes follow `rules/gen3-fields.json`; the collector writes the field names bel
 | cards | `library_cards`, `exiled_with`, `mutate_components`, `last_known` | card entities with their role |
 | snapshot | `links` | `[{from, to, type, index?}]`; `type` a § 10.3 family name; `index` only for `targets` |
 
-A `keyword` line's keys name the keyword line the card prints; a `Secondary$ True` trait joins it.
+A card's `lines` members:
+
+| member | shape | present on |
+|---|---|---|
+| `keys` | list of 0 or 1 provenance key | every line; `[]` when the line resolves to no printed line |
+| `kind` | one of the six kinds | every line |
+| `granted` | bool: the line is not printed on this card (a static's, an attachment's, an effect's, an emblem's or a splice's) | every line |
+| `active` | bool | statics of the face up (`checkConditions()`); `false` on every line of a face not up |
+| `cast_with` | int ≥ 1: times the spell this card was cast as paid the line's cost (1 for an alternative cost or kicker, the count for multikicker) | `keyword` lines of a card on the stack or a permanent cast so |
+| `chosen` | list of `Choices$` positions the ability on the stack chose, in chain order | the line of a modal ability on the stack |
+| `fragment` | the keyword instance's own fragment as Forge writes it (`Ward:2`, `Annihilator:2`, `Protection:Goblin`) | `keyword` lines |
+
+A `keyword` line's keys name the keyword line the card prints, else the static that granted the
+keyword; a keyword a resolved effect granted has `keys: []` and is read by its `fragment`. The
+triggers, statics and abilities a keyword instance builds are its line, not lines of their own; a
+`Secondary$ True` trait is listed under its own key and joins its primary's line through the
+sidecar. A land's play and a permanent's plain cast are not lines. A face not up (a face-down
+card's real face, a double-faced card's other face) lists its printed lines with `active: false`;
+a split card lists no face not up.
 
 ## Payload additions
 
@@ -82,4 +100,5 @@ A `keyword` line's keys name the keyword line the card prints; a `Secondary$ Tru
 ## Removed
 
 - `what_if` on `attackers` records (none is written).
+- A card's `printed` and `granted_attached` (both now in `lines`) and `pt` (now `base_pt` and `pt_boosts`).
 - The AI hook's decision records (replaced by the enumerator's).

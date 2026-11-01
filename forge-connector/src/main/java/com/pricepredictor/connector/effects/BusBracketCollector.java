@@ -291,7 +291,8 @@ public final class BusBracketCollector extends BusEventReader {
      * <p>One record per damage step: first strike and regular damage are
      * separate phases, so the phase boundary is exactly the step boundary.
      * Forge publishes the phase event before the step's turn-based actions,
-     * so the window opened last sees all of them.
+     * so the window opened last sees all of them, and a damage step's board
+     * is snapshotted here before it deals any damage.
      */
     @Subscribe
     public void onPhase(GameEventTurnPhase event) {
@@ -302,6 +303,7 @@ public final class BusBracketCollector extends BusEventReader {
         // to notice what it swept away.
         reconcilePending();
         turnActions.open(event.phase());
+        combatStep.beginStep(event.phase());
     }
 
     /**

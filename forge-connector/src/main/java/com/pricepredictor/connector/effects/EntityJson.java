@@ -5,12 +5,12 @@ import com.google.common.collect.Table;
 import forge.card.CardStateName;
 import forge.card.CardTypeView;
 import forge.card.ColorSet;
+import forge.game.CardTraitBase;
 import forge.game.Game;
 import forge.game.GameEntity;
 import forge.game.card.Card;
 import forge.game.card.CardCollectionView;
 import forge.game.card.CardTraitChanges;
-import forge.game.card.CounterEnumType;
 import forge.game.card.CounterType;
 import forge.game.card.ICardTraitChanges;
 import forge.game.keyword.KeywordInterface;
@@ -25,7 +25,7 @@ import java.util.Set;
 /**
  * A snapshot's {@code state.entities} entry for one card: its computed
  * characteristics, its place in combat and on the stack, and the lines it
- * carries, printed and granted.
+ * carries, printed and granted ({@link CardLines}).
  */
 final class EntityJson {
 
@@ -55,7 +55,8 @@ final class EntityJson {
                 .raw("colors", Json.stringArray(CardSpelling.colorLetters(
                         without == null ? card.getColor() : without.colors())))
                 .value("mana_value", card.getCMC())
-                .raw("pt", ptJson(card, without))
+                .raw("base_pt", basePtJson(card))
+                .raw("pt_boosts", ptBoostsJson(card, without))
                 .value("tapped", card.isTapped())
                 .value("sick", card.isSick())
                 .value("damage", card.getDamage())
@@ -63,9 +64,10 @@ final class EntityJson {
                 .raw("combat", combatJson(game, card))
                 .value("attached_to", Refs.ofNullable(card.getAttachedTo()))
                 .value("face_down", card.isFaceDown())
-                .raw("granted_attached", ProvenanceKey.toJsonArray(grantedAttached(card)))
                 .raw("granted_temporary", grantedTemporaryJson(card, without))
-                .raw("printed", ProvenanceKey.toJsonArray(printedKeys(card)))
+                .raw("lines", CardLines.render(game, card,
+                        without == null ? card.getKeywords() : without.keywords(),
+                        without == null ? null : withoutStatic))
                 .raw("stack_extras", stackExtrasJson(game, card))
                 .render();
     }
@@ -76,30 +78,44 @@ final class EntityJson {
     }
 
     /**
-     * Computed power and toughness, decomposed into the three sources.
+     * Power and toughness before boosts: the base the printed value or a
+     * setting effect (layer 7b, Ensoul Artifact's 5/5) gives, or null for a
+     * card that is not a creature.
      *
-     * <p>Base plus boosts plus counters, kept apart because an ability that
-     * adds a boost and one that adds a counter are different effects with the
-     * same total, and the head has to predict which happened.
+     * <p>Forge's own breakdown of the numbers the creature fights with, so
+     * base, boosts and counters add up to its net power and toughness, a
+     * switch included.
      */
-    private static String ptJson(Card card, Suppressed without) {
+    private static String basePtJson(Card card) {
         if (!card.isCreature()) {
             return "null";
         }
-        int counterPower = card.getCounters(CounterEnumType.P1P1)
-                - card.getCounters(CounterEnumType.M1M1);
-        int basePower = card.getBasePower();
-        int baseToughness = card.getBaseToughness();
-        int boostPower = card.getNetPower() - basePower - counterPower;
-        int boostToughness = card.getNetToughness() - baseToughness - counterPower;
+        return Json.value(List.of(
+                card.getNetPowerBreakdown().currentValue,
+                card.getNetToughnessBreakdown().currentValue));
+    }
+
+    /**
+     * The boosts on top of the base, kept apart by source: a temporary boost
+     * and a counter are different effects with the same total, and the head
+     * has to predict which happened. Counters are every counter's
+     * contribution (+1/+1, -1/-1, +1/+2, ...), as Forge sums them.
+     */
+    private static String ptBoostsJson(Card card, Suppressed without) {
+        if (!card.isCreature()) {
+            return "null";
+        }
+        Card.StatBreakdown power = card.getNetPowerBreakdown();
+        Card.StatBreakdown toughness = card.getNetToughnessBreakdown();
+        int boostPower = power.tempBoost;
+        int boostToughness = toughness.tempBoost;
         if (without != null) {
             boostPower -= without.power();
             boostToughness -= without.toughness();
         }
         return Json.object()
-                .value("base", List.of(basePower, baseToughness))
-                .value("boosts", List.of(boostPower, boostToughness))
-                .value("counters", List.of(counterPower, counterPower))
+                .value("temporary", List.of(boostPower, boostToughness))
+                .value("counters", List.of(power.bonusFromCounters, toughness.bonusFromCounters))
                 .render();
     }
 
@@ -155,13 +171,12 @@ final class EntityJson {
     }
 
     /**
-     * Lines granted by a timestamped change rather than printed or attached.
+     * Abilities granted by a timestamped change: a static's, an attachment's
+     * or a resolved effect's grant.
      *
      * <p>"Gains flying and 'T: draw a card' until end of turn" puts the second
-     * half here. Attachment grants ride {@code granted_attached} instead, and
-     * the two stay apart because the model reads them differently: an entity's
-     * ability tokens are its printed and attached lines, while a temporary
-     * grant is part of what happened to it.
+     * half here. {@code lines} lists the same grants among every other line,
+     * flagged {@code granted}; this list keeps them by themselves.
      */
     private static List<ProvenanceKey> grantedTemporaryAbilities(Card card) {
         Set<ProvenanceKey> keys = new LinkedHashSet<>();
@@ -195,14 +210,7 @@ final class EntityJson {
      * single creature have the same cost and the same text.
      */
     private static String stackExtrasJson(Game game, Card card) {
-        SpellAbility onStack = null;
-        for (var instance : game.getStack()) {
-            SpellAbility candidate = instance.getSpellAbility();
-            if (candidate != null && candidate.getHostCard() == card) {
-                onStack = candidate;
-                break;
-            }
-        }
+        SpellAbility onStack = CardLines.stackAbilityOf(game, card);
         if (onStack == null || onStack.getTargets() == null) {
             return "null";
         }
@@ -232,37 +240,14 @@ final class EntityJson {
                 .render();
     }
 
-    /** Printed lines, as provenance keys into the card's own script. */
-    private static List<ProvenanceKey> printedKeys(Card card) {
-        Set<ProvenanceKey> keys = new LinkedHashSet<>();
-        addKeys(keys, card.getSpellAbilities());
-        return List.copyOf(keys);
-    }
-
-    /**
-     * Attachment-granted lines only.
-     *
-     * <p>Temporary grants ride the overlay instead, and the two channels stay
-     * separate because the model reads them differently: an entity's ability
-     * tokens are its printed and attachment-granted lines, while a grant until
-     * end of turn is part of what happened to it rather than what it is.
-     */
-    private static List<ProvenanceKey> grantedAttached(Card card) {
-        Set<ProvenanceKey> keys = new LinkedHashSet<>();
-        for (Card attachment : card.getAttachedCards()) {
-            addKeys(keys, attachment.getSpellAbilities());
-        }
-        return List.copyOf(keys);
-    }
-
     /**
      * Add every line's key that has one and is not already listed; shared with
      * the global block's emblems.
      */
     static void addKeys(Set<ProvenanceKey> into, Iterable<?> lines) {
         for (Object line : lines) {
-            if (line instanceof SpellAbility sa) {
-                ProvenanceKey key = ProvenanceResolver.of(sa);
+            if (line instanceof CardTraitBase trait) {
+                ProvenanceKey key = ProvenanceResolver.of(trait);
                 if (key != null) {
                     into.add(key);
                 }

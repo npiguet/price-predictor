@@ -210,7 +210,11 @@ public final class SnapshotBuilder {
         Set<ProvenanceKey> keys = new LinkedHashSet<>();
         for (Card card : game.getCardsIn(ZoneType.Command)) {
             if (card.isEmblem()) {
+                // An emblem's lines are mostly statics and triggers.
                 EntityJson.addKeys(keys, card.getSpellAbilities());
+                EntityJson.addKeys(keys, card.getTriggers());
+                EntityJson.addKeys(keys, card.getStaticAbilities());
+                EntityJson.addKeys(keys, card.getReplacementEffects());
             }
         }
         return List.copyOf(keys);

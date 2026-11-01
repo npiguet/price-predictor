@@ -265,6 +265,26 @@ public final class ProvenanceResolver {
     }
 
     /**
+     * The key of a keyword instance's own line: the keyword {@code state}
+     * prints, else the line of the static that granted it, else null.
+     *
+     * <p>The same answer a trait the keyword built gets from {@link #keyFor}
+     * and {@link #keywordGrantor}, so a keyword line and the triggers, statics
+     * and abilities its instance carries name one line. A keyword with no
+     * traits at all, such as flying, has only this to key it.
+     */
+    static ProvenanceKey keyOfKeyword(CardState state, KeywordInterface keyword) {
+        if (state == null || keyword == null) return null;
+        Card host = state.getCard();
+        if (host != null && !isScriptless(host)) {
+            ProvenanceKey printed = keyAt(state, TraitKind.KEYWORD,
+                    FaceOrder.keywordIndex(state, keyword));
+            if (printed != null) return printed;
+        }
+        return keyword.getStatic() == null ? null : of(keyword.getStatic());
+    }
+
+    /**
      * The key of the {@code index}-th {@code kind} trait of {@code state}, or
      * null for a negative index, which is how every index search here says it
      * found nothing.

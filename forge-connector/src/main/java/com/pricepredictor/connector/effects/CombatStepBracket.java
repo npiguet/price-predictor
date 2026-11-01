@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import forge.game.Game;
 import forge.game.combat.Combat;
+import forge.game.phase.PhaseType;
 
 import java.util.function.Consumer;
 
@@ -27,6 +28,12 @@ final class CombatStepBracket {
 
     /** The damage step's combat being gathered, or null outside one. */
     private StepCombat combat;
+
+    /**
+     * The board as this damage step began, before any damage, or null outside
+     * a damage step; taken by {@link #beginStep} and used by the step's record.
+     */
+    private String stepStart;
 
     /**
      * Whether this damage step's combat record has been written because
@@ -59,12 +66,17 @@ final class CombatStepBracket {
      * One damage step's combat, from the first event dealt in it until the
      * step ends or something uses the stack.
      *
-     * <p>The structure is read when the bracket opens rather than at the
+     * <p>The state is the board as the step began ({@link #beginStep}): read
+     * at the first damage event instead, it already shows that event's damage
+     * marked, so the record's input holds part of its own answer.
+     *
+     * <p>The structure is read at the first damage event rather than at the
      * flush, because the flush happens at the phase boundary — after the
      * damage has been dealt and the creatures it killed have left. Read there,
      * an attacker that traded with its blocker is in neither list, and the
-     * record describes a combat nobody fought. Read here it matches the
-     * snapshot beside it, which is taken in the same call.
+     * record describes a combat nobody fought. At the step's start the
+     * assignment does not exist yet: Forge assigns combat damage in the
+     * step's turn-based action, after the phase event.
      */
     private static final class StepCombat {
         private final String state;
@@ -94,13 +106,28 @@ final class CombatStepBracket {
         return !windowClosed && inDamageStep();
     }
 
+    /**
+     * A step has begun: in a combat damage step, the board is snapshotted now,
+     * before the step deals any damage (FR-027). Taken for every damage step
+     * with a combat and dropped at the step's end when no damage came.
+     */
+    void beginStep(PhaseType step) {
+        stepStart = (step == PhaseType.COMBAT_FIRST_STRIKE_DAMAGE
+                || step == PhaseType.COMBAT_DAMAGE) && game.getCombat() != null
+                ? snapshots.ofBoard().render() : null;
+    }
+
     /** File an event into the damage step's bracket, opening it first if need be. */
     void file(EffectEvent event) {
         if (combat == null) {
             // Combat damage is the next action. Ordinarily the step boundary
             // before it has written the held resolution already.
             heldResolution.close();
-            combat = new StepCombat(snapshots.ofBoard().render(), game.getCombat());
+            // The step's start where it was seen; a step entered without its
+            // phase event (a hand-driven board) is read now, as late as that.
+            String state = stepStart != null ? stepStart : snapshots.ofBoard().render();
+            stepStart = null;
+            combat = new StepCombat(state, game.getCombat());
         }
         combat.events.file(event);
     }
@@ -124,6 +151,7 @@ final class CombatStepBracket {
     void endStep() {
         flush();
         windowClosed = false;
+        stepStart = null;
     }
 
     /** Write the open combat bracket, if any, as one {@code combat} record. */

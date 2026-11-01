@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * with {@link GameCopier}, and the fork's copy is rendered by the collectors'
  * own {@link SnapshotBuilder}.
  *
- * <p>The assertion is on the copy's {@code printed} keys (FR-150): every
+ * <p>The assertion is on the keys of the copy's {@code lines} (FR-150): every
  * ability-bearing token in a forked record arrives without a paper card, and
  * keyed by its name its lines would name {@code cardsfolder/f/food_token.txt}
  * -- a file that does not exist, so the sidecar join would fail loudly and the
@@ -50,7 +50,7 @@ class CopiedTokenProvenanceTest {
             "\"script_file\":\"tokenscripts/c_a_food_sac.txt\"";
     private static final String CARD_SCRIPT = "cardsfolder/f/food_token.txt";
 
-    private static final String PRINTED_KEY = "\"printed\":[";
+    private static final String LINES_KEY = "\"lines\":[";
 
     /**
      * A Food token on a forked board keys its printed line into the token tree.
@@ -90,8 +90,8 @@ class CopiedTokenProvenanceTest {
         // read exactly like the record the same board would have written
         // un-forked, which is the property the join actually needs.
         String mainline = new SnapshotBuilder(game).ofBoard().render();
-        assertEquals(printedBlock(mainline), printedBlock(forked),
-                "the fork's printed keys differ from the board it was forked from");
+        assertEquals(linesBlock(mainline), linesBlock(forked),
+                "the fork's lines differ from the board it was forked from");
     }
 
     /** FR-078 calls the field a token-script id; the printed name collapses distinct scripts. */
@@ -123,10 +123,10 @@ class CopiedTokenProvenanceTest {
      * <p>Both seats' decks are <b>empty</b>, and that is load-bearing rather
      * than incidental: the token has to be the only entity in either snapshot,
      * because the assertions read the whole rendered JSON -- {@code contains}
-     * over the two script paths, and a {@link #printedBlock} that takes the
-     * <em>first</em> {@code printed} array. A second permanent on the board
+     * over the two script paths, and a {@link #linesBlock} that takes the
+     * <em>first</em> {@code lines} array. A second permanent on the board
      * would let some other card satisfy the {@code tokenscripts} check, or hand
-     * {@code printedBlock} somebody else's keys, and the test would keep
+     * {@code linesBlock} somebody else's keys, and the test would keep
      * passing while checking nothing. The entity count is asserted in the test
      * so a fixture that stops holding this fails loudly instead.
      */
@@ -143,16 +143,26 @@ class CopiedTokenProvenanceTest {
     }
 
     /**
-     * The one entity's {@code printed} array, as rendered.
+     * The one entity's {@code lines} array, as rendered.
      *
      * <p>Takes the first one in the snapshot, which names the token only
      * because the fixture puts nothing else on the board -- see
-     * {@link #boardWithFoodTokenAndItsFork}.
+     * {@link #boardWithFoodTokenAndItsFork}. The array nests each line's
+     * {@code keys}, so its end is found by depth rather than the first
+     * closing bracket.
      */
-    private static String printedBlock(String snapshot) {
-        int open = snapshot.indexOf(PRINTED_KEY);
+    private static String linesBlock(String snapshot) {
+        int open = snapshot.indexOf(LINES_KEY);
         assertTrue(open >= 0, snapshot);
-        int close = snapshot.indexOf(']', open);
-        return snapshot.substring(open, close + 1);
+        int depth = 0;
+        for (int at = open + LINES_KEY.length() - 1; at < snapshot.length(); at++) {
+            char c = snapshot.charAt(at);
+            if (c == '[') {
+                depth++;
+            } else if (c == ']' && --depth == 0) {
+                return snapshot.substring(open, at + 1);
+            }
+        }
+        throw new AssertionError("an unclosed lines array: " + snapshot);
     }
 }
