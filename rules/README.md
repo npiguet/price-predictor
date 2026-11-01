@@ -220,3 +220,59 @@ and `out_of_scope` rules. `note`: optional, for example why a borderline rule go
   `validate`.
 - **`verified`** and **`review`** belong to the verification agent: `review` holds one string per
   change it made, and `verified` is true once it has checked the whole file.
+
+### Gen-3 fields: `detector`, `variants[].operation`, `departure`
+
+Gen-3 reads three more fields off every scenario. `validate` refuses a scenario missing the first
+two.
+
+- **`detector`** says how a record showing the scenario's rule is found in the self-play corpus. It
+  names a detector family from `src/effects/domain/rule_detectors/` and that family's parameters:
+
+  ```json
+  "detector": {
+    "family": "sba_zone_move",
+    "record_kind": "resolution",
+    "outcome": "A 0-toughness creature moves to its owner's graveyard in the state-based check after the resolution.",
+    "near_miss": "The creature stays on the battlefield at toughness 1 or more.",
+    "params": {"check": "toughness_zero"},
+    "needs": []
+  }
+  ```
+
+  `record_kind` equals the scenario's. `params` are the ones the family declares, and `validate`
+  refuses any other. `needs` lists the gen-3 record fields the detector reads, and is empty when it
+  runs on gen-2 records too. A rule outcome that no record field or event shows declares
+  `{"none": reason}` instead.
+
+  `outcome`, `near_miss` and `params` describe the rule's condition as it shows in any game, never
+  the scenario's cards. 704.5f's detector tags any creature at toughness 0 or less dying in the check
+  after any resolution, not Grizzly Bears after Shock. A detector written from the scenario's board
+  matches that board and almost nothing in the corpus, so no family takes a card name, and `validate`
+  refuses a parameter value that names one (`Card.namedX`).
+
+- **`operation`**, on every variant but the base, says which change a directed fork applies to make
+  that variant out of a live board: `pt`, `keyword`, `colour_type`, `counters`, `tap`, `life` or
+  `replace_card`. A change no fork operation can make, such as removing a permanent or a different
+  choice by a player, is `{"unclassifiable": reason}`. The base variant carries no operation.
+
+  ```json
+  {"label": "tougher", "polarity": "does_not_fire", "delta": "B's creature is Centaur Courser (3/3) instead of Grizzly Bears.",
+   "expected": "...", "operation": "replace_card"}
+  ```
+
+- **`departure`**, optional, records a disagreement between the scenario and Forge that survived
+  review. `status` is `suspected` or `confirmed`. A confirmed departure also has a `resolution`:
+  `unpatched`, `patched` or `accepted`. `forge_behaviour` says what Forge does and `note` anything
+  else.
+
+  ```
+  (none) --review keeps the disagreement--> suspected --confirmed--> confirmed/unpatched
+  confirmed/unpatched --patch on effect-record-hooks--> confirmed/patched   (expected unchanged)
+  confirmed/unpatched --accept--> confirmed/accepted                       (expected rewritten)
+  ```
+
+  Accepting a departure rewrites every variant's `expected` to Forge's behaviour in the same edit,
+  and the departure stays on the scenario as `accepted`. A rule with a scenario at
+  `confirmed/unpatched` has no rule-test records; patched and accepted rules return to the rule
+  tests.

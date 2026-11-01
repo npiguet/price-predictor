@@ -11,7 +11,8 @@
     "614.12-2: without_jailer variant gave the same outcome as the base (enters tapped), so it flipped nothing; dropped it.",
     "614.17a-1: base variant carried a non-empty delta; base decisions now cast Healing Salve after Skullcrack resolves and the in_response delta names the timing change.",
     "614.17c-1: base variant carried a non-empty delta; Skullcrack is now cast in the base decisions and the replaced variant's delta removes it.",
-    "skipped 614.10b: reason claimed no Forge card schedules an action after a skip, but Time Vault does; reworded to the real reason, that its timing is not observable."
+    "skipped 614.10b: reason claimed no Forge card schedules an action after a skip, but Time Vault does; reworded to the real reason, that its timing is not observable.",
+    "614.4-1, 614.8-2, 614.10-1, 614.11a-1, 614.11b-1, 614.12c-1, 614.13-1, 614.13c-1, 614.14-1: the base variant carried the scenario's choice in its delta; the choice moved into decisions and the base delta is empty."
   ],
   "skipped": [
     {
@@ -128,13 +129,13 @@
       },
       "decisions": [
         "A casts Doom Blade targeting River Boa, tapping two Swamps.",
-        "A passes priority. B either responds or passes, as the variant says; then both players pass and Doom Blade resolves."
+        "A passes priority. B responds by activating River Boa's regeneration ability ({G}, tapping the Forest); it resolves before Doom Blade. Then both players pass and Doom Blade resolves."
       ],
       "variants": [
         {
           "label": "in_response",
           "polarity": "fires",
-          "delta": "B responds by activating River Boa's regeneration ability ({G}, tapping the Forest); it resolves before Doom Blade.",
+          "delta": "",
           "expected": "The shield exists when Doom Blade's destruction would happen, so the destruction is replaced: River Boa stays on the battlefield, tapped. Doom Blade resolves and goes to A's graveyard."
         },
         {
@@ -561,7 +562,7 @@
         "notes": "Kazarov, Sengir Pureblood has no counters at the start."
       },
       "decisions": [
-        "A casts the spell the variant names targeting River Boa, tapping the matching lands, and passes priority.",
+        "A casts Shock targeting River Boa, tapping the Mountain, and passes priority.",
         "B responds by activating River Boa's regeneration ability ({G}, tapping the Forest); it resolves.",
         "Both players pass; A's spell resolves."
       ],
@@ -569,7 +570,7 @@
         {
           "label": "damage_regenerated",
           "polarity": "fires",
-          "delta": "A casts Shock (tapping the Mountain).",
+          "delta": "",
           "expected": "Shock deals 2 damage to River Boa, so Kazarov triggers and gets a +1/+1 counter (5/5). River Boa would be destroyed and regenerates: it stays on the battlefield, tapped, with no damage marked."
         },
         {
@@ -754,14 +755,14 @@
         "notes": ""
       },
       "decisions": [
-        "The variant says when A casts Moment of Silence and who it targets, tapping the Plains; both players pass and it resolves.",
+        "In the main phase, before combat, A casts Moment of Silence targeting A, tapping the Plains; both players pass and it resolves.",
         "A attacks B with Grizzly Bears in any combat phase that occurs."
       ],
       "variants": [
         {
           "label": "skip_own_combat",
           "polarity": "fires",
-          "delta": "In the main phase, before combat, A casts Moment of Silence targeting A.",
+          "delta": "",
           "expected": "A's combat phase is skipped: there is no beginning of combat, no attack and no combat damage. B's life stays 20."
         },
         {
@@ -1080,13 +1081,13 @@
       },
       "decisions": [
         "A casts Divination, tapping three Islands.",
-        "Both players pass; Divination resolves. For the first of the two draws A chooses (or declines) to dredge Darkblast, as the variant says; the second draw is made normally."
+        "Both players pass; Divination resolves. For the first of the two draws A dredges Darkblast; the second draw is made normally."
       ],
       "variants": [
         {
           "label": "dredge_first",
           "polarity": "fires",
-          "delta": "A dredges Darkblast for the first draw.",
+          "delta": "",
           "expected": "The first draw is replaced: A mills the top three cards (Forest, Mountain, Plains) and returns Darkblast to hand, completing before the second draw. The second draw then takes the new top card, Swamp. A's hand is Darkblast and Swamp; the graveyard holds Forest, Mountain, Plains and Divination."
         },
         {
@@ -1150,13 +1151,13 @@
       },
       "decisions": [
         "A activates Sindbad ({T}); both players pass and it resolves.",
-        "A chooses (or declines) to dredge Darkblast for the draw, as the variant says."
+        "A dredges Darkblast for the draw."
       ],
       "variants": [
         {
           "label": "dredge",
           "polarity": "fires",
-          "delta": "A dredges Darkblast for the draw.",
+          "delta": "",
           "expected": "The draw is replaced: A mills Grizzly Bears, Forest and Mountain and returns Darkblast to hand. The discard-if-nonland action is not performed on Darkblast, which stays in A's hand; the graveyard holds Grizzly Bears, Forest and Mountain."
         },
         {
@@ -1338,14 +1339,14 @@
       },
       "decisions": [
         "A casts Citadel Siege, tapping four Plains; both players pass and it resolves.",
-        "As it enters, A chooses the anchor word the variant names.",
+        "As it enters, A chooses Khans.",
         "A moves to the beginning of combat; if Citadel Siege triggers, A targets Grizzly Bears."
       ],
       "variants": [
         {
           "label": "khans",
           "polarity": "fires",
-          "delta": "A chooses Khans.",
+          "delta": "",
           "expected": "Citadel Siege has the Khans ability: at the beginning of combat it puts two +1/+1 counters on Grizzly Bears, which is 4/4."
         },
         {
@@ -1405,13 +1406,13 @@
       },
       "decisions": [
         "A casts Sutured Ghoul, tapping seven Swamps; both players pass and it resolves.",
-        "As it enters, A exiles the creature cards from A's graveyard that the variant names."
+        "As it enters, A exiles Grizzly Bears and Hill Giant from A's graveyard."
       ],
       "variants": [
         {
           "label": "exile_both",
           "polarity": "fires",
-          "delta": "A exiles both Grizzly Bears and Hill Giant.",
+          "delta": "",
           "expected": "Both cards move from A's graveyard to exile as Sutured Ghoul enters. Sutured Ghoul enters as a 5/5 (2 + 3 power and 2 + 3 toughness) and stays on the battlefield."
         },
         {
@@ -1475,14 +1476,14 @@
         "notes": "Library is listed top first. Oracle of Mul Daya lets A play lands from the top of the library and an additional land this turn. Ashiok has 5 loyalty."
       },
       "decisions": [
-        "A plays the Breeding Pool the variant names.",
+        "A plays the Breeding Pool on top of the library with Oracle of Mul Daya.",
         "As it enters, A chooses to pay 2 life; Ashiok's replacement exiles cards from the top of A's library instead."
       ],
       "variants": [
         {
           "label": "from_library",
           "polarity": "fires",
-          "delta": "A plays the Breeding Pool on top of the library with Oracle of Mul Daya.",
+          "delta": "",
           "expected": "Ashiok's effect ignores the entering Breeding Pool and exiles the next two cards, Mountain and Plains. A's life stays 20 and Breeding Pool enters untapped. A's library is Island, Swamp."
         },
         {
@@ -1539,14 +1540,14 @@
         "notes": ""
       },
       "decisions": [
-        "A removes Grizzly Bears as the variant says; both players pass until the spell resolves.",
+        "A casts Shock targeting Grizzly Bears, tapping the Mountain; both players pass until it resolves.",
         "A then tries to activate Void Maw's ability, putting a card exiled with Void Maw into its owner's graveyard as the cost."
       ],
       "variants": [
         {
           "label": "exiled_by_replacement",
           "polarity": "fires",
-          "delta": "A casts Shock targeting Grizzly Bears, tapping the Mountain.",
+          "delta": "",
           "expected": "Grizzly Bears would die; Void Maw exiles it instead. The activation is legal: A puts Grizzly Bears into B's graveyard as the cost and Void Maw gets +2/+2 until end of turn (6/7)."
         },
         {

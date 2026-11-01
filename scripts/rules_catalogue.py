@@ -41,6 +41,7 @@ HEAD_OUTPUTS = rule_catalogue.head_outputs()
 HEAD_OUTPUT_PREFIXES = rule_catalogue.HEAD_OUTPUT_PREFIXES
 OUTPUT_TAGS = rule_catalogue.OUTPUT_TAGS
 INPUT_TAGS = rule_catalogue.INPUT_TAGS
+FORK_OPERATIONS = rule_catalogue.FORK_OPERATIONS
 
 RULE_RE = re.compile(r"^(\d{3})\.(\d+)([a-z]*)\.? (.*)$")
 SECTION_RE = re.compile(r"^(\d{3})\. (.*)$")
@@ -356,7 +357,84 @@ def validate_triage(rows, rule_ids):
     return errs
 
 
-def validate_scenarios(doc, triage, all_rule_ids, names):
+DEPARTURE_STATUS = frozenset(rule_catalogue.DepartureStatus)
+DEPARTURE_RESOLUTION = frozenset(rule_catalogue.DepartureResolution)
+
+
+def _names_a_card(value):
+    """Whether a detector parameter's value names one card (a ``Card.namedX`` selector)."""
+    return isinstance(value, str) and "named" in value.lower()
+
+
+def validate_gen3_fields(s, families):
+    """The detector, operation and departure fields of one scenario (FR-002, FR-003, FR-005).
+
+    ``families`` is the detector registry, ``family id -> declared params``.
+    """
+    errs = []
+    sid = s.get("id")
+    detector = s.get("detector")
+    if not isinstance(detector, dict) or not detector:
+        errs.append(f"{sid}: no detector (declare one, or {{\"none\": reason}})")
+    elif "none" in detector:
+        if len(detector) != 1 or not str(detector["none"]).strip():
+            errs.append(f"{sid}: a none detector carries its reason and nothing else")
+    else:
+        family = detector.get("family")
+        if family not in families:
+            errs.append(f"{sid}: unknown detector family {family!r}")
+        else:
+            undeclared = set(detector.get("params") or {}) - families[family]
+            if undeclared:
+                errs.append(f"{sid}: {family} declares no parameter {sorted(undeclared)}")
+        if detector.get("record_kind") != s.get("record_kind"):
+            errs.append(f"{sid}: detector record_kind {detector.get('record_kind')!r} is not "
+                        f"the scenario's {s.get('record_kind')!r}")
+        for name, value in (detector.get("params") or {}).items():
+            if _names_a_card(value):
+                errs.append(f"{sid}: detector parameter {name} names a card ({value!r}); "
+                            "describe the rule's condition, not the scenario's board")
+        for key in ("outcome", "near_miss"):
+            if not str(detector.get(key) or "").strip():
+                errs.append(f"{sid}: detector has no {key}")
+    variants = s.get("variants", [])
+    if variants:
+        base = variants[0]
+        if base.get("delta"):
+            errs.append(f"{sid}: the first variant is the base and its delta is not empty")
+        if "operation" in base:
+            errs.append(f"{sid}: the base variant carries an operation")
+    for v in variants[1:]:
+        op = v.get("operation")
+        label = f"{sid}/{v.get('label')}"
+        if op is None:
+            errs.append(f"{label}: no operation (one of {sorted(map(str, FORK_OPERATIONS))}, "
+                        "or {\"unclassifiable\": reason})")
+        elif isinstance(op, dict):
+            if set(op) != {"unclassifiable"} or not str(op["unclassifiable"]).strip():
+                errs.append(f"{label}: operation {op!r}")
+        elif op not in FORK_OPERATIONS:
+            errs.append(f"{label}: unknown operation {op!r}")
+    departure = s.get("departure")
+    if departure is not None:
+        status, resolution = departure.get("status"), departure.get("resolution")
+        if status not in DEPARTURE_STATUS:
+            errs.append(f"{sid}: departure status {status!r}")
+        if resolution is not None and resolution not in DEPARTURE_RESOLUTION:
+            errs.append(f"{sid}: departure resolution {resolution!r}")
+        if resolution is not None and status != "confirmed":
+            errs.append(f"{sid}: a departure has a resolution only once confirmed")
+    return errs
+
+
+def detector_families():
+    """``family id -> declared params`` from the package's registry."""
+    from effects.domain.rule_detectors import families
+
+    return {family_id: family.params for family_id, family in families().items()}
+
+
+def validate_scenarios(doc, triage, all_rule_ids, names, families=None):
     errs, warns = [], []
     scen = doc.get("scenarios", [])
     covered = {rid for s in scen for rid in s.get("rules", [])}
@@ -382,6 +460,8 @@ def validate_scenarios(doc, triage, all_rule_ids, names):
         for c in s.get("cards", []):
             if c not in names:
                 errs.append(f"{sid}: card not in Forge cardsfolder: {c!r}")
+        if families is not None:
+            errs += validate_gen3_fields(s, families)
     return errs, warns
 
 
@@ -392,6 +472,7 @@ def cmd_validate(args):
     for r in rules:
         ids_by_unit[r["unit"]].append(r["id"])
     names = card_names() if not args.no_cards else None
+    families = detector_families()
     units = args.units or sorted(ids_by_unit, key=unit_sort_key)
     n_err = 0
     for unit in units:
@@ -408,7 +489,7 @@ def cmd_validate(args):
             doc, errs = None, errs + [f"scenarios json: {e}"]
         if doc is not None and tri is not None:
             known = names if names is not None else _AnyName()
-            e2, w2 = validate_scenarios(doc, tri, all_ids, known)
+            e2, w2 = validate_scenarios(doc, tri, all_ids, known, families)
             errs += e2
             warns += w2
         if args.heads and tri is not None and wanted_rules(tri):
