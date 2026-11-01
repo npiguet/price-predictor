@@ -8,7 +8,11 @@ export const meta = {
 }
 
 const WT = 'C:/Users/nicol/IdeaProjects/price-predictor'
-const UNITS = args && args.units ? args.units : ['704', '608', '701.6', '702.2', '702.19']
+// Batches of units, one declaring and one verifying agent each: args.batches as
+// [{id, units}], or args.units, one unit per batch.
+const BATCHES = args && args.batches
+  ? args.batches
+  : (args && args.units ? args.units : ['704', '608', '701.6', '702.2', '702.19']).map(u => ({ id: u, units: [u] }))
 // 'all': every scenario of the unit. 'requests': only the scenarios with no detector yet.
 const MODE = args && args.mode ? args.mode : 'all'
 
@@ -25,11 +29,11 @@ function limiter(n) {
 }
 const opusSlot = limiter(3)
 
-const COMMON = `Working directory: ${WT}. All paths are relative to it. Do not cd elsewhere. Write only rules/scenarios/<unit>.json and rules/detector-requests/<unit>.jsonl for your unit. Do not commit. Run Python as .venv/Scripts/python. Run nothing heavy: no test suites, no Maven, no JVM.`
+const COMMON = `Working directory: ${WT}. All paths are relative to it. Do not cd elsewhere. Write only rules/scenarios/<unit>.json and rules/detector-requests/<unit>.jsonl for your units. Do not commit. Run Python as .venv/Scripts/python. Run nothing heavy: no test suites, no Maven, no JVM.`
 
 const SCOPE = MODE === 'requests'
-  ? `SCOPE: only the scenarios of your unit that have NO "detector" field yet. Each has a line in rules/detector-requests/<unit>.jsonl from an earlier pass, written when fewer families existed. Families have been added since: re-decide every such scenario from scratch with the families now registered. Leave every scenario that already has a detector, and every variant that already has an operation, exactly as it is, unless you find it plainly wrong (say so in your notes). When you finish, rewrite rules/detector-requests/<unit>.jsonl to hold only the requests still open (one line per scenario still without a detector); delete the file if none is left.`
-  : `SCOPE: every scenario of your unit.`
+  ? `SCOPE: in each of your units, only the scenarios that have NO "detector" field yet. Each has a line in rules/detector-requests/<unit>.jsonl from an earlier pass, written when fewer families existed. Families have been added since: re-decide every such scenario from scratch with the families now registered. Leave every scenario that already has a detector, and every variant that already has an operation, exactly as it is, unless you find it plainly wrong (say so in your notes). When you finish, rewrite rules/detector-requests/<unit>.jsonl to hold only the requests still open (one line per scenario still without a detector); delete the file if none is left.`
+  : `SCOPE: every scenario of each of your units.`
 
 const TASK = `
 ## What you are doing
@@ -69,7 +73,7 @@ Every error must be fixed except "no detector" on a scenario you filed a request
 const DECLARE_SCHEMA = {
   type: 'object',
   properties: {
-    unit: { type: 'string' },
+    units: { type: 'array', items: { type: 'string' } },
     declared: { type: 'integer', description: 'scenarios in scope given a family declaration' },
     none: { type: 'integer', description: 'scenarios in scope declared none' },
     requests: { type: 'integer', description: 'scenarios in scope left as requests' },
@@ -78,32 +82,34 @@ const DECLARE_SCHEMA = {
     validate_errors_left: { type: 'array', items: { type: 'string' } },
     notes: { type: 'string', description: 'anything the reviewer should know: families that almost fit, doubts' },
   },
-  required: ['unit', 'declared', 'none', 'requests', 'operations', 'unclassifiable', 'validate_errors_left', 'notes'],
+  required: ['units', 'declared', 'none', 'requests', 'operations', 'unclassifiable', 'validate_errors_left', 'notes'],
 }
 
 const VERIFY_SCHEMA = {
   type: 'object',
   properties: {
-    unit: { type: 'string' },
+    units: { type: 'array', items: { type: 'string' } },
     changes: { type: 'array', items: { type: 'string' }, description: 'one line per change made, naming scenario/variant and why' },
     too_specific_found: { type: 'integer', description: 'declarations that were tied to the scenario board and had to be generalized' },
     requests_kept: { type: 'integer' },
     validate_errors_left: { type: 'array', items: { type: 'string' } },
     notes: { type: 'string' },
   },
-  required: ['unit', 'changes', 'too_specific_found', 'requests_kept', 'validate_errors_left', 'notes'],
+  required: ['units', 'changes', 'too_specific_found', 'requests_kept', 'validate_errors_left', 'notes'],
 }
 
-const declarePrompt = unit => `${COMMON}
+const files = units => units.map(u => `rules/scenarios/${u}.json (rule texts: rules/cr/${u}.md)`).join(', ')
 
-Your unit: ${unit}. File: rules/scenarios/${unit}.json (rule texts: rules/cr/${unit}.md).
+const declarePrompt = batch => `${COMMON}
+
+Your units: ${batch.units.join(', ')}. Files: ${files(batch.units)}. Work through them one unit at a time; each unit has its own request file and its own validate run.
 ${SCOPE}
 ${TASK}
 Return the counts (for the scenarios in scope) and any notes.`
 
-const verifyPrompt = (unit, declared) => `${COMMON}
+const verifyPrompt = (batch, declared) => `${COMMON}
 
-Your unit: ${unit}. Another agent has just worked on rules/scenarios/${unit}.json and rules/detector-requests/${unit}.jsonl. ${SCOPE} Its summary: ${JSON.stringify(declared)}.
+Your units: ${batch.units.join(', ')}. Another agent has just worked on ${files(batch.units)} and their rules/detector-requests/<unit>.jsonl files. ${SCOPE} Its summary: ${JSON.stringify(declared)}.
 
 Verify every declaration, operation and request in that scope against the rules below and fix what is wrong in place. Check in particular:
 - generality: a detector tied to the scenario's cards or board (a parameter, an outcome or near_miss sentence naming the scenario's cards, a selector naming a card) is wrong; rewrite it to the rule's general condition;
@@ -117,9 +123,9 @@ Return what you changed.`
 
 phase('Declare')
 const results = await pipeline(
-  UNITS,
-  unit => agent(declarePrompt(unit), { label: `declare:${unit}`, phase: 'Declare', model: 'sonnet', effort: 'medium', schema: DECLARE_SCHEMA }),
-  (declared, unit) => declared && opusSlot(() => agent(verifyPrompt(unit, declared), { label: `verify:${unit}`, phase: 'Verify', model: 'opus', effort: 'medium', schema: VERIFY_SCHEMA }))
-    .then(verified => ({ unit, declared, verified })),
+  BATCHES,
+  batch => agent(declarePrompt(batch), { label: `declare:${batch.id}`, phase: 'Declare', model: 'sonnet', effort: 'medium', schema: DECLARE_SCHEMA }),
+  (declared, batch) => declared && opusSlot(() => agent(verifyPrompt(batch, declared), { label: `verify:${batch.id}`, phase: 'Verify', model: 'opus', effort: 'medium', schema: VERIFY_SCHEMA }))
+    .then(verified => ({ batch: batch.id, units: batch.units, declared, verified })),
 )
 return results.filter(Boolean)
