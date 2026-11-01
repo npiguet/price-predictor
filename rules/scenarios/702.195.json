@@ -97,7 +97,10 @@
         "Grizzly Bears",
         "Isamaru, Hound of Konda"
       ],
-      "forge_notes": "Forge reads the designation through Condition$ EnduringStory on the damage sub-ability. Whether the discard prompt (OptionalDecider$ You) can be pre-answered depends on the harness."
+      "forge_notes": "Forge reads the designation through Condition$ EnduringStory on the damage sub-ability. Whether the discard prompt (OptionalDecider$ You) can be pre-answered depends on the harness.",
+      "detector": {
+        "none": "Looked for the enduring-story designation in EVENT_PARAMS (state_flag_change flag/value, no enduring_story flag emitted; Forge's Player.setEnduringStory raises no bus event), in a command-zone zone_change, and in the gen-3 player fields (speed, city_blessing, rad, monarch, initiative, turn_counts): none shows it."
+      }
     },
     {
       "id": "702.195a-2",
@@ -179,7 +182,10 @@
         "Dwarven Trader",
         "Shatter"
       ],
-      "forge_notes": "B needs priority with an empty stack after A passes in A's main phase; in Forge the harness must hand B priority there."
+      "forge_notes": "B needs priority with an empty stack after A passes in A's main phase; in Forge the harness must hand B priority there.",
+      "detector": {
+        "none": "Looked for the enduring-story designation in EVENT_PARAMS (no event for it), in a command-zone zone_change and in the gen-3 player fields (speed, city_blessing, rad, monarch, initiative, turn_counts): none shows it, so neither its creation nor its lasting is in any record."
+      }
     },
     {
       "id": "702.195c-1",

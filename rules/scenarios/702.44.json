@@ -80,7 +80,18 @@
         "Sol Ring",
         "Pentad Prism"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A noncreature permanent spell resolves and the permanent enters with charge counters, one per colour of mana spent (sunburst).",
+        "near_miss": "The permanent enters with no counters. Not counted: a permanent spell's acting line is the implicit spell, which has no API type or keyword line for the detector to scope by. A permanent that enters from somewhere other than the stack, or after only colourless mana, gets none.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "CHARGE"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.44a-2",
@@ -155,7 +166,18 @@
         "Etched Oracle",
         "Sol Ring"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A creature permanent spell resolves and the creature enters with +1/+1 counters, one per colour of mana spent (sunburst).",
+        "near_miss": "The permanent enters with no counters. Not counted: a permanent spell's acting line is the implicit spell, which has no API type or keyword line for the detector to scope by. A permanent that enters from somewhere other than the stack, or after only colourless mana, gets none.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "+1/+1"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.44b-1",
@@ -224,7 +246,18 @@
         "Etched Oracle",
         "Zombify"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A creature permanent spell with sunburst resolves and the creature enters from the stack with +1/+1 counters, one per colour of mana spent.",
+        "near_miss": "The permanent enters with no counters. Not counted: a permanent spell's acting line is the implicit spell, which has no API type or keyword line for the detector to scope by. A permanent that enters from somewhere other than the stack gets none.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "+1/+1"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.44c-1",
@@ -304,7 +337,18 @@
         "Arcbound Wanderer",
         "Sol Ring"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A creature permanent spell with sunburst and modular resolves and the creature enters with +1/+1 counters, one per colour of mana spent.",
+        "near_miss": "The permanent enters with no counters. Not counted: a permanent spell's acting line is the implicit spell, which has no API type or keyword line for the detector to scope by. Only colourless mana spent gives none.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "+1/+1"
+        },
+        "needs": []
+      }
     }
   ]
 }

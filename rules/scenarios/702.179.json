@@ -303,7 +303,10 @@
         "Spikeshell Harrier",
         "Grizzly Bears",
         "Island"
-      ]
+      ],
+      "detector": {
+        "none": "A player with no speed counting as speed 0 shows in no event or field: speed_changed records only increases, the comparison is evaluated inside the spell's script, and the resulting cost reduction is specific to one card."
+      }
     }
   ]
 }

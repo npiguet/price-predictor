@@ -156,7 +156,21 @@
         "Doom Blade",
         "Sheltering Light"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Destroy effect resolves and the permanent it targets does not move from the battlefield to the graveyard.",
+        "near_miss": "A Destroy effect resolves and the permanent moves from the battlefield to the graveyard.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "graveyard",
+          "api": "Destroy",
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.12b-3",

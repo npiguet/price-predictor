@@ -79,7 +79,19 @@
         "Shock",
         "Mountain"
       ],
-      "forge_notes": "Forge checks surge through a count of spells cast this turn by the player (and teammates); an opponent's spell must not count."
+      "forge_notes": "Forge checks surge through a count of spells cast this turn by the player (and teammates); an opponent's spell must not count.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate cast through its surge cost is playable because its controller or a teammate has cast another spell this turn.",
+        "near_miss": "A candidate cast through its surge cost that is not playable.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Surge"
+        },
+        "needs": []
+      }
     }
   ]
 }

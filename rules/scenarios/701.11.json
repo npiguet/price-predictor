@@ -159,7 +159,21 @@
         "Hill Giant",
         "Tifa's Limit Break"
       ],
-      "forge_notes": "Forge implements the tiers as a Charm with ModeCost."
+      "forge_notes": "Forge implements the tiers as a Charm with ModeCost.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A pump that triples a creature's power (Forge's NumAtt$ Triple) changes its power: a pt_change event.",
+        "near_miss": "A power-tripling pump that changes nothing, the creature's power and toughness being 0.",
+        "params": {
+          "event": "pt_change",
+          "api": "Pump",
+          "script_param": {
+            "NumAtt": "Triple"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.11c-1",

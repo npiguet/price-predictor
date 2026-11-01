@@ -410,7 +410,18 @@
         "Holy Strength",
         "Island"
       ],
-      "forge_notes": "Forge's ZoneExchangeEffect does nothing unless the activating player owns the Aura on the battlefield."
+      "forge_notes": "Forge's ZoneExchangeEffect does nothing unless the activating player owns the Aura on the battlefield.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An Aura swap resolution moves the Aura card and the exchanged card between zones (zone_change events).",
+        "near_miss": "An Aura swap resolution that moves no card.",
+        "params": {
+          "event": "zone_change",
+          "keyword": "Aura swap"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.12e-1",
@@ -480,7 +491,18 @@
         "Holy Strength",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An Aura swap resolution attaches the incoming Aura to the permanent the outgoing Aura was attached to (an attached event).",
+        "near_miss": "An Aura swap resolution that attaches nothing.",
+        "params": {
+          "event": "attached",
+          "keyword": "Aura swap"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.12g-1",

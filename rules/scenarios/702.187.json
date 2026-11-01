@@ -76,7 +76,19 @@
         "Mountain",
         "Grizzly Bears"
       ],
-      "forge_notes": "Wild Mongrel is only a way to discard a card at a chosen time."
+      "forge_notes": "Wild Mongrel is only a way to discard a card at a chosen time.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A mayhem alternative cost is a playable candidate for a card discarded this turn.",
+        "near_miss": "A mayhem candidate is not playable (not discarded this turn, or unpayable).",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Mayhem"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.187c-1",
@@ -143,7 +155,19 @@
         "Oscorp Industries",
         "Wild Mongrel"
       ],
-      "forge_notes": "Oscorp Industries carries K:Mayhem with no cost."
+      "forge_notes": "Oscorp Industries carries K:Mayhem with no cost.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A costless mayhem play is a playable candidate for a card discarded this turn.",
+        "near_miss": "A mayhem candidate is not playable (not discarded this turn, or the play is illegal).",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Mayhem"
+        },
+        "needs": []
+      }
     }
   ]
 }

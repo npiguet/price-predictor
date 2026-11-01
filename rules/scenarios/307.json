@@ -462,7 +462,18 @@
         "Mountain",
         "Lightning Bolt"
       ],
-      "forge_notes": "Forge implements the clause with the MayFlashSac keyword. The cast timing is not a field of any record today; the sacrifice at cleanup is the observable."
+      "forge_notes": "Forge implements the clause with the MayFlashSac keyword. The cast timing is not a field of any record today; the sacrifice at cleanup is the observable.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "The delayed trigger a flash-with-sacrifice keyword schedules, when its permanent was cast at a time a sorcery could not have been, resolves at the next cleanup step and sacrifices that permanent.",
+        "near_miss": "The same keyword's delayed trigger resolving without sacrificing anything (the permanent already left the battlefield). A cast at sorcery timing schedules no delayed trigger and shows on no resolution, so the rule's own does_not_fire side is not counted.",
+        "params": {
+          "event": "sacrificed",
+          "keyword": "MayFlashSac"
+        },
+        "needs": []
+      }
     }
   ]
 }

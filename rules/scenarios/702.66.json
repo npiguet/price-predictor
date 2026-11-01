@@ -77,7 +77,19 @@
         "Gurmag Angler",
         "Walking Corpse"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell whose card has delve is affordable, graveyard cards paying generic mana.",
+        "near_miss": "A delve spell that is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "source_keyword": "Delve"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.66b-1",
@@ -147,7 +159,19 @@
         "Treasure Cruise",
         "Walking Corpse"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell whose card has delve is affordable once its reduced total cost's generic part is paid by graveyard cards.",
+        "near_miss": "A delve spell that is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "source_keyword": "Delve"
+        },
+        "needs": []
+      }
     }
   ]
 }

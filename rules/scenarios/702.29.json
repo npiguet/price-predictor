@@ -75,7 +75,18 @@
         "Mountain",
         "Swamp"
       ],
-      "forge_notes": "In the on_battlefield variant the land is untapped so that tapping it for mana is not what makes the activation fail; its only activated abilities are the mana ability and cycling."
+      "forge_notes": "In the on_battlefield variant the land is untapped so that tapping it for mana is not what makes the activation fail; its only activated abilities are the mana ability and cycling.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A cycling ability (the keyword's own line) resolves and its controller draws a card.",
+        "near_miss": "A cycling ability resolves and no card is drawn.",
+        "params": {
+          "event": "card_drawn",
+          "keyword": "Cycling"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.29b-1",
@@ -361,7 +372,20 @@
         "Plains",
         "Swamp"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A typecycling ability resolves and a card moves from its controller's library to hand.",
+        "near_miss": "A typecycling ability resolves and no card moves from library to hand.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "library",
+          "to_zone": "hand",
+          "keyword": "TypeCycling"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.29f-1",

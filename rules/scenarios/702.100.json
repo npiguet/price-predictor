@@ -160,7 +160,17 @@
         "Mountain",
         "Hill Giant"
       ],
-      "forge_notes": "Check that Forge keeps Experiment One's printed Evolve and the granted Evolve as two separate triggers."
+      "forge_notes": "Check that Forge keeps Experiment One's printed Evolve and the granted Evolve as two separate triggers.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An evolve trigger fires, one trigger record per instance of the keyword on the entering creature's source.",
+        "near_miss": "An evolve trigger evaluated and not fired.",
+        "params": {
+          "keyword": "evolve"
+        },
+        "needs": []
+      }
     }
   ]
 }

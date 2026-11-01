@@ -131,7 +131,17 @@
         "Avenger of the Fallen",
         "Grizzly Bears",
         "Hill Giant"
-      ]
+      ],
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A mobilize trigger (keyword-derived, read off its Mobilize line) fires when its creature attacks, creating the tokens.",
+        "near_miss": "A mobilize trigger evaluated against an event without firing.",
+        "params": {
+          "keyword": "Mobilize"
+        },
+        "needs": []
+      }
     }
   ]
 }

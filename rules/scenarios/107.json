@@ -848,7 +848,19 @@
         "Snow-Covered Forest",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate whose cost holds a snow symbol is affordable: snow sources were available to pay it.",
+        "near_miss": "A candidate whose cost holds a snow symbol is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "cost_symbol": "S"
+        },
+        "needs": []
+      }
     },
     {
       "id": "107.5-1",
@@ -910,7 +922,19 @@
       "cards": [
         "Llanowar Elves"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate whose cost holds {T} is affordable: its permanent is untapped and, if a creature, has been controlled since the turn began.",
+        "near_miss": "A candidate whose cost holds {T} is not affordable because its permanent is tapped or is a summoning-sick creature.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "cost_symbol": "T"
+        },
+        "needs": []
+      }
     },
     {
       "id": "107.5-2",
@@ -964,7 +988,19 @@
         "Mind Stone",
         "Llanowar Elves"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate whose cost holds {T} is affordable: summoning sickness restricts only creatures.",
+        "near_miss": "A candidate whose cost holds {T} is not affordable because it is a summoning-sick creature or is tapped.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "cost_symbol": "T"
+        },
+        "needs": []
+      }
     },
     {
       "id": "107.6-1",
@@ -1029,7 +1065,19 @@
         "Farmstead Gleaner",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate whose cost holds {Q} is affordable: its permanent is tapped and, if a creature, has been controlled since the turn began.",
+        "near_miss": "A candidate whose cost holds {Q} is not affordable because its permanent is untapped or is a summoning-sick creature.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "cost_symbol": "Q"
+        },
+        "needs": []
+      }
     },
     {
       "id": "107.7-1",
@@ -1175,7 +1223,18 @@
       "cards": [
         "Student of Warfare"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A leveler's level-range static, conditioned on its host's level counters, contributes the keywords of its range while the counters lie in it.",
+        "near_miss": "A level-conditioned static that applies and contributes no keyword. A range whose counter condition is unmet applies to nothing and writes no continuous record, so the near miss is rare.",
+        "params": {
+          "field": "keywords",
+          "counter_condition": "LEVEL"
+        },
+        "needs": []
+      }
     },
     {
       "id": "107.8b-1",
@@ -1236,7 +1295,18 @@
       "cards": [
         "Student of Warfare"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A leveler's N+ static, conditioned on its host having at least N level counters, contributes the keywords of that level.",
+        "near_miss": "A level-conditioned static that applies and contributes no keyword. A static whose counter condition is unmet applies to nothing and writes no continuous record, so the near miss is rare.",
+        "params": {
+          "field": "keywords",
+          "counter_condition": "LEVEL"
+        },
+        "needs": []
+      }
     },
     {
       "id": "107.14-1",
@@ -1358,7 +1428,17 @@
         "History of Benalia",
         "Silver Knight"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A Saga chapter ability evaluated on a lore counter being added fires when the count goes from below its chapter number to at least it.",
+        "near_miss": "A chapter ability evaluated on a lore counter being added whose chapter number the count did not reach, not firing.",
+        "params": {
+          "keyword": "Chapter"
+        },
+        "needs": []
+      }
     },
     {
       "id": "107.16a-1",
@@ -1489,7 +1569,19 @@
         "Ranger Class",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A Class level bar candidate can be played: the Class is at the previous level and the timing is sorcery speed.",
+        "near_miss": "A Class level bar candidate that cannot be played because the Class is not at the previous level or the timing is wrong.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Class"
+        },
+        "needs": []
+      }
     },
     {
       "id": "107.3b-1",
@@ -1608,7 +1700,19 @@
         "Wastes",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate whose cost holds a {C} symbol is affordable: colorless mana was available to pay it.",
+        "near_miss": "A candidate whose cost holds a {C} symbol is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "cost_symbol": "C"
+        },
+        "needs": []
+      }
     },
     {
       "id": "107.4e-1",
@@ -1671,7 +1775,19 @@
         "Forest",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate whose cost holds a two-colour hybrid symbol is affordable with mana of either colour.",
+        "near_miss": "A candidate whose cost holds a hybrid symbol is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "cost_symbol": "hybrid"
+        },
+        "needs": []
+      }
     },
     {
       "id": "107.4e-2",
@@ -1740,7 +1856,19 @@
         "Island",
         "Plains"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate whose cost holds a monocoloured hybrid symbol is affordable by one mana of its colour or two of any type.",
+        "near_miss": "A candidate whose cost holds a monocoloured hybrid symbol is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "cost_symbol": "monohybrid"
+        },
+        "needs": []
+      }
     },
     {
       "id": "107.4f-1",
@@ -1798,7 +1926,19 @@
         "Mutagenic Growth",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate whose cost holds a Phyrexian symbol is affordable, the symbol paid with mana or with 2 life.",
+        "near_miss": "A candidate whose cost holds a Phyrexian symbol is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "cost_symbol": "phyrexian"
+        },
+        "needs": []
+      }
     }
   ]
 }

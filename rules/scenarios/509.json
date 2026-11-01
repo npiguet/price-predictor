@@ -707,7 +707,17 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger that fires on a creature becoming blocked (Mode$ AttackerBlocked), which the declaration of blockers causes and which waits to be put on the stack before a player gets priority.",
+        "near_miss": "A becomes-blocked trigger evaluated against a declaration of blockers that does not fire.",
+        "params": {
+          "mode": "AttackerBlocked"
+        },
+        "needs": []
+      }
     },
     {
       "id": "509.3a-1",
@@ -870,7 +880,18 @@
         "Brimaz, King of Oreskos",
         "Brave the Sands"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A 'whenever this creature blocks a creature' trigger (Forge's Mode$ AttackerBlocked keyed on any attacking creature, ValidCard$ Creature, with the blocker named in ValidBlocker$) fires, once for each attacker its creature blocks.",
+        "near_miss": "Such a trigger evaluated against a creature becoming blocked that does not fire, its own creature not being among the blockers.",
+        "params": {
+          "mode": "AttackerBlocked",
+          "selector": "Creature"
+        },
+        "needs": []
+      }
     },
     {
       "id": "509.3c-1",

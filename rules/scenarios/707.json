@@ -2029,7 +2029,21 @@
         "Shock",
         "Radiate"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A copy-for-each-target resolution (a copy of a spell for each other object or player it could target) puts copies of the spell onto the stack: its effect half holds a spell_copied event.",
+        "near_miss": "A copy-for-each-target resolution that puts no copy onto the stack, no other object or player being a legal target for the spell.",
+        "params": {
+          "event": "spell_copied",
+          "api": "CopySpellAbility",
+          "script_param": {
+            "CopyForEachCanTarget": "*"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "707.10e-1",

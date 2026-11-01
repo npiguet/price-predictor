@@ -73,7 +73,19 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate for a card with escape is affordable: its mana and the exiling of other graveyard cards can both be paid.",
+        "near_miss": "A candidate for a card with escape that is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "source_keyword": "Escape"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.138c-1",

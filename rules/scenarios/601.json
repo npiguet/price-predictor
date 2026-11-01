@@ -1065,7 +1065,21 @@
         "Grizzly Bears",
         "Rout"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell whose card prints the may-cast-as-though-it-had-flash-if-you-pay-more permission (Forge's MayFlashCost keyword) passes the timing check, at instant speed as at sorcery speed, before its increased cost is determined.",
+        "near_miss": "A candidate of such a spell that fails the timing check.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true,
+          "source_keyword": "MayFlashCost"
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "601.3d-1",

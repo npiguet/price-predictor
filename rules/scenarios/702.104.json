@@ -64,7 +64,20 @@
         "Forest",
         "Fanatic of Xenagos"
       ],
-      "forge_notes": "B's tribute choice is an AI decision in Forge and has to be forced."
+      "forge_notes": "B's tribute choice is an AI decision in Forge and has to be forced.",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A tribute replacement meets a creature entering the battlefield and is applied: it enters with the extra +1/+1 counters.",
+        "near_miss": "A tribute replacement meets a creature entering the battlefield and is not applied.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "battlefield",
+          "result": "updated",
+          "keyword": "Tribute"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.104b-1",

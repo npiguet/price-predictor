@@ -396,7 +396,18 @@
         "Grizzly Bears",
         "Invasion of Mercadia"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "combat",
+        "outcome": "A combat damage step in which damage dealt to a battle is followed by a counter_change removing defense counters from it.",
+        "near_miss": "Combat damage dealt in a step where no defense counters were removed (the attackers were blocked); the near miss is not counted for a combat record, which has no acting line to hold an api.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "DEFENSE"
+        },
+        "needs": []
+      }
     },
     {
       "id": "310.6-2",
@@ -468,7 +479,19 @@
         "Lightning Bolt",
         "Counterspell"
       ],
-      "forge_notes": "Lightning Bolt's 'Any' target must include battles in Forge's target validation."
+      "forge_notes": "Lightning Bolt's 'Any' target must include battles in Forge's target validation.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A damage-dealing resolution whose effect half holds a counter_change removing defense counters, from damage dealt to a battle.",
+        "near_miss": "A damage-dealing resolution whose damage goes to a creature or player and removes no defense counters.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "DEFENSE",
+          "api": "DealDamage"
+        },
+        "needs": []
+      }
     },
     {
       "id": "310.7-1",

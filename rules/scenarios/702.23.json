@@ -78,7 +78,18 @@
         "Wolverine Pack",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A rampage trigger resolves and the attacker gets +N/+N until end of turn, N per blocker beyond the first.",
+        "near_miss": "A rampage trigger resolves with no blockers beyond the first and the attacker gets no bonus.",
+        "params": {
+          "event": "pt_change",
+          "keyword": "Rampage"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.23b-1",
@@ -147,7 +158,18 @@
         "Grizzly Bears",
         "Lightning Bolt"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A rampage trigger resolves and its bonus is applied once, fixed by the blockers when it resolves.",
+        "near_miss": "A rampage trigger resolves with no blockers beyond the first and gives no bonus.",
+        "params": {
+          "event": "pt_change",
+          "keyword": "Rampage"
+        },
+        "needs": []
+      }
     }
   ]
 }

@@ -69,7 +69,20 @@
         "Pir, Imaginative Rascal",
         "Toothy, Imaginary Friend"
       ],
-      "forge_notes": "The Commander-designation half of partner with is out of scope; only the enters trigger is illustrated."
+      "forge_notes": "The Commander-designation half of partner with is out of scope; only the enters trigger is illustrated.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A partner-with trigger resolves and moves the named card from its player's library to hand.",
+        "near_miss": "A partner-with trigger resolution that moves no card from library to hand.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "library",
+          "to_zone": "hand",
+          "keyword": "Partner with"
+        },
+        "needs": []
+      }
     }
   ]
 }

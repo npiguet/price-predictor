@@ -168,7 +168,21 @@
         "Mountain",
         "Swamp"
       ],
-      "forge_notes": "Forge's ChangeZone to Ante has no owner check, so the stolen-bird variant likely diverges in Forge (the Bird would be anted into B's ante zone). Setting up the ante zone needs a hand-built game state."
+      "forge_notes": "Forge's ChangeZone to Ante has no owner check, so the stolen-bird variant likely diverges in Forge (the Bird would be anted into B's ante zone). Setting up the ante zone needs a hand-built game state.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An effect puts an object into the ante zone, and the object's controller is its owner (only an object's owner can ante it).",
+        "near_miss": "An object whose controller is not its owner is put into the ante zone (Forge applies no owner check, so this is where it may diverge from the rule).",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "ante",
+          "controller_is_owner": true
+        },
+        "needs": [
+          "owner"
+        ]
+      }
     }
   ]
 }

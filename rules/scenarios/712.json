@@ -991,7 +991,19 @@
         "Generous Soul",
         "Hanweir Watchkeep"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate produced by a Disturb keyword (casting a double-faced card from the graveyard transformed) is legal.",
+        "near_miss": "A Disturb candidate the verdict marks not playable (cost unpayable).",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Disturb"
+        },
+        "needs": []
+      }
     },
     {
       "id": "712.13-1",
@@ -1384,7 +1396,18 @@
         "Leeching Lurker",
         "Curse of Leeches"
       ],
-      "forge_notes": "Forge implements the attachment as a Transform replacement effect (Event$ Transform) on the Curse of Leeches face."
+      "forge_notes": "Forge implements the attachment as a Transform replacement effect (Event$ Transform) on the Curse of Leeches face.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent that turns to a face which is an Aura is attached (an attached event beside the face_change) rather than put into the graveyard as an unattached Aura.",
+        "near_miss": "An attached event in a record with no face_change (an Aura attached by another means).",
+        "params": {
+          "event": "attached",
+          "with_event": "face_change"
+        },
+        "needs": []
+      }
     },
     {
       "id": "712.21-1",

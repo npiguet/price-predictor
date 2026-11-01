@@ -68,7 +68,18 @@
         "Sacred Cat",
         "Stifle"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An embalm ability resolves and creates a token copy of its card.",
+        "near_miss": "An embalm ability resolution that creates no token.",
+        "params": {
+          "event": "token_created",
+          "keyword": "Embalm"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.128a-2",

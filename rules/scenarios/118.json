@@ -1229,7 +1229,19 @@
         "Shock",
         "Force Spike"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Counter ability with an unless-cost whose effect happens because the player did not pay: the spell is countered.",
+        "near_miss": "The same kind of ability resolves with the unless cost paid and the spell is not countered.",
+        "params": {
+          "event": "spell_countered",
+          "api": "Counter",
+          "script_param": "UnlessCost"
+        },
+        "needs": []
+      }
     },
     {
       "id": "118.12b-1",
@@ -1297,7 +1309,21 @@
         "Forest",
         "Lightning Bolt"
       ],
-      "forge_notes": "Depends on Forge running the SkipPhase subability when the optional search finds no card."
+      "forge_notes": "Depends on Forge running the SkipPhase subability when the optional search finds no card.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An optional library search from a trigger is followed by its if-you-do effect (a phase is skipped) because the player chose to search, whatever the search found.",
+        "near_miss": "The search ability resolves without the follow-up effect, as when the player declines to search.",
+        "params": {
+          "event": "phase_skipped",
+          "api": "ChangeZone",
+          "script_param": {
+            "Origin": "Library"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "118.14-1",

@@ -81,7 +81,22 @@
         "Shock",
         "Mountain"
       ],
-      "forge_notes": "In the flash_with_spell_on_stack variant, put Shock on the stack as {\"card\": \"Shock\", \"controller\": \"A\", \"targets\": [\"B\"]}; A's battlefield otherwise holds a Mountain tapped for it."
+      "forge_notes": "In the flash_with_spell_on_stack variant, put Shock on the stack as {\"card\": \"Shock\", \"controller\": \"A\", \"targets\": [\"B\"]}; A's battlefield otherwise holds a Mountain tapped for it.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate card that prints flash passes the casting-speed check, so it can be cast at instant timing.",
+        "near_miss": "A candidate card that prints flash failing the casting-speed check (rare: a card without flash is outside this filter).",
+        "params": {
+          "bit": "failed_check",
+          "check": "casting_speed",
+          "fires_when": true,
+          "source_keyword": "flash"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     }
   ]
 }

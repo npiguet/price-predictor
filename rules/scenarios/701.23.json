@@ -153,7 +153,22 @@
         "Forest",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A library search (a ChangeZone from a library) moves a card out of the library when it holds one.",
+        "near_miss": "A library search that moves no card.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "Library",
+          "api": "ChangeZone",
+          "script_param": {
+            "Origin": "Library"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.23e-1",
@@ -221,7 +236,23 @@
         "Lightning Bolt",
         "Mystical Tutor"
       ],
-      "forge_notes": "Forge has no trigger mode for revealing a card, so the reveal is visible only in the game log; record fields do not capture it."
+      "forge_notes": "Forge has no trigger mode for revealing a card, so the reveal is visible only in the game log; record fields do not capture it.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A library search whose instruction does not say to reveal holds no card_revealed event.",
+        "near_miss": "A library search that reveals the found card.",
+        "params": {
+          "event": "card_revealed",
+          "from_zone": "Library",
+          "api": "ChangeZone",
+          "script_param": {
+            "Origin": "Library"
+          },
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.23f-1",

@@ -1537,7 +1537,23 @@
         "Diregraf Ghoul",
         "Frost Lynx"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent entering the battlefield meets its own enters-tapped / enters-with replacement and the entering event is modified in place, as part of the entering and without using the stack.",
+        "near_miss": "A zone change to the battlefield meets a Moved replacement that leaves it unmodified.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "Battlefield",
+          "mode": "Moved",
+          "result": [
+            "replaced",
+            "updated"
+          ]
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.6e-1",

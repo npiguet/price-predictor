@@ -911,7 +911,22 @@
         "Grizzly Bears",
         "Moment of Silence"
       ],
-      "forge_notes": "Forge implements Moment of Silence as a SkipPhase effect with Duration NextThisTurn."
+      "forge_notes": "Forge implements Moment of Silence as a SkipPhase effect with Duration NextThisTurn.",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A skip effect replaces the beginning of a phase or step, so it does not happen.",
+        "near_miss": "A phase, step or turn beginning meets the effect and is not replaced, so it begins.",
+        "params": {
+          "event": "state_flag_change",
+          "mode": "BeginPhase",
+          "result": [
+            "replaced",
+            "skipped"
+          ]
+        },
+        "needs": []
+      }
     },
     {
       "id": "614.10a-1",
@@ -986,7 +1001,22 @@
         "Forest",
         "Fatigue"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "Each of several skip effects replaces one occurrence of the phase or step beginning.",
+        "near_miss": "A phase, step or turn beginning meets the effect and is not replaced, so it begins.",
+        "params": {
+          "event": "state_flag_change",
+          "mode": "BeginPhase",
+          "result": [
+            "replaced",
+            "skipped"
+          ]
+        },
+        "needs": []
+      }
     },
     {
       "id": "614.10-2",
@@ -1053,7 +1083,22 @@
         "Island",
         "Avizoa"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A skip effect replaces the beginning of a step, so it does not happen.",
+        "near_miss": "A phase, step or turn beginning meets the effect and is not replaced, so it begins.",
+        "params": {
+          "event": "state_flag_change",
+          "mode": "BeginPhase",
+          "result": [
+            "replaced",
+            "skipped"
+          ]
+        },
+        "needs": []
+      }
     },
     {
       "id": "614.10a-2",
@@ -2088,7 +2133,21 @@
         "Grizzly Bears",
         "Mutagenic Growth"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate is not playable because its cost includes an event a static ability says can't happen.",
+        "near_miss": "A candidate a static ability restricts passes the cost check: the static does not stop any event its cost includes.",
+        "params": {
+          "bit": "failed_check",
+          "check": "cost",
+          "responsible_static": true
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "614.17c-1",

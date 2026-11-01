@@ -187,7 +187,10 @@
         "Aerie Bowmasters",
         "Daru Lancer"
       ],
-      "forge_notes": "The face-down permanent is placed directly on the battlefield by the harness."
+      "forge_notes": "The face-down permanent is placed directly on the battlefield by the harness.",
+      "detector": {
+        "none": "Turning a face-down permanent face up, through megamorph or morph, is a special action: it uses no stack object, so no resolution record is written for it, and no turn_action subkind covers it (draw, cleanup_discard, untap, phasing, day_night, lore_counter). Its face_change event and the +1/+1 counter_change megamorph adds are filed in no record; a later snapshot shows a counter on the permanent but not that turning it face up put it there. Looked in EVENT_PARAMS (face_change, counter_change), the resolution, rewrite and turn_action payloads, and 702.168d-1's identical finding."
+      }
     },
     {
       "id": "702.37e-1",
@@ -275,7 +278,10 @@
         "Daru Lancer",
         "Shock"
       ],
-      "forge_notes": "The enters-the-battlefield clause is exercised in 702.37e-2 through Soul Warden; Forge's morph cards with their own enters triggers (Efreet Weaponmaster, Ponyback Brigade) also trigger when turned face up, so they cannot show it."
+      "forge_notes": "The enters-the-battlefield clause is exercised in 702.37e-2 through Soul Warden; Forge's morph cards with their own enters triggers (Efreet Weaponmaster, Ponyback Brigade) also trigger when turned face up, so they cannot show it.",
+      "detector": {
+        "none": "Turning a face-down permanent face up is a special action that uses no stack object: no resolution record is written for it and no turn_action subkind covers it, so its face_change event appears in no record, and no field says that the stack was left as it was. A decision record's turn-face-up candidate shows only that the action may be taken (405.6d-1's verdict_bit), not that taking it uses no stack."
+      }
     },
     {
       "id": "702.37f-1",

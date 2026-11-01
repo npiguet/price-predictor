@@ -79,7 +79,19 @@
         "Island",
         "Plains"
       ],
-      "forge_notes": "Forge handles waterbend in CostAdjustment with the convoke and improvise helper, limited to the waterbend amount."
+      "forge_notes": "Forge handles waterbend in CostAdjustment with the convoke and improvise helper, limited to the waterbend amount.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate whose cost has a waterbend part is affordable, untapped artifacts and creatures paying generic mana.",
+        "near_miss": "A candidate whose cost has a waterbend part is unaffordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "cost_part": "Waterbend"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.67b-1",
@@ -156,7 +168,19 @@
         "Spirit Water Revival",
         "Forest"
       ],
-      "forge_notes": "Forge limits waterbend payment through the maximum waterbend amount set on the spell ability."
+      "forge_notes": "Forge limits waterbend payment through the maximum waterbend amount set on the spell ability.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate whose cost has a waterbend part is unaffordable because creatures and artifacts cannot pay generic mana outside the waterbend part.",
+        "near_miss": "A candidate whose cost has a waterbend part is affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": false,
+          "cost_part": "Waterbend"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.67c-1",

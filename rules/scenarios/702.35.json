@@ -91,7 +91,21 @@
         "Shock",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A madness card's own replacement meets the card's move from hand to graveyard as it is discarded and replaces it (the card goes to exile instead).",
+        "near_miss": "A card's move from hand to graveyard meets its madness replacement and is not replaced.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "hand",
+          "to_zone": "graveyard",
+          "result": "replaced",
+          "keyword": "Madness"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.35c-1",

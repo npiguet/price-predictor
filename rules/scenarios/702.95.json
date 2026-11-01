@@ -227,7 +227,10 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "Pairing is neither an event type in EVENT_PARAMS nor a snapshot entity field; looked in the gen-2 record schema, the gen-3 delta and state_snapshot, and found none."
+      }
     },
     {
       "id": "702.95d-1",

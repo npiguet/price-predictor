@@ -251,7 +251,19 @@
         "Thornvault Forager",
         "Grizzly Bears"
       ],
-      "forge_notes": "Thornvault Forager's second mana ability has Cost$ T Forage."
+      "forge_notes": "Thornvault Forager's second mana ability has Cost$ T Forage.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate whose cost has a forage part is affordable because its controller has three graveyard cards or a Food.",
+        "near_miss": "A candidate whose cost has a forage part is unaffordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "cost_part": "Forage"
+        },
+        "needs": []
+      }
     }
   ]
 }

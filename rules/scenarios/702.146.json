@@ -148,7 +148,20 @@
         "Mourning Patrol",
         "Plains"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A spell cast with disturb resolves and its card enters the battlefield, back face up as the disturb cast put it on the stack: a zone_change from the stack to the battlefield in the effect half of a resolution acting through the Disturb line.",
+        "near_miss": "A spell cast with disturb resolving without entering the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "battlefield",
+          "keyword": "Disturb"
+        },
+        "needs": []
+      }
     }
   ]
 }

@@ -149,7 +149,19 @@
         "Gladecover Scout",
         "Mizzium Mortars"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate casting a spell for its overload cost is playable although its targeted text has no legal target.",
+        "near_miss": "An overload candidate that cannot be played.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Overload"
+        },
+        "needs": []
+      }
     }
   ]
 }

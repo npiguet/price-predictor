@@ -70,7 +70,18 @@
         "Evolving Wilds",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A fortify ability resolves and attaches its Fortification to a land.",
+        "near_miss": "A fortify ability resolves with nothing attached.",
+        "params": {
+          "event": "attached",
+          "keyword": "Fortify"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.67a-2",
@@ -129,7 +140,21 @@
         "Mountain",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A fortify ability candidate passes its timing check (sorcery timing).",
+        "near_miss": "A fortify candidate whose timing check fails.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true,
+          "keyword": "Fortify"
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     }
   ]
 }

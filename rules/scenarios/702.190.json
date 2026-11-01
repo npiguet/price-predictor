@@ -78,7 +78,19 @@
         "Hill Giant",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A sneak cost is a playable candidate during the declare blockers step with an unblocked creature to return.",
+        "near_miss": "A sneak candidate is not playable (wrong step, or no unblocked creature).",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Sneak"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.190b-1",

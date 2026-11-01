@@ -72,7 +72,22 @@
         "Hulk, Gamma Goliath",
         "Forest"
       ],
-      "forge_notes": "Hulk's own ReduceCost static ability applies only to other creatures."
+      "forge_notes": "Hulk's own ReduceCost static ability applies only to other creatures.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A power-up ability not yet activated passes its activation-limit check.",
+        "near_miss": "A power-up ability already activated once fails its activation-limit check.",
+        "params": {
+          "bit": "failed_check",
+          "check": "activation_limit",
+          "fires_when": true,
+          "script_param": "PowerUp"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "702.193b-1",
@@ -129,7 +144,19 @@
         "Gamma Grotesque",
         "Plains"
       ],
-      "forge_notes": "Hulk's mana cost never exceeds the colored part of its power-up cost, so the 'excess reduces generic' branch of 702.193b cannot be reached with any card Forge implements."
+      "forge_notes": "Hulk's mana cost never exceeds the colored part of its power-up cost, so the 'excess reduces generic' branch of 702.193b cannot be reached with any card Forge implements.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A power-up ability is affordable once the permanent's own mana cost reduces its cost.",
+        "near_miss": "A power-up ability is unaffordable because the reduction does not cover the cost.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "script_param": "PowerUp"
+        },
+        "needs": []
+      }
     }
   ]
 }

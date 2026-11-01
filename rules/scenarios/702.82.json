@@ -77,7 +77,19 @@
         "Grizzly Bears",
         "Gorger Wurm"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution in which creatures are sacrificed and +1/+1 counters are put on a permanent: an entering permanent gets counters for what was sacrificed as it entered.",
+        "near_miss": "A resolution that puts +1/+1 counters with no sacrifice in the same resolution.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "P1P1",
+          "with_event": "sacrificed"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.82c-1",
@@ -142,7 +154,19 @@
         "Bonesplitter",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution in which permanents are sacrificed and +1/+1 counters are put on a permanent, the counters scaled to the sacrifice.",
+        "near_miss": "A resolution that puts +1/+1 counters with no sacrifice in the same resolution.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "P1P1",
+          "with_event": "sacrificed"
+        },
+        "needs": []
+      }
     }
   ]
 }

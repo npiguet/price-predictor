@@ -72,7 +72,19 @@
         "Snapcaster Mage",
         "Grizzly Bears"
       ],
-      "forge_notes": "The split card Give // Take is two faces in Forge, Name:Give and Name:Take; the hand entry stands for the whole card. Forge implements fuse with the Fuse keyword on the first face and may offer it only from hand; flashback on a split card may or may not offer each half separately, so the graveyard variant is the one to check."
+      "forge_notes": "The split card Give // Take is two faces in Forge, Name:Give and Name:Take; the hand entry stands for the whole card. Forge implements fuse with the Fuse keyword on the first face and may offer it only from hand; flashback on a split card may or may not offer each half separately, so the graveyard variant is the one to check.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A fused casting of a split card with fuse is a playable candidate.",
+        "near_miss": "A fuse candidate that cannot be played.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Fuse"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.102b-1",
@@ -228,7 +240,19 @@
         "Take",
         "Grizzly Bears"
       ],
-      "forge_notes": "The split card Give // Take is two faces in Forge, Name:Give and Name:Take."
+      "forge_notes": "The split card Give // Take is two faces in Forge, Name:Give and Name:Take.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A fused casting of a split card is affordable when its controller can pay both halves' costs together.",
+        "near_miss": "A fuse candidate whose cost the controller cannot pay.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "keyword": "Fuse"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.102d-1",

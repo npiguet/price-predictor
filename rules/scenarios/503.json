@@ -155,7 +155,24 @@
         "Paradox Haze",
         "Island"
       ],
-      "forge_notes": "Reset uses CheckSVar$ Count$FinishedUpkeepsThisTurn; check Forge counts the first upkeep as finished once the additional upkeep begins."
+      "forge_notes": "Reset uses CheckSVar$ Count$FinishedUpkeepsThisTurn; check Forge counts the first upkeep as finished once the additional upkeep begins.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate restricted to being cast after a player's upkeep step has finished (a script restriction on the count of finished upkeeps) passes its script_restriction check once that upkeep step has ended.",
+        "near_miss": "The same kind of candidate fails its script_restriction check while the upkeep step has not yet ended.",
+        "params": {
+          "bit": "failed_check",
+          "check": "script_restriction",
+          "fires_when": true,
+          "script_param": {
+            "CheckSVar": "Count$FinishedUpkeepsThisTurn"
+          }
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     }
   ]
 }

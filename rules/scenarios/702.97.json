@@ -78,7 +78,19 @@
         "Shock",
         "Dreg Mangler"
       ],
-      "forge_notes": "Dreg Mangler's power for the counter count must come from last known information after it is exiled as a cost."
+      "forge_notes": "Dreg Mangler's power for the counter count must come from last known information after it is exiled as a cost.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A scavenge ability's resolution puts +1/+1 counters on its target creature.",
+        "near_miss": "A scavenge resolution that puts no counters (its target became illegal).",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "P1P1",
+          "keyword": "Scavenge"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.97a-2",
@@ -154,7 +166,19 @@
         "Grizzly Bears",
         "Dreg Mangler"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A scavenge candidate is playable from the graveyard at sorcery timing.",
+        "near_miss": "A scavenge candidate that cannot be played.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Scavenge"
+        },
+        "needs": []
+      }
     }
   ]
 }

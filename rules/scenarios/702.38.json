@@ -80,7 +80,18 @@
         "Elite Vanguard",
         "Grizzly Bears"
       ],
-      "forge_notes": "The reveal is a choice the harness fixes."
+      "forge_notes": "The reveal is a choice the harness fixes.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent spell resolves and the permanent enters with +1/+1 counters put on it by an enters-with-counters keyword (amplify).",
+        "near_miss": "The permanent enters with no counters. Not counted: a permanent spell's acting line is the implicit spell, which has no API type or keyword line for the detector to scope by.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "+1/+1"
+        },
+        "needs": []
+      }
     }
   ]
 }

@@ -312,7 +312,17 @@
         "Mountain",
         "Lightning Bolt"
       ],
-      "forge_notes": "In the second variant Craw Wurm's summoning sickness is also cleared."
+      "forge_notes": "In the second variant Craw Wurm's summoning sickness is also cleared.",
+      "detector": {
+        "family": "keyword_combat",
+        "record_kind": "combat",
+        "outcome": "A real combat in which an attacker with trample deals combat damage, the excess reaching the defending player.",
+        "near_miss": "A damage-step probe re-running the combat with trample stripped from the attacker.",
+        "params": {
+          "keyword": "trample"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.19e-1",

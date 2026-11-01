@@ -119,7 +119,9 @@
           "polarity": "other",
           "delta": "B's flipped permanent is Akki Lavarunner (flipped, Tok-Tok, Volcano Born, a red creature) instead of Nezumi Graverobber.",
           "expected": "Doom Blade has a legal target: the flipped permanent Tok-Tok, Volcano Born is red, so casting Doom Blade targeting it is legal.",
-          "operation": "replace_card"
+          "operation": {
+            "unclassifiable": "a different card that is also flipped: replace_card puts the new card in unflipped, and flip status is not an operation"
+          }
         }
       ],
       "cards": [
@@ -181,7 +183,9 @@
           "polarity": "other",
           "delta": "B's flipped permanent is Bushi Tenderfoot (flipped, Kenzo the Hardhearted, mana cost {W}) instead of Akki Lavarunner.",
           "expected": "Smother has a legal target: the flipped permanent has mana value 1, so casting it is legal.",
-          "operation": "replace_card"
+          "operation": {
+            "unclassifiable": "a different card that is also flipped: replace_card puts the new card in unflipped, and flip status is not an operation"
+          }
         }
       ],
       "cards": [

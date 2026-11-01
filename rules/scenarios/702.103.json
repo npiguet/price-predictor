@@ -68,7 +68,18 @@
         "Hopeful Eidolon",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A spell cast for its bestow cost resolves as an Aura attached to the creature it targeted.",
+        "near_miss": "A bestow resolution that attaches nothing.",
+        "params": {
+          "event": "attached",
+          "keyword": "Bestow"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.103b-1",
@@ -139,7 +150,19 @@
         "Hopeful Eidolon",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A bestowed casting has a legal creature to enchant.",
+        "near_miss": "A bestow candidate with no legal target.",
+        "params": {
+          "bit": "has_legal_target",
+          "fires_when": true,
+          "keyword": "Bestow"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.103c-1",
@@ -273,7 +296,19 @@
         "Grizzly Bears",
         "Aether Storm"
       ],
-      "forge_notes": "Forge's CantBeCast check must use the characteristics of the bestowed spell, not the card's printed creature type."
+      "forge_notes": "Forge's CantBeCast check must use the characteristics of the bestowed spell, not the card's printed creature type.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A bestowed casting is judged as an Aura spell, so a restriction on creature spells does not stop it from being played.",
+        "near_miss": "A bestow candidate that cannot be played.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Bestow"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.103e-1",
@@ -343,7 +378,20 @@
         "Grizzly Bears",
         "Centaur Courser"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A bestowed Aura spell whose target became illegal resolves and enters the battlefield as a creature with nothing attached, instead of fizzling.",
+        "near_miss": "A bestow resolution whose spell attaches to its target.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "battlefield",
+          "keyword": "Bestow",
+          "without_event": "attached"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.103f-1",

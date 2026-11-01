@@ -217,7 +217,10 @@
         "Swamp",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "No decision-candidate field records whether teamwork was declared: has_legal_target and legal_targets (gen-3, the union over clauses) show only which targets exist, so the choosing of a teamwork-only target is in no field."
+      }
     }
   ]
 }

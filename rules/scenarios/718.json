@@ -76,7 +76,19 @@
         "Plains",
         "Blitz Automaton"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate produced by a Prototype keyword (casting a spell for its prototype cost) is legal when that cost can be paid.",
+        "near_miss": "A Prototype candidate the verdict marks not playable because its cost cannot be paid.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Prototype"
+        },
+        "needs": []
+      }
     },
     {
       "id": "718.3b-1",

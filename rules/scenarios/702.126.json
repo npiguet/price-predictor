@@ -92,7 +92,19 @@
         "Ornithopter",
         "Reverse Engineer"
       ],
-      "forge_notes": "Variant one_artifact_tapped sets tapped=true on one Ornithopter in the base setup; variant two_artifacts removes one."
+      "forge_notes": "Variant one_artifact_tapped sets tapped=true on one Ornithopter in the base setup; variant two_artifacts removes one.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate for a card with improvise is affordable because untapped artifacts pay generic mana.",
+        "near_miss": "A candidate for a card with improvise that is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "source_keyword": "Improvise"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.126a-2",
@@ -178,7 +190,19 @@
         "Ornithopter",
         "Reverse Engineer"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate for a card with improvise is not affordable although untapped artifacts exist, since improvise pays no coloured mana.",
+        "near_miss": "A candidate for a card with improvise that is affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": false,
+          "source_keyword": "Improvise"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.126b-1",
@@ -267,7 +291,19 @@
         "Thalia, Guardian of Thraben",
         "Reverse Engineer"
       ],
-      "forge_notes": "Variant three_artifacts removes one Ornithopter from the base setup."
+      "forge_notes": "Variant three_artifacts removes one Ornithopter from the base setup.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate for a card with improvise whose cost was raised is affordable, untapped artifacts paying the raised generic part.",
+        "near_miss": "A candidate for a card with improvise that is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "source_keyword": "Improvise"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.126c-1",
@@ -344,7 +380,19 @@
         "Ornithopter",
         "Reverse Engineer"
       ],
-      "forge_notes": "Variant two_artifacts removes one Ornithopter from the base setup."
+      "forge_notes": "Variant two_artifacts removes one Ornithopter from the base setup.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate for a card with several instances of improvise is affordable with at most one artifact per generic mana.",
+        "near_miss": "A candidate for a card with improvise that is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "source_keyword": "Improvise"
+        },
+        "needs": []
+      }
     }
   ]
 }

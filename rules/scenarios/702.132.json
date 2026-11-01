@@ -73,7 +73,19 @@
         "Plains",
         "Forest"
       ],
-      "forge_notes": "Forge's can_play for the caster may not count the assisting player's lands; the verdict may need to be read from the assisted payment itself. In a two-player game the only possible assisting player is the opponent."
+      "forge_notes": "Forge's can_play for the caster may not count the assisting player's lands; the verdict may need to be read from the assisted payment itself. In a two-player game the only possible assisting player is the opponent.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate for a card with assist is affordable because another player's mana pays generic mana.",
+        "near_miss": "A candidate for a card with assist that is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "source_keyword": "Assist"
+        },
+        "needs": []
+      }
     }
   ]
 }

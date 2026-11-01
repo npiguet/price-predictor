@@ -217,7 +217,19 @@
         "Grizzly Bears",
         "Mutagenic Growth"
       ],
-      "forge_notes": "Forge lets the human pay Phyrexian mana with life only if getLife() >= 2; the AI may decline to do so even when legal."
+      "forge_notes": "Forge lets the human pay Phyrexian mana with life only if getLife() >= 2; the AI may decline to do so even when legal.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell whose cost holds a Phyrexian mana symbol (payable with life) is affordable when the player's life total covers the life payment.",
+        "near_miss": "The same kind of spell is not affordable because the life total falls short of the payment.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "cost_symbol": "phyrexian"
+        },
+        "needs": []
+      }
     },
     {
       "id": "119.4-2",
@@ -282,7 +294,19 @@
         "Grizzly Bears",
         "Hatred"
       ],
-      "forge_notes": "Forge bounds the announced X by what the life payment allows; the verdict may appear as X being unselectable rather than as a rejected cast."
+      "forge_notes": "Forge bounds the announced X by what the life payment allows; the verdict may appear as X being unselectable rather than as a rejected cast.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate whose cost includes paying life is affordable when the player's life total is at least the amount.",
+        "near_miss": "The same kind of candidate is not affordable because the life total is below the amount.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "cost_part": "PayLife"
+        },
+        "needs": []
+      }
     },
     {
       "id": "119.4b-1",
@@ -350,7 +374,19 @@
         "Grizzly Bears",
         "Hatred"
       ],
-      "forge_notes": "Forge may hide X=1 from the announcement instead of rejecting the cast."
+      "forge_notes": "Forge may hide X=1 from the announcement instead of rejecting the cast.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate whose cost pays life is affordable when the payment is 0 even where life totals can't change, since 0 life can always be paid.",
+        "near_miss": "The same kind of candidate is not affordable when it needs a positive life payment that cannot be made.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "cost_part": "PayLife"
+        },
+        "needs": []
+      }
     },
     {
       "id": "119.5-1",

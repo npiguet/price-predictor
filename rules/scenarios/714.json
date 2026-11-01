@@ -315,7 +315,19 @@
         "Savannah Lions",
         "Love Song of Night and Day"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent enters with lore counters in a number its controller chose (read ahead): counter_change events on lore counters beside a choice_made event.",
+        "near_miss": "Lore counters put on a Saga with no choice made (the single counter a Saga without read ahead enters with).",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "lore",
+          "with_event": "choice_made"
+        },
+        "needs": []
+      }
     },
     {
       "id": "714.3c-1",
@@ -323,7 +335,7 @@
         "714.3c"
       ],
       "title": "A player adds a lore counter to each Saga they control as their precombat main phase begins",
-      "record_kind": "trigger",
+      "record_kind": "turn_action",
       "setup": {
         "active": "A",
         "step": "draw",
@@ -377,7 +389,20 @@
         "Plains",
         "Love Song of Night and Day"
       ],
-      "forge_notes": "Forge adds the counter in the draw-to-main transition; the scenario is set in the draw step so that it is the only change before main phase."
+      "forge_notes": "Forge adds the counter in the draw-to-main transition; the scenario is set in the draw step so that it is the only change before main phase.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "The turn-based action as the active player's precombat main phase begins puts a lore counter on each Saga that player controls: a counter_change on lore counters in a turn_action record.",
+        "near_miss": "Not counted: a turn_action record has no acting line to scope by, so only the fires side is tagged.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "lore"
+        },
+        "needs": [
+          "turn_action"
+        ]
+      }
     },
     {
       "id": "714.4-1",
@@ -456,7 +481,18 @@
         "Shock",
         "History of Benalia"
       ],
-      "forge_notes": "In the base variant B simply passes with Shock unused."
+      "forge_notes": "In the base variant B simply passes with Shock unused.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A chapter ability resolves and its Saga, its lore count at or past its final chapter number and no chapter ability of it left on the stack, is sacrificed in the state-based check after the resolution.",
+        "near_miss": "A chapter ability resolves and nothing is sacrificed after it: the Saga is below its final chapter number, or another of its chapter abilities is still on the stack.",
+        "params": {
+          "event": "sacrificed",
+          "keyword": "Chapter"
+        },
+        "needs": []
+      }
     }
   ]
 }

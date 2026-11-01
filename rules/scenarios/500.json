@@ -553,7 +553,7 @@
         "500.9"
       ],
       "title": "An effect that adds a step inserts it directly after the specified step",
-      "record_kind": "trigger",
+      "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "untap",
@@ -610,7 +610,18 @@
         "Juzám Djinn",
         "Paradox Haze"
       ],
-      "forge_notes": "Paradox Haze uses AddPhase with ExtraPhase$ Upkeep."
+      "forge_notes": "Paradox Haze uses AddPhase with ExtraPhase$ Upkeep.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution's effect half holds a phase_added event: an AddPhase ability adds a step to the turn at the place the effect names.",
+        "near_miss": "An AddPhase ability resolves and adds no phase.",
+        "params": {
+          "event": "phase_added",
+          "api": "AddPhase"
+        },
+        "needs": []
+      }
     },
     {
       "id": "500.10-1",
@@ -618,7 +629,7 @@
         "500.10"
       ],
       "title": "An effect that adds a step after a phase creates a phase that holds only that step",
-      "record_kind": "trigger",
+      "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "declare_attackers",
@@ -673,7 +684,18 @@
         "Juzám Djinn",
         "Grizzly Bears"
       ],
-      "forge_notes": "Obeka's AddPhase uses AfterPhase$ EndCombat and NumPhases from the damage amount; check that each added phase contains only the upkeep step."
+      "forge_notes": "Obeka's AddPhase uses AfterPhase$ EndCombat and NumPhases from the damage amount; check that each added phase contains only the upkeep step.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution's effect half holds a phase_added event: an AddPhase ability adds a step after a phase, in a phase of its own that holds only that step.",
+        "near_miss": "An AddPhase ability resolves and adds no phase.",
+        "params": {
+          "event": "phase_added",
+          "api": "AddPhase"
+        },
+        "needs": []
+      }
     },
     {
       "id": "500.11-1",

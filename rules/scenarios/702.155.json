@@ -85,7 +85,17 @@
         "Island",
         "Founding the Third Path"
       ],
-      "forge_notes": "Forge scripts chapter III with TargetMax 1, so it may put the ability on the stack with no target and resolve it doing nothing; the observable result (nothing exiled, Saga sacrificed) is the same."
+      "forge_notes": "Forge scripts chapter III with TargetMax 1, so it may put the ability on the stack with no target and resolve it doing nothing; the observable result (nothing exiled, Saga sacrificed) is the same.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A Saga's chapter ability (keyword-derived, read off its Chapter line) is evaluated and fires as lore counters reach its chapter number.",
+        "near_miss": "A chapter ability evaluated and not fired: its chapter number is not the one the lore counters reached, as with a skipped chapter.",
+        "params": {
+          "keyword": "Chapter"
+        },
+        "needs": []
+      }
     }
   ]
 }

@@ -79,7 +79,18 @@
         "Illusionary Wall",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A keyword-generated upkeep-payment trigger (cumulative upkeep) resolves and the permanent is sacrificed because the cost was not paid in full.",
+        "near_miss": "The same keyword trigger resolves, the cost is paid, and nothing is sacrificed.",
+        "params": {
+          "event": "sacrificed",
+          "keyword": "Cumulative upkeep"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.24b-1",
@@ -151,7 +162,18 @@
         "Mana Chains",
         "Island"
       ],
-      "forge_notes": "Mana Chains grants 'Cumulative upkeep:1' as a second keyword instance; Forge should trigger it separately from the printed keyword."
+      "forge_notes": "Mana Chains grants 'Cumulative upkeep:1' as a second keyword instance; Forge should trigger it separately from the printed keyword.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A keyword-generated upkeep-payment trigger (cumulative upkeep) resolves and the permanent is sacrificed because the cost was not paid in full.",
+        "near_miss": "The same keyword trigger resolves, the cost is paid, and nothing is sacrificed.",
+        "params": {
+          "event": "sacrificed",
+          "keyword": "Cumulative upkeep"
+        },
+        "needs": []
+      }
     }
   ]
 }

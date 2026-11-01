@@ -282,7 +282,20 @@
         "Grizzly Bears",
         "Plains"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Discover resolution with a discovered card: the final exiled card leaves exile for its owner's hand (or is cast) instead of going to the library bottom.",
+        "near_miss": "A Discover resolution in which no card is put from exile into hand.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "exile",
+          "to_zone": "hand",
+          "api": "Discover"
+        },
+        "needs": []
+      }
     }
   ]
 }

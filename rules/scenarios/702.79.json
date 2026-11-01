@@ -61,7 +61,20 @@
         "Shock",
         "Safehold Elite"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A persist trigger resolves and the creature moves from the graveyard to the battlefield.",
+        "near_miss": "A persist trigger resolves and the creature stays in the graveyard.",
+        "params": {
+          "event": "zone_change",
+          "keyword": "Persist",
+          "from_zone": "graveyard",
+          "to_zone": "battlefield"
+        },
+        "needs": []
+      }
     }
   ]
 }

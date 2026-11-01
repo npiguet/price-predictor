@@ -168,7 +168,18 @@
         "Into the Night",
         "Island"
       ],
-      "forge_notes": "In the neither variant Brimstone Vandal has to be on the battlefield without its enters-as-day replacement having applied, which needs a puzzle or setup-state placement."
+      "forge_notes": "In the neither variant Brimstone Vandal has to be on the battlefield without its enters-as-day replacement having applied, which needs a puzzle or setup-state placement.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution of an effect that makes it day or night changes the designation: its effect half holds a day_night_changed event.",
+        "near_miss": "A resolution of the same kind of effect that leaves the designation as it was (it already has the one the effect names): no day_night_changed event.",
+        "params": {
+          "event": "day_night_changed",
+          "api": "DayTime"
+        },
+        "needs": []
+      }
     },
     {
       "id": "731.2a-1",
@@ -177,7 +188,7 @@
         "731.2a"
       ],
       "title": "In the next untap step, day becomes night if the previous turn's active player cast no spells",
-      "record_kind": "resolution",
+      "record_kind": "turn_action",
       "setup": {
         "active": "A",
         "step": "main2",
@@ -255,7 +266,20 @@
         "Savannah Lions",
         "Opt"
       ],
-      "forge_notes": "Forge's Untap phase calls doDayTime with the previous turn's active player and counts only that player's spells cast last turn."
+      "forge_notes": "Forge's Untap phase calls doDayTime with the previous turn's active player and counts only that player's spells cast last turn.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "In the untap step the turn-based day/night check makes it night: the day_night turn_action record holds a day_night_changed event with to night.",
+        "near_miss": "No near miss is counted: an untap step in which the game stays day writes no day_night turn_action record, and outcome_event counts a near miss only with an api or keyword, which a turn_action record has none of.",
+        "params": {
+          "event": "day_night_changed",
+          "to": "night"
+        },
+        "needs": [
+          "turn_action"
+        ]
+      }
     },
     {
       "id": "731.2b-1",
@@ -263,7 +287,7 @@
         "731.2b"
       ],
       "title": "In the next untap step, night becomes day if the previous turn's active player cast two or more spells",
-      "record_kind": "resolution",
+      "record_kind": "turn_action",
       "setup": {
         "active": "A",
         "step": "main1",
@@ -344,7 +368,20 @@
         "Savannah Lions",
         "Opt"
       ],
-      "forge_notes": "Forge requires strictly more than one spell cast by the previous turn's active player."
+      "forge_notes": "Forge requires strictly more than one spell cast by the previous turn's active player.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "In the untap step the turn-based day/night check makes it day: the day_night turn_action record holds a day_night_changed event with to day.",
+        "near_miss": "No near miss is counted: an untap step in which the game stays night writes no day_night turn_action record, and outcome_event counts a near miss only with an api or keyword, which a turn_action record has none of.",
+        "params": {
+          "event": "day_night_changed",
+          "to": "day"
+        },
+        "needs": [
+          "turn_action"
+        ]
+      }
     },
     {
       "id": "731.2c-1",
@@ -352,7 +389,7 @@
         "731.2c"
       ],
       "title": "If the game is neither day nor night, the untap-step check does not happen",
-      "record_kind": "resolution",
+      "record_kind": "turn_action",
       "setup": {
         "active": "A",
         "step": "main2",

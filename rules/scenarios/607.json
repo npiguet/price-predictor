@@ -179,7 +179,19 @@
         "Shock",
         "Swords to Plowshares"
       ],
-      "forge_notes": "The exiled card is recorded through the replacement effect's ChangeZone (ExiledWithSource), whereas Swords to Plowshares exiles the card as an ordinary spell effect."
+      "forge_notes": "The exiled card is recorded through the replacement effect's ChangeZone (ExiledWithSource), whereas Swords to Plowshares exiles the card as an ordinary spell effect.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate ability whose cost puts a card exiled with its source into a graveyard is playable (can_play true) because a card its source exiled is available to pay.",
+        "near_miss": "The same kind of candidate is not playable (can_play false) because no card is exiled with its source.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "cost_part": "ExiledMoveToGrave"
+        },
+        "needs": []
+      }
     },
     {
       "id": "607.2c-1",

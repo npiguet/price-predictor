@@ -169,7 +169,18 @@
         "Memnite",
         "Solemnity"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent spell resolves and the permanent enters with +1/+1 counters put on it by an enters-with-counters keyword (modular).",
+        "near_miss": "The permanent enters with no counters. Not counted: a permanent spell's acting line is the implicit spell, which has no API type or keyword line for the detector to scope by.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "+1/+1"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.43b-1",
@@ -228,7 +239,18 @@
         "Blaster, Combat DJ",
         "Arcbound Worker"
       ],
-      "forge_notes": "Depends on Forge applying a granted modular's enters-with-counters replacement to a permanent entering under the granting static (rule 614.12)."
+      "forge_notes": "Depends on Forge applying a granted modular's enters-with-counters replacement to a permanent entering under the granting static (rule 614.12).",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent spell resolves and the permanent enters with +1/+1 counters put on it by an enters-with-counters keyword (several modular instances add up).",
+        "near_miss": "The permanent enters with no counters. Not counted: a permanent spell's acting line is the implicit spell, which has no API type or keyword line for the detector to scope by.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "+1/+1"
+        },
+        "needs": []
+      }
     }
   ]
 }

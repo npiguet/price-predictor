@@ -134,7 +134,17 @@
         "Enraged Revolutionary",
         "Marchesa, the Black Rose"
       ],
-      "forge_notes": "Forge may collapse a granted keyword that duplicates the card's own into one instance."
+      "forge_notes": "Forge may collapse a granted keyword that duplicates the card's own into one instance.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A dethrone trigger fires, one trigger record per instance of the keyword on the attacker.",
+        "near_miss": "A dethrone trigger evaluated and not fired.",
+        "params": {
+          "keyword": "dethrone"
+        },
+        "needs": []
+      }
     }
   ]
 }

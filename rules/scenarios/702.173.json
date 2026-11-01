@@ -94,7 +94,19 @@
         "Grizzly Bears",
         "Eagle Vision"
       ],
-      "forge_notes": "Forge checks Player.hasFreerunning() when the cast is attempted. A commander branch cannot be set up with these cards and is not illustrated."
+      "forge_notes": "Forge checks Player.hasFreerunning() when the cast is attempted. A commander branch cannot be set up with these cards and is not illustrated.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell with freerunning is a playable candidate for its freerunning cost once an Assassin or commander has dealt combat damage to a player this turn.",
+        "near_miss": "The same spell's freerunning candidate is not playable because no such damage was dealt.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Freerunning"
+        },
+        "needs": []
+      }
     }
   ]
 }

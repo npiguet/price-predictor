@@ -10,7 +10,7 @@
         "502.1"
       ],
       "title": "Phasing permanents phase in or out in the active player's untap step",
-      "record_kind": "continuous",
+      "record_kind": "turn_action",
       "setup": {
         "active": "A",
         "step": "untap",
@@ -62,7 +62,19 @@
       "cards": [
         "Tolarian Drake"
       ],
-      "forge_notes": "Variant phases_in needs a phased-out permanent in the starting state; Forge represents it as a permanent with phasedOut set."
+      "forge_notes": "Variant phases_in needs a phased-out permanent in the starting state; Forge represents it as a permanent with phasedOut set.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "In a player's untap step the turn-based phasing action phases permanents in or out: the turn_action record holds phased events.",
+        "near_miss": "No near miss is declared: an untap record with no phased event is not tagged.",
+        "params": {
+          "event": "phased"
+        },
+        "needs": [
+          "turn_action"
+        ]
+      }
     },
     {
       "id": "502.2-1",
@@ -70,7 +82,7 @@
         "502.2"
       ],
       "title": "It becomes night at the untap step if it was day and the previous active player cast no spells",
-      "record_kind": "continuous",
+      "record_kind": "turn_action",
       "setup": {
         "active": "A",
         "step": "untap",
@@ -123,7 +135,20 @@
         "Forest",
         "Grizzly Bears"
       ],
-      "forge_notes": "The day/night state and B's cast count of the previous turn are starting history fixed by the notes, not setup fields."
+      "forge_notes": "The day/night state and B's cast count of the previous turn are starting history fixed by the notes, not setup fields.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "At the untap step the day/night check makes it night: the turn_action record holds a day_night_changed event with to night.",
+        "near_miss": "No near miss is declared: a check that changes nothing leaves no event.",
+        "params": {
+          "event": "day_night_changed",
+          "to": "night"
+        },
+        "needs": [
+          "turn_action"
+        ]
+      }
     },
     {
       "id": "502.2-2",
@@ -131,7 +156,7 @@
         "502.2"
       ],
       "title": "It becomes day at the untap step if it was night and the previous active player cast two or more spells",
-      "record_kind": "continuous",
+      "record_kind": "turn_action",
       "setup": {
         "active": "A",
         "step": "untap",
@@ -182,7 +207,20 @@
         "Forest",
         "Grizzly Bears"
       ],
-      "forge_notes": "In the one_spell variant the second Grizzly Bears is in B's hand."
+      "forge_notes": "In the one_spell variant the second Grizzly Bears is in B's hand.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "At the untap step the day/night check makes it day: the turn_action record holds a day_night_changed event with to day.",
+        "near_miss": "No near miss is declared: a check that changes nothing leaves no event.",
+        "params": {
+          "event": "day_night_changed",
+          "to": "day"
+        },
+        "needs": [
+          "turn_action"
+        ]
+      }
     },
     {
       "id": "502.3-1",
@@ -190,7 +228,7 @@
         "502.3"
       ],
       "title": "The active player's permanents untap simultaneously except those an effect keeps from untapping",
-      "record_kind": "continuous",
+      "record_kind": "turn_action",
       "setup": {
         "active": "A",
         "step": "untap",
@@ -261,7 +299,19 @@
         "Claustrophobia",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "In the active player's untap step their tapped permanents untap together: the turn_action record holds untapped events.",
+        "near_miss": "No near miss is declared: a permanent an effect keeps tapped leaves no event.",
+        "params": {
+          "event": "untapped"
+        },
+        "needs": [
+          "turn_action"
+        ]
+      }
     },
     {
       "id": "502.4-1",

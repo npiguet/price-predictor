@@ -69,7 +69,19 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A reinforce ability resolves and puts +1/+1 counters on its target creature.",
+        "near_miss": "A reinforce ability resolves and puts no counters.",
+        "params": {
+          "event": "counter_change",
+          "keyword": "Reinforce",
+          "counter_type": "+1/+1"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.77a-2",

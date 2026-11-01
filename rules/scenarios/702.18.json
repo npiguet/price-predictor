@@ -75,7 +75,19 @@
         "Grizzly Bears",
         "Lightning Bolt"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
+        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
+        "params": {
+          "list": "legal_targets",
+          "fires_when": "outside",
+          "universe": "battlefield_and_players"
+        },
+        "needs": []
+      }
     }
   ]
 }

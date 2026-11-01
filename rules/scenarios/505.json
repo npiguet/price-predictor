@@ -90,7 +90,7 @@
         "505.5"
       ],
       "title": "The active player rolls to visit their Attractions as the precombat main phase begins",
-      "record_kind": "resolution",
+      "record_kind": "trigger",
       "setup": {
         "active": "A",
         "step": "main1",
@@ -144,7 +144,17 @@
       "cards": [
         "Balloon Stand"
       ],
-      "forge_notes": "Forge rolls in PhaseHandler on entering MAIN1 only if the active player controls an Attraction. The die result has to be fixed through a test hook; the lights of Balloon Stand (2 and 6 is Variant A) depend on the variant Forge picks when the card is created."
+      "forge_notes": "Forge rolls in PhaseHandler on entering MAIN1 only if the active player controls an Attraction. The die result has to be fixed through a test hook; the lights of Balloon Stand (2 and 6 is Variant A) depend on the variant Forge picks when the card is created.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A Visit ability (a keyword-generated trigger) is evaluated after the active player's roll to visit Attractions at the start of the precombat main phase, and fires when the roll matches one of the Attraction's lights.",
+        "near_miss": "The Visit trigger is evaluated and does not fire because the roll matches none of the Attraction's lights.",
+        "params": {
+          "keyword": "Visit"
+        },
+        "needs": []
+      }
     },
     {
       "id": "505.6a-1",
@@ -273,7 +283,7 @@
           "delta": "A has already played a land this turn (the Mountain on the battlefield).",
           "expected": "Playing Forest is not legal (can_play false).",
           "operation": {
-            "unclassifiable": "Changes the turn's land-play history and a permanent."
+            "unclassifiable": "Changes the turn's land-play history (a land already played this turn), which no fork operation sets."
           }
         },
         {

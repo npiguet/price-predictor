@@ -215,7 +215,19 @@
         "Grizzly Bears",
         "Mountain"
       ],
-      "forge_notes": "The station keyword is K:Station:8 in Forge; the striated abilities are added by a static ability conditioned on counters_GE8_CHARGE. 721.4 is unconditional, so it has no does_not_fire branch of its own; the contrast is the striated pump ability, gated in seven_counters and zero_counters and available in eight_counters."
+      "forge_notes": "The station keyword is K:Station:8 in Forge; the striated abilities are added by a static ability conditioned on counters_GE8_CHARGE. 721.4 is unconditional, so it has no does_not_fire branch of its own; the contrast is the striated pump ability, gated in seven_counters and zero_counters and available in eight_counters.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate produced by a Station keyword (a permanent's station ability) is legal whatever number of charge counters the permanent has.",
+        "near_miss": "A Station candidate the verdict marks not playable for another reason (its timing or its tap cost).",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Station"
+        },
+        "needs": []
+      }
     }
   ]
 }

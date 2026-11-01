@@ -82,7 +82,18 @@
         "Grizzly Bears",
         "Propaganda"
       ],
-      "forge_notes": "Token copy attack requirement with a tax (Propaganda): confirm the AI/engine does not force payment."
+      "forge_notes": "Token copy attack requirement with a tax (Propaganda): confirm the AI/engine does not force payment.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An encore ability resolves and creates token copies of its card.",
+        "near_miss": "An encore ability resolution that creates no token copy.",
+        "params": {
+          "event": "permanent_copied",
+          "keyword": "Encore"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.141a-2",
@@ -180,7 +191,21 @@
         "Fathom Fleet Swordjack",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An encore ability is activatable at sorcery timing: its controller's main phase with an empty stack.",
+        "near_miss": "An encore ability that fails the timing check.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true,
+          "keyword": "Encore"
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     }
   ]
 }

@@ -164,7 +164,20 @@
         "Craw Wurm",
         "Counterspell"
       ],
-      "forge_notes": "The reflexive trigger in Forge is an ImmediateTrigger gated on the remembered Army, which is set before counters are placed."
+      "forge_notes": "The reflexive trigger in Forge is an ImmediateTrigger gated on the remembered Army, which is set before counters are placed.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An Amass resolution that places no +1/+1 counter on the Army (counters prevented or none placeable) still counts as amassing.",
+        "near_miss": "An Amass resolution in which the Army receives its +1/+1 counters.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "P1P1",
+          "api": "Amass",
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.47c-1",
@@ -252,7 +265,20 @@
         "Craw Wurm",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An Amass resolution that places no +1/+1 counter still designates the chosen Army as the amassed Army.",
+        "near_miss": "An Amass resolution in which the Army receives its +1/+1 counters.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "P1P1",
+          "api": "Amass",
+          "absent": true
+        },
+        "needs": []
+      }
     }
   ]
 }

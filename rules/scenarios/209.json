@@ -71,7 +71,19 @@
         "Liliana of the Veil",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent spell resolves and the permanent enters the battlefield with loyalty counters: the effect half holds a LOYALTY counter_change beside a zone_change.",
+        "near_miss": "Not tagged: no api restricts a near miss to permanent-spell resolutions.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "LOYALTY",
+          "with_event": "zone_change"
+        },
+        "needs": []
+      }
     },
     {
       "id": "209.2-1",

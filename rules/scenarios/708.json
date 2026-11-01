@@ -624,7 +624,22 @@
         "Grizzly Bears",
         "Song of the Dryads"
       ],
-      "forge_notes": "Needs Forge to reach a manifested face-down card as initial state. Forge's reveal check on the face-down permanent may read the current (overridden) types rather than the card's own."
+      "forge_notes": "Needs Forge to reach a manifested face-down card as initial state. Forge's reveal check on the face-down permanent may read the current (overridden) types rather than the card's own.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A reveal-first set-state resolution reveals a face-down permanent and turns it face up, the revealed card itself (ignoring continuous effects on the permanent) having the characteristic the effect asks for.",
+        "near_miss": "A reveal-first set-state resolution that turns nothing face up, the revealed card itself lacking that characteristic.",
+        "params": {
+          "event": "face_change",
+          "to_state": "face_up",
+          "api": "SetState",
+          "script_param": {
+            "RevealFirst": "*"
+          }
+        },
+        "needs": []
+      }
     }
   ]
 }

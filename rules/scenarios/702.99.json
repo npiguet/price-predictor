@@ -95,7 +95,17 @@
         "Last Thoughts",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A cipher trigger on an encoded creature fires when the creature deals combat damage to a player.",
+        "near_miss": "A cipher trigger evaluated and not fired.",
+        "params": {
+          "keyword": "Cipher"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.99c-1",
@@ -167,7 +177,17 @@
         "Island",
         "Last Thoughts"
       ],
-      "forge_notes": "Raging Goblin has haste, so the returned object can attack. In the flickered variant Cloudshift is cast in main1 before combat."
+      "forge_notes": "Raging Goblin has haste, so the returned object can attack. In the flickered variant Cloudshift is cast in main1 before combat.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A cipher trigger on an encoded creature fires when the creature deals combat damage to a player.",
+        "near_miss": "A cipher trigger evaluated and not fired.",
+        "params": {
+          "keyword": "Cipher"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.99c-2",
@@ -248,7 +268,17 @@
         "Island",
         "Last Thoughts"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A cipher trigger on an encoded creature fires when the creature deals combat damage to a player.",
+        "near_miss": "A cipher trigger evaluated and not fired.",
+        "params": {
+          "keyword": "Cipher"
+        },
+        "needs": []
+      }
     }
   ]
 }

@@ -225,7 +225,23 @@
         "Swamp",
         "Terror"
       ],
-      "forge_notes": "Use the exert ability (Duration$ UntilHostLeavesPlay), not the first ability, which returns the creature at the next end step."
+      "forge_notes": "Use the exert ability (Duration$ UntilHostLeavesPlay), not the first ability, which returns the creature at the next end step.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution of a zone-changing ability whose duration lasts until its source leaves the battlefield produces no exile move, because the source had already left when the ability resolved.",
+        "near_miss": "A resolution of the same kind of ability, source still on the battlefield, that moves the object to exile.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "exile",
+          "api": "ChangeZone",
+          "absent": true,
+          "script_param": {
+            "Duration": "UntilHostLeavesPlay"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "610.3b-1",

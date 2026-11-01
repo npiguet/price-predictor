@@ -71,7 +71,20 @@
         "Island",
         "Mulldrifter"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An evoke trigger resolves and its permanent moves from the battlefield to the graveyard.",
+        "near_miss": "An evoke trigger resolves and the permanent stays on the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "keyword": "Evoke",
+          "from_zone": "battlefield",
+          "to_zone": "graveyard"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.74a-2",
@@ -138,7 +151,19 @@
         "Mulldrifter",
         "Air Elemental"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A card's evoke cast is affordable: its evoke cost can be paid.",
+        "near_miss": "An evoke cast that is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "keyword": "Evoke"
+        },
+        "needs": []
+      }
     }
   ]
 }

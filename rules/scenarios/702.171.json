@@ -225,7 +225,10 @@
         "Quilled Charger",
         "Grizzly Bears"
       ],
-      "forge_notes": "The leave-the-battlefield and not-copiable parts of the rule are not exercised here; a copy of a saddled Mount is summoning sick and cannot attack to show the designation."
+      "forge_notes": "The leave-the-battlefield and not-copiable parts of the rule are not exercised here; a copy of a saddled Mount is summoning sick and cannot attack to show the designation.",
+      "detector": {
+        "none": "The saddled designation has no event in EVENT_PARAMS (Forge's Saddle ability is an AlterAttribute that writes none), and a continuous record lists only P/T, keyword, type and colour contributions. Gen-3 snapshots list a permanent's current designations, saddled among them, but no record field says on which turn a designation was set or marks its end at end of turn, so no single record shows a permanent saddled this turn against one saddled last turn."
+      }
     }
   ]
 }

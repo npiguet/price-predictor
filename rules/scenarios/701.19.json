@@ -160,7 +160,17 @@
         "Cudgel Troll",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "combat",
+        "outcome": "A creature in combat that would be destroyed regenerates: a regenerated event in the damage step.",
+        "near_miss": "A creature dealt lethal combat damage with no shield is destroyed instead (no regenerated event); the detector tags the fires side only.",
+        "params": {
+          "event": "regenerated"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.19b-1",
@@ -311,7 +321,18 @@
         "Doom Blade",
         "Cudgel Troll"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A destruction that cannot be regenerated destroys the permanent, whatever shield it holds (a destroyed event marked not regenerable).",
+        "near_miss": "A destruction that can be regenerated and is regenerated instead; no clean near miss without an api filter, so only the fires side is tagged.",
+        "params": {
+          "event": "destroyed",
+          "regenerable": false
+        },
+        "needs": []
+      }
     }
   ]
 }

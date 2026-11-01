@@ -74,7 +74,19 @@
         "Grizzly Bears",
         "Elite Vanguard"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate cast through its mutate cost has a legal target: a non-Human creature with the same owner as the spell.",
+        "near_miss": "A candidate cast through its mutate cost that has no legal target.",
+        "params": {
+          "bit": "has_legal_target",
+          "fires_when": true,
+          "keyword": "Mutate"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.140b-1",
@@ -145,7 +157,20 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": "Forge resolves a mutating spell with an illegal target as a regular creature spell; check that it does not simply fizzle."
+      "forge_notes": "Forge resolves a mutating spell with an illegal target as a regular creature spell; check that it does not simply fizzle.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A spell cast with mutate whose target is illegal on resolution resolves as a creature spell: stack to battlefield.",
+        "near_miss": "A mutate resolution that does not move the spell from the stack to the battlefield (it merges).",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "battlefield",
+          "keyword": "Mutate"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.140c-1",

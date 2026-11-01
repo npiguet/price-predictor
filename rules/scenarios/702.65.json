@@ -67,7 +67,20 @@
         "Arcanum Wings",
         "Holy Strength"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An aura swap ability resolves and an Aura card moves from its controller's hand to the battlefield.",
+        "near_miss": "An aura swap ability resolves with no Aura card moving from the hand to the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "keyword": "Aura swap",
+          "from_zone": "hand",
+          "to_zone": "battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.65b-1",
@@ -133,7 +146,19 @@
         "Wild Growth",
         "Holy Strength"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An aura swap ability resolves with no zone change: one half of the exchange cannot be completed.",
+        "near_miss": "An aura swap ability resolves and moves a card between zones.",
+        "params": {
+          "event": "zone_change",
+          "keyword": "Aura swap",
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.65b-2",
@@ -198,7 +223,19 @@
         "Arcanum Wings",
         "Holy Strength"
       ],
-      "forge_notes": "Needs an Aura owned by one player and controlled by the other, for example after a control-changing effect on the Aura."
+      "forge_notes": "Needs an Aura owned by one player and controlled by the other, for example after a control-changing effect on the Aura.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An aura swap ability resolves with no zone change: one half of the exchange cannot be completed.",
+        "near_miss": "An aura swap ability resolves and moves a card between zones.",
+        "params": {
+          "event": "zone_change",
+          "keyword": "Aura swap",
+          "absent": true
+        },
+        "needs": []
+      }
     }
   ]
 }

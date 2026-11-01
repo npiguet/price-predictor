@@ -64,7 +64,19 @@
         "Plains",
         "Fleecemane Lion"
       ],
-      "forge_notes": "The monstrous designation is not a setup field. For the already_monstrous variant the Lion must be set up (or played up) as having become monstrous earlier, for example by a first activation resolved before the scenario's decisions."
+      "forge_notes": "The monstrous designation is not a setup field. For the already_monstrous variant the Lion must be set up (or played up) as having become monstrous earlier, for example by a first activation resolved before the scenario's decisions.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A monstrosity ability puts +1/+1 counters on a permanent that is not monstrous yet.",
+        "near_miss": "A monstrosity ability that puts no counter, the permanent already being monstrous.",
+        "params": {
+          "event": "counter_change",
+          "api": "PutCounter",
+          "script_param": "Monstrosity"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.37a-2",
@@ -124,7 +136,10 @@
         "Plains",
         "Hundred-Handed One"
       ],
-      "forge_notes": "The monstrous designation is not a setup field; the already_monstrous variant needs a Hundred-Handed One that became monstrous earlier."
+      "forge_notes": "The monstrous designation is not a setup field; the already_monstrous variant needs a Hundred-Handed One that became monstrous earlier.",
+      "detector": {
+        "none": "A continuous record lists only what a static contributes (P/T, keywords, types, colours); the N counters a monstrosity ability puts show on its resolution record's counter_change, not on any continuous record, and no continuous field carries a counter count."
+      }
     },
     {
       "id": "701.37c-1",

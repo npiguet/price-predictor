@@ -77,7 +77,19 @@
         "Hill Giant",
         "Lead by Example"
       ],
-      "forge_notes": "Forge models Support as a PutCounter with the Support parameter; a zero-target cast needs TargetMin 0."
+      "forge_notes": "Forge models Support as a PutCounter with the Support parameter; a zero-target cast needs TargetMin 0.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A support resolution puts +1/+1 counters on other target creatures.",
+        "near_miss": "A support resolution that puts no counter.",
+        "params": {
+          "event": "counter_change",
+          "api": "PutCounter",
+          "script_param": "Support"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.41a-2",
@@ -138,7 +150,19 @@
         "Grizzly Bears",
         "Aerie Auxiliary"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A support resolution puts +1/+1 counters on other target creatures.",
+        "near_miss": "A support resolution that puts no counter.",
+        "params": {
+          "event": "counter_change",
+          "api": "PutCounter",
+          "script_param": "Support"
+        },
+        "needs": []
+      }
     }
   ]
 }

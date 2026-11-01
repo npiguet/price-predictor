@@ -67,7 +67,20 @@
         "Boggart Mob",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A champion trigger resolves and a permanent moves from the battlefield to exile.",
+        "near_miss": "A champion trigger resolves with nothing exiled from the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "keyword": "Champion",
+          "from_zone": "battlefield",
+          "to_zone": "exile"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.72a-2",

@@ -74,7 +74,18 @@
       "cards": [
         "Student of Warfare"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static conditioned on its host's level counters lying in a range grants the host keywords while the counters are in the range.",
+        "near_miss": "A level-conditioned static whose host's level counters lie outside its range, so it gives the host nothing.",
+        "params": {
+          "field": "keywords",
+          "counter_condition": "LEVEL"
+        },
+        "needs": []
+      }
     },
     {
       "id": "711.2b-1",
@@ -136,7 +147,18 @@
       "cards": [
         "Student of Warfare"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static conditioned on at least N level counters grants the host keywords while it has that many counters.",
+        "near_miss": "A level-conditioned static whose host has fewer level counters than its threshold, so it gives the host nothing.",
+        "params": {
+          "field": "keywords",
+          "counter_condition": "LEVEL"
+        },
+        "needs": []
+      }
     },
     {
       "id": "711.4-1",
@@ -190,7 +212,19 @@
         "Plains",
         "Student of Warfare"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A level up candidate is playable (can_play true), whatever the number of level counters on its permanent.",
+        "near_miss": "Not distinct within the rule: a level up candidate the verdict refuses, for timing or cost, never for its permanent's level counters.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Level up"
+        },
+        "needs": []
+      }
     },
     {
       "id": "711.5-1",

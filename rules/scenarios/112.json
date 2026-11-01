@@ -79,7 +79,21 @@
         "Grizzly Bears",
         "Essence Scatter"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate that counters a target spell has a legal target: a spell on the stack is a legal target for a spell-targeting effect.",
+        "near_miss": "A candidate that targets a spell has no legal target because no spell is on the stack.",
+        "params": {
+          "bit": "has_legal_target",
+          "fires_when": true,
+          "script_param": {
+            "TargetType": "Spell"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "112.1-2",

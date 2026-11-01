@@ -79,7 +79,20 @@
         "Craw Wurm",
         "Grizzly Bears"
       ],
-      "forge_notes": "The top of A's library must be pinned. The bottom cards are put in random order, so only the set of bottom cards is asserted when more than one is bottomed."
+      "forge_notes": "The top of A's library must be pinned. The bottom cards are put in random order, so only the set of bottom cards is asserted when more than one is bottomed.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A cascade trigger's resolution casts a card from exile without paying its mana cost.",
+        "near_miss": "A cascade trigger's resolution that casts nothing.",
+        "params": {
+          "event": "spell_cast",
+          "without_paying": true,
+          "from_zone": "exile",
+          "keyword": "cascade"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.85c-1",

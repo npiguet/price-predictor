@@ -606,7 +606,19 @@
         "Forest",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A counterspell resolves and counters nothing: its target spell can't be countered, so no spell_countered event is written.",
+        "near_miss": "A counterspell resolves and removes its target spell from the stack, writing a spell_countered event.",
+        "params": {
+          "event": "spell_countered",
+          "api": "Counter",
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "113.6h-1",
@@ -807,7 +819,22 @@
         "Barkhide Mauler",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A cycling candidate passes the zone check: cycling can be activated from the zone its discard cost can be paid from.",
+        "near_miss": "A cycling candidate fails the zone check because its source is in a zone the cost cannot be paid from.",
+        "params": {
+          "bit": "failed_check",
+          "check": "zone",
+          "fires_when": true,
+          "keyword": "Cycling"
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "113.6k-1",
@@ -950,7 +977,24 @@
         "Reassembling Skeleton",
         "Swamp"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An activated ability that functions only in the graveyard passes the zone check for a source in the graveyard.",
+        "near_miss": "The same graveyard-only ability fails the zone check for a source in another zone.",
+        "params": {
+          "bit": "failed_check",
+          "check": "zone",
+          "fires_when": true,
+          "script_param": {
+            "ActivationZone": "Graveyard"
+          }
+        },
+        "needs": [
+          "failed_checks"
+        ]
+      }
     },
     {
       "id": "113.6p-1",

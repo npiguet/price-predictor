@@ -180,7 +180,9 @@
         "Grizzly Bears"
       ],
       "forge_notes": "",
-      "detector": null
+      "detector": {
+        "none": "A loyalty cost's counter change shows on no record: a resolution's cost half holds only payload.costs (mana, tapped, life, sacrificed, discarded, exiled) and its effect half holds no cost events, and gen-3 adds no loyalty-cost field (looked at gen-2 cost halves, gen-3 costs_paid and printed_loyalty, the counters map of the snapshot, which shows a total but not the combined cost)."
+      }
     },
     {
       "id": "606.5-1",
@@ -255,7 +257,10 @@
         "Garruk Wildspeaker",
         "Forest"
       ],
-      "forge_notes": "Forge applies Carth's RaiseCost as an extra AddCounter cost part; confirm it nets against the SubCounter part."
+      "forge_notes": "Forge applies Carth's RaiseCost as an extra AddCounter cost part; confirm it nets against the SubCounter part.",
+      "detector": {
+        "none": "A loyalty cost's counter change shows on no record: a resolution's cost half holds only payload.costs (mana, tapped, life, sacrificed, discarded, exiled) and its effect half holds no cost events, and gen-3 adds no loyalty-cost field (looked at gen-2 cost halves, gen-3 costs_paid and printed_loyalty, the counters map of the snapshot, which shows a total but not the combined cost)."
+      }
     },
     {
       "id": "606.6-1",

@@ -1661,7 +1661,7 @@
         "508.7a"
       ],
       "title": "A reselected attacker stays in combat and does not attack a second time",
-      "record_kind": "combat",
+      "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "declare_attackers",
@@ -1727,7 +1727,18 @@
         "Jace Beleren",
         "Portal Mage"
       ],
-      "forge_notes": "Portal Mage's trigger is optional (OptionalDecider$ You); the scenario takes the 'may' as accepted."
+      "forge_notes": "Portal Mage's trigger is optional (OptionalDecider$ You); the scenario takes the 'may' as accepted.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A ChangeCombatants resolution reselects the defender of an attacker already in combat: the effect half holds a removed_from_combat event naming the attacker, which stays in combat attacking the new defender.",
+        "near_miss": "A ChangeCombatants resolution that changes no attacker's defender (the attacker already attacks that defender, or the choice is declined).",
+        "params": {
+          "event": "removed_from_combat",
+          "api": "ChangeCombatants"
+        },
+        "needs": []
+      }
     },
     {
       "id": "508.7b-1",

@@ -78,7 +78,19 @@
         "Grizzly Bears",
         "Hill Giant",
         "Island"
-      ]
+      ],
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A cast candidate of a card printing harmonize is affordable, its cost reduced by the power of a creature tapped for harmonize.",
+        "near_miss": "A cast candidate of a card printing harmonize is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "source_keyword": "Harmonize"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.180a-2",

@@ -75,7 +75,19 @@
         "Skewer the Critics",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate cast through its spectacle cost is playable because an opponent lost life this turn.",
+        "near_miss": "A candidate cast through its spectacle cost that is not playable.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Spectacle"
+        },
+        "needs": []
+      }
     }
   ]
 }

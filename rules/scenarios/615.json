@@ -83,7 +83,18 @@
         "Fog",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A prevention effect prevents all or part of a damage event it applies to.",
+        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
+        "params": {
+          "event": "damage_dealt",
+          "prevention": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "615.3-1",
@@ -146,7 +157,18 @@
         "Grizzly Bears",
         "Fog"
       ],
-      "forge_notes": "The scenario spans two turns; the step name only gives the starting point."
+      "forge_notes": "The scenario spans two turns; the step name only gives the starting point.",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A prevention effect within its duration prevents damage it applies to.",
+        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
+        "params": {
+          "event": "damage_dealt",
+          "prevention": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "615.4-1",
@@ -212,7 +234,18 @@
         "Mending Hands",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A prevention effect that exists when the damage would be dealt prevents it.",
+        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
+        "params": {
+          "event": "damage_dealt",
+          "prevention": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "615.5-1",
@@ -274,7 +307,18 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": "Vigor's script is a DamageDone replacement with PreventionEffect and ExecuteMode$ PerTarget that puts counters equal to the damage."
+      "forge_notes": "Vigor's script is a DamageDone replacement with PreventionEffect and ExecuteMode$ PerTarget that puts counters equal to the damage.",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A prevention effect prevents damage, and its additional effect follows.",
+        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
+        "params": {
+          "event": "damage_dealt",
+          "prevention": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "615.6-1",
@@ -349,7 +393,18 @@
         "Plains",
         "Mending Hands"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "Damage is prevented by a prevention effect and is never dealt.",
+        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
+        "params": {
+          "event": "damage_dealt",
+          "prevention": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "615.7-1",
@@ -433,7 +488,18 @@
         "Lava Axe",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A damage-amount shield prevents damage up to its remaining amount.",
+        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
+        "params": {
+          "event": "damage_dealt",
+          "prevention": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "615.8-1",
@@ -504,7 +570,18 @@
         "Circle of Protection: Red",
         "Plains"
       ],
-      "forge_notes": "Circle of Protection: Red is implemented as an Effect with a replacement that exiles itself after one use."
+      "forge_notes": "Circle of Protection: Red is implemented as an Effect with a replacement that exiles itself after one use.",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A next-time prevention effect prevents a whole damage instance.",
+        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
+        "params": {
+          "event": "damage_dealt",
+          "prevention": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "615.9-1",
@@ -570,7 +647,18 @@
         "Circle of Protection: Green",
         "Plains"
       ],
-      "forge_notes": "The ChooseSource choice is made on resolution, so the recoloring response must come after the ability resolves. Forge rechecks the colour through ValidSource Card.ChosenCardStrict+GreenSource."
+      "forge_notes": "The ChooseSource choice is made on resolution, so the recoloring response must come after the ability resolves. Forge rechecks the colour through ValidSource Card.ChosenCardStrict+GreenSource.",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A shield for sources with a property prevents damage from a matching source.",
+        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
+        "params": {
+          "event": "damage_dealt",
+          "prevention": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "615.10-1",
@@ -643,7 +731,18 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A static prevention effect of a fixed amount prevents that amount of each damage event.",
+        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
+        "params": {
+          "event": "damage_dealt",
+          "prevention": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "615.11-1",
@@ -725,7 +824,18 @@
         "Forest",
         "Pyroclasm"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A shield created by a radiance prevention effect prevents damage to its creature.",
+        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
+        "params": {
+          "event": "damage_dealt",
+          "prevention": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "615.12-1",
@@ -798,7 +908,19 @@
         "Flames of the Blood Hand",
         "Lightning Bolt"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "Damage that can't be prevented meets a prevention effect and none of it is prevented (result not_replaced).",
+        "near_miss": "A preventable damage event meets the prevention effect and part or all of it is prevented.",
+        "params": {
+          "event": "damage_dealt",
+          "prevention": true,
+          "result": "not_replaced"
+        },
+        "needs": []
+      }
     },
     {
       "id": "615.13-1",

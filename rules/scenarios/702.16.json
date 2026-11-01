@@ -68,7 +68,19 @@
         "Swords to Plowshares",
         "Lightning Bolt"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
+        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
+        "params": {
+          "list": "legal_targets",
+          "fires_when": "outside",
+          "universe": "battlefield_and_players"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.16b-2",
@@ -132,7 +144,19 @@
         "Plains",
         "Black Knight"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
+        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
+        "params": {
+          "list": "legal_targets",
+          "fires_when": "outside",
+          "universe": "battlefield_and_players"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.16c-1",
@@ -412,7 +436,17 @@
         "Grizzly Bears",
         "Burrenton Forge-Tender"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "combat",
+        "outcome": "Combat damage from a source meeting a protection quality to the protected creature is prevented: the damage step holds a damage_prevented event.",
+        "near_miss": "Combat damage to a creature with no matching protection is dealt and nothing is prevented (no clean near miss without an api).",
+        "params": {
+          "event": "damage_prevented"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.16f-1",
@@ -544,7 +578,19 @@
         "Hill Giant",
         "Lightning Bolt"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
+        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
+        "params": {
+          "list": "legal_targets",
+          "fires_when": "outside",
+          "universe": "battlefield_and_players"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.16j-2",
@@ -748,7 +794,19 @@
         "True-Name Nemesis",
         "Lightning Bolt"
       ],
-      "forge_notes": "The chosen player is a setup fact; B chose A in the base. Current Oracle and Forge let True-Name Nemesis's controller choose any player, so the protected_from_B variant is reachable."
+      "forge_notes": "The chosen player is a setup fact; B chose A in the base. Current Oracle and Forge let True-Name Nemesis's controller choose any player, so the protected_from_B variant is reachable.",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
+        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
+        "params": {
+          "list": "legal_targets",
+          "fires_when": "outside",
+          "universe": "battlefield_and_players"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.16k-2",

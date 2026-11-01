@@ -81,7 +81,19 @@
         "Sublime Exhalation",
         "Devout Invocation"
       ],
-      "forge_notes": "Variant five_lands changes the number of Plains in the base setup from six to five."
+      "forge_notes": "Variant five_lands changes the number of Plains in the base setup from six to five.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate for a card with undaunted is affordable at its cost reduced by one generic mana per opponent.",
+        "near_miss": "A candidate for a card with undaunted that is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "source_keyword": "Undaunted"
+        },
+        "needs": []
+      }
     }
   ]
 }

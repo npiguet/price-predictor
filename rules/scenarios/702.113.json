@@ -68,7 +68,18 @@
         "Island",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A spell cast with an awaken cost resolves and puts +1/+1 counters on a target land its controller controls.",
+        "near_miss": "A resolution of an awaken line that puts no counters on a land.",
+        "params": {
+          "event": "counter_change",
+          "keyword": "Awaken"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.113b-1",
@@ -133,7 +144,19 @@
         "Thought Vessel",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate for a card with awaken has a legal target without needing a land (cast for its mana cost, awaken unused).",
+        "near_miss": "A candidate for a card with awaken that has no legal target.",
+        "params": {
+          "bit": "has_legal_target",
+          "fires_when": true,
+          "source_keyword": "Awaken"
+        },
+        "needs": []
+      }
     }
   ]
 }

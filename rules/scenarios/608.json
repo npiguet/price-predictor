@@ -478,7 +478,19 @@
         "Terror",
         "Doom Blade"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A destroy resolution produces a destroyed event that can't be regenerated (regenerable false), so a regeneration shield cannot save the permanent.",
+        "near_miss": "A destroy resolution whose destroyed events are all regenerable: no later text of the spell or ability modified its destroy instruction.",
+        "params": {
+          "event": "destroyed",
+          "regenerable": false,
+          "api": "Destroy"
+        },
+        "needs": []
+      }
     },
     {
       "id": "608.2f-1",

@@ -727,7 +727,19 @@
         "Plains",
         "Exalted Angel"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A face-down permanent's turn-face-up special action is a candidate the player can take (can_play true).",
+        "near_miss": "The same special action is a candidate the player cannot take.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Morph"
+        },
+        "needs": []
+      }
     },
     {
       "id": "405.6e-1",
@@ -735,7 +747,7 @@
         "405.6e"
       ],
       "title": "A turn-based action happens before priority without using the stack",
-      "record_kind": "resolution",
+      "record_kind": "turn_action",
       "setup": {
         "active": "A",
         "step": "upkeep",
@@ -786,7 +798,19 @@
         "Island",
         "Necropotence"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "At the start of the draw step the active player draws as a turn-based action, with no object on the stack and before any player receives priority: the draw turn_action record holds a card_drawn event.",
+        "near_miss": "No near miss is counted: a skipped or replaced draw writes no card_drawn on a turn_action record, so only the fires side is tagged.",
+        "params": {
+          "event": "card_drawn"
+        },
+        "needs": [
+          "turn_action"
+        ]
+      }
     },
     {
       "id": "405.6f-1",

@@ -77,7 +77,21 @@
         "Mountain",
         "Patron of the Akki"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A creature spell whose card prints offering has its timing check pass (castable at instant speed) once the offering cost can be paid.",
+        "near_miss": "The same kind of candidate whose timing check fails.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true,
+          "source_keyword": "Offering"
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "702.48c-1",

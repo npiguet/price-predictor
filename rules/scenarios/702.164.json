@@ -73,7 +73,17 @@
         "Plains",
         "Holy Day"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "combat",
+        "outcome": "Combat damage to a player from a creature with toxic is accompanied by a poison_change event for that player in the damage step.",
+        "near_miss": "Not counted: a combat record has no acting line, so the family tags only the fires side; a blocked or prevented attack writes no poison_change.",
+        "params": {
+          "event": "poison_change"
+        },
+        "needs": []
+      }
     }
   ]
 }

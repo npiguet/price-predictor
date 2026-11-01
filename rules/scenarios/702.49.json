@@ -82,7 +82,20 @@
         "Ninja of the Deep Hours",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A ninjutsu ability resolves and its card moves from the hand to the battlefield.",
+        "near_miss": "A ninjutsu ability resolves and the card does not enter the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "keyword": "Ninjutsu",
+          "from_zone": "hand",
+          "to_zone": "battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.49c-1",

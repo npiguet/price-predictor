@@ -94,7 +94,19 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
+        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
+        "params": {
+          "list": "legal_targets",
+          "fires_when": "outside",
+          "universe": "battlefield_and_players"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.11b-2",
@@ -248,7 +260,19 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
+        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
+        "params": {
+          "list": "legal_targets",
+          "fires_when": "outside",
+          "universe": "battlefield_and_players"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.11d-1",
@@ -321,7 +345,19 @@
         "Doom Blade",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
+        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
+        "params": {
+          "list": "legal_targets",
+          "fires_when": "outside",
+          "universe": "battlefield_and_players"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.11e-1",
@@ -386,7 +422,19 @@
         "Garruk's Harbinger",
         "Doom Blade"
       ],
-      "forge_notes": "Forge's AnimateAll RemoveKeywords$ Hexproof may remove only the plain Hexproof keyword and leave Hexproof:Black."
+      "forge_notes": "Forge's AnimateAll RemoveKeywords$ Hexproof may remove only the plain Hexproof keyword and leave Hexproof:Black.",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A spell or ability's candidate lists, among its legal targets, an entity or player that a restriction or permission makes targetable.",
+        "near_miss": "An entity or player that the candidate's targeting restriction excludes from its legal targets.",
+        "params": {
+          "list": "legal_targets",
+          "fires_when": "inside",
+          "universe": "battlefield_and_players"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.11e-2",
@@ -458,7 +506,19 @@
         "Garruk's Harbinger",
         "Doom Blade"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A spell or ability's candidate lists, among its legal targets, an entity or player that a restriction or permission makes targetable.",
+        "near_miss": "An entity or player that the candidate's targeting restriction excludes from its legal targets.",
+        "params": {
+          "list": "legal_targets",
+          "fires_when": "inside",
+          "universe": "battlefield_and_players"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.11f-1",
@@ -535,7 +595,19 @@
         "Pacifism",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
+        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
+        "params": {
+          "list": "legal_targets",
+          "fires_when": "outside",
+          "universe": "battlefield_and_players"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.11g-1",
@@ -599,7 +671,19 @@
         "Breaker of Creation",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
+        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
+        "params": {
+          "list": "legal_targets",
+          "fires_when": "outside",
+          "universe": "battlefield_and_players"
+        },
+        "needs": []
+      }
     }
   ]
 }

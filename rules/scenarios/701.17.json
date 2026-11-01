@@ -235,7 +235,19 @@
         "Island",
         "Rot Farm Skeleton"
       ],
-      "forge_notes": "The activation is sorcery speed from the graveyard; the step is main1 with an empty stack. Verify that Forge's mill cost checks library size before payment."
+      "forge_notes": "The activation is sorcery speed from the graveyard; the step is main1 with an empty stack. Verify that Forge's mill cost checks library size before payment.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate whose cost includes milling cards is affordable when the library can pay the mill.",
+        "near_miss": "A candidate whose cost includes milling cards is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "cost_part": "Mill"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.17c-1",

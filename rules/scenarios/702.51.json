@@ -78,7 +78,19 @@
         "Grizzly Bears",
         "Siege Wurm"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell whose card has convoke is affordable, its cost payable with mana plus untapped creatures.",
+        "near_miss": "A convoke spell that is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "source_keyword": "Convoke"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.51a-2",
@@ -148,7 +160,19 @@
         "Raging Goblin",
         "Siege Wurm"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell whose card has convoke is affordable, a creature paying coloured mana only if it has that colour.",
+        "near_miss": "A convoke spell that is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "source_keyword": "Convoke"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.51b-1",
@@ -227,7 +251,19 @@
         "Grizzly Bears",
         "Siege Wurm"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A spell whose card has convoke is affordable once its cost has been reduced by cost changes.",
+        "near_miss": "A convoke spell that is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "source_keyword": "Convoke"
+        },
+        "needs": []
+      }
     }
   ]
 }

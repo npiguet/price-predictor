@@ -59,7 +59,20 @@
         "Mountain",
         "Rakdos Cackler"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "An unleash replacement meets a creature entering the battlefield and is applied, so it enters with an additional +1/+1 counter.",
+        "near_miss": "An unleash replacement meets a creature entering the battlefield and is not applied.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "battlefield",
+          "result": "updated",
+          "keyword": "Unleash"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.98a-2",

@@ -1126,7 +1126,17 @@
         "Song of the Dryads",
         "Pacifism"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An Equipment or Fortification becomes unattached from an illegal permanent in the state-based check after a resolution.",
+        "near_miss": "No near miss is tagged: outcome_event counts one only with an api or keyword.",
+        "params": {
+          "event": "unattached"
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.5p-1",
@@ -1193,7 +1203,17 @@
         "Bonesplitter",
         "March of the Machines"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent that is both attached and a creature becomes unattached in the state-based check after a resolution.",
+        "near_miss": "No near miss is tagged: outcome_event counts one only with an api or keyword.",
+        "params": {
+          "event": "unattached"
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.5q-1",

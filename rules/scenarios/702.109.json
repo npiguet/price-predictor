@@ -200,7 +200,19 @@
         "Plains",
         "Mardu Scout"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A card's dash-cost cast is a candidate whose cost is affordable.",
+        "near_miss": "A dash candidate whose cost cannot be paid.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "keyword": "Dash"
+        },
+        "needs": []
+      }
     }
   ]
 }

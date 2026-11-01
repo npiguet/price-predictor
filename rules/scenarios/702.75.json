@@ -87,7 +87,20 @@
         "Forest",
         "Swamp"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A hideaway trigger resolves and a card moves from its controller's library to exile.",
+        "near_miss": "A hideaway trigger resolves with no card moving from the library to exile.",
+        "params": {
+          "event": "zone_change",
+          "keyword": "Hideaway",
+          "from_zone": "library",
+          "to_zone": "exile"
+        },
+        "needs": []
+      }
     }
   ]
 }

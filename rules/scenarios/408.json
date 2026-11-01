@@ -77,7 +77,21 @@
         "Shock",
         "Stifle"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution of an Effect-API ability with a permanent duration creates a lasting effect object in the command zone (an emblem), which stays after its source leaves the battlefield.",
+        "near_miss": "A resolution of the same kind of permanent-duration Effect ability that creates no continuous effect.",
+        "params": {
+          "event": "continuous_effect_created",
+          "api": "Effect",
+          "script_param": {
+            "Duration": "Permanent"
+          }
+        },
+        "needs": []
+      }
     }
   ]
 }

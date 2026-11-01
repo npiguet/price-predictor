@@ -70,7 +70,19 @@
         "Plains",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A web-slinging cost is a playable candidate: the mana is payable and a tapped creature can be returned.",
+        "near_miss": "A web-slinging candidate is not playable (no tapped creature to return, or unpayable mana).",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Web-slinging"
+        },
+        "needs": []
+      }
     }
   ]
 }

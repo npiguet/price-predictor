@@ -711,7 +711,21 @@
         "Grizzly Bears",
         "Break Open"
       ],
-      "forge_notes": "Forge may not allow a manifested noncreature card as a mutate target, and may not apply the 730.2g exception to a merged permanent whose top component is a creature card."
+      "forge_notes": "Forge may not allow a manifested noncreature card as a mutate target, and may not apply the 730.2g exception to a merged permanent whose top component is a creature card.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A turn-face-up resolution meets a face-down permanent that cannot be turned face up: Forge reveals the card (a card_revealed event) instead of turning it, so no face_change and no turned-face-up trigger follow.",
+        "near_miss": "A turn-face-up resolution on a face-down permanent that can be turned up: it holds no card_revealed event (a face_change to the front instead).",
+        "params": {
+          "event": "card_revealed",
+          "api": "SetState",
+          "script_param": {
+            "Mode": "TurnFaceUp"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "730.2h-1",

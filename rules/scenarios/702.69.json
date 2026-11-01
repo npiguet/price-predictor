@@ -76,7 +76,18 @@
         "Follow the Bodies",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A gravestorm trigger resolves and copies its spell.",
+        "near_miss": "A gravestorm trigger resolves and makes no copy.",
+        "params": {
+          "event": "spell_copied",
+          "keyword": "Gravestorm"
+        },
+        "needs": []
+      }
     }
   ]
 }

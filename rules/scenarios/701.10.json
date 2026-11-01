@@ -165,7 +165,21 @@
         "Unleash Fury",
         "Wall of Wood"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A pump that doubles a creature's power (Forge's NumAtt$ Double) changes its power: a pt_change event.",
+        "near_miss": "A power-doubling pump that changes nothing, the creature's power being 0.",
+        "params": {
+          "event": "pt_change",
+          "api": "Pump",
+          "script_param": {
+            "NumAtt": "Double"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.10b-2",
@@ -241,7 +255,22 @@
         "Tifa's Limit Break",
         "Unleash Fury"
       ],
-      "forge_notes": "Forge implements the tiers as a Charm with ModeCost; the chosen tier's cost is added to {G}."
+      "forge_notes": "Forge implements the tiers as a Charm with ModeCost; the chosen tier's cost is added to {G}.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A pump that doubles a creature's power and toughness (NumAtt$ Double and NumDef$ Double) changes them: a pt_change event.",
+        "near_miss": "A pump doubling power and toughness that changes nothing, both values being 0.",
+        "params": {
+          "event": "pt_change",
+          "api": "Pump",
+          "script_param": {
+            "NumAtt": "Double",
+            "NumDef": "Double"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.10c-1",
@@ -548,7 +577,21 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": "Doubling Cube is a mana ability in Forge (it does not use the stack); the pool must be kept within the main phase."
+      "forge_notes": "Doubling Cube is a mana ability in Forge (it does not use the stack); the pool must be kept within the main phase.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A mana ability that doubles the unspent mana in its controller's pool (Forge's Produced$ Special DoubleManaInPool) adds mana: a mana_produced event.",
+        "near_miss": "A mana-doubling ability on an empty pool adds nothing, and a mana ability that produces nothing writes no record, so only the fires side is tagged.",
+        "params": {
+          "event": "mana_produced",
+          "api": "Mana",
+          "script_param": {
+            "Produced": "Special DoubleManaInPool"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.10g-1",

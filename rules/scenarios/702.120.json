@@ -77,7 +77,19 @@
         "Grizzly Bears",
         "Borrowed Hostility"
       ],
-      "forge_notes": "Variant two_modes_three_lands changes the number of Mountains in the base setup from four to three."
+      "forge_notes": "Variant two_modes_three_lands changes the number of Mountains in the base setup from four to three.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate for a modal card with escalate is affordable with the escalate cost added for each extra mode.",
+        "near_miss": "A candidate for a card with escalate that is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "source_keyword": "Escalate"
+        },
+        "needs": []
+      }
     }
   ]
 }

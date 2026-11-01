@@ -65,7 +65,19 @@
         "Forest",
         "Sauroform Hybrid"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An adapt ability puts +1/+1 counters on a permanent that has none.",
+        "near_miss": "An adapt ability that puts no counter, the permanent already having +1/+1 counters.",
+        "params": {
+          "event": "counter_change",
+          "api": "PutCounter",
+          "script_param": "Adapt"
+        },
+        "needs": []
+      }
     }
   ]
 }

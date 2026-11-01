@@ -78,7 +78,19 @@
         "Hill Giant",
         "Cinder Strike"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Blight resolution puts -1/-1 counters on a creature the blighting player controls.",
+        "near_miss": "A Blight resolution that puts no -1/-1 counter on any creature, its player controlling no creature to blight.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "M1M1",
+          "api": "Blight"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.68b-1",
@@ -140,7 +152,19 @@
         "Grizzly Bears",
         "Evershrike's Gift"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate whose cost has a blight part is unaffordable because its controller controls no creature to put the counters on.",
+        "near_miss": "A candidate whose cost has a blight part is affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": false,
+          "cost_part": "Blight"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.68c-1",

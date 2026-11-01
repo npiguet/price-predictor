@@ -147,7 +147,19 @@
         "Hill Giant",
         "Giant Growth"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "combat",
+        "outcome": "Several creatures deal combat damage in one damage step: the record holds a combat damage_dealt event per damaging creature.",
+        "near_miss": "A combat in which fewer than two damage events happen (only one side deals damage).",
+        "params": {
+          "event": "damage_dealt",
+          "combat": true,
+          "min_count": 2
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.2b-1",
@@ -455,7 +467,19 @@
         "Plains",
         "Mending Hands"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "Damage dealt to a planeswalker removes loyalty counters: the effect half holds a loyalty counter_change beside the damage_dealt.",
+        "near_miss": "Loyalty counters change in a resolution without any damage being dealt.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "loyalty",
+          "with_event": "damage_dealt"
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.3d-1",
@@ -613,7 +637,20 @@
         "Sickle Ripper",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "combat",
+        "outcome": "Combat damage dealt to a creature is marked on it: the damage_dealt to a combatant creature comes with no -1/-1 counter_change.",
+        "near_miss": "Combat damage to a creature comes with -1/-1 counters (wither or infect), so it is not marked.",
+        "params": {
+          "event": "damage_dealt",
+          "combat": true,
+          "subject_in_combat": true,
+          "without_event": "counter_change"
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.3f-1",
@@ -846,7 +883,19 @@
         "Plains",
         "Mending Hands"
       ],
-      "forge_notes": "Requires Forge's Any target filter to include battles and the battle to be placed with B as protector."
+      "forge_notes": "Requires Forge's Any target filter to include battles and the battle to be placed with B as protector.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "Damage dealt to a battle removes defense counters: the effect half holds a defense counter_change beside the damage_dealt.",
+        "near_miss": "Defense counters change in a resolution without any damage being dealt.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "defense",
+          "with_event": "damage_dealt"
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.4-1",
@@ -994,7 +1043,20 @@
         "Grizzly Bears",
         "Craw Wurm"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A damage effect with an excess-damage redirection deals damage to two recipients: the lethal part and the excess.",
+        "near_miss": "The same kind of damage effect deals no excess, so only one damage_dealt event happens.",
+        "params": {
+          "event": "damage_dealt",
+          "api": "DealDamage",
+          "script_param": "ExcessDamage",
+          "min_count": 2
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.4a-2",

@@ -80,7 +80,19 @@
         "Grizzly Bears",
         "Wall of Wood"
       ],
-      "forge_notes": "Counter type is CHARGE. Station is implemented as a PutCounter ability with cost tapXType<1/Creature.Other> and SorcerySpeed."
+      "forge_notes": "Counter type is CHARGE. Station is implemented as a PutCounter ability with cost tapXType<1/Creature.Other> and SorcerySpeed.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A station ability resolves and puts charge counters on its permanent.",
+        "near_miss": "A station ability resolves and puts no charge counters.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "CHARGE",
+          "keyword": "Station"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.184a-2",
@@ -152,7 +164,19 @@
         "Galvanizing Sawship",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A station ability is a playable candidate: sorcery timing and another untapped creature to tap.",
+        "near_miss": "A station ability is not playable (wrong timing, or no other untapped creature).",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Station"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.184c-1",

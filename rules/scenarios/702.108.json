@@ -153,7 +153,17 @@
         "Triton Wavebreaker",
         "Shock"
       ],
-      "forge_notes": "The bestowed state of the pre-placed Aura is not expressible in the zone list; the harness must set it up as if cast bestowed."
+      "forge_notes": "The bestowed state of the pre-placed Aura is not expressible in the zone list; the harness must set it up as if cast bestowed.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A prowess trigger fires, one trigger record per instance of the keyword on the creature.",
+        "near_miss": "A prowess trigger evaluated and not fired.",
+        "params": {
+          "keyword": "Prowess"
+        },
+        "needs": []
+      }
     }
   ]
 }

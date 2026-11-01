@@ -246,7 +246,19 @@
         "Mountain",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A card offered as a candidate through its flashback ability can be played (can_play true).",
+        "near_miss": "A flashback candidate that cannot be played, because its flashback cost cannot be paid or the card is not in the graveyard (can_play false).",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Flashback"
+        },
+        "needs": []
+      }
     }
   ]
 }

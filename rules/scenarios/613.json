@@ -1789,7 +1789,17 @@
         "Serra's Emissary",
         "Natural Affinity"
       ],
-      "forge_notes": "The chosen card type is an ETB choice that the setup has to preset."
+      "forge_notes": "The chosen card type is an ETB choice that the setup has to preset.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "combat",
+        "outcome": "In a combat damage step, damage dealt to a player is prevented by a protection effect that applies once the source's characteristics are determined.",
+        "near_miss": "A combat damage step in which no damage is prevented (no damage_prevented event); the fires side only is tagged, since no clean near miss exists without an acting line.",
+        "params": {
+          "event": "damage_prevented"
+        },
+        "needs": []
+      }
     },
     {
       "id": "613.11-1",

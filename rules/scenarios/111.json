@@ -407,7 +407,19 @@
         "Forest",
         "Worms of the Earth"
       ],
-      "forge_notes": "Only the first sentence of 111.5 is illustrated; the token-copy-of-an-instant-or-sorcery case has no simple Forge card."
+      "forge_notes": "Only the first sentence of 111.5 is illustrated; the token-copy-of-an-instant-or-sorcery case has no simple Forge card.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A token-making resolution (Token API) produces no token_created event, because a rule or effect forbids the token's characteristics on the battlefield.",
+        "near_miss": "A token-making resolution of the same API produces its token_created event.",
+        "params": {
+          "event": "token_created",
+          "api": "Token",
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.6-1",
@@ -537,7 +549,20 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A token moves from the battlefield to the graveyard (it then ceases to exist).",
+        "near_miss": "A card, not a token, moves from the battlefield to the graveyard and stays there.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "Battlefield",
+          "to_zone": "Graveyard",
+          "subject_is_token": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.7-2",
@@ -598,7 +623,20 @@
         "Island",
         "Unsummon"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A token moves from the battlefield to its owner's hand (it then ceases to exist).",
+        "near_miss": "A card, not a token, moves from the battlefield to hand and stays there.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "Battlefield",
+          "to_zone": "Hand",
+          "subject_is_token": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.8-1",
@@ -725,7 +763,19 @@
         "Negate",
         "Strike It Rich"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A token-making resolution creates a Treasure token (the token_created event's token is a Treasure).",
+        "near_miss": "A token-making resolution that creates no Treasure token.",
+        "params": {
+          "event": "token_created",
+          "api": "Token",
+          "token_kind": "Treasure"
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.10b-1",
@@ -784,7 +834,19 @@
         "Forest",
         "Gilded Goose"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Food token's own ability resolves and its controller gains life.",
+        "near_miss": "A life-gain resolution whose source is not a Food token.",
+        "params": {
+          "event": "life_change",
+          "source_token_kind": "Food",
+          "api": "GainLife"
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.10c-1",
@@ -854,7 +916,19 @@
         "Shock",
         "Swamp"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A token-making resolution creates a Gold token.",
+        "near_miss": "A token-making resolution that creates no Gold token.",
+        "params": {
+          "event": "token_created",
+          "api": "Token",
+          "token_kind": "Gold"
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.10d-1",
@@ -991,7 +1065,18 @@
         "Plains",
         "Swamp"
       ],
-      "forge_notes": "In the four-land variant A's battlefield is Plains x2 and Island x2."
+      "forge_notes": "In the four-land variant A's battlefield is Plains x2 and Island x2.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Shard token's own ability resolves and its controller draws a card.",
+        "near_miss": "A draw whose source is not a Shard token.",
+        "params": {
+          "event": "card_drawn",
+          "source_token_kind": "Shard"
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.10f-1",
@@ -1057,7 +1142,19 @@
         "Plains",
         "Thraben Inspector"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Clue token's own ability resolves and its controller draws a card.",
+        "near_miss": "A draw resolution whose source is not a Clue token.",
+        "params": {
+          "event": "card_drawn",
+          "source_token_kind": "Clue",
+          "api": "Draw"
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.10g-1",
@@ -1121,7 +1218,19 @@
         "Mountain",
         "Voldaren Epicure"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Blood token's own ability resolves and its controller draws a card.",
+        "near_miss": "A draw resolution whose source is not a Blood token.",
+        "params": {
+          "event": "card_drawn",
+          "source_token_kind": "Blood",
+          "api": "Draw"
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.10h-1",
@@ -1317,7 +1426,18 @@
         "Diminisher Witch",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A Cursed Role token's static contributes a power/toughness change to the creature it enchants.",
+        "near_miss": "A static of the same kind on a source that is not a Role token of this kind contributes no such boost; the Role's own static is the fires side.",
+        "params": {
+          "field": "pt",
+          "source_token_kind": "Cursed"
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.10k-1",
@@ -1382,7 +1502,18 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A Monster Role token's static contributes a power/toughness boost to the creature it enchants.",
+        "near_miss": "A static of the same kind on a source that is not a Role token of this kind contributes no such boost; the Role's own static is the fires side.",
+        "params": {
+          "field": "pt",
+          "source_token_kind": "Monster"
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.10m-1",
@@ -1448,7 +1579,18 @@
         "Royal Treatment",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A Royal Role token's static contributes a power/toughness boost to the creature it enchants.",
+        "near_miss": "A static of the same kind on a source that is not a Role token of this kind contributes no such boost; the Role's own static is the fires side.",
+        "params": {
+          "field": "pt",
+          "source_token_kind": "Royal"
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.10n-1",
@@ -1507,7 +1649,18 @@
         "Plains",
         "Spellbook Vendor"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A Sorcerer Role token's static contributes a power/toughness boost to the creature it enchants.",
+        "near_miss": "A static of the same kind on a source that is not a Role token of this kind contributes no such boost; the Role's own static is the fires side.",
+        "params": {
+          "field": "pt",
+          "source_token_kind": "Sorcerer"
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.10p-1",
@@ -1579,7 +1732,18 @@
         "Plains",
         "Seal of Fire"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A Virtuous Role token's static contributes a power/toughness boost to the creature it enchants.",
+        "near_miss": "A static of the same kind on a source that is not a Role token of this kind contributes no such boost; the Role's own static is the fires side.",
+        "params": {
+          "field": "pt",
+          "source_token_kind": "Virtuous"
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.10q-1",
@@ -1648,7 +1812,18 @@
         "Shock",
         "Witch's Mark"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A Wicked Role token's static contributes a power/toughness boost to the creature it enchants.",
+        "near_miss": "A static of the same kind on a source that is not a Role token of this kind contributes no such boost; the Role's own static is the fires side.",
+        "params": {
+          "field": "pt",
+          "source_token_kind": "Wicked"
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.10r-1",
@@ -1776,7 +1951,19 @@
         "Island",
         "Spyglass Siren"
       ],
-      "forge_notes": "In the no_mana variant A's battlefield is a single Island."
+      "forge_notes": "In the no_mana variant A's battlefield is a single Island.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Map token's own ability resolves and the target creature explores (the top card is revealed).",
+        "near_miss": "An Explore resolution whose source is not a Map token.",
+        "params": {
+          "event": "card_revealed",
+          "source_token_kind": "Map",
+          "api": "Explore"
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.10t-1",
@@ -1844,7 +2031,22 @@
         "Mind Stone",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An ability candidate that may be activated only as a sorcery fails its timing check outside a main phase with an empty stack.",
+        "near_miss": "The same sorcery-speed candidate passes its timing check in a main phase with an empty stack.",
+        "params": {
+          "bit": "timing",
+          "script_param": {
+            "SorcerySpeed": "True"
+          }
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "111.10u-1",
@@ -1916,7 +2118,21 @@
         "Mountain",
         "Orbital Plunge"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Lander token's own ability resolves and a card moves from library to battlefield.",
+        "near_miss": "A ChangeZone resolution whose source is not a Lander token.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "Library",
+          "to_zone": "Battlefield",
+          "source_token_kind": "Lander",
+          "api": "ChangeZone"
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.10v-1",
@@ -1975,7 +2191,19 @@
         "Crustacean Commando",
         "Island"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Mutagen token's own ability resolves and counters are put on a creature.",
+        "near_miss": "A PutCounter resolution whose source is not a Mutagen token.",
+        "params": {
+          "event": "counter_change",
+          "source_token_kind": "Mutagen",
+          "api": "PutCounter"
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.10w-1",
@@ -2043,7 +2271,19 @@
         "Shatter",
         "Shuri's Fabricator"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A token-making resolution creates a Vibranium token.",
+        "near_miss": "A token-making resolution that creates no Vibranium token.",
+        "params": {
+          "event": "token_created",
+          "api": "Token",
+          "token_kind": "Vibranium"
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.10x-1",
@@ -2225,7 +2465,19 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": "Whether Forge permits activating Mimic Vat with nothing exiled is unverified."
+      "forge_notes": "Whether Forge permits activating Mimic Vat with nothing exiled is unverified.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution instructed to create a token copy produces no token_created event because the object to copy does not exist.",
+        "near_miss": "A CopyPermanent resolution that creates its token copy.",
+        "params": {
+          "event": "token_created",
+          "api": "CopyPermanent",
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.13-1",

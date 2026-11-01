@@ -12,7 +12,7 @@
         "504.1"
       ],
       "title": "The active player draws a card at the start of the draw step",
-      "record_kind": "resolution",
+      "record_kind": "turn_action",
       "setup": {
         "active": "A",
         "step": "draw",
@@ -75,7 +75,19 @@
         "Swamp",
         "Necropotence"
       ],
-      "forge_notes": "Necropotence ('Skip your draw step') is a BeginPhase replacement with Skip$ True; in variant draw_step_skipped it is on A's battlefield."
+      "forge_notes": "Necropotence ('Skip your draw step') is a BeginPhase replacement with Skip$ True; in variant draw_step_skipped it is on A's battlefield.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "At the start of the draw step the active player draws as a turn-based action: the turn_action record holds a card_drawn event.",
+        "near_miss": "No near miss is declared: a skipped draw step leaves no record.",
+        "params": {
+          "event": "card_drawn"
+        },
+        "needs": [
+          "turn_action"
+        ]
+      }
     }
   ]
 }

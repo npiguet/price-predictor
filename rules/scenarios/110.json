@@ -79,7 +79,21 @@
         "Shock",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution puts a card onto the battlefield and it enters under a player who is not its owner.",
+        "near_miss": "A resolution puts a card onto the battlefield under its owner.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "Battlefield",
+          "controller_is_owner": false
+        },
+        "needs": [
+          "owner"
+        ]
+      }
     },
     {
       "id": "110.2a-1",
@@ -226,7 +240,22 @@
         "Aethersnatch",
         "Grizzly Bears"
       ],
-      "forge_notes": "In a two-player game the default-controller distinction of 110.2b never shows; the observable outcome is the permanent's controller after the stolen spell resolves."
+      "forge_notes": "In a two-player game the default-controller distinction of 110.2b never shows; the observable outcome is the permanent's controller after the stolen spell resolves.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent spell controlled by a player other than its owner resolves and the permanent enters under that controller.",
+        "near_miss": "A permanent spell controlled by its owner resolves and enters under its owner.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "Stack",
+          "to_zone": "Battlefield",
+          "controller_is_owner": false
+        },
+        "needs": [
+          "owner"
+        ]
+      }
     },
     {
       "id": "110.3-1",
@@ -354,7 +383,19 @@
         "Nature's Lore",
         "Rampant Growth"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution puts a permanent onto the battlefield and no tapped event accompanies it: it enters untapped.",
+        "near_miss": "A resolution puts a permanent onto the battlefield together with a tapped event: it enters tapped because the effect says so.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "Battlefield",
+          "without_event": "tapped"
+        },
+        "needs": []
+      }
     },
     {
       "id": "110.5c-1",

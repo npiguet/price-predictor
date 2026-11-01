@@ -165,7 +165,17 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": "Check that Forge keeps Basilica Screecher's printed Extort and the one granted by Pontiff of Blight as two separate triggers."
+      "forge_notes": "Check that Forge keeps Basilica Screecher's printed Extort and the one granted by Pontiff of Blight as two separate triggers.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An extort trigger fires, one trigger record per instance of the keyword on its source.",
+        "near_miss": "An extort trigger evaluated and not fired.",
+        "params": {
+          "keyword": "extort"
+        },
+        "needs": []
+      }
     }
   ]
 }

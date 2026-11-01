@@ -1271,7 +1271,18 @@
         "Swamp",
         "Island"
       ],
-      "forge_notes": "Forge's trample damage assignment must be set to the split named in the decisions (3 to Swans and 3 to B in the base, all 6 to Swans in all_to_blocker)."
+      "forge_notes": "Forge's trample damage assignment must be set to the split named in the decisions (3 to Swans and 3 to B in the base, all 6 to Swans in all_to_blocker).",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "combat",
+        "outcome": "Damage prevented by an effect that replaces it with card draws: the damage step holds a damage_prevented and the card_drawn events that replace it.",
+        "near_miss": "Damage is prevented with no card draws resulting.",
+        "params": {
+          "event": "damage_prevented",
+          "with_event": "card_drawn"
+        },
+        "needs": []
+      }
     },
     {
       "id": "121.8-1",

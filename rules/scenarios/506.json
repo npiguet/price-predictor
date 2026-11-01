@@ -252,7 +252,19 @@
         "Treetop Village",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A noncreature permanent the attacking player controls is outside the legal attackers: only creatures can attack.",
+        "near_miss": "A creature that can attack is inside the legal attackers.",
+        "params": {
+          "list": "legal_attackers",
+          "fires_when": "outside",
+          "universe": "battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "506.3-2",
@@ -323,7 +335,19 @@
         "Forest",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A noncreature permanent the defending player controls is outside the legal blockers: only creatures can block.",
+        "near_miss": "A creature that can block is inside the legal blockers.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside",
+          "universe": "battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "506.3-3",
@@ -652,7 +676,7 @@
         "506.4"
       ],
       "title": "A creature that leaves the battlefield is removed from combat",
-      "record_kind": "combat",
+      "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "beginning_of_combat",
@@ -718,7 +742,19 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution's effect half moves an attacking or blocking creature off the battlefield, which removes it from combat.",
+        "near_miss": "A resolution moves a creature off the battlefield that is neither attacking nor blocking.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "subject_in_combat": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "506.4-2",
@@ -726,7 +762,7 @@
         "506.4"
       ],
       "title": "A creature whose controller changes is removed from combat",
-      "record_kind": "combat",
+      "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "beginning_of_combat",
@@ -799,7 +835,18 @@
         "Gods Willing",
         "Act of Aggression"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution's effect half changes the controller of an attacking or blocking creature, which removes it from combat.",
+        "near_miss": "A resolution changes the controller of a creature that is neither attacking nor blocking.",
+        "params": {
+          "event": "control_change",
+          "subject_in_combat": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "506.4-3",
@@ -865,7 +912,18 @@
         "Gorilla Chieftain",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "combat",
+        "outcome": "In a damage step a regeneration shield saves an attacking or blocking creature (a regenerated event), which removes it from combat.",
+        "near_miss": "A regenerated event on a creature that is neither attacking nor blocking.",
+        "params": {
+          "event": "regenerated",
+          "subject_in_combat": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "506.4-4",
@@ -873,7 +931,7 @@
         "506.4"
       ],
       "title": "A creature that phases out is removed from combat",
-      "record_kind": "combat",
+      "record_kind": "resolution",
       "setup": {
         "active": "A",
         "step": "beginning_of_combat",
@@ -940,7 +998,18 @@
         "Plains",
         "Galadriel's Dismissal"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution's effect half phases out an attacking or blocking creature, which removes it from combat.",
+        "near_miss": "A resolution phases out a creature that is neither attacking nor blocking.",
+        "params": {
+          "event": "phased",
+          "subject_in_combat": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "506.4-5",

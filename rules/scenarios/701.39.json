@@ -65,7 +65,19 @@
         "Savannah Lions",
         "Cached Defenses"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A bolster resolution puts +1/+1 counters on a creature its controller controls.",
+        "near_miss": "A bolster resolution that puts no counter.",
+        "params": {
+          "event": "counter_change",
+          "api": "PutCounter",
+          "script_param": "Bolster"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.39a-2",
@@ -130,7 +142,19 @@
         "Savannah Lions",
         "Cached Defenses"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A bolster resolution puts +1/+1 counters on a creature its controller controls.",
+        "near_miss": "A bolster resolution that puts no counter.",
+        "params": {
+          "event": "counter_change",
+          "api": "PutCounter",
+          "script_param": "Bolster"
+        },
+        "needs": []
+      }
     }
   ]
 }

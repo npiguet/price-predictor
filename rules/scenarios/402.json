@@ -12,7 +12,7 @@
         "402.2"
       ],
       "title": "A player discards down to the maximum hand size during the cleanup step",
-      "record_kind": "resolution",
+      "record_kind": "turn_action",
       "setup": {
         "active": "A",
         "step": "cleanup",
@@ -76,7 +76,19 @@
         "Giant Growth",
         "Reliquary Tower"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "In the cleanup step the active player, holding more cards than their maximum hand size, discards down to it as a turn-based action: the cleanup_discard turn_action record holds card_discarded events.",
+        "near_miss": "No near miss is counted: a cleanup step with no discard writes no turn_action record, so only the fires side is tagged.",
+        "params": {
+          "event": "card_discarded"
+        },
+        "needs": [
+          "turn_action"
+        ]
+      }
     }
   ]
 }

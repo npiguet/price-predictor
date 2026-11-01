@@ -65,7 +65,20 @@
         "Grizzly Bears",
         "Craw Wurm"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A transfigure ability resolves and a card moves from its controller's library to the battlefield.",
+        "near_miss": "A transfigure ability resolves with no card moving from the library to the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "keyword": "Transfigure",
+          "from_zone": "library",
+          "to_zone": "battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.71a-2",
@@ -124,7 +137,21 @@
         "Swamp",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A transfigure ability candidate passes its timing check (sorcery timing).",
+        "near_miss": "A transfigure candidate whose timing check fails.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true,
+          "keyword": "Transfigure"
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     }
   ]
 }

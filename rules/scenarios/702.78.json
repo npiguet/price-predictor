@@ -82,7 +82,18 @@
         "Burn Trail",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A conspire trigger resolves and copies its spell.",
+        "near_miss": "A conspire trigger resolves and makes no copy.",
+        "params": {
+          "event": "spell_copied",
+          "keyword": "Conspire"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.78b-1",
@@ -171,7 +182,18 @@
         "Goblin Piker",
         "Burn Trail"
       ],
-      "forge_notes": "Raiding Schemes grants conspire to a spell on the stack; confirm Forge offers the two conspire costs separately."
+      "forge_notes": "Raiding Schemes grants conspire to a spell on the stack; confirm Forge offers the two conspire costs separately.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A conspire trigger resolves and copies its spell, one copy per paid instance.",
+        "near_miss": "A conspire trigger resolves and makes no copy.",
+        "params": {
+          "event": "spell_copied",
+          "keyword": "Conspire"
+        },
+        "needs": []
+      }
     }
   ]
 }

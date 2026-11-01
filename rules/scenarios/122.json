@@ -967,7 +967,10 @@
         "Fume Spitter",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The cancellation of a +1/+1 and a -1/-1 counter pair is a state-based action (704.5q). A resolution's effect half files only the permanents that leave the battlefield in the state-based check after it (023 record-schema.md, resolution/resolution row; the gen-3 delta widens that to every death of the state-based loop, still no counter change), so no counter_change event records the removal, and the record's snapshot, gen-3 card counters included, is taken before the resolution put the counter."
+      }
     },
     {
       "id": "122.4-1",

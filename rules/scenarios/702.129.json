@@ -72,7 +72,18 @@
         "Proven Combatant",
         "Stifle"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An eternalize ability resolves and creates a token copy of its card.",
+        "near_miss": "An eternalize ability resolution that creates no token.",
+        "params": {
+          "event": "token_created",
+          "keyword": "Eternalize"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.129a-2",

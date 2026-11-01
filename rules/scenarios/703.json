@@ -74,7 +74,10 @@
         "Howling Mine",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The rule orders the draw step's turn-based action before state-based actions and trigger placement. Looked at trigger records (Phase mode alone matches every beginning-of-step trigger), turn_action draw (not written for a draw from an empty library) and player_lost: no field shows the order."
+      }
     },
     {
       "id": "703.4a-1",
@@ -82,7 +85,7 @@
         "703.4a"
       ],
       "title": "Phasing permanents of the active player phase out or in at the start of the untap step",
-      "record_kind": "continuous",
+      "record_kind": "turn_action",
       "setup": {
         "active": "B",
         "step": "end",
@@ -140,7 +143,17 @@
         "Breezekeeper",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "The untap step's phasing action phases permanents out or in.",
+        "near_miss": "No near miss is tagged: outcome_event counts one only with an api or keyword.",
+        "params": {
+          "event": "phased"
+        },
+        "needs": []
+      }
     },
     {
       "id": "703.4b-1",
@@ -148,7 +161,7 @@
         "703.4b"
       ],
       "title": "Day becomes night when the previous turn's active player cast no spells",
-      "record_kind": "continuous",
+      "record_kind": "turn_action",
       "setup": {
         "active": "B",
         "step": "main2",
@@ -202,7 +215,18 @@
         "Forest",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "The untap step's day/night action changes the designation to night.",
+        "near_miss": "No near miss is tagged: outcome_event counts one only with an api or keyword.",
+        "params": {
+          "event": "day_night_changed",
+          "to": "night"
+        },
+        "needs": []
+      }
     },
     {
       "id": "703.4b-2",
@@ -210,7 +234,7 @@
         "703.4b"
       ],
       "title": "Night becomes day when the previous turn's active player cast two or more spells",
-      "record_kind": "continuous",
+      "record_kind": "turn_action",
       "setup": {
         "active": "B",
         "step": "main2",
@@ -266,7 +290,18 @@
         "Mountain",
         "Dwarven Trader"
       ],
-      "forge_notes": "Setup requires the night designation and the back face on the battlefield."
+      "forge_notes": "Setup requires the night designation and the back face on the battlefield.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "The untap step's day/night action changes the designation to day.",
+        "near_miss": "No near miss is tagged: outcome_event counts one only with an api or keyword.",
+        "params": {
+          "event": "day_night_changed",
+          "to": "day"
+        },
+        "needs": []
+      }
     },
     {
       "id": "703.4c-1",
@@ -274,7 +309,7 @@
         "703.4c"
       ],
       "title": "The active player untaps their permanents during the untap step",
-      "record_kind": "continuous",
+      "record_kind": "turn_action",
       "setup": {
         "active": "B",
         "step": "end",
@@ -334,7 +369,17 @@
         "Grim Monolith",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "The untap step's untap action untaps permanents.",
+        "near_miss": "No near miss is tagged: outcome_event counts one only with an api or keyword.",
+        "params": {
+          "event": "untapped"
+        },
+        "needs": []
+      }
     },
     {
       "id": "703.4d-1",
@@ -342,7 +387,7 @@
         "703.4d"
       ],
       "title": "The active player draws a card as the draw step begins",
-      "record_kind": "resolution",
+      "record_kind": "turn_action",
       "setup": {
         "active": "A",
         "step": "upkeep",
@@ -392,7 +437,17 @@
         "Necropotence",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "The draw step's turn-based action draws a card for the active player.",
+        "near_miss": "No near miss is tagged: outcome_event counts one only with an api or keyword.",
+        "params": {
+          "event": "card_drawn"
+        },
+        "needs": []
+      }
     },
     {
       "id": "703.4f-1",
@@ -400,7 +455,7 @@
         "703.4f"
       ],
       "title": "The active player adds a lore counter to each of their Sagas as the precombat main phase begins",
-      "record_kind": "trigger",
+      "record_kind": "turn_action",
       "setup": {
         "active": "A",
         "step": "draw",
@@ -455,7 +510,18 @@
         "History of Benalia",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "The precombat main phase's turn-based action adds a lore counter to a Saga.",
+        "near_miss": "No near miss is tagged: outcome_event counts one only with an api or keyword.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "LORE"
+        },
+        "needs": []
+      }
     },
     {
       "id": "703.4g-1",
@@ -580,7 +646,19 @@
         "Grizzly Bears",
         "Youthful Knight"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "combat",
+        "outcome": "One combat damage step deals damage from two or more sources at once.",
+        "near_miss": "No near miss is tagged: outcome_event counts one only with an api or keyword.",
+        "params": {
+          "event": "damage_dealt",
+          "combat": true,
+          "min_count": 2
+        },
+        "needs": []
+      }
     },
     {
       "id": "703.4n-1",
@@ -588,7 +666,7 @@
         "703.4n"
       ],
       "title": "The active player discards down to maximum hand size in the cleanup step",
-      "record_kind": "resolution",
+      "record_kind": "turn_action",
       "setup": {
         "active": "A",
         "step": "end",
@@ -654,7 +732,19 @@
         "Mountain",
         "Reliquary Tower"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "The cleanup step's discard action moves cards from the active player's hand to the graveyard.",
+        "near_miss": "No near miss is tagged: outcome_event counts one only with an api or keyword.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "hand",
+          "to_zone": "graveyard"
+        },
+        "needs": []
+      }
     },
     {
       "id": "703.4p-1",

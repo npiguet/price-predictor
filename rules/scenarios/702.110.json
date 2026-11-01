@@ -82,7 +82,18 @@
         "Vulturous Aven",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An exploit trigger's resolution sacrifices a permanent.",
+        "near_miss": "An exploit trigger's resolution that sacrifices nothing.",
+        "params": {
+          "event": "sacrificed",
+          "keyword": "Exploit"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.110b-1",

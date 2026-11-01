@@ -63,7 +63,20 @@
         "Memorial Team Leader",
         "Mountain"
       ],
-      "forge_notes": "Warp is implemented by registering a delayed trigger when the spell's permanent enters."
+      "forge_notes": "Warp is implemented by registering a delayed trigger when the spell's permanent enters.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A warp delayed trigger resolves and exiles the permanent from the battlefield at the beginning of the end step.",
+        "near_miss": "A warp trigger resolves and the permanent is not exiled.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "exile",
+          "keyword": "Warp"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.185a-2",
@@ -131,7 +144,19 @@
         "Memorial Team Leader",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A card printing warp is a playable candidate (for example from exile on a later turn, for its mana cost).",
+        "near_miss": "A card printing warp is not playable (cost unpayable or not castable from where it is).",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "source_keyword": "Warp"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.185c-1",

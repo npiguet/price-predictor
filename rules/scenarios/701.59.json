@@ -76,7 +76,19 @@
         "Mountain",
         "Hill Giant"
       ],
-      "forge_notes": "Cryptex's cost is the CollectEvidence<3> cost part. Hill Giant appears only in the total_exceeds variant's graveyard."
+      "forge_notes": "Cryptex's cost is the CollectEvidence<3> cost part. Hill Giant appears only in the total_exceeds variant's graveyard.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate whose cost has a collect evidence part is affordable because the controller's graveyard totals the required mana value.",
+        "near_miss": "A candidate whose cost has a collect evidence part is unaffordable because the graveyard totals too little.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "cost_part": "CollectEvidence"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.59c-1",

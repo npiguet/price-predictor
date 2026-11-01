@@ -67,7 +67,18 @@
         "Grizzly Bears",
         "Serpent-Blade Assailant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A backup ability's resolution grants the target the abilities printed below backup: a keyword_change event in the effect half.",
+        "near_miss": "A backup ability resolving with no keyword_change event, as when it targets the creature that already has the abilities.",
+        "params": {
+          "event": "keyword_change",
+          "keyword": "Backup"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.165b-1",
@@ -130,7 +141,17 @@
         "Grizzly Bears",
         "Clone"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A keyword-derived backup trigger (read off its Backup line) is evaluated as its creature enters and fires.",
+        "near_miss": "A backup trigger evaluated and not fired.",
+        "params": {
+          "keyword": "Backup"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.165c-1",
@@ -195,7 +216,18 @@
         "Serpent-Blade Assailant",
         "Sigiled Sentinel"
       ],
-      "forge_notes": "Forge grants a backup creature's printed abilities from the BackupAbility SVar, so a keyword from a static effect such as Herald of Dromoka's is not part of the grant."
+      "forge_notes": "Forge grants a backup creature's printed abilities from the BackupAbility SVar, so a keyword from a static effect such as Herald of Dromoka's is not part of the grant.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A backup ability's resolution grants only the source's printed abilities: a keyword_change event in the effect half.",
+        "near_miss": "A backup ability resolving with no keyword_change event.",
+        "params": {
+          "event": "keyword_change",
+          "keyword": "Backup"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.165d-1",
@@ -265,7 +297,18 @@
         "Serpent-Blade Assailant",
         "Turn to Frog"
       ],
-      "forge_notes": "702.165d has no does_not_fire branch: it only says the granted set does not change, and an ability the source gains after the trigger is on the stack is unprinted, so 702.165c already excludes it."
+      "forge_notes": "702.165d has no does_not_fire branch: it only says the granted set does not change, and an ability the source gains after the trigger is on the stack is unprinted, so 702.165c already excludes it.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A backup ability's resolution grants the abilities fixed when it went on the stack: a keyword_change event in the effect half.",
+        "near_miss": "A backup ability resolving with no keyword_change event.",
+        "params": {
+          "event": "keyword_change",
+          "keyword": "Backup"
+        },
+        "needs": []
+      }
     }
   ]
 }

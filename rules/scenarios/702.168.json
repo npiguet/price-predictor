@@ -70,7 +70,19 @@
         "Swamp",
         "Basilica Stalker"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate acting through a Disguise line (the face-down cast for {3}) is affordable.",
+        "near_miss": "A candidate acting through a Disguise line is not affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "keyword": "Disguise"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.168b-1",
@@ -198,7 +210,10 @@
         "Swamp",
         "Hunted Bonebrute"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "Turning a permanent face up is a special action: it uses no stack object, so no resolution record is written, and no turn_action subkind covers it (draw, cleanup_discard, untap, phasing, day_night, lore_counter); the face_change event and the absent enters trigger appear in no record."
+      }
     },
     {
       "id": "702.168e-1",

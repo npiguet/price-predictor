@@ -506,7 +506,22 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": "In the instant variant the face-down card is Shock; no cost is paid because Ugin's Mastery turns it face up without the special action."
+      "forge_notes": "In the instant variant the face-down card is Shock; no cost is paid because Ugin's Mastery turns it face up without the special action.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A turn-face-up resolution turns a face-down permanent face up (a face_change to face_up).",
+        "near_miss": "A turn-face-up resolution that writes no face_change.",
+        "params": {
+          "event": "face_change",
+          "to_state": "face_up",
+          "api": "SetState",
+          "script_param": {
+            "Mode": "TurnFaceUp"
+          }
+        },
+        "needs": []
+      }
     }
   ]
 }

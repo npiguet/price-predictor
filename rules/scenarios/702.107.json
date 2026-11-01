@@ -71,7 +71,19 @@
         "Salt Road Patrol",
         "Doom Blade"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An outlast ability's resolution puts a +1/+1 counter on its source creature.",
+        "near_miss": "An outlast resolution that puts no counter.",
+        "params": {
+          "event": "counter_change",
+          "counter_type": "P1P1",
+          "keyword": "Outlast"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.107a-2",
@@ -170,7 +182,19 @@
         "Salt Road Patrol",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "An outlast ability is a playable candidate: sorcery timing, untapped source, affordable cost.",
+        "near_miss": "An outlast candidate that cannot be played.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Outlast"
+        },
+        "needs": []
+      }
     }
   ]
 }
