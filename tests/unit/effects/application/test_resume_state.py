@@ -40,6 +40,7 @@ def test_the_compared_flags_are_the_ones_that_place_a_step():
         "variant", "e_dim", "encoder_layers", "encoder_d_model",
         "keyword_expand_p", "context_dropout", "curriculum_epoch", "batch_size",
         "grad_accum", "steps_per_epoch", "shards_per_epoch", "withhold_keyword",
+        "relation_values",
     }
 
 
