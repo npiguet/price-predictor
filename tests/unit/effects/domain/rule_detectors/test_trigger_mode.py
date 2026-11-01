@@ -56,3 +56,35 @@ def test_a_selector_naming_a_card_is_refused(by_kind, gen2_sidecars):
     with pytest.raises(ValueError, match="naming a card"):
         FAMILY.match(by_kind("trigger")[0], gen2_sidecars,
                      {"mode": "ChangesZone", "selector": "Card.namedGoblin King"})
+
+
+def _keyword_trigger(by_kind, sidecars, fired):
+    return next(r for r in by_kind("trigger") if bool(r.payload.fired) == fired
+                and r.ability and r.ability[0].trait_kind == "keyword"
+                and sidecars.first_line(r.ability).keyword_display_name)
+
+
+class TestKeyword:
+    def test_a_trigger_a_keyword_generates_shows_on_its_side(self, by_kind, gen2_sidecars):
+        for fired, polarity in ((True, Polarity.FIRES), (False, Polarity.DOES_NOT_FIRE)):
+            record = _keyword_trigger(by_kind, gen2_sidecars, fired)
+            name = gen2_sidecars.first_line(record.ability).keyword_display_name
+            found = FAMILY.match(record, gen2_sidecars, {"keyword": name})
+            assert found.polarity is polarity and found.observed is fired
+
+    def test_the_name_is_compared_in_the_packages_spelling(self, by_kind, gen2_sidecars):
+        record = _keyword_trigger(by_kind, gen2_sidecars, True)
+        name = gen2_sidecars.first_line(record.ability).keyword_display_name
+        spelled = name.lower().replace(" ", "_")
+        assert FAMILY.match(record, gen2_sidecars, {"keyword": spelled}) is not None
+
+    def test_another_keyword_or_a_script_trigger_shows_nothing(self, by_kind, gen2_sidecars):
+        record = _keyword_trigger(by_kind, gen2_sidecars, True)
+        assert FAMILY.match(record, gen2_sidecars, {"keyword": "no such keyword"}) is None
+        scripted = next(r for r in by_kind("trigger") if _mode_of(r, gen2_sidecars))
+        assert FAMILY.match(scripted, gen2_sidecars, {"keyword": "exalted"}) is None
+
+    def test_a_keyword_takes_no_script_parameter(self, by_kind, gen2_sidecars):
+        with pytest.raises(ValueError, match="no script parameters"):
+            FAMILY.match(by_kind("trigger")[0], gen2_sidecars,
+                         {"keyword": "exalted", "mode": "Attacks"})

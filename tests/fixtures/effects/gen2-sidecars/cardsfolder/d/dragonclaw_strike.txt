@@ -1,0 +1,4 @@
+name: dragonclaw strike
+mana cost: {2/G}{2/U}{2/R}
+types: sorcery
+spell[1]: double the power and toughness of target creature you control until end of turn. then it fights up to one target creature an opponent controls.

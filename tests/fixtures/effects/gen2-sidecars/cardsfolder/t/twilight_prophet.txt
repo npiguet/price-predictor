@@ -1,0 +1,7 @@
+name: twilight prophet
+mana cost: {2}{B}{B}
+types: creature vampire cleric
+power toughness: 2/4
+static: flying
+triggered: ascend
+triggered: at the beginning of your upkeep, if you have the city's blessing, reveal the top card of your library and put it into your hand. each opponent loses X life and you gain X life, where X is that card's mana value.

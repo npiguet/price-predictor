@@ -1,0 +1,8 @@
+name: garruk, primal hunter
+mana cost: {2}{G}{G}{G}
+types: legendary planeswalker garruk
+loyalty: 3
+planeswalker[1]: [+1]: create a 3/3 green beast creature token.
+planeswalker[2]: [-3]: draw cards equal to the greatest power among creatures you control.
+planeswalker[3]: [-6]: create a 6/6 green wurm creature token for each land you control.
+replacement: CARDNAME enters with three loyalty counters on it.

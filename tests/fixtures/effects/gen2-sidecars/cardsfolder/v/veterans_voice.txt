@@ -1,0 +1,5 @@
+name: veteran's voice
+mana cost: {R}
+types: enchantment aura
+static: enchant creature you control
+activated[1]: tap enchanted creature: target creature other than the creature tapped this way gets +2/+1 until end of turn. activate only if enchanted creature is untapped.

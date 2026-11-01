@@ -1,0 +1,4 @@
+name: celestial prism
+mana cost: {3}
+types: artifact
+activated[1]: {2}, {T}: add one mana of any color.

@@ -1,0 +1,5 @@
+name: coppercoat vanguard
+mana cost: {1}{W}
+types: creature human soldier
+power toughness: 2/2
+static: each other human you control gets +1/+0 and has ward {1}.

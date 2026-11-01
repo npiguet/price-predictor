@@ -1,0 +1,5 @@
+name: march toward perfection
+mana cost: {B}
+types: sorcery
+spell[1]: you get a boon with "when you cast your next phyrexian creature spell, that creature enters with an additional +1/+1 counter and deathtouch counter on it."
+spell[2]: draft a card from CARDNAME's spellbook.

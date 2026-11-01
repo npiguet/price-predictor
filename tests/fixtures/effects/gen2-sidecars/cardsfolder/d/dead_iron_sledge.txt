@@ -1,0 +1,5 @@
+name: dead-iron sledge
+mana cost: {1}
+types: artifact equipment
+activated[1]: equip {2}
+triggered: whenever equipped creature blocks or becomes blocked by a creature, destroy both creatures.

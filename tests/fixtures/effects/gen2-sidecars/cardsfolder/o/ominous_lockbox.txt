@@ -1,0 +1,6 @@
+name: ominous lockbox
+mana cost: {1}{U}
+types: artifact clue
+replacement: as CARDNAME enters, secretly choose a number between 1 and 20.
+activated[1]: {2}, sacrifice CARDNAME: draw a card.
+triggered: when an opponent casts a spell with mana value equal to the chosen number, sacrifice CARDNAME. if you do, copy that spell, and you may choose new targets for the copy.

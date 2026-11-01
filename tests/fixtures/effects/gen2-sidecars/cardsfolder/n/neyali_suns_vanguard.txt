@@ -1,0 +1,6 @@
+name: neyali, suns' vanguard
+mana cost: {2}{R}{W}
+types: legendary creature human rebel
+power toughness: 3/3
+triggered: whenever one or more tokens you control attack a player, exile the top card of your library. during any turn you attacked with a token, you may play that card.
+static: attacking tokens you control have double strike.

@@ -1,0 +1,5 @@
+name: guild globe
+mana cost: {2}
+types: artifact
+activated[1]: {2}, {T}, sacrifice CARDNAME: add two mana of different colors.
+triggered: when CARDNAME enters, draw a card.

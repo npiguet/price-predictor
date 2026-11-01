@@ -1,0 +1,4 @@
+name: swindler's scheme
+mana cost: {2}{U}
+types: enchantment
+triggered: whenever an opponent casts a spell from their hand, you may reveal the top card of your library. if it shares a card type with that spell, counter that spell and that opponent may cast the revealed card without paying its mana cost.

@@ -1,0 +1,4 @@
+name: jaya's immolating inferno
+mana cost: {X}{R}{R}
+types: legendary sorcery
+spell[1]: CARDNAME deals X damage to each of up to three targets.

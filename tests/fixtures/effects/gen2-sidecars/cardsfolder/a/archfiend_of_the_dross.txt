@@ -1,0 +1,8 @@
+name: archfiend of the dross
+mana cost: {2}{B}{B}
+types: creature phyrexian demon
+power toughness: 6/6
+static: flying
+replacement: CARDNAME enters with four oil counters on it.
+triggered: at the beginning of your upkeep, remove an oil counter from CARDNAME. then if it has no oil counters on it, you lose the game.
+triggered: whenever a creature an opponent controls dies, its controller loses 2 life.

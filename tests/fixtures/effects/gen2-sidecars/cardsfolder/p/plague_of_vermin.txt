@@ -1,0 +1,5 @@
+name: plague of vermin
+mana cost: {6}{B}
+types: sorcery
+spell[1]: starting with you, each player may pay any amount of life. repeat this process until no one pays life. each player creates a 1/1 black rat creature token for each 1 life they paid this way.
+spell[2]: pay the chosen amount of life.

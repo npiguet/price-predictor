@@ -1,0 +1,4 @@
+name: selvala's stampede
+mana cost: {4}{G}{G}
+types: sorcery
+spell[1]: council's dilemma — starting with you, each player votes for wild or free. reveal cards from the top of your library until you reveal a creature card for each wild vote. put those creature cards onto the battlefield, then shuffle the rest into your library. you may put a permanent card from your hand onto the battlefield for each free vote.

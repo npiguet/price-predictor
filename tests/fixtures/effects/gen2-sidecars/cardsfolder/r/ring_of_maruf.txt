@@ -1,0 +1,4 @@
+name: ring of ma'rûf
+mana cost: {5}
+types: artifact
+activated[1]: {5}, {T}, exile CARDNAME: the next time you would draw a card this turn, instead put a card you own from outside the game into your hand.

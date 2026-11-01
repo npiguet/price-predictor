@@ -1,0 +1,4 @@
+name: turtles in time
+mana cost: {5}{U}{U}
+types: sorcery
+spell[1]: return all creatures to their owners' hands. each player may shuffle their hand and graveyard into their library, then each player who does draws seven cards. exile CARDNAME.

@@ -1,0 +1,6 @@
+name: oscorp industries
+types: land
+static: mayhem
+activated[1]: {T}: add {U}, {B}, or {R}.
+triggered: when this land enters from a graveyard, you lose 2 life.
+replacement: this land enters tapped.

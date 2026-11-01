@@ -1,0 +1,5 @@
+name: leyline immersion
+mana cost: {3}{G}
+types: enchantment aura
+static: enchant legendary creature
+static: enchanted creature has ward {2} and "{T}: add five mana in any combination of colors. spend this mana only to cast spells."

@@ -1,0 +1,4 @@
+name: brilliant spectrum
+mana cost: {3}{U}
+types: sorcery
+spell[1]: converge — draw X cards, where X is the number of colors of mana spent to cast this spell. then discard two cards.

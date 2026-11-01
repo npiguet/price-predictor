@@ -1,0 +1,7 @@
+name: merchant of truth
+mana cost: {2}{W}{W}
+types: creature angel detective
+power toughness: 2/5
+static: flying
+triggered: whenever a nontoken creature you control dies, investigate.
+static: clues you control have exalted.

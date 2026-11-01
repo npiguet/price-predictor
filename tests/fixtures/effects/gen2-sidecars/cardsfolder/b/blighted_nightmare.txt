@@ -1,0 +1,5 @@
+name: blighted nightmare
+mana cost: {2}{B}
+types: enchantment
+activated[1]: blight X, return CARDNAME to its owner's hand: return target creature card with mana value X or less from your graveyard to the battlefield. X can't be greater than the greatest toughness among creatures you control. activate only as a sorcery.
+triggered: when this enchantment enters, creature cards in your graveyard perpetually get +1/+1.

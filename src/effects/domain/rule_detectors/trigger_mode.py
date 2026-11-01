@@ -7,8 +7,14 @@ line's script, read through the sidecar, says which trigger it was.
 
 Parameters, each a condition of the rule rather than of a card:
 
-- ``mode`` (required): the trigger's ``Mode$`` (``ChangesZone``, ``Attacks``,
-  ``DamageDone`` …);
+- ``mode``: the trigger's ``Mode$`` (``ChangesZone``, ``Attacks``,
+  ``DamageDone`` …), required unless ``keyword`` is given;
+- ``keyword``: the trigger is one a keyword generates (exalted, evolve,
+  cumulative upkeep), read off the acting line, which for such a trigger is the
+  keyword's own line (``Exalted``, ``Suspend:2:…``) and carries no ``Mode$``; the
+  name is compared in ``keyword_names``' spelling, so ``Cumulative upkeep`` and
+  ``cumulative_upkeep`` agree. The script parameters below cannot be read off a
+  keyword line, so a declaration giving ``keyword`` gives none of them;
 - ``origin``, ``destination``: a ``ChangesZone`` trigger's zones;
 - ``selector``: the trigger's ``ValidCard$`` selector, compared as written
   (``Creature.Other+YouCtrl``); one that names a card (``Card.namedX``) is
@@ -24,6 +30,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.rule_catalogue import Polarity
@@ -47,25 +54,39 @@ def acting_root_params(record: EffectRecord, lines: SidecarLookup | None) -> dic
 @dataclass(frozen=True, slots=True)
 class TriggerMode:
     id: str = "trigger_mode"
-    params: frozenset[str] = frozenset(_SCRIPT_PARAMS)
+    params: frozenset[str] = frozenset(_SCRIPT_PARAMS) | {"keyword"}
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset()
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        if "mode" not in params:
-            raise ValueError("trigger_mode: a declaration names the trigger's mode")
+        keyword = params.get("keyword")
+        if keyword is not None and set(params) & set(_SCRIPT_PARAMS):
+            raise ValueError("trigger_mode: a keyword's line has no script parameters to compare")
+        if keyword is None and "mode" not in params:
+            raise ValueError("trigger_mode: a declaration names the trigger's mode or keyword")
         if "named" in str(params.get("selector", "")).lower():
             raise ValueError("trigger_mode: a selector naming a card fixes one scenario's board")
         if record.kind is not RecordKind.TRIGGER:
             return None
+        if keyword is not None:
+            line = (lines.first_line(record.ability)
+                    if lines is not None and record.ability else None)
+            name = line.keyword_display_name if line is not None else None
+            if name is None or normalize_keyword(name) != normalize_keyword(keyword):
+                return None
+            return self._side(record)
         found = acting_root_params(record, lines)
         if found is None:
             return None
         for name, script_name in _SCRIPT_PARAMS.items():
             if name in params and found.get(script_name) != params[name]:
                 return None
+        return self._side(record)
+
+    @staticmethod
+    def _side(record: EffectRecord) -> FamilyMatch:
         fired = record.payload.fired
         return FamilyMatch(Polarity.FIRES if fired else Polarity.DOES_NOT_FIRE, fired,
                            tuple(record.payload.event.subjects))

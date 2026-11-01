@@ -1,0 +1,7 @@
+name: kaldra compleat
+mana cost: {7}
+types: legendary artifact equipment
+triggered: living weapon
+static: indestructible
+activated[1]: equip {7}
+static: equipped creature gets +5/+5 and has first strike, trample, indestructible, haste, and "whenever this creature deals combat damage to a creature, exile that creature."

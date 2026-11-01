@@ -1,0 +1,5 @@
+name: charge of the forever-beast
+mana cost: {2}{G}
+types: sorcery
+additional cost: reveal a creature card from your hand.
+spell[1]: CARDNAME deals damage to target creature or planeswalker equal to the revealed card's power.

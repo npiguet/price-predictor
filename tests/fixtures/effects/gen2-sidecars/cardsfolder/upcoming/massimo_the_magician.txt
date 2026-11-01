@@ -1,0 +1,5 @@
+name: massimo, the magician
+mana cost: {U}{R}{W}
+types: legendary creature cat wizard
+power toughness: 3/2
+triggered: whenever CARDNAME or another creature you control enters, exile up to one target instant or sorcery card with mana value 1 from your graveyard. if a card is exiled this way, that creature gains "whenever this creature deals combat damage to a player, copy the exiled card. you may cast the copy without paying its mana cost."

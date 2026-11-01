@@ -1,0 +1,4 @@
+name: implements of sacrifice
+mana cost: {2}
+types: artifact
+activated[1]: {1}, {T}, sacrifice CARDNAME: add two mana of any one color.

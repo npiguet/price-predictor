@@ -1,0 +1,6 @@
+name: vengeful archon
+mana cost: {4}{W}{W}{W}
+types: creature archon
+power toughness: 7/7
+static: flying
+activated[1]: {X}: prevent the next X damage that would be dealt to you this turn. if damage is prevented this way, CARDNAME deals that much damage to target player or planeswalker.

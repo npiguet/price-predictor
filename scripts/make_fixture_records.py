@@ -20,8 +20,10 @@ resolution whose effect half kills a creature at toughness 0 or less in the
 state-based check (704.5f fires), one that leaves a creature at toughness 1
 (704.5f does not fire), a creature killed by damage (704.5g), the legend rule
 (704.5j), a planeswalker at loyalty 0 (704.5i) and an Aura whose host left
-(704.5m), a damage-step probe stripping deathtouch, and records
-from a random-seat game and from a game the Forge AI played on both seats.
+(704.5m), a damage-step probe stripping deathtouch, triggers a keyword
+generates (fired and not), a predefined token
+kind made (111.10) and an ability whose source is one, and records from a
+random-seat game and from a game the Forge AI played on both seats.
 """
 
 from __future__ import annotations
@@ -188,6 +190,42 @@ def _sba_fires(check: str) -> Callable[[dict], bool]:
     return test
 
 
+#: Rule 111.10's predefined token kinds the fixture looks for.
+_PREDEFINED_TOKENS = frozenset({"treasure", "food", "clue", "blood", "map", "gold",
+                                "powerstone", "shard", "incubator", "junk"})
+
+
+def _keyword_trigger(fired: bool) -> Callable[[dict], bool]:
+    """A trigger a keyword generates: its acting key is the keyword's trait."""
+    def test(record: dict) -> bool:
+        keys = record.get("ability") or ()
+        return (record["kind"] == "trigger" and bool(record["payload"].get("fired")) == fired
+                and bool(keys) and keys[0]["trait_kind"] == "keyword")
+    return test
+
+
+def _subtypes(type_line: str) -> set[str]:
+    _, dash, rest = type_line.partition(" - ")
+    return {word.lower() for word in rest.split()} if dash else set()
+
+
+def _predefined_token_made(record: dict) -> bool:
+    return _effect_resolution(record) and any(
+        e["type"] == "token_created" and _subtypes(str(
+            ((e.get("params") or {}).get("characteristics") or {}).get("types") or ""))
+        & _PREDEFINED_TOKENS
+        for e in record["payload"].get("events") or ())
+
+
+def _predefined_token_source(record: dict) -> bool:
+    if not _effect_resolution(record):
+        return False
+    source = (record["state"].get("refs") or {}).get("source")
+    return any(e["id"] == source and e.get("token_script_id")
+               and {s.lower() for s in e.get("subtypes") or ()} & _PREDEFINED_TOKENS
+               for e in record["state"]["entities"])
+
+
 def _gen2_categories() -> dict[str, Callable[[dict], bool]]:
     """Gen-2's own categories, matched before the shared ones."""
     return {
@@ -197,6 +235,10 @@ def _gen2_categories() -> dict[str, Callable[[dict], bool]]:
         "704.5f-fires": _toughness_zero_death,
         "704.5g-fires": _lethal_damage_death,
         "704.5f-does-not-fire": _left_at_toughness_one,
+        "keyword-trigger-fired": _keyword_trigger(True),
+        "keyword-trigger-unfired": _keyword_trigger(False),
+        "predefined-token-source": _predefined_token_source,
+        "predefined-token-made": _predefined_token_made,
         "probe-deathtouch": lambda r: r["kind"] == "combat" and (
             r["payload"].get("probed_keyword") == "deathtouch"),
         "random-seat": lambda r: r.get("random_seat") is True,

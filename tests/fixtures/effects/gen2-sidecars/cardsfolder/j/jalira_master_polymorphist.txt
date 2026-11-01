@@ -1,0 +1,5 @@
+name: jalira, master polymorphist
+mana cost: {3}{U}
+types: legendary creature human wizard
+power toughness: 2/2
+activated[1]: {2}{U}, {T}, sacrifice another creature: reveal cards from the top of your library until you reveal a nonlegendary creature card. put that card onto the battlefield and the rest on the bottom of your library in a random order.

@@ -1,0 +1,4 @@
+name: treetop warden
+mana cost: {1}{G}
+types: creature elf warrior
+power toughness: 2/2

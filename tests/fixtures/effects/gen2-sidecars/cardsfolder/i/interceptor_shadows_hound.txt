@@ -1,0 +1,7 @@
+name: interceptor, shadow's hound
+mana cost: {2}{B}{B}
+types: legendary creature dog
+power toughness: 4/3
+static: menace
+triggered: whenever you attack with one or more legendary creatures, you may pay {2}{B}. if you do, return this card from your graveyard to the battlefield tapped and attacking.
+static: assassins you control have menace.

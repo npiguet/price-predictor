@@ -1,0 +1,5 @@
+name: surprise deployment
+mana cost: {3}{W}
+types: instant
+spell[1]: cast this spell only during combat. you may put a nonwhite creature card from your hand onto the battlefield. at the beginning of the next end step, return that creature to your hand.
+spell[2]: at the beginning of the next end step, return that creature to your hand.

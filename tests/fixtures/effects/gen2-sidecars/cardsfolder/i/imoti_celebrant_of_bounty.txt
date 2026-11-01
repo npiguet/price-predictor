@@ -1,0 +1,6 @@
+name: imoti, celebrant of bounty
+mana cost: {3}{G}{U}
+types: legendary creature snake druid
+power toughness: 3/1
+triggered: cascade
+static: spells you cast with mana value 6 or greater have cascade.

@@ -1,0 +1,4 @@
+name: swift silence
+mana cost: {2}{W}{U}{U}
+types: instant
+spell[1]: counter all other spells. draw a card for each spell countered this way.

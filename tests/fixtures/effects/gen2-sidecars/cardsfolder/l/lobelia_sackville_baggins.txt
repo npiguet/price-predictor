@@ -1,0 +1,7 @@
+name: lobelia sackville-baggins
+mana cost: {2}{B}
+types: legendary creature halfling citizen
+power toughness: 2/3
+static: flash
+static: menace
+triggered: when CARDNAME enters, exile target creature card from an opponent's graveyard that was put there from the battlefield this turn, then create X treasure tokens, where X is the exiled card's power.

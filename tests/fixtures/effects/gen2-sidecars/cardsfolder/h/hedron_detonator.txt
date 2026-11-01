@@ -1,0 +1,6 @@
+name: hedron detonator
+mana cost: {2}{R}
+types: creature goblin artificer
+power toughness: 2/3
+activated[1]: {T}, sacrifice two artifacts: exile the top card of your library. you may play that card this turn.
+triggered: whenever an artifact you control enters, CARDNAME deals 1 damage to target opponent.

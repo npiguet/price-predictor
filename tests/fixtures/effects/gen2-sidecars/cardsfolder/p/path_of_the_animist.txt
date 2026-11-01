@@ -1,0 +1,6 @@
+name: path of the animist
+mana cost: {3}{G}
+types: sorcery
+spell[1]: search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.
+spell[2]: ,,,,,,
+spell[3]: will of the planeswalkers — starting with you, each player votes for planeswalk or chaos. if planeswalk gets more votes, planeswalk. if chaos gets more votes or the vote is tied, chaos ensues.

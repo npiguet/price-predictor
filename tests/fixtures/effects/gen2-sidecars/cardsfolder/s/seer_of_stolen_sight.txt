@@ -1,0 +1,6 @@
+name: seer of stolen sight
+mana cost: {2}{B}
+types: creature phyrexian warlock
+power toughness: 2/3
+static: menace
+triggered: whenever one or more artifacts and/or creatures you control are put into a graveyard from the battlefield, surveil 1.

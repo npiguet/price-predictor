@@ -1,0 +1,7 @@
+name: gwaihir, greatest of the eagles
+mana cost: {4}{W}
+types: legendary creature bird noble
+power toughness: 5/5
+static: flying
+triggered: whenever CARDNAME attacks, target attacking creature gains flying until end of turn.
+triggered: at the beginning of each end step, if you gained 3 or more life this turn, create a 3/3 white bird creature token with flying and "whenever this token attacks, target attacking creature gains flying until end of turn."

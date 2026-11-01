@@ -1,0 +1,6 @@
+name: skyway sniper
+mana cost: {G}
+types: creature elf archer
+power toughness: 1/2
+static: reach
+activated[1]: {2}{G}: CARDNAME deals 1 damage to target creature with flying.

@@ -1,0 +1,4 @@
+name: cataclysm
+mana cost: {2}{W}{W}
+types: sorcery
+spell[1]: each player chooses from among the permanents they control an artifact, a creature, an enchantment, and a land, then sacrifices the rest.

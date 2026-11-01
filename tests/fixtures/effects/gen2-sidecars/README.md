@@ -16,6 +16,8 @@ The tree also holds the sidecars every record of `../gen2-records.jsonl.gz` name
 cut from the real gen-2 shards by `python scripts/make_fixture_records.py --generation 2`, three
 records per category: the shared kinds and subkinds, plus a 704.5f state-based death at toughness 0
 or less (Saproling Burst's tokens, Barrenton Medic, Decree of Pain), a creature lowered to toughness
-1 that stays, a damage-step probe stripping deathtouch, and records from random-seat and Forge-AI
-games. Rerunning the script rewrites the records file and adds sidecars here; it never edits a
+1 that stays, a death by damage, the legend rule, a planeswalker at loyalty 0, an Aura whose host
+left, triggers a keyword generates (fired and not), a predefined token kind made (111.10) and an
+ability whose source is one, a damage-step probe stripping deathtouch, and records from
+random-seat and Forge-AI games. Rerunning the script rewrites the records file and adds sidecars here; it never edits a
 sidecar already present.

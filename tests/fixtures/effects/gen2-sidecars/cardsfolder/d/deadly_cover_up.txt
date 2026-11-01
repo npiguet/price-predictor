@@ -1,0 +1,6 @@
+name: deadly cover-up
+mana cost: {3}{B}{B}
+types: sorcery
+additional cost: you may collect evidence 6.
+spell[1]: destroy all creatures.
+spell[2]: if evidence was collected, exile a card from an opponent's graveyard. then search its owner's graveyard, hand, and library for any number of cards with that name and exile them. that player shuffles, then draws a card for each card exiled from their hand this way.

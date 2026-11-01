@@ -1,0 +1,6 @@
+name: kinetic ooze
+mana cost: {X}{G}
+types: creature ooze
+power toughness: 0/0
+replacement: CARDNAME enters with X +1/+1 counters on it.
+triggered: when this creature enters, destroy up to one target artifact or enchantment with mana value X or less. if X is 5 or more, you draw a card. if X is 10 or more, double the number of +1/+1 counters on any number of other target creatures.

@@ -1,0 +1,16 @@
+layout: transform
+name: polukranos reborn
+mana cost: {G}{G}{G}
+types: legendary creature hydra
+power toughness: 4/5
+static: reach
+activated[1]: {6}{W/P}: transform CARDNAME. activate only as a sorcery.
+
+ALTERNATE
+
+name: polukranos, engine of ruin
+types: legendary creature phyrexian hydra
+power toughness: 6/6
+static: reach
+static: lifelink
+triggered: whenever CARDNAME or another nontoken hydra you control dies, create a 3/3 green and white phyrexian hydra creature token with reach and a 3/3 green and white phyrexian hydra creature token with lifelink.

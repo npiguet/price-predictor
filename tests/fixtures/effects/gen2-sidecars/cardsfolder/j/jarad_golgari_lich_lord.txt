@@ -1,0 +1,7 @@
+name: jarad, golgari lich lord
+mana cost: {B}{B}{G}{G}
+types: legendary creature zombie elf
+power toughness: 2/2
+activated[1]: {1}{B}{G}, sacrifice another creature: each opponent loses life equal to the sacrificed creature's power.
+activated[2]: sacrifice a swamp, sacrifice a forest: return CARDNAME from your graveyard to your hand.
+static: CARDNAME gets +1/+1 for each creature card in your graveyard.

@@ -1,0 +1,5 @@
+name: giant trap door spider
+mana cost: {1}{R}{G}
+types: creature spider
+power toughness: 2/3
+activated[1]: {1}{R}{G}, {T}: exile CARDNAME and target creature without flying that's attacking you.

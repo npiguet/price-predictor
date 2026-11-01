@@ -1,0 +1,8 @@
+name: whip vine
+mana cost: {2}{G}
+types: creature plant wall
+power toughness: 1/4
+static: defender
+static: reach
+static: you may choose not to untap CARDNAME during your untap step.
+activated[1]: {T}: tap target creature with flying blocked by CARDNAME. that creature doesn't untap during its controller's untap step for as long as CARDNAME remains tapped.

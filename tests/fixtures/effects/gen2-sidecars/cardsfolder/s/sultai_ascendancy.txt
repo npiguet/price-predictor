@@ -1,0 +1,4 @@
+name: sultai ascendancy
+mana cost: {B}{G}{U}
+types: enchantment
+triggered: at the beginning of your upkeep, surveil 2.

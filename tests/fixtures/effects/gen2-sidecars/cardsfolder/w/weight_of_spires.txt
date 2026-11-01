@@ -1,0 +1,4 @@
+name: weight of spires
+mana cost: {R}
+types: instant
+spell[1]: CARDNAME deals damage to target creature equal to the number of nonbasic lands that creature's controller controls.

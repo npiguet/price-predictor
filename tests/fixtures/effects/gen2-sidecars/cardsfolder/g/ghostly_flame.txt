@@ -1,0 +1,4 @@
+name: ghostly flame
+mana cost: {B}{R}
+types: enchantment
+static: black and/or red permanents and spells are colorless sources of damage.

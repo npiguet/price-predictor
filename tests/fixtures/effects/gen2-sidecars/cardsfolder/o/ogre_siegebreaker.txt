@@ -1,0 +1,5 @@
+name: ogre siegebreaker
+mana cost: {2}{B}{R}
+types: creature ogre berserker
+power toughness: 4/3
+activated[1]: {2}{B}{R}: destroy target creature that was dealt damage this turn.

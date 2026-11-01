@@ -1,0 +1,4 @@
+name: hair-strung koto
+mana cost: {6}
+types: artifact
+activated[1]: tap an untapped creature you control: target player mills a card.

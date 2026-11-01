@@ -1,0 +1,4 @@
+name: reclamation
+mana cost: {2}{G}{W}
+types: enchantment
+static: black creatures can't attack unless their controller sacrifices a land for each black creature they control that's attacking.

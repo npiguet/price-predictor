@@ -1,0 +1,7 @@
+name: orcish healer
+mana cost: {R}{R}
+types: creature orc cleric
+power toughness: 1/1
+activated[1]: {R}{R}, {T}: target creature can't be regenerated this turn.
+activated[2]: {B}{B}{R}, {T}: regenerate target black or green creature.
+activated[3]: {R}{G}{G}, {T}: regenerate target black or green creature.

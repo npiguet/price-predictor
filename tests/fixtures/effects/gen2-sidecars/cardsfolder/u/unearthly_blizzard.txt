@@ -1,0 +1,4 @@
+name: unearthly blizzard
+mana cost: {2}{R}
+types: sorcery arcane
+spell[1]: up to three target creatures can't block this turn.

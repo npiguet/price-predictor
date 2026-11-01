@@ -1,0 +1,6 @@
+name: skyship plunderer
+mana cost: {1}{U}
+types: creature human pirate
+power toughness: 2/1
+static: flying
+triggered: whenever CARDNAME deals combat damage to a player, for each kind of counter on target permanent or player, give that permanent or player another counter of that kind.

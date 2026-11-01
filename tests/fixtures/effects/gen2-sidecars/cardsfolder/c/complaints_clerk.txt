@@ -1,0 +1,6 @@
+name: complaints clerk
+mana cost: {3}{W}
+types: creature sloth beast employee
+power toughness: 3/3
+triggered: when CARDNAME enters the battlefield, open an attraction.
+triggered: whenever you roll a 1, create a 1/1 white clown robot artifact creature token.

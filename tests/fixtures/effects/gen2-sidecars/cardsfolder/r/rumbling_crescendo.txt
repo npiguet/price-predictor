@@ -1,0 +1,5 @@
+name: rumbling crescendo
+mana cost: {3}{R}{R}
+types: enchantment
+activated[1]: {R}, sacrifice CARDNAME: destroy up to X target lands, where X is the number of verse counters on CARDNAME.
+triggered: at the beginning of your upkeep, you may put a verse counter on CARDNAME.

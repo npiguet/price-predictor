@@ -1,0 +1,8 @@
+name: ajani, inspiring leader
+mana cost: {4}{W}{W}
+types: legendary planeswalker ajani
+loyalty: 5
+planeswalker[1]: [+2]: you gain 2 life. put two +1/+1 counters on up to one target creature.
+planeswalker[2]: [-3]: exile target creature. its controller gains 2 life.
+planeswalker[3]: [-10]: creatures you control gain flying and double strike until end of turn.
+replacement: CARDNAME enters with five loyalty counters on it.

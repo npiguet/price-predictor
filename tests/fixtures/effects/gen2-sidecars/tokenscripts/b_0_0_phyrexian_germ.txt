@@ -1,0 +1,3 @@
+name: phyrexian germ token
+types: creature phyrexian germ
+power toughness: 0/0

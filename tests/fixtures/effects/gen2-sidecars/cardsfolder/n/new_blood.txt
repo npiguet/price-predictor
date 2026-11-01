@@ -1,0 +1,5 @@
+name: new blood
+mana cost: {2}{B}{B}
+types: sorcery
+additional cost: tap an untapped vampire you control.
+spell[1]: gain control of target creature. change the text of that creature by replacing all instances of one creature type with vampire.

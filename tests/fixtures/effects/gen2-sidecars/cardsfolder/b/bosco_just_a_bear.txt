@@ -1,0 +1,6 @@
+name: bosco, just a bear
+mana cost: {4}{G}
+types: legendary creature bear
+power toughness: 4/4
+activated[1]: {2}{G}, sacrifice a food: put two +1/+1 counters on CARDNAME. he gains trample until end of turn.
+triggered: when CARDNAME enters, create a food token for each legendary creature you control.

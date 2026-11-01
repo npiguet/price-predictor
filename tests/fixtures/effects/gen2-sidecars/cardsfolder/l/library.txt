@@ -1,0 +1,5 @@
+name: library
+types: land
+activated[1]: {T}: add {U} or {R}.
+activated[2]: {4}, {T}: investigate.
+replacement: CARDNAME enters tapped.

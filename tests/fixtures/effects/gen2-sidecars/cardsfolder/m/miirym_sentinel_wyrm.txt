@@ -1,0 +1,7 @@
+name: miirym, sentinel wyrm
+mana cost: {3}{G}{U}{R}
+types: legendary creature dragon spirit
+power toughness: 6/6
+static: flying
+static: ward {2}
+triggered: whenever another nontoken dragon you control enters, create a token that's a copy of it, except the token isn't legendary if that dragon is legendary.

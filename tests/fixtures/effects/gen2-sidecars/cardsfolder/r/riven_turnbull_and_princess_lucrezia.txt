@@ -1,0 +1,5 @@
+name: riven turnbull and princess lucrezia
+mana cost: {5}{U}{B}
+types: legendary creature human advisor wizard
+power toughness: 10/11
+activated[1]: {T}: add {U}{B}.

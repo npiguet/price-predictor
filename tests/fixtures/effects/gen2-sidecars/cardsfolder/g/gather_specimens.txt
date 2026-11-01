@@ -1,0 +1,4 @@
+name: gather specimens
+mana cost: {3}{U}{U}{U}
+types: instant
+spell[1]: if a creature would enter the battlefield under an opponent's control this turn, it enters under your control instead.

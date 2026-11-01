@@ -1,0 +1,7 @@
+name: fearless swashbuckler
+mana cost: {1}{U}{R}
+types: creature fish pirate
+power toughness: 3/3
+static: haste
+triggered: whenever you attack, if a pirate and a vehicle attacked this combat, draw three cards, then discard two cards.
+static: vehicles you control have haste.

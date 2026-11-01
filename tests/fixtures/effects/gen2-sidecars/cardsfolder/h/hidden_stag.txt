@@ -1,0 +1,5 @@
+name: hidden stag
+mana cost: {1}{G}
+types: enchantment
+triggered: whenever an opponent plays a land, if CARDNAME is an enchantment, CARDNAME becomes a 3/2 elk beast creature.
+triggered: whenever you play a land, if CARDNAME is a creature, CARDNAME becomes an enchantment.

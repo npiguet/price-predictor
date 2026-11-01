@@ -1,0 +1,5 @@
+name: leshrac's sigil
+mana cost: {B}{B}
+types: enchantment
+activated[1]: {B}{B}: return CARDNAME to its owner's hand.
+triggered: whenever an opponent casts a green spell, you may pay {B}{B}. if you do, look at that player's hand and choose a card from it. the player discards that card.

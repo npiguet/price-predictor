@@ -1,0 +1,5 @@
+name: disciple of bolas
+mana cost: {3}{B}
+types: creature human wizard
+power toughness: 2/1
+triggered: when CARDNAME enters, sacrifice another creature. you gain X life and draw X cards, where X is that creature's power.

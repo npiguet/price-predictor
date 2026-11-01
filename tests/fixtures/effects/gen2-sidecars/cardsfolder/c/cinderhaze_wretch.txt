@@ -1,0 +1,6 @@
+name: cinderhaze wretch
+mana cost: {4}{B}
+types: creature elemental shaman
+power toughness: 3/2
+activated[1]: {T}: target player discards a card. activate only during your turn.
+activated[2]: put a -1/-1 counter on CARDNAME: untap CARDNAME.

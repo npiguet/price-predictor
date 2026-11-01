@@ -1,0 +1,4 @@
+name: life and limb
+mana cost: {3}{G}
+types: enchantment
+static: all forests and all saprolings are 1/1 green saproling creatures and forest lands in addition to their other types.

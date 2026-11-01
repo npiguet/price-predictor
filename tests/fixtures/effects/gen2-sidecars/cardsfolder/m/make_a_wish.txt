@@ -1,0 +1,4 @@
+name: make a wish
+mana cost: {3}{G}
+types: sorcery
+spell[1]: return two cards at random from your graveyard to your hand.

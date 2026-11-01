@@ -1,0 +1,5 @@
+name: avenge
+mana cost: {4}{W}{W}
+types: sorcery
+spell[1]: destroy all creatures. you gain 1 life for each creature destroyed this way.
+static: this spell costs {2} less to cast if a player attacked you during their last turn.

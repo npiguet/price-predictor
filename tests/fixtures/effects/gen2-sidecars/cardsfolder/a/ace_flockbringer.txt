@@ -1,0 +1,6 @@
+name: ace flockbringer
+mana cost: {1}{W}{U}
+types: creature bird scout
+power toughness: 3/3
+static: flying
+triggered: whenever you cast a creature spell without flying, conjure a duplicate of it into your hand. the duplicate perpetually gains flying. this ability triggers only once each turn.

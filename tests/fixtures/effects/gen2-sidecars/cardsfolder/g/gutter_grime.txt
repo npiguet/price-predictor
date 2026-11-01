@@ -1,0 +1,4 @@
+name: gutter grime
+mana cost: {4}{G}
+types: enchantment
+triggered: whenever a nontoken creature you control dies, put a slime counter on CARDNAME, then create a green ooze creature token with "this token's power and toughness are each equal to the number of slime counters on CARDNAME."

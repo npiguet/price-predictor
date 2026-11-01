@@ -1,0 +1,4 @@
+name: knowledge is power
+mana cost: {3}{W}{U}
+types: enchantment
+static: creatures you control get +X/+X, where X is the number of cards you've drawn this turn.

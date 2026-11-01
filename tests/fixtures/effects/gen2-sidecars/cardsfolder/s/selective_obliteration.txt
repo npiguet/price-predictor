@@ -1,0 +1,5 @@
+name: selective obliteration
+mana cost: {3}{C}{C}
+types: sorcery
+spell[1]: each player chooses a color.
+spell[2]: then exile each permanent unless it's colorless or it's only the color its controller chose.

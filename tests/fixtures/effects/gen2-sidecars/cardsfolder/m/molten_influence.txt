@@ -1,0 +1,4 @@
+name: molten influence
+mana cost: {1}{R}
+types: instant
+spell[1]: counter target instant or sorcery spell unless its controller has CARDNAME deal 4 damage to them.
