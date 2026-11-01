@@ -1,0 +1,5 @@
+name: stormcloud spirit
+mana cost: {3}{U}{U}
+types: creature spirit
+power toughness: 4/4
+static: flying

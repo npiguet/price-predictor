@@ -1,0 +1,6 @@
+name: spitting spider
+mana cost: {3}{G}{G}
+types: creature spider
+power toughness: 3/5
+static: reach
+activated[1]: sacrifice a land: CARDNAME deals 1 damage to each creature with flying.

@@ -1,0 +1,5 @@
+name: wheel and deal
+mana cost: {3}{U}
+types: instant
+spell[1]: any number of target opponents each discard their hands, then draw seven cards.
+spell[2]: draw a card.

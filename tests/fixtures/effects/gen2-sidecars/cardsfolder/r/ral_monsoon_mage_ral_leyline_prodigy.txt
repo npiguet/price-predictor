@@ -1,0 +1,18 @@
+layout: transform
+name: ral, monsoon mage
+mana cost: {1}{R}
+types: legendary creature human wizard
+power toughness: 1/3
+triggered: whenever you cast an instant or sorcery spell during your turn, flip a coin. if you lose the flip, CARDNAME deals 1 damage to you. if you win the flip, you may exile CARDNAME. if you do, return him to the battlefield transformed under his owner's control.
+static: instant and sorcery spells you cast cost {1} less to cast.
+
+ALTERNATE
+
+name: ral, leyline prodigy
+types: legendary planeswalker ral
+loyalty: 2
+replacement: CARDNAME enters with an additional loyalty counter on him for each instant and sorcery spell you've cast this turn.
+planeswalker[1]: [+1]: until your next turn, instant and sorcery spells you cast cost {1} less to cast.
+planeswalker[2]: [-2]: CARDNAME deals 2 damage divided as you choose among one or two targets. draw a card if you control a blue permanent other than CARDNAME.
+planeswalker[3]: [-8]: exile the top eight cards of your library. you may cast instant and sorcery spells from among them this turn without paying their mana costs.
+replacement: CARDNAME enters with two loyalty counters on it.

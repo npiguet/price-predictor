@@ -1,0 +1,9 @@
+name: mountain mover
+mana cost: {2}{R}
+types: artifact vehicle
+power toughness: 5/3
+static: flying
+static: haste
+activated[1]: crew 3
+triggered: whenever CARDNAME enters or attacks, put a mountain card from outside the game underneath it.
+triggered: when CARDNAME leaves the battlefield, put all cards underneath it onto the battlefield.

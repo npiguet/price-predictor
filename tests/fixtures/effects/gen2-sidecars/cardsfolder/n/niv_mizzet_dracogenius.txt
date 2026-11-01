@@ -1,0 +1,7 @@
+name: niv-mizzet, dracogenius
+mana cost: {2}{U}{U}{R}{R}
+types: legendary creature dragon wizard
+power toughness: 5/5
+static: flying
+activated[1]: {U}{R}: CARDNAME deals 1 damage to any target.
+triggered: whenever CARDNAME deals damage to a player, you may draw a card.

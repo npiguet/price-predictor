@@ -1,0 +1,5 @@
+name: rune of protection: white
+mana cost: {1}{W}
+types: enchantment
+activated[1]: cycling {2}
+activated[2]: {W}: the next time a white source of your choice would deal damage to you this turn, prevent that damage. the next time the chosen white source deals damage to you, prevent that damage.

@@ -1,0 +1,5 @@
+name: drop of honey
+mana cost: {G}
+types: enchantment
+triggered: at the beginning of your upkeep, destroy the creature with the least power. it can't be regenerated. if two or more creatures are tied for least power, you choose one of them.
+triggered: when there are no creatures on the battlefield, sacrifice CARDNAME.

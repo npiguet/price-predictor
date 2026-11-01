@@ -1,0 +1,13 @@
+layout: modal
+name: rush of inspiration
+mana cost: {1}{U/R}{U/R}
+types: instant
+spell[1]: draw two cards.
+spell[2]: then discard a card at random unless you pay {E}{E}.
+
+ALTERNATE
+
+name: crackling falls
+types: land
+activated[1]: {T}: add {U} or {R}.
+replacement: CARDNAME enters tapped.

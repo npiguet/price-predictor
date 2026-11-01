@@ -18,6 +18,11 @@ records per category: the shared kinds and subkinds, plus a 704.5f state-based d
 or less (Saproling Burst's tokens, Barrenton Medic, Decree of Pain), a creature lowered to toughness
 1 that stays, a death by damage, the legend rule, a planeswalker at loyalty 0, an Aura whose host
 left, triggers a keyword generates (fired and not), a predefined token kind made (111.10) and an
-ability whose source is one, a damage-step probe stripping deathtouch, and records from
-random-seat and Forge-AI games. Rerunning the script rewrites the records file and adds sidecars here; it never edits a
+ability whose source is one, a damage-step probe stripping deathtouch, records from
+random-seat and Forge-AI games, and the shapes the detector families' parameters read: a
+resolution and a decision candidate acting through a keyword's own line, a candidate whose card
+prints a keyword, a candidate whose `Cost$` has a part (`Sac<…>`), a candidate listing legal
+targets, a damage rewrite a prevention shield replaced or reduced, a creature leaving the
+battlefield while attacking or blocking, a token's static (the Monster Role's) and a static whose
+`IsPresent$` condition reads counters (Captain America's). Rerunning the script rewrites the records file and adds sidecars here; it never edits a
 sidecar already present.

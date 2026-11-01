@@ -1,0 +1,4 @@
+name: open the vaults
+mana cost: {4}{W}{W}
+types: sorcery
+spell[1]: return all artifact and enchantment cards from all graveyards to the battlefield under their owners' control.

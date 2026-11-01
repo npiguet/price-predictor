@@ -1,0 +1,4 @@
+name: faith's shield
+mana cost: {W}
+types: instant
+spell[1]: target permanent you control gains protection from the color of your choice until end of turn.

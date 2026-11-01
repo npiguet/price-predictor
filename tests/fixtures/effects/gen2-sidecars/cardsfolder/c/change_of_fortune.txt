@@ -1,0 +1,4 @@
+name: change of fortune
+mana cost: {3}{R}
+types: sorcery
+spell[1]: discard your hand, then draw a card for each card you've discarded this turn.

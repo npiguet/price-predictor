@@ -1,0 +1,5 @@
+name: kavu recluse
+mana cost: {2}{R}
+types: creature kavu
+power toughness: 2/2
+activated[1]: {T}: target land becomes a forest until end of turn.

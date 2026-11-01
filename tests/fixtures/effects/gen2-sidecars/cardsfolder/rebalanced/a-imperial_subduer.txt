@@ -1,0 +1,5 @@
+name: a-imperial subduer
+mana cost: {1}{W}
+types: creature human samurai
+power toughness: 3/1
+triggered: whenever a samurai or warrior you control attacks alone, tap target creature you don't control.

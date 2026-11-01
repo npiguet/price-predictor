@@ -1,0 +1,4 @@
+name: nissa's triumph
+mana cost: {G}{G}
+types: sorcery
+spell[1]: search your library for up to two basic forest cards. if you control a nissa planeswalker, instead search your library for up to three land cards. reveal those cards, put them into your hand, then shuffle.

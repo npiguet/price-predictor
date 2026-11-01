@@ -1,0 +1,4 @@
+name: song of blood
+mana cost: {1}{R}
+types: sorcery
+spell[1]: mill four cards. whenever a creature attacks this turn, it gets +1/+0 until end of turn for each creature card put into your graveyard this way.

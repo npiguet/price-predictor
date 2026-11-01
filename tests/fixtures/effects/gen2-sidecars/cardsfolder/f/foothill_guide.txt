@@ -1,0 +1,6 @@
+name: foothill guide
+mana cost: {W}
+types: creature human cleric
+power toughness: 1/1
+alternate cost: morph {W}
+static: protection from goblin

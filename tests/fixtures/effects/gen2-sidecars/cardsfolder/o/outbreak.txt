@@ -1,0 +1,6 @@
+name: outbreak
+mana cost: {3}{B}
+types: sorcery
+spell[1]: choose a creature type. all creatures of that type get -1/-1 until end of turn.
+spell[2]: all creatures of that type get -1/-1 until end of turn.
+static: you may discard a swamp card rather than pay this spell's mana cost.

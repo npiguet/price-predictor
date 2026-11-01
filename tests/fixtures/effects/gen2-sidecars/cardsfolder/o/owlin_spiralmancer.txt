@@ -1,0 +1,7 @@
+name: owlin spiralmancer
+mana cost: {3}{U}
+types: creature bird wizard
+power toughness: 3/4
+static: flying
+static: vigilance
+triggered: whenever you cast your first spell with {X} in its mana cost each turn, you may copy it. you may choose new targets for the copy.

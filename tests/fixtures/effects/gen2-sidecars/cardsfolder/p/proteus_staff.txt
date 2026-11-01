@@ -1,0 +1,4 @@
+name: proteus staff
+mana cost: {3}
+types: artifact
+activated[1]: {2}{U}, {T}: put target creature on the bottom of its owner's library. that creature's controller reveals cards from the top of their library until they reveal a creature card. the player puts that card onto the battlefield and the rest on the bottom of their library in any order. activate only as a sorcery.

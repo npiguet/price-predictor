@@ -1,0 +1,4 @@
+name: body of research
+mana cost: {G}{G}{G}{U}{U}{U}
+types: sorcery
+spell[1]: create a 0/0 green and blue fractal creature token. put X +1/+1 counters on it, where X is the number of cards in your library.

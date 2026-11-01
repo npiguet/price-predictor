@@ -1,0 +1,5 @@
+name: riptide chronologist
+mana cost: {3}{U}{U}
+types: creature human wizard
+power toughness: 1/3
+activated[1]: {U}, sacrifice CARDNAME: untap all creatures of the creature type of your choice.

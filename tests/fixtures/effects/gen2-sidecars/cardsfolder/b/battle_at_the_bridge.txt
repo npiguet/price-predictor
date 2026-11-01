@@ -1,0 +1,6 @@
+name: battle at the bridge
+mana cost: {X}{B}
+types: sorcery
+cost reduction: improvise
+spell[1]: target creature gets -X/-X until end of turn.
+spell[2]: you gain X life.

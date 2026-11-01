@@ -1,0 +1,6 @@
+name: formless genesis
+mana cost: {2}{G}
+types: kindred sorcery shapeshifter
+alternate cost: retrace
+static: changeling
+spell[1]: create an X/X colorless shapeshifter creature token with changeling and deathtouch, where X is the number of land cards in your graveyard.

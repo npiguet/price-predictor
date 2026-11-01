@@ -1,0 +1,8 @@
+name: teyo, aegis adept
+mana cost: {2}{W}{W}
+types: legendary planeswalker teyo
+loyalty: 4
+planeswalker[1]: [+1]: up to one target creature's base power perpetually becomes equal to its toughness. it perpetually gains "this creature can attack as though it didn't have defender."
+planeswalker[2]: [-2]: conjure a lumbering lightshield card onto the battlefield.
+planeswalker[3]: [-6]: you get an emblem with "at the beginning of your end step, return target white creature card from your graveyard to the battlefield. you gain life equal to its toughness."
+replacement: CARDNAME enters with four loyalty counters on it.

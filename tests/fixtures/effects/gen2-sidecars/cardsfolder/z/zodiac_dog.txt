@@ -1,0 +1,5 @@
+name: zodiac dog
+mana cost: {2}{R}
+types: creature dog
+power toughness: 2/2
+static: mountainwalk

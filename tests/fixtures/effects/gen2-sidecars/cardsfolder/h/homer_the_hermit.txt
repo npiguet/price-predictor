@@ -1,0 +1,5 @@
+name: homer, the hermit
+mana cost: {B}{G}{U}
+types: legendary creature crab druid
+power toughness: 0/9
+triggered: landfall — whenever a land you control enters, any number of target players each mill X cards, where X is twice the number of crabs, lobsters, nautiluses, starfish, and/or trilobites you control.

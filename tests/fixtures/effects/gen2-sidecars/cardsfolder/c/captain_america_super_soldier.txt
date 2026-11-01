@@ -1,0 +1,7 @@
+name: captain america, super-soldier
+mana cost: {1}{W}{W}
+types: legendary creature human soldier hero
+power toughness: 3/2
+static: first strike
+replacement: CARDNAME enters with a shield counter on it.
+static: as long as CARDNAME has a shield counter on him, you and other heroes you control have hexproof.

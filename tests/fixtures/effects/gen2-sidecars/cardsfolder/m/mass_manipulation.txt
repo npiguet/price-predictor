@@ -1,0 +1,4 @@
+name: mass manipulation
+mana cost: {X}{X}{U}{U}{U}{U}
+types: sorcery
+spell[1]: gain control of X target creatures and/or planeswalkers.

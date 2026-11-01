@@ -1,0 +1,5 @@
+name: a-goma fada vanguard
+mana cost: {1}{R}
+types: creature human warrior
+power toughness: 2/2
+triggered: whenever CARDNAME attacks, target creature an opponent controls with power less than or equal to the number of warriors and equipment you control can't block this turn.

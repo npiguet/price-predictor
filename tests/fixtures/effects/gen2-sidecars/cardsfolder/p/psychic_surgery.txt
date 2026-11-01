@@ -1,0 +1,4 @@
+name: psychic surgery
+mana cost: {1}{U}
+types: enchantment
+triggered: whenever an opponent shuffles their library, you may look at the top two cards of that library. you may exile one of those cards. then put the rest on top of that library in any order.

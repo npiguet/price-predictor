@@ -1,0 +1,5 @@
+name: sacred mesa
+mana cost: {2}{W}
+types: enchantment
+activated[1]: {1}{W}: create a 1/1 white pegasus creature token with flying.
+triggered: at the beginning of your upkeep, sacrifice CARDNAME unless you sacrifice a pegasus.

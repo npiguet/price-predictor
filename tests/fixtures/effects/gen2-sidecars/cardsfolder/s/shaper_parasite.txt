@@ -1,0 +1,6 @@
+name: shaper parasite
+mana cost: {1}{U}{U}
+types: creature illusion
+power toughness: 2/3
+alternate cost: morph {2}{U}
+triggered: when CARDNAME is turned face up, target creature gets +2/-2 or -2/+2 until end of turn.

@@ -1,0 +1,5 @@
+name: price of knowledge
+mana cost: {6}{B}
+types: enchantment
+triggered: at the beginning of each opponent's upkeep, CARDNAME deals damage to that player equal to the number of cards in that player's hand.
+static: players have no maximum hand size.

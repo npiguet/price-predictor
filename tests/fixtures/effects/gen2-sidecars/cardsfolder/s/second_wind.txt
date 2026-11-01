@@ -1,0 +1,6 @@
+name: second wind
+mana cost: {2}{U}
+types: enchantment aura
+static: enchant creature
+activated[1]: {T}: tap enchanted creature.
+activated[2]: {T}: untap enchanted creature.

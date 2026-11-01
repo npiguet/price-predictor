@@ -1,0 +1,5 @@
+name: katara, the fearless
+mana cost: {G}{W}{U}
+types: legendary creature human warrior ally
+power toughness: 3/3
+static: if a triggered ability of an ally you control triggers, that ability triggers an additional time.

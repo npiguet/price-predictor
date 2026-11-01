@@ -1,0 +1,4 @@
+name: dissipation field
+mana cost: {2}{U}{U}
+types: enchantment
+triggered: whenever a permanent deals damage to you, return it to its owner's hand.

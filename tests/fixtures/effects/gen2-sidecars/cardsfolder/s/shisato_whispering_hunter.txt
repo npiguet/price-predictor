@@ -1,0 +1,6 @@
+name: shisato, whispering hunter
+mana cost: {3}{G}
+types: legendary creature snake warrior
+power toughness: 2/2
+triggered: at the beginning of your upkeep, sacrifice a snake.
+triggered: whenever CARDNAME deals combat damage to a player, that player skips their next untap step.

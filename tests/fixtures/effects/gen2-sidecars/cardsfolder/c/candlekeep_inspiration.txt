@@ -1,0 +1,4 @@
+name: candlekeep inspiration
+mana cost: {4}{U}
+types: sorcery
+spell[1]: until end of turn, creatures you control have base power and toughness X/X, where X is the number of cards you own in exile and in your graveyard that are instant cards, are sorcery cards, and/or have an adventure.

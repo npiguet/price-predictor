@@ -1,0 +1,5 @@
+name: gore vassal
+mana cost: {2}{W}
+types: creature phyrexian dog
+power toughness: 2/1
+activated[1]: sacrifice CARDNAME: put a -1/-1 counter on target creature. then if that creature's toughness is 1 or greater, regenerate it.

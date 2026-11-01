@@ -1,0 +1,6 @@
+name: edgin, larcenous lutenist
+mana cost: {1}{U}{R}
+types: legendary creature human bard
+power toughness: 3/3
+triggered: whenever you cast your second spell each turn, goad target creature an opponent controls.
+static: each nonland card in your hand without foretell has foretell. its foretell cost is equal to its mana cost reduced by {2}.

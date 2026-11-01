@@ -13,23 +13,121 @@ Parameters:
 - ``fires_when``: the bit's value on the ``fires`` side, ``false`` by default;
 - ``responsible_static``: true to count only candidates a static restricts.
 
+The candidates a rule speaks for, each filter narrowing both sides:
+
+- ``keyword``: the candidate is the line this keyword produced (a Crew,
+  Cycling, Flashback, Dash or Disguise ability, which acts through the
+  keyword's own line), compared in ``keyword_names``' spelling;
+- ``source_keyword``: the candidate's source prints this keyword on any of
+  its lines (a spell with convoke, improvise, escalate or undaunted, cast
+  through its own line), read off its sidecar, so a granted keyword is not
+  its own;
+- ``cost_symbol``: the candidate's cost holds this symbol: ``T``, ``Q``, a
+  mana symbol (``S``, ``C``, ``X``, ``W`` …), or a class of them,
+  ``hybrid`` (``W/U``), ``monohybrid`` (``2/W``) or ``phyrexian`` (``W/P``);
+  read off the line's ``Cost$`` and the candidate's ``cost_after_adjustment``
+  mana, so a spell's mana cost counts whatever its line;
+- ``cost_part``: the line's ``Cost$`` holds a part of this name, the name
+  before its ``<…>`` (``Sac``, ``PayLife``, ``Discard``, ``CollectEvidence``,
+  ``Forage``, ``Waterbend``, ``Blight``), compared without case; unreadable
+  on a candidate whose line the sidecar dropped (a permanent spell);
+- ``script_param``: the line's root segment holds this parameter, a name or a
+  name -> value map as ``outcome_event`` reads it.
+
+A candidate a filter cannot read is on neither side.
+
 The entity is the verdict head's ``[ACT]``: the candidate is the acting line.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
 from effects.domain.provenance import SidecarLookup
-from effects.domain.records import EffectRecord, PlayabilitySubkind, RecordKind
+from effects.domain.records import Candidate, EffectRecord, PlayabilitySubkind, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors.acting_line import (
+    card_has_keyword,
+    is_keyword_line,
+    line_of,
+    root_params_of,
+    script_params_match,
+)
 
 GEN2_BITS = frozenset({"can_play", "affordable", "has_legal_target"})
 GEN3_BITS = frozenset({"timing", "failed_check"})
 ACT = "[ACT]"
+FILTERS = frozenset({"keyword", "source_keyword", "cost_symbol", "cost_part", "script_param"})
+
+#: A mana symbol as ``Cost$`` spells it (``W``, ``12``, ``W/U``, ``2/W``,
+#: ``W/P``); ``T`` and ``Q`` are symbols too, and any other token is a part.
+_MANA = re.compile(r"^(\d+|[WUBRGCSXYZ]|[WUBRGC\d]+/[WUBRGCP](/P)?)$")
+_COST_TOKEN = re.compile(r"[^\s<]+<[^>]*>|\S+")
+_TAP = frozenset({"T", "Q"})
+_COLOURS = frozenset("WUBRG")
+
+
+def _symbol_class(symbol: str) -> str | None:
+    halves = symbol.split("/")
+    if len(halves) < 2:
+        return None
+    if "P" in halves:
+        return "phyrexian"
+    if halves[0].isdigit():
+        return "monohybrid"
+    return "hybrid" if set(halves) <= _COLOURS else None
+
+
+def cost_of(candidate: Candidate, lines: SidecarLookup | None
+            ) -> tuple[frozenset[str] | None, frozenset[str] | None]:
+    """The candidate's cost symbols and its ``Cost$`` part names (upper-cased),
+    each None where nothing says what it is."""
+    line = line_of(candidate.ability, lines)
+    found = root_params_of(line)
+    # A part's ``<…>`` may hold spaces (``Sac<1/CARDNAME/this token>``).
+    written = _COST_TOKEN.findall((found or {}).get("Cost", "")) if line is not None else []
+    symbols = {t.upper() for t in written if t.upper() in _TAP or _MANA.match(t.upper())}
+    parts = {t.split("<", 1)[0].upper() for t in written if t.upper() not in _TAP
+             and not _MANA.match(t.upper())}
+    mana = (candidate.cost_after_adjustment or {}).get("mana")
+    if isinstance(mana, str):
+        symbols.update(s.upper() for s in re.findall(r"\{([^}]*)\}", mana))
+    known = line is not None or isinstance(mana, str)
+    return (frozenset(symbols) if known else None,
+            frozenset(parts) if line is not None else None)
+
+
+def _holds_symbol(symbols: frozenset[str], wanted: str) -> bool:
+    if wanted.lower() in ("hybrid", "monohybrid", "phyrexian"):
+        return any(_symbol_class(s) == wanted.lower() for s in symbols)
+    return wanted.upper() in symbols
+
+
+def _passes(candidate: Candidate, lines: SidecarLookup | None,
+            params: Mapping[str, Any]) -> bool:
+    """Whether the candidate is one the declaration's filters speak for."""
+    if "keyword" in params and not is_keyword_line(
+            line_of(candidate.ability, lines), params["keyword"]):
+        return False
+    if "source_keyword" in params and not card_has_keyword(
+            candidate.ability, lines, params["source_keyword"]):
+        return False
+    if "script_param" in params and not script_params_match(
+            root_params_of(line_of(candidate.ability, lines)), params["script_param"]):
+        return False
+    if "cost_symbol" in params or "cost_part" in params:
+        symbols, parts = cost_of(candidate, lines)
+        if "cost_symbol" in params and (
+                symbols is None or not _holds_symbol(symbols, params["cost_symbol"])):
+            return False
+        if "cost_part" in params and (
+                parts is None or params["cost_part"].upper() not in parts):
+            return False
+    return True
 
 
 def _bit(candidate, bit: str, check: str | None) -> bool | None:
@@ -44,7 +142,8 @@ def _bit(candidate, bit: str, check: str | None) -> bool | None:
 @dataclass(frozen=True, slots=True)
 class VerdictBit:
     id: str = "verdict_bit"
-    params: frozenset[str] = frozenset({"bit", "check", "fires_when", "responsible_static"})
+    params: frozenset[str] = frozenset(
+        {"bit", "check", "fires_when", "responsible_static"}) | FILTERS
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         bit = params.get("bit")
@@ -69,7 +168,8 @@ class VerdictBit:
         fires_when = bool(params.get("fires_when", False))
         candidates = [
             c for c in record.payload.candidates
-            if not params.get("responsible_static") or c.responsible_static]
+            if (not params.get("responsible_static") or c.responsible_static)
+            and _passes(c, lines, params)]
         values = [_bit(c, bit, params.get("check")) for c in candidates]
         values = [v for v in values if v is not None]
         if not values:

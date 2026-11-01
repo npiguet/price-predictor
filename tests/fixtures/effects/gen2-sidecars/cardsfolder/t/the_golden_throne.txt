@@ -1,0 +1,5 @@
+name: the golden throne
+mana cost: {4}
+types: legendary artifact
+activated[1]: a thousand souls die every day — {T}, sacrifice a creature: add three mana in any combination of colors.
+replacement: arcane life-support — if you would lose the game, instead exile CARDNAME and your life total becomes 1.

@@ -1,0 +1,8 @@
+name: gunner conscript
+mana cost: {1}{G}
+types: creature human mercenary
+power toughness: 2/2
+static: trample
+triggered: when CARDNAME dies, if it was enchanted, create a junk token.
+triggered: when CARDNAME dies, if it was equipped, create a junk token.
+static: CARDNAME gets +1/+1 for each aura and equipment attached to it.

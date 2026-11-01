@@ -1,0 +1,9 @@
+name: daretti, scrap savant
+mana cost: {3}{R}
+types: legendary planeswalker daretti
+loyalty: 3
+text: CARDNAME can be your commander.
+planeswalker[1]: [+2]: discard up to two cards, then draw that many cards.
+planeswalker[2]: [-2]: sacrifice an artifact. if you do, return target artifact card from your graveyard to the battlefield.
+planeswalker[3]: [-10]: you get an emblem with "whenever an artifact is put into your graveyard from the battlefield, return that card to the battlefield at the beginning of the next end step."
+replacement: CARDNAME enters with three loyalty counters on it.

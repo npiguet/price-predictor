@@ -23,7 +23,12 @@ state-based check (704.5f fires), one that leaves a creature at toughness 1
 (704.5m), a damage-step probe stripping deathtouch, triggers a keyword
 generates (fired and not), a predefined token
 kind made (111.10) and an ability whose source is one, and records from a
-random-seat game and from a game the Forge AI played on both seats.
+random-seat game and from a game the Forge AI played on both seats, and the
+shapes the detector families' parameters read: a resolution and a decision
+candidate acting through a keyword's own line, a candidate whose card prints a
+keyword, a candidate whose cost has a part (``Sac<...>``), a candidate listing
+targets, a damage rewrite a prevention shield replaced, a creature leaving the
+battlefield in combat, a token's static and a counter-conditioned static.
 """
 
 from __future__ import annotations
@@ -37,6 +42,8 @@ from collections import defaultdict
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
+from effects.domain.script_text import params as params_of
+from effects.domain.script_text import root as root_of
 from effects.infrastructure.record_codec import record_from_dict
 from effects.infrastructure.shard_io import iter_shard_lines, iter_shards
 
@@ -83,7 +90,8 @@ class _Sidecars:
             )
         return self._cache[script_file]
 
-    def api_type(self, key: dict) -> str | None:
+    def line(self, key: dict) -> dict | None:
+        """The raw sidecar line a key names, or None."""
         sidecar = self.get(key["script_file"])
         if sidecar is None:
             return None
@@ -92,8 +100,22 @@ class _Sidecars:
                 if (candidate["face"], candidate["trait_kind"],
                         candidate["index_within_kind"]) == (
                         key["face"], key["trait_kind"], key["index_within_kind"]):
-                    return line.get("script_api_type")
+                    return line
         return None
+
+    def api_type(self, key: dict) -> str | None:
+        line = self.line(key)
+        return line.get("script_api_type") if line is not None else None
+
+    def script(self, key: dict) -> str:
+        line = self.line(key)
+        return (line.get("script_text") or "") if line is not None else ""
+
+    def prints_keyword(self, script_file: str) -> bool:
+        """Whether the card has a line a keyword produced."""
+        sidecar = self.get(script_file)
+        return sidecar is not None and any(
+            line.get("script_api_type") == "Keyword" for line in sidecar["lines"])
 
 
 def _toughness(entity: dict) -> int | None:
@@ -226,9 +248,105 @@ def _predefined_token_source(record: dict) -> bool:
                for e in record["state"]["entities"])
 
 
-def _gen2_categories() -> dict[str, Callable[[dict], bool]]:
+def _candidate_key(record: dict) -> dict | None:
+    """A decision record's one candidate's first key."""
+    if record["kind"] != "playability" or record.get("subkind") != "decision":
+        return None
+    candidates = record["payload"].get("candidates") or ()
+    keys = (candidates[0].get("ability") or ()) if candidates else ()
+    return keys[0] if keys else None
+
+
+def _combatant_leaves(record: dict) -> bool:
+    """An effect half moving a creature that is attacking or blocking off the battlefield."""
+    if not _effect_resolution(record):
+        return False
+    entities = {e["id"]: e for e in record["state"]["entities"]}
+    for event in record["payload"].get("events") or ():
+        if event["type"] != "zone_change" or (
+                (event.get("params") or {}).get("from_zone") != "battlefield"):
+            continue
+        for subject in event.get("subjects") or ():
+            combat = (entities.get(subject) or {}).get("combat") or {}
+            if combat.get("attacking") or combat.get("blocking"):
+                return True
+    return False
+
+
+def _detector_shapes(sidecars: _Sidecars) -> dict[str, Callable[[dict], bool]]:
+    """Records the detector families' parameters read: a keyword's own line
+    acting, a candidate's card printing a keyword, a cost part, targets, a
+    prevention shield, a combatant leaving, a token's or a counter-conditioned
+    static."""
+    from effects.domain.rule_detectors.continuous_contribution import (
+        condition_counter_types,
+    )
+    from effects.domain.rule_detectors.rewrite_event import PREVENTS
+
+    def first_key(record: dict) -> dict | None:
+        keys = record.get("ability") or ()
+        return keys[0] if keys else None
+
+    def keyword_resolution(record: dict) -> bool:
+        key = first_key(record)
+        return (_effect_resolution(record) and key is not None
+                and key["trait_kind"] == "keyword"
+                and bool(record["payload"].get("events")))
+
+    def keyword_decision(record: dict) -> bool:
+        key = _candidate_key(record)
+        return key is not None and key["trait_kind"] == "keyword"
+
+    def keyword_card_decision(record: dict) -> bool:
+        key = _candidate_key(record)
+        return (key is not None and key["trait_kind"] == "spell"
+                and sidecars.prints_keyword(key["script_file"]))
+
+    def cost_part_decision(record: dict) -> bool:
+        key = _candidate_key(record)
+        return key is not None and "<" in (
+            params_of(root_of(sidecars.script(key))).get("Cost") or "")
+
+    def targeting_decision(record: dict) -> bool:
+        if _candidate_key(record) is None:
+            return False
+        targets = record["payload"]["candidates"][0].get("legal_targets") or ()
+        return 0 < len(targets) < 32
+
+    def prevention_rewrite(record: dict) -> bool:
+        key = first_key(record)
+        return (record["kind"] == "rewrite" and key is not None
+                and record["payload"]["incoming"]["type"] == "damage_dealt"
+                and record["payload"].get("result") in ("replaced", "updated")
+                and bool(PREVENTS.search(sidecars.script(key))))
+
+    def token_static(record: dict) -> bool:
+        key = first_key(record)
+        return (record["kind"] == "continuous" and key is not None
+                and key["script_file"].startswith("tokenscripts/"))
+
+    def counter_conditioned_static(record: dict) -> bool:
+        key = first_key(record)
+        return (record["kind"] == "continuous" and key is not None
+                and bool(condition_counter_types(sidecars.script(key))))
+
+    return {
+        "keyword-resolution": keyword_resolution,
+        "keyword-decision": keyword_decision,
+        "keyword-card-decision": keyword_card_decision,
+        "cost-part-decision": cost_part_decision,
+        "targeting-decision": targeting_decision,
+        "prevention-rewrite": prevention_rewrite,
+        "combatant-leaves": _combatant_leaves,
+        "token-static": token_static,
+        "counter-conditioned-static": counter_conditioned_static,
+    }
+
+
+def _gen2_categories(sidecars: _Sidecars) -> dict[str, Callable[[dict], bool]]:
     """Gen-2's own categories, matched before the shared ones."""
     return {
+        **_detector_shapes(sidecars),
         "704.5j-fires": _sba_fires("legend_rule"),
         "704.5m-fires": _sba_fires("aura_illegal"),
         "704.5i-fires": _sba_fires("loyalty_zero"),
@@ -305,7 +423,7 @@ def main() -> int:
     sidecars = _Sidecars({folder.name: folder for folder in folders})
     categories = _categories(sidecars)
     if gen == 2:
-        categories = {**_gen2_categories(), **categories}
+        categories = {**_gen2_categories(sidecars), **categories}
     chosen: dict[str, list[dict]] = defaultdict(list)
     wanted_links: set[str] = set()
     wanted_mirrors: set[str] = set()

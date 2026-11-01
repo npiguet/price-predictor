@@ -1,0 +1,4 @@
+name: ember gale
+mana cost: {3}{R}
+types: sorcery
+spell[1]: creatures target player controls can't block this turn. CARDNAME deals 1 damage to each white and/or blue creature that player controls.

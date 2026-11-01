@@ -1,0 +1,5 @@
+name: gideon's resolve
+mana cost: {4}{W}
+types: enchantment
+triggered: when CARDNAME enters, you may search your library and/or graveyard for a card named gideon, martial paragon, reveal it, and put it into your hand. if you search your library this way, shuffle.
+static: creatures you control get +1/+1.

@@ -1,0 +1,4 @@
+name: flow of ideas
+mana cost: {5}{U}
+types: sorcery
+spell[1]: draw a card for each island you control.

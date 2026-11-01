@@ -1,0 +1,7 @@
+name: djeru, with eyes open
+mana cost: {3}{W}{W}
+types: legendary creature human warrior
+power toughness: 4/3
+static: vigilance
+triggered: when CARDNAME enters, you may search your library for a planeswalker card, reveal it, put it into your hand, then shuffle.
+replacement: if a source would deal damage to a planeswalker you control, prevent 1 of that damage.

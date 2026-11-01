@@ -1,0 +1,4 @@
+name: jovial evil
+mana cost: {2}{B}
+types: sorcery
+spell[1]: CARDNAME deals X damage to target opponent, where X is twice the number of white creatures that player controls.

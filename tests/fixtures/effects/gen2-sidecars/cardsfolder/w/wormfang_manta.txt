@@ -1,0 +1,7 @@
+name: wormfang manta
+mana cost: {5}{U}{U}
+types: creature nightmare fish beast
+power toughness: 6/1
+static: flying
+triggered: when CARDNAME enters, you skip your next turn.
+triggered: when CARDNAME leaves the battlefield, you take an extra turn after this one.

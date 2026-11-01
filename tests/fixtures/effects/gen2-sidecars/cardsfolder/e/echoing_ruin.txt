@@ -1,0 +1,4 @@
+name: echoing ruin
+mana cost: {1}{R}
+types: sorcery
+spell[1]: destroy target artifact and all other artifacts with the same name as that artifact.

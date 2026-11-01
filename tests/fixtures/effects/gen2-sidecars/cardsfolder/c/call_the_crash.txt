@@ -1,0 +1,5 @@
+name: call the crash
+mana cost: {3}{W}{B}{G}
+types: sorcery
+alternate cost: suspend 2—{1}{W}{B}{G}
+spell[1]: conjure two cards named siege rhino onto the battlefield.

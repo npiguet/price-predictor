@@ -1,0 +1,4 @@
+name: food chain
+mana cost: {2}{G}
+types: enchantment
+activated[1]: exile a creature you control: add X mana of any one color, where X is 1 plus the exiled creature's mana value. spend this mana only to cast creature spells.

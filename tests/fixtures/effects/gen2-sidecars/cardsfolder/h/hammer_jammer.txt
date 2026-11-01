@@ -1,0 +1,6 @@
+name: hammer jammer
+mana cost: {3}{R}
+types: creature goblin warrior
+power toughness: 0/0
+replacement: as CARDNAME enters, roll a six-sided die. CARDNAME enters with a number of +1/+1 counters on it equal to the total of those results.
+triggered: whenever you roll a die, remove all +1/+1 counters from CARDNAME, then put a number of +1/+1 counters on it equal to the result.

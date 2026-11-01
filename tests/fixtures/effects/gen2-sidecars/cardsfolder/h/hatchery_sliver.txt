@@ -1,0 +1,6 @@
+name: hatchery sliver
+mana cost: {1}{G}
+types: creature sliver
+power toughness: 2/2
+additional cost: replicate {1}{G}
+static: each sliver spell you cast has replicate. the replicate cost is equal to its mana cost.

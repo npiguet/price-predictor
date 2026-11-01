@@ -1,0 +1,6 @@
+name: wurmquake
+mana cost: {4}{G}{G}
+types: sorcery
+alternate cost: flashback {8}{G}{G}
+spell[1]: corrupted — create an X/X green phyrexian wurm creature token with trample and toxic 1, where X is the amount of mana spent to cast this spell.
+spell[2]: then for each opponent with three or more poison counters, you create another one of those tokens.

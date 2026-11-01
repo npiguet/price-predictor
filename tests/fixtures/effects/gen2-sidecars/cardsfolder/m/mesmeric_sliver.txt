@@ -1,0 +1,5 @@
+name: mesmeric sliver
+mana cost: {3}{U}
+types: creature sliver
+power toughness: 2/2
+static: all slivers have "when this permanent enters, you may fateseal 1."

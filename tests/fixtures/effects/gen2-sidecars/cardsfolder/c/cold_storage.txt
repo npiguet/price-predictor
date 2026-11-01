@@ -1,0 +1,5 @@
+name: cold storage
+mana cost: {4}
+types: artifact
+activated[1]: {3}: exile target creature you control.
+activated[2]: sacrifice CARDNAME: return each creature card exiled with CARDNAME to the battlefield under your control.

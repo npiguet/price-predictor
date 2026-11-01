@@ -1,0 +1,4 @@
+name: excavator
+mana cost: {2}
+types: artifact
+activated[1]: {T}, sacrifice a basic land: target creature gains landwalk of each of the land types of the sacrificed land until end of turn.

@@ -1,0 +1,8 @@
+name: lich's mastery
+mana cost: {3}{B}{B}{B}
+types: legendary enchantment
+static: hexproof
+triggered: whenever you gain life, draw that many cards.
+triggered: whenever you lose life, for each 1 life you lost, exile a permanent you control or a card from your hand or graveyard.
+triggered: when CARDNAME leaves the battlefield, you lose the game.
+replacement: you can't lose the game.

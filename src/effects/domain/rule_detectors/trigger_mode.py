@@ -13,7 +13,8 @@ Parameters, each a condition of the rule rather than of a card:
   cumulative upkeep), read off the acting line, which for such a trigger is the
   keyword's own line (``Exalted``, ``Suspend:2:…``) and carries no ``Mode$``; the
   name is compared in ``keyword_names``' spelling, so ``Cumulative upkeep`` and
-  ``cumulative_upkeep`` agree. The script parameters below cannot be read off a
+  ``cumulative_upkeep`` agree (``acting_line.is_keyword_line``, the read
+  every family's ``keyword`` shares). The script parameters below cannot be read off a
   keyword line, so a declaration giving ``keyword`` gives none of them;
 - ``origin``, ``destination``: a ``ChangesZone`` trigger's zones;
 - ``selector``: the trigger's ``ValidCard$`` selector, compared as written
@@ -30,25 +31,20 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
-from effects.domain.script_text import params, root
+from effects.domain.rule_detectors.acting_line import (
+    acting_line,
+    acting_root_params,
+    is_keyword_line,
+)
+
+__all__ = ["FAMILY", "acting_root_params"]
 
 _SCRIPT_PARAMS = {"mode": "Mode", "origin": "Origin", "destination": "Destination",
                   "selector": "ValidCard"}
-
-
-def acting_root_params(record: EffectRecord, lines: SidecarLookup | None) -> dict[str, str] | None:
-    """The acting line's root-segment parameters, or None where no line is readable."""
-    if lines is None or not record.ability:
-        return None
-    line = lines.first_line(record.ability)
-    if line is None or not line.script_text:
-        return None
-    return params(root(line.script_text))
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,10 +67,7 @@ class TriggerMode:
         if record.kind is not RecordKind.TRIGGER:
             return None
         if keyword is not None:
-            line = (lines.first_line(record.ability)
-                    if lines is not None and record.ability else None)
-            name = line.keyword_display_name if line is not None else None
-            if name is None or normalize_keyword(name) != normalize_keyword(keyword):
+            if not is_keyword_line(acting_line(record, lines), keyword):
                 return None
             return self._side(record)
         found = acting_root_params(record, lines)

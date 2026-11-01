@@ -1,0 +1,6 @@
+name: omnath, locus of creation
+mana cost: {R}{G}{W}{U}
+types: legendary creature elemental
+power toughness: 4/4
+triggered: when CARDNAME enters, draw a card.
+triggered: landfall — whenever a land you control enters, you gain 4 life if this is the first time this ability has resolved this turn. if it's the second time, add {R}{G}{W}{U}. if it's the third time, CARDNAME deals 4 damage to each opponent and each planeswalker you don't control.

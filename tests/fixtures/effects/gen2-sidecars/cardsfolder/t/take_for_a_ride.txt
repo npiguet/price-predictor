@@ -1,0 +1,5 @@
+name: take for a ride
+mana cost: {2}{R}
+types: sorcery
+spell[1]: gain control of target creature until end of turn. untap that creature. it gains haste until end of turn.
+static: CARDNAME has flash as long as you've committed a crime this turn.

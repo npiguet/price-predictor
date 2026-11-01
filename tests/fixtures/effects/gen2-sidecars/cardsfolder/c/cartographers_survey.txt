@@ -1,0 +1,4 @@
+name: cartographer's survey
+mana cost: {3}{G}
+types: sorcery
+spell[1]: look at the top seven cards of your library. put up to two land cards from among them onto the battlefield tapped. put the rest on the bottom of your library in a random order.

@@ -1,0 +1,4 @@
+name: ghouls' night out
+mana cost: {3}{B}{B}
+types: sorcery
+spell[1]: for each player, choose a creature card in that player's graveyard. put those cards onto the battlefield under your control. they're black zombies in addition to their other colors and types and they gain decayed.

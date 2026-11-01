@@ -1,0 +1,5 @@
+name: shapeshifter token
+types: creature shapeshifter
+power toughness: */*
+static: changeling
+static: deathtouch

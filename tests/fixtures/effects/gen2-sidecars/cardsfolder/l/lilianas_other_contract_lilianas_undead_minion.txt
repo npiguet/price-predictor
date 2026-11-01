@@ -1,0 +1,16 @@
+layout: transform
+name: liliana's other contract
+mana cost: {4}{B}
+types: enchantment
+triggered: when CARDNAME enters the battlefield, you draw three cards and you lose 3 life.
+replacement: if you would lose the game, instead exile CARDNAME, then return it to the battlefield transformed under your control.
+
+ALTERNATE
+
+name: liliana's undead minion
+types: legendary planeswalker you
+loyalty: 5
+planeswalker[1]: [+1]: each opponent loses 1 life.
+planeswalker[2]: [-4]: destroy target creature.
+replacement: you can't lose the game.
+replacement: CARDNAME enters with five loyalty counters on it.

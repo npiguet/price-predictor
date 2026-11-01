@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
+
 from effects.domain.records import RewriteResult
 from effects.domain.rule_catalogue import Polarity
-from effects.domain.rule_detectors.rewrite_event import FAMILY
+from effects.domain.rule_detectors.acting_line import acting_line
+from effects.domain.rule_detectors.rewrite_event import FAMILY, is_prevention_line
 
 
 def _entering(by_kind):
@@ -27,6 +30,84 @@ def test_the_same_record_edited_to_not_replaced_is_the_near_miss(by_kind):
                                              outgoing=None, replaced_by=()))
     found = FAMILY.match(edited, None, {"event": "zone_change", "result": "updated"})
     assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
+
+
+def test_the_mode_and_any_incoming_parameter_narrow_the_event(by_kind):
+    record = _entering(by_kind)
+    incoming = record.payload.incoming
+    mode = incoming.params["mode"]
+    for declared in ({"mode": mode}, {"mode": mode.lower()},
+                     {"to_zone": incoming.params["to_zone"].upper()}):
+        found = FAMILY.match(record, None, {"event": "zone_change", "result": "updated",
+                                            **declared})
+        assert found.polarity is Polarity.FIRES, declared
+    assert FAMILY.match(record, None, {"event": "zone_change", "mode": "BeginPhase"}) is None
+    with pytest.raises(ValueError, match="no parameter"):
+        FAMILY.match(record, None, {"event": "zone_change", "counter_type": "P1P1"})
+
+
+def test_a_result_list_names_every_fires_result(by_kind):
+    record = _entering(by_kind)
+    found = FAMILY.match(record, None,
+                         {"event": "zone_change", "result": ["replaced", "updated"]})
+    assert found.polarity is Polarity.FIRES
+    found = FAMILY.match(record, None,
+                         {"event": "zone_change", "result": ["replaced", "skipped"]})
+    assert found.polarity is Polarity.DOES_NOT_FIRE
+
+
+def _keyword_rewrite(by_kind, sidecars):
+    return next(r for r in by_kind("rewrite") if acting_line(r, sidecars) is not None
+                and acting_line(r, sidecars).keyword_display_name)
+
+
+def test_a_keyword_replacement_shows_by_its_keyword(by_kind, gen2_sidecars):
+    record = _keyword_rewrite(by_kind, gen2_sidecars)
+    name = acting_line(record, gen2_sidecars).keyword_display_name
+    event = record.payload.incoming.type.value
+    result = record.payload.result.value
+    found = FAMILY.match(record, gen2_sidecars,
+                         {"event": event, "result": result, "keyword": name.lower()})
+    assert found.polarity is Polarity.FIRES
+    assert FAMILY.match(record, gen2_sidecars, {"event": event, "keyword": "Madness"}) is None
+
+
+class TestPrevention:
+    @staticmethod
+    def _shield(by_kind, sidecars):
+        return next(r for r in by_kind("rewrite")
+                    if r.payload.incoming.type.value == "damage_dealt"
+                    and r.payload.result in (RewriteResult.REPLACED, RewriteResult.UPDATED)
+                    and is_prevention_line(acting_line(r, sidecars)))
+
+    def test_a_shield_replacing_damage_fires_whatever_result_it_reports(
+            self, by_kind, gen2_sidecars):
+        record = self._shield(by_kind, gen2_sidecars)
+        found = FAMILY.match(record, gen2_sidecars,
+                             {"event": "damage_dealt", "prevention": True})
+        assert found.polarity is Polarity.FIRES and found.observed
+
+    def test_a_shield_preventing_nothing_is_the_near_miss(self, by_kind, gen2_sidecars):
+        record = self._shield(by_kind, gen2_sidecars)
+        edited = replace(record, payload=replace(
+            record.payload, result=RewriteResult.NOT_REPLACED, outgoing=None, replaced_by=()))
+        found = FAMILY.match(edited, gen2_sidecars, {"event": "damage_dealt", "prevention": True})
+        assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
+        found = FAMILY.match(edited, gen2_sidecars, {"event": "damage_dealt",
+                                                     "prevention": True,
+                                                     "result": "not_replaced"})
+        assert found.polarity is Polarity.FIRES
+
+    def test_another_replacement_is_no_prevention_but_a_prevented_result_is(
+            self, by_kind, gen2_sidecars):
+        record = _keyword_rewrite(by_kind, gen2_sidecars)
+        assert not is_prevention_line(acting_line(record, gen2_sidecars))
+        event = record.payload.incoming.type.value
+        declared = {"event": event, "prevention": True}
+        assert FAMILY.match(record, gen2_sidecars, declared) is None
+        prevented = replace(record, payload=replace(record.payload,
+                                                    result=RewriteResult.PREVENTED))
+        assert FAMILY.match(prevented, gen2_sidecars, declared).polarity is Polarity.FIRES
 
 
 def test_another_event_or_destination_shows_nothing(by_kind):

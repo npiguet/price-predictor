@@ -1,0 +1,6 @@
+name: zimone, infinite analyst
+mana cost: {1}{G}{U}
+types: legendary creature human wizard
+power toughness: 0/4
+triggered: whenever you cast your first spell with {X} in its mana cost each turn, put two +1/+1 counters on CARDNAME.
+static: the first spell you cast with {X} in its mana cost each turn costs {1} less to cast for each +1/+1 counter on CARDNAME.

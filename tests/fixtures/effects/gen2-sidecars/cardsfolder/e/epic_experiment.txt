@@ -1,0 +1,4 @@
+name: epic experiment
+mana cost: {X}{U}{R}
+types: sorcery
+spell[1]: exile the top X cards of your library. you may cast instant and sorcery spells with mana value X or less from among them without paying their mana costs. then put all cards exiled this way that weren't cast into your graveyard.

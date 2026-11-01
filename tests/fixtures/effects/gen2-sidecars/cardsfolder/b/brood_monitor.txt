@@ -1,0 +1,6 @@
+name: brood monitor
+mana cost: {4}{G}{G}
+types: creature eldrazi drone
+power toughness: 3/3
+static: devoid
+triggered: when CARDNAME enters, create three 1/1 colorless eldrazi scion creature tokens. they have "sacrifice this creature: add {C}."

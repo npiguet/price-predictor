@@ -1,0 +1,6 @@
+name: storm, shaker of skies
+mana cost: {4}{G}{G}
+types: legendary creature mutant hero
+power toughness: 4/3
+static: flying
+triggered: when CARDNAME enters, destroy up to one target artifact, enchantment, or creature with flying.

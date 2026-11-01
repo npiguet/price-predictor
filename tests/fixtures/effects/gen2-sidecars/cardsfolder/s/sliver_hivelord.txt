@@ -1,0 +1,5 @@
+name: sliver hivelord
+mana cost: {W}{U}{B}{R}{G}
+types: legendary creature sliver
+power toughness: 5/5
+static: sliver creatures you control have indestructible.

@@ -1,0 +1,5 @@
+name: reckless barbarian
+mana cost: {1}{R}
+types: creature dragon barbarian
+power toughness: 2/2
+activated[1]: sacrifice CARDNAME: add {R}{R}.

@@ -1,0 +1,5 @@
+name: moorland rescuer
+mana cost: {5}{W}
+types: creature human knight
+power toughness: 4/4
+triggered: when CARDNAME dies, return any number of other creature cards with total power X or less from the graveyard to the battlefield, where X is CARDNAME's power. exile CARDNAME.

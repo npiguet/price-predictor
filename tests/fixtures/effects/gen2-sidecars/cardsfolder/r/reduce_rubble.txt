@@ -1,0 +1,13 @@
+layout: split
+name: reduce
+mana cost: {2}{U}
+types: instant
+spell[1]: counter target spell unless its controller pays {3}.
+
+ALTERNATE
+
+name: rubble
+mana cost: {2}{R}
+types: sorcery
+static: aftermath
+spell[1]: up to three target lands don't untap during their controller's next untap step.

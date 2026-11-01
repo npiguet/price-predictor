@@ -1,0 +1,5 @@
+name: ashaya's enduring bond
+mana cost: {1}{R}{G}
+types: legendary sorcery
+text: CARDNAME can be your commander.
+spell[1]: discover X, where X is the amount of mana spent to cast this spell.

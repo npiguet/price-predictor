@@ -1,0 +1,6 @@
+name: jirina kudro
+mana cost: {1}{R}{W}{B}
+types: legendary creature human soldier
+power toughness: 3/3
+triggered: when CARDNAME enters, create a 1/1 white human soldier creature token for each time you've cast a commander from the command zone this game.
+static: other humans you control get +2/+0.

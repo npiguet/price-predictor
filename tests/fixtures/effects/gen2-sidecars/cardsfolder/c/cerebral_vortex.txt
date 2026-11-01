@@ -1,0 +1,4 @@
+name: cerebral vortex
+mana cost: {1}{U}{R}
+types: instant
+spell[1]: target player draws two cards, then CARDNAME deals damage to that player equal to the number of cards they've drawn this turn.

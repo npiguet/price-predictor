@@ -1,0 +1,6 @@
+name: kjeldoran phalanx
+mana cost: {5}{W}
+types: creature human soldier
+power toughness: 2/5
+static: first strike
+static: banding

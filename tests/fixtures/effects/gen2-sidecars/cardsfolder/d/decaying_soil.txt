@@ -1,0 +1,5 @@
+name: decaying soil
+mana cost: {1}{B}{B}
+types: enchantment
+triggered: at the beginning of your upkeep, exile a card from your graveyard.
+static: threshold — as long as there are seven or more cards in your graveyard, CARDNAME has "whenever a nontoken creature is put into your graveyard from the battlefield, you may pay {1}. if you do, return that card to your hand."
