@@ -58,7 +58,8 @@
           "label": "plain_blocker",
           "polarity": "does_not_fire",
           "delta": "B's blocker is Mons's Goblin Raiders (1/1, no abilities) instead of Typhoid Rats.",
-          "expected": "Hill Giant deals 3 damage to Mons's Goblin Raiders, which is destroyed. Hill Giant has 1 damage marked and stays on the battlefield. B's life stays 20."
+          "expected": "Hill Giant deals 3 damage to Mons's Goblin Raiders, which is destroyed. Hill Giant has 1 damage marked and stays on the battlefield. B's life stays 20.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -66,7 +67,17 @@
         "Typhoid Rats",
         "Mons's Goblin Raiders"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "keyword_combat",
+        "record_kind": "combat",
+        "outcome": "A creature with deathtouch deals combat damage to a single creature whose toughness would survive that much damage, and that creature is destroyed.",
+        "near_miss": "A damage-step probe fork re-runs the same combat with deathtouch stripped from that creature, and the damaged creature survives.",
+        "params": {
+          "keyword": "deathtouch"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.2b-2",
@@ -119,7 +130,10 @@
           "label": "unequipped",
           "polarity": "does_not_fire",
           "delta": "Basilisk Collar is not on the battlefield.",
-          "expected": "Prodigal Sorcerer deals 1 damage to Hill Giant, which stays on the battlefield with 1 damage marked. A's life stays 20."
+          "expected": "Prodigal Sorcerer deals 1 damage to Hill Giant, which stays on the battlefield with 1 damage marked. A's life stays 20.",
+          "operation": {
+            "unclassifiable": "removes a permanent (Basilisk Collar) from the battlefield"
+          }
         }
       ],
       "cards": [
@@ -127,7 +141,17 @@
         "Basilisk Collar",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "A creature dealt damage below its toughness by a source with deathtouch moves from the battlefield to its owner's graveyard in the state-based check after the resolution.",
+        "near_miss": "A creature dealt damage below its toughness by a source without deathtouch stays on the battlefield.",
+        "params": {
+          "check": "deathtouch_damage"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.2c-1",
@@ -182,13 +206,19 @@
           "label": "no_collar",
           "polarity": "does_not_fire",
           "delta": "Basilisk Collar is not on the battlefield, so A must assign 3 damage (lethal) to Hill Giant and assigns the other 3 damage to player B.",
-          "expected": "Hill Giant is destroyed by 3 damage. B takes 3 damage (life 17). A's life stays 20. Colossal Dreadmaw survives with 3 damage marked."
+          "expected": "Hill Giant is destroyed by 3 damage. B takes 3 damage (life 17). A's life stays 20. Colossal Dreadmaw survives with 3 damage marked.",
+          "operation": {
+            "unclassifiable": "removes a permanent (the Equipment) and changes the attacker's damage assignment, more than one fact"
+          }
         },
         {
           "label": "two_blockers",
           "polarity": "fires",
           "delta": "Grizzly Bears also blocks Colossal Dreadmaw, and A assigns 1 damage to Hill Giant, 1 damage to Grizzly Bears and 4 damage to player B.",
-          "expected": "Hill Giant and Grizzly Bears are both destroyed. B takes 4 damage (life 16). Colossal Dreadmaw takes 5 damage and survives. A gains 6 life (life 26)."
+          "expected": "Hill Giant and Grizzly Bears are both destroyed. B takes 4 damage (life 16). Colossal Dreadmaw takes 5 damage and survives. A gains 6 life (life 26).",
+          "operation": {
+            "unclassifiable": "a different block declaration and damage assignment by the players; the board is unchanged"
+          }
         }
       ],
       "cards": [
@@ -250,7 +280,10 @@
           "label": "unequipped",
           "polarity": "does_not_fire",
           "delta": "Basilisk Collar is not on the battlefield.",
-          "expected": "Mogg Fanatic is in A's graveyard. The ability deals 1 damage to Hill Giant, which stays on the battlefield with 1 damage marked. A's life stays 20."
+          "expected": "Mogg Fanatic is in A's graveyard. The ability deals 1 damage to Hill Giant, which stays on the battlefield with 1 damage marked. A's life stays 20.",
+          "operation": {
+            "unclassifiable": "removes a permanent (Basilisk Collar) from the battlefield"
+          }
         }
       ],
       "cards": [

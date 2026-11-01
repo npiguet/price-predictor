@@ -56,14 +56,27 @@
           "label": "trampler_blocks",
           "polarity": "does_not_fire",
           "delta": "The roles are reversed: B controls Colossal Dreadmaw and blocks with it, and A attacks with Grizzly Bears (no summoning sickness).",
-          "expected": "Colossal Dreadmaw deals all 6 damage to Grizzly Bears, which is destroyed. A's life stays 20. Colossal Dreadmaw takes 2 damage and survives. No damage goes to either player."
+          "expected": "Colossal Dreadmaw deals all 6 damage to Grizzly Bears, which is destroyed. A's life stays 20. Colossal Dreadmaw takes 2 damage and survives. No damage goes to either player.",
+          "operation": {
+            "unclassifiable": "swaps which side controls the creatures and who attacks and blocks"
+          }
         }
       ],
       "cards": [
         "Colossal Dreadmaw",
         "Grizzly Bears"
       ],
-      "forge_notes": "In the second variant the harness fixes the attacker and blocker declarations for the swapped sides."
+      "forge_notes": "In the second variant the harness fixes the attacker and blocker declarations for the swapped sides.",
+      "detector": {
+        "family": "keyword_combat",
+        "record_kind": "combat",
+        "outcome": "An attacking creature with trample, attacking a player, is blocked by creatures whose remaining toughness sums to less than its power, so its excess combat damage can reach the defending player.",
+        "near_miss": "A damage-step probe fork re-running the same combat with trample stripped from the attacker, so none of its damage reaches the defending player.",
+        "params": {
+          "keyword": "trample"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.19b-1",
@@ -113,25 +126,33 @@
           "label": "no_trample",
           "polarity": "does_not_fire",
           "delta": "A's attacker is Craw Wurm (6/4, no trample) instead of Colossal Dreadmaw.",
-          "expected": "Craw Wurm assigns all 6 damage to Grizzly Bears, which is destroyed. B's life stays 20."
+          "expected": "Craw Wurm assigns all 6 damage to Grizzly Bears, which is destroyed. B's life stays 20.",
+          "operation": "replace_card"
         },
         {
           "label": "toughness_matches_power",
           "polarity": "does_not_fire",
           "delta": "B's blocker is a Colossal Dreadmaw (6 toughness) instead of Grizzly Bears.",
-          "expected": "A's Colossal Dreadmaw assigns all 6 damage to the blocking Colossal Dreadmaw as lethal damage, and none to B (life 20). Both Colossal Dreadmaws are destroyed."
+          "expected": "A's Colossal Dreadmaw assigns all 6 damage to the blocking Colossal Dreadmaw as lethal damage, and none to B (life 20). Both Colossal Dreadmaws are destroyed.",
+          "operation": "replace_card"
         },
         {
           "label": "damage_already_marked",
           "polarity": "fires",
           "delta": "Grizzly Bears already has 1 damage marked, so lethal damage is 1.",
-          "expected": "Grizzly Bears receives 1 damage and is destroyed. B takes 5 damage (life 15)."
+          "expected": "Grizzly Bears receives 1 damage and is destroyed. B takes 5 damage (life 15).",
+          "operation": {
+            "unclassifiable": "marks damage on a creature, which none of the seven operations sets"
+          }
         },
         {
           "label": "two_blockers",
           "polarity": "fires",
           "delta": "B blocks with two Grizzly Bears instead of one.",
-          "expected": "Each Grizzly Bears receives 2 damage and is destroyed. B takes the 2 excess damage (life 18)."
+          "expected": "Each Grizzly Bears receives 2 damage and is destroyed. B takes the 2 excess damage (life 18).",
+          "operation": {
+            "unclassifiable": "adds a permanent and changes the block declaration"
+          }
         }
       ],
       "cards": [
@@ -139,7 +160,17 @@
         "Craw Wurm",
         "Grizzly Bears"
       ],
-      "forge_notes": "The damage assignment must be fixed by the harness. The second Grizzly Bears of the two_blockers variant is a second copy of the same card."
+      "forge_notes": "The damage assignment must be fixed by the harness. The second Grizzly Bears of the two_blockers variant is a second copy of the same card.",
+      "detector": {
+        "family": "keyword_combat",
+        "record_kind": "combat",
+        "outcome": "An attacking creature with trample, attacking a player, is blocked by creatures whose remaining toughness sums to less than its power, and assigns lethal damage to its blockers and the excess to the defending player.",
+        "near_miss": "A damage-step probe fork re-running the same combat with trample stripped from the attacker, so all its damage is assigned to its blockers and the defending player's life does not move.",
+        "params": {
+          "keyword": "trample"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.19c-1",
@@ -195,13 +226,17 @@
           "label": "plain_trample",
           "polarity": "does_not_fire",
           "delta": "A's attacker is Colossal Dreadmaw (6/6, trample but not trample over planeswalkers) instead of Thrasta, and A assigns all 6 damage to Jace Beleren.",
-          "expected": "Jace Beleren is dealt 6 damage and goes to B's graveyard. B's life stays 20: Colossal Dreadmaw cannot assign damage to B."
+          "expected": "Jace Beleren is dealt 6 damage and goes to B's graveyard. B's life stays 20: Colossal Dreadmaw cannot assign damage to B.",
+          "operation": "replace_card"
         },
         {
           "label": "blocked",
           "polarity": "fires",
           "delta": "B blocks Thrasta with Grizzly Bears; A assigns 2 damage to Grizzly Bears, 3 to Jace Beleren and 2 to player B.",
-          "expected": "Grizzly Bears is destroyed. Jace Beleren is dealt 3 damage and goes to B's graveyard. B takes 2 damage (life 18)."
+          "expected": "Grizzly Bears is destroyed. Jace Beleren is dealt 3 damage and goes to B's graveyard. B takes 2 damage (life 18).",
+          "operation": {
+            "unclassifiable": "a different block decision and damage assignment"
+          }
         }
       ],
       "cards": [
@@ -266,7 +301,8 @@
           "label": "no_trample",
           "polarity": "does_not_fire",
           "delta": "A's attacker is Craw Wurm (6/4, no trample) instead of Colossal Dreadmaw.",
-          "expected": "Craw Wurm is blocked and has no blocker, so it deals no combat damage. B's life stays 20. Grizzly Bears is in B's graveyard."
+          "expected": "Craw Wurm is blocked and has no blocker, so it deals no combat damage. B's life stays 20. Grizzly Bears is in B's graveyard.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -338,13 +374,17 @@
           "label": "blocked",
           "polarity": "fires",
           "delta": "B blocks Thrasta with Grizzly Bears; A assigns 2 damage to Grizzly Bears and 5 to player B.",
-          "expected": "Grizzly Bears is destroyed. B takes 5 damage (life 15). Jace Beleren is in B's graveyard."
+          "expected": "Grizzly Bears is destroyed. B takes 5 damage (life 15). Jace Beleren is in B's graveyard.",
+          "operation": {
+            "unclassifiable": "a different block decision and damage assignment"
+          }
         },
         {
           "label": "plain_trample",
           "polarity": "does_not_fire",
           "delta": "A's attacker is Colossal Dreadmaw (6/6, trample but not trample over planeswalkers) instead of Thrasta.",
-          "expected": "Colossal Dreadmaw deals no combat damage to B (life 20) because it can only assign damage to the planeswalker that left the battlefield. Jace Beleren is in B's graveyard."
+          "expected": "Colossal Dreadmaw deals no combat damage to B (life 20) because it can only assign damage to the planeswalker that left the battlefield. Jace Beleren is in B's graveyard.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -415,19 +455,26 @@
           "label": "trample_over_planeswalkers",
           "polarity": "does_not_fire",
           "delta": "A's attacker is Thrasta, Tempest's Roar (7/7, trample over planeswalkers) instead of Craw Wurm.",
-          "expected": "Jace Beleren is in B's graveyard. Thrasta deals all 7 combat damage to B (life 13)."
+          "expected": "Jace Beleren is in B's graveyard. Thrasta deals all 7 combat damage to B (life 13).",
+          "operation": "replace_card"
         },
         {
           "label": "planeswalker_stays",
           "polarity": "fires",
           "delta": "B does not cast Lightning Bolt, and Jace Beleren stays on the battlefield.",
-          "expected": "Craw Wurm deals 6 damage to Jace Beleren, which loses all loyalty and goes to B's graveyard. B's life stays 20: the excess over the loyalty is not dealt to B."
+          "expected": "Craw Wurm deals 6 damage to Jace Beleren, which loses all loyalty and goes to B's graveyard. B's life stays 20: the excess over the loyalty is not dealt to B.",
+          "operation": {
+            "unclassifiable": "a different spell cast by B"
+          }
         },
         {
           "label": "attacks_player",
           "polarity": "other",
           "delta": "A attacks player B instead of Jace Beleren, and B does not cast Lightning Bolt.",
-          "expected": "Craw Wurm deals 6 damage to B (life 14). Jace Beleren stays at 3 loyalty."
+          "expected": "Craw Wurm deals 6 damage to B (life 14). Jace Beleren stays at 3 loyalty.",
+          "operation": {
+            "unclassifiable": "a different attack target and no spell cast"
+          }
         }
       ],
       "cards": [

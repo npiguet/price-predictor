@@ -68,7 +68,10 @@
           "label": "response",
           "polarity": "does_not_fire",
           "delta": "After A passes with Shock on the stack, B responds by casting Shock targeting A, tapping B's Mountain; B passes, then A passes.",
-          "expected": "After both players pass once, only B's Shock (the top object) resolves: A's life is 18, B's Shock is in B's graveyard. A's Shock is still on the stack and Grizzly Bears has no damage; A's Shock resolves only after a second round of passes."
+          "expected": "After both players pass once, only B's Shock (the top object) resolves: A's life is 18, B's Shock is in B's graveyard. A's Shock is still on the stack and Grizzly Bears has no damage; A's Shock resolves only after a second round of passes.",
+          "operation": {
+            "unclassifiable": "B casts an extra spell"
+          }
         }
       ],
       "cards": [
@@ -76,7 +79,10 @@
         "Grizzly Bears",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "Every resolution record is one object resolving off the top of the stack; the record carries no field separating a resolution after both players passed in succession from one after a response, so no condition has a near-miss side."
+      }
     },
     {
       "id": "608.2a-1",
@@ -125,13 +131,17 @@
           "label": "life-lost-in-response",
           "polarity": "does_not_fire",
           "delta": "B responds by casting Shock targeting A, tapping Mountain, before the trigger resolves.",
-          "expected": "A's life is 38 when the trigger would resolve; the condition is false, the trigger is removed from the stack and does nothing; nobody wins and the game continues."
+          "expected": "A's life is 38 when the trigger would resolve; the condition is false, the trigger is removed from the stack and does nothing; nobody wins and the game continues.",
+          "operation": {
+            "unclassifiable": "B casts Shock in response"
+          }
         },
         {
           "label": "never-triggers",
           "polarity": "other",
           "delta": "A starts at 39 life instead of 40 and B casts nothing.",
-          "expected": "The trigger does not go on the stack at all; nobody wins."
+          "expected": "The trigger does not go on the stack at all; nobody wins.",
+          "operation": "life"
         }
       ],
       "cards": [
@@ -193,7 +203,10 @@
           "label": "target-leaves",
           "polarity": "fires",
           "delta": "B responds by casting Unsummon on Grizzly Bears, tapping Island; Unsummon resolves first.",
-          "expected": "Grizzly Bears is in B's hand, so Sorin's Thirst has no legal target: it does not resolve, moves to A's graveyard, and A gains no life (A stays at 20)."
+          "expected": "Grizzly Bears is in B's hand, so Sorin's Thirst has no legal target: it does not resolve, moves to A's graveyard, and A gains no life (A stays at 20).",
+          "operation": {
+            "unclassifiable": "a spell is cast in response"
+          }
         }
       ],
       "cards": [
@@ -203,7 +216,21 @@
         "Sorin's Thirst",
         "Unsummon"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "resolution_outcome",
+        "record_kind": "resolution",
+        "outcome": "A targeted spell or ability with every target illegal on resolution is removed from the stack and does not resolve (outcome fizzled).",
+        "near_miss": "A targeted spell or ability whose targets are still legal on resolution, which resolves.",
+        "params": {
+          "outcome": "fizzled",
+          "near": [
+            "resolved"
+          ],
+          "targeted": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "608.2b-2",
@@ -260,13 +287,19 @@
           "label": "one-target-leaves",
           "polarity": "other",
           "delta": "B responds by casting Unsummon on Llanowar Elves, tapping one Island; Unsummon resolves first.",
-          "expected": "Llanowar Elves is in B's hand. Arc Trail still resolves for its remaining legal target: Grizzly Bears takes 2 damage and moves to B's graveyard; the Elves are unaffected; Arc Trail moves to A's graveyard."
+          "expected": "Llanowar Elves is in B's hand. Arc Trail still resolves for its remaining legal target: Grizzly Bears takes 2 damage and moves to B's graveyard; the Elves are unaffected; Arc Trail moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "spells are cast in response"
+          }
         },
         {
           "label": "both-targets-leave",
           "polarity": "fires",
           "delta": "B responds with both Unsummons, one on each creature, tapping both Islands; both resolve first.",
-          "expected": "Both creatures are in B's hand. Arc Trail has no legal target: it does not resolve and moves to A's graveyard; no damage is dealt."
+          "expected": "Both creatures are in B's hand. Arc Trail has no legal target: it does not resolve and moves to A's graveyard; no damage is dealt.",
+          "operation": {
+            "unclassifiable": "spells are cast in response"
+          }
         }
       ],
       "cards": [
@@ -277,7 +310,21 @@
         "Arc Trail",
         "Unsummon"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "resolution_outcome",
+        "record_kind": "resolution",
+        "outcome": "A spell or ability whose targets are all illegal on resolution does not resolve (outcome fizzled); with only some illegal it resolves for the rest.",
+        "near_miss": "A targeted spell or ability whose targets are still legal on resolution, which resolves.",
+        "params": {
+          "outcome": "fizzled",
+          "near": [
+            "resolved"
+          ],
+          "targeted": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "608.2b-3",
@@ -330,13 +377,17 @@
           "label": "not-blue",
           "polarity": "other",
           "delta": "B's creature is Grizzly Bears (green) instead of Merfolk of the Pearl Trident, and A targets it.",
-          "expected": "Pyroblast resolves (it is not countered or fizzled) but does nothing: Grizzly Bears stays on the battlefield undamaged; Pyroblast moves to A's graveyard."
+          "expected": "Pyroblast resolves (it is not countered or fizzled) but does nothing: Grizzly Bears stays on the battlefield undamaged; Pyroblast moves to A's graveyard.",
+          "operation": "replace_card"
         },
         {
           "label": "target-leaves",
           "polarity": "fires",
           "delta": "B responds by casting Unsummon on Merfolk of the Pearl Trident, tapping Island.",
-          "expected": "Merfolk is in B's hand; Pyroblast's target is illegal, so it fizzles (does not resolve) and moves to A's graveyard."
+          "expected": "Merfolk is in B's hand; Pyroblast's target is illegal, so it fizzles (does not resolve) and moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "a spell is cast in response"
+          }
         }
       ],
       "cards": [
@@ -347,7 +398,21 @@
         "Pyroblast",
         "Unsummon"
       ],
-      "forge_notes": "The not-blue variant needs Grizzly Bears in place of Merfolk on B's battlefield; Island and Unsummon are unused there."
+      "forge_notes": "The not-blue variant needs Grizzly Bears in place of Merfolk on B's battlefield; Island and Unsummon are unused there.",
+      "detector": {
+        "family": "resolution_outcome",
+        "record_kind": "resolution",
+        "outcome": "A targeted spell or ability whose target is illegal on resolution does not resolve (outcome fizzled).",
+        "near_miss": "A targeted spell or ability whose target is still legal on resolution, which resolves.",
+        "params": {
+          "outcome": "fizzled",
+          "near": [
+            "resolved"
+          ],
+          "targeted": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "608.2c-1",
@@ -400,7 +465,10 @@
           "label": "no-clause",
           "polarity": "does_not_fire",
           "delta": "A casts Doom Blade (no regeneration clause) instead of Terror.",
-          "expected": "Doom Blade destroys River Boa but the regeneration shield replaces it: River Boa stays on the battlefield, tapped, with no damage and the shield used up."
+          "expected": "Doom Blade destroys River Boa but the regeneration shield replaces it: River Boa stays on the battlefield, tapped, with no damage and the shield used up.",
+          "operation": {
+            "unclassifiable": "a different spell is cast"
+          }
         }
       ],
       "cards": [
@@ -464,7 +532,10 @@
           "label": "one-at-a-time",
           "polarity": "does_not_fire",
           "delta": "A has two Mountains and two Shocks instead of the Plains and Day of Judgment; A casts one Shock on Blood Artist, then after it resolves a second Shock on Grizzly Bears.",
-          "expected": "Blood Artist dies first and triggers once (B at 19, A at 21); when Grizzly Bears dies afterwards, Blood Artist is gone and does not trigger. One trigger fired in total."
+          "expected": "Blood Artist dies first and triggers once (B at 19, A at 21); when Grizzly Bears dies afterwards, Blood Artist is gone and does not trigger. One trigger fired in total.",
+          "operation": {
+            "unclassifiable": "hand and spells cast change"
+          }
         }
       ],
       "cards": [
@@ -475,7 +546,19 @@
         "Day of Judgment",
         "Shock"
       ],
-      "forge_notes": "The one-at-a-time variant replaces A's lands and hand: Mountain, Mountain on the battlefield and Shock, Shock in hand."
+      "forge_notes": "The one-at-a-time variant replaces A's lands and hand: Mountain, Mountain on the battlefield and Shock, Shock in hand.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "One resolution's effect half holds zone_change events to the graveyard for several objects at once, from a single instruction.",
+        "near_miss": "A resolution that moves objects one at a time (not counted: no API restricts the near miss).",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "graveyard",
+          "min_count": 2
+        },
+        "needs": []
+      }
     },
     {
       "id": "608.2g-1",
@@ -533,7 +616,10 @@
           "label": "nothing-cheaper",
           "polarity": "does_not_fire",
           "delta": "A's library is Serra Angel, then Mountain; no nonland card with lesser mana value exists.",
-          "expected": "No spell is cast: Serra Angel and Mountain are put on the bottom of A's library; Grizzly Bears has no damage; Bloodbraid Elf resolves and enters A's battlefield."
+          "expected": "No spell is cast: Serra Angel and Mountain are put on the bottom of A's library; Grizzly Bears has no damage; Bloodbraid Elf resolves and enters A's battlefield.",
+          "operation": {
+            "unclassifiable": "the library changes"
+          }
         }
       ],
       "cards": [
@@ -544,7 +630,10 @@
         "Grizzly Bears",
         "Serra Angel"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "A spell cast during a resolution is an ordinary cast record; no field says it was cast mid-resolution, so it cannot be told from a cast in response."
+      }
     },
     {
       "id": "608.2h-1",
@@ -599,13 +688,19 @@
           "label": "pumped",
           "polarity": "other",
           "delta": "B responds by casting Giant Growth on Grizzly Bears, tapping Forest; Giant Growth resolves first.",
-          "expected": "Grizzly Bears is a 5/5 when exiled, so its last known power is 5: Grizzly Bears is exiled and B gains 5 life (B at 25)."
+          "expected": "Grizzly Bears is a 5/5 when exiled, so its last known power is 5: Grizzly Bears is exiled and B gains 5 life (B at 25).",
+          "operation": {
+            "unclassifiable": "a spell is cast in response"
+          }
         },
         {
           "label": "target-leaves",
           "polarity": "other",
           "delta": "B responds by casting Unsummon on Grizzly Bears, tapping Island.",
-          "expected": "Grizzly Bears is in B's hand; Swords to Plowshares fizzles, B gains no life (B at 20)."
+          "expected": "Grizzly Bears is in B's hand; Swords to Plowshares fizzles, B gains no life (B at 20).",
+          "operation": {
+            "unclassifiable": "a spell is cast in response"
+          }
         }
       ],
       "cards": [
@@ -673,7 +768,10 @@
           "label": "no-attack",
           "polarity": "does_not_fire",
           "delta": "A does not attack with Grizzly Bears; combat is skipped.",
-          "expected": "A did not attack this turn: Heart-Piercer enters, its raid trigger does not fire, and B stays at 20; Grizzly Bears is still on the battlefield."
+          "expected": "A did not attack this turn: Heart-Piercer enters, its raid trigger does not fire, and B stays at 20; Grizzly Bears is still on the battlefield.",
+          "operation": {
+            "unclassifiable": "the attack decision differs"
+          }
         }
       ],
       "cards": [
@@ -734,7 +832,8 @@
           "label": "green-creature",
           "polarity": "does_not_fire",
           "delta": "B's creature is Grizzly Bears instead of Edgewalker.",
-          "expected": "Grizzly Bears is not black: it stays on the battlefield undamaged; Cleanse moves to A's graveyard."
+          "expected": "Grizzly Bears is not black: it stays on the battlefield undamaged; Cleanse moves to A's graveyard.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -796,7 +895,8 @@
           "label": "green-creature",
           "polarity": "does_not_fire",
           "delta": "B's creature is Grizzly Bears instead of Edgewalker.",
-          "expected": "Grizzly Bears is nonblack: it is destroyed and moves to B's graveyard. One creature died, so Hellfire deals 4 damage to A (A at 16)."
+          "expected": "Grizzly Bears is nonblack: it is destroyed and moves to B's graveyard. One creature died, so Hellfire deals 4 damage to A (A at 16).",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -863,7 +963,10 @@
           "label": "still-creature",
           "polarity": "other",
           "delta": "B does not cast Doom Blade.",
-          "expected": "Heliod stays a 5/6 creature and deals 5 damage to Wall of Tears, which moves to B's graveyard; at end of combat Heliod is returned to A's hand."
+          "expected": "Heliod stays a 5/6 creature and deals 5 damage to Wall of Tears, which moves to B's graveyard; at end of combat Heliod is returned to A's hand.",
+          "operation": {
+            "unclassifiable": "a spell is not cast"
+          }
         }
       ],
       "cards": [
@@ -924,13 +1027,19 @@
           "label": "flashback",
           "polarity": "does_not_fire",
           "delta": "Firebolt starts in A's graveyard instead of A's hand, and A casts it with flashback ({4}{R}), tapping all five Mountains.",
-          "expected": "B takes 2 damage (B at 18) and Firebolt is exiled instead of going to A's graveyard."
+          "expected": "B takes 2 damage (B at 18) and Firebolt is exiled instead of going to A's graveyard.",
+          "operation": {
+            "unclassifiable": "the zone and the cast differ"
+          }
         },
         {
           "label": "ability",
           "polarity": "other",
           "delta": "The object is not a spell: A has an untapped Prodigal Sorcerer (instead of Firebolt) and activates it targeting B.",
-          "expected": "B takes 1 damage (B at 19); the ability is removed from the stack and ceases to exist; Prodigal Sorcerer stays on the battlefield, tapped, and nothing goes to a graveyard."
+          "expected": "B takes 1 damage (B at 19); the ability is removed from the stack and ceases to exist; Prodigal Sorcerer stays on the battlefield, tapped, and nothing goes to a graveyard.",
+          "operation": {
+            "unclassifiable": "the zone and the cast differ"
+          }
         }
       ],
       "cards": [
@@ -938,7 +1047,19 @@
         "Firebolt",
         "Prodigal Sorcerer"
       ],
-      "forge_notes": "The ability variant adds Prodigal Sorcerer (not summoning sick) to A's battlefield and removes Firebolt from the hand."
+      "forge_notes": "The ability variant adds Prodigal Sorcerer (not summoning sick) to A's battlefield and removes Firebolt from the hand.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolving spell is moved from the stack to its owner's graveyard as the last step of its resolution.",
+        "near_miss": "A spell that does not go to the graveyard on resolving (not counted: no API restricts the near miss).",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "graveyard"
+        },
+        "needs": []
+      }
     },
     {
       "id": "608.2p-1",
@@ -991,7 +1112,8 @@
           "label": "not-final-chapter",
           "polarity": "does_not_fire",
           "delta": "History of Benalia starts with 1 lore counter instead of 2.",
-          "expected": "Chapter II resolves: A creates a 2/2 white Knight token with vigilance. Narci's trigger does not fire; life totals stay 20 and 20; History of Benalia stays on the battlefield with 2 lore counters; A draws nothing."
+          "expected": "Chapter II resolves: A creates a 2/2 white Knight token with vigilance. Narci's trigger does not fire; life totals stay 20 and 20; History of Benalia stays on the battlefield with 2 lore counters; A draws nothing.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -999,7 +1121,17 @@
         "History of Benalia",
         "Plains"
       ],
-      "forge_notes": "Forge implements the trigger as Mode$ AbilityResolves with ValidSpellAbility$ Triggered.LastChapter."
+      "forge_notes": "Forge implements the trigger as Mode$ AbilityResolves with ValidSpellAbility$ Triggered.LastChapter.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger whose event is an ability resolving is evaluated after that resolution is complete and fires when the resolved ability matches its condition.",
+        "near_miss": "An ability-resolution trigger evaluated against a resolved ability that does not match its condition does not fire.",
+        "params": {
+          "mode": "AbilityResolves"
+        },
+        "needs": []
+      }
     },
     {
       "id": "608.3a-1",
@@ -1053,7 +1185,10 @@
           "label": "countered",
           "polarity": "does_not_fire",
           "delta": "B responds with Counterspell, tapping both Islands.",
-          "expected": "Grizzly Bears never resolves: it is countered and moves to A's graveyard; nothing enters A's battlefield."
+          "expected": "Grizzly Bears never resolves: it is countered and moves to A's graveyard; nothing enters A's battlefield.",
+          "operation": {
+            "unclassifiable": "a spell is cast in response"
+          }
         }
       ],
       "cards": [
@@ -1062,7 +1197,19 @@
         "Grizzly Bears",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolving permanent spell moves from the stack to the battlefield.",
+        "near_miss": "A permanent spell that leaves the stack another way (not counted: no API restricts the near miss).",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "battlefield"
+        },
+        "needs": []
+      }
     },
     {
       "id": "608.3b-1",
@@ -1117,7 +1264,10 @@
           "label": "target-leaves",
           "polarity": "fires",
           "delta": "B responds by casting Unsummon on Grizzly Bears, tapping Island.",
-          "expected": "Grizzly Bears is in B's hand; Pacifism has an illegal target, does not resolve and is put into A's graveyard; it never enters the battlefield."
+          "expected": "Grizzly Bears is in B's hand; Pacifism has an illegal target, does not resolve and is put into A's graveyard; it never enters the battlefield.",
+          "operation": {
+            "unclassifiable": "a spell is cast in response"
+          }
         }
       ],
       "cards": [
@@ -1127,7 +1277,21 @@
         "Pacifism",
         "Unsummon"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "resolution_outcome",
+        "record_kind": "resolution",
+        "outcome": "An Aura spell (or any targeted spell) whose target is illegal on resolution is removed from the stack without resolving, so it never enters the battlefield.",
+        "near_miss": "A targeted spell whose target is still legal, which resolves.",
+        "params": {
+          "outcome": "fizzled",
+          "near": [
+            "resolved"
+          ],
+          "targeted": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "608.3b-2",
@@ -1183,7 +1347,10 @@
           "label": "target-leaves",
           "polarity": "fires",
           "delta": "B responds by casting Unsummon on A's Grizzly Bears, tapping Island.",
-          "expected": "Grizzly Bears is in A's hand. The bestowed spell does not fizzle: it becomes a creature spell and resolves, so Hopeful Eidolon enters A's battlefield as a 1/1 lifelink creature (not in the graveyard)."
+          "expected": "Grizzly Bears is in A's hand. The bestowed spell does not fizzle: it becomes a creature spell and resolves, so Hopeful Eidolon enters A's battlefield as a 1/1 lifelink creature (not in the graveyard).",
+          "operation": {
+            "unclassifiable": "a spell is cast in response"
+          }
         }
       ],
       "cards": [
@@ -1249,7 +1416,10 @@
           "label": "target-leaves",
           "polarity": "does_not_fire",
           "delta": "B responds by casting Unsummon on A's Grizzly Bears, tapping Island.",
-          "expected": "Grizzly Bears is in A's hand. The mutating spell resolves as a creature spell: Gemrazer enters A's battlefield as an ordinary 4/4 with reach and trample; nothing merged."
+          "expected": "Grizzly Bears is in A's hand. The mutating spell resolves as a creature spell: Gemrazer enters A's battlefield as an ordinary 4/4 with reach and trample; nothing merged.",
+          "operation": {
+            "unclassifiable": "a spell is cast in response"
+          }
         }
       ],
       "cards": [
@@ -1313,7 +1483,10 @@
           "label": "copy-bears",
           "polarity": "does_not_fire",
           "delta": "A chooses to have Clone enter as a copy of Grizzly Bears.",
-          "expected": "A copy of Grizzly Bears is not a land: Clone enters A's battlefield as a 2/2 Grizzly Bears copy."
+          "expected": "A copy of Grizzly Bears is not a land: Clone enters A's battlefield as a 2/2 Grizzly Bears copy.",
+          "operation": {
+            "unclassifiable": "a choice by the player differs"
+          }
         }
       ],
       "cards": [
@@ -1323,7 +1496,19 @@
         "Grizzly Bears",
         "Clone"
       ],
-      "forge_notes": "Forge's Clone replacement effect and Worms' replacement ('Lands can't enter the battlefield') may not combine as the rule describes; verify in the engine."
+      "forge_notes": "Forge's Clone replacement effect and Worms' replacement ('Lands can't enter the battlefield') may not combine as the rule describes; verify in the engine.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolving permanent spell that cannot enter the battlefield is moved from the stack to its owner's graveyard.",
+        "near_miss": "A permanent spell that enters the battlefield (not counted: no API restricts the near miss).",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "graveyard"
+        },
+        "needs": []
+      }
     },
     {
       "id": "608.3f-1",
@@ -1377,7 +1562,10 @@
           "label": "no-copy",
           "polarity": "does_not_fire",
           "delta": "A does not activate Lithoform Engine.",
-          "expected": "A controls one Grizzly Bears (the card) and no token."
+          "expected": "A controls one Grizzly Bears (the card) and no token.",
+          "operation": {
+            "unclassifiable": "an ability activation is removed"
+          }
         }
       ],
       "cards": [
@@ -1434,7 +1622,10 @@
           "label": "hard-cast",
           "polarity": "does_not_fire",
           "delta": "A casts Mardu Scout for its normal mana cost ({R}{R}) instead of dashing it.",
-          "expected": "No delayed trigger is created: Mardu Scout stays on A's battlefield at the end step."
+          "expected": "No delayed trigger is created: Mardu Scout stays on A's battlefield at the end step.",
+          "operation": {
+            "unclassifiable": "a different way of casting"
+          }
         }
       ],
       "cards": [

@@ -60,7 +60,10 @@
           "label": "not_countered",
           "polarity": "does_not_fire",
           "delta": "B holds Counterspell and does not cast it; both players pass and Grizzly Bears resolves.",
-          "expected": "Grizzly Bears resolves and is on A's battlefield. Counterspell is still in B's hand. A's graveyard is empty."
+          "expected": "Grizzly Bears resolves and is on A's battlefield. Counterspell is still in B's hand. A's graveyard is empty.",
+          "operation": {
+            "unclassifiable": "B casting or not casting a response is a different player decision; no fork operation changes it"
+          }
         }
       ],
       "cards": [
@@ -69,7 +72,20 @@
         "Grizzly Bears",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "resolution_outcome",
+        "record_kind": "resolution",
+        "outcome": "A spell or ability on the stack is countered: its stack object's outcome is countered and it never resolves.",
+        "near_miss": "A spell or ability that leaves the stack by resolving.",
+        "params": {
+          "outcome": "countered",
+          "near": [
+            "resolved"
+          ]
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.6a-2",
@@ -123,7 +139,10 @@
           "label": "not_countered",
           "polarity": "does_not_fire",
           "delta": "B does not cast Stifle; both players pass.",
-          "expected": "The ability resolves and deals 1 damage to B, whose life is 19. Prodigal Sorcerer is tapped on A's battlefield. Stifle is still in B's hand."
+          "expected": "The ability resolves and deals 1 damage to B, whose life is 19. Prodigal Sorcerer is tapped on A's battlefield. Stifle is still in B's hand.",
+          "operation": {
+            "unclassifiable": "B casting or not casting a response is a different player decision; no fork operation changes it"
+          }
         }
       ],
       "cards": [
@@ -131,7 +150,20 @@
         "Island",
         "Stifle"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "resolution_outcome",
+        "record_kind": "resolution",
+        "outcome": "A spell or ability on the stack is countered: its stack object's outcome is countered and it never resolves.",
+        "near_miss": "A spell or ability that leaves the stack by resolving.",
+        "params": {
+          "outcome": "countered",
+          "near": [
+            "resolved"
+          ]
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.6b-1",
@@ -187,7 +219,10 @@
           "label": "not_countered",
           "polarity": "other",
           "delta": "B does not cast Counterspell and passes.",
-          "expected": "Shock resolves and deals 2 damage to B, whose life is 18. The first Mountain is tapped as in the base variant."
+          "expected": "Shock resolves and deals 2 damage to B, whose life is 18. The first Mountain is tapped as in the base variant.",
+          "operation": {
+            "unclassifiable": "B casting or not casting a response is a different player decision; no fork operation changes it"
+          }
         }
       ],
       "cards": [
@@ -196,7 +231,10 @@
         "Shock",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "701.6b is the absence of a refund, and the rule has no does_not_fire side: costs stay paid whether or not the spell or ability is countered. A countered object's cost half (outcome countered) shows the costs it paid, but no record field or event shows a cost not coming back; a refund would be an event that never occurs."
+      }
     },
     {
       "id": "701.6b-2",
@@ -252,7 +290,10 @@
           "label": "not_countered",
           "polarity": "other",
           "delta": "B does not cast Counterspell and passes.",
-          "expected": "Fireblast resolves and deals 4 damage to B, whose life is 16. Both Mountains are in A's graveyard as in the base variant."
+          "expected": "Fireblast resolves and deals 4 damage to B, whose life is 16. Both Mountains are in A's graveyard as in the base variant.",
+          "operation": {
+            "unclassifiable": "B casting or not casting a response is a different player decision; no fork operation changes it"
+          }
         }
       ],
       "cards": [
@@ -261,7 +302,10 @@
         "Fireblast",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "701.6b is the absence of a refund, and the rule has no does_not_fire side: costs stay paid whether or not the spell or ability is countered. A countered object's cost half (outcome countered) shows the costs it paid, but no record field or event shows a cost not coming back; a refund would be an event that never occurs."
+      }
     },
     {
       "id": "701.6b-3",
@@ -315,7 +359,10 @@
           "label": "not_countered",
           "polarity": "other",
           "delta": "B does not cast Stifle and passes.",
-          "expected": "The ability resolves and deals 1 damage to B, whose life is 19. Mogg Fanatic is in A's graveyard."
+          "expected": "The ability resolves and deals 1 damage to B, whose life is 19. Mogg Fanatic is in A's graveyard.",
+          "operation": {
+            "unclassifiable": "B casting or not casting a response is a different player decision; no fork operation changes it"
+          }
         }
       ],
       "cards": [
@@ -323,7 +370,10 @@
         "Island",
         "Stifle"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "701.6b is the absence of a refund, and the rule has no does_not_fire side: costs stay paid whether or not the spell or ability is countered. A countered object's cost half (outcome countered) shows the costs it paid, but no record field or event shows a cost not coming back; a refund would be an event that never occurs."
+      }
     }
   ]
 }

@@ -74,7 +74,10 @@
           "label": "piker_undamaged",
           "polarity": "does_not_fire",
           "delta": "Goblin Piker has no damage marked.",
-          "expected": "Goblin King dies in the first check. Goblin Piker (2/1, no damage) stays on the battlefield; the repeated check finds nothing to do."
+          "expected": "Goblin King dies in the first check. Goblin Piker (2/1, no damage) stays on the battlefield; the repeated check finds nothing to do.",
+          "operation": {
+            "unclassifiable": "damage marked on a creature is not a fork-settable fact"
+          }
         }
       ],
       "cards": [
@@ -135,7 +138,10 @@
           "label": "mind_rot",
           "polarity": "does_not_fire",
           "delta": "A's hand holds Mind Rot instead of Wheel of Fortune; A casts Mind Rot targeting A, tapping Swamp and two other lands.",
-          "expected": "Mind Rot makes A discard the two Plains, leaving A's hand empty. Maro is 0/0 at the next check and moves to A's graveyard."
+          "expected": "Mind Rot makes A discard the two Plains, leaving A's hand empty. Maro is 0/0 at the next check and moves to A's graveyard.",
+          "operation": {
+            "unclassifiable": "different spell cast and different hand"
+          }
         }
       ],
       "cards": [
@@ -146,7 +152,10 @@
         "Mind Rot",
         "Plains"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The rule is the absence of a state-based check during a resolution. A resolution record holds a snapshot from before it and the events of it, never a mid-resolution state, so a characteristic that is momentarily 0 or less and restored by the same resolution leaves no field or event."
+      }
     },
     {
       "id": "704.5a-1",
@@ -192,14 +201,25 @@
           "label": "survives",
           "polarity": "does_not_fire",
           "delta": "B has 4 life.",
-          "expected": "B takes 3 damage, has 1 life and the game continues."
+          "expected": "B takes 3 damage, has 1 life and the game continues.",
+          "operation": "life"
         }
       ],
       "cards": [
         "Mountain",
         "Lightning Bolt"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_game_loss",
+        "record_kind": "resolution",
+        "outcome": "A player whose life the resolution brings to 0 or less loses the game in the state-based check.",
+        "near_miss": "A player whose life the resolution lowers stays at 1 or more and does not lose.",
+        "params": {
+          "check": "life_zero"
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.5b-1",
@@ -251,7 +271,10 @@
           "label": "two_cards",
           "polarity": "does_not_fire",
           "delta": "A's library holds two cards.",
-          "expected": "A draws both cards, the library is empty, and the game continues because no draw was attempted from it."
+          "expected": "A draws both cards, the library is empty, and the game continues because no draw was attempted from it.",
+          "operation": {
+            "unclassifiable": "changes a library"
+          }
         }
       ],
       "cards": [
@@ -305,13 +328,24 @@
           "label": "eight",
           "polarity": "does_not_fire",
           "delta": "B has 8 poison counters.",
-          "expected": "B receives 1 poison counter, now has 9, and stays in the game. B's life stays 20."
+          "expected": "B receives 1 poison counter, now has 9, and stays in the game. B's life stays 20.",
+          "operation": "counters"
         }
       ],
       "cards": [
         "Plague Stinger"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_game_loss",
+        "record_kind": "combat",
+        "outcome": "A player whose poison counters, after the record's changes, reach 10 or more loses the game in the state-based check.",
+        "near_miss": "A player who gains poison counters stays below 10 and does not lose.",
+        "params": {
+          "check": "poison_ten"
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.5d-1",
@@ -363,7 +397,10 @@
           "label": "card",
           "polarity": "does_not_fire",
           "delta": "B's Grizzly Bears is a card, not a token.",
-          "expected": "Grizzly Bears is destroyed and stays in B's graveyard."
+          "expected": "Grizzly Bears is destroyed and stays in B's graveyard.",
+          "operation": {
+            "unclassifiable": "token status is not a colour, type, subtype or card swap the fork applies"
+          }
         }
       ],
       "cards": [
@@ -371,7 +408,10 @@
         "Shock",
         "Grizzly Bears"
       ],
-      "forge_notes": "A token copy of a card is the simplest reachable token whose name Forge's cardsfolder knows."
+      "forge_notes": "A token copy of a card is the simplest reachable token whose name Forge's cardsfolder knows.",
+      "detector": {
+        "none": "A token's move to the graveyard may be recorded, but nothing shows it ceasing to exist afterwards; there is no event type for ceasing to exist."
+      }
     },
     {
       "id": "704.5e-1",
@@ -422,7 +462,10 @@
           "label": "real_card",
           "polarity": "does_not_fire",
           "delta": "A's hand holds a second Lightning Bolt instead of Twincast; A casts it targeting B, tapping the other Mountain.",
-          "expected": "B takes 6 damage in total. A's graveyard holds two Lightning Bolt cards, because the second one is a card and not a copy."
+          "expected": "B takes 6 damage in total. A's graveyard holds two Lightning Bolt cards, because the second one is a card and not a copy.",
+          "operation": {
+            "unclassifiable": "different spell cast"
+          }
         }
       ],
       "cards": [
@@ -431,7 +474,10 @@
         "Lightning Bolt",
         "Twincast"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "No record field or event shows a spell copy ceasing to exist; the copy's removal from the stack is not an event."
+      }
     },
     {
       "id": "704.5f-1",
@@ -482,7 +528,8 @@
           "label": "counters",
           "polarity": "does_not_fire",
           "delta": "Drudge Skeletons carries two +1/+1 counters.",
-          "expected": "Drudge Skeletons becomes 1/1 and stays on the battlefield; the regeneration shield is unused."
+          "expected": "Drudge Skeletons becomes 1/1 and stays on the battlefield; the regeneration shield is unused.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -490,7 +537,17 @@
         "Disfigure",
         "Drudge Skeletons"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "A creature at toughness 0 or less moves to its owner's graveyard in the state-based check after a resolution, whatever regeneration shields it has.",
+        "near_miss": "A creature the resolution lowered keeps toughness 1 or more and stays on the battlefield.",
+        "params": {
+          "check": "toughness_zero"
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.5g-1",
@@ -541,13 +598,17 @@
           "label": "shield",
           "polarity": "other",
           "delta": "In response to Shock, B pays B from Swamp to regenerate Drudge Skeletons.",
-          "expected": "Drudge Skeletons is destroyed in the check but regeneration replaces it: it becomes tapped, has no damage and stays on the battlefield."
+          "expected": "Drudge Skeletons is destroyed in the check but regeneration replaces it: it becomes tapped, has no damage and stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "a different choice by a player: activating regeneration in response"
+          }
         },
         {
           "label": "tougher",
           "polarity": "does_not_fire",
           "delta": "Drudge Skeletons carries two +1/+1 counters and B does not regenerate.",
-          "expected": "Drudge Skeletons (3/3) has 2 damage marked and stays on the battlefield."
+          "expected": "Drudge Skeletons (3/3) has 2 damage marked and stays on the battlefield.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -556,7 +617,17 @@
         "Shock",
         "Drudge Skeletons"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "A creature the resolution dealt damage to, with damage marked reaching its toughness, moves to its owner's graveyard in the state-based check unless a replacement effect intervenes.",
+        "near_miss": "A damaged creature whose marked damage is below its toughness stays on the battlefield.",
+        "params": {
+          "check": "lethal_damage"
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.5h-1",
@@ -605,7 +676,8 @@
           "label": "plain_blocker",
           "polarity": "does_not_fire",
           "delta": "B blocks with Fugitive Wizard instead of Typhoid Rats.",
-          "expected": "Hill Giant has 1 damage marked and stays on the battlefield; Fugitive Wizard takes 3 and dies."
+          "expected": "Hill Giant has 1 damage marked and stays on the battlefield; Fugitive Wizard takes 3 and dies.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -613,7 +685,17 @@
         "Typhoid Rats",
         "Fugitive Wizard"
       ],
-      "forge_notes": "B's battlefield in the second variant lists Fugitive Wizard in place of Typhoid Rats."
+      "forge_notes": "B's battlefield in the second variant lists Fugitive Wizard in place of Typhoid Rats.",
+      "detector": {
+        "family": "keyword_combat",
+        "record_kind": "combat",
+        "outcome": "A creature dealt combat damage by a deathtouch source is destroyed in the state-based check, whatever the amount, in a real combat where the keyword's effect is observable.",
+        "near_miss": "A damage-step probe re-runs the combat with deathtouch stripped from the source, and a creature it dealt less than lethal damage survives.",
+        "params": {
+          "keyword": "deathtouch"
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.5i-1",
@@ -667,7 +749,8 @@
           "label": "four",
           "polarity": "does_not_fire",
           "delta": "Jace Beleren has 4 loyalty.",
-          "expected": "Jace Beleren keeps 1 loyalty counter and stays on the battlefield."
+          "expected": "Jace Beleren keeps 1 loyalty counter and stays on the battlefield.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -675,7 +758,17 @@
         "Lightning Bolt",
         "Jace Beleren"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "A planeswalker whose loyalty counters, after the resolution, number 0 moves to its owner's graveyard in the state-based check.",
+        "near_miss": "A planeswalker whose loyalty the resolution lowered keeps 1 or more and stays on the battlefield.",
+        "params": {
+          "check": "loyalty_zero"
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.5j-1",
@@ -723,14 +816,27 @@
           "label": "other_controller",
           "polarity": "does_not_fire",
           "delta": "The Isamaru already on the battlefield is controlled by B.",
-          "expected": "Both Isamaru stay on the battlefield, one under each player's control, and the graveyards are empty."
+          "expected": "Both Isamaru stay on the battlefield, one under each player's control, and the graveyards are empty.",
+          "operation": {
+            "unclassifiable": "changes which player controls a permanent"
+          }
         }
       ],
       "cards": [
         "Plains",
         "Isamaru, Hound of Konda"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "Two or more legendary permanents with one name under one controller leave one of them in the graveyard in the state-based check.",
+        "near_miss": "A legendary permanent entering with no same-named twin under its controller stays.",
+        "params": {
+          "check": "legend_rule"
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.5k-1",
@@ -779,7 +885,10 @@
           "label": "one_world",
           "polarity": "does_not_fire",
           "delta": "A's hand holds Glorious Anthem instead of the second Concordant Crossroads; A casts it tapping Forest and two Plains.",
-          "expected": "Both permanents stay on the battlefield, because Glorious Anthem is not a world permanent."
+          "expected": "Both permanents stay on the battlefield, because Glorious Anthem is not a world permanent.",
+          "operation": {
+            "unclassifiable": "different spell cast"
+          }
         }
       ],
       "cards": [
@@ -788,7 +897,17 @@
         "Concordant Crossroads",
         "Glorious Anthem"
       ],
-      "forge_notes": "The tie branch (two world permanents with the same timestamp) is not illustrated."
+      "forge_notes": "The tie branch (two world permanents with the same timestamp) is not illustrated.",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "Two or more world permanents on the battlefield leave only the newest in the state-based check.",
+        "near_miss": "A world permanent entering alone stays on the battlefield.",
+        "params": {
+          "check": "world_rule"
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.5m-1",
@@ -842,7 +961,10 @@
           "label": "red",
           "polarity": "does_not_fire",
           "delta": "B chooses red.",
-          "expected": "Grizzly Bears has protection from red; Pacifism stays attached and Grizzly Bears still cannot attack or block."
+          "expected": "Grizzly Bears has protection from red; Pacifism stays attached and Grizzly Bears still cannot attack or block.",
+          "operation": {
+            "unclassifiable": "a different choice by a player"
+          }
         }
       ],
       "cards": [
@@ -851,7 +973,17 @@
         "Plains",
         "Gods Willing"
       ],
-      "forge_notes": "Gods Willing's scry is inert for this scenario."
+      "forge_notes": "Gods Willing's scry is inert for this scenario.",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "An Aura whose host left the battlefield or became illegal moves to its owner's graveyard in the state-based check.",
+        "near_miss": "An Aura whose host the record touched but which stayed legal remains on the battlefield.",
+        "params": {
+          "check": "aura_illegal"
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.5m-2",
@@ -904,7 +1036,8 @@
           "label": "survives",
           "polarity": "does_not_fire",
           "delta": "The enchanted creature is Centaur Courser (3/3) instead of Grizzly Bears.",
-          "expected": "Centaur Courser has 2 damage marked and stays on the battlefield with Pacifism attached."
+          "expected": "Centaur Courser has 2 damage marked and stays on the battlefield with Pacifism attached.",
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -914,7 +1047,17 @@
         "Centaur Courser",
         "Pacifism"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "An Aura whose host left the battlefield or became illegal moves to its owner's graveyard in the state-based check.",
+        "near_miss": "An Aura whose host the record touched but which stayed legal remains on the battlefield.",
+        "params": {
+          "check": "aura_illegal"
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.5n-1",
@@ -969,7 +1112,10 @@
           "label": "pacifism",
           "polarity": "does_not_fire",
           "delta": "A's hand holds Pacifism instead of Song of the Dryads; A casts it targeting Grizzly Bears, tapping two Plains.",
-          "expected": "Grizzly Bears is still a creature, so Bonesplitter stays attached and Grizzly Bears is a 4/2 that cannot attack or block."
+          "expected": "Grizzly Bears is still a creature, so Bonesplitter stays attached and Grizzly Bears is a 4/2 that cannot attack or block.",
+          "operation": {
+            "unclassifiable": "different spell cast"
+          }
         }
       ],
       "cards": [
@@ -1034,7 +1180,10 @@
           "label": "no_march",
           "polarity": "does_not_fire",
           "delta": "A passes priority without casting March of the Machines.",
-          "expected": "Bonesplitter stays attached and Grizzly Bears is a 4/2."
+          "expected": "Bonesplitter stays attached and Grizzly Bears is a 4/2.",
+          "operation": {
+            "unclassifiable": "a different decision by a player: not casting a spell"
+          }
         }
       ],
       "cards": [
@@ -1098,7 +1247,8 @@
           "label": "only_minus",
           "polarity": "does_not_fire",
           "delta": "Grizzly Bears has no +1/+1 counters.",
-          "expected": "Grizzly Bears keeps its one -1/-1 counter and is a 1/1."
+          "expected": "Grizzly Bears keeps its one -1/-1 counter and is a 1/1.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -1154,7 +1304,8 @@
           "label": "below_cap",
           "polarity": "does_not_fire",
           "delta": "Rasputin has 5 dream counters.",
-          "expected": "Rasputin ends with 6 dream counters; nothing is removed."
+          "expected": "Rasputin ends with 6 dream counters; nothing is removed.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -1208,7 +1359,8 @@
           "label": "middle_chapter",
           "polarity": "does_not_fire",
           "delta": "History of Benalia has 1 lore counter.",
-          "expected": "Chapter II triggers and creates a 2/2 Knight token; History of Benalia stays with 2 lore counters."
+          "expected": "Chapter II triggers and creates a 2/2 Knight token; History of Benalia stays with 2 lore counters.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -1267,7 +1419,10 @@
           "label": "other_creature",
           "polarity": "does_not_fire",
           "delta": "Royal Treatment targets Centaur Courser.",
-          "expected": "Each creature has one Royal Role: Grizzly Bears is a 3/3 and Centaur Courser is a 4/4; no Role leaves the battlefield."
+          "expected": "Each creature has one Royal Role: Grizzly Bears is a 3/3 and Centaur Courser is a 4/4; no Role leaves the battlefield.",
+          "operation": {
+            "unclassifiable": "different target"
+          }
         }
       ],
       "cards": [
@@ -1323,13 +1478,19 @@
           "label": "has_speed",
           "polarity": "other",
           "delta": "A already has speed 3.",
-          "expected": "A's speed stays 3."
+          "expected": "A's speed stays 3.",
+          "operation": {
+            "unclassifiable": "sets a player's speed, which no operation changes"
+          }
         },
         {
           "label": "no_engine",
           "polarity": "does_not_fire",
           "delta": "A's hand holds Goblin Piker instead of Burnout Bashtronaut; A casts it tapping two Mountains.",
-          "expected": "A has no speed."
+          "expected": "A has no speed.",
+          "operation": {
+            "unclassifiable": "different spell cast and different hand"
+          }
         }
       ],
       "cards": [
@@ -1393,7 +1554,10 @@
           "label": "no_mirror",
           "polarity": "does_not_fire",
           "delta": "Lich's Mirror is not on the battlefield.",
-          "expected": "A has -1 life and attempted a draw from an empty library; A loses the game."
+          "expected": "A has -1 life and attempted a draw from an empty library; A loses the game.",
+          "operation": {
+            "unclassifiable": "removes a permanent"
+          }
         }
       ],
       "cards": [
@@ -1402,7 +1566,18 @@
         "Night's Whisper",
         "Plains"
       ],
-      "forge_notes": "Lich's Mirror's library must hold at least 7 cards after it shuffles: the setup has 9 cards owned by A in library, hand and battlefield."
+      "forge_notes": "Lich's Mirror's library must hold at least 7 cards after it shuffles: the setup has 9 cards owned by A in library, hand and battlefield.",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A player's game loss proposed by the state-based check meets a replacement effect and is replaced; one replacement covers every loss the same check proposes for that player.",
+        "near_miss": "A game-loss event meets a replacement effect and is not replaced, so the player loses the game.",
+        "params": {
+          "event": "player_lost",
+          "result": "replaced"
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.8-1",
@@ -1458,7 +1633,8 @@
           "label": "no_counter",
           "polarity": "fires",
           "delta": "Young Wolf has no +1/+1 counter.",
-          "expected": "Young Wolf dies and its last known information shows no +1/+1 counter, so undying triggers; Young Wolf returns to the battlefield with a +1/+1 counter as a 2/2."
+          "expected": "Young Wolf dies and its last known information shows no +1/+1 counter, so undying triggers; Young Wolf returns to the battlefield with a +1/+1 counter as a 2/2.",
+          "operation": "counters"
         }
       ],
       "cards": [
@@ -1514,7 +1690,10 @@
           "label": "middle_room",
           "polarity": "does_not_fire",
           "delta": "A's venture marker starts on Goblin Lair.",
-          "expected": "The marker moves to Dark Pool: B loses 1 life (19) and A gains 1 life (21). Lost Mine of Phandelver stays in the command zone."
+          "expected": "The marker moves to Dark Pool: B loses 1 life (19) and A gains 1 life (21). Lost Mine of Phandelver stays in the command zone.",
+          "operation": {
+            "unclassifiable": "sets a dungeon venture marker, which no operation changes"
+          }
         }
       ],
       "cards": [
@@ -1578,7 +1757,10 @@
           "label": "trigger_resolves",
           "polarity": "does_not_fire",
           "delta": "A does not cast Stifle; both players pass, the defeat trigger resolves and A casts the Siege transformed.",
-          "expected": "Invasion of Zendikar stays on the battlefield with defense 0 while its trigger is on the stack, then is exiled and cast transformed; Awakened Skyclave enters A's battlefield and A's graveyard holds only Lightning Bolt."
+          "expected": "Invasion of Zendikar stays on the battlefield with defense 0 while its trigger is on the stack, then is exiled and cast transformed; Awakened Skyclave enters A's battlefield and A's graveyard holds only Lightning Bolt.",
+          "operation": {
+            "unclassifiable": "a different decision by a player: not casting Stifle"
+          }
         }
       ],
       "cards": [
@@ -1588,7 +1770,17 @@
         "Lightning Bolt",
         "Stifle"
       ],
-      "forge_notes": "Damage to a battle removes defense counters (310.6). Forge may implement the Siege's intrinsic defeat trigger engine-side rather than in the card script."
+      "forge_notes": "Damage to a battle removes defense counters (310.6). Forge may implement the Siege's intrinsic defeat trigger engine-side rather than in the card script.",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "A battle (Siege) whose defense counters number 0 moves to its owner's graveyard in the state-based check.",
+        "near_miss": "A battle whose defense the resolution lowered keeps 1 or more and stays on the battlefield.",
+        "params": {
+          "check": "defense_zero"
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.5y-1",
@@ -1653,7 +1845,10 @@
           "label": "stolen_land",
           "polarity": "does_not_fire",
           "delta": "Confiscate targets A's Mountain instead of Invasion of Zendikar.",
-          "expected": "A still controls Invasion of Zendikar and B remains its protector. Grizzly Bears can legally attack A but not Invasion of Zendikar."
+          "expected": "A still controls Invasion of Zendikar and B remains its protector. Grizzly Bears can legally attack A but not Invasion of Zendikar.",
+          "operation": {
+            "unclassifiable": "different target"
+          }
         }
       ],
       "cards": [
