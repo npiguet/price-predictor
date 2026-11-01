@@ -49,7 +49,10 @@ THE MOST IMPORTANT RULE: a detector describes the rule's condition as it would s
 Facts earlier passes got wrong, check them yourself where they matter:
 - Before declaring that no event shows an outcome, look it up in EVENT_PARAMS: player_won and player_lost exist, token_created, delayed_trigger_created, counter_change and many more.
 - A gen-2 damage_dealt event names its source in the "cause" parameter.
-- A keyword-derived trigger (Undying, Persist, Afflict ...) is stored in the sidecar as its bare keyword, with no Mode$, so trigger_mode, which reads Mode$, cannot match it.
+- A keyword-derived trigger (Undying, Persist, Afflict ...) acts through the keyword's own line, which carries no Mode$: declare trigger_mode with "keyword" (and no mode). outcome_event, verdict_bit and rewrite_event also take "keyword" for an ability acting through a keyword's line. Shared reads live in src/effects/domain/rule_detectors/acting_line.py.
+- A requested parameter may exist under another name now: verdict_bit's "source_keyword" (the candidate's card prints the keyword) and "cost_part" (a Cost$ part such as Sac<…>, PayLife<…>). No parameter name may contain "card" (the registry refuses it).
+- A resolution's cost half holds no events (only payload.costs: mana, tapped, life, sacrificed, discarded, exiled); a cost that puts or removes counters, such as a loyalty cost, shows on no gen-2 record.
+- A continuous record has no refs.source; its snapshot omits the static from its host's printed lines.
 - sba_zone_move sees one resolution's effect half: the snapshot before it and its events. It cannot tell which pass of the state-based check a death came from.
 - outcome_event's near miss is counted only with "api" set (the acting line's script API type, e.g. ChangeZone, Token, Destroy); without it the detector tags only the fires side, which is acceptable when no clean near miss exists.
 
