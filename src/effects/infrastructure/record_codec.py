@@ -52,6 +52,7 @@ from effects.domain.records import (
     TurnActionPayload,
 )
 from effects.domain.state_snapshot import (
+    CardLine,
     CombatStatus,
     EntityState,
     GlobalState,
@@ -153,6 +154,52 @@ def _pt_from_json(data: dict) -> PowerToughness:
     )
 
 
+def _pt_boosts_to_json(pt: PowerToughness) -> dict:
+    """Gen-3's ``pt_boosts``; ``base_pt`` is ``pt.base`` written alone."""
+    return {"temporary": list(pt.boosts), "counters": list(pt.counters)}
+
+
+def _gen3_pt_from_json(data: dict) -> PowerToughness | None:
+    """Gen-3's ``base_pt`` and ``pt_boosts``, both null on a non-creature."""
+    base = data.get("base_pt")
+    if base is None:
+        return None
+    boosts = data.get("pt_boosts") or {}
+    return PowerToughness(
+        base=tuple(base),
+        boosts=tuple(boosts.get("temporary", (0, 0))),
+        counters=tuple(boosts.get("counters", (0, 0))),
+    )
+
+
+def _line_to_json(line: CardLine) -> dict:
+    """One gen-3 line; the optional members only where set, as Java writes them."""
+    out: dict = {"keys": _keys_to_json(line.keys), "kind": line.kind,
+                 "granted": line.granted}
+    if line.active is not None:
+        out["active"] = line.active
+    if line.cast_with is not None:
+        out["cast_with"] = line.cast_with
+    if line.chosen is not None:
+        out["chosen"] = list(line.chosen)
+    if line.fragment is not None:
+        out["fragment"] = line.fragment
+    return out
+
+
+def _line_from_json(data: dict) -> CardLine:
+    chosen = data.get("chosen")
+    return CardLine(
+        keys=_keys_from_json(data.get("keys")),
+        kind=data["kind"],
+        granted=data.get("granted", False),
+        active=data.get("active"),
+        cast_with=data.get("cast_with"),
+        chosen=tuple(chosen) if chosen is not None else None,
+        fragment=data.get("fragment"),
+    )
+
+
 def _combat_status_to_json(combat: CombatStatus) -> dict:
     return {
         "attacking": combat.attacking,
@@ -202,7 +249,9 @@ def _stack_extras_from_json(data: dict) -> StackExtras:
 
 
 def _entity_to_json(entity: EntityState) -> dict:
-    return {
+    """One entity in the shape it was read in: gen-3 (``lines`` set) as the
+    gen-3 collector writes it, else gen-2's, byte for byte."""
+    head = {
         "id": entity.id, "name": entity.name, "zone": entity.zone,
         "controller": entity.controller, "face": entity.face,
         "copy_source": entity.copy_source,
@@ -210,20 +259,55 @@ def _entity_to_json(entity: EntityState) -> dict:
         "types": list(entity.types), "subtypes": list(entity.subtypes),
         "supertypes": list(entity.supertypes), "colors": list(entity.colors),
         "mana_value": entity.mana_value,
-        "pt": _optional(_pt_to_json, entity.pt),
+    }
+    status = {
         "tapped": entity.tapped, "sick": entity.sick, "damage": entity.damage,
         "counters": dict(entity.counters),
         "combat": _optional(_combat_status_to_json, entity.combat),
         "attached_to": entity.attached_to,
         "face_down": entity.face_down,
+    }
+    stack_extras = _optional(_stack_extras_to_json, entity.stack_extras)
+    if entity.lines is not None:
+        pt = entity.pt
+        return {
+            **head,
+            "base_pt": list(pt.base) if pt is not None else None,
+            "pt_boosts": _pt_boosts_to_json(pt) if pt is not None else None,
+            **status,
+            "granted_temporary": _granted_temporary_to_json(entity.granted_temporary),
+            "lines": [_line_to_json(line) for line in entity.lines],
+            "stack_extras": stack_extras,
+        }
+    return {
+        **head,
+        "pt": _optional(_pt_to_json, entity.pt),
+        **status,
         "granted_attached": _keys_to_json(entity.granted_attached),
         "granted_temporary": _granted_temporary_to_json(entity.granted_temporary),
         "printed": _keys_to_json(entity.printed),
-        "stack_extras": _optional(_stack_extras_to_json, entity.stack_extras),
+        "stack_extras": stack_extras,
     }
 
 
 def _entity_from_json(data: dict) -> EntityState:
+    """One entity of either shape; a ``lines`` member makes it gen-3, whose
+    ``printed`` :class:`EntityState` derives from the lines."""
+    lines = data.get("lines")
+    if lines is not None:
+        return _entity(
+            data, pt=_gen3_pt_from_json(data),
+            lines=tuple(_line_from_json(line) for line in lines),
+        )
+    return _entity(
+        data, pt=_optional(_pt_from_json, data.get("pt")),
+        granted_attached=_keys_from_json(data.get("granted_attached")),
+        printed=_keys_from_json(data.get("printed")),
+    )
+
+
+def _entity(data: dict, **shaped) -> EntityState:
+    """The members both entity shapes share, plus the ``shaped`` ones."""
     return EntityState(
         id=data["id"], name=data["name"], zone=data["zone"],
         controller=data["controller"], face=data.get("face", 0),
@@ -234,18 +318,16 @@ def _entity_from_json(data: dict) -> EntityState:
         supertypes=tuple(data.get("supertypes", ())),
         colors=tuple(data.get("colors", ())),
         mana_value=data.get("mana_value", 0),
-        pt=_optional(_pt_from_json, data.get("pt")),
         tapped=data.get("tapped", False), sick=data.get("sick", False),
         damage=data.get("damage", 0), counters=dict(data.get("counters", {})),
         combat=_optional(_combat_status_from_json, data.get("combat")),
         attached_to=data.get("attached_to"),
         face_down=data.get("face_down", False),
-        granted_attached=_keys_from_json(data.get("granted_attached")),
         granted_temporary=_granted_temporary_from_json(
             data.get("granted_temporary") or {}
         ),
-        printed=_keys_from_json(data.get("printed")),
         stack_extras=_optional(_stack_extras_from_json, data.get("stack_extras")),
+        **shaped,
     )
 
 

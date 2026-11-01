@@ -5,6 +5,13 @@ Stored as data and tensorized at training time by
 change rather than a re-collection. Controllers are absolute player ids — mine
 and opponent derive from the record's ``actor_player`` — and an absent
 inclusion tier means uncollected, not empty.
+
+One :class:`EntityState` reads both entity shapes. A gen-2 card slot lists
+its keys in ``printed`` and ``granted_attached`` and its power and toughness
+in ``pt``; a gen-3 one lists ``lines`` (:class:`CardLine`), ``base_pt`` and
+``pt_boosts``. ``EntityState.__post_init__`` and
+:attr:`EntityState.ability_keys` hold the one mapping from a gen-3 entity onto
+what the gen-2 readers read, so every reader works on both shapes.
 """
 
 from __future__ import annotations
@@ -13,6 +20,7 @@ from dataclasses import dataclass, field, replace
 from enum import IntEnum, StrEnum
 
 from effects.domain.event_schema import Event
+from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey
 
 
@@ -102,7 +110,11 @@ class PowerToughness:
     """Power and toughness decomposed into the three sources that set it.
 
     Kept separate because a boost and a counter are different effects with
-    the same total.
+    the same total. A gen-2 entity writes the three as ``pt`` (``base`` the
+    printed base); a gen-3 one as ``base_pt`` (the base a layer-7b setting
+    effect leaves, Ensoul Artifact's 5/5) and ``pt_boosts`` ``{temporary,
+    counters}``, read into ``base``, ``boosts`` and ``counters``. On both the
+    three sum to the net power and toughness.
     """
 
     base: tuple[int, int]
@@ -133,9 +145,14 @@ class GrantedTemporary:
     """What the timestamped change tables report for one entity.
 
     Provenance keys where a grant resolves to a printed line, bare keywords
-    where it does not ("gains flying until end of turn"). Separate from
-    ``granted_attached`` because temporary grants ride the overlay rather than
-    the ability tokens, and gate 2 strips a keyword from whichever carries it.
+    where it does not ("gains flying until end of turn"). Separate from the
+    ability tokens because temporary grants ride the overlay rather than the
+    tokens, and gate 2 strips a keyword from whichever carries it.
+
+    ``keywords`` is every keyword the card has now, printed ones included, on
+    gen-2 and gen-3 alike: the collector writes the card's whole keyword list.
+    ``abilities`` is the spell and activated abilities a layer-6 change
+    granted.
     """
 
     keywords: tuple[str, ...] = ()
@@ -157,6 +174,81 @@ def normalize_counter_type(raw: str) -> str:
         .replace("/", "")
         .upper()
     )
+
+
+class LineKind(StrEnum):
+    """What a gen-3 card line is, in the collector's spelling.
+
+    A line keeps its kind as the string the record carries, as an entity keeps
+    its zone; the enum is what code compares it against.
+    """
+
+    SPELL = "spell"
+    ACTIVATED = "activated"
+    TRIGGER = "trigger"
+    STATIC = "static"
+    REPLACEMENT = "replacement"
+    KEYWORD = "keyword"
+
+
+@dataclass(frozen=True, slots=True)
+class CardLine:
+    """One line of a gen-3 card slot: a trait the card carries now.
+
+    Read off Forge's live trait lists, so a creature that lost all its
+    abilities lists none and an anthem's grant is listed on the creature it
+    reaches. A face not up (a face-down card's real face, a double-faced
+    card's other face) lists its printed lines with ``active = False``.
+    """
+
+    #: Zero or one provenance key: none where the line resolves to no printed
+    #: line, such as a keyword a resolved effect granted (read by its
+    #: ``fragment``). A granted keyword's key names the static that granted it.
+    keys: tuple[ProvenanceKey, ...]
+    kind: str
+    #: The line is not printed on this card: a static's, an attachment's, an
+    #: effect's, an emblem's or a splice's.
+    granted: bool
+    #: Forge's answer to whether a static's condition holds; False on every
+    #: line of a face not up; None on any other line.
+    active: bool | None = None
+    #: Keyword lines of a card cast with them: how many times the spell paid
+    #: the line's cost (1 for an alternative cost or kicker, the count for
+    #: multikicker).
+    cast_with: int | None = None
+    #: The ``Choices$`` positions a modal ability on the stack chose, in chain order.
+    chosen: tuple[int, ...] | None = None
+    #: A keyword line's own fragment as Forge writes it (``Ward:2``,
+    #: ``Protection:Goblin``).
+    fragment: str | None = None
+
+    @property
+    def in_force(self) -> bool:
+        """Whether the line applies now: neither an unmet static nor a line
+        of a face not up."""
+        return self.active is not False
+
+    @property
+    def keyword(self) -> str | None:
+        """A keyword line's keyword in the package's spelling (``ward``,
+        ``protection``, ``first_strike``); None on any other line."""
+        if self.kind != LineKind.KEYWORD or not self.fragment:
+            return None
+        return normalize_keyword(self.fragment)
+
+
+def printed_keys_of(lines: tuple[CardLine, ...]) -> tuple[ProvenanceKey, ...]:
+    """A gen-3 entity's ``printed``: the keys of the lines printed on it.
+
+    Every line not ``granted``, in force or not, each key once in line order.
+    The keys name the card's own script, which is what ``printed``'s readers
+    look up: the host of a continuous record, a card's script file.
+    """
+    return _unique_keys(line for line in lines if not line.granted)
+
+
+def _unique_keys(lines) -> tuple[ProvenanceKey, ...]:
+    return tuple(dict.fromkeys(key for line in lines for key in line.keys))
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,21 +294,60 @@ class EntityState:
     attached_to: str | None = None
     face_down: bool = False
 
+    #: Gen-2 only: the spell abilities of the cards attached to this one. A
+    #: gen-3 entity lists its grants among its ``lines`` and reads ``()``.
     granted_attached: tuple[ProvenanceKey, ...] = ()
     granted_temporary: GrantedTemporary = field(default_factory=GrantedTemporary)
 
-    #: The entity's own printed lines, as keys into its sidecar.
+    #: The entity's own printed lines, as keys into its sidecar. On a gen-3
+    #: entity derived from ``lines`` (:func:`printed_keys_of`), replacing
+    #: whatever was passed, so an edit of the lines carries through.
     printed: tuple[ProvenanceKey, ...] = ()
 
     stack_extras: StackExtras | None = None
 
+    #: Gen-3: every line the card carries now (FR-021). None on a gen-1 or
+    #: gen-2 entity, which wrote ``printed`` instead; this is what tells the
+    #: two shapes apart, in memory and on the wire.
+    lines: tuple[CardLine, ...] | None = None
+
+    def __post_init__(self) -> None:
+        if self.lines is not None:
+            object.__setattr__(self, "printed", printed_keys_of(self.lines))
+            object.__setattr__(self, "granted_attached", ())
+
     @property
     def ability_keys(self) -> tuple[ProvenanceKey, ...]:
-        """The entity's ability tokens: printed and attachment-granted lines.
+        """The entity's ability tokens.
 
-        Temporary grants are not among them: they ride the overlay (FR-073).
+        Gen-2: the printed and attachment-granted lines. Gen-3: the key of
+        every line in force (:attr:`CardLine.in_force`), printed or granted,
+        each once in line order, so an unmet static and a face not up give no
+        token.
+
+        Temporary grants are not among them on either: they ride the overlay
+        (FR-073), so a gen-3 key ``granted_temporary.abilities`` also lists is
+        left to the overlay.
         """
-        return (*self.printed, *self.granted_attached)
+        if self.lines is None:
+            return (*self.printed, *self.granted_attached)
+        overlay = set(self.granted_temporary.abilities)
+        in_force = _unique_keys(line for line in self.lines if line.in_force)
+        return tuple(key for key in in_force if key not in overlay)
+
+    @property
+    def line_keys(self) -> tuple[ProvenanceKey, ...]:
+        """Every key the entity's lines name, in force or not: gen-2's printed
+        and attached keys, or every gen-3 line's."""
+        if self.lines is None:
+            return (*self.printed, *self.granted_attached)
+        return _unique_keys(self.lines)
+
+    @property
+    def keyword_lines(self) -> tuple[CardLine, ...]:
+        """A gen-3 entity's keyword lines; none on gen-2, whose keywords are
+        ``granted_temporary.keywords`` alone."""
+        return tuple(line for line in self.lines or () if line.kind == LineKind.KEYWORD)
 
     @property
     def power(self) -> int:

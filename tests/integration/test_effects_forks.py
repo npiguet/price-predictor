@@ -207,8 +207,15 @@ def test_the_probed_creature_actually_lost_the_keyword(tmp_path: Path) -> None:
         )
         if carrier is None:
             continue
+        assert carrier.lines is not None, (
+            f"{probe.record_id}: {carrier.name} was not written in the gen-3 shape"
+        )
         checked += 1
-        assert probe.payload.probed_keyword not in carrier.granted_temporary.keywords, (
+        # Both places a keyword shows: its keyword line, and the overlay's
+        # list of every keyword the card has.
+        lines = {line.keyword for line in carrier.keyword_lines if line.in_force}
+        overlay = set(carrier.granted_temporary.keywords)
+        assert probe.payload.probed_keyword not in lines | overlay, (
             f"{probe.payload.probed_keyword} survived the strip on "
             f"{carrier.name}"
         )

@@ -39,6 +39,7 @@ from effects.domain.records import (
     TurnActionSubkind,
 )
 from effects.domain.state_snapshot import (
+    CardLine,
     CombatStatus,
     EntityState,
     GlobalState,
@@ -62,7 +63,7 @@ from effects.infrastructure.shard_io import (
     read_shard,
     write_shard,
 )
-from tests.unit.effects.builders import make_record
+from tests.unit.effects.builders import java_golden_records, make_record
 
 _KEY = ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "trigger", 0)
 _DONOR = ProvenanceKey("cardsfolder/a/anthem.txt", 0, "static", 1)
@@ -747,3 +748,94 @@ class TestTheGen2Fixture:
         """Not the raw line: parsing normalizes keyword spellings by design."""
         for record in read_shard(_GEN2_FIXTURE):
             assert record_from_dict(record_to_dict(record)) == record
+
+    def test_every_entity_reads_and_writes_in_the_gen2_shape(self):
+        """Gen-2 entities keep reading exactly as before (T074): no lines, and
+        written back with the members they were read with, in their order."""
+        for line in iter_shard_lines(_GEN2_FIXTURE):
+            raw = parse_record_line(line)
+            written = record_to_dict(record_from_dict(raw))
+            for before, after in zip(raw["state"]["entities"], written["state"]["entities"],
+                                     strict=True):
+                assert list(after) == list(before)
+                assert {k: v for k, v in after.items() if k != "granted_temporary"} == {
+                    k: v for k, v in before.items() if k != "granted_temporary"}
+        assert all(entity.lines is None for record in read_shard(_GEN2_FIXTURE)
+                   for entity in record.state.entities)
+
+
+def _without_keyword_spellings(entity: dict) -> dict:
+    """An entity less its overlay keywords, which the reader normalizes by design."""
+    return {k: v for k, v in entity.items() if k != "granted_temporary"}
+
+
+class TestTheGen3EntityShape:
+    """``lines``, ``base_pt`` and ``pt_boosts`` as the Java collector writes them (T074)."""
+
+    def test_every_golden_record_reads_as_gen3(self):
+        records = [record_from_dict(raw) for raw in java_golden_records()]
+        assert len(records) > 20
+        assert {record.generation for record in records} == {3}
+        assert all(entity.lines is not None
+                   for record in records for entity in record.state.entities)
+
+    def test_an_entity_writes_back_as_the_collector_wrote_it(self):
+        for raw in java_golden_records():
+            written = record_to_dict(record_from_dict(raw))
+            for before, after in zip(raw["state"]["entities"], written["state"]["entities"],
+                                     strict=True):
+                assert list(after) == list(before)
+                assert _without_keyword_spellings(after) == _without_keyword_spellings(before)
+
+    def test_a_golden_record_survives_a_write_and_a_read(self):
+        for raw in java_golden_records():
+            record = record_from_dict(raw)
+            assert record_from_dict(json.loads(json.dumps(record_to_dict(record)))) == record
+
+    def test_a_non_creature_writes_null_power_and_toughness(self):
+        data = _entity_dict(EntityState(id="E1", name="Bolt", zone="stack",
+                                        controller="P0", lines=()))
+        assert (data["base_pt"], data["pt_boosts"]) == (None, None)
+        assert not {"pt", "printed", "granted_attached"} & data.keys()
+
+    def test_every_optional_line_member_round_trips_and_is_written_only_when_set(self):
+        key = ProvenanceKey("cardsfolder/k/kraken.txt", 0, "keyword", 0)
+        lines = (
+            CardLine(keys=(key,), kind="keyword", granted=False, cast_with=2,
+                     fragment="Multikicker:1 U"),
+            CardLine(keys=(), kind="static", granted=True, active=False),
+            CardLine(keys=(key,), kind="spell", granted=False, chosen=(0, 2)),
+        )
+        entity = EntityState(
+            id="E1", name="A", zone="battlefield", controller="P0", lines=lines,
+            pt=PowerToughness(base=(5, 5), boosts=(1, 0), counters=(2, 2)),
+            counters={"+1/+1": 2, "LOYALTY": 3},
+        )
+        data = _entity_dict(entity)
+        assert data["base_pt"] == [5, 5]
+        assert data["pt_boosts"] == {"temporary": [1, 0], "counters": [2, 2]}
+        assert [sorted(line) for line in data["lines"]] == [
+            ["cast_with", "fragment", "granted", "keys", "kind"],
+            ["active", "granted", "keys", "kind"],
+            ["chosen", "granted", "keys", "kind"],
+        ]
+        record = _record(state=replace(_record().state, entities=(entity,)))
+        assert record_from_dict(json.loads(json.dumps(record_to_dict(record)))) == record
+
+    def test_a_turn_action_record_reads_from_the_collector_s_shape(self):
+        """No golden holds one yet: a golden envelope carrying a draw."""
+        raw = dict(java_golden_records()[0])
+        raw.update(kind="turn_action", moment=None, subkind="draw", ability=None,
+                   link_id=None, mirror_of=None, fork=False, payload={"events": [{
+                       "type": "zone_change", "subjects": ["E9"],
+                       "params": {"from_zone": "library", "to_zone": "hand"},
+                       "duration": "instant", "attributed_to": "unresolved"}]})
+        record = record_from_dict(raw)
+        assert (record.kind, record.subkind) == (RecordKind.TURN_ACTION, TurnActionSubkind.DRAW)
+        assert [event.type for event in record.payload.events] == [EventType.ZONE_CHANGE]
+        assert record_from_dict(record_to_dict(record)) == record
+
+
+def _entity_dict(entity: EntityState) -> dict:
+    record = _record(state=replace(_record().state, entities=(entity,)))
+    return record_to_dict(record)["state"]["entities"][0]

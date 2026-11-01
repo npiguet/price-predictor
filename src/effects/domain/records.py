@@ -739,16 +739,16 @@ def events_of(record: EffectRecord) -> tuple[Event, ...]:
 def key_sites(record: EffectRecord) -> Iterator[ProvenanceKey]:
     """Every printed-line key a record names, except its emblems', in record order.
 
-    The acting ``ability``, each entity's printed and granted keys, and every
-    key its payload carries. Emblems are left out: their engine-built traits
-    key to a script path in no converted tree, so a sidecar join would report
-    every planeswalker ultimate as a mismatch.
+    The acting ``ability``, each entity's line keys (printed and granted, a
+    gen-3 face not up's included) and temporary grants, and every key its
+    payload carries. Emblems are left out: their engine-built traits key to a
+    script path in no converted tree, so a sidecar join would report every
+    planeswalker ultimate as a mismatch.
     """
     if record.ability:
         yield from record.ability
     for entity in record.state.entities:
-        yield from entity.printed
-        yield from entity.granted_attached
+        yield from entity.line_keys
         yield from entity.granted_temporary.abilities
     yield from record.payload.provenance_keys()
 

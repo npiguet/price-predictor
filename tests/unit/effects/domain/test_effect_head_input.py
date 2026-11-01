@@ -298,6 +298,21 @@ class TestAbilityTokens:
         surface = _build(_record(state=_snapshot(entities=(entity,))))
         assert len(slots_of_kind(surface, SlotKind.ABILITY)) == 1
 
+    def test_a_gen3_entity_builds_the_surface_its_gen2_twin_builds(self):
+        """The lines in force become the tokens, printed or granted; an unmet
+        static and a temporary grant give none (T074)."""
+        from effects.domain.state_snapshot import CardLine
+
+        lines = (
+            CardLine(keys=(_ANTHEM,), kind="static", granted=False, active=True),
+            CardLine(keys=(_WARD,), kind="static", granted=True, active=True),
+            CardLine(keys=(_BOLT,), kind="static", granted=False, active=False),
+        )
+        gen3 = _entity("E1", lines=lines)
+        gen2 = _entity("E1", printed=(_ANTHEM,), granted_attached=(_WARD,))
+        assert _build(_record(state=_snapshot(entities=(gen3,)))) == _build(
+            _record(state=_snapshot(entities=(gen2,))))
+
     def test_context_dropout_can_drop_a_context_ability(self):
         record = _record()
         kept = _build(record, context_dropout=0.0)

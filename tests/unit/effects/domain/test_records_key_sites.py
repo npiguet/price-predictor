@@ -81,3 +81,18 @@ def test_a_legality_record_names_its_forbidding_statics(make_record, snapshot):
 
 def test_emblems_are_never_named(make_record, snapshot):
     assert EMBLEM not in set(key_sites(make_record(state=_board(snapshot))))
+
+
+def test_a_gen3_entity_names_every_line_s_key_in_force_or_not(make_record, snapshot, ability_key):
+    """A face not up and a granted line join their sidecars too (T074)."""
+    from effects.domain.state_snapshot import CardLine
+
+    own, other_face, granted = _key("printed", "trigger"), _key("back"), _key("anthem")
+    entity = make_entity("E1", "Bear", lines=(
+        CardLine(keys=(own,), kind="trigger", granted=False),
+        CardLine(keys=(other_face,), kind="static", granted=False, active=False),
+        CardLine(keys=(granted,), kind="keyword", granted=True, fragment="Flying"),
+        CardLine(keys=(), kind="keyword", granted=True, fragment="Haste"),
+    ), granted_temporary=GrantedTemporary(abilities=(TEMPORARY,)))
+    record = make_record(state=replace(snapshot, entities=(entity,)))
+    assert list(key_sites(record)) == [ability_key, own, other_face, granted, TEMPORARY]

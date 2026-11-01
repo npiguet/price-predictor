@@ -119,6 +119,7 @@ def test_a_continuous_snapshot_does_not_contain_the_effect_it_labels(
     a creature. Those are the boards the statics really acted on, and a test
     demanding zero would be demanding a board that never existed.
     """
+    from effects.domain.keyword_names import normalize_keyword
     from effects.domain.records import RecordKind
 
     records = _require_patched(tmp_path / "records", wants="continuous")
@@ -139,19 +140,21 @@ def test_a_continuous_snapshot_does_not_contain_the_effect_it_labels(
             entity = entities.get(contribution.entity)
             if entity is None:
                 continue
+            # A gen-3 entity: its keywords are its keyword lines, its boosts
+            # pt_boosts.temporary (read into pt.boosts).
+            assert entity.lines is not None, (
+                f"{record.record_id}: {entity.name} was not written in the gen-3 shape"
+            )
 
             if contribution.pt_boost != (0, 0):
                 total += 1
                 boosts = tuple(entity.pt.boosts) if entity.pt else (0, 0)
                 visible += boosts == tuple(contribution.pt_boost)
 
-            shown = {
-                k.strip().lower().replace(" ", "_")
-                for k in entity.granted_temporary.keywords
-            }
+            shown = {line.keyword for line in entity.keyword_lines if line.in_force}
             for keyword in contribution.keywords:
                 total += 1
-                visible += keyword.strip().lower().replace(" ", "_") in shown
+                visible += normalize_keyword(keyword) in shown
 
             shown = {
                 t.lower()

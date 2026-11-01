@@ -50,6 +50,39 @@ GEN1_KEYWORD_DEFINITIONS = EFFECTS_FIXTURES / "keyword-definitions.json"
 GEN1_TRAINING_SEED = 11
 GEN1_TRAINING_SHARDS = 3
 
+#: Real gen-3 JSON: the goldens the connector's characterization tests emit
+#: (``-Dcharacterization.update=true``), read until the gen-3 fixture exists.
+JAVA_GOLDENS = (
+    Path(__file__).parents[3] / "forge-connector" / "src" / "test" / "resources"
+    / "characterization"
+)
+#: The one golden that is no collected record: an AI what-if blockers record
+#: pinned for its envelope alone, with an empty payload no collector writes.
+_ENVELOPE_ONLY_GOLDENS = frozenset({"record-what-if.jsonl"})
+
+
+def java_golden_records() -> list[dict]:
+    """Every whole record the Java goldens hold, as the raw JSON objects."""
+    import json
+
+    return [
+        json.loads(line)
+        for path in sorted(JAVA_GOLDENS.glob("*.jsonl"))
+        if path.name not in _ENVELOPE_ONLY_GOLDENS
+        for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
+
+
+def java_golden_entities() -> list[dict]:
+    """Every entity of the Java goldens, the standalone snapshots' included."""
+    import json
+
+    snapshots = [record["state"] for record in java_golden_records()]
+    snapshots += [json.loads(path.read_text(encoding="utf-8"))
+                  for path in sorted(JAVA_GOLDENS.glob("snapshot-*.json"))]
+    return [entity for snapshot in snapshots for entity in snapshot["entities"]]
+
+
 _EVENT = Event(type=EventType.LIFE_CHANGE, params={"delta": 1})
 
 

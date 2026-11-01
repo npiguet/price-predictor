@@ -1,17 +1,23 @@
-"""The four rules that let later stages widen the corpus (T023).
+"""The four rules that let later stages widen the corpus (T023), pinned to
+the gen-3 schema (T075, FR-019).
 
-There is no ``schema_version`` field — the root spec defines none — so these
-tests are the enforcement, not a version stamp. plan.md's Principle III claim
-rests on exactly that, which is why they check the rules rather than the code
-that happens to satisfy them today.
+The rules hold within a generation: a record says its own (``generation``
+on gen-3, ``random_seat`` on gen-2, neither on gen-1), and gen-3 may change
+or drop a gen-2 field. These tests pin the gen-3 schema — the envelope, the
+kinds and the card slot — so the next change within gen-3 is caught, and they
+check the rules rather than the code that happens to satisfy them today.
 
-The rules, from ``contracts/record-schema.md``:
+The rules, from ``contracts/record-schema.md`` and feature 025's
+``contracts/record-schema-delta.md``:
 
 1. A field may be added; existing fields may not change meaning or type.
 2. A new ``kind`` or ``subkind`` value may be introduced; existing values may
    not be repurposed.
 3. Snapshot tiers are additive; absence means uncollected.
 4. Nothing listed as collection metadata may become a model input.
+
+What gen-3 changed relative to gen-2 is listed in ``_REMOVED_IN_GEN3`` and
+``_REDEFINED_IN_GEN2`` beside the pins it would otherwise break.
 """
 
 from __future__ import annotations
@@ -35,11 +41,23 @@ from effects.domain.records import (
     TurnActionSubkind,
     UnresolvedReason,
 )
-from effects.domain.state_snapshot import InclusionTier, PlayerState, StateSnapshot
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+from effects.domain.state_snapshot import (
+    CardLine,
+    EntityState,
+    InclusionTier,
+    LineKind,
+    PlayerState,
+    StateSnapshot,
+)
+from tests.unit.effects.builders import (
+    java_golden_entities,
+    make_entity,
+    make_record,
+    make_snapshot,
+)
 
-# The envelope as frozen before stage-one collection. A field may be added to
-# this set by a later stage; one may never be removed, renamed, or retyped.
+# The envelope as gen-3 freezes it. A field may be added to this set within
+# gen-3; one may never be removed, renamed, or retyped.
 _FROZEN_ENVELOPE: dict[str, str] = {
     "record_id": "str",
     "run_id": "str",
@@ -95,13 +113,37 @@ _REDEFINED_IN_GEN2: dict[str, set[str]] = {
     "actor_player": {"attackers", "blockers", "decision"},
 }
 
-# The enum values reachable from stage one onward. A later stage may append;
-# nothing here may be reused for a different meaning.
+# The enum values gen-3 reaches. A later stage may append; nothing here may be
+# reused for a different meaning.
 _FROZEN_KINDS = {
     "resolution", "rewrite", "continuous", "combat", "trigger", "playability",
+    "turn_action",
 }
 _FROZEN_MOMENTS = {"activation", "resolution"}
 _FROZEN_SUBKINDS = {"decision", "attackers", "blockers"}
+_FROZEN_TURN_ACTION_SUBKINDS = {
+    "draw", "cleanup_discard", "untap", "phasing", "day_night", "lore_counter",
+}
+
+#: A gen-3 card slot's members, in the order the collector writes them
+#: (``FE/EntityJson.java``). Members are added here as later tasks write them
+#: (``owner``, ``face_state``, ...); none may be removed or repurposed.
+_FROZEN_GEN3_ENTITY = (
+    "id", "name", "zone", "controller", "face", "copy_source", "token_script_id",
+    "types", "subtypes", "supertypes", "colors", "mana_value", "base_pt", "pt_boosts",
+    "tapped", "sick", "damage", "counters", "combat", "attached_to", "face_down",
+    "granted_temporary", "lines", "stack_extras",
+)
+#: A line's members (``FE/CardLines.java``): the ones always written, and the
+#: ones written only when set.
+_FROZEN_LINE_MEMBERS = {"keys", "kind", "granted"}
+_FROZEN_OPTIONAL_LINE_MEMBERS = {"active", "cast_with", "chosen", "fragment"}
+_FROZEN_LINE_KINDS = {"spell", "activated", "trigger", "static", "replacement", "keyword"}
+
+#: The gen-2 card-slot members gen-3 drops (FR-019): ``printed`` and
+#: ``granted_attached`` are now ``lines``, ``pt`` is now ``base_pt`` and
+#: ``pt_boosts``. A gen-2 shard still carries them, and still reads.
+_REMOVED_IN_GEN3: frozenset[str] = frozenset({"printed", "granted_attached", "pt"})
 _FROZEN_MODES = {"patched", "degraded"}
 _FROZEN_OUTCOMES = {
     "resolved", "fizzled", "partially_fizzled", "declined", "countered",
@@ -146,6 +188,10 @@ class TestRuleTwoEnumValuesMayBeAddedNotReused:
     def test_the_frozen_moments_and_subkinds_all_survive(self):
         assert _FROZEN_MOMENTS <= {m.value for m in Moment}
         assert _FROZEN_SUBKINDS <= {s.value for s in PlayabilitySubkind}
+        assert _FROZEN_TURN_ACTION_SUBKINDS <= {s.value for s in TurnActionSubkind}
+
+    def test_the_frozen_line_kinds_all_survive(self):
+        assert _FROZEN_LINE_KINDS <= {k.value for k in LineKind}
 
     def test_the_frozen_modes_and_outcomes_all_survive(self):
         assert _FROZEN_MODES <= {m.value for m in CollectionMode}
@@ -171,6 +217,30 @@ class TestRuleTwoEnumValuesMayBeAddedNotReused:
         assert PAYLOAD_TYPES[(RecordKind.RESOLUTION, Moment.ACTIVATION)] is (
             ActivationPayload
         )
+
+
+class TestTheGen3CardSlotIsPinned:
+    """Rule 1 for the card slot, which gen-3 rewrote (FR-021, FR-025)."""
+
+    def test_the_collector_writes_exactly_the_frozen_members(self):
+        entities = java_golden_entities()
+        assert entities
+        for entity in entities:
+            assert tuple(entity) == _FROZEN_GEN3_ENTITY
+            for line in entity["lines"]:
+                assert _FROZEN_LINE_MEMBERS <= line.keys()
+                assert line.keys() <= _FROZEN_LINE_MEMBERS | _FROZEN_OPTIONAL_LINE_MEMBERS
+                assert line["kind"] in _FROZEN_LINE_KINDS
+
+    def test_the_reader_writes_a_gen3_entity_with_the_frozen_members(self):
+        from effects.infrastructure.record_codec import record_to_dict
+
+        entity = EntityState(id="E1", name="A", zone="battlefield", controller="P0",
+                             lines=())
+        record = make_record(state=make_snapshot(entities=(entity,)))
+        written = record_to_dict(record)["state"]["entities"][0]
+        assert tuple(written) == _FROZEN_GEN3_ENTITY
+        assert not _REMOVED_IN_GEN3 & written.keys()
 
 
 class TestRuleThreeTiersAreAdditive:
@@ -208,14 +278,16 @@ class _EveryLine:
 
 
 def _board() -> StateSnapshot:
+    """A gen-3 board: card slots that list ``lines``."""
     return make_snapshot(
         players=(
             PlayerState(id="P0", life=14, hand=3, library=21, graveyard=9),
             PlayerState(id="P1", life=8, hand=1, library=30, graveyard=4),
         ),
         entities=(
-            make_entity("E1", "Serra Angel", printed=(_PRINTED,), mana_value=5),
-            make_entity("E2", "Grizzly Bears", controller="P1", mana_value=2),
+            make_entity("E1", "Serra Angel", mana_value=5, lines=(CardLine(
+                keys=(_PRINTED,), kind="keyword", granted=False, fragment="Flying"),)),
+            make_entity("E2", "Grizzly Bears", controller="P1", mana_value=2, lines=()),
         ),
     )
 
@@ -232,7 +304,13 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
     from gen-3, ``generation``, ``aimed_at`` and ``directed``: a
     model that could see one would learn to predict differently on forks, or
     on the random seat, which is the confound the flags exist to keep out.
+    A curated record's ``curation`` member says how curation copied it, never
+    what the board was, so it is held to the same rule.
     """
+
+    def test_the_board_is_a_gen3_board(self):
+        assert all(entity.lines is not None for entity in _board().entities)
+        assert _surface(make_record(state=_board(), ability=(_ACTING,))).slots
 
     @pytest.mark.parametrize("flip", [
         {"mode": CollectionMode.PATCHED},
@@ -240,12 +318,18 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
         {"synthetic": True},
         {"random_seat": True},
         {"random_seat": None},
-        {"generation": 3},
+        {"generation": None},
         {"aimed_at": ()},
         {"aimed_at": ("704.5f",)},
+        # No dataclass models ``curation`` until the write pass writes it
+        # (T136): until then it reaches a record as an envelope member the
+        # reader keeps verbatim.
+        {"extra_fields": {"curation": {
+            "natural_share": 1, "copies": 2, "drawn_rule": "704.5f",
+            "drawn_rules": ["704.5f"], "rule_entities": ["E2"]}}},
     ])
     def test_a_resolution_s_surface_ignores_the_flag(self, flip):
-        base = make_record(state=_board(), ability=(_ACTING,))
+        base = make_record(state=_board(), ability=(_ACTING,), generation=3)
         assert _surface(replace(base, **flip)) == _surface(base)
 
     def test_an_intervention_s_surface_is_its_fork_s(self):
