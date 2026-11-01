@@ -103,7 +103,10 @@ def families() -> Mapping[str, DetectorFamily]:
 
 
 #: One module per family, each registering its family on import.
-FAMILY_MODULES: tuple[str, ...] = ("sba_zone_move",)
+FAMILY_MODULES: tuple[str, ...] = (
+    "sba_zone_move", "trigger_mode", "keyword_combat", "verdict_bit",
+    "continuous_contribution", "rewrite_event", "legality_membership",
+)
 
 
 def _load_families() -> None:
