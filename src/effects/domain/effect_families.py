@@ -140,7 +140,7 @@ def combat_family(record: EffectRecord, resolver: KeywordResolver) -> str:
     return ",".join(sorted(found)) if found else FamilySentinel.NONE
 
 
-def rule_family(
+def effect_family(
     record: EffectRecord, sidecars: SidecarLookup, *,
     resolver: KeywordResolver | None = None,
     legality_mode_counts: Mapping[str, int] = NO_MODE_COUNTS,

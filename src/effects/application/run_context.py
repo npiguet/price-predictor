@@ -133,7 +133,7 @@ def training_settings(spec: RunSpec, *, api_types, param_keys) -> dict:
         "api_types": list(api_types),
         "param_keys": list(param_keys),
         TOKENIZER_RULES_KEY: TOKENIZER_RULES,
-        INPUT_LAYOUT_KEY: INPUT_LAYOUT.name,
+        INPUT_LAYOUT_KEY: INPUT_LAYOUT,
     }
 
 

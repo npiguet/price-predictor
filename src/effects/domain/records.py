@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from effects.domain.event_schema import Event
+from effects.domain.fork_operation import ForkOperation
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.state_snapshot import StateSnapshot
 
@@ -26,6 +27,9 @@ class RecordKind(StrEnum):
     COMBAT = "combat"
     TRIGGER = "trigger"
     PLAYABILITY = "playability"
+    #: A turn-based action: a draw, an untap, a cleanup discard (gen-3). Never
+    #: written to a curated stratum.
+    TURN_ACTION = "turn_action"
 
 
 class Moment(StrEnum):
@@ -39,6 +43,24 @@ class PlayabilitySubkind(StrEnum):
     DECISION = "decision"
     ATTACKERS = "attackers"
     BLOCKERS = "blockers"
+
+
+class TurnActionSubkind(StrEnum):
+    """Which turn-based action a ``turn_action`` record holds."""
+
+    DRAW = "draw"
+    CLEANUP_DISCARD = "cleanup_discard"
+    UNTAP = "untap"
+    PHASING = "phasing"
+    DAY_NIGHT = "day_night"
+    LORE_COUNTER = "lore_counter"
+
+
+#: The kinds whose ``subkind`` is set, each with its own subkind vocabulary.
+SUBKINDS_OF: dict[RecordKind, type[StrEnum]] = {
+    RecordKind.PLAYABILITY: PlayabilitySubkind,
+    RecordKind.TURN_ACTION: TurnActionSubkind,
+}
 
 
 class CollectionMode(StrEnum):
@@ -158,8 +180,23 @@ class UnresolvedReason(StrEnum):
 #: or a legality declaration, and a decision acts through its candidate's line
 #: (:attr:`EffectRecord.has_act_line`), which the payload names.
 KINDS_WITHOUT_ACTING_ABILITY: frozenset[RecordKind] = frozenset({
-    RecordKind.COMBAT, RecordKind.PLAYABILITY,
+    RecordKind.COMBAT, RecordKind.PLAYABILITY, RecordKind.TURN_ACTION,
 })
+
+#: Envelope fields that say how a record was collected, never what the board
+#: was: none of them may reach the model (compatibility rule 4).
+COLLECTION_METADATA_FIELDS: frozenset[str] = frozenset({
+    "mode", "interventional", "fork", "synthetic", "ability_unresolved", "random_seat",
+    "what_if", "generation", "aimed_at", "directed",
+})
+
+
+@dataclass(frozen=True, slots=True)
+class DirectedTag:
+    """What a directed fork changed: the scenario variant and the operation that applied it."""
+
+    variant: str
+    operation: ForkOperation
 
 
 class _PayloadQueries:
@@ -459,6 +496,22 @@ class PlayabilityBlockersPayload(_PayloadQueries):
         return _forbidding_statics(self.forbidden)
 
 
+@dataclass(frozen=True, slots=True)
+class TurnActionPayload(_PayloadQueries):
+    """``turn_action``: the events of one turn-based action, which no ability caused."""
+
+    events: tuple[Event, ...] = ()
+
+    def happened_events(self) -> tuple[Event, ...]:
+        return self.events
+
+    def listed_events(self) -> tuple[Event, ...]:
+        return self.events
+
+    def all_events(self) -> tuple[Event, ...]:
+        return self.events
+
+
 def _forbidding_statics(forbidden: tuple[ForbiddenEntity, ...]) -> Iterator[ProvenanceKey]:
     for entry in forbidden:
         yield from entry.responsible_static
@@ -474,10 +527,11 @@ Payload = (
     | PlayabilityDecisionPayload
     | PlayabilityAttackersPayload
     | PlayabilityBlockersPayload
+    | TurnActionPayload
 )
 
 #: The payload type each ``(kind, moment/subkind)`` must carry.
-PAYLOAD_TYPES: dict[tuple[RecordKind, Moment | PlayabilitySubkind | None], type] = {
+PAYLOAD_TYPES: dict[tuple[RecordKind, Moment | StrEnum | None], type] = {
     (RecordKind.RESOLUTION, Moment.ACTIVATION): ActivationPayload,
     (RecordKind.RESOLUTION, Moment.RESOLUTION): ResolutionPayload,
     (RecordKind.REWRITE, None): RewritePayload,
@@ -487,6 +541,7 @@ PAYLOAD_TYPES: dict[tuple[RecordKind, Moment | PlayabilitySubkind | None], type]
     (RecordKind.PLAYABILITY, PlayabilitySubkind.DECISION): PlayabilityDecisionPayload,
     (RecordKind.PLAYABILITY, PlayabilitySubkind.ATTACKERS): PlayabilityAttackersPayload,
     (RecordKind.PLAYABILITY, PlayabilitySubkind.BLOCKERS): PlayabilityBlockersPayload,
+    **{(RecordKind.TURN_ACTION, subkind): TurnActionPayload for subkind in TurnActionSubkind},
 }
 
 
@@ -504,7 +559,11 @@ class EffectRecord:
     ordinary observation        any           False            False
     interventional resolution   resolution    True             True
     damage-step probe           combat        False            True
+    directed fork (gen-3)       any           False            True
     ==========================  ============  ===============  ======
+
+    A directed fork also carries ``directed`` and the rule it aimed at in
+    ``aimed_at``.
     """
 
     record_id: str
@@ -517,7 +576,7 @@ class EffectRecord:
     payload: Payload
     mode: CollectionMode = CollectionMode.DEGRADED
     moment: Moment | None = None
-    subkind: PlayabilitySubkind | None = None
+    subkind: PlayabilitySubkind | TurnActionSubkind | None = None
     link_id: str | None = None
     mirror_of: str | None = None
     variant_of: str | None = None
@@ -537,6 +596,14 @@ class EffectRecord:
     #: Set only where a line was looked for and none found; a reason given as
     #: its string is read as the member.
     ability_unresolved: UnresolvedReason | None = None
+    #: The record generation, 3 on a gen-3 record; None on gen-1 and gen-2,
+    #: which are told apart by ``random_seat`` (FR-018).
+    generation: int | None = None
+    #: The rules the run or fork aimed at (FR-009a); None on every record of a
+    #: run that aimed at none. Collection metadata.
+    aimed_at: tuple[str, ...] | None = None
+    #: A directed fork's variant and operation; None elsewhere. Collection metadata.
+    directed: DirectedTag | None = None
     #: Envelope keys a newer writer added that this code does not model, kept
     #: verbatim so a read-and-rewrite round trip is lossless (compatibility
     #: rule 1).
@@ -554,10 +621,13 @@ class EffectRecord:
                 f"moment is the resolution kind's discriminator; kind="
                 f"{self.kind.value} carries moment={self.moment}"
             )
-        if (self.subkind is not None) != (self.kind is RecordKind.PLAYABILITY):
+        subkinds = SUBKINDS_OF.get(self.kind)
+        if (self.subkind is not None) != (subkinds is not None) or (
+            subkinds is not None and not isinstance(self.subkind, subkinds)
+        ):
             raise ValueError(
-                f"subkind is the playability kind's discriminator; kind="
-                f"{self.kind.value} carries subkind={self.subkind}"
+                f"subkind is the playability and turn-action kinds' discriminator; "
+                f"kind={self.kind.value} carries subkind={self.subkind}"
             )
         discriminator = self.discriminator
         expected = PAYLOAD_TYPES[(self.kind, discriminator)]
@@ -608,6 +678,11 @@ class EffectRecord:
             raise ValueError("mirror_of names the real record a fork mirrors")
         if self.variant_of is not None and not self.synthetic:
             raise ValueError("variant_of names the card a synthetic script came from")
+        if self.directed is not None:
+            if not self.fork or self.interventional:
+                raise ValueError("a directed fork is a fork that intervened in nothing")
+            if self.aimed_at is None:
+                raise ValueError("a directed fork names the rule it aimed at in aimed_at")
         if self.what_if is not None and (
             self.subkind not in LEGALITY_SUBKINDS
         ):
@@ -632,7 +707,7 @@ class EffectRecord:
             )
 
     @property
-    def discriminator(self) -> Moment | PlayabilitySubkind | None:
+    def discriminator(self) -> Moment | PlayabilitySubkind | TurnActionSubkind | None:
         """The ``moment`` or ``subkind`` that, with ``kind``, picks the payload type."""
         return self.moment or self.subkind
 
@@ -641,15 +716,18 @@ class EffectRecord:
         """Whether one line acts, filling the ``[ACT]`` slot and keying the
         record's rarity: not in a combat or a legality declaration, which
         sample uniformly instead (FR-087)."""
-        return self.kind is not RecordKind.COMBAT and self.subkind not in LEGALITY_SUBKINDS
+        return (self.kind not in (RecordKind.COMBAT, RecordKind.TURN_ACTION)
+                and self.subkind not in LEGALITY_SUBKINDS)
 
     @property
     def is_probe(self) -> bool:
-        """A damage-step probe: a combat fork that intervened in nothing."""
+        """A damage-step probe: a combat fork that intervened in nothing and
+        applied no directed change."""
         return (
             self.kind is RecordKind.COMBAT
             and self.fork
             and not self.interventional
+            and self.directed is None
         )
 
 

@@ -31,14 +31,14 @@ from effects.domain.corpus_curation import (
     text_capacity,
 )
 from effects.domain.damage_step_keywords import KeywordResolver
-from effects.domain.provenance import ProvenanceKey, SidecarLookup
-from effects.domain.records import EffectRecord, LegalityDecision
-from effects.domain.rule_families import (
+from effects.domain.effect_families import (
     FamilySentinel,
+    effect_family,
     legality_family,
     legality_modes,
-    rule_family,
 )
+from effects.domain.provenance import ProvenanceKey, SidecarLookup
+from effects.domain.records import EffectRecord, LegalityDecision
 from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.strata import Stratum
 
@@ -94,7 +94,7 @@ class Cell:
         :meth:`resolved` to fold later.
         """
         klass = sampling_class(record)
-        half = _selection_half(record, klass)
+        half = _what_if_half(record, klass)
         if klass == SamplingClass.PLAYABILITY_LEGALITY:
             modes = legality_modes(record, sidecars)
             family = "" if modes else FamilySentinel.NONE
@@ -103,7 +103,7 @@ class Cell:
         return cls(
             klass=klass,
             half=half,
-            family=rule_family(record, sidecars, resolver=resolver),
+            family=effect_family(record, sidecars, resolver=resolver),
             signature=(
                 signature_label(outcome_signature(record))
                 if klass in SIGNATURE_CLASSES else ""
@@ -116,7 +116,7 @@ class Cell:
         return f"{self.half}:{self.family}" if self.half else self.family
 
 
-def _selection_half(
+def _what_if_half(
     record: EffectRecord, klass: SamplingClass,
 ) -> LegalityDecision | Literal[""]:
     """``real`` / ``what-if`` on a legality record (FR-049 step 3), empty on

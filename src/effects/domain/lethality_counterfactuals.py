@@ -28,6 +28,7 @@ from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutc
 from effects.domain.effect_targets import EntityTargets
 from effects.domain.provenance import ProvenanceKey, RoleSpan, SidecarLine, SourceTree
 from effects.domain.records import EffectRecord, Moment, RecordKind
+from effects.domain.rule_outcomes import EffectKind, damage_lethal, lethal, shrink_lethal
 from effects.domain.script_text import api_of, params, segments
 from effects.domain.state_snapshot import EntityState, StateSnapshot, normalize_counter_type
 
@@ -56,27 +57,11 @@ _DIED = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
 _STAYED = ZONE_OUTCOMES.index(ZoneOutcome.STAYED)
 
 
-class EffectKind(StrEnum):
-    """What the one amount does to a creature it hits."""
-
-    DAMAGE = "damage"  # marks damage on it
-    SHRINK = "shrink"  # lowers its toughness, -X/-X style
-
-
 class Stated(StrEnum):
     """Where the amount is written, which decides where a copy edits it."""
 
     TEXT = "text"  # a literal in the script, edited in the copy's text
     X = "x"  # the X the caster paid, edited in the copy's references
-
-
-def _damage_lethal(toughness: int, damage: int, amount: int) -> bool:
-    return toughness <= 0 or damage + amount >= toughness
-
-
-def _shrink_lethal(toughness: int, damage: int, amount: int) -> bool:
-    left = toughness - amount
-    return left <= 0 or (damage > 0 and damage >= left)
 
 
 def _prose_damage(effect: StatedEffect, amount: int) -> list[tuple[str, str]]:
@@ -133,7 +118,7 @@ _RULES: dict[EffectKind, _KindRules] = {
     EffectKind.DAMAGE: _KindRules(
         field=HeadField.DAMAGE_TAKEN, sign=1,
         hit_fields=frozenset({HeadField.DAMAGE_TAKEN, HeadField.ZONE_OUTCOME}),
-        lethal=_damage_lethal, edit_params=_params_damage, prose=_prose_damage,
+        lethal=damage_lethal, edit_params=_params_damage, prose=_prose_damage,
     ),
     EffectKind.SHRINK: _KindRules(
         field=HeadField.TOUGHNESS_DELTA, sign=-1,
@@ -141,7 +126,7 @@ _RULES: dict[EffectKind, _KindRules] = {
             HeadField.TOUGHNESS_DELTA, HeadField.POWER_DELTA, HeadField.PT_DURATION,
             HeadField.ZONE_OUTCOME,
         }),
-        lethal=_shrink_lethal, edit_params=_params_shrink, prose=_prose_shrink,
+        lethal=shrink_lethal, edit_params=_params_shrink, prose=_prose_shrink,
     ),
 }
 
@@ -192,11 +177,6 @@ class Counterfactual:
     record: EffectRecord
     targets: dict[str, EntityTargets]
     edit: TextEdit
-
-
-def lethal(kind: EffectKind, amount: int, entity: EntityState) -> bool:
-    """Whether ``amount`` kills ``entity`` under rule 704.5f-g."""
-    return _RULES[kind].lethal(entity.toughness, entity.damage, amount)
 
 
 def _blocked(found: dict[str, str]) -> bool:

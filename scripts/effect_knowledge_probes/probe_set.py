@@ -11,17 +11,16 @@ Nothing here does work at import time.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 
+from effects.domain.canonical_digest import canonical_sha256
+
 
 def canonical_digest(payload: dict) -> str:
     """sha256 of the canonical JSON (sorted keys, no whitespace), ``digest`` excluded."""
-    body = {k: v for k, v in payload.items() if k != "digest"}
-    canonical = json.dumps(body, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return canonical_sha256({k: v for k, v in payload.items() if k != "digest"})
 
 
 def probe_set_path(directory: Path, corpus_digest: str) -> Path:

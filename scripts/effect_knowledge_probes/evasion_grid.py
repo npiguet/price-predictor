@@ -37,8 +37,7 @@ from _lib.markdown import print_table  # noqa: E402
 
 from effect_knowledge_probes import common, readout, record_walk  # noqa: E402
 from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
-
-COLOUR_WORDS = {"W": "white", "U": "blue", "B": "black", "R": "red", "G": "green"}
+from effects.domain.rule_outcomes import COLOUR_WORDS, may_block  # noqa: E402
 
 #: Attacker rows: the keyword the attacker is granted; ``None`` grants nothing.
 #: ``protection-blocker`` and ``protection-other`` resolve against the blocker's colour.
@@ -55,38 +54,6 @@ EVASION_KEYWORDS = frozenset({
     "flying", "reach", "horsemanship", "fear", "intimidate", "shadow", "unblockable",
     "skulk", "menace", "landwalk", "defender",
 })
-
-
-# ── the rule ────────────────────────────────────────────────────────────
-
-
-def may_block(attacker_keywords, attacker_colours, blocker_keywords, blocker_colours,
-              blocker_types) -> bool:
-    """Whether one creature may block another, as far as these keywords decide.
-
-    Rules 702.9 (flying, reach), 702.31 (horsemanship), 702.36 (fear), 702.13
-    (intimidate), 702.28 (shadow), 702.16 (protection) and "can't be blocked".
-    """
-    a, b = set(attacker_keywords), set(blocker_keywords)
-    if "unblockable" in a:
-        return False
-    if "flying" in a and not b & {"flying", "reach"}:
-        return False
-    if "horsemanship" in a and "horsemanship" not in b:
-        return False
-    if "fear" in a and "artifact" not in blocker_types and "B" not in blocker_colours:
-        return False
-    if ("intimidate" in a and "artifact" not in blocker_types
-            and not set(attacker_colours) & set(blocker_colours)):
-        return False
-    if ("shadow" in a) != ("shadow" in b):
-        return False
-    for keyword in a:
-        if keyword.startswith("protection_from_"):
-            colour = keyword.removeprefix("protection_from_")
-            if any(COLOUR_WORDS.get(c) == colour for c in blocker_colours):
-                return False
-    return True
 
 
 # ── the edits ───────────────────────────────────────────────────────────

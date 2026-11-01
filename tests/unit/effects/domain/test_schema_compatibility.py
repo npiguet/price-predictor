@@ -32,6 +32,7 @@ from effects.domain.records import (
     PlayabilitySubkind,
     RecordKind,
     ResolutionOutcome,
+    TurnActionSubkind,
     UnresolvedReason,
 )
 from effects.domain.state_snapshot import InclusionTier, PlayerState, StateSnapshot
@@ -50,7 +51,8 @@ _FROZEN_ENVELOPE: dict[str, str] = {
     "payload": "Payload",
     "mode": "CollectionMode",
     "moment": "Moment | None",
-    "subkind": "PlayabilitySubkind | None",
+    # Widened by gen-3 to the turn-action subkinds; every gen-2 value keeps its meaning.
+    "subkind": "PlayabilitySubkind | TurnActionSubkind | None",
     "link_id": "str | None",
     "mirror_of": "str | None",
     "variant_of": "str | None",
@@ -71,6 +73,12 @@ _FROZEN_ENVELOPE: dict[str, str] = {
     # generation; on the wire each is still a bool or absent.
     "random_seat": "bool | None",
     "what_if": "bool | None",
+    # Gen-3 (feature 025), all three collection metadata: the generation marker
+    # (FR-018), the rules a run or fork aimed at (FR-009a) and a directed
+    # fork's change. Absent on gen-1 and gen-2 lines, read as None.
+    "generation": "int | None",
+    "aimed_at": "tuple[str, ...] | None",
+    "directed": "DirectedTag | None",
     "extra_fields": "dict",
 }
 
@@ -150,6 +158,8 @@ class TestRuleTwoEnumValuesMayBeAddedNotReused:
                 expected |= {(kind, m) for m in Moment}
             elif kind is RecordKind.PLAYABILITY:
                 expected |= {(kind, s) for s in PlayabilitySubkind}
+            elif kind is RecordKind.TURN_ACTION:
+                expected |= {(kind, s) for s in TurnActionSubkind}
             else:
                 expected.add((kind, None))
         assert set(PAYLOAD_TYPES) == expected, (
@@ -218,7 +228,8 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
     """Flipping a collection-metadata field leaves the model's input unchanged.
 
     The contract's metadata list is ``mode``, ``interventional``, ``fork``,
-    ``synthetic``, ``ability_unresolved``, ``random_seat`` and ``what_if``: a
+    ``synthetic``, ``ability_unresolved``, ``random_seat``, ``what_if`` and,
+    from gen-3, ``generation``, ``aimed_at`` and ``directed``: a
     model that could see one would learn to predict differently on forks, or
     on the random seat, which is the confound the flags exist to keep out.
     """
@@ -229,6 +240,9 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
         {"synthetic": True},
         {"random_seat": True},
         {"random_seat": None},
+        {"generation": 3},
+        {"aimed_at": ()},
+        {"aimed_at": ("704.5f",)},
     ])
     def test_a_resolution_s_surface_ignores_the_flag(self, flip):
         base = make_record(state=_board(), ability=(_ACTING,))
@@ -237,6 +251,23 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
     def test_an_intervention_s_surface_is_its_fork_s(self):
         fork = make_record(state=_board(), ability=(_ACTING,), fork=True)
         assert _surface(replace(fork, interventional=True)) == _surface(fork)
+
+    def test_a_directed_fork_s_surface_is_its_plain_fork_s(self):
+        from effects.domain.fork_operation import ForkOperation
+        from effects.domain.records import DirectedTag
+
+        fork = make_record(state=_board(), ability=(_ACTING,), fork=True)
+        directed = replace(fork, aimed_at=("704.5f",),
+                           directed=DirectedTag("tougher", ForkOperation.PT))
+        assert _surface(directed) == _surface(fork)
+
+    def test_every_listed_metadata_field_is_flipped_here(self):
+        from effects.domain.records import COLLECTION_METADATA_FIELDS
+
+        assert COLLECTION_METADATA_FIELDS == {
+            "mode", "interventional", "fork", "synthetic", "ability_unresolved",
+            "random_seat", "what_if", "generation", "aimed_at", "directed",
+        }
 
     def test_an_unresolved_reason_leaves_the_surface_alone(self):
         base = make_record(state=_board())

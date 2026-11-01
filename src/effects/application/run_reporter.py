@@ -47,7 +47,7 @@ class EpochTally:
     running: torch.Tensor
     taken: int = 0
     terms: dict[str, torch.Tensor] = field(default_factory=dict)
-    #: Trained records by rarity bucket and by rule family (FR-055).
+    #: Trained records by rarity bucket and by effect family (FR-055).
     buckets: Counter[str] = field(default_factory=Counter)
     families: Counter[str] = field(default_factory=Counter)
 
@@ -215,7 +215,7 @@ class RunReporter:
         )
         logger.info(
             "epoch %d | trained records by rarity bucket: %s%s\n"
-            "  by rule family: %s",
+            "  by effect family: %s",
             epoch,
             format_shares(tally.buckets, (*RARITY_BUCKETS, NO_TEXT_BUCKET)),
             format_terms(tally.mean_terms()),

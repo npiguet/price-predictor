@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.effects.directed.DirectedTag;
 import com.pricepredictor.connector.json.Json;
 import java.util.List;
 import java.util.Objects;
@@ -17,6 +18,13 @@ import java.util.Objects;
  * {@link RecordPayloads}, one factory per payload shape.
  */
 public final class EffectRecord {
+
+    /**
+     * The record generation this connector writes (FR-018): the first envelope
+     * member after {@code record_id} on every record, and what names a gen-3
+     * shard to a reader. Gen-2 and gen-1 records carry no such member.
+     */
+    public static final int GENERATION = 3;
 
     private final String recordId;
     private final String runId;
@@ -49,6 +57,15 @@ public final class EffectRecord {
      * the AI. Null everywhere else, and absent from the JSON then.
      */
     private Boolean whatIf;
+    /**
+     * The rules a collection run aimed at (FR-009a): the run's
+     * {@code --directed-fork-rules} on every record of a coverage or variant
+     * run, possibly empty, and the one rule a directed fork forked for. Null on
+     * every other record, and absent from the JSON then. Collection metadata.
+     */
+    private List<String> aimedAt;
+    /** What a directed fork changed; null on every record but a directed fork's. */
+    private DirectedTag directed;
     private String actorPlayer;
     private List<ProvenanceKey> ability;
     private UnresolvedReason abilityUnresolved;
@@ -140,6 +157,18 @@ public final class EffectRecord {
     /** Only the {@code attackers} and {@code blockers} subkinds set this. */
     public EffectRecord whatIf(Boolean value) {
         this.whatIf = value;
+        return this;
+    }
+
+    /** The rules this record's run or fork aimed at; null leaves the member out. */
+    public EffectRecord aimedAt(List<String> rules) {
+        this.aimedAt = rules == null ? null : List.copyOf(rules);
+        return this;
+    }
+
+    /** A directed fork's variant and operation; null leaves the member out. */
+    public EffectRecord directed(DirectedTag tag) {
+        this.directed = tag;
         return this;
     }
 
@@ -236,8 +265,13 @@ public final class EffectRecord {
     }
 
     public String toJson() {
+        if (directed != null && (aimedAt == null || !fork || interventional)) {
+            throw new IllegalStateException(
+                    "a directed fork is a non-interventional fork naming the rule it aimed at");
+        }
         Json.ObjectWriter json = Json.object()
                 .value("record_id", recordId)
+                .value("generation", GENERATION)
                 .value("run_id", runId)
                 .value("timestamp", timestamp)
                 .value("game_id", gameId)
@@ -260,6 +294,12 @@ public final class EffectRecord {
                 .value("random_seat", randomSeat);
         if (whatIf != null) {
             json.value("what_if", whatIf);
+        }
+        if (aimedAt != null) {
+            json.raw("aimed_at", Json.stringArray(aimedAt));
+        }
+        if (directed != null) {
+            json.raw("directed", directed.toJson());
         }
         return json
                 .value("actor_player", actorPlayer)

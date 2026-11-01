@@ -73,7 +73,7 @@ class ClassCounts:
 
 @dataclass(frozen=True, slots=True)
 class FamilyRow:
-    """One rule family's row of ``families`` (FR-053): what its class budget
+    """One effect family's row of ``families`` (FR-053): what its class budget
     gave it and what the training output holds. ``share`` is the equal split
     before redistribution, so ``shortfall`` is ``max(0, share - written)``."""
 

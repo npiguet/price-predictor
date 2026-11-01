@@ -6,7 +6,7 @@ tests build ``Survey`` objects directly and exercise the fold that happens
 once, here, against a fake ``SidecarCache``.
 
 Gen-2 selection (FR-049) is a cell-by-cell plan: a class budget split equally
-across rule families, a family's across outcome signatures, the legality class
+across effect families, a family's across outcome signatures, the legality class
 across its real and what-if halves, and a cell's across its ability texts, each
 level capped by what its members can supply with ``--reuse-cap`` repeats and
 ``--text-cap`` per text per cell.

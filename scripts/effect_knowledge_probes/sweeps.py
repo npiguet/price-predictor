@@ -26,7 +26,6 @@ Nothing here does work at import time.
 from __future__ import annotations
 
 import re
-import zlib
 from dataclasses import replace
 
 import numpy as np
@@ -34,6 +33,7 @@ import numpy as np
 from effect_knowledge_probes import readout
 from effect_knowledge_probes.board_edits import BoardEdit
 from effect_knowledge_probes.common import predict
+from effects.domain.seeded_draw import id_hash
 
 TOUGHNESS_VALUES = tuple(range(1, 9))
 BOARD_SIZES = tuple(range(0, 9))
@@ -294,7 +294,7 @@ class SweepSelector:
     def observe(self, record) -> None:
         from effects.domain.records import Moment, PlayabilityDecisionPayload, RecordKind
 
-        order = zlib.crc32(record.record_id.encode("utf-8"))
+        order = id_hash(record.record_id)
         rid = record.record_id
         if isinstance(record.payload, PlayabilityDecisionPayload):
             if affordability_ready(record, self.sidecars):

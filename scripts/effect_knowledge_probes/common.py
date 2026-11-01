@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import zlib
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +36,7 @@ from effect_embedding_probes.common import (  # noqa: F401
 )
 
 from effects.domain.ability_tokenizer import Surface
+from effects.domain.seeded_draw import id_hash
 
 #: The two validation strata, as the corpus names its directories.
 STRATA: tuple[str, ...] = ("card-disjoint", "game-disjoint")
@@ -48,7 +48,7 @@ def stable_hash(value: str) -> int:
     A function of the string alone, so a rebuild that keeps a game or a record
     keeps choosing it.
     """
-    return zlib.crc32(value.encode("utf-8"))
+    return id_hash(value)
 
 
 # ── checkpoint, sidecars and cache ──────────────────────────────────────
@@ -161,18 +161,19 @@ def read_games(
     for, and parsing them would cost most of the read. ``record_ids`` narrows
     it further to the records a probing run actually reads.
     """
+    from effects.domain.shard_generation import ACCEPTED_GENERATIONS
     from effects.infrastructure.record_codec import parse_record_line, record_from_dict
     from effects.infrastructure.shard_io import (
         iter_shard_lines,
         peek_envelope,
-        refuse_mixed_generations,
+        require_generation,
     )
 
     def wanted(record_id: str, game_id: str) -> bool:
         return game_id in game_ids and (record_ids is None or record_id in record_ids)
 
     shards = list(shards)
-    refuse_mixed_generations(shards)
+    require_generation(shards, *ACCEPTED_GENERATIONS)
     for shard in shards:
         for line in iter_shard_lines(shard):
             head = peek_envelope(line)

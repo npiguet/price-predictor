@@ -17,6 +17,7 @@ import torch
 from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
 from effects.domain.aux_heads import TRAINING_ONLY_PREFIXES
 from effects.domain.baselines import Baseline
+from effects.domain.effect_head_input import require_input_layout
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.split_provenance import SplitProvenance
 from effects.domain.tokenizer_files import TokenizerFiles
@@ -116,12 +117,9 @@ def filter_training_only(state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-#: Model state a shipped checkpoint may lack: the training-only heads (FR-076)
-#: and the zero-initialized option-kind embedding (FR-063a). Anything else
-#: missing is refused, or it would run at random initial weights.
-OPTIONAL_STATE_PREFIXES: tuple[str, ...] = (
-    *TRAINING_ONLY_PREFIXES, "option_kind_embedding.",
-)
+#: Model state a shipped checkpoint may lack: the training-only heads (FR-076).
+#: Anything else missing is refused, or it would run at random initial weights.
+OPTIONAL_STATE_PREFIXES: tuple[str, ...] = TRAINING_ONLY_PREFIXES
 
 
 def load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
@@ -148,18 +146,10 @@ _RESERVED_PAYLOAD_KEYS = frozenset({
     "cards_folders", "training_settings",
 })
 
-#: Encoder-config keys a gen-1 checkpoint carries that the config no longer
-#: has, dropped on load (FR-057, FR-061).
-_REMOVED_ENCODER_KEYS = frozenset({"e_noise"})
-
-
 def encoder_config_from(data: dict[str, Any]) -> AbilityEncoderConfig:
     """An encoder config from a checkpoint's dict; one that records no size
     builds at the defaults, which every pre-size-flag checkpoint trained at."""
-    return AbilityEncoderConfig(**{
-        key: value for key, value in data.items()
-        if key not in _REMOVED_ENCODER_KEYS
-    })
+    return AbilityEncoderConfig(**data)
 
 
 class EffectModelStore:
@@ -212,6 +202,9 @@ class EffectModelStore:
         payload, model_config = load_checkpoint(
             path, EffectModelConfig, weights_only=False,
         )
+        # Before anything is built from it (FR-045): a checkpoint trained on
+        # another input layout would read inputs this code no longer builds.
+        require_input_layout(payload.get("training_settings"))
         return EffectCheckpoint(
             encoder_config=encoder_config_from(payload["encoder_config"]),
             model_config=model_config,

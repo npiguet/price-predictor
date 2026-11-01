@@ -20,30 +20,27 @@ from collections import Counter, defaultdict
 
 from _lib.paths import FORGE_RES, REPO
 
+from effects.domain import rule_catalogue
+
 RULES = REPO / "rules"
 CARDSFOLDER = FORGE_RES / "cardsfolder"
 
 SPLIT_SECTIONS = {"701", "702"}
-CATEGORIES = {"mechanical", "legality", "decision", "definitional", "out_of_scope"}
-OBSERVABILITY = {"direct", "indirect", "needs_new_fields", "none"}
-RECORD_KINDS = {"resolution", "rewrite", "continuous", "combat", "trigger", "playability"}
-SCENARIO_CATEGORIES = {"mechanical", "legality"}
-POLARITIES = {"fires", "does_not_fire", "other"}
+# The catalogue's vocabulary is the package's, so the corpus code that reads these
+# sidecars and this validator spell every enum alike.
+CATEGORIES = rule_catalogue.CATEGORIES
+OBSERVABILITY = rule_catalogue.OBSERVABILITY
+RECORD_KINDS = rule_catalogue.RECORD_KINDS
+SCENARIO_CATEGORIES = rule_catalogue.SCENARIO_CATEGORIES
+POLARITIES = rule_catalogue.POLARITIES
 # Heads pass (rules/MODEL-FIELDS.md): what the model reads and is trained on per rule.
-OUTPUT_STATUS = {"trained", "recorded", "missing", "planned"}
-INPUT_STATUS = {"complete", "incomplete"}
-HEAD_OUTPUTS = {
-    "gate", "zone_outcome", "tap_state", "damage_taken", "power_delta", "toughness_delta",
-    "pt_duration", "types_gained", "types_lost", "colors_gained", "colors_lost",
-    "type_color_duration", "keywords_gained", "keywords_lost", "control_change",
-    "attached_to_change", "life_delta", "cards_drawn", "cards_discarded", "cards_milled",
-    "library_events", "poison_delta", "target_legal", "attacker_legal", "blocker_legal",
-    "min_blockers", "can_play", "affordable", "has_legal_target", "mana_paid", "trigger_fired",
-    "created_objects",
-}
-HEAD_OUTPUT_PREFIXES = ("counters_delta_", "mana_delta_")
-OUTPUT_TAGS = ("record:", "new:", "planned:")
-INPUT_TAGS = ("snapshot:", "new:", "planned:")
+OUTPUT_STATUS = rule_catalogue.OUTPUT_STATUS
+INPUT_STATUS = rule_catalogue.INPUT_STATUS
+# Derived from the model's own layout rather than kept by hand.
+HEAD_OUTPUTS = rule_catalogue.head_outputs()
+HEAD_OUTPUT_PREFIXES = rule_catalogue.HEAD_OUTPUT_PREFIXES
+OUTPUT_TAGS = rule_catalogue.OUTPUT_TAGS
+INPUT_TAGS = rule_catalogue.INPUT_TAGS
 
 RULE_RE = re.compile(r"^(\d{3})\.(\d+)([a-z]*)\.? (.*)$")
 SECTION_RE = re.compile(r"^(\d{3})\. (.*)$")

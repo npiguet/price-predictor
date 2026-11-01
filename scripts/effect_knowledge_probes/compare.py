@@ -30,7 +30,7 @@ from _lib.markdown import md_table, utf8_console  # noqa: E402
 from effect_knowledge_probes.common import fmt  # noqa: E402
 from effect_knowledge_probes.scorecard import Scorecard  # noqa: E402
 
-PROBE_TYPES = ("linear", "mlp")
+PROBE_MODELS = ("linear", "mlp")
 #: The score each target kind is read by, which names its ranking.
 METRICS = {"binary": "AUC", "amount": "R²"}
 
@@ -83,7 +83,7 @@ def ranking(cards: list[Scorecard]) -> dict[str, list[tuple[str, float]]]:
     """Per probe type and score (``mlp AUC``, ``linear R²``), the checkpoints
     from largest width gain to smallest."""
     out = {}
-    for probe_type in PROBE_TYPES:
+    for probe_type in PROBE_MODELS:
         for kind, metric in METRICS.items():
             scored = [(card.checkpoint or f"#{i}", width_gain(card, probe_type, kind))
                       for i, card in enumerate(cards)]
@@ -107,12 +107,12 @@ def render(cards: list[Scorecard]) -> str:
     for family in sorted(tables):
         lines += [f"## {family}", ""]
         header = ["target", "stratum", "rung"] + [
-            f"{name} {probe_type}" for name in names for probe_type in (*PROBE_TYPES, "model")
+            f"{name} {probe_type}" for name in names for probe_type in (*PROBE_MODELS, "model")
         ]
         rows = [[target, stratum, rung] + [
                     fmt(values.get((column, probe_type)))
                     for column in range(len(cards))
-                    for probe_type in (*PROBE_TYPES, "model")]
+                    for probe_type in (*PROBE_MODELS, "model")]
                 for (target, stratum, rung), values in sorted(tables[family].items())]
         lines += [md_table(header, rows, "lll" + "r" * (len(header) - 3)), ""]
     lines += ["## Ranking on rung 1 − rung 1w", ""]

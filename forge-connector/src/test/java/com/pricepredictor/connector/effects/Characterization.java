@@ -46,13 +46,13 @@ final class Characterization {
      * instant it claims to be.
      */
     private static final Pattern TIMESTAMP = Pattern.compile(
-            "^(\\{\"record_id\":\"[^\"]*\",\"run_id\":\"[^\"]*\",\"timestamp\":\")([^\"]*)(\")");
+            "^(\\{\"record_id\":\"[^\"]*\",\"generation\":3,\"run_id\":\"[^\"]*\",\"timestamp\":\")([^\"]*)(\")");
 
     private static final String TIMESTAMP_PLACEHOLDER = "<timestamp>";
 
     /** The literal runs of the head {@link #TIMESTAMP} matches, around the two ids. */
     private static final List<String> ENVELOPE_HEAD = List.of(
-            "{\"record_id\":\"", "\",\"run_id\":\"", "\",\"timestamp\":\"");
+            "{\"record_id\":\"", "\",\"generation\":3,\"run_id\":\"", "\",\"timestamp\":\"");
 
     /** Characters either side of the first difference shown on a mismatch. */
     private static final int CONTEXT = 160;

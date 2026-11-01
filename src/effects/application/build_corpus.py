@@ -51,7 +51,11 @@ from effects.domain.provenance import ProvenanceKey, SourceTree, first_text, spl
 from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
 from effects.domain.records import acting_keys
 from effects.domain.sampling import DEFAULT_KIND_MIX
-from effects.domain.shard_generation import MixedGenerationsError
+from effects.domain.shard_generation import (
+    ACCEPTED_GENERATIONS,
+    MixedGenerationsError,
+    UnacceptedGenerationError,
+)
 from effects.domain.split import HeldOutCards, HoldoutRule
 from effects.domain.strata import OUTPUT_STRATA
 
@@ -113,7 +117,7 @@ class BuildCorpusConfig:
         "repeats included; 0 means no cap (default: %(default)s)"
     )})
     reuse_cap: int = field(default=4, metadata={"help": (
-        "Max copies of one record toward a short rule family's share (FR-049); "
+        "Max copies of one record toward a short effect family's share (FR-049); "
         "1 means no repeats (default: %(default)s)"
     )})
     class_mix: dict[str, float] | None = None
@@ -419,7 +423,7 @@ def build(config: BuildCorpusConfig) -> int:
     held_out = _select_holdout(config, trees)
     surface = surface_of(config.vocab_path)
     _log_holdout(config, held_out, surface)
-    _refuse_mixed_generations(config.records_dir)
+    _require_generation(config.records_dir)
     read = ReadConfig(
         records_dir=config.records_dir, sidecar_roots=roots,
         max_events=config.max_events_per_record, held_out=held_out, seed=config.seed,
@@ -519,13 +523,13 @@ def _select_holdout(config: BuildCorpusConfig, trees: ConvertedTrees) -> HeldOut
     return held_out
 
 
-def _refuse_mixed_generations(records_dir: Path) -> None:
-    """Before any record is read (FR-033)."""
-    from effects.infrastructure.shard_io import iter_shards, refuse_mixed_generations
+def _require_generation(records_dir: Path) -> None:
+    """Before any record is read (FR-020, FR-033)."""
+    from effects.infrastructure.shard_io import iter_shards, require_generation
 
     try:
-        refuse_mixed_generations(iter_shards(records_dir))
-    except MixedGenerationsError as exc:
+        require_generation(iter_shards(records_dir), *ACCEPTED_GENERATIONS)
+    except (MixedGenerationsError, UnacceptedGenerationError) as exc:
         raise BuildCorpusError(str(exc)) from exc
 
 

@@ -36,6 +36,7 @@ from effects.domain.aux_head_targets import (
 )
 from effects.domain.aux_heads import TRAINING_HEADS, Head
 from effects.domain.damage_step_keywords import KeywordResolver
+from effects.domain.effect_families import effect_family
 from effects.domain.effect_head_input import SlotKind
 from effects.domain.effect_head_layout import CREATED_OBJECTS_WIDTH, VERDICT_WIDTH, FieldSpec
 from effects.domain.effect_targets import derive_targets
@@ -44,7 +45,6 @@ from effects.domain.lethality_counterfactuals import counterfactual, qualify
 from effects.domain.provenance import SidecarLine
 from effects.domain.rarity import RarityCoverage, TextGames
 from effects.domain.records import EffectRecord
-from effects.domain.rule_families import rule_family
 from effects.domain.sampling import (
     batches_without_replacement,
     sample_weights,
@@ -144,7 +144,7 @@ class StepReady:
     """One prepared step, with the epoch-line shares of the records it planned."""
 
     prepared: DeviceStep
-    #: Trained records by rarity bucket and by rule family (FR-055).
+    #: Trained records by rarity bucket and by effect family (FR-055).
     buckets: dict[str, int]
     families: dict[str, int]
 
@@ -449,7 +449,7 @@ class StepPreparer:
             text = texts[record.record_id]
             bucket = NO_TEXT_BUCKET if text is None else games.bucket(text)
             labels[record.record_id] = RecordLabels(
-                bucket, rule_family(
+                bucket, effect_family(
                     record, self.sidecars, resolver=self._keywords,
                     legality_mode_counts=self.legality_mode_counts,
                 ),

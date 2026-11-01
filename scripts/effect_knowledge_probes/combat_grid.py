@@ -51,6 +51,7 @@ from _lib.markdown import print_table  # noqa: E402
 
 from effect_knowledge_probes import common, readout, record_walk  # noqa: E402
 from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
+from effects.domain.rule_outcomes import step_deaths, strikes_in_step  # noqa: E402
 
 VALUES = range(1, 9)
 #: Keywords that change who dies in a damage step; a qualifying pair carries none.
@@ -72,50 +73,6 @@ VARIANTS: dict[str, tuple[str | None, str | None, str, bool]] = {
     "attacker-double-strike": ("attacker", "double_strike", "first_strike", False),
     "attacker-double-strike-second-hit": ("attacker", "double_strike", "regular", True),
 }
-
-
-# ── the rule ────────────────────────────────────────────────────────────
-
-
-def strikes_in_step(keywords, step: str) -> bool:
-    """Whether a creature with ``keywords`` deals its combat damage in ``step``.
-
-    Rules 510, 702.7 and 702.4: a first or double striker in the first-strike step,
-    a creature without first strike or with double strike in the regular step.
-    """
-    if step == "first_strike":
-        return bool(keywords & {"first_strike", "double_strike"})
-    return "first_strike" not in keywords or "double_strike" in keywords
-
-
-def step_deaths(
-    attacker: tuple[int, int, int], blocker: tuple[int, int, int],
-    attacker_keywords=frozenset(), blocker_keywords=frozenset(), step: str = "regular",
-) -> tuple[bool, bool]:
-    """``(attacker dies, blocker dies)`` in one damage step of a one-on-one block.
-
-    Each creature is ``(power, toughness, damage already marked)``. Rules 510 and
-    702.7, 702.4, 702.2 and 702.12: a first or double striker deals damage in the
-    first-strike step, a creature without first strike or with double strike in the
-    regular step, both creatures striking in a step at once. Lethal damage is marked
-    damage at least the toughness, or any damage from a deathtouch source;
-    indestructible survives both.
-    """
-    power = {"a": attacker[0], "b": blocker[0]}
-    toughness = {"a": attacker[1], "b": blocker[1]}
-    marked = {"a": attacker[2], "b": blocker[2]}
-    keywords = {"a": set(attacker_keywords), "b": set(blocker_keywords)}
-    deathtouched = {"a": False, "b": False}
-    other = {"a": "b", "b": "a"}
-
-    for side in [s for s in ("a", "b") if strikes_in_step(keywords[s], step) and power[s] > 0]:
-        marked[other[side]] += power[side]
-        if "deathtouch" in keywords[side]:
-            deathtouched[other[side]] = True
-    dead = {side: "indestructible" not in keywords[side]
-            and (marked[side] >= toughness[side] or deathtouched[side])
-            for side in ("a", "b")}
-    return dead["a"], dead["b"]
 
 
 # ── the edits ───────────────────────────────────────────────────────────

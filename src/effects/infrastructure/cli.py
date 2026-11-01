@@ -53,7 +53,7 @@ from effects.domain.default_paths import (
     DEFAULT_VOCAB_PATH,
     DEFAULT_WIN_RATES,
 )
-from effects.domain.shard_generation import MixedGenerationsError
+from effects.domain.shard_generation import MixedGenerationsError, UnacceptedGenerationError
 from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
 from price_predictor.domain.dataclass_defaults import field_default
@@ -69,6 +69,8 @@ _Config = TypeVar("_Config")
 
 #: Torch loads with this module, so its exceptions are named rather than imported.
 _EFFECT_MODEL_STORE = "effects.infrastructure.effect_model_store"
+#: A checkpoint trained on another input layout (FR-045), refused by every loader.
+_LAYOUT_REFUSED = "effects.domain.effect_head_input.CheckpointLayoutError"
 
 
 def config_from_args(cls: type[_Config], args: argparse.Namespace, **overrides: Any) -> _Config:
@@ -477,7 +479,7 @@ def _collector_runner(command: str, config_type: type, module: str) -> Callable:
     traceback.
     """
 
-    @exits_with({CollectorRefusal: 1})
+    @exits_with({CollectorRefusal: 1, _LAYOUT_REFUSED: 1})
     def run(args: argparse.Namespace) -> int:
         error = random_seat_error(args)
         if error is not None:
@@ -732,10 +734,12 @@ def _train_effect_model_parser(subparsers) -> None:
 
 @exits_with({
     MissingTrainingInputError: 1,
+    _LAYOUT_REFUSED: 1,
     HoldoutMismatchError: 1,
     # Raised in a prefetch worker too, which hands the exception itself over.
     ValidationGameInTrainingError: 1,
     MixedGenerationsError: 1,
+    UnacceptedGenerationError: 1,
     SurfaceMismatchError: 2,
     EmptyHoldoutError: 2,
     f"{_EFFECT_MODEL_STORE}.ResumeMismatchError": 2,
@@ -781,7 +785,9 @@ def _encode_abilities_parser(subparsers) -> None:
     )
 
 
-@exits_with({f"{_EFFECT_MODEL_STORE}.HashMismatchError": 2, FileNotFoundError: 2})
+@exits_with({
+    f"{_EFFECT_MODEL_STORE}.HashMismatchError": 2, FileNotFoundError: 2, _LAYOUT_REFUSED: 1,
+})
 def run_encode_abilities(args: argparse.Namespace) -> int:
     from effects.application.encode_abilities import EncodeAbilitiesConfig
     from effects.application.encode_abilities import run as encode
@@ -838,6 +844,7 @@ def _baseline_checkpoint(value: str):
     f"{_EFFECT_MODEL_STORE}.SplitMismatchError": 2,
     CorpusMismatchError: 2,
     FileNotFoundError: 2,
+    _LAYOUT_REFUSED: 1,
 })
 def run_evaluate_effect_model(args: argparse.Namespace) -> int:
     from effects.application.evaluate_effect_model import run as evaluate

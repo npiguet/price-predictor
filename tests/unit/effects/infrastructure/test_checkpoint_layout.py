@@ -1,8 +1,5 @@
-"""A checkpoint's weights load strictly, less only the training-only heads.
-
-Which input layout a loaded checkpoint is fed is ``InputLayout.of``'s, tested
-with the layout in ``domain/test_effect_head_input.py``.
-"""
+"""A checkpoint loads only on the input layout it trained on, and its weights
+load strictly, less only the training-only heads (FR-045, M1)."""
 
 from __future__ import annotations
 
@@ -53,12 +50,30 @@ def test_a_missing_shipped_key_is_refused():
         )
 
 
-def test_a_checkpoint_from_before_option_rows_still_loads():
-    """The option-kind embedding starts at zero, so its absence changes nothing."""
+def test_a_checkpoint_missing_the_option_kind_embedding_is_refused():
+    """Gen-1 checkpoints lacked it; no checkpoint this code loads may."""
+    import pytest
     import torch
 
     from effects.infrastructure.effect_model_store import load_weights
 
-    load_weights(
-        _checkpoint(drop=("option_kind_embedding.weight",)), torch.device("cpu"),
+    with pytest.raises(RuntimeError, match="option_kind_embedding"):
+        load_weights(
+            _checkpoint(drop=("option_kind_embedding.weight",)), torch.device("cpu"),
+        )
+
+
+def test_only_the_current_layout_is_accepted():
+    import pytest
+
+    from effects.domain.effect_head_input import (
+        INPUT_LAYOUT,
+        INPUT_LAYOUT_KEY,
+        CheckpointLayoutError,
+        require_input_layout,
     )
+
+    require_input_layout({INPUT_LAYOUT_KEY: INPUT_LAYOUT})
+    for settings in ({}, None, {INPUT_LAYOUT_KEY: "gen-1"}, {INPUT_LAYOUT_KEY: "gen-0"}):
+        with pytest.raises(CheckpointLayoutError, match=INPUT_LAYOUT):
+            require_input_layout(settings)

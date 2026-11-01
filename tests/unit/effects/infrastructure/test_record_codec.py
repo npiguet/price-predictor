@@ -36,6 +36,7 @@ from effects.domain.records import (
     RewritePayload,
     RewriteResult,
     TriggerPayload,
+    TurnActionSubkind,
 )
 from effects.domain.state_snapshot import (
     CombatStatus,
@@ -61,6 +62,7 @@ from effects.infrastructure.shard_io import (
     read_shard,
     write_shard,
 )
+from tests.unit.effects.builders import make_record
 
 _KEY = ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "trigger", 0)
 _DONOR = ProvenanceKey("cardsfolder/a/anthem.txt", 0, "static", 1)
@@ -675,3 +677,48 @@ class TestThePayloadCodecs:
 
         with pytest.raises(ValueError, match="no payload is defined"):
             _payload_from_json({"anchor_attacker": "E1"}, kind, discriminator)
+
+
+class TestGen3EnvelopeFields:
+    """``generation``, ``aimed_at``, ``directed`` and the ``turn_action`` kind (FR-018, T014)."""
+
+    def test_generation_is_first_after_the_record_id(self):
+        keys = list(record_to_dict(_record(generation=3)))
+        assert keys[:2] == ["record_id", "generation"]
+
+    def test_the_gen3_members_are_written_only_when_set(self):
+        data = record_to_dict(_record())
+        assert not {"generation", "aimed_at", "directed"} & data.keys()
+
+    def test_a_gen3_envelope_round_trips(self):
+        from effects.domain.fork_operation import ForkOperation
+        from effects.domain.records import DirectedTag
+
+        record = make_record(
+            RecordKind.COMBAT, generation=3, fork=True, aimed_at=("704.5f",),
+            directed=DirectedTag("tougher", ForkOperation.PT))
+        data = record_to_dict(record)
+        assert data["aimed_at"] == ["704.5f"]
+        assert data["directed"] == {"variant": "tougher", "operation": "pt"}
+        assert record_from_dict(json.loads(json.dumps(data))) == record
+
+    def test_an_empty_aimed_at_is_kept_apart_from_none(self):
+        record = _record(generation=3, aimed_at=())
+        data = record_to_dict(record)
+        assert data["aimed_at"] == []
+        assert record_from_dict(data).aimed_at == ()
+
+    @pytest.mark.parametrize("subkind", list(TurnActionSubkind))
+    def test_a_turn_action_record_round_trips(self, subkind):
+        record = make_record(RecordKind.TURN_ACTION, subkind=subkind, generation=3)
+        data = record_to_dict(record)
+        assert (data["kind"], data["subkind"]) == ("turn_action", subkind.value)
+        assert record_from_dict(data) == record
+
+    def test_a_gen3_shard_reads_as_gen3(self, tmp_path):
+        from effects.domain.shard_generation import ShardGeneration
+        from effects.infrastructure.shard_io import shard_generation, write_shard
+
+        path = tmp_path / "g3.jsonl.gz"
+        write_shard(path, [replace(r, generation=3) for r in read_shard(_GEN1_FIXTURE)])
+        assert shard_generation(path) is ShardGeneration.GEN_3

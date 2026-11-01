@@ -14,12 +14,12 @@ import torch
 from effects.application.breakdowns import TOTAL, RecordResult
 from effects.application.model_loading import forward_chunks
 from effects.domain.damage_step_keywords import KeywordResolver
+from effects.domain.effect_families import effect_family
 from effects.domain.effect_losses import per_entity_loss
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import first_text
 from effects.domain.records import acting_keys
-from effects.domain.rule_families import rule_family
 
 if TYPE_CHECKING:
     from effects.application.model_loading import Runnable
@@ -68,7 +68,7 @@ def _record_result(
 ) -> RecordResult:
     """The grouping keys of one scored record, beside its losses."""
     try:
-        family = rule_family(
+        family = effect_family(
             record, batcher.sidecars, resolver=resolver,
             legality_mode_counts=legality_mode_counts,
         )

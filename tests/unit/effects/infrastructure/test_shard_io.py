@@ -289,20 +289,51 @@ class TestShardGeneration:
         empty.write_text("", encoding="utf-8")
         assert shard_generation(empty) is None
 
-    def test_a_set_holding_both_generations_is_refused(self, tmp_path):
+    def _gen3_shard(self, path: Path) -> Path:
+        with gzip.open(path, "wt", encoding="utf-8") as out:
+            for line in iter_shard_lines(self._gen2_shard(path.with_name("src.jsonl.gz"))):
+                data = json.loads(line)
+                out.write(json.dumps({"record_id": data["record_id"], "generation": 3, **data})
+                          + "\n")
+        return path
+
+    def test_a_shard_carrying_generation_3_is_gen3(self, tmp_path):
+        from effects.domain.shard_generation import ShardGeneration
+        from effects.infrastructure.shard_io import shard_generation
+
+        assert shard_generation(self._gen3_shard(tmp_path / "g3.jsonl.gz")) is ShardGeneration.GEN_3
+
+    @pytest.mark.parametrize("pair", [("gen1", "gen2"), ("gen2", "gen3"), ("gen1", "gen3")])
+    def test_a_set_holding_two_generations_is_refused(self, tmp_path, pair):
         from effects.domain.shard_generation import MixedGenerationsError
-        from effects.infrastructure.shard_io import refuse_mixed_generations
+        from effects.infrastructure.shard_io import require_generation
+
+        shards = {"gen1": lambda: _GEN1_FIXTURE,
+                  "gen2": lambda: self._gen2_shard(tmp_path / "g2.jsonl.gz"),
+                  "gen3": lambda: self._gen3_shard(tmp_path / "g3.jsonl.gz")}
+        first, second = pair
+        with pytest.raises(MixedGenerationsError,
+                           match=f"mixes gen-{first[-1]} shards with gen-{second[-1]}"):
+            require_generation([shards[first](), shards[second]()])
+
+    def test_a_single_generation_set_passes_and_names_its_generation(self, tmp_path):
+        from effects.domain.shard_generation import ShardGeneration
+        from effects.infrastructure.shard_io import require_generation
 
         gen2 = self._gen2_shard(tmp_path / "g2.jsonl.gz")
-        with pytest.raises(MixedGenerationsError, match="gen-1"):
-            refuse_mixed_generations([_GEN1_FIXTURE, gen2])
+        assert require_generation([gen2, gen2]) is ShardGeneration.GEN_2
+        assert require_generation([]) is None
 
-    def test_a_single_generation_set_passes(self, tmp_path):
-        from effects.infrastructure.shard_io import refuse_mixed_generations
+    def test_a_generation_outside_the_accepted_ones_is_refused_naming_the_shard(self, tmp_path):
+        from effects.domain.shard_generation import ShardGeneration, UnacceptedGenerationError
+        from effects.infrastructure.shard_io import require_generation
 
         gen2 = self._gen2_shard(tmp_path / "g2.jsonl.gz")
-        refuse_mixed_generations([gen2, gen2])
-        refuse_mixed_generations([])
+        with pytest.raises(UnacceptedGenerationError, match=r"g2\.jsonl\.gz holds gen-2"):
+            require_generation([gen2], ShardGeneration.GEN_3)
+        gen3 = self._gen3_shard(tmp_path / "g3.jsonl.gz")
+        assert require_generation(
+            [gen3], ShardGeneration.GEN_2, ShardGeneration.GEN_3) is ShardGeneration.GEN_3
 
 
 class TestReadRecordsMatching:

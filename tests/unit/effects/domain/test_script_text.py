@@ -1,6 +1,6 @@
 """The script-text grammar every reader of a sidecar's ``script_text`` shares.
 
-The equivalence test pins the parser rule families used to read ``Mode$`` and
+The equivalence test pins the parser effect families used to read ``Mode$`` and
 ``Event$`` with: a family that moved would re-place records a corpus already
 placed.
 """

@@ -26,6 +26,8 @@ from effects.domain.records import (
     ResolutionPayload,
     RewritePayload,
     TriggerPayload,
+    TurnActionPayload,
+    TurnActionSubkind,
 )
 from effects.domain.split import HeldOutCards
 from effects.domain.state_snapshot import (
@@ -96,6 +98,8 @@ def _default_payload(kind: RecordKind, moment, subkind):
                 anchor_attacker="E1",
             ),
         }[subkind]()
+    if kind is RecordKind.TURN_ACTION:
+        return TurnActionPayload()
     return {
         RecordKind.COMBAT: CombatPayload,
         RecordKind.CONTINUOUS: ContinuousPayload,
@@ -124,6 +128,8 @@ def make_record(kind: RecordKind = RecordKind.RESOLUTION, **overrides) -> Effect
         moment = moment or Moment.RESOLUTION
     elif kind is RecordKind.PLAYABILITY:
         subkind = subkind or PlayabilitySubkind.DECISION
+    elif kind is RecordKind.TURN_ACTION:
+        subkind = subkind or TurnActionSubkind.DRAW
     # A discriminator on the wrong kind is forwarded as given, so a test can
     # still build the record the envelope check is meant to refuse.
     if moment is not None:
@@ -273,7 +279,7 @@ def make_batcher(
     *, tokenizer=None, sidecars=None, masks=None, surface: str = "script",
     e_dim: int = 4, widths=None, device=None, withhold_keyword=None,
     keyword_expand_p: float = 0.0, context_dropout: float = 0.0, rng=None,
-    identity_table=None, noise=None, truncations=None, input_layout=None,
+    identity_table=None, noise=None, truncations=None,
     resolver=None,
 ):
     """A ``SurfaceBatcher`` and its collaborators from one flat set of settings."""
@@ -287,7 +293,6 @@ def make_batcher(
     )
     from effects.application.text_staging import TextStager
     from effects.domain.baselines import BaselineMasks
-    from effects.domain.effect_head_input import INPUT_LAYOUT
 
     masks = masks or BaselineMasks()
     return SurfaceBatcher(
@@ -296,7 +301,7 @@ def make_batcher(
             keyword_expand_p=keyword_expand_p, truncations=truncations,
         ),
         resolver=resolver or KeyResolver(sidecars, surface),
-        spec=SurfaceSpec(e_dim, widths or {}, masks, input_layout or INPUT_LAYOUT),
+        spec=SurfaceSpec(e_dim, widths or {}, masks),
         materializer=Materializer(
             device or torch.device("cpu"), masks, identity_table, noise,
         ),

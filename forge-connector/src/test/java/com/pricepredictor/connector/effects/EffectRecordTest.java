@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.effects.directed.DirectedTag;
+import com.pricepredictor.connector.effects.directed.ForkOperation;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -39,12 +41,60 @@ class EffectRecordTest {
     void anEnvelopeCarriesEveryFrozenField() {
         String json = record(RecordKind.COMBAT).actor("P0").toJson();
         for (String key : List.of(
-                "record_id", "run_id", "timestamp", "game_id", "kind", "moment",
+                "record_id", "generation", "run_id", "timestamp", "game_id", "kind", "moment",
                 "subkind", "link_id", "mirror_of", "variant_of", "mode",
                 "interventional", "fork", "synthetic", "random_seat", "actor_player",
                 "ability", "state", "payload")) {
             assertTrue(json.contains("\"" + key + "\":"), key + " missing from " + json);
         }
+    }
+
+    /**
+     * {@code generation} is the first member after {@code record_id} on every
+     * record (FR-018): its value is what names a gen-3 shard to a reader.
+     */
+    @Test
+    void generationFollowsTheRecordIdOnEveryRecord() {
+        for (EffectRecord r : List.of(record(RecordKind.COMBAT), resolution(Moment.RESOLUTION),
+                playability(PlayabilitySubkind.DECISION))) {
+            assertTrue(r.toJson().startsWith("{\"record_id\":\"run.0.1\",\"generation\":3,"),
+                    r.toJson());
+        }
+    }
+
+    /**
+     * {@code aimed_at} and {@code directed} are written only where set, after
+     * the gen-2 flags; an empty {@code aimed_at} is written, because a coverage
+     * run aimed at no rule says so (FR-009a).
+     */
+    @Test
+    void aimedAtAndDirectedAreWrittenOnlyWhereSet() {
+        String plain = resolution(Moment.RESOLUTION).toJson();
+        assertFalse(plain.contains("aimed_at"), plain);
+        assertFalse(plain.contains("directed"), plain);
+
+        String coverage = resolution(Moment.RESOLUTION).aimedAt(List.of()).toJson();
+        assertTrue(coverage.contains("\"random_seat\":false,\"aimed_at\":[],\"actor_player\":"),
+                coverage);
+
+        String fork = record(RecordKind.COMBAT).fork(true).aimedAt(List.of("704.5f"))
+                .directed(new DirectedTag("tougher", ForkOperation.PT)).toJson();
+        assertTrue(fork.contains(
+                "\"aimed_at\":[\"704.5f\"],\"directed\":{\"variant\":\"tougher\",\"operation\":\"pt\"},"),
+                fork);
+    }
+
+    /** The directed-fork signature: a non-interventional fork naming its rule. */
+    @Test
+    void aDirectedTagNeedsAnAimedNonInterventionalFork() {
+        DirectedTag tag = new DirectedTag("tougher", ForkOperation.PT);
+        assertThrows(IllegalStateException.class,
+                () -> record(RecordKind.COMBAT).fork(true).directed(tag).toJson());
+        assertThrows(IllegalStateException.class,
+                () -> record(RecordKind.COMBAT).aimedAt(List.of("704.5f")).directed(tag).toJson());
+        assertThrows(IllegalStateException.class,
+                () -> resolution(Moment.RESOLUTION).fork(true).interventional(true)
+                        .aimedAt(List.of("704.5f")).directed(tag).toJson());
     }
 
     /**

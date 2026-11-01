@@ -17,13 +17,14 @@ from effects.domain import default_paths
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import Baseline
 from effects.domain.corpus_manifest import CorpusManifest
+from effects.domain.shard_generation import ACCEPTED_GENERATIONS
 from effects.domain.split import CorpusSplit, HoldoutRule
 from effects.domain.strata import VALIDATION_STRATA, Stratum
 from effects.domain.text_holdout import HoldoutUnit, normalize_script_text
 from effects.domain.tokenizer_files import TokenizerFiles
 from effects.infrastructure.converted_trees import SourceTrees
 from effects.infrastructure.corpus_store import CorpusStore
-from effects.infrastructure.shard_io import iter_shards, refuse_mixed_generations
+from effects.infrastructure.shard_io import iter_shards, require_generation
 
 logger = logging.getLogger(__name__)
 
@@ -440,8 +441,8 @@ def run(config: TrainEffectModelConfig) -> int:
             f"({', '.join(missing)}). Rebuild it with a build-corpus that writes "
             "validation/samples/."
         )
-    # Before any record is read (FR-033).
-    refuse_mixed_generations(iter_shards(Path(config.corpus)))
+    # Before any record is read (FR-020, FR-033).
+    require_generation(iter_shards(Path(config.corpus)), *ACCEPTED_GENERATIONS)
     check_manifest_holdout(manifest, config)
     facts = CorpusFacts.of(manifest)
     logger.info(

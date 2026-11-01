@@ -19,6 +19,7 @@ from effects.domain.baselines import (
     BASELINES,
     Baseline,
 )
+from effects.domain.effect_head_input import INPUT_LAYOUT, INPUT_LAYOUT_KEY
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.split_provenance import SplitProvenance
 from effects.domain.text_holdout import HoldoutUnit
@@ -83,6 +84,7 @@ def _checkpoint(files, **overrides) -> EffectCheckpoint:
         "encoder_state": {"token_embedding.weight": torch.zeros(32, 16)},
         "model_state": model.state_dict(),
         "provenance": _provenance(files),
+        "training_settings": {INPUT_LAYOUT_KEY: INPUT_LAYOUT},
     }
     defaults.update(overrides)
     return EffectCheckpoint(**defaults)
@@ -408,10 +410,23 @@ class TestInferenceFiles:
         verify_hashes(provenance, TokenizerFiles(*files))
 
 
-_GEN1_CHECKPOINT = (
-    __import__("pathlib").Path(__file__).parents[4]
-    / "models" / "effects" / "runs" / "2026-09-17-full-textless-corpus" / "latest.pt"
-)
+class TestTheInputLayout:
+    """Every loader goes through the store, so its one check refuses an
+    earlier layout everywhere (FR-045, M1)."""
+
+    @pytest.mark.parametrize("settings", [{}, {INPUT_LAYOUT_KEY: "earlier"}])
+    def test_a_checkpoint_recording_another_layout_or_none_is_refused(
+        self, tmp_path, files, settings,
+    ):
+        from effects.domain.effect_head_input import CheckpointLayoutError
+        from effects.infrastructure.effect_model_store import load_effect_checkpoint
+
+        store = EffectModelStore(tmp_path)
+        store.save(_checkpoint(files, training_settings=settings))
+        with pytest.raises(CheckpointLayoutError, match=INPUT_LAYOUT):
+            store.load()
+        with pytest.raises(CheckpointLayoutError):
+            load_effect_checkpoint(store.latest_path())
 
 
 class TestGen2Checkpoint:
@@ -422,7 +437,8 @@ class TestGen2Checkpoint:
         encoder = AbilityEncoderConfig(vocab_size=32, e_dim=4, d_model=32, n_layers=2)
         settings = {"e_noise": 0.2, "value_weight": 0.05, "mlm_weight": 0.1,
                     "mlm_mask_prob": 0.15, "api_weight": 0.05,
-                    "api_types": ["Draw"], "param_keys": ["NumCards"]}
+                    "api_types": ["Draw"], "param_keys": ["NumCards"],
+                    INPUT_LAYOUT_KEY: INPUT_LAYOUT}
         store = EffectModelStore(tmp_path)
         store.save(_checkpoint(
             files, encoder_config=encoder,
@@ -440,38 +456,8 @@ class TestGen2Checkpoint:
             "output/gen1-cardsfolder", "output/gen1-tokenscripts",
         )
 
-    def test_an_encoder_config_recording_e_noise_loads_with_it_ignored(self, tmp_path, files):
-        store = EffectModelStore(tmp_path)
-        store.save(_checkpoint(files))
-        path = store.latest_path()
-        payload = torch.load(path, weights_only=False)
-        payload["encoder_config"]["e_noise"] = 0.05
-        torch.save(payload, path)
-        assert store.load().encoder_config == _ENCODER_CONFIG
-
     def test_a_config_recording_no_size_builds_at_four_layers_and_256(self):
         from effects.infrastructure.effect_model_store import encoder_config_from
 
-        config = encoder_config_from({"vocab_size": 32, "e_dim": 64, "e_noise": 0.05})
+        config = encoder_config_from({"vocab_size": 32, "e_dim": 64})
         assert (config.n_layers, config.d_model, config.ff_dim) == (4, 256, 1024)
-
-    @pytest.mark.skipif(not _GEN1_CHECKPOINT.exists(), reason="gen-1 checkpoint absent")
-    def test_the_gen1_checkpoint_loads_at_its_recorded_size(self):
-        """Spec Story 5 scenario 8, on the real gen-1 payload."""
-        from effects.domain.ability_encoder import AbilityEncoder
-
-        checkpoint = EffectModelStore(_GEN1_CHECKPOINT.parent).load(_GEN1_CHECKPOINT)
-        config = checkpoint.encoder_config
-        assert (config.n_layers, config.d_model) == (4, 256)
-        encoder = AbilityEncoder(config)
-        encoder.load_state_dict(checkpoint.encoder_state)
-        model = EffectModel(checkpoint.model_config)
-        missing, unexpected = model.load_state_dict(checkpoint.model_state, strict=False)
-        assert not unexpected
-        assert set(missing) <= {
-            key for key in model.state_dict()
-            if key.startswith(("option_kind_embedding.", *(
-                f"{name}." for name in TRAINING_ONLY_MODULES
-            )))
-        }
-        assert checkpoint.training_settings == {} and checkpoint.cards_folders == ()

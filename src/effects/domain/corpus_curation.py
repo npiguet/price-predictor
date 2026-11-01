@@ -9,17 +9,14 @@ earliest games' opening boards over and over.
 
 from __future__ import annotations
 
-import hashlib
 import heapq
-import zlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
 from effects.domain.effect_targets import derive_targets
 from effects.domain.sampling import SamplingClass
-
-_HASH_BYTES = 8
+from effects.domain.seeded_draw import id_hash, keyed_hash
 
 
 def record_hash(record_id: str, *, seed: int) -> int:
@@ -28,12 +25,7 @@ def record_hash(record_id: str, *, seed: int) -> int:
     Not the built-in ``hash()``, which is salted per process, so the survey and
     write passes would silently admit different records (FR-088a).
     """
-    digest = hashlib.blake2b(
-        record_id.encode("utf-8"),
-        digest_size=_HASH_BYTES,
-        key=str(seed).encode("utf-8"),
-    ).digest()
-    return int.from_bytes(digest, "big")
+    return keyed_hash(record_id, seed)
 
 
 class _BoundedHeap:
@@ -246,7 +238,7 @@ def rate_plan(distinct: int, quota: int) -> CopyPlan:
 def game_hash(game_id: str) -> int:
     """A stable 32-bit id for a game; not ``hash()``, which is salted per
     process (FR-088a)."""
-    return zlib.crc32(game_id.encode("utf-8"))
+    return id_hash(game_id)
 
 
 def game_disjoint_draw(game_id: str) -> float:

@@ -53,7 +53,7 @@ BOOTSTRAP_RESAMPLES = 1000
 CI_LEVEL = 0.95
 
 PROBED_RUNGS: tuple[str, ...] = ("0", "1", "1w", "1o", "2")
-PROBE_TYPES: tuple[str, ...] = ("linear", "mlp")
+PROBE_MODELS: tuple[str, ...] = ("linear", "mlp")
 
 
 # ── folds, the width control, scores ────────────────────────────────────
@@ -303,7 +303,7 @@ def run_ladder(data: LadderInput, *, rungs=PROBED_RUNGS, mlp_options=None,
             continue
         X = data.features[rung]
         scores = {}
-        for probe_type in PROBE_TYPES:
+        for probe_type in PROBE_MODELS:
             prediction = probe(X, data.y, folds, data.kind, data.weight, probe_type,
                                **(mlp_options if probe_type == "mlp" else {}))
             oof[(rung, probe_type)] = prediction
@@ -315,7 +315,7 @@ def run_ladder(data: LadderInput, *, rungs=PROBED_RUNGS, mlp_options=None,
         rung3 = score(data.kind, data.y, data.rung3, data.weight)
         result["rungs"]["3"] = {"model": rung3}
         shares = {}
-        for probe_type in PROBE_TYPES:
+        for probe_type in PROBE_MODELS:
             if ("0", probe_type) not in oof or ("1", probe_type) not in oof:
                 continue
             value = share(result["rungs"]["0"][probe_type],
@@ -334,7 +334,7 @@ def run_ladder(data: LadderInput, *, rungs=PROBED_RUNGS, mlp_options=None,
         result["per_layer"] = []
         for depth, X in enumerate(data.layers):
             row = {"layer": depth}
-            for probe_type in PROBE_TYPES:
+            for probe_type in PROBE_MODELS:
                 prediction = probe(X, data.y, folds, data.kind, data.weight, probe_type,
                                    **(mlp_options if probe_type == "mlp" else {}))
                 row[probe_type] = score(data.kind, data.y, prediction, data.weight)

@@ -16,15 +16,18 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from enum import StrEnum
 from typing import Any
 
 import orjson
 
 from effects.domain.event_schema import Event
+from effects.domain.fork_operation import ForkOperation
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     PAYLOAD_TYPES,
+    SUBKINDS_OF,
     ActivationPayload,
     Candidate,
     CollectionMode,
@@ -32,6 +35,7 @@ from effects.domain.records import (
     ContinuousPayload,
     Contribution,
     Costs,
+    DirectedTag,
     EffectRecord,
     ForbiddenEntity,
     Moment,
@@ -45,6 +49,7 @@ from effects.domain.records import (
     RewritePayload,
     RewriteResult,
     TriggerPayload,
+    TurnActionPayload,
 )
 from effects.domain.state_snapshot import (
     CombatStatus,
@@ -63,9 +68,9 @@ from effects.domain.state_snapshot import (
 #: Envelope keys this code models. Anything else on a line is a field a newer
 #: writer added and is kept in ``EffectRecord.extra_fields``.
 _KNOWN_ENVELOPE_KEYS = frozenset({
-    "record_id", "run_id", "timestamp", "game_id", "kind", "moment", "subkind",
+    "record_id", "generation", "run_id", "timestamp", "game_id", "kind", "moment", "subkind",
     "link_id", "mirror_of", "variant_of", "mode", "interventional", "fork",
-    "synthetic", "random_seat", "what_if", "actor_player", "ability",
+    "synthetic", "random_seat", "what_if", "aimed_at", "directed", "actor_player", "ability",
     "ability_unresolved", "state", "payload",
 })
 
@@ -557,6 +562,14 @@ def _blockers_from_json(data: dict) -> PlayabilityBlockersPayload:
     )
 
 
+def _turn_action_to_json(payload: TurnActionPayload) -> dict:
+    return {"events": _events_to_json(payload.events)}
+
+
+def _turn_action_from_json(data: dict) -> TurnActionPayload:
+    return TurnActionPayload(events=_events_from_json(data.get("events")))
+
+
 @dataclass(frozen=True, slots=True)
 class _PayloadCodec:
     encode: Callable[[Any], dict]
@@ -574,6 +587,7 @@ _PAYLOAD_CODECS: dict[type, _PayloadCodec] = {
     PlayabilityDecisionPayload: _PayloadCodec(_decision_to_json, _decision_from_json),
     PlayabilityAttackersPayload: _PayloadCodec(_attackers_to_json, _attackers_from_json),
     PlayabilityBlockersPayload: _PayloadCodec(_blockers_to_json, _blockers_from_json),
+    TurnActionPayload: _PayloadCodec(_turn_action_to_json, _turn_action_from_json),
 }
 
 
@@ -585,7 +599,7 @@ def _payload_to_json(payload) -> dict:
 
 
 def _payload_from_json(
-    data: dict, kind: RecordKind, discriminator: Moment | PlayabilitySubkind | None,
+    data: dict, kind: RecordKind, discriminator: Moment | StrEnum | None,
 ):
     payload_type = PAYLOAD_TYPES.get((kind, discriminator))
     if payload_type is None:
@@ -602,8 +616,11 @@ def _payload_from_json(
 
 def record_to_dict(record: EffectRecord) -> dict:
     """One record's JSON-serializable dict form, envelope keys first."""
-    out: dict = {
-        "record_id": record.record_id,
+    out: dict = {"record_id": record.record_id}
+    # First after record_id where set: its value names a gen-3 shard (FR-018).
+    if record.generation is not None:
+        out["generation"] = record.generation
+    out |= {
         "run_id": record.run_id,
         "timestamp": record.timestamp,
         "game_id": record.game_id,
@@ -624,6 +641,11 @@ def record_to_dict(record: EffectRecord) -> dict:
         out["random_seat"] = record.random_seat
     if record.what_if is not None:
         out["what_if"] = record.what_if
+    if record.aimed_at is not None:
+        out["aimed_at"] = list(record.aimed_at)
+    if record.directed is not None:
+        out["directed"] = {"variant": record.directed.variant,
+                           "operation": record.directed.operation.value}
     out |= {
         "actor_player": record.actor_player,
         "ability": (
@@ -642,8 +664,11 @@ def record_from_dict(data: dict) -> EffectRecord:
     """Parse one shard line into an :class:`EffectRecord`."""
     kind = RecordKind(data["kind"])
     moment = Moment(data["moment"]) if data.get("moment") else None
-    subkind = PlayabilitySubkind(data["subkind"]) if data.get("subkind") else None
+    subkinds = SUBKINDS_OF.get(kind, PlayabilitySubkind)
+    subkind = subkinds(data["subkind"]) if data.get("subkind") else None
     ability = data.get("ability")
+    aimed_at = data.get("aimed_at")
+    directed = data.get("directed")
     return EffectRecord(
         record_id=data["record_id"],
         run_id=data["run_id"],
@@ -664,6 +689,10 @@ def record_from_dict(data: dict) -> EffectRecord:
         synthetic=data.get("synthetic", False),
         random_seat=data.get("random_seat"),
         what_if=data.get("what_if"),
+        generation=data.get("generation"),
+        aimed_at=tuple(aimed_at) if aimed_at is not None else None,
+        directed=(DirectedTag(directed["variant"], ForkOperation(directed["operation"]))
+                  if directed is not None else None),
         ability=_keys_from_json(ability) if ability is not None else None,
         ability_unresolved=data.get("ability_unresolved"),
         extra_fields={

@@ -12,41 +12,27 @@ import math
 import random
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from pathlib import Path
 
-import numpy as np
 import pytest
 
 from effects.domain.effect_head_input import (
     ACT_SLOT,
-    CARD_TYPES,
-    COMBAT_SUBSTEPS,
-    COUNTER_TYPES,
-    EARLIER_LAYOUT,
-    INPUT_LAYOUT,
     NO_STRIP,
     OVERLAY_KEYWORDS,
     OVERLAY_KEYWORDS_GEN2,
     PHASES,
-    SUPERTYPES,
     THERMOMETER_STEPS,
-    ZONES,
-    InputLayout,
     SlotKind,
     SurfaceBuilder,
-    _multi_hot,
-    _one_hot,
     _push_scalar,
     act_features,
     card_features,
     continuous_masked_keywords,
-    feature_widths,
     global_features,
     player_features,
 )
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey
-from effects.domain.recorded_version import UnknownRecordedVersion
 from effects.domain.records import (
     ActivationPayload,
     Candidate,
@@ -64,7 +50,6 @@ from effects.domain.records import (
     TriggerPayload,
 )
 from effects.domain.state_snapshot import (
-    COLORS,
     CombatStatus,
     EntityState,
     GlobalState,
@@ -83,10 +68,6 @@ from tests.unit.effects.builders import (
 
 E_DIM = 4
 _ZERO = (0.0,) * E_DIM
-
-_EARLIER_LAYOUT_FEATURES = (
-    Path(__file__).parents[3] / "fixtures" / "effects" / "earlier-layout-features.npz"
-)
 
 _BOLT = ProvenanceKey("cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
 _ANTHEM = ProvenanceKey("cardsfolder/a/anthem.txt", 0, "static", 0)
@@ -534,137 +515,6 @@ class TestKeysWithNoLine:
         assert [slot.e for slot in slots_of_kind(_build(record), SlotKind.ABILITY)] == [_ZERO]
 
 
-class TestFeatureEquivalence:
-    """The per-entity features against the implementation they replaced.
-
-    The feature vector is a layout, not a computation: a value that moves one
-    position changes what every checkpoint's weights mean while every number
-    the run reports still looks fine. So the slower implementation's output is
-    kept in ``earlier-layout-features.npz`` and compared element by element
-    over a generated board that reaches every branch — a known value and an
-    unknown one in each vocabulary, present and absent power/toughness,
-    counters on and off the checked-in list, and both combat payloads.
-
-    The reference is the earlier input layout (FR-063c), which every checkpoint
-    recording no ``input_layout`` must keep reading bit for bit.
-    """
-
-    @staticmethod
-    def _golden(name: str) -> np.ndarray:
-        with np.load(_EARLIER_LAYOUT_FEATURES) as golden:
-            return golden[name]
-
-    @staticmethod
-    def _boards(seed: int):
-        """Records whose entities between them reach every feature branch."""
-        rng = random.Random(seed)
-        zones = (*ZONES, "Battle Field", "nowhere")
-        types = (*CARD_TYPES, "Kindred", "Conspiracy")
-        counters = (*COUNTER_TYPES, "MUSTER", "GROWTH")
-        keywords = (*OVERLAY_KEYWORDS, "First Strike", "Riot")
-        records = []
-        for index in range(60):
-            entities = []
-            for slot in range(rng.randrange(1, 8)):
-                pt = None if rng.random() < 0.25 else PowerToughness(
-                    base=(rng.randrange(-2, 9), rng.randrange(-2, 9)),
-                    boosts=(rng.randrange(-4, 5), rng.randrange(-4, 5)),
-                    counters=(rng.randrange(0, 5), rng.randrange(0, 5)),
-                )
-                entities.append(_entity(
-                    f"E{slot}",
-                    zone=rng.choice(zones),
-                    types=tuple(rng.sample(types, rng.randrange(0, 3))),
-                    supertypes=tuple(
-                        rng.sample(SUPERTYPES, rng.randrange(0, 2))
-                    ),
-                    colors=tuple(rng.sample(COLORS, rng.randrange(0, 3))),
-                    mana_value=rng.randrange(0, 13),
-                    pt=pt,
-                    tapped=rng.random() < 0.5,
-                    sick=rng.random() < 0.5,
-                    face_down=rng.random() < 0.2,
-                    damage=rng.randrange(0, 7),
-                    counters={
-                        name: rng.randrange(1, 4)
-                        for name in rng.sample(counters, rng.randrange(0, 4))
-                    },
-                    combat=None if rng.random() < 0.4 else CombatStatus(
-                        attacking=rng.random() < 0.5,
-                        blocking=rng.random() < 0.5,
-                        became_blocked=rng.random() < 0.5,
-                        blocked_by=tuple(
-                            f"E{i}" for i in range(rng.randrange(0, 3))
-                        ),
-                    ),
-                    controller=rng.choice(("P0", "P1")),
-                    granted_temporary=GrantedTemporary(
-                        keywords=tuple(
-                            rng.sample(keywords, rng.randrange(0, 4))
-                        ),
-                        abilities=tuple(range(rng.randrange(0, 3))),
-                    ),
-                ))
-            kind = RecordKind.COMBAT if index % 5 == 0 else RecordKind.RESOLUTION
-            overrides: dict = {
-                "kind": kind,
-                "state": _snapshot(
-                    entities=tuple(entities),
-                    refs=Refs(targets=("E0", "P1"), source="E1"),
-                ),
-            }
-            if kind is RecordKind.COMBAT:
-                overrides["payload"] = CombatPayload(
-                    attackers=("E0",),
-                    assignment_choices={"E0": {"E1": 2}},
-                )
-            records.append(_record(**overrides))
-        return records
-
-    def test_every_entity_builds_the_same_card_features(self):
-        built = [
-            card_features(
-                entity, record,
-                masked_keywords=frozenset(entity.granted_temporary.keywords[:1]),
-                layout=EARLIER_LAYOUT,
-            )
-            for record in self._boards(3)
-            for entity in record.state.entities
-        ]
-        assert len(built) > 150
-        assert np.array_equal(np.array(built), self._golden("card"))
-
-    def test_the_global_and_player_features_are_unchanged(self):
-        records = self._boards(5)
-        global_rows = [global_features(r, layout=EARLIER_LAYOUT) for r in records]
-        player_rows = [
-            player_features(player, record, layout=EARLIER_LAYOUT)
-            for record in records for player in record.state.players
-        ]
-        assert np.array_equal(np.array(global_rows), self._golden("global_"))
-        assert np.array_equal(np.array(player_rows), self._golden("player"))
-
-    def test_the_helpers_themselves_agree_on_every_vocabulary(self):
-        one_hot: list[float] = []
-        multi_hot: list[float] = []
-        for vocabulary in (PHASES, COMBAT_SUBSTEPS, ZONES, CARD_TYPES,
-                           SUPERTYPES, COUNTER_TYPES, OVERLAY_KEYWORDS, COLORS):
-            values = (None, *vocabulary, " First Strike ", "nope", "")
-            for value in values:
-                one_hot += _one_hot(value, vocabulary)
-            for size in range(4):
-                present = set(random.Random(size).sample(values[1:], size))
-                multi_hot += _multi_hot(present, vocabulary)
-        scalars = []
-        for value in (0, -0.0, 3, -3, 2.5, -2.5, 1e6, -1e6):
-            pushed: list[float] = []
-            _push_scalar(pushed, value)
-            scalars.append(pushed)
-        assert np.array_equal(np.array(one_hot), self._golden("one_hot"))
-        assert np.array_equal(np.array(multi_hot), self._golden("multi_hot"))
-        assert np.array_equal(np.array(scalars), self._golden("scalar"))
-
-
 class TestOptionRows:
     """FR-063a: a charm's mode rows follow its root row inside the card's block."""
 
@@ -746,8 +596,8 @@ class TestGen2Layout:
     """
 
     @staticmethod
-    def _phase_slot(record, layout):
-        features = global_features(record, layout=layout)
+    def _phase_slot(record):
+        features = global_features(record)
         # turn and stack size are two scalars each; the phase one-hot follows.
         return features[4:4 + len(PHASES) + 1]
 
@@ -757,10 +607,7 @@ class TestGen2Layout:
             priority="P0", stack_size=0,
         ))
         record = _record(state=state)
-        gen2 = self._phase_slot(record, layout=INPUT_LAYOUT)
-        earlier = self._phase_slot(record, layout=EARLIER_LAYOUT)
-        assert gen2[PHASES.index("declare_attackers")] == 1.0
-        assert earlier[-1] == 1.0  # the earlier layout's "other" slot
+        assert self._phase_slot(record)[PHASES.index("declare_attackers")] == 1.0
 
     def test_every_forge_combat_phase_name_is_mapped(self):
         for forge_name in (
@@ -771,29 +618,21 @@ class TestGen2Layout:
                 turn=3, phase=forge_name, active="P0", priority="P0",
                 stack_size=0,
             ))
-            assert self._phase_slot(_record(state=state), INPUT_LAYOUT)[-1] == 0.0
+            assert self._phase_slot(_record(state=state))[-1] == 0.0
 
     def test_plus_one_counters_read_as_p1p1(self):
         entity = _entity("E1", counters={"+1/+1": 2})
         record = _record(state=_snapshot(entities=(entity,)))
-        gen2 = card_features(entity, record, layout=INPUT_LAYOUT)
-        earlier = card_features(entity, record, layout=EARLIER_LAYOUT)
         plain = _entity("E1", counters={"P1P1": 2})
-        reference = card_features(
-            plain, _record(state=_snapshot(entities=(plain,))), layout=INPUT_LAYOUT,
-        )
-        assert gen2 == reference
-        assert earlier != card_features(
-            plain, _record(state=_snapshot(entities=(plain,))),
-            layout=EARLIER_LAYOUT,
-        )
+        reference = card_features(plain, _record(state=_snapshot(entities=(plain,))))
+        assert card_features(entity, record) == reference
 
     def test_protection_from_a_colour_and_landwalk_set_their_bits(self):
         entity = _entity("E1", granted_temporary=GrantedTemporary(
             keywords=("protection_from_red", "landwalk"),
         ))
         record = _record(state=_snapshot(entities=(entity,)))
-        features = card_features(entity, record, layout=INPUT_LAYOUT)
+        features = card_features(entity, record)
         tail = 2 + 3 + 6 + 3 + 2 + 3 * THERMOMETER_STEPS
         end = len(features) - tail
         block = features[end - (len(OVERLAY_KEYWORDS_GEN2) + 1):end]
@@ -807,7 +646,7 @@ class TestGen2Layout:
             damage=2,
         )
         record = _record(state=_snapshot(entities=(entity,)))
-        features = card_features(entity, record, layout=INPUT_LAYOUT)
+        features = card_features(entity, record)
         steps = THERMOMETER_STEPS
         power, toughness, remaining = (
             features[-3 * steps:-2 * steps],
@@ -821,24 +660,13 @@ class TestGen2Layout:
     def test_an_entity_without_power_and_toughness_carries_zero_codes(self):
         entity = _entity("E1", types=("Enchantment",), pt=None)
         record = _record(state=_snapshot(entities=(entity,)))
-        features = card_features(entity, record, layout=INPUT_LAYOUT)
+        features = card_features(entity, record)
         assert features[-3 * THERMOMETER_STEPS:] == (0.0,) * (3 * THERMOMETER_STEPS)
 
     def test_the_player_ends_with_a_life_thermometer(self):
         record = _record()
-        features = player_features(record.state.players[1], record, layout=INPUT_LAYOUT)
+        features = player_features(record.state.players[1], record)
         assert sum(features[-THERMOMETER_STEPS:]) == 8  # P1 is at 8 life
-
-    def test_the_earlier_layout_is_the_gen2_layout_without_its_additions(self):
-        record = _record()
-        entity = record.state.entities[0]
-        assert len(card_features(entity, record, layout=INPUT_LAYOUT)) == len(
-            card_features(entity, record, layout=EARLIER_LAYOUT),
-        ) + 3 * THERMOMETER_STEPS + 1
-        player = record.state.players[0]
-        assert len(player_features(player, record, layout=INPUT_LAYOUT)) == len(
-            player_features(player, record, layout=EARLIER_LAYOUT),
-        ) + THERMOMETER_STEPS
 
     def test_life_above_the_starting_twenty_reads_in_full(self):
         players = (
@@ -846,38 +674,6 @@ class TestGen2Layout:
             PlayerState(id="P1", life=8, hand=1, library=30, graveyard=4),
         )
         record = _record(state=_snapshot(players=players))
-        features = player_features(players[0], record, layout=INPUT_LAYOUT)
+        features = player_features(players[0], record)
         assert sum(features[-THERMOMETER_STEPS:]) == 33
 
-
-class TestTheRecordedLayout:
-    """A loaded checkpoint is run on the input layout it trained on (FR-063c).
-
-    The layout changes what the model's input vectors mean and how wide they
-    are, so a checkpoint has to be fed the one it learned: gen-1, and gen-2 arms
-    trained before the layout was recorded, record none and read the earlier
-    layout.
-    """
-
-    def test_a_checkpoint_recording_no_layout_reads_the_earlier_one(self):
-        assert InputLayout.of({}) is EARLIER_LAYOUT
-        assert InputLayout.of(None) is EARLIER_LAYOUT
-
-    def test_a_checkpoint_recording_the_layout_reads_it(self):
-        assert InputLayout.of({"input_layout": "gen-2"}) is INPUT_LAYOUT
-
-    def test_a_layout_this_code_does_not_know_is_refused(self):
-        with pytest.raises(UnknownRecordedVersion, match="gen-3"):
-            InputLayout.of({"input_layout": "gen-3"})
-
-    def test_a_run_records_its_layout_under_the_value_checkpoints_on_disk_hold(self):
-        assert INPUT_LAYOUT.name == "gen-2"
-        assert EARLIER_LAYOUT.name is None
-
-    def test_the_widths_follow_the_layout(self):
-        records = [_record()]
-        earlier = feature_widths(records, layout=EARLIER_LAYOUT)
-        gen2 = feature_widths(records, layout=INPUT_LAYOUT)
-        assert gen2[SlotKind.GLOBAL] == earlier[SlotKind.GLOBAL]
-        assert gen2[SlotKind.PLAYER] == earlier[SlotKind.PLAYER] + THERMOMETER_STEPS
-        assert gen2[SlotKind.CARD] == earlier[SlotKind.CARD] + 3 * THERMOMETER_STEPS + 1

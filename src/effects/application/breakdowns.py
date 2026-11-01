@@ -142,7 +142,7 @@ def by_rarity_bucket(
 
 
 def by_family(results: Iterable[RecordResult]) -> dict[str, GroupResult]:
-    """Grouped by rule family (FR-064)."""
+    """Grouped by effect family (FR-064)."""
     return _group(results, lambda r: r.family)
 
 

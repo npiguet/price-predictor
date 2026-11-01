@@ -10,7 +10,7 @@ and a rewrite's result vocabulary tracks Forge's own enum both ways.
 from __future__ import annotations
 
 import re
-from dataclasses import fields
+from dataclasses import fields, replace
 from pathlib import Path
 
 import pytest
@@ -205,7 +205,7 @@ class TestDiscriminators:
             )
 
     def test_subkind_belongs_to_the_playability_kind(self, make_record):
-        with pytest.raises(ValueError, match="subkind is the playability kind"):
+        with pytest.raises(ValueError, match="subkind is the playability and turn-action"):
             make_record(
                 kind=RecordKind.COMBAT,
                 subkind=PlayabilitySubkind.DECISION,
@@ -491,3 +491,51 @@ class TestContributionChannels:
         assert contribution.keyword_changes == ChannelChange(
             gained=("flying",), lost=("haste",),
         )
+
+
+class TestGen3Envelope:
+    """The directed-fork signature and the ``turn_action`` kind (T013)."""
+
+    def _tag(self):
+        from effects.domain.fork_operation import ForkOperation
+        from effects.domain.records import DirectedTag
+
+        return DirectedTag("tougher", ForkOperation.PT)
+
+    def test_a_directed_fork_is_a_non_interventional_fork_naming_its_rule(self):
+        record = build_record(RecordKind.COMBAT, fork=True, aimed_at=("704.5f",),
+                              directed=self._tag())
+        assert record.directed.variant == "tougher"
+        assert not record.is_probe
+
+    @pytest.mark.parametrize("overrides", [
+        {"fork": False, "aimed_at": ("704.5f",)},
+        {"fork": True},
+    ])
+    def test_a_directed_tag_outside_the_signature_is_refused(self, overrides):
+        with pytest.raises(ValueError, match="directed fork"):
+            build_record(RecordKind.COMBAT, directed=self._tag(), **overrides)
+
+    def test_an_interventional_record_cannot_be_directed(self):
+        with pytest.raises(ValueError, match="directed fork"):
+            build_record(RecordKind.RESOLUTION, fork=True, interventional=True,
+                         aimed_at=("704.5f",), directed=self._tag())
+
+    def test_a_turn_action_names_no_acting_line(self):
+        from effects.domain.records import TurnActionSubkind
+
+        record = build_record(RecordKind.TURN_ACTION, subkind=TurnActionSubkind.UNTAP)
+        assert not record.has_act_line
+        with pytest.raises(ValueError, match="no single acting line"):
+            build_record(RecordKind.TURN_ACTION, ability=())
+
+    def test_a_turn_action_takes_its_own_subkinds_only(self):
+        with pytest.raises(ValueError, match="discriminator"):
+            build_record(RecordKind.TURN_ACTION, subkind=PlayabilitySubkind.DECISION)
+        with pytest.raises(ValueError, match="discriminator"):
+            replace(build_record(RecordKind.TURN_ACTION), subkind=None)
+
+    def test_the_metadata_list_names_every_gen3_member(self):
+        from effects.domain.records import COLLECTION_METADATA_FIELDS
+
+        assert {"generation", "aimed_at", "directed"} <= COLLECTION_METADATA_FIELDS

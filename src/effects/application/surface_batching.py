@@ -23,10 +23,8 @@ from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BaselineMasks, baseline_masks
 from effects.domain.effect_head_input import (
     ACT_SLOT,
-    INPUT_LAYOUT,
     KIND_FLAG_WIDTH,
     NO_STRIP,
-    InputLayout,
     SlotKind,
     SurfaceBuilder,
     feature_widths,
@@ -285,8 +283,6 @@ class SurfaceSpec:
     e_dim: int
     widths: dict[SlotKind, int]
     masks: BaselineMasks
-    #: Training's own, or the one a loaded checkpoint recorded (FR-063c).
-    layout: InputLayout = INPUT_LAYOUT
 
     @classmethod
     def for_training(cls, config, widths: dict[SlotKind, int]) -> SurfaceSpec:
@@ -295,12 +291,11 @@ class SurfaceSpec:
 
     @classmethod
     def for_checkpoint(cls, checkpoint, records) -> SurfaceSpec:
-        """A saved model's, each width measured from ``records`` under the
-        layout the checkpoint recorded."""
-        layout = InputLayout.of(checkpoint.training_settings)
+        """A saved model's, each width measured from ``records``; the store has
+        already refused a checkpoint trained on another input layout."""
         return cls(
-            checkpoint.encoder_config.e_dim, feature_widths(records, layout=layout),
-            baseline_masks(checkpoint.variant), layout,
+            checkpoint.encoder_config.e_dim, feature_widths(records),
+            baseline_masks(checkpoint.variant),
         )
 
 
@@ -451,7 +446,7 @@ class SurfaceBatcher:
         it draws context dropout from the batcher's generator."""
         return SurfaceBuilder(
             _StagedLines(self, rows), e_dim=self.spec.e_dim, rng=self.rng,
-            context_dropout=self.context_dropout, layout=self.spec.layout,
+            context_dropout=self.context_dropout,
         )
 
     def build(self, records, encoder: AbilityEncoder, strip_per_record=None) -> Materialized:

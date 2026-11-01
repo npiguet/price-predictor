@@ -1,4 +1,4 @@
-"""``rule_family`` over real gen-1 records and their sidecars (T071, FR-047–048).
+"""``effect_family`` over real gen-1 records and their sidecars (T071, FR-047–048).
 
 Every record here is cut from a real shard (``scripts/make_fixture_records.py``);
 the few tests that need a shape the sample lacks — a keyword on a combat
@@ -13,14 +13,14 @@ from pathlib import Path
 
 import pytest
 
-from effects.domain.provenance import ProvenanceKey, SidecarLine
-from effects.domain.records import Candidate, ForbiddenEntity, RecordKind
-from effects.domain.rule_families import (
+from effects.domain.effect_families import (
     FamilySentinel,
     candidate_family,
+    effect_family,
     legality_modes,
-    rule_family,
 )
+from effects.domain.provenance import ProvenanceKey, SidecarLine
+from effects.domain.records import Candidate, ForbiddenEntity, RecordKind
 from effects.domain.state_snapshot import GrantedTemporary
 from effects.infrastructure.shard_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
@@ -54,38 +54,38 @@ def _first(records, kind, discriminator=None, test=lambda r: True):
 def test_a_resolution_takes_its_acting_lines_api_type(records, sidecars):
     record = _first(records, RecordKind.RESOLUTION, "resolution",
                     lambda r: r.ability and r.ability[0].script_file.endswith("tcri_building.txt"))
-    assert rule_family(record, sidecars) == "GainLife"
+    assert effect_family(record, sidecars) == "GainLife"
 
 
 def test_both_halves_of_a_resolution_share_its_family(records, sidecars):
     halves = [r for r in records if r.link_id and r.ability
               and r.ability[0].script_file.endswith("crustacean_commando.txt")]
     assert {r.moment.value for r in halves} == {"activation", "resolution"}
-    assert {rule_family(r, sidecars) for r in halves} == {"Token"}
+    assert {effect_family(r, sidecars) for r in halves} == {"Token"}
 
 
 def test_a_charm_resolution_is_the_charm_family(records, sidecars):
     record = _first(records, RecordKind.RESOLUTION, "resolution",
                     lambda r: r.ability and "you_come_to_a_river" in r.ability[0].script_file)
-    assert rule_family(record, sidecars) == "Charm"
+    assert effect_family(record, sidecars) == "Charm"
 
 
 def test_a_trigger_takes_its_root_segments_mode(records, sidecars):
     record = _first(records, RecordKind.TRIGGER)
-    assert rule_family(record, sidecars) == "ChangesZone"
+    assert effect_family(record, sidecars) == "ChangesZone"
 
 
 def test_a_trigger_with_no_mode_is_no_mode(records):
     record = _first(records, RecordKind.TRIGGER)
     line = SidecarLine(line_index=0, line_kind="triggered", provenance=record.ability,
                        script_api_type="Draw", script_text="Execute$ SV1 | TriggerZones$ Hand")
-    assert rule_family(record, _Lines({record.ability[0]: line})) == FamilySentinel.NO_MODE
+    assert effect_family(record, _Lines({record.ability[0]: line})) == FamilySentinel.NO_MODE
 
 
 def test_a_continuous_record_takes_its_static_mode(records, sidecars):
     record = _first(records, RecordKind.CONTINUOUS,
                     test=lambda r: "bramblewood_paragon" in r.ability[0].script_file)
-    assert rule_family(record, sidecars) == "Continuous"
+    assert effect_family(record, sidecars) == "Continuous"
 
 
 def test_a_multi_mode_static_keeps_its_mode_list_whole(records):
@@ -93,18 +93,18 @@ def test_a_multi_mode_static_keeps_its_mode_list_whole(records):
     line = SidecarLine(line_index=0, line_kind="static", provenance=record.ability,
                        script_api_type="CantBlockBy,CantAttack",
                        script_text="Mode$ CantBlockBy,CantAttack | ValidCard$ Creature")
-    assert rule_family(record, _Lines({record.ability[0]: line})) == "CantBlockBy,CantAttack"
+    assert effect_family(record, _Lines({record.ability[0]: line})) == "CantBlockBy,CantAttack"
 
 
 def test_a_rewrite_takes_its_event(records, sidecars):
     record = _first(records, RecordKind.REWRITE,
                     test=lambda r: "bramblewood_paragon" in r.ability[0].script_file)
-    assert rule_family(record, sidecars) == "ETBReplacement"
+    assert effect_family(record, sidecars) == "ETBReplacement"
 
 
 def test_a_combat_without_damage_step_keywords_is_none(records, sidecars):
     record = _first(records, RecordKind.COMBAT, test=lambda r: not r.fork)
-    assert rule_family(record, sidecars) == FamilySentinel.NONE
+    assert effect_family(record, sidecars) == FamilySentinel.NONE
 
 
 def test_a_combat_family_is_the_sorted_keyword_set(records, sidecars):
@@ -116,7 +116,7 @@ def test_a_combat_family_is_the_sorted_keyword_set(records, sidecars):
         for entity in record.state.entities
     )
     edited = dataclasses.replace(record, state=dataclasses.replace(record.state, entities=entities))
-    assert rule_family(edited, sidecars) == "first_strike,trample"
+    assert effect_family(edited, sidecars) == "first_strike,trample"
 
 
 def test_a_keyword_acting_line_is_its_keywords_family(records):
@@ -124,13 +124,13 @@ def test_a_keyword_acting_line_is_its_keywords_family(records):
     record = _first(records, RecordKind.TRIGGER)
     line = SidecarLine(line_index=0, line_kind="static", provenance=record.ability,
                        script_api_type="Keyword", script_text="Ward:2")
-    assert rule_family(record, _Lines({record.ability[0]: line})) == "Ward"
+    assert effect_family(record, _Lines({record.ability[0]: line})) == "Ward"
 
 
 def test_a_decision_with_an_unaffordable_candidate_is_unaffordable(records, sidecars):
     record = _first(records, RecordKind.PLAYABILITY, "decision")
     assert not record.payload.candidates[0].affordable
-    assert rule_family(record, sidecars) == FamilySentinel.UNAFFORDABLE
+    assert effect_family(record, sidecars) == FamilySentinel.UNAFFORDABLE
 
 
 def test_decision_candidates_by_verdict_and_by_static(records):
@@ -159,7 +159,7 @@ def test_decision_candidates_by_verdict_and_by_static(records):
 def test_a_blockers_record_restricted_by_flying_is_flying(records, sidecars):
     record = _first(records, RecordKind.PLAYABILITY, "blockers",
                     test=lambda r: any(f.responsible_static for f in r.payload.forbidden))
-    assert rule_family(record, sidecars) == "Flying"
+    assert effect_family(record, sidecars) == "Flying"
 
 
 def _restricted(records, *statics):
@@ -182,7 +182,7 @@ def _restricted(records, *statics):
 def test_a_legality_record_is_in_its_rarest_modes_family(records):
     record, lines = _restricted(records, "CantBlockBy", "CantBlock")
     counts = {"CantBlockBy": 3, "CantBlock": 900}
-    assert rule_family(record, lines, legality_mode_counts=counts) == "CantBlockBy"
+    assert effect_family(record, lines, legality_mode_counts=counts) == "CantBlockBy"
 
 
 def test_a_multi_mode_static_counts_each_of_its_modes(records):
@@ -191,23 +191,23 @@ def test_a_multi_mode_static_counts_each_of_its_modes(records):
     record, lines = _restricted(records, "CantAttack,CantBlock", "CantAttack")
     assert legality_modes(record, lines) == frozenset({"CantAttack", "CantBlock"})
     counts = {"CantAttack": 40, "CantBlock": 7}
-    assert rule_family(record, lines, legality_mode_counts=counts) == "CantBlock"
+    assert effect_family(record, lines, legality_mode_counts=counts) == "CantBlock"
 
 
 def test_without_mode_counts_the_family_is_still_one_mode(records):
     """A dataset built before the counts existed still gets a single-rule
     family, the first mode by name, rather than the combination."""
     record, lines = _restricted(records, "CantBlockBy", "CantBlock")
-    assert rule_family(record, lines) == "CantBlock"
+    assert effect_family(record, lines) == "CantBlock"
 
 
 def test_a_legality_record_with_no_static_is_none(records, sidecars):
     record = _first(records, RecordKind.PLAYABILITY, "attackers")
-    assert rule_family(record, sidecars) == FamilySentinel.NONE
+    assert effect_family(record, sidecars) == FamilySentinel.NONE
 
 
 def test_every_fixture_record_has_a_family(records, sidecars):
-    assert all(rule_family(record, sidecars) for record in records)
+    assert all(effect_family(record, sidecars) for record in records)
 
 
 class _Lines:

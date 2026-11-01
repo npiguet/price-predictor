@@ -1,7 +1,7 @@
 """The evaluation report's breakdowns (T106; spec Story 6 scenarios 1–5).
 
 The rows are real gen-1 records from the fixture, grouped by the families
-``rule_family`` gives them over their real sidecars; only the losses are made
+``effect_family`` gives them over their real sidecars; only the losses are made
 up, because what is under test is the grouping, not the model.
 """
 
@@ -17,9 +17,9 @@ from effects.application.breakdowns import (
     RecordResult,
     breakdown_checks,
 )
+from effects.domain.effect_families import effect_family
 from effects.domain.evaluation_report import CheckStatus
 from effects.domain.records import LEGALITY_SUBKINDS, LegalityDecision
-from effects.domain.rule_families import rule_family
 from effects.domain.strata import Stratum
 from effects.infrastructure.shard_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
@@ -46,7 +46,7 @@ def rows() -> list[RecordResult]:
             game_id=record.game_id,
             subkind=record.subkind.value if record.subkind else None,
             text=text,
-            family=rule_family(record, sidecars),
+            family=effect_family(record, sidecars),
             random_seat=record.random_seat,
             what_if=record.what_if,
             losses={"gate": float(position % 3), bd.TOTAL: float(position % 5)},
@@ -97,7 +97,7 @@ class TestRarityAndFamily:
                 _row(text="new", game="g3")]
         assert list(bd.by_rarity_bucket(rows, {})) == ["2-4"]
 
-    def test_real_records_group_by_their_rule_family(self, rows):
+    def test_real_records_group_by_their_effect_family(self, rows):
         families = bd.by_family(rows)
         assert len(families) > 3
         assert sum(g.per_record.records for g in families.values()) == len(rows)
