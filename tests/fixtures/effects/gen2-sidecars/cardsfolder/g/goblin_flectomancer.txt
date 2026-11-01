@@ -1,0 +1,5 @@
+name: goblin flectomancer
+mana cost: {U}{R}{R}
+types: creature goblin wizard
+power toughness: 2/2
+activated[1]: sacrifice CARDNAME: you may change the targets of target instant or sorcery spell.

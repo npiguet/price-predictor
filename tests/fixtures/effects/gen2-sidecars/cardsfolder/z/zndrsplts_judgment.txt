@@ -1,0 +1,4 @@
+name: zndrsplt's judgment
+mana cost: {4}{U}
+types: sorcery
+spell[1]: for each player, choose friend or foe. each friend creates a token that's a copy of a creature they control. each foe returns a creature they control to its owner's hand.

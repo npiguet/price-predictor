@@ -1,0 +1,8 @@
+name: angel of indemnity
+mana cost: {5}{W}
+types: creature angel warrior
+power toughness: 5/5
+alternate cost: encore {6}{W}{W}
+static: flying
+static: lifelink
+triggered: when CARDNAME enters, return target permanent card with mana value 4 or less from your graveyard to the battlefield.

@@ -1,0 +1,6 @@
+name: nullstone gargoyle
+mana cost: {9}
+types: artifact creature gargoyle
+power toughness: 4/5
+static: flying
+triggered: whenever the first noncreature spell of a turn is cast, counter that spell.

@@ -1,0 +1,4 @@
+name: emergent growth
+mana cost: {3}{G}
+types: sorcery
+spell[1]: target creature gets +5/+5 until end of turn and must be blocked this turn if able.

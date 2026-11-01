@@ -1,0 +1,6 @@
+name: summoner's egg
+mana cost: {4}
+types: artifact creature egg
+power toughness: 0/4
+triggered: imprint — when CARDNAME enters, you may exile a card from your hand face down.
+triggered: when CARDNAME dies, turn the exiled card face up. if it's a creature card, put it onto the battlefield under your control.

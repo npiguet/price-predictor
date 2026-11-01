@@ -1,0 +1,5 @@
+name: mannichi, the fevered dream
+mana cost: {2}{R}
+types: legendary creature spirit
+power toughness: 1/2
+activated[1]: {1}{R}: switch each creature's power and toughness until end of turn.

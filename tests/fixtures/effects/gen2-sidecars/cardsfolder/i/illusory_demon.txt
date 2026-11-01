@@ -1,0 +1,6 @@
+name: illusory demon
+mana cost: {1}{U}{B}
+types: creature demon illusion
+power toughness: 4/3
+static: flying
+triggered: when you cast a spell, sacrifice CARDNAME.

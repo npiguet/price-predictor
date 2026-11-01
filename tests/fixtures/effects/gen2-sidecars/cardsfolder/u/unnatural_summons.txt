@@ -1,0 +1,6 @@
+name: unnatural summons
+mana cost: {1}{G}{U}
+types: sorcery
+static: rebound
+spell[1]: manifest dread.
+static: if you weren't the starting player, this spell costs {1} less to cast.

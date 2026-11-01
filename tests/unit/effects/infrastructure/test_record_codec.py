@@ -722,3 +722,28 @@ class TestGen3EnvelopeFields:
         path = tmp_path / "g3.jsonl.gz"
         write_shard(path, [replace(r, generation=3) for r in read_shard(_GEN1_FIXTURE)])
         assert shard_generation(path) is ShardGeneration.GEN_3
+
+
+_GEN2_FIXTURE = _GEN1_FIXTURE.with_name("gen2-records.jsonl.gz")
+
+
+class TestTheGen2Fixture:
+    """The gen-2 fixture cut from real shards reads whole and stays gen-2 (T002, T014)."""
+
+    def test_every_record_reads_and_carries_random_seat(self):
+        records = list(read_shard(_GEN2_FIXTURE))
+        assert len(records) > 40
+        assert all(record.random_seat is not None for record in records)
+        assert any(record.random_seat for record in records)
+        assert all(record.generation is None for record in records)
+
+    def test_the_shard_is_gen2(self):
+        from effects.domain.shard_generation import ShardGeneration
+        from effects.infrastructure.shard_io import shard_generation
+
+        assert shard_generation(_GEN2_FIXTURE) is ShardGeneration.GEN_2
+
+    def test_a_parsed_record_survives_a_write_and_a_read(self):
+        """Not the raw line: parsing normalizes keyword spellings by design."""
+        for record in read_shard(_GEN2_FIXTURE):
+            assert record_from_dict(record_to_dict(record)) == record

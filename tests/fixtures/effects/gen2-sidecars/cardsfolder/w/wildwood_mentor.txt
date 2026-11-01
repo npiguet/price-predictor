@@ -1,0 +1,6 @@
+name: wildwood mentor
+mana cost: {2}{G}
+types: creature treefolk
+power toughness: 1/1
+triggered: whenever a token you control enters, put a +1/+1 counter on CARDNAME.
+triggered: whenever CARDNAME attacks, another target creature gets +X/+X until end of turn, where X is CARDNAME's power.

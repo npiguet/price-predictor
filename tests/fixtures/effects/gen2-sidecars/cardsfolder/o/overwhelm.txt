@@ -1,0 +1,5 @@
+name: overwhelm
+mana cost: {5}{G}{G}
+types: sorcery
+cost reduction: convoke
+spell[1]: creatures you control get +3/+3 until end of turn.

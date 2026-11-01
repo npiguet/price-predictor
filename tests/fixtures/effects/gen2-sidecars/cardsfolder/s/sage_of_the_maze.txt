@@ -1,0 +1,7 @@
+name: sage of the maze
+mana cost: {2}{G}
+types: creature elf wizard
+power toughness: 1/3
+activated[1]: {T}: add two mana in any combination of colors.
+activated[2]: {T}: until end of turn, target land you control becomes an X/X citizen creature with haste in addition to its other types, where X is twice the number of gates you control. activate only as a sorcery.
+activated[3]: tap an untapped gate you control: untap CARDNAME.

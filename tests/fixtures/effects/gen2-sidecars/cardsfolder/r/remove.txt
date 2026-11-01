@@ -1,0 +1,4 @@
+name: remove
+mana cost: {U}
+types: instant
+spell[1]: cast this spell only during the declare attackers step and only if you've been attacked this step. return target attacking creature to its owner's hand.

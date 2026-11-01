@@ -1,0 +1,7 @@
+name: kassandra, eagle bearer
+mana cost: {1}{R}{W}
+types: legendary creature human assassin warrior
+power toughness: 2/2
+static: haste
+triggered: when CARDNAME enters, search your graveyard, hand, and library for a card named the spear of leonidas, put it onto the battlefield, then shuffle.
+triggered: whenever a creature you control with a legendary equipment attached to it deals combat damage to a player, draw a card.

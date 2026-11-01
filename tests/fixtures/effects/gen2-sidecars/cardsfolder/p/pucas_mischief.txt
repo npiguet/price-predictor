@@ -1,0 +1,4 @@
+name: puca's mischief
+mana cost: {3}{U}
+types: enchantment
+triggered: at the beginning of your upkeep, you may exchange control of target nonland permanent you control and target nonland permanent an opponent controls with an equal or lesser mana value.

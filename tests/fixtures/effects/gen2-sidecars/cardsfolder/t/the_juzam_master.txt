@@ -1,0 +1,5 @@
+name: the juzam master
+mana cost: {2}{B}{B}
+types: legendary creature human wizard
+power toughness: 4/5
+static: creatures you control get +1/+0 and have "at the beginning of your upkeep, this creature deals 1 damage to you."

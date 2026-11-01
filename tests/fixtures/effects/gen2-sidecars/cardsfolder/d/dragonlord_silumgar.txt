@@ -1,0 +1,7 @@
+name: dragonlord silumgar
+mana cost: {4}{U}{B}
+types: legendary creature elder dragon
+power toughness: 3/5
+static: flying
+static: deathtouch
+triggered: when CARDNAME enters, gain control of target creature or planeswalker for as long as you control CARDNAME.

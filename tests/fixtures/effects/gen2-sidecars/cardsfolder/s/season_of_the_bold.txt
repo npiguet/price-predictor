@@ -1,0 +1,7 @@
+name: season of the bold
+mana cost: {3}{R}{R}
+types: sorcery
+spell[1]: choose up to 5 {P} worth of modes. you may choose the same mode more than once.
+option[2]: {P} — create a tapped treasure token.
+option[3]: {P}{P} — exile the top two cards of your library. until the end of your next turn, you may play them.
+option[4]: {P}{P}{P} — until the end of your next turn, whenever you cast a spell, CARDNAME deals 2 damage to up to one target creature.

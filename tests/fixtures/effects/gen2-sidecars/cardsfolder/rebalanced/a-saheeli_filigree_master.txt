@@ -1,0 +1,8 @@
+name: a-saheeli, filigree master
+mana cost: {2}{U}{R}
+types: legendary planeswalker saheeli
+loyalty: 3
+planeswalker[1]: [+1]: scry 2. if you control an artifact, draw a card.
+planeswalker[2]: [-2]: create two 1/1 colorless thopter artifact creature tokens with flying. they gain haste until end of turn.
+planeswalker[3]: [-4]: you get an emblem with "artifact creatures you control get +1/+1" and "artifact spells you cast cost {1} less to cast."
+replacement: CARDNAME enters with three loyalty counters on it.

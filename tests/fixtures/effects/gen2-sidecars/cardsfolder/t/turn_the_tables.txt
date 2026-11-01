@@ -1,0 +1,4 @@
+name: turn the tables
+mana cost: {3}{W}{W}
+types: instant
+spell[1]: all combat damage that would be dealt to you this turn is dealt to target attacking creature instead.

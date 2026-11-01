@@ -1,0 +1,6 @@
+name: leyline of the guildpact
+mana cost: {G/W}{G/U}{B/G}{R/G}
+types: enchantment
+triggered: if CARDNAME is in your opening hand, you may begin the game with it on the battlefield.
+static: each nonland permanent you control is all colors.
+static: lands you control are every basic land type in addition to their other types.

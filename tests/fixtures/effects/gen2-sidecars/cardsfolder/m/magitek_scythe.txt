@@ -1,0 +1,6 @@
+name: magitek scythe
+mana cost: {4}
+types: artifact equipment
+activated[1]: equip {2}
+triggered: a test of your reflexes! — when this equipment enters, you may attach it to target creature you control. if you do, that creature gains first strike until end of turn and must be blocked this turn if able.
+static: equipped creature gets +2/+1.

@@ -1,0 +1,8 @@
+name: tresserhorn's lord, returned
+mana cost: {2}{U}{B}{R}
+types: legendary creature zombie noble
+power toughness: 10/4
+static: trample
+static: indestructible
+triggered: when CARDNAME enters, sacrifice him unless you sacrifice three creatures, pay 3 life, and have target opponent draw three cards.
+triggered: whenever you sacrifice a creature, draw a card.

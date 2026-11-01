@@ -1,0 +1,4 @@
+name: intellectual offering
+mana cost: {4}{U}
+types: instant
+spell[1]: choose an opponent. you and that player each draw three cards. choose an opponent. untap all nonland permanents you control and all nonland permanents that player controls.

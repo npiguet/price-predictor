@@ -1,0 +1,6 @@
+name: chisei, heart of oceans
+mana cost: {2}{U}{U}
+types: legendary creature spirit
+power toughness: 4/4
+static: flying
+triggered: at the beginning of your upkeep, sacrifice CARDNAME unless you remove a counter from a permanent you control.

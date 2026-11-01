@@ -1,0 +1,5 @@
+name: lantern of insight
+mana cost: {1}
+types: artifact
+activated[1]: {T}, sacrifice CARDNAME: target player shuffles.
+static: players play with the top card of their libraries revealed.

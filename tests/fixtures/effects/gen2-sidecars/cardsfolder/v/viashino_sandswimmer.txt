@@ -1,0 +1,5 @@
+name: viashino sandswimmer
+mana cost: {2}{R}{R}
+types: creature lizard
+power toughness: 3/2
+activated[1]: {R}: flip a coin. if you win the flip, return CARDNAME to its owner's hand. if you lose the flip, sacrifice CARDNAME.

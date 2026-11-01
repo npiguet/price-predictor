@@ -1,0 +1,6 @@
+name: rootwire amalgam
+mana cost: {5}
+types: artifact creature golem
+power toughness: 5/5
+alternate cost: prototype {1}{G}
+activated[1]: {3}{G}{G}, sacrifice CARDNAME: create an X/X colorless golem artifact creature token, where X is three times CARDNAME's power. it gains haste until end of turn. activate only as a sorcery.

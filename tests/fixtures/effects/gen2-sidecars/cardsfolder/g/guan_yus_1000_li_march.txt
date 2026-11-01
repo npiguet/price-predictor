@@ -1,0 +1,4 @@
+name: guan yu's 1,000-li march
+mana cost: {4}{W}{W}
+types: sorcery
+spell[1]: destroy all tapped creatures.

@@ -1,0 +1,7 @@
+name: black carriage
+mana cost: {3}{B}{B}
+types: creature horse
+power toughness: 4/4
+static: trample
+activated[1]: sacrifice a creature: untap this creature. activate only during your upkeep.
+replacement: this creature doesn't untap during your untap step.

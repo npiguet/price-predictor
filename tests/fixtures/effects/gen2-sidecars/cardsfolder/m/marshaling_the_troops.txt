@@ -1,0 +1,4 @@
+name: marshaling the troops
+mana cost: {1}{G}
+types: sorcery
+spell[1]: tap any number of untapped creatures you control. you gain 4 life for each creature tapped this way.

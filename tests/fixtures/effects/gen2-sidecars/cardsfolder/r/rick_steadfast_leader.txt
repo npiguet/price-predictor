@@ -1,0 +1,7 @@
+name: rick, steadfast leader
+mana cost: {2}{W}{W}
+types: legendary creature human soldier
+power toughness: 3/4
+replacement: as CARDNAME enters, choose two abilities from among first strike, vigilance, and lifelink.
+static: humans you control have each of the chosen abilities.
+static: as long as you control four or more humans, humans you control get +2/+2.

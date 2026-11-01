@@ -1,0 +1,5 @@
+name: endemic plague
+mana cost: {3}{B}
+types: sorcery
+additional cost: sacrifice a creature.
+spell[1]: destroy all creatures that share a creature type with the sacrificed creature. they can't be regenerated.

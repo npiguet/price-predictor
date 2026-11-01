@@ -1,0 +1,4 @@
+name: search for survivors
+mana cost: {2}{R}
+types: sorcery
+spell[1]: reorder your graveyard at random. an opponent chooses a card at random in your graveyard. if it's a creature card, put it onto the battlefield. otherwise, exile it.

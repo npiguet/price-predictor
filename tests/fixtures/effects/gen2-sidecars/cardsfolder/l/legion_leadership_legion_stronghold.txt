@@ -1,0 +1,12 @@
+layout: modal
+name: legion leadership
+mana cost: {1}{R/W}
+types: instant
+spell[1]: until end of turn, double target creature's power and it gains first strike.
+
+ALTERNATE
+
+name: legion stronghold
+types: land
+activated[1]: {T}: add {R} or {W}.
+replacement: CARDNAME enters tapped.

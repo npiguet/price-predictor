@@ -1,0 +1,7 @@
+name: riveteers confluence
+mana cost: {2}{B}{R}{G}
+types: sorcery
+spell[1]: choose three
+option[2]: you draw a card and you lose 1 life.
+option[3]: CARDNAME deals 1 damage to each creature and planeswalker you don't control.
+option[4]: you may put a land card from your hand or graveyard onto the battlefield tapped.

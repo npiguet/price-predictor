@@ -1,0 +1,5 @@
+name: sozin's comet
+mana cost: {3}{R}{R}
+types: sorcery
+alternate cost: foretell {2}{R}
+spell[1]: each creature you control gains firebending 5 until end of turn.

@@ -1,0 +1,6 @@
+name: primal adversary
+mana cost: {2}{G}
+types: creature wolf
+power toughness: 4/3
+static: trample
+triggered: when CARDNAME enters, you may pay {1}{G} any number of times. when you pay this cost one or more times, put that many +1/+1 counters on CARDNAME, then up to that many target lands you control become 3/3 wolf creatures with haste that are still lands.

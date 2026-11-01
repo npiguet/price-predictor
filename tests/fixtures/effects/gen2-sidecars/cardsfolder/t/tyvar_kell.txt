@@ -1,0 +1,9 @@
+name: tyvar kell
+mana cost: {2}{G}{G}
+types: legendary planeswalker tyvar
+loyalty: 3
+planeswalker[1]: [+1]: put a +1/+1 counter on up to one target elf. untap it. it gains deathtouch until end of turn.
+planeswalker[2]: 0: create a 1/1 green elf warrior creature token.
+planeswalker[3]: [-6]: you get an emblem with "whenever you cast an elf spell, it gains haste until end of turn and you draw two cards."
+static: elves you control have "{T}: add {B}."
+replacement: CARDNAME enters with three loyalty counters on it.

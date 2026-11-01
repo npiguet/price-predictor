@@ -1,4 +1,4 @@
-"""Cut a small, kind-balanced sample of real gen-1 records into a test fixture.
+"""Cut a small, kind-balanced sample of real records into a test fixture.
 
 Tests of the gen-2 readers, families, value targets and probes need records
 shaped exactly like the collector's output, so the fixture is cut from real
@@ -12,7 +12,14 @@ The sidecars and converted texts every chosen record names, anywhere in its
 envelope, state or payload, are copied beside it under the same tree layout,
 so a ``SidecarCache`` rooted there resolves every key.
 
-    python scripts/make_fixture_records.py
+    python scripts/make_fixture_records.py                 # gen-1
+    python scripts/make_fixture_records.py --generation 2  # gen-2
+
+``--generation 2`` adds the categories the rule detectors are tested on: a
+resolution whose effect half kills a creature at toughness 0 or less in the
+state-based check (704.5f fires), one that leaves a creature at toughness 1
+(704.5f does not fire), a damage-step probe stripping deathtouch, and records
+from a random-seat game and from a game the Forge AI played on both seats.
 """
 
 from __future__ import annotations
@@ -85,6 +92,86 @@ class _Sidecars:
         return None
 
 
+def _toughness(entity: dict) -> int | None:
+    pt = entity.get("pt")
+    if not pt:
+        return None
+    return sum(part[1] for part in (pt["base"], pt["boosts"], pt["counters"]))
+
+
+def _toughness_after(record: dict) -> dict[str, tuple[int, bool, bool]]:
+    """``entity id -> (toughness after the record's own P/T changes, damaged,
+    died in the state-based check)`` for each creature the record names."""
+    events = record["payload"].get("events") or []
+    entities = {e["id"]: e for e in record["state"]["entities"]}
+    delta: dict[str, int] = {}
+    damaged: set[str] = set()
+    died: set[str] = set()
+    uncreatured: set[str] = set()
+    for event in events:
+        params = event.get("params") or {}
+        for subject in event.get("subjects") or ():
+            if event["type"] == "type_change" and "creature" in (params.get("types_removed") or ()):
+                # No longer a creature, so a death is not 704.5f's (an Aura
+                # with nothing to enchant is 704.5m).
+                uncreatured.add(subject)
+            elif event["type"] == "pt_change":
+                delta[subject] = delta.get(subject, 0) + int(params.get("toughness_delta", 0))
+            elif event["type"] == "damage_dealt":
+                damaged.add(subject)
+            elif (event["type"] == "zone_change" and event.get("attributed_to") == "unresolved"
+                  and params.get("from_zone") == "battlefield"
+                  and params.get("to_zone") == "graveyard"):
+                died.add(subject)
+    out = {}
+    for entity_id in set(delta) | died:
+        entity = entities.get(entity_id)
+        if (entity is None or entity_id in uncreatured
+                or "creature" not in (entity.get("types") or ())):
+            continue
+        toughness = _toughness(entity)
+        if toughness is not None:
+            out[entity_id] = (toughness + delta.get(entity_id, 0),
+                              entity_id in damaged, entity_id in died)
+    return out
+
+
+def _effect_resolution(record: dict) -> bool:
+    return (record["kind"] == "resolution" and record.get("moment") == "resolution"
+            and not record["fork"])
+
+
+def _toughness_zero_death(record: dict) -> bool:
+    """704.5f fires: a creature dies in the check at toughness 0 or less, undamaged."""
+    return _effect_resolution(record) and any(
+        toughness <= 0 and died and not damaged
+        for toughness, damaged, died in _toughness_after(record).values())
+
+
+def _left_at_toughness_one(record: dict) -> bool:
+    """704.5f does not fire: a creature's toughness is lowered to 1 and it stays."""
+    if not _effect_resolution(record):
+        return False
+    lowered = {
+        subject for event in record["payload"].get("events") or ()
+        if event["type"] == "pt_change"
+        and int((event.get("params") or {}).get("toughness_delta", 0)) < 0
+        for subject in event.get("subjects") or ()}
+    return any(entity_id in lowered and toughness == 1 and not died
+               for entity_id, (toughness, _, died) in _toughness_after(record).items())
+
+
+def _gen2_categories() -> dict[str, Callable[[dict], bool]]:
+    """Gen-2's own categories, matched before the shared ones."""
+    return {
+        "704.5f-fires": _toughness_zero_death,
+        "704.5f-does-not-fire": _left_at_toughness_one,
+        "probe-deathtouch": lambda r: r["kind"] == "combat" and (
+            r["payload"].get("probed_keyword") == "deathtouch"),
+        "random-seat": lambda r: r.get("random_seat") is True,
+    }
+
+
 def _categories(sidecars: _Sidecars) -> dict[str, Callable[[dict], bool]]:
     def acting_api(record: dict) -> str | None:
         keys = record.get("ability") or ()
@@ -122,21 +209,30 @@ def _categories(sidecars: _Sidecars) -> dict[str, Callable[[dict], bool]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
-    parser.add_argument("--records-dir", type=Path, default=Path("output/effects/records"))
+    parser.add_argument("--generation", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--records-dir", type=Path,
+                        help="default output/effects/records, or records-gen2 for --generation 2")
     parser.add_argument("--cards-folder", action="append", type=Path,
                         help="converted roots, named by tree (repeatable); "
                              "default output/cardsfolder and output/tokenscripts")
     parser.add_argument("--output", type=Path,
-                        default=Path("tests/fixtures/effects/gen1-records.jsonl.gz"))
+                        help="default tests/fixtures/effects/gen<N>-records.jsonl.gz")
     parser.add_argument("--sidecars-out", type=Path,
-                        default=Path("tests/fixtures/effects/gen1-sidecars"))
+                        help="default tests/fixtures/effects/gen<N>-sidecars")
     parser.add_argument("--per-category", type=int, default=3)
     parser.add_argument("--max-shards", type=int, default=400)
     args = parser.parse_args()
+    gen = args.generation
+    args.records_dir = args.records_dir or Path(
+        "output/effects/records" if gen == 1 else "output/effects/records-gen2")
+    args.output = args.output or Path(f"tests/fixtures/effects/gen{gen}-records.jsonl.gz")
+    args.sidecars_out = args.sidecars_out or Path(f"tests/fixtures/effects/gen{gen}-sidecars")
 
     folders = args.cards_folder or [Path("output/cardsfolder"), Path("output/tokenscripts")]
     sidecars = _Sidecars({folder.name: folder for folder in folders})
     categories = _categories(sidecars)
+    if gen == 2:
+        categories = {**_gen2_categories(), **categories}
     chosen: dict[str, list[dict]] = defaultdict(list)
     wanted_links: set[str] = set()
     wanted_mirrors: set[str] = set()
@@ -146,8 +242,11 @@ def main() -> int:
     # Interleave the collection runs rather than reading one run's shards first,
     # so a category only another run reaches (probes, variants) is found early.
     shards = shards[::7] + [s for i, s in enumerate(shards) if i % 7]
+    forge_ai_wanted = gen == 2
     for shard_no, shard in enumerate(shards[: args.max_shards]):
         followers: dict[str, int] = {}
+        seat_games: set[str] = set()
+        plain: dict[str, list[dict]] = defaultdict(list)
         for line in iter_shard_lines(shard):
             try:
                 record = json.loads(line)
@@ -155,6 +254,10 @@ def main() -> int:
                 continue
             record_id = record["record_id"]
             game = record["game_id"]
+            if record.get("random_seat"):
+                seat_games.add(game)
+            elif forge_ai_wanted and not record["fork"] and len(plain[game]) < 2:
+                plain[game].append(record)
             if followers.get(game) and record["kind"] == "resolution":
                 extras[record_id] = record
                 followers[game] -= 1
@@ -173,7 +276,14 @@ def main() -> int:
                 if name == "trigger-fired":
                     followers[game] = _FOLLOWERS_PER_TRIGGER
                 break
-        if all(len(chosen[name]) >= args.per_category for name in categories):
+        if forge_ai_wanted:
+            # Games never span shards, so a game is known to be Forge AI on
+            # both seats once its shard has been read through.
+            for game, kept in plain.items():
+                if game not in seat_games and len(chosen["forge-ai"]) < args.per_category:
+                    chosen["forge-ai"].append(kept[0])
+        if all(len(chosen[name]) >= args.per_category for name in categories) and (
+                not forge_ai_wanted or len(chosen["forge-ai"]) >= args.per_category):
             break
         if shard_no % 25 == 0:
             filled = sum(len(chosen[name]) >= args.per_category for name in categories)
@@ -181,11 +291,12 @@ def main() -> int:
                   file=sys.stderr)
 
     records: dict[str, dict] = {}
-    for name in categories:
+    for name in chosen:
         for record in chosen[name]:
             records[record["record_id"]] = record
     records.update(extras)
-    missing = [name for name in categories if not chosen[name]]
+    missing = [name for name in [*categories, *(["forge-ai"] if forge_ai_wanted else [])]
+               if not chosen[name]]
 
     # Every record must parse with the current reader before it is a fixture.
     for record in records.values():
@@ -212,8 +323,8 @@ def main() -> int:
             shutil.copyfile(text, target.with_name(text.name))
         copied += 1
 
-    for name in categories:
-        print(f"{name:20s} {len(chosen[name])}", file=sys.stderr)
+    for name in chosen:
+        print(f"{name:22s} {len(chosen[name])}", file=sys.stderr)
     print(f"{len(records)} records ({len(extras)} joined) -> {args.output}; "
           f"{copied} sidecars -> {args.sidecars_out}", file=sys.stderr)
     if missing:

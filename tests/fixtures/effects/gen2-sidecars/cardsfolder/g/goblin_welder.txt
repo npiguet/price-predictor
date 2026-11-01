@@ -1,0 +1,5 @@
+name: goblin welder
+mana cost: {R}
+types: creature goblin artificer
+power toughness: 1/1
+activated[1]: {T}: choose target artifact a player controls and target artifact card in that player's graveyard. if both targets are still legal as this ability resolves, that player simultaneously sacrifices the artifact and returns the artifact card to the battlefield. and returns {C:THISTARGETEDCARD} to the battlefield.

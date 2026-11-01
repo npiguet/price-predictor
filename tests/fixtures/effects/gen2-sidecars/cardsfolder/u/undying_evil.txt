@@ -1,0 +1,4 @@
+name: undying evil
+mana cost: {B}
+types: instant
+spell[1]: target creature gains undying until end of turn.

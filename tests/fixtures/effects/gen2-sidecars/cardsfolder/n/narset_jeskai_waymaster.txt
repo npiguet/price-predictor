@@ -1,0 +1,5 @@
+name: narset, jeskai waymaster
+mana cost: {U}{R}{W}
+types: legendary creature human monk
+power toughness: 3/4
+triggered: at the beginning of your end step, you may discard your hand. if you do, draw cards equal to the number of spells you've cast this turn.

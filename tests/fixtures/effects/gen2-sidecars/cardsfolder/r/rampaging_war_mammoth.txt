@@ -1,0 +1,7 @@
+name: rampaging war mammoth
+mana cost: {5}{R}{R}
+types: creature elephant
+power toughness: 9/7
+static: trample
+activated[1]: cycling {X}{2}{R}
+triggered: when you cycle CARDNAME, destroy up to X target artifacts.

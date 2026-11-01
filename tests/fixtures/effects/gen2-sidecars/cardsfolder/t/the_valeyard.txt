@@ -1,0 +1,6 @@
+name: the valeyard
+mana cost: {2}{U}{B}{R}
+types: legendary creature time lord noble
+power toughness: 4/5
+static: if an opponent would face a villainous choice, they face that choice an additional time.
+static: while voting, you may vote an additional time.

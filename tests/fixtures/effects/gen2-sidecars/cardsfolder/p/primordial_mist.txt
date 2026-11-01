@@ -1,0 +1,5 @@
+name: primordial mist
+mana cost: {4}{U}
+types: enchantment
+activated[1]: exile a face-down permanent you control face up: you may play that card this turn.
+triggered: at the beginning of your end step, you may manifest the top card of your library.

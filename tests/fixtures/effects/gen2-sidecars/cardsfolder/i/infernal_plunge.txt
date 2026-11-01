@@ -1,0 +1,5 @@
+name: infernal plunge
+mana cost: {R}
+types: sorcery
+additional cost: sacrifice a creature.
+spell[1]: add {R}{R}{R}.

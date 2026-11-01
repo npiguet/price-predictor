@@ -1,0 +1,5 @@
+name: demonic lore
+mana cost: {2}{B}
+types: enchantment
+triggered: when CARDNAME enters, draw three cards.
+triggered: at the beginning of your end step, you lose 2 life for each card in your hand.

@@ -1,0 +1,7 @@
+name: protean war engine
+mana cost: {R}{W}
+types: artifact vehicle
+power toughness: 0/4
+replacement: as CARDNAME enters, draft a card from CARDNAME's spellbook and exile it.
+activated[1]: crew 3
+triggered: whenever CARDNAME becomes crewed, until end of turn, it becomes a copy of the exiled card, except it's a vehicle artifact in addition to its other types.

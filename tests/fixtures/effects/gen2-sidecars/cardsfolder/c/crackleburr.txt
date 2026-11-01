@@ -1,0 +1,6 @@
+name: crackleburr
+mana cost: {1}{U/R}{U/R}
+types: creature elemental
+power toughness: 2/2
+activated[1]: {U/R}{U/R}, {T}, tap two untapped red creatures you control: CARDNAME deals 3 damage to any target.
+activated[2]: {U/R}{U/R}, untap two  tapped blue creatures you control, {Q}: return target creature to its owner's hand.

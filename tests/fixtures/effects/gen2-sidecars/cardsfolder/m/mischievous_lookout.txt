@@ -1,0 +1,6 @@
+name: mischievous lookout
+mana cost: {W}{B}
+types: enchantment creature rat glimmer
+power toughness: 2/1
+replacement: if you do, it perpetually becomes a 2/1 rat creature in addition to its other types.
+static: once during each of your turns, you may cast a noncreature, non-aura permanent spell from your graveyard.

@@ -1,0 +1,5 @@
+name: breath of the sleepless
+mana cost: {3}{U}
+types: enchantment
+triggered: whenever you cast a creature spell during an opponent's turn, tap up to one target creature.
+static: you may cast spirit spells as though they had flash.

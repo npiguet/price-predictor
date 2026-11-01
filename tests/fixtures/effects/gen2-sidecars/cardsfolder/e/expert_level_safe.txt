@@ -1,0 +1,5 @@
+name: expert-level safe
+mana cost: {2}
+types: artifact
+activated[1]: {1}, {T}: you and target opponent each secretly choose 1, 2, or 3. then those choices are revealed. if they match, sacrifice CARDNAME and put all cards exiled with it into their owners' hands. otherwise, exile the top card of your library face down.
+triggered: when CARDNAME enters, exile the top two cards of your library face down.

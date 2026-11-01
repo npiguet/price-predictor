@@ -1,0 +1,6 @@
+name: eagle of deliverance
+mana cost: {4}{W}{W}
+types: creature bird soldier
+power toughness: 5/5
+static: flying
+triggered: when CARDNAME enters, put an indestructible counter on another target creature you control. draw a card if that creature's power is 2 or less.

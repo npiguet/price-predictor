@@ -1,0 +1,5 @@
+name: pick up the pace
+mana cost: {1}{R}
+types: enchantment
+triggered: whenever a creature you control that entered this turn attacks, exile the top card of your library.
+static: you may play cards exiled with this enchantment as long as you attacked this turn.

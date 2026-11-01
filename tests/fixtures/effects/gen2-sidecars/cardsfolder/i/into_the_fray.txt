@@ -1,0 +1,5 @@
+name: into the fray
+mana cost: {R}
+types: instant arcane
+additional cost: splice onto arcane {R}
+spell[1]: target creature attacks this turn if able.

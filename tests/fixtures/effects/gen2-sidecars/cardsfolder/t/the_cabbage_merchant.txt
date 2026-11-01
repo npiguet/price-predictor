@@ -1,0 +1,7 @@
+name: the cabbage merchant
+mana cost: {2}{G}
+types: legendary creature human citizen
+power toughness: 2/2
+activated[1]: tap two untapped foods you control: add one mana of any color.
+triggered: whenever an opponent casts a noncreature spell, create a food token.
+triggered: whenever a creature deals combat damage to you, sacrifice a food token.

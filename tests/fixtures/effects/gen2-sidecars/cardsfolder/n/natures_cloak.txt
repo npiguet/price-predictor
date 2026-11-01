@@ -1,0 +1,4 @@
+name: nature's cloak
+mana cost: {2}{G}
+types: sorcery
+spell[1]: green creatures you control gain forestwalk until end of turn.

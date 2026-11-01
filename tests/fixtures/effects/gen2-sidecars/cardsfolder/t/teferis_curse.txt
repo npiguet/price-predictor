@@ -1,0 +1,5 @@
+name: teferi's curse
+mana cost: {1}{U}
+types: enchantment aura
+static: enchant artifact or creature
+static: enchanted permanent has phasing.

@@ -1,0 +1,4 @@
+name: turbocharged escape
+mana cost: {3}{W}{W}
+types: sorcery
+spell[1]: destroy all non-vehicle creatures. then choose a vehicle you control. it perpetually becomes an artifact creature.

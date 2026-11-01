@@ -1,0 +1,7 @@
+name: herald of amity
+mana cost: {3}{W}
+types: creature griffin
+power toughness: 2/2
+static: flying
+triggered: when this creature enters, exile the top eight cards of your library. you may cast an aura spell from among them without paying its mana cost. then put the rest on the bottom of your library in a random order.
+triggered: whenever this creature attacks, it gets +X/+X until end of turn, where X is the number of auras you control.

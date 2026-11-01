@@ -1,0 +1,5 @@
+name: fly
+mana cost: {U}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature has flying and "whenever this creature deals combat damage to a player, venture into the dungeon."

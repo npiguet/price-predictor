@@ -1,0 +1,5 @@
+name: silverglade pathfinder
+mana cost: {1}{G}
+types: creature dryad spellshaper
+power toughness: 1/1
+activated[1]: {1}{G}, {T}, discard a card: search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.

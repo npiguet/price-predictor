@@ -1,0 +1,4 @@
+name: shatter the sky
+mana cost: {2}{W}{W}
+types: sorcery
+spell[1]: each player who controls a creature with power 4 or greater draws a card. then destroy all creatures.

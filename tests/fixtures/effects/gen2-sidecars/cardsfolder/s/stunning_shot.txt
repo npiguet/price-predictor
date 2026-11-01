@@ -1,0 +1,4 @@
+name: stunning shot
+mana cost: {1}{W}
+types: sorcery
+spell[1]: put two +1/+1 counters on up to one target creature you control. tap up to one target creature an opponent controls and put a stun counter on it.

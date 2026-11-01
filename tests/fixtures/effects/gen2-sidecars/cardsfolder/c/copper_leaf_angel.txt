@@ -1,0 +1,6 @@
+name: copper-leaf angel
+mana cost: {5}
+types: artifact creature angel
+power toughness: 2/2
+static: flying
+activated[1]: {T}, you may sacrifice any number of lands: put X +1/+1 counters on CARDNAME.

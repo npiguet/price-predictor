@@ -1,0 +1,13 @@
+layout: split
+name: flotsam
+mana cost: {1}{G/U}
+types: instant
+spell[1]: mill three cards.
+spell[2]: investigate.
+
+ALTERNATE
+
+name: jetsam
+mana cost: {4}{U/B}{U/B}
+types: sorcery
+spell[1]: each opponent mills three cards, then you may cast a spell from each opponent's graveyard without paying its mana cost. if a spell cast this way would be put into a graveyard, exile it instead.

@@ -1,0 +1,8 @@
+name: keldon battlewagon
+mana cost: {5}
+types: artifact creature juggernaut
+power toughness: 0/3
+static: trample
+activated[1]: tap an untapped creature you control: CARDNAME gets +X/+0 until end of turn, where X is the power of the creature tapped this way.
+triggered: when CARDNAME attacks, sacrifice it at end of combat.
+static: CARDNAME can't block.

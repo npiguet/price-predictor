@@ -1,0 +1,5 @@
+name: satyr enchanter
+mana cost: {1}{G}{W}
+types: creature satyr druid
+power toughness: 2/2
+triggered: whenever you cast an enchantment spell, draw a card.

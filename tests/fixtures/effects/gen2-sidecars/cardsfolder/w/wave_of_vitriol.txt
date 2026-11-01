@@ -1,0 +1,4 @@
+name: wave of vitriol
+mana cost: {5}{G}{G}
+types: sorcery
+spell[1]: each player sacrifices all artifacts, enchantments, and nonbasic lands they control. for each land sacrificed this way, its controller may search their library for a basic land card and put it onto the battlefield tapped. then each player who searched their library this way shuffles.

@@ -1,0 +1,7 @@
+name: iraxxa, empress of mars
+mana cost: {2}{R}{R}
+types: legendary creature alien warrior
+power toughness: 5/4
+static: trample
+triggered: battle cry
+triggered: paradox — whenever you cast a spell from anywhere other than your hand, create a 2/2 red alien warrior creature token.

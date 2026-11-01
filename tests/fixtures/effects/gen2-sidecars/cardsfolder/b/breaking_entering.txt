@@ -1,0 +1,13 @@
+layout: split
+name: breaking
+mana cost: {U}{B}
+types: sorcery
+activated[1]: fuse
+spell[2]: target player mills eight cards.
+
+ALTERNATE
+
+name: entering
+mana cost: {4}{B}{R}
+types: sorcery
+spell[1]: put a creature card from a graveyard onto the battlefield under your control. it gains haste until end of turn.

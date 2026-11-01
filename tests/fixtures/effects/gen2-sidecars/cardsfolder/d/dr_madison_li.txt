@@ -1,0 +1,8 @@
+name: dr. madison li
+mana cost: {U}{R}{W}
+types: legendary creature human scientist
+power toughness: 2/3
+activated[1]: {T}, pay {E}: target creature gets +1/+0 and gains trample and haste until end of turn.
+activated[2]: {T}, pay {E}{E}{E}: draw a card.
+activated[3]: {T}, pay {E}{E}{E}{E}{E}: return target artifact card from your graveyard to the battlefield tapped.
+triggered: whenever you cast an artifact spell, you get {E}.

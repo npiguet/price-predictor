@@ -1,0 +1,4 @@
+name: dark heart of the wood
+mana cost: {B}{G}
+types: enchantment
+activated[1]: sacrifice a forest: you gain 3 life.

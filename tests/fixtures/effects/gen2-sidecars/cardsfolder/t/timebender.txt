@@ -1,0 +1,8 @@
+name: timebender
+mana cost: {U}
+types: creature human wizard
+power toughness: 1/1
+alternate cost: morph {U}
+triggered: when CARDNAME is turned face up, choose one
+option[1]: remove two time counters from target permanent or suspended card.
+option[2]: put two time counters target permanent with a time counter on it or suspended card.

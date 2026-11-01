@@ -1,0 +1,4 @@
+name: kessig wolf run
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {X}{R}{G}, {T}: target creature gets +X/+0 and gains trample until end of turn.

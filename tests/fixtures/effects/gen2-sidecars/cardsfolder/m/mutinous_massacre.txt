@@ -1,0 +1,4 @@
+name: mutinous massacre
+mana cost: {3}{B}{B}{R}{R}
+types: sorcery
+spell[1]: choose odd or even. destroy each creature with mana value of the chosen quality. then gain control of all creatures until end of turn. untap them. they gain haste until end of turn.

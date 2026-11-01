@@ -1,0 +1,5 @@
+name: katilda and lier
+mana cost: {G}{W}{U}
+types: legendary creature human
+power toughness: 3/3
+triggered: whenever you cast a human spell, target instant or sorcery card in your graveyard gains flashback until end of turn. the flashback cost is equal to its mana cost.

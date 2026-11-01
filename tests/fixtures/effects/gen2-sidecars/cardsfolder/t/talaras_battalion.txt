@@ -1,0 +1,6 @@
+name: talara's battalion
+mana cost: {1}{G}
+types: creature elf warrior
+power toughness: 4/3
+static: trample
+static: cast this spell only if you've cast another green spell this turn.

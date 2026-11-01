@@ -1,0 +1,6 @@
+name: crater elemental
+mana cost: {2}{R}
+types: creature elemental
+power toughness: 0/6
+activated[1]: {R}, {T}, sacrifice CARDNAME: it deals 4 damage to target creature.
+activated[2]: formidable — {2}{R}: CARDNAME has base power 8 until end of turn. activate only if creatures you control have total power 8 or greater.

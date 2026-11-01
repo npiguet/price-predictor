@@ -1,0 +1,5 @@
+name: multiversal recruitment
+mana cost: {3}{U}
+types: sorcery
+alternate cost: flashback {5}{U}{U}
+spell[1]: create a token that's a copy of target creature you control, except it isn't legendary.

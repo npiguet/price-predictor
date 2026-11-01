@@ -1,0 +1,4 @@
+name: presence of the wise
+mana cost: {2}{W}{W}
+types: sorcery
+spell[1]: you gain 2 life for each card in your hand.

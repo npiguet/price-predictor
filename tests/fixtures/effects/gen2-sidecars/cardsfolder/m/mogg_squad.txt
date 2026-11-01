@@ -1,0 +1,5 @@
+name: mogg squad
+mana cost: {1}{R}
+types: creature goblin
+power toughness: 3/3
+static: CARDNAME gets -1/-1 for each other creature on the battlefield.

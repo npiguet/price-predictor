@@ -1,0 +1,5 @@
+name: steamflogger of the month
+mana cost: {3}{R}{R}
+types: creature goblin rigger
+power toughness: 3/3
+triggered: when CARDNAME enters, it assembles a contraption for each contraption you control.

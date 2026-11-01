@@ -1,0 +1,6 @@
+name: exalted flamer of tzeentch
+mana cost: {2}{U}{R}
+types: creature demon
+power toughness: 2/4
+triggered: sorcerous inspiration — at the beginning of your upkeep, return an instant or sorcery card at random from your graveyard to your hand.
+triggered: fire of tzeentch — whenever you cast an instant or sorcery spell, CARDNAME deals 1 damage to each opponent.

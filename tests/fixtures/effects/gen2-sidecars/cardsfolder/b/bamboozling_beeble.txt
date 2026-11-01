@@ -1,0 +1,6 @@
+name: bamboozling beeble
+mana cost: {U}
+types: creature beeble
+power toughness: 1/1
+static: protection from robot
+activated[1]: {1}, {T}: the next time target player would roll one or more dice this turn, instead they roll that many dice plus one and you choose one of those rolls to ignore.

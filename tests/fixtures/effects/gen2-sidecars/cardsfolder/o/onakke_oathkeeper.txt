@@ -1,0 +1,6 @@
+name: onakke oathkeeper
+mana cost: {1}{W}
+types: creature ogre spirit
+power toughness: 0/4
+activated[1]: {4}{W}{W}, exile CARDNAME from your graveyard: return target planeswalker card from your graveyard to the battlefield.
+static: creatures can't attack planeswalkers you control unless their controller pays {1} for each creature they control that's attacking a planeswalker you control.

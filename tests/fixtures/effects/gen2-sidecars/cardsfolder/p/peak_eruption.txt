@@ -1,0 +1,4 @@
+name: peak eruption
+mana cost: {2}{R}
+types: sorcery
+spell[1]: destroy target mountain. CARDNAME deals 3 damage to that land's controller.

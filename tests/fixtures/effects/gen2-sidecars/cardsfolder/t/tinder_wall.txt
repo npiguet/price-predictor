@@ -1,0 +1,7 @@
+name: tinder wall
+mana cost: {G}
+types: creature plant wall
+power toughness: 0/3
+static: defender
+activated[1]: sacrifice CARDNAME: add {R}{R}.
+activated[2]: {R}, sacrifice CARDNAME: it deals 2 damage to target creature it's blocking.

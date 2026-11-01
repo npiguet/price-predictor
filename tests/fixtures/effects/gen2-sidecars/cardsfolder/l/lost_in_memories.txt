@@ -1,0 +1,6 @@
+name: lost in memories
+mana cost: {1}{R}
+types: enchantment aura
+static: flash
+static: enchant creature you control
+static: enchanted creature gets +1/+1 and has "whenever this creature deals combat damage to a player, target instant or sorcery card in your graveyard gains flashback until end of turn. the flashback cost is equal to its mana cost."

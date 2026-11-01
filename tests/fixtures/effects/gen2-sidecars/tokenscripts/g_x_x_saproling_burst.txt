@@ -1,0 +1,4 @@
+name: saproling token
+types: creature saproling
+power toughness: */*
+static: this creature's power and toughness are each equal to the number of fade counters on saproling burst.

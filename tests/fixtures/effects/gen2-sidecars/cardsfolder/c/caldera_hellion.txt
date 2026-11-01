@@ -1,0 +1,6 @@
+name: caldera hellion
+mana cost: {3}{R}{R}
+types: creature hellion
+power toughness: 3/3
+static: devour 1
+triggered: when CARDNAME enters, it deals 3 damage to each creature.

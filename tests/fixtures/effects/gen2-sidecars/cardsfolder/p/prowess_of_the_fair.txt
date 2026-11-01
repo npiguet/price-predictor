@@ -1,0 +1,4 @@
+name: prowess of the fair
+mana cost: {1}{B}
+types: kindred enchantment elf
+triggered: whenever another nontoken elf is put into your graveyard from the battlefield, you may create a 1/1 green elf warrior creature token.

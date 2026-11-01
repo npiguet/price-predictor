@@ -1,0 +1,4 @@
+name: open the way
+mana cost: {X}{G}{G}
+types: sorcery
+spell[1]: X can't be greater than the number of players in the game. reveal cards from the top of your library until you reveal X land cards. put those land cards onto the battlefield tapped and the rest on the bottom of your library in a random order.

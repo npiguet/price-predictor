@@ -1,0 +1,4 @@
+name: builder's bane
+mana cost: {X}{X}{R}
+types: sorcery
+spell[1]: destroy X target artifacts. CARDNAME deals damage to each player equal to the number of artifacts they controlled that were put into a graveyard this way.

@@ -1,0 +1,6 @@
+name: decree of pain
+mana cost: {6}{B}{B}
+types: sorcery
+activated[1]: cycling {3}{B}{B}
+spell[2]: destroy all creatures. they can't be regenerated. draw a card for each creature destroyed this way.
+triggered: when you cycle CARDNAME, all creatures get -2/-2 until end of turn.

@@ -1,0 +1,7 @@
+name: atalya, samite master
+mana cost: {3}{W}{W}
+types: legendary creature human cleric
+power toughness: 2/3
+spell[1]: choose one
+option[2]: prevent the next X damage that would be dealt to target creature this turn. spend only white mana on X.
+option[3]: you gain X life. spend only white mana on X.

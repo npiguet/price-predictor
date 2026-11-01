@@ -1,0 +1,5 @@
+name: yore-tiller nephilim
+mana cost: {W}{U}{B}{R}
+types: creature nephilim
+power toughness: 2/2
+triggered: whenever CARDNAME attacks, return target creature card from your graveyard to the battlefield tapped and attacking.

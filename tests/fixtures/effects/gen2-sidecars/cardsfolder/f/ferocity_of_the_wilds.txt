@@ -1,0 +1,4 @@
+name: ferocity of the wilds
+mana cost: {2}{R}
+types: enchantment
+static: attacking non-human creatures you control get +1/+0 and have trample.

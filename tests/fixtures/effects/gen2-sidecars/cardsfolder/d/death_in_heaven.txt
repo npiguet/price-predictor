@@ -1,0 +1,6 @@
+name: death in heaven
+mana cost: {3}{B}
+types: enchantment saga
+chapter: I, II — target player mills two cards, then exiles their graveyard.
+chapter: III — put all creature cards exiled with CARDNAME onto the battlefield face down under your control. they're 2/2 cyberman artifact creatures.
+replacement: CARDNAME enters with a lore counter on it.

@@ -1,0 +1,4 @@
+name: escape to the wilds
+mana cost: {3}{R}{G}
+types: sorcery
+spell[1]: exile the top five cards of your library. you may play cards exiled this way until the end of your next turn. you may play an additional land this turn.

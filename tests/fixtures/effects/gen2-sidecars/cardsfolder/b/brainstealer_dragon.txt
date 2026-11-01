@@ -1,0 +1,7 @@
+name: brainstealer dragon
+mana cost: {5}{B}{B}
+types: creature dragon horror
+power toughness: 6/6
+static: flying
+triggered: at the beginning of your end step, exile the top card of each opponent's library. you may play those cards for as long as they remain exiled. if you cast a spell this way, you may spend mana as though it were mana of any color to cast it.
+triggered: whenever a nonland permanent an opponent owns enters the battlefield under your control, they lose life equal to its mana value.

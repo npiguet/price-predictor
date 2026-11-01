@@ -1,0 +1,4 @@
+name: nova pentacle
+mana cost: {4}
+types: artifact
+activated[1]: {3}, {T}: the next time a source of your choice would deal damage to you this turn, that damage is dealt to target creature of an opponent's choice instead. the next time a source of your choice would deal damage to you this turn, that damage is dealt to target creature of an opponent's choice instead.

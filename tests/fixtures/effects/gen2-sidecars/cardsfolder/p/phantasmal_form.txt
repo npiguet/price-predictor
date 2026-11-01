@@ -1,0 +1,5 @@
+name: phantasmal form
+mana cost: {2}{U}
+types: instant
+spell[1]: until end of turn, up to two target creatures each have base power and toughness 3/3, gain flying, and become blue illusions in addition to their other colors and types.
+spell[2]: draw a card.

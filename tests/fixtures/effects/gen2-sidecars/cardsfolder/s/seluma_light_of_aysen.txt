@@ -1,0 +1,6 @@
+name: seluma, light of aysen
+mana cost: {4}{W}
+types: legendary creature angel warrior
+power toughness: 4/4
+static: flying
+triggered: whenever CARDNAME deals combat damage to a player, return target angel creature card from your graveyard to the battlefield.

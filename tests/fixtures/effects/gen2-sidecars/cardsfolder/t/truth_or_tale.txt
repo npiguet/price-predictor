@@ -1,0 +1,4 @@
+name: truth or tale
+mana cost: {1}{U}
+types: instant
+spell[1]: reveal the top five cards of your library and separate them into two piles. an opponent chooses one of those piles. put a card from the chosen pile into your hand, then put all other cards revealed this way on the bottom of your library in any order.

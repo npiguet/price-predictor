@@ -1,0 +1,6 @@
+name: cabal patriarch
+mana cost: {3}{B}{B}{B}
+types: legendary creature human wizard
+power toughness: 5/5
+activated[1]: {2}{B}, sacrifice a creature: target creature gets -2/-2 until end of turn.
+activated[2]: {2}{B}, exile a creature card from your graveyard: target creature gets -2/-2 until end of turn.

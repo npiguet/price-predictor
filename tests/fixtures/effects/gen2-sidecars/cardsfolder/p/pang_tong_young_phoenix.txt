@@ -1,0 +1,5 @@
+name: pang tong, "young phoenix"
+mana cost: {1}{W}{W}
+types: legendary creature human advisor
+power toughness: 1/2
+activated[1]: {T}: target creature gets +0/+2 until end of turn. activate only during your turn, before attackers are declared.

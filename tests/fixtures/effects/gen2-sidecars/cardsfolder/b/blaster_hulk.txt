@@ -1,0 +1,7 @@
+name: blaster hulk
+mana cost: {6}{R}{R}
+types: artifact creature pirate
+power toughness: 8/8
+static: haste
+triggered: whenever CARDNAME attacks, you get {E}{E}, then you may pay eight {E}. when you do, CARDNAME deals 8 damage divided as you choose among up to eight targets. when you do, CARDNAME deals 8 damage divided as you choose among up to eight targets.
+static: this spell costs {1} less to cast for each {E} you've paid or lost this turn.

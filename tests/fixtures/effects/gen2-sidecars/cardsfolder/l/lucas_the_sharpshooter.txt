@@ -1,0 +1,6 @@
+name: lucas, the sharpshooter
+mana cost: {U}{R}
+types: legendary creature human
+power toughness: 1/3
+static: partner — friends forever
+activated[1]: {T}, sacrifice an artifact: CARDNAME deals 1 damage to target creature. goad that creature. goad {C:TARGETED}.

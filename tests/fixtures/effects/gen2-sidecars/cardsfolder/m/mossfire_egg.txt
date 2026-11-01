@@ -1,0 +1,4 @@
+name: mossfire egg
+mana cost: {1}
+types: artifact
+activated[1]: {2}, {T}, sacrifice CARDNAME: add {R}{G}. draw a card.

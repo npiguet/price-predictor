@@ -1,0 +1,5 @@
+name: glamerdye
+mana cost: {1}{U}
+types: instant
+alternate cost: retrace
+spell[1]: change the text of target spell or permanent by replacing all instances of one color word with another.

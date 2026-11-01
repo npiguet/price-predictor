@@ -1,0 +1,5 @@
+name: structural assault
+mana cost: {3}{R}{R}
+types: sorcery
+spell[1]: destroy all artifacts,
+spell[2]: then CARDNAME deals damage to each creature equal to the number of artifacts that were put into graveyards from the battlefield this turn.

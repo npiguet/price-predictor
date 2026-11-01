@@ -1,0 +1,5 @@
+name: krark-clan engineers
+mana cost: {3}{R}
+types: creature goblin artificer
+power toughness: 2/2
+activated[1]: {R}, sacrifice two artifacts: destroy target artifact.

@@ -1,0 +1,5 @@
+name: solemnity
+mana cost: {2}{W}
+types: enchantment
+static: players can't get counters.
+static: counters can't be put on artifacts, creatures, enchantments or lands.

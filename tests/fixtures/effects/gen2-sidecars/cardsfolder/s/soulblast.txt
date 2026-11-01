@@ -1,0 +1,5 @@
+name: soulblast
+mana cost: {3}{R}{R}{R}
+types: instant
+additional cost: sacrifice all creatures you control.
+spell[1]: CARDNAME deals damage to any target equal to the total power of the sacrificed creatures.

@@ -1,0 +1,4 @@
+name: monster
+types: enchantment aura role
+static: enchant creature
+static: enchanted creature gets +1/+1 and has trample.

@@ -1,0 +1,6 @@
+name: immortal phoenix
+mana cost: {4}{R}{R}
+types: creature phoenix
+power toughness: 5/3
+static: flying
+triggered: when CARDNAME dies, return it to its owner's hand.

@@ -1,0 +1,4 @@
+name: firespout
+mana cost: {2}{R/G}
+types: sorcery
+spell[1]: CARDNAME deals 3 damage to each creature without flying if {R} was spent to cast this spell and 3 damage to each creature with flying if {G} was spent to cast this spell.

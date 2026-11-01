@@ -1,0 +1,5 @@
+name: animal friend
+mana cost: {1}{G}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature has "whenever this creature attacks, create a 1/1 green squirrel creature token. put a +1/+1 counter on that token for each aura and equipment attached to this creature other than CARDNAME."

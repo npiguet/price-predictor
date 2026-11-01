@@ -1,0 +1,6 @@
+name: uril, the miststalker
+mana cost: {2}{R}{G}{W}
+types: legendary creature beast
+power toughness: 5/5
+static: hexproof
+static: CARDNAME gets +2/+2 for each aura attached to it.

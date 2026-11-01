@@ -1,0 +1,4 @@
+name: windfall
+mana cost: {2}{U}
+types: sorcery
+spell[1]: each player discards their hand, then draws cards equal to the greatest number of cards a player discarded this way.

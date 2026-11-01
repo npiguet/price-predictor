@@ -1,0 +1,7 @@
+name: broadside bombardiers
+mana cost: {2}{R}
+types: creature goblin pirate
+power toughness: 2/2
+static: menace
+static: haste
+activated[1]: boast —  sacrifice another creature or artifact: CARDNAME deals damage equal to 2 plus the sacrificed permanent's mana value to any target.

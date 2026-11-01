@@ -1,0 +1,7 @@
+name: norn's choirmaster
+mana cost: {3}{W}{W}
+types: creature phyrexian angel
+power toughness: 5/4
+static: flying
+static: first strike
+triggered: whenever your commander enters or attacks, proliferate

@@ -1,0 +1,4 @@
+name: goblin lyre
+mana cost: {3}
+types: artifact
+activated[1]: sacrifice CARDNAME: flip a coin. if you win the flip, CARDNAME deals damage to target opponent or planeswalker equal to the number of creatures you control. if you lose the flip, CARDNAME deals damage to you equal to the number of creatures that opponent or that planeswalker's controller controls.

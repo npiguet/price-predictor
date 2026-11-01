@@ -1,0 +1,4 @@
+name: krark's thumb
+mana cost: {2}
+types: legendary artifact
+static: if you would flip a coin, instead flip two coins and ignore one.

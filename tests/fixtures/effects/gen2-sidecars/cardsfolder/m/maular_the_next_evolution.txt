@@ -1,0 +1,5 @@
+name: maular, the next evolution
+mana cost: {5}{G}{G}
+types: legendary creature dinosaur mutant
+power toughness: 10/10
+triggered: whenever a creature you control with mana value 7 or greater attacks, double its power and toughness until end of turn.

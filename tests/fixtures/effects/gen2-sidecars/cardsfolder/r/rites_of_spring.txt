@@ -1,0 +1,4 @@
+name: rites of spring
+mana cost: {1}{G}
+types: sorcery
+spell[1]: discard any number of cards. search your library for up to that many basic land cards, reveal them, put them into your hand, then shuffle.

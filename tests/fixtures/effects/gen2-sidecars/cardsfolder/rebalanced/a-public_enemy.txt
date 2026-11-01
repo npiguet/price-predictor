@@ -1,0 +1,6 @@
+name: a-public enemy
+mana cost: {2}{U}
+types: enchantment aura
+static: enchant creature
+triggered: when enchanted creature dies, draw two cards.
+static: all creatures attack enchanted creature's controller each combat if able.

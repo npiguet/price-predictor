@@ -1,0 +1,6 @@
+name: enraging licid
+mana cost: {1}{R}
+types: creature licid
+power toughness: 1/1
+activated[1]: {R}, {T}: CARDNAME loses this ability and becomes an aura enchantment with enchant creature. attach it to target creature. you may pay {R} to end this effect.
+static: enchanted creature has haste.

@@ -1,0 +1,6 @@
+name: sharuum the hegemon
+mana cost: {3}{W}{U}{B}
+types: legendary artifact creature sphinx
+power toughness: 5/5
+static: flying
+triggered: when CARDNAME enters, you may return target artifact card from your graveyard to the battlefield.

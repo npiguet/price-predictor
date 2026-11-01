@@ -1,0 +1,5 @@
+name: whim of volrath
+mana cost: {U}
+types: instant
+additional cost: buyback {2}
+spell[1]: change the text of target permanent by replacing all instances of one color word with another or one basic land type with another until end of turn.

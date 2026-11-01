@@ -1,0 +1,4 @@
+name: elemental spectacle
+mana cost: {5}{G}
+types: sorcery
+spell[1]: vivid — create a number of 5/5 red and green elemental creature tokens equal to the number of colors among permanents you control. then you gain life equal to the number of creatures you control.

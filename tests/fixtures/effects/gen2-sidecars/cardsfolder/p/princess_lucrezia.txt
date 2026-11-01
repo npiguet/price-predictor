@@ -1,0 +1,5 @@
+name: princess lucrezia
+mana cost: {3}{U}{U}{B}
+types: legendary creature human wizard
+power toughness: 5/4
+activated[1]: {T}: add {U}.

@@ -1,0 +1,18 @@
+layout: modal
+name: eddie brock
+mana cost: {2}{B}
+types: legendary creature human hero villain
+power toughness: 3/3
+activated[1]: {3}{B}{R}{G}: transform CARDNAME. activate only as a sorcery.
+triggered: when CARDNAME enters, return target creature card with mana value 1 or less from your graveyard to the battlefield.
+
+ALTERNATE
+
+name: venom, lethal protector
+mana cost: {3}{B}{R}{G}
+types: legendary creature symbiote hero villain
+power toughness: 5/5
+static: menace
+static: trample
+static: haste
+triggered: whenever CARDNAME attacks, you may sacrifice another creature. if you do, draw X cards, then you may put a permanent card with mana value X or less from your hand onto the battlefield, where X is the sacrificed creature's mana value.

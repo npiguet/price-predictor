@@ -1,0 +1,4 @@
+name: reflect damage
+mana cost: {3}{R}{W}
+types: instant
+spell[1]: the next time a source of your choice would deal damage this turn, that damage is dealt to that source's controller instead.

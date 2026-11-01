@@ -1,0 +1,5 @@
+name: banish to another universe
+mana cost: {4}{W}
+types: enchantment
+cost reduction: affinity for historic permanents
+triggered: when CARDNAME enters, exile target nonland permanent an opponent controls until CARDNAME leaves the battlefield.

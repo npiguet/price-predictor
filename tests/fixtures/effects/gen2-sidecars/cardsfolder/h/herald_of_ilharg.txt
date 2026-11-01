@@ -1,0 +1,6 @@
+name: herald of ilharg
+mana cost: {2}{R}{G}
+types: creature boar beast
+power toughness: 3/3
+static: trample
+triggered: whenever you cast a creature spell, put two +1/+1 counters on CARDNAME. if that spell has mana value 5 or greater, CARDNAME deals damage equal to the number of counters on it to each opponent.

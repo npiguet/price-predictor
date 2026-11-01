@@ -1,0 +1,4 @@
+name: lifelace
+mana cost: {G}
+types: instant
+spell[1]: target spell or permanent becomes green.

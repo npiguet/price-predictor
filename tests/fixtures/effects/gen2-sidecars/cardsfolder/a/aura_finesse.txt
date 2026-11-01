@@ -1,0 +1,4 @@
+name: aura finesse
+mana cost: {U}
+types: instant
+spell[1]: attach target aura you control to target creature. draw a card.

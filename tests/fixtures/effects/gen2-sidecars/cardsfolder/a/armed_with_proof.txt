@@ -1,0 +1,5 @@
+name: armed with proof
+mana cost: {2}{W}
+types: enchantment
+triggered: when CARDNAME enters, investigate twice.
+static: clues you control are equipment in addition to their other types and have "equipped creature gets +2/+0" and equip {2}.

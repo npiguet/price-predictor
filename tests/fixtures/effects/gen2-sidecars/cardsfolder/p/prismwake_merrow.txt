@@ -1,0 +1,6 @@
+name: prismwake merrow
+mana cost: {2}{U}
+types: creature merfolk wizard
+power toughness: 2/1
+static: flash
+triggered: when CARDNAME enters, target permanent becomes the color or colors of your choice until end of turn.

@@ -1,0 +1,6 @@
+name: wyleth, soul of steel
+mana cost: {1}{R}{W}
+types: legendary creature human warrior
+power toughness: 2/2
+static: trample
+triggered: whenever CARDNAME attacks, draw a card for each aura and equipment attached to it.

@@ -1,0 +1,6 @@
+name: the wasp, janet van dyne
+mana cost: {2}{W}
+types: legendary creature human hero
+power toughness: 1/1
+static: flying
+triggered: when CARDNAME enters, she deals 4 damage to target tapped creature an opponent controls.

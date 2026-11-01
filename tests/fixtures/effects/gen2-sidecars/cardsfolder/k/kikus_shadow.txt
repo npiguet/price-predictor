@@ -1,0 +1,4 @@
+name: kiku's shadow
+mana cost: {B}{B}
+types: sorcery
+spell[1]: target creature deals damage to itself equal to its power.

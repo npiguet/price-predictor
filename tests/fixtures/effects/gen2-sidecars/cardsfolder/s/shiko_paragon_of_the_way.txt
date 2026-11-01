@@ -1,0 +1,7 @@
+name: shiko, paragon of the way
+mana cost: {2}{U}{R}{W}
+types: legendary creature spirit dragon
+power toughness: 4/5
+static: flying
+static: vigilance
+triggered: when CARDNAME enters, exile target nonland card with mana value 3 or less from your graveyard. copy it, then you may cast the copy without paying its mana cost.

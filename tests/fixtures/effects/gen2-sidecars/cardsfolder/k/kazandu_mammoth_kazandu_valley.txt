@@ -1,0 +1,13 @@
+layout: modal
+name: kazandu mammoth
+mana cost: {1}{G}{G}
+types: creature elephant
+power toughness: 3/3
+triggered: landfall — whenever a land you control enters, CARDNAME gets +2/+2 until end of turn.
+
+ALTERNATE
+
+name: kazandu valley
+types: land
+activated[1]: {T}: add {G}.
+replacement: CARDNAME enters tapped.

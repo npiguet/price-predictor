@@ -1,0 +1,6 @@
+name: giant inheritance
+mana cost: {4}{G}
+types: enchantment aura
+static: enchant creature
+triggered: when CARDNAME is put into a graveyard from the battlefield, return CARDNAME to its owner's hand.
+static: enchanted creature gets +5/+5 and has "whenever this creature attacks, create a monster role token attached to up to one target attacking creature."

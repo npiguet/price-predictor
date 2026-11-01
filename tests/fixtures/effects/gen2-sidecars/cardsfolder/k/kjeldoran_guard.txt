@@ -1,0 +1,5 @@
+name: kjeldoran guard
+mana cost: {1}{W}
+types: creature human soldier
+power toughness: 1/1
+activated[1]: {T}: target creature gets +1/+1 until end of turn. when that creature leaves the battlefield this turn, sacrifice CARDNAME. activate only during combat and only if defending player controls no snow lands.

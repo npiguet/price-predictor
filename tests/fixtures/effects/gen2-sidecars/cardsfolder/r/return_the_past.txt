@@ -1,0 +1,4 @@
+name: return the past
+mana cost: {4}{R}{R}
+types: enchantment
+static: during your turn, each instant and sorcery card in your graveyard has flashback. its flashback cost is equal to its mana cost.

@@ -1,0 +1,6 @@
+name: living twister
+mana cost: {R}{R}{G}
+types: creature elemental
+power toughness: 2/5
+activated[1]: {1}{R}, discard a land card: CARDNAME deals 2 damage to any target.
+activated[2]: {G}: return a tapped land you control to its owner's hand.

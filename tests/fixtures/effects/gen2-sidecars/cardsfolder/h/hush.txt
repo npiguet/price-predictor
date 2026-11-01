@@ -1,0 +1,5 @@
+name: hush
+mana cost: {3}{G}
+types: sorcery
+activated[1]: cycling {2}
+spell[2]: destroy all enchantments.

@@ -1,0 +1,4 @@
+name: delete
+mana cost: {X}{R}{R}
+types: sorcery
+spell[1]: CARDNAME deals X damage to each nonartifact creature and each player.

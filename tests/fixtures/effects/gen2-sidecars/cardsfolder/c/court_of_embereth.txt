@@ -1,0 +1,5 @@
+name: court of embereth
+mana cost: {2}{R}{R}
+types: enchantment
+triggered: when CARDNAME enters, you become the monarch.
+triggered: at the beginning of your upkeep, create a 3/1 red knight creature token. then if you're the monarch, CARDNAME deals X damage to each opponent, where X is the number of creatures you control.

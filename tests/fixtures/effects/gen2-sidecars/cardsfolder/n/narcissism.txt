@@ -1,0 +1,5 @@
+name: narcissism
+mana cost: {2}{G}
+types: enchantment
+activated[1]: {G}, discard a card: target creature gets +2/+2 until end of turn.
+activated[2]: {G}, sacrifice CARDNAME: target creature gets +2/+2 until end of turn.

@@ -1,0 +1,5 @@
+name: roar of jukai
+mana cost: {2}{G}
+types: instant arcane
+additional cost: splice onto arcane—have an opponent gain 5 life
+spell[1]: if you control a forest, each blocked creature gets +2/+2 until end of turn.

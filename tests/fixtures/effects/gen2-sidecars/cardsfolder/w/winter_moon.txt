@@ -1,0 +1,4 @@
+name: winter moon
+mana cost: {2}
+types: artifact
+static: players can't untap more than one nonbasic land during their untap steps.

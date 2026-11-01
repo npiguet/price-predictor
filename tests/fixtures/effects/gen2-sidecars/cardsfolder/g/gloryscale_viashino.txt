@@ -1,0 +1,5 @@
+name: gloryscale viashino
+mana cost: {1}{R}{G}{W}
+types: creature lizard soldier
+power toughness: 3/3
+triggered: whenever you cast a multicolored spell, CARDNAME gets +3/+3 until end of turn.

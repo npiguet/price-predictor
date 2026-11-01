@@ -1,0 +1,9 @@
+name: dakkon, shadow slayer
+mana cost: {W}{U}{B}
+types: legendary planeswalker dakkon
+loyalty: 0
+replacement: CARDNAME enters with a number of loyalty counters on him equal to the number of lands you control.
+planeswalker[1]: [+1]: surveil 2.
+planeswalker[2]: [-3]: exile target creature.
+planeswalker[3]: [-6]: you may put an artifact card from your hand or graveyard onto the battlefield.
+replacement: CARDNAME enters with zero loyalty counters on it.
