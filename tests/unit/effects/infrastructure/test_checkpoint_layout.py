@@ -70,10 +70,13 @@ def test_only_the_current_layout_is_accepted():
         INPUT_LAYOUT,
         INPUT_LAYOUT_KEY,
         CheckpointLayoutError,
+        layout_settings,
         require_input_layout,
     )
 
-    require_input_layout({INPUT_LAYOUT_KEY: INPUT_LAYOUT})
+    require_input_layout(layout_settings())
+    with pytest.raises(CheckpointLayoutError, match="relation_types"):
+        require_input_layout({**layout_settings(), "relation_types": ["line_of:forward"]})
     for settings in ({}, None, {INPUT_LAYOUT_KEY: "gen-1"}, {INPUT_LAYOUT_KEY: "gen-0"}):
         with pytest.raises(CheckpointLayoutError, match=INPUT_LAYOUT):
             require_input_layout(settings)

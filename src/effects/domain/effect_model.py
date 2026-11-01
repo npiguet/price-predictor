@@ -21,6 +21,8 @@ from effects.domain.effect_head_layout import (
     VALUE_WIDTH,
     VERDICT_WIDTH,
 )
+from effects.domain.relation_attention import RelationEncoderLayer
+from effects.domain.relation_types import RELATION_TYPES
 from effects.domain.surface_collation import TrunkInputs, gather_entities
 
 # Hardcoded architecture (contracts/cli.md: "Hardcoded, not flags").
@@ -54,6 +56,10 @@ class EffectModelConfig:
     ff_dim: int = TRUNK_D_MODEL * FF_MULTIPLIER
     dropout: float = DROPOUT
     max_position: int = MAX_POSITION
+    #: Rows of each layer's relation tables: one per relation type (FR-047).
+    relation_types: int = len(RELATION_TYPES)
+    #: ``--relation-values``: off keeps the value tables at zero, untrained.
+    relation_values: bool = True
 
     def __post_init__(self) -> None:
         if self.d_model % self.n_heads != 0:
@@ -67,6 +73,29 @@ def _mlp(width_in: int, hidden: int, width_out: int) -> nn.Sequential:
     return nn.Sequential(
         nn.Linear(width_in, hidden), nn.GELU(), nn.Linear(hidden, width_out),
     )
+
+
+class RelationTrunk(nn.Module):
+    """The gen-3 trunk: ``RelationEncoderLayer``s in sequence (root spec § 10.1).
+
+    Kept under ``trunk.layers.N``, the names ``nn.TransformerEncoder`` gave the
+    stock layers, so the parameter names a run reports stay as they were.
+    """
+
+    def __init__(self, d_model: int, n_heads: int, ff_dim: int, dropout: float,
+                 n_layers: int, *, relation_types: int, relation_values: bool) -> None:
+        super().__init__()
+        self.layers = nn.ModuleList(
+            RelationEncoderLayer(d_model, n_heads, ff_dim, dropout,
+                                 relation_types=relation_types, relation_values=relation_values)
+            for _ in range(n_layers))
+
+    def forward(self, hidden: torch.Tensor, src_key_padding_mask: torch.Tensor,
+                relations: torch.Tensor | None = None) -> torch.Tensor:
+        for layer in self.layers:
+            hidden = layer(hidden, src_key_padding_mask=src_key_padding_mask,
+                           relations=relations)
+        return hidden
 
 
 class EffectModel(nn.Module):
@@ -90,14 +119,9 @@ class EffectModel(nn.Module):
         self.position_embedding = nn.Embedding(config.max_position, d)
         self.dropout = nn.Dropout(config.dropout)
 
-        self.trunk = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(
-                d_model=d, nhead=config.n_heads, dim_feedforward=config.ff_dim,
-                dropout=config.dropout, batch_first=True, norm_first=True,
-            ),
-            num_layers=config.n_layers,
-            # norm_first rules the nested-tensor path out; this silences the warning.
-            enable_nested_tensor=False,
+        self.trunk = RelationTrunk(
+            d, config.n_heads, config.ff_dim, config.dropout, config.n_layers,
+            relation_types=config.relation_types, relation_values=config.relation_values,
         )
         self.norm = nn.LayerNorm(d)
 
@@ -142,7 +166,8 @@ class EffectModel(nn.Module):
         if inputs.option_kinds is not None:
             hidden = hidden + self.option_kind_embedding(inputs.option_kinds)
         hidden = self.dropout(hidden)
-        hidden = self.trunk(hidden, src_key_padding_mask=inputs.attention_mask == 0)
+        hidden = self.trunk(hidden, src_key_padding_mask=inputs.attention_mask == 0,
+                            relations=inputs.relations)
         return self.norm(hidden)
 
     def per_entity(self, hidden: torch.Tensor) -> torch.Tensor:

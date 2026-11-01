@@ -561,3 +561,30 @@ def test_a_prose_text_is_encoded_with_its_lines_role_spans():
     # on the prose surface reads none.
     (fallback,) = batcher.stage({line.script_text: line}).prepared
     assert set(fallback.role_ids) == {0}
+
+
+class TestRelationsUnderTheMasks:
+    """T102: the board's links are state, so the no-state baseline reads none."""
+
+    def _inputs(self):
+        from effects.domain.effect_head_input import EffectHeadInput, Slot, SlotKind
+        from effects.domain.surface_collation import collate_surfaces
+
+        slots = tuple(Slot(kind=SlotKind.CARD, position=i, features=(1.0,)) for i in range(3))
+        return collate_surfaces([EffectHeadInput(slots=slots, relations=((0, 1, 2),))],
+                                e_dim=4, widths={SlotKind.CARD: 1, SlotKind.GLOBAL: 40,
+                                                 SlotKind.PLAYER: 1})
+
+    def test_no_state_drops_every_relation(self):
+        from effects.domain.baselines import Baseline, baseline_masks
+        from tests.unit.effects.builders import make_batcher
+
+        batcher = make_batcher(masks=baseline_masks(Baseline.NO_STATE))
+        assert batcher._masked(self._inputs()).relations.shape == (0, 4)
+
+    def test_the_full_model_keeps_them(self):
+        from effects.domain.baselines import Baseline, baseline_masks
+        from tests.unit.effects.builders import make_batcher
+
+        batcher = make_batcher(masks=baseline_masks(Baseline.FULL))
+        assert batcher._masked(self._inputs()).relations.tolist() == [[0, 0, 1, 2]]

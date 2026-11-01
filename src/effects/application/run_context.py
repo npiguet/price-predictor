@@ -42,7 +42,7 @@ from effects.domain.ability_encoder import (
 )
 from effects.domain.ability_tokenizer import TOKENIZER_RULES, TOKENIZER_RULES_KEY
 from effects.domain.baselines import baseline_masks
-from effects.domain.effect_head_input import INPUT_LAYOUT, INPUT_LAYOUT_KEY, SlotKind
+from effects.domain.effect_head_input import SlotKind, layout_settings
 from effects.domain.effect_head_layout import FieldSpec
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.infrastructure.sidecar_io import script_vocabularies
@@ -133,7 +133,7 @@ def training_settings(spec: RunSpec, *, api_types, param_keys) -> dict:
         "api_types": list(api_types),
         "param_keys": list(param_keys),
         TOKENIZER_RULES_KEY: TOKENIZER_RULES,
-        INPUT_LAYOUT_KEY: INPUT_LAYOUT,
+        **layout_settings(),
     }
 
 

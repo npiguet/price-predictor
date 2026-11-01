@@ -319,6 +319,7 @@ class TestTheBatchersTheLoopBuilds:
         rest = [
             "seed", "e_noise", "value_weight", "mlm_weight", "mlm_mask_prob",
             "api_weight", "api_types", "param_keys", "tokenizer_rules", "input_layout",
+            "relation_types", "relation_target_indices",
         ]
         assert keys() == rest
         assert keys(lethality_copies=2) == ["lethality_copies", *rest]

@@ -19,7 +19,7 @@ from effects.domain.baselines import (
     BASELINES,
     Baseline,
 )
-from effects.domain.effect_head_input import INPUT_LAYOUT, INPUT_LAYOUT_KEY
+from effects.domain.effect_head_input import INPUT_LAYOUT, INPUT_LAYOUT_KEY, layout_settings
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.split_provenance import SplitProvenance
 from effects.domain.text_holdout import HoldoutUnit
@@ -84,7 +84,7 @@ def _checkpoint(files, **overrides) -> EffectCheckpoint:
         "encoder_state": {"token_embedding.weight": torch.zeros(32, 16)},
         "model_state": model.state_dict(),
         "provenance": _provenance(files),
-        "training_settings": {INPUT_LAYOUT_KEY: INPUT_LAYOUT},
+        "training_settings": layout_settings(),
     }
     defaults.update(overrides)
     return EffectCheckpoint(**defaults)
@@ -438,7 +438,7 @@ class TestGen2Checkpoint:
         settings = {"e_noise": 0.2, "value_weight": 0.05, "mlm_weight": 0.1,
                     "mlm_mask_prob": 0.15, "api_weight": 0.05,
                     "api_types": ["Draw"], "param_keys": ["NumCards"],
-                    INPUT_LAYOUT_KEY: INPUT_LAYOUT}
+                    **layout_settings()}
         store = EffectModelStore(tmp_path)
         store.save(_checkpoint(
             files, encoder_config=encoder,

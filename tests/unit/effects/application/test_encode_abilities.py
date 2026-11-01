@@ -21,7 +21,7 @@ from effects.application.encode_abilities import (
 from effects.domain.ability_cache_layout import ARRAY_KEY, cache_path_for
 from effects.domain.ability_encoder import AbilityEncoderConfig
 from effects.domain.baselines import Baseline
-from effects.domain.effect_head_input import INPUT_LAYOUT, INPUT_LAYOUT_KEY
+from effects.domain.effect_head_input import layout_settings
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.split_provenance import SplitProvenance
@@ -96,7 +96,7 @@ def corpus(tmp_path):
             vocab_hash=content_hash(vocab),
             keyword_definitions_hash=content_hash(keywords),
         ),
-        training_settings={INPUT_LAYOUT_KEY: INPUT_LAYOUT},
+        training_settings=layout_settings(),
     ))
     return cards, tokens, store.latest_path(), vocab
 
@@ -344,7 +344,7 @@ class TestTheRealEncoder:
                 vocab_hash=content_hash(vocab),
                 keyword_definitions_hash=content_hash(keywords),
             ),
-            training_settings={INPUT_LAYOUT_KEY: INPUT_LAYOUT},
+            training_settings=layout_settings(),
         ))
         return EncodeAbilitiesConfig(
             cards_folders=(cards,),

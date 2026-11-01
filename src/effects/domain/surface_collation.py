@@ -35,6 +35,9 @@ class TrunkInputs:
     attention_mask: torch.Tensor
     option_kinds: torch.Tensor | None = None
     e_rows: torch.Tensor | None = None
+    #: ``(N, 4)`` long ``[batch row, from slot, to slot, relation type]``; None
+    #: or empty where the batch holds no relation (root spec § 10.1).
+    relations: torch.Tensor | None = None
 
     def _mapped(self, move) -> TrunkInputs:
         def moved(tensor):
@@ -48,6 +51,7 @@ class TrunkInputs:
             attention_mask=move(self.attention_mask),
             option_kinds=moved(self.option_kinds),
             e_rows=moved(self.e_rows),
+            relations=moved(self.relations),
         )
 
     def to(self, device, *, non_blocking: bool = False) -> TrunkInputs:
@@ -107,6 +111,10 @@ def collate_surfaces(
     e_rows = np.full((batch, width), -1, dtype=np.int64)
     attention = np.zeros((batch, width), dtype=np.int64)
     option_kinds = np.zeros((batch, width), dtype=np.int64)
+    relations = np.array(
+        [(row, i, j, r) for row, surface in enumerate(surfaces)
+         for i, j, r in getattr(surface, "relations", ())],
+        dtype=np.int64).reshape(-1, 4)
 
     for row, surface in enumerate(surfaces):
         slots = surface.slots
@@ -134,6 +142,7 @@ def collate_surfaces(
         attention_mask=torch.from_numpy(attention),
         option_kinds=torch.from_numpy(option_kinds),
         e_rows=torch.from_numpy(e_rows),
+        relations=torch.from_numpy(relations),
     )
 
 

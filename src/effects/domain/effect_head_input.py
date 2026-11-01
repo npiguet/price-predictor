@@ -32,6 +32,7 @@ from effects.domain.records import (
     ResolutionOutcome,
     acting_keys,
 )
+from effects.domain.relation_types import RELATION_TYPES, TARGET_INDICES
 from effects.domain.state_snapshot import (
     COLORS,
     CombatSubstep,
@@ -110,14 +111,37 @@ class CheckpointLayoutError(ValueError):
     """A checkpoint trained on an input layout this code does not build."""
 
 
+#: Where a checkpoint records the trunk's relation types, by name in table-row
+#: order, and the ``targets`` index cap (research M3, M4).
+RELATION_TYPES_KEY = "relation_types"
+RELATION_TARGET_INDICES_KEY = "relation_target_indices"
+
+
+def layout_settings() -> dict:
+    """What a run records about the inputs it was built on: the input layout and
+    the relation types whose order fixes the trunk's table rows."""
+    return {
+        INPUT_LAYOUT_KEY: INPUT_LAYOUT,
+        RELATION_TYPES_KEY: list(RELATION_TYPES),
+        RELATION_TARGET_INDICES_KEY: TARGET_INDICES,
+    }
+
+
 def require_input_layout(training_settings) -> None:
-    """Refuse a checkpoint whose recorded input layout is not :data:`INPUT_LAYOUT`."""
-    recorded = (training_settings or {}).get(INPUT_LAYOUT_KEY)
+    """Refuse a checkpoint trained on another input layout or relation-type table."""
+    settings = training_settings or {}
+    recorded = settings.get(INPUT_LAYOUT_KEY)
     if recorded != INPUT_LAYOUT:
         raise CheckpointLayoutError(
             f"the checkpoint was trained on input layout {recorded!r}; this code "
             f"builds {INPUT_LAYOUT!r} only. Retrain it on the current code."
         )
+    for key, value in layout_settings().items():
+        if settings.get(key) != value:
+            raise CheckpointLayoutError(
+                f"the checkpoint records another {key} than this code's ({INPUT_LAYOUT!r} "
+                "layout); its relation tables would be read in the wrong rows. Retrain it."
+            )
 
 
 #: The largest magnitude a count or a signed delta is scored at, by the field
@@ -252,6 +276,8 @@ class EffectHeadInput:
     slots: tuple[Slot, ...]
     #: Slot indices of the per-entity head's targets: every CARD and PLAYER.
     entity_slots: tuple[int, ...] = field(default_factory=tuple)
+    #: ``(from slot, to slot, relation type)`` triples over ``slots`` (root spec § 10.1).
+    relations: tuple[tuple[int, int, int], ...] = field(default_factory=tuple)
 
 
 #: The kinds a model input can be: every kind but ``turn_action``, which no

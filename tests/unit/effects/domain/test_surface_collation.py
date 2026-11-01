@@ -176,3 +176,27 @@ class TestCollateSurfaces:
 
     def test_an_empty_batch_keeps_its_shapes(self):
         self._assert_same([], e_dim=3, widths={SlotKind.CARD: 2})
+
+
+class TestRelations:
+    """T102: each surface's relations, offset by its batch row, as one ``(N, 4)`` tensor."""
+
+    def _surface(self, relations):
+        slots = tuple(Slot(kind=SlotKind.CARD, position=i, features=(0.0,)) for i in range(3))
+        return EffectHeadInput(slots=slots, relations=tuple(relations))
+
+    def test_rows_carry_their_batch_index(self):
+        inputs = collate_surfaces(
+            [self._surface([(0, 1, 2)]), self._surface([]), self._surface([(2, 0, 5), (1, 2, 0)])],
+            e_dim=2, widths={SlotKind.CARD: 1})
+        assert inputs.relations.tolist() == [[0, 0, 1, 2], [2, 2, 0, 5], [2, 1, 2, 0]]
+        assert inputs.relations.dtype == torch.long
+
+    def test_a_batch_without_relations_has_an_empty_tensor(self):
+        inputs = collate_surfaces([self._surface([])], e_dim=2, widths={SlotKind.CARD: 1})
+        assert inputs.relations.shape == (0, 4)
+
+    def test_the_relations_move_with_the_batch(self):
+        inputs = collate_surfaces([self._surface([(0, 1, 2)])], e_dim=2,
+                                  widths={SlotKind.CARD: 1})
+        assert inputs.to(torch.device("cpu")).relations.tolist() == [[0, 0, 1, 2]]

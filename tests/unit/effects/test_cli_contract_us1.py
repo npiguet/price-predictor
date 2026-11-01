@@ -262,7 +262,7 @@ class TestSubcommandTable:
             "build-vocab", "extract-keyword-definitions", "collect-coverage",
             "build-corpus", "field-coverage", "validate-corpus",
             "collect-variants", "train-effect-model", "encode-abilities",
-            "evaluate-effect-model", "holdout-cards",
+            "evaluate-effect-model", "holdout-cards", "rule-counts",
         }
 
     def test_bare_invocation_prints_help_rather_than_failing(self):

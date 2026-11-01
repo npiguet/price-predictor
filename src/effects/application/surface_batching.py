@@ -7,6 +7,7 @@ the trainer and every evaluator so they cannot disagree.
 
 from __future__ import annotations
 
+import dataclasses
 import random
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
@@ -482,6 +483,9 @@ class SurfaceBatcher:
             for kind in (SlotKind.PLAYER, SlotKind.CARD):
                 features[kind] = torch.zeros_like(features[kind])
             features[SlotKind.GLOBAL][..., :-KIND_FLAG_WIDTH] = 0.0
+            # The board's links are state too: no-state reads none.
+            if inputs.relations is not None:
+                inputs = dataclasses.replace(inputs, relations=inputs.relations[:0])
         if masks.zero_act_e or masks.zero_context_e:
             zeroed = torch.full(
                 (inputs.e_rows.shape[1],), masks.zero_context_e, dtype=torch.bool,

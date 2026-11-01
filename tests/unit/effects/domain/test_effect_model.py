@@ -105,3 +105,43 @@ class TestGen2Heads:
         flagged = replace(batch, option_kinds=torch.ones_like(batch.slot_kinds))
         with torch.no_grad():
             assert torch.equal(model(batch), model(flagged))
+
+
+class TestRelationTrunk:
+    """T101: the trunk is relation layers; with empty tables the relations change nothing."""
+
+    def test_the_trunk_is_relation_layers_with_one_table_row_per_type(self, model):
+        from effects.domain.relation_attention import RelationEncoderLayer
+        from effects.domain.relation_types import RELATION_TYPES
+
+        assert len(model.trunk.layers) == _CONFIG.n_layers
+        layer = model.trunk.layers[0]
+        assert isinstance(layer, RelationEncoderLayer)
+        assert layer.rel_k.shape == (_CONFIG.n_heads, len(RELATION_TYPES),
+                                     _CONFIG.d_model // _CONFIG.n_heads)
+
+    def test_the_tables_train_with_the_head_group(self, model):
+        names = dict(model.named_parameters())
+        assert "trunk.layers.0.rel_k" in names and "trunk.layers.0.rel_v" in names
+
+    def test_relations_change_nothing_while_the_tables_are_zero(self, model):
+        model.eval()
+        surface = _surface()
+        related = replace(surface, relations=torch.tensor([[0, 4, 5, 0], [1, 2, 4, 3]]))
+        with torch.no_grad():
+            assert torch.allclose(model(surface), model(related))
+
+    def test_a_trained_table_makes_the_relation_matter(self, model):
+        model.eval()
+        surface = _surface()
+        related = replace(surface, relations=torch.tensor([[0, 4, 5, 0]]))
+        with torch.no_grad():
+            model.trunk.layers[0].rel_k.normal_()
+            model.trunk.layers[0].rel_v.normal_()
+            assert not torch.allclose(model(surface)[0, 4], model(related)[0, 4])
+            assert torch.allclose(model(surface)[1], model(related)[1], atol=1e-6)
+
+    def test_relation_values_off_leaves_no_value_parameter(self):
+        torch.manual_seed(0)
+        off = EffectModel(replace(_CONFIG, relation_values=False))
+        assert "trunk.layers.0.rel_v" not in dict(off.named_parameters())
