@@ -1,0 +1,7 @@
+name: west wind avatar
+mana cost: {5}{G}{G}
+types: creature cat spirit avatar
+power toughness: 7/7
+static: trample
+triggered: whenever this creature enters or attacks, you may sacrifice a token or a land. if you do, you gain 3 life.
+triggered: disappear — at the beginning of your end step, if a permanent left the battlefield under your control this turn, draw a card.

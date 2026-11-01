@@ -1,0 +1,6 @@
+name: mona lisa, science geek
+mana cost: {2}{G}
+types: legendary creature lizard mutant
+power toughness: 1/3
+static: reach
+activated[1]: {T}: add X mana of any one color, where X is CARDNAME's power.

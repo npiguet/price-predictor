@@ -1,0 +1,5 @@
+name: flying men
+mana cost: {U}
+types: creature human
+power toughness: 1/1
+static: flying

@@ -1,0 +1,5 @@
+name: animal boneyard
+mana cost: {2}{W}
+types: enchantment aura
+static: enchant land
+static: enchanted land has "{T}, sacrifice a creature: you gain life equal to the sacrificed creature's toughness."

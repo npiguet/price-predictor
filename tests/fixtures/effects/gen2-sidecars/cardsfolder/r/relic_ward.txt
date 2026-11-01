@@ -1,0 +1,6 @@
+name: relic ward
+mana cost: {1}{W}
+types: enchantment aura
+triggered: you may cast CARDNAME as though it had flash. if you cast it any time a sorcery couldn't have been cast, the controller of the permanent it becomes sacrifices it at the beginning of the next cleanup step.
+static: enchant artifact
+static: enchanted artifact has shroud.

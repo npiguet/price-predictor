@@ -1,0 +1,6 @@
+name: marshal's anthem
+mana cost: {2}{W}{W}
+types: enchantment
+additional cost: multikicker {1}{W}
+triggered: when CARDNAME enters, return up to X target creature cards from your graveyard to the battlefield, where X is the number of times CARDNAME was kicked.
+static: creatures you control get +1/+1.

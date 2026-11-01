@@ -1,0 +1,7 @@
+name: donnie & april, adorkable duo
+mana cost: {4}{U}
+types: legendary creature mutant ninja human turtle
+power toughness: 3/3
+triggered: when CARDNAME enter, choose one or both
+option[1]: target player draws two cards.
+option[2]: target player returns an artifact, instant, or sorcery card from their graveyard to their hand.

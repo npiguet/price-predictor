@@ -1,0 +1,7 @@
+name: squadron carrier
+mana cost: {2}{W}
+types: artifact spacecraft
+power toughness: 4/4
+activated[1]: station 10
+static: spacecraft you control have "exhaust — {W}: conjure a card named starfighter pilot onto the battlefield."
+static: station 10+ creatures you control have flying.

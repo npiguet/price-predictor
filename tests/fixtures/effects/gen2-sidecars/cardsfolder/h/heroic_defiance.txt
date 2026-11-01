@@ -1,0 +1,5 @@
+name: heroic defiance
+mana cost: {1}{W}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature gets +3/+3 unless it shares a color with the most common color among all permanents or a color tied for most common.

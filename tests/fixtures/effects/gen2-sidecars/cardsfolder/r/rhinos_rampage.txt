@@ -1,0 +1,5 @@
+name: rhino's rampage
+mana cost: {R/G}
+types: sorcery
+spell[1]: target creature you control gets +1/+0 until end of turn. it fights target creature an opponent controls.
+spell[2]: when excess damage is dealt to the creature an opponent controls this way, destroy up to one target noncreature artifact with mana value 3 or less.

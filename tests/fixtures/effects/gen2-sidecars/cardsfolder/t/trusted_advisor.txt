@@ -1,0 +1,6 @@
+name: trusted advisor
+mana cost: {U}
+types: creature human advisor
+power toughness: 1/2
+triggered: at the beginning of your upkeep, return a blue creature you control to its owner's hand.
+static: your maximum hand size is increased by two.

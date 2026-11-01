@@ -1,0 +1,5 @@
+name: shimmer
+mana cost: {2}{U}{U}
+types: enchantment
+replacement: as CARDNAME enters, choose a land type.
+static: each land of the chosen type has phasing.

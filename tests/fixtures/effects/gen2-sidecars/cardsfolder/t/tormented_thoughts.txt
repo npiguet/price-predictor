@@ -1,0 +1,5 @@
+name: tormented thoughts
+mana cost: {2}{B}
+types: sorcery
+additional cost: sacrifice a creature.
+spell[1]: target player discards a number of cards equal to the sacrificed creature's power.

@@ -1,0 +1,4 @@
+name: twilight mire
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {B/G}, {T}: add {B}{B}, {B}{G}, or {G}{G}.

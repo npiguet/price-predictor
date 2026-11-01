@@ -1,0 +1,6 @@
+name: faceless one
+mana cost: {5}
+types: legendary enchantment creature background
+power toughness: 3/3
+static: choose a background
+static: if CARDNAME is your commander, choose a color before the game begins. CARDNAME is the chosen color.

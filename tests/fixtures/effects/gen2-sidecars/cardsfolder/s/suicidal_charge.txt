@@ -1,0 +1,4 @@
+name: suicidal charge
+mana cost: {3}{B}{R}
+types: enchantment
+activated[1]: sacrifice CARDNAME: creatures your opponents control get -1/-1 until end of turn. those creatures attack this turn if able.

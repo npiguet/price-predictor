@@ -1,0 +1,4 @@
+name: down for repairs
+mana cost: {2}{B}
+types: sorcery
+spell[1]: target opponent reveals their hand. you choose a nonland card from it. that player discards that card. destroy up to one target attraction that player controls.

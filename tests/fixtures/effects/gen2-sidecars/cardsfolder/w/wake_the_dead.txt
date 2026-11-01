@@ -1,0 +1,5 @@
+name: wake the dead
+mana cost: {X}{B}{B}
+types: instant
+text: cast this spell only during combat on an opponent's turn.
+spell[1]: return X target creature cards from your graveyard to the battlefield. sacrifice those creatures at the beginning of the next end step.

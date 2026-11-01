@@ -1,0 +1,6 @@
+name: super mutant scavenger
+mana cost: {4}{G}
+types: creature mutant warrior
+power toughness: 5/5
+static: trample
+triggered: when CARDNAME enters or dies, return up to one target aura or equipment card from your graveyard to your hand.

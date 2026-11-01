@@ -1,0 +1,6 @@
+name: tippy-toe, terrific partner
+mana cost: {3}{G}
+types: legendary creature squirrel hero
+power toughness: 2/4
+triggered: at the beginning of your end step, if you gained life this turn, draw a card.
+replacement: if you would create one or more tokens, instead create those tokens plus an additional food token.

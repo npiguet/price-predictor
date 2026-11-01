@@ -1,0 +1,5 @@
+name: tegwyll's scouring
+mana cost: {4}{B}{B}
+types: sorcery
+additional cost: you may cast CARDNAME as though it had flash if you pay tap three untapped creatures with flyings you control more to cast it.
+spell[1]: destroy all creatures. create three 1/1 black faerie rogue creature tokens with flying.

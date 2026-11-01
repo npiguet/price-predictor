@@ -1,0 +1,6 @@
+name: primal cocoon
+mana cost: {G}
+types: enchantment aura
+static: enchant creature
+triggered: at the beginning of your upkeep, put a +1/+1 counter on enchanted creature.
+triggered: when enchanted creature attacks or blocks, sacrifice CARDNAME.

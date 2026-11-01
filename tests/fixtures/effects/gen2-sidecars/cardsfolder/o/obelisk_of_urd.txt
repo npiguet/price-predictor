@@ -1,0 +1,6 @@
+name: obelisk of urd
+mana cost: {6}
+types: artifact
+cost reduction: convoke
+replacement: as CARDNAME enters, choose a creature type.
+static: creatures you control of the chosen type get +2/+2.

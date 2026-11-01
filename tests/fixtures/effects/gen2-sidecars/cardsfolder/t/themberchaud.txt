@@ -1,0 +1,7 @@
+name: themberchaud
+mana cost: {4}{R}{R}{R}
+types: legendary creature dragon
+power toughness: 5/5
+static: trample
+triggered: when CARDNAME enters, he deals X damage to each other creature without flying and each player, where X is the number of mountains you control.
+static: you may exert CARDNAME as it attacks. when you do, he gains flying until end of turn.

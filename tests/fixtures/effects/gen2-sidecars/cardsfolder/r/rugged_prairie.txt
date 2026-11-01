@@ -1,0 +1,4 @@
+name: rugged prairie
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {R/W}, {T}: add {R}{R}, {R}{W}, or {W}{W}.

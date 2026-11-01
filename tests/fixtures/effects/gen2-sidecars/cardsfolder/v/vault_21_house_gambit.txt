@@ -1,0 +1,6 @@
+name: vault 21: house gambit
+mana cost: {1}{R}
+types: enchantment saga
+chapter: I, II — discard a card, then draw a card.
+chapter: III — reveal up to five nonland cards from your hand. for each of those cards that has the same mana value as another card revealed this way, create a treasure token.
+replacement: CARDNAME enters with a lore counter on it.

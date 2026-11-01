@@ -1,0 +1,5 @@
+name: electro's bolt
+mana cost: {2}{R}
+types: sorcery
+static: mayhem {1}{R}
+spell[1]: CARDNAME deals 4 damage to target creature.

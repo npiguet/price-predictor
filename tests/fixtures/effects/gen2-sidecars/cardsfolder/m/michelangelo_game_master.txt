@@ -1,0 +1,5 @@
+name: michelangelo, game master
+mana cost: {2}{G}
+types: legendary creature mutant ninja turtle
+power toughness: 3/3
+triggered: disappear — at the beginning of your end step, if a permanent left the battlefield under your control this turn, put a +1/+1 counter on CARDNAME.

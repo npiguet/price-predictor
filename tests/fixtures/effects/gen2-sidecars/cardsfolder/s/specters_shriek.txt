@@ -1,0 +1,4 @@
+name: specter's shriek
+mana cost: {B}
+types: sorcery
+spell[1]: target opponent reveals their hand. you may choose a nonland card from it. if you do, that player exiles that card. if a nonblack card is exiled this way, exile a card from your hand.

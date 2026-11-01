@@ -1,0 +1,4 @@
+name: baki's curse
+mana cost: {2}{U}{U}
+types: sorcery
+spell[1]: CARDNAME deals 2 damage to each creature for each aura attached to that creature.

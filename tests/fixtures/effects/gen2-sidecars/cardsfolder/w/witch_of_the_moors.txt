@@ -1,0 +1,6 @@
+name: witch of the moors
+mana cost: {3}{B}{B}
+types: creature human warlock
+power toughness: 4/4
+static: deathtouch
+triggered: at the beginning of your end step, if you gained life this turn, each opponent sacrifices a creature and you return up to one target creature card from your graveyard to your hand.

@@ -1,0 +1,4 @@
+name: necrotic hex
+mana cost: {6}{B}
+types: sorcery
+spell[1]: each player sacrifices six creatures. you create six tapped 2/2 black zombie creature tokens.

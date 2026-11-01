@@ -96,3 +96,107 @@ def test_an_unknown_check_is_refused():
 
 def test_the_family_runs_on_gen2_records():
     assert FAMILY.needs({"check": "toughness_zero"}) == frozenset()
+
+
+def _fires(records, check):
+    from effects.domain.rule_catalogue import Polarity as P
+
+    return next(r for r in records
+                if (m := FAMILY.match(r, None, {"check": check})) and m.polarity is P.FIRES)
+
+
+def test_a_second_legend_entering_fires_the_legend_rule(gen2_records):
+    record = _fires(gen2_records, "legend_rule")
+    found = FAMILY.match(record, None, {"check": "legend_rule"})
+    assert found.observed and len(found.entities) == 2
+    names = {record.state.entity(e).name for e in found.entities}
+    assert len(names) == 1
+
+
+def test_the_same_legend_entering_under_another_controller_is_the_near_miss(gen2_records):
+    """The near miss edited from the real record: the entering copy changes controller."""
+    record = _fires(gen2_records, "legend_rule")
+    entering = next(e.subjects[0] for e in record.payload.events
+                    if e.type is EventType.ZONE_CHANGE and e.params.get("to_zone") == "battlefield")
+    other = next(p.id for p in record.state.players
+                 if p.id != record.state.entity(entering).controller)
+    state = replace(record.state, entities=tuple(
+        replace(e, controller=other) if e.id == entering else e for e in record.state.entities))
+    events = tuple(e for e in record.payload.events
+                   if not (e.type is EventType.ZONE_CHANGE and e.attributed_to == "unresolved"))
+    found = FAMILY.match(replace(record, state=state, payload=ResolutionPayload(events=events)),
+                         None, {"check": "legend_rule"})
+    assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
+
+
+def test_an_aura_whose_host_left_fires(gen2_records):
+    found = FAMILY.match(_fires(gen2_records, "aura_illegal"), None, {"check": "aura_illegal"})
+    assert found.observed
+
+
+def test_an_aura_whose_host_stays_is_the_near_miss(gen2_records):
+    record = _fires(gen2_records, "aura_illegal")
+    found = FAMILY.match(record, None, {"check": "aura_illegal"})
+    hosts = {record.state.entity(a).attached_to for a in found.entities}
+    events = tuple(e for e in record.payload.events
+                   if not (e.type is EventType.ZONE_CHANGE
+                           and e.params.get("from_zone") == "battlefield"
+                           and (set(e.subjects) & (hosts | set(found.entities)))))
+    stayed = FAMILY.match(replace(record, payload=ResolutionPayload(events=events)), None,
+                          {"check": "aura_illegal"})
+    assert stayed.polarity is Polarity.DOES_NOT_FIRE and not stayed.observed
+
+
+def test_a_planeswalker_losing_its_last_loyalty_fires(gen2_records):
+    record = next(r for r in gen2_records if any(
+        e.type is EventType.COUNTER_CHANGE and e.params.get("counter_type") == "LOYALTY"
+        for e in r.payload.listed_events()))
+    found = FAMILY.match(record, None, {"check": "loyalty_zero"})
+    assert found.polarity is Polarity.FIRES and found.observed
+
+
+def test_a_planeswalker_left_with_loyalty_is_the_near_miss(gen2_records):
+    """Sivitri loses 3 of her 4 loyalty instead of all of it, and stays."""
+    record = next(r for r in gen2_records if any(
+        e.type is EventType.COUNTER_CHANGE and e.params.get("counter_type") == "LOYALTY"
+        for e in r.payload.listed_events()))
+    events = []
+    for e in record.payload.events:
+        if e.type is EventType.COUNTER_CHANGE and e.params.get("counter_type") == "LOYALTY":
+            e = replace(e, params={**e.params, "delta": e.params["delta"] + 1})
+        elif e.type is EventType.ZONE_CHANGE and e.attributed_to == "unresolved":
+            continue
+        events.append(e)
+    found = FAMILY.match(replace(record, payload=ResolutionPayload(events=tuple(events))), None,
+                         {"check": "loyalty_zero"})
+    assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
+
+
+def _small_hit(gen2_records):
+    """A real 704.5g kill edited to a 1-damage hit: non-lethal, its source named."""
+    record = _fires(gen2_records, "lethal_damage")
+    hit = next(e for e in record.payload.events if e.type is EventType.DAMAGE_DEALT
+               and (e.params.get("source") or e.params.get("cause")))
+    events = tuple(
+        replace(e, params={**e.params, "amount": 1}) if e is hit else e
+        for e in record.payload.events
+        if not (e.type is EventType.ZONE_CHANGE and e.attributed_to == "unresolved"))
+    return replace(record, payload=ResolutionPayload(events=events)), hit
+
+
+def test_a_small_hit_from_a_source_without_deathtouch_is_the_near_miss(gen2_records):
+    record, _ = _small_hit(gen2_records)
+    found = FAMILY.match(record, None, {"check": "deathtouch_damage"})
+    assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
+
+
+def test_the_same_hit_from_a_deathtouch_source_fires(gen2_records):
+    record, hit = _small_hit(gen2_records)
+    source_id = hit.params.get("source") or hit.params.get("cause")
+    source = record.state.entity(source_id)
+    granted = replace(source, granted_temporary=replace(
+        source.granted_temporary, keywords=(*source.granted_temporary.keywords, "deathtouch")))
+    state = replace(record.state, entities=tuple(
+        granted if e.id == source_id else e for e in record.state.entities))
+    found = FAMILY.match(replace(record, state=state), None, {"check": "deathtouch_damage"})
+    assert found.polarity is Polarity.FIRES and not found.observed  # the edit left no death

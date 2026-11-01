@@ -1,0 +1,8 @@
+name: decimator of the provinces
+mana cost: {10}
+types: creature eldrazi boar
+power toughness: 7/7
+alternate cost: emerge {6}{G}{G}{G}
+static: trample
+static: haste
+triggered: when you cast this spell, creatures you control get +2/+2 and gain trample until end of turn.

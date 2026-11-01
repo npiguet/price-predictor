@@ -1,0 +1,5 @@
+name: purple dragon punks
+mana cost: {1}{R}
+types: creature human rogue
+power toughness: 2/2
+activated[1]: {T}: add {U}. spend this mana only to cast an artifact spell or activate an ability.

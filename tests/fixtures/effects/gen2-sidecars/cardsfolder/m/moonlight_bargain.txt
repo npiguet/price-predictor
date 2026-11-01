@@ -1,0 +1,5 @@
+name: moonlight bargain
+mana cost: {3}{B}{B}
+types: instant
+spell[1]: look at the top five cards of your library.
+spell[2]: for each card, put that card into your graveyard unless you pay 2 life. then put the rest into your hand.

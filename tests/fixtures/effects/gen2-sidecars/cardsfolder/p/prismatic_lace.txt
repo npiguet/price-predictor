@@ -1,0 +1,4 @@
+name: prismatic lace
+mana cost: {U}
+types: instant
+spell[1]: target permanent becomes the color or colors of your choice.

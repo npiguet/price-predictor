@@ -1,0 +1,5 @@
+name: tears of rage
+mana cost: {2}{R}{R}
+types: instant
+text: cast this spell only during the declare attackers step.\r\n
+spell[1]: attacking creatures you control get +X/+0 until end of turn, where X is the number of attacking creatures. sacrifice those creatures at the beginning of the next end step.

@@ -1,0 +1,4 @@
+name: skycloud egg
+mana cost: {1}
+types: artifact
+activated[1]: {2}, {T}, sacrifice CARDNAME: add {W}{U}. draw a card.

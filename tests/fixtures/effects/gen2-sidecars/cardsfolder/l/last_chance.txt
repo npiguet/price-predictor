@@ -1,0 +1,4 @@
+name: last chance
+mana cost: {R}{R}
+types: sorcery
+spell[1]: take an extra turn after this one. at the beginning of that turn's end step, you lose the game.

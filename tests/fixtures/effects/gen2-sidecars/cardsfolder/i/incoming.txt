@@ -1,0 +1,4 @@
+name: incoming!
+mana cost: {4}{G}{G}{G}{G}
+types: sorcery
+spell[1]: each player searches their library for any number of artifact, creature, enchantment, and/or land cards, puts them onto the battlefield, then shuffles.

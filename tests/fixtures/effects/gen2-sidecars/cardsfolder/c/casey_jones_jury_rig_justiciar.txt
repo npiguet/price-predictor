@@ -1,0 +1,6 @@
+name: casey jones, jury-rig justiciar
+mana cost: {1}{R}
+types: legendary creature human berserker
+power toughness: 2/1
+static: haste
+triggered: when CARDNAME enters, look at the top four cards of your library. you may reveal an artifact card from among them and put it into your hand. put the rest on the bottom of your library in a random order.

@@ -1,0 +1,5 @@
+name: petty larceny
+mana cost: {3}{B}
+types: sorcery
+alternate cost: freerunning {1}{B}
+spell[1]: look at the top two cards of target opponent's library and exile those cards face down. you may play those cards for as long as they remain exiled, and mana of any type can be spent to cast them. create a treasure token.

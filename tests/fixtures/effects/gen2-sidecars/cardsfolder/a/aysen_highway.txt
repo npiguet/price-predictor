@@ -1,0 +1,4 @@
+name: aysen highway
+mana cost: {3}{W}{W}{W}
+types: enchantment
+static: white creatures have plainswalk.

@@ -1,0 +1,7 @@
+name: the unspeakable
+mana cost: {6}{U}{U}{U}
+types: legendary creature spirit
+power toughness: 6/7
+static: flying
+static: trample
+triggered: whenever CARDNAME deals combat damage to a player, you may return target arcane card from your graveyard to your hand.

@@ -1,0 +1,6 @@
+name: tenacious tosk
+mana cost: {3}{G}
+types: creature tosk rogue
+power toughness: 4/4
+triggered: whenever this creature deals combat damage to a player, put a +1/+1 counter on it.
+static: CARDNAME can't be blocked by more than one creature.

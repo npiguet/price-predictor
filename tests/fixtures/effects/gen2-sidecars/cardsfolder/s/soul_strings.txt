@@ -1,0 +1,4 @@
+name: soul strings
+mana cost: {X}{B}
+types: sorcery
+spell[1]: return two target creature cards from your graveyard to your hand unless any player pays {X}.

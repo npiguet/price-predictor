@@ -1,0 +1,4 @@
+name: aethermage's touch
+mana cost: {2}{W}{U}
+types: instant
+spell[1]: reveal the top four cards of your library. you may put a creature card from among them onto the battlefield. it gains "at the beginning of your end step, return this creature to its owner's hand." then put the rest of the cards revealed this way on the bottom of your library in any order.

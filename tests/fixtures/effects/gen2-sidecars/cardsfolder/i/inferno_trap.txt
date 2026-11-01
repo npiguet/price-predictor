@@ -1,0 +1,5 @@
+name: inferno trap
+mana cost: {3}{R}
+types: instant trap
+spell[1]: CARDNAME deals 4 damage to target creature.
+static: if you've been dealt damage by two or more creatures this turn, you may pay {R} rather than pay this spell's mana cost.

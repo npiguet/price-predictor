@@ -1,0 +1,5 @@
+name: compulsion
+mana cost: {1}{U}
+types: enchantment
+activated[1]: {1}{U}, discard a card: draw a card.
+activated[2]: {1}{U}, sacrifice CARDNAME: draw a card.

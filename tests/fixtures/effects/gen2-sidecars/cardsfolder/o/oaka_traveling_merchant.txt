@@ -1,0 +1,5 @@
+name: o'aka, traveling merchant
+mana cost: {1}{U}
+types: legendary creature human citizen
+power toughness: 1/2
+activated[1]: {T}, remove a counter from a nonland permanent you control: draw a card.

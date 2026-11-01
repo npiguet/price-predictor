@@ -1,0 +1,10 @@
+name: jeska, thrice reborn
+mana cost: {2}{R}
+types: legendary planeswalker jeska
+loyalty: 0
+text: CARDNAME can be your commander.
+replacement: CARDNAME enters with a loyalty counter on her for each time you've cast a commander from the command zone this game.
+static: partner
+planeswalker[1]: 0: choose target creature. until your next turn, if that creature would deal combat damage to one of your opponents, it deals triple that damage to that player instead.
+planeswalker[2]: [-X]: CARDNAME deals X damage to each of up to three targets.
+replacement: CARDNAME enters with zero loyalty counters on it.

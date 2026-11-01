@@ -1,0 +1,6 @@
+name: shredder's revenge
+mana cost: {2}{B}
+types: sorcery
+spell[1]: choose one
+option[2]: target player discards two cards.
+option[3]: target player draws two cards and loses 2 life.

@@ -1,0 +1,6 @@
+name: dralnu's pet
+mana cost: {1}{U}{U}
+types: creature shapeshifter
+power toughness: 2/2
+additional cost: kicker—{2}{B}, discard a creature card
+replacement: if CARDNAME was kicked, it enters with flying and with X +1/+1 counters on it, where X is the discarded card's mana value.

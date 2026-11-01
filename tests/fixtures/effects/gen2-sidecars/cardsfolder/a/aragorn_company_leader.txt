@@ -1,0 +1,6 @@
+name: aragorn, company leader
+mana cost: {1}{G}{W}
+types: legendary creature human ranger
+power toughness: 3/3
+triggered: whenever the ring tempts you, if you chose a creature other than CARDNAME as your ring-bearer, put your choice of a counter from among first strike, vigilance, deathtouch, and lifelink on CARDNAME.
+triggered: whenever you put one or more counters on CARDNAME, put one of each of those kinds of counters on up to one other target creature.

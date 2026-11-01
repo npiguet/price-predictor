@@ -1,0 +1,5 @@
+name: diamond lion
+mana cost: {2}
+types: artifact creature cat
+power toughness: 2/2
+activated[1]: {T}, discard your hand, sacrifice CARDNAME: add three mana of any one color. activate only as an instant.

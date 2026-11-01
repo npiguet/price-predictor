@@ -1,0 +1,6 @@
+name: march of the drowned
+mana cost: {B}
+types: sorcery
+spell[1]: choose one
+option[2]: return target creature card from your graveyard to your hand.
+option[3]: return two target pirate cards from your graveyard to your hand.

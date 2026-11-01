@@ -1,0 +1,4 @@
+name: searing rays
+mana cost: {2}{R}
+types: sorcery
+spell[1]: choose a color. CARDNAME deals damage to each player equal to the number of creatures of that color that player controls.

@@ -1,0 +1,7 @@
+name: hull breach
+mana cost: {R}{G}
+types: sorcery
+spell[1]: choose one
+option[2]: destroy target artifact.
+option[3]: destroy target enchantment.
+option[4]: destroy target artifact and target enchantment.

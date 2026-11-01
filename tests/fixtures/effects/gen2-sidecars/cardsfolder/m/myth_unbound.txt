@@ -1,0 +1,5 @@
+name: myth unbound
+mana cost: {2}{G}
+types: enchantment
+triggered: whenever your commander is put into the command zone from anywhere, draw a card.
+static: your commander costs {1} less to cast for each time it's been cast from the command zone this game.

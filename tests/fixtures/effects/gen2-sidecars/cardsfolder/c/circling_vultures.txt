@@ -1,0 +1,6 @@
+name: circling vultures
+mana cost: {B}
+types: creature bird
+power toughness: 3/2
+static: flying
+triggered: at the beginning of your upkeep, sacrifice CARDNAME unless you exile the top creature card of your graveyard.

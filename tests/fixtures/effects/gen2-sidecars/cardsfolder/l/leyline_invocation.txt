@@ -1,0 +1,4 @@
+name: leyline invocation
+mana cost: {5}{G}
+types: sorcery
+spell[1]: create a 0/0 green and blue fractal creature token. put X +1/+1 counters on it, where X is the number of lands you control.

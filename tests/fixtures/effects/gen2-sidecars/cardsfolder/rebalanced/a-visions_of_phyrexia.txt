@@ -1,0 +1,5 @@
+name: a-visions of phyrexia
+mana cost: {3}{R}
+types: enchantment
+triggered: at the beginning of your upkeep, exile the top two cards of your library. you may play one of those cards this turn.
+triggered: at the beginning of your end step, if you didn't play a card from exile this turn, create a tapped powerstone token.

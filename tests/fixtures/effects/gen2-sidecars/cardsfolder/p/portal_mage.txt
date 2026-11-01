@@ -1,0 +1,6 @@
+name: portal mage
+mana cost: {2}{U}
+types: creature human wizard
+power toughness: 2/2
+static: flash
+triggered: when CARDNAME enters during the declare attackers step, you may reselect which player or permanent target attacking creature is attacking.

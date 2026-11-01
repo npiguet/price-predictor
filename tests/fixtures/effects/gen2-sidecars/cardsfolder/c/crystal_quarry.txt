@@ -1,0 +1,4 @@
+name: crystal quarry
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {5}, {T}: add {W}{U}{B}{R}{G}.

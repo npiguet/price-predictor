@@ -18,8 +18,9 @@ so a ``SidecarCache`` rooted there resolves every key.
 ``--generation 2`` adds the categories the rule detectors are tested on: a
 resolution whose effect half kills a creature at toughness 0 or less in the
 state-based check (704.5f fires), one that leaves a creature at toughness 1
-(704.5f does not fire), a creature killed by damage (704.5g), a damage-step
-probe stripping deathtouch, and records
+(704.5f does not fire), a creature killed by damage (704.5g), the legend rule
+(704.5j), a planeswalker at loyalty 0 (704.5i) and an Aura whose host left
+(704.5m), a damage-step probe stripping deathtouch, and records
 from a random-seat game and from a game the Forge AI played on both seats.
 """
 
@@ -169,9 +170,30 @@ def _lethal_damage_death(record: dict) -> bool:
         for toughness, damaged, died in _toughness_after(record).values())
 
 
+def _sba_fires(check: str) -> Callable[[dict], bool]:
+    """A death the ``sba_zone_move`` detector puts on the rule's fires side and
+    sees happen: the detector itself picks the record, so the fixture holds
+    what the family test reads. Only effect halves with an unresolved
+    battlefield death are parsed, which keeps the scan cheap."""
+    from effects.domain.rule_catalogue import Polarity
+    from effects.domain.rule_detectors.sba_zone_move import FAMILY
+
+    def test(record: dict) -> bool:
+        if not _effect_resolution(record) or not any(
+                e["type"] == "zone_change" and e.get("attributed_to") == "unresolved"
+                for e in record["payload"].get("events") or ()):
+            return False
+        found = FAMILY.match(record_from_dict(record), None, {"check": check})
+        return found is not None and found.polarity is Polarity.FIRES and found.observed
+    return test
+
+
 def _gen2_categories() -> dict[str, Callable[[dict], bool]]:
     """Gen-2's own categories, matched before the shared ones."""
     return {
+        "704.5j-fires": _sba_fires("legend_rule"),
+        "704.5m-fires": _sba_fires("aura_illegal"),
+        "704.5i-fires": _sba_fires("loyalty_zero"),
         "704.5f-fires": _toughness_zero_death,
         "704.5g-fires": _lethal_damage_death,
         "704.5f-does-not-fire": _left_at_toughness_one,

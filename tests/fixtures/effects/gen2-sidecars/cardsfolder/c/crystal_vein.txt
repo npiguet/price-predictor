@@ -1,0 +1,4 @@
+name: crystal vein
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {T}, sacrifice CARDNAME: add {C}{C}.

@@ -1,0 +1,6 @@
+name: mutant town musicians
+mana cost: {2}{R}
+types: creature mutant bard performer
+power toughness: 2/4
+static: trample
+triggered: alliance — whenever another creature you control enters, this creature gets +1/+0 until end of turn.

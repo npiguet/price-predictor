@@ -1,0 +1,5 @@
+name: well rested
+mana cost: {1}{G}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature has "whenever this creature becomes untapped, put two +1/+1 counters on it, then you gain 2 life and draw a card. this ability triggers only once each turn."

@@ -1,0 +1,4 @@
+name: manamorphose
+mana cost: {1}{R/G}
+types: instant
+spell[1]: add two mana in any combination of colors. draw a card.

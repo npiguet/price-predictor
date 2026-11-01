@@ -1,0 +1,8 @@
+name: rakdos the defiler
+mana cost: {2}{B}{B}{R}{R}
+types: legendary creature demon
+power toughness: 7/6
+static: flying
+static: trample
+triggered: whenever CARDNAME attacks, sacrifice half the non-demon permanents you control, rounded up.
+triggered: whenever CARDNAME deals combat damage to a player, that player sacrifices half the non-demon permanents they control, rounded up.

@@ -1,0 +1,4 @@
+name: rally the righteous
+mana cost: {1}{R}{W}
+types: instant
+spell[1]: radiance — untap target creature and each other creature that shares a color with it. those creatures get +2/+0 until end of turn.

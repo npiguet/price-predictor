@@ -1,0 +1,5 @@
+name: punk frogs
+mana cost: {3}{G/U}{G/U}
+types: creature frog mutant rebel
+power toughness: 4/5
+static: ward {3}

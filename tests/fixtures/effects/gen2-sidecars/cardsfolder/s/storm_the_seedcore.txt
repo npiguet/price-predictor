@@ -1,0 +1,5 @@
+name: storm the seedcore
+mana cost: {2}{G}{G}
+types: sorcery
+spell[1]: distribute four +1/+1 counters among up to four target creatures you control.
+spell[2]: creatures you control gain vigilance and trample until end of turn.

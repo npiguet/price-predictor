@@ -1,0 +1,6 @@
+name: shuttle crew
+mana cost: {2}{W}
+types: creature human officer
+power toughness: 1/1
+static: flying
+triggered: when this creature enters, it deals 4 damage to target tapped creature an opponent controls.

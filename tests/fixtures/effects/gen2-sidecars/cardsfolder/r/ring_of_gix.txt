@@ -1,0 +1,5 @@
+name: ring of gix
+mana cost: {3}
+types: artifact
+triggered: echo {3}
+activated[1]: {1}, {T}: tap target artifact, creature, or land.

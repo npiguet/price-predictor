@@ -1,0 +1,6 @@
+name: pride sovereign
+mana cost: {2}{G}
+types: creature cat
+power toughness: 2/2
+activated[1]: {W}, {T}, exert CARDNAME: create two 1/1 white cat creature tokens with lifelink.
+static: CARDNAME gets +1/+1 for each other cat you control.

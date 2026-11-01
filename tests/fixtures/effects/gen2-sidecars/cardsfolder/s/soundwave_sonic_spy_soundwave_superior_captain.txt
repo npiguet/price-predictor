@@ -1,0 +1,14 @@
+layout: transform
+name: soundwave, sonic spy
+mana cost: {1}{W}{U}{B}
+types: legendary artifact creature robot
+power toughness: 5/4
+alternate cost: more than meets the eye {2}{W}{U}{B}
+triggered: whenever one or more creature tokens you control deal combat damage to a player, exile target instant or sorcery card with mana value equal to the damage dealt from their graveyard. copy it. you may cast the copy without paying its mana cost. if you do, convert CARDNAME.
+
+ALTERNATE
+
+name: soundwave, superior captain
+types: legendary artifact
+triggered: whenever you cast a spell with an odd mana value, convert CARDNAME. if you do, create ravage, a legendary 3/3 black robot artifact creature token with menace and deathtouch.
+triggered: whenever you cast a spell with an even mana value, convert CARDNAME. if you do, create laserbeak, a legendary 2/2 blue robot artifact creature token with flying and hexproof.

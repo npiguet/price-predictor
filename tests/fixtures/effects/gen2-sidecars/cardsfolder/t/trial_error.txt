@@ -1,0 +1,12 @@
+layout: split
+name: trial
+mana cost: {W}{U}
+types: instant
+spell[1]: return all creatures blocking or blocked by target creature to their owner's hand.
+
+ALTERNATE
+
+name: error
+mana cost: {U}{B}
+types: instant
+spell[1]: counter target multicolored spell.

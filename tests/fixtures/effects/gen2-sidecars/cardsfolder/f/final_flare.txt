@@ -1,0 +1,5 @@
+name: final flare
+mana cost: {2}{R}
+types: instant
+additional cost: sacrifice a creature or enchantment.
+spell[1]: CARDNAME deals 5 damage to target creature.

@@ -1,0 +1,5 @@
+name: winding way
+mana cost: {1}{G}
+types: sorcery
+spell[1]: choose creature or land.
+spell[2]: reveal the top four cards of your library. put all cards of the chosen type revealed this way into your hand and the rest into your graveyard.

@@ -1,0 +1,5 @@
+name: interplanar beacon
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {1}, {T}: add two mana of different colors. spend this mana only to cast planeswalker spells.
+triggered: whenever you cast a planeswalker spell, you gain 1 life.

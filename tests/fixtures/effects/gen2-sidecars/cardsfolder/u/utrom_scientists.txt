@@ -1,0 +1,5 @@
+name: utrom scientists
+mana cost: {2}{U}
+types: artifact creature utrom robot scientist
+power toughness: 2/2
+triggered: when this creature enters, tap up to one target creature and put a stun counter on it.

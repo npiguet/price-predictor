@@ -1,0 +1,4 @@
+name: wojek siren
+mana cost: {W}
+types: instant
+spell[1]: radiance — target creature and each other creature that shares a color with it get +1/+1 until end of turn.

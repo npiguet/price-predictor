@@ -1,0 +1,5 @@
+name: let the galaxy burn
+mana cost: {X}{5}{R}
+types: sorcery
+triggered: cascade
+spell[1]: CARDNAME deals X plus 2 damage to each creature that didn't enter this turn.

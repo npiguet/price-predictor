@@ -1,0 +1,4 @@
+name: fraying omnipotence
+mana cost: {3}{B}{B}
+types: sorcery
+spell[1]: each player loses half their life, then discards half the cards in their hand, then sacrifices half the creatures they control. round up each time.

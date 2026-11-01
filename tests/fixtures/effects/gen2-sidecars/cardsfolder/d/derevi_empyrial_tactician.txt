@@ -1,0 +1,7 @@
+name: derevi, empyrial tactician
+mana cost: {G}{W}{U}
+types: legendary creature bird wizard
+power toughness: 2/3
+static: flying
+activated[1]: {1}{G}{W}{U}: put CARDNAME onto the battlefield from the command zone.
+triggered: whenever CARDNAME enters or a creature you control deals combat damage to a player, you may tap or untap target permanent.

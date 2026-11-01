@@ -1,0 +1,12 @@
+layout: split
+name: flower
+mana cost: {G/W}
+types: sorcery
+spell[1]: search your library for a basic forest or plains card, reveal it, put it into your hand, then shuffle.
+
+ALTERNATE
+
+name: flourish
+mana cost: {4}{G}{W}
+types: sorcery
+spell[1]: creatures you control get +2/+2 until end of turn.

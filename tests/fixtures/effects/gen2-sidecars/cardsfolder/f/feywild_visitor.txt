@@ -1,0 +1,4 @@
+name: feywild visitor
+mana cost: {2}{U}
+types: legendary enchantment background
+static: commander creatures you own have "whenever one or more nontoken creatures you control deal combat damage to a player, you create a 1/1 blue faerie dragon creature token with flying."

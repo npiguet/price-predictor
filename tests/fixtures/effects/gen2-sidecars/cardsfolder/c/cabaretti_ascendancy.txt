@@ -1,0 +1,4 @@
+name: cabaretti ascendancy
+mana cost: {R}{G}{W}
+types: enchantment
+triggered: at the beginning of your upkeep, look at the top card of your library. if it's a creature or planeswalker card, you may reveal it and put it into your hand. if you don't put the card into your hand, you may put it on the bottom of your library.

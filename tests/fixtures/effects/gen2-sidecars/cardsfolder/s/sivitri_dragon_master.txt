@@ -1,0 +1,9 @@
+name: sivitri, dragon master
+mana cost: {2}{U}{B}
+types: legendary planeswalker sivitri
+loyalty: 4
+text: CARDNAME can be your commander.
+planeswalker[1]: [+1]: until your next turn, creatures can't attack you or planeswalkers you control unless their controller pays 2 life for each of those creatures.
+planeswalker[2]: [-3]: search your library for a dragon card, reveal it, put it into your hand, then shuffle.
+planeswalker[3]: [-7]: destroy all non-dragon creatures.
+replacement: CARDNAME enters with four loyalty counters on it.

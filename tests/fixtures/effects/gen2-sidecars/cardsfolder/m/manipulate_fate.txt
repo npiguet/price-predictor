@@ -1,0 +1,5 @@
+name: manipulate fate
+mana cost: {1}{U}
+types: sorcery
+spell[1]: search your library for three cards, exile them, then shuffle.
+spell[2]: draw a card.

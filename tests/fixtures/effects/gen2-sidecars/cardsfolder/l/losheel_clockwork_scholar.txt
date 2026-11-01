@@ -1,0 +1,6 @@
+name: losheel, clockwork scholar
+mana cost: {2}{W}
+types: legendary creature elephant artificer
+power toughness: 2/4
+triggered: whenever one or more artifact creatures you control enter, draw a card. this ability triggers only once each turn.
+replacement: prevent all combat damage that would be dealt to attacking artifact creatures you control.

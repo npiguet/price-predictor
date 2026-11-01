@@ -1,0 +1,4 @@
+name: cascade bluffs
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {U/R}, {T}: add {U}{U}, {U}{R}, or {R}{R}.

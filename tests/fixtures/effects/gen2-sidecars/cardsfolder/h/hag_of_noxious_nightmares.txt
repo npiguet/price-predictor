@@ -1,0 +1,5 @@
+name: hag of noxious nightmares
+mana cost: {2}{B}
+types: creature hag warlock
+power toughness: 2/2
+static: warlocks you control have menace.

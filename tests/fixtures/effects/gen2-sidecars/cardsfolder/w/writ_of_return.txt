@@ -1,0 +1,5 @@
+name: writ of return
+mana cost: {3}{B}{B}
+types: sorcery
+static: cipher
+spell[1]: return target creature card from your graveyard to the battlefield tapped.

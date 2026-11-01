@@ -1,0 +1,6 @@
+name: omni-cheese pizza
+mana cost: {2}
+types: artifact food
+activated[1]: {1}, {T}, sacrifice this artifact: add one mana of any color.
+activated[2]: {2}, {T}, sacrifice this artifact: you gain 3 life.
+triggered: when this artifact enters, draw a card.

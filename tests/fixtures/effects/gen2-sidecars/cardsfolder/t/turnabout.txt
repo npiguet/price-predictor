@@ -1,0 +1,4 @@
+name: turnabout
+mana cost: {2}{U}{U}
+types: instant
+spell[1]: choose artifact, creature, or land. tap all untapped permanents of the chosen type target player controls, or untap all tapped permanents of that type that player controls.

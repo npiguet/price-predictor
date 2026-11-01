@@ -1,0 +1,6 @@
+name: tin-wing chimera
+mana cost: {4}
+types: artifact creature chimera
+power toughness: 2/2
+static: flying
+activated[1]: sacrifice CARDNAME: put a +2/+2 counter on target chimera creature. it gains flying.

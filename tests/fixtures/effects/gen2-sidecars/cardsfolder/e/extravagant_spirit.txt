@@ -1,0 +1,6 @@
+name: extravagant spirit
+mana cost: {3}{U}
+types: creature spirit
+power toughness: 4/4
+static: flying
+triggered: at the beginning of your upkeep, sacrifice CARDNAME unless you pay {1} for each card in your hand.

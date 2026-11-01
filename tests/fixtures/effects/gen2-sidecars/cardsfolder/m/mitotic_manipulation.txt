@@ -1,0 +1,4 @@
+name: mitotic manipulation
+mana cost: {1}{U}{U}
+types: sorcery
+spell[1]: look at the top seven cards of your library. you may put one of those cards onto the battlefield if it has the same name as a permanent. put the rest on the bottom of your library in any order.

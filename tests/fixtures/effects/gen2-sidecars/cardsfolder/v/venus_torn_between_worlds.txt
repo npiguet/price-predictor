@@ -1,0 +1,6 @@
+name: venus, torn between worlds
+mana cost: {4}{G}
+types: legendary creature mutant frog turtle
+power toughness: 5/5
+triggered: whenever CARDNAME is dealt damage, put that many +1/+1 counters on her.
+triggered: whenever a creature you control with a counter on it deals combat damage to a player, you may pay {U}. if you do, draw a card.

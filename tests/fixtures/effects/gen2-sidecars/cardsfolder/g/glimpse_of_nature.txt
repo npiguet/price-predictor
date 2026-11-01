@@ -1,0 +1,4 @@
+name: glimpse of nature
+mana cost: {G}
+types: sorcery
+spell[1]: whenever you cast a creature spell this turn, draw a card.

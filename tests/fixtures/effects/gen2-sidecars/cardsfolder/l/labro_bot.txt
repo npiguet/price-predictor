@@ -1,0 +1,5 @@
+name: labro bot
+mana cost: {5}
+types: host artifact creature dog
+power toughness: 3/3
+triggered: when this creature enters, return target host card or card with augment from your graveyard to your hand.

@@ -1,0 +1,6 @@
+name: town-razer tyrant
+mana cost: {2}{R}{R}
+types: creature dragon
+power toughness: 4/4
+static: flying
+triggered: when CARDNAME enters, target nonbasic land you don't control loses all abilities except mana abilities and gains "at the beginning of your upkeep, this permanent deals 2 damage to you unless you sacrifice it."

@@ -1,0 +1,4 @@
+name: aggressive instinct
+mana cost: {1}{G}
+types: sorcery
+spell[1]: target creature you control deals damage equal to its power to target creature you don't control.

@@ -1,0 +1,4 @@
+name: burst of speed
+mana cost: {R}
+types: sorcery
+spell[1]: creatures you control gain haste until end of turn.

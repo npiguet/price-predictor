@@ -1,0 +1,6 @@
+name: loyal drake
+mana cost: {2}{U}
+types: creature drake
+power toughness: 2/2
+static: flying
+triggered: lieutenant — at the beginning of combat on your turn, if you control your commander, draw a card.
