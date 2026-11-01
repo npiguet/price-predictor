@@ -10,6 +10,7 @@ from pathlib import Path
 from effects.domain.collection_caps import CollectionCaps
 from effects.infrastructure.deck_file import write_deck_file
 from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool, WorkerLogFiles
+from sealed.infrastructure.effect_collection_flags import dropped_events_report
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 
 logger = logging.getLogger(__name__)
@@ -111,9 +112,14 @@ class CollectorSupervisor:
         self._interrupted = self._interrupted or self._pool.interrupted
 
     def stop(self) -> None:
+        """End the run: flush the worker logs, stop the pool, and print the
+        dropped-event table summed over every round's workers when the run
+        counted dropped events (FR-041)."""
         self._worker_logs.close_all()
         if self._pool is not None:
             # Runs in both collectors' ``finally``: a raise here would hide
             # the run's report and return code.
             self._pool.request_shutdown()
             self._pool = None
+        if self._caps.count_dropped_events:
+            print(dropped_events_report(self._effect_records, self._run_id))

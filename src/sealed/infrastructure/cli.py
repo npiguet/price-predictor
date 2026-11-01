@@ -16,6 +16,8 @@ from sealed.infrastructure.cli_resume import (
     resolve_resumable_args,
 )
 from sealed.infrastructure.effect_collection_flags import (
+    COUNT_DROPPED_EVENTS_PROPERTY,
+    EFFECT_COUNT_DROPPED_EVENTS,
     EFFECT_INTERVENTIONS_PER_GAME,
     EFFECT_MANA_CAP,
     EFFECT_PLAYABILITY_RATE,
@@ -1024,6 +1026,10 @@ def _effect_collection_caps(args: argparse.Namespace) -> dict[str, str]:
             getattr(args, "random_seat_share", EFFECT_RANDOM_SEAT_SHARE)
         ),
         "effect.random.seat.probability": str(probability),
+        COUNT_DROPPED_EVENTS_PROPERTY: (
+            "true" if getattr(args, "count_dropped_events", EFFECT_COUNT_DROPPED_EVENTS)
+            else "false"
+        ),
     }
 
 

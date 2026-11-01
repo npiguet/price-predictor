@@ -42,11 +42,14 @@ class CollectionCaps:
     #: at no rule in particular, None for a run whose records carry no
     #: ``aimed_at`` at all. Travels by its presence: None sends no property.
     aimed_at: tuple[str, ...] | None = None
+    #: Whether each worker appends its games' dropped-event counts beside its
+    #: shard, for the supervisor to sum and print when the run ends (FR-041).
+    count_dropped_events: bool = False
 
     def as_system_properties(self) -> dict[str, str]:
         """The `-D effect.*` properties the worker reads them back from."""
         properties = {
-            _property_name(field.name): str(getattr(self, field.name))
+            _property_name(field.name): _property_value(getattr(self, field.name))
             for field in fields(self) if field.name != "aimed_at"
         }
         if self.aimed_at is not None:
@@ -56,3 +59,10 @@ class CollectionCaps:
 
 def _property_name(field_name: str) -> str:
     return f"effect.{field_name.replace('_', '.')}"
+
+
+def _property_value(value: object) -> str:
+    """A flag as the ``true``/``false`` the worker's flag reader expects."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)

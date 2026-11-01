@@ -10,6 +10,8 @@ cannot drift into collecting under different defaults. Loads no torch: the
 from __future__ import annotations
 
 import argparse
+from collections import Counter
+from pathlib import Path
 
 EFFECT_MANA_CAP = 1
 EFFECT_PLAYABILITY_RATE = 0.1
@@ -23,6 +25,14 @@ EFFECT_PROBE_KEYWORDS = (
 )
 EFFECT_RANDOM_SEAT_SHARE = 0.0
 EFFECT_RANDOM_SEAT_PROBABILITY = 0.0
+EFFECT_COUNT_DROPPED_EVENTS = False
+#: The property ``--count-dropped-events`` travels to the worker as.
+COUNT_DROPPED_EVENTS_PROPERTY = "effect.count.dropped.events"
+
+#: The file each worker lifetime appends its games' dropped-event counts to,
+#: beside its shard: ``{run_id}.{worker}-{lifetime}`` then this. The JVM's
+#: ``DroppedEvents.SUFFIX``; a test pins the two.
+DROPPED_EVENTS_SUFFIX = ".dropped-events.tsv"
 
 
 def add_cap_flags(parser: argparse.ArgumentParser) -> None:
@@ -73,6 +83,15 @@ def add_cap_flags(parser: argparse.ArgumentParser) -> None:
             "point; required when --random-seat-share is above 0"
         ),
     )
+    parser.add_argument(
+        "--count-dropped-events", action="store_true",
+        default=EFFECT_COUNT_DROPPED_EVENTS,
+        help=(
+            "Count the events that reach no record, by event type and engine "
+            "phase, and print the table summed over every worker when the "
+            "run ends"
+        ),
+    )
 
 
 def random_seat_error(args: argparse.Namespace) -> str | None:
@@ -111,3 +130,56 @@ def announce_probe_state(probe_keywords: str, probes_per_game: int) -> str:
         f"Damage-step probes: up to {probes_per_game} per game on "
         f"{', '.join(named)}"
     )
+
+
+def sum_dropped_events(records_dir: Path, run_id: str) -> tuple[Counter[tuple[str, str]], int]:
+    """The run's dropped-event counts summed over its worker lifetimes, and
+    how many lifetimes' files they came from.
+
+    Each lifetime appends one ``event_type<TAB>phase<TAB>count`` line per pair
+    and game. A worker is killed rather than stopped, so its last line may be
+    cut short; a line that does not parse is skipped, as a shard's trailing
+    partial line is.
+    """
+    counts: Counter[tuple[str, str]] = Counter()
+    files = sorted(Path(records_dir).glob(f"{run_id}.*{DROPPED_EVENTS_SUFFIX}"))
+    for path in files:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            # Printed from the supervisors' ``finally``: one unreadable file
+            # must not hide the run's report and return code.
+            continue
+        for line in text.splitlines():
+            fields = line.split("\t")
+            if len(fields) != 3 or not fields[2].isdigit():
+                continue
+            counts[(fields[0], fields[1])] += int(fields[2])
+    return counts, len(files)
+
+
+def dropped_events_report(records_dir: Path, run_id: str) -> str:
+    """The table a run under ``--count-dropped-events`` prints when it ends
+    (FR-041): every (event type, engine phase) pair, most dropped first."""
+    counts, lifetimes = sum_dropped_events(records_dir, run_id)
+    if not counts:
+        return (
+            f"Dropped events: none counted over {lifetimes} worker lifetime"
+            f"{'' if lifetimes == 1 else 's'}"
+        )
+    rows = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    type_width = max(len("event type"), *(len(t) for (t, _), _ in rows))
+    phase_width = max(len("phase"), *(len(p) for (_, p), _ in rows))
+    total = sum(counts.values())
+    count_width = max(len("count"), len(str(total)))
+    lines = [
+        f"Dropped events (no record open), summed over {lifetimes} worker "
+        f"lifetime{'' if lifetimes == 1 else 's'}:",
+        f"  {'event type':<{type_width}}  {'phase':<{phase_width}}  {'count':>{count_width}}",
+    ]
+    lines.extend(
+        f"  {event_type:<{type_width}}  {phase:<{phase_width}}  {count:>{count_width}}"
+        for (event_type, phase), count in rows
+    )
+    lines.append(f"  {'total':<{type_width}}  {'':<{phase_width}}  {total:>{count_width}}")
+    return "\n".join(lines)

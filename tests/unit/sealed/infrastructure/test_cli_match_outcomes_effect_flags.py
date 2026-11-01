@@ -10,7 +10,12 @@ from __future__ import annotations
 
 import pytest
 
-from sealed.infrastructure.cli import build_parser, check_random_seat_flags, run_match_outcomes
+from sealed.infrastructure.cli import (
+    _effect_collection_caps,
+    build_parser,
+    check_random_seat_flags,
+    run_match_outcomes,
+)
 from sealed.infrastructure.effect_collection_flags import (
     EFFECT_PROBE_KEYWORDS,
     announce_probe_state,
@@ -71,6 +76,21 @@ class TestCapAndBudgetFlags:
         """Every record collects all four tiers."""
         with pytest.raises(SystemExit):
             parse("match-outcomes", "--snapshot-tiers", "1,2,3,4")
+
+
+class TestCountDroppedEvents:
+    """FR-041: ``--count-dropped-events`` is off by default and travels to the
+    worker as ``effect.count.dropped.events``."""
+
+    def test_it_is_off_by_default(self):
+        args = parse("match-outcomes")
+        assert args.count_dropped_events is False
+        assert _effect_collection_caps(args)["effect.count.dropped.events"] == "false"
+
+    def test_the_flag_reaches_the_worker_property(self):
+        args = parse("match-outcomes", "--count-dropped-events")
+        assert args.count_dropped_events is True
+        assert _effect_collection_caps(args)["effect.count.dropped.events"] == "true"
 
 
 class TestProbesAnnounceThemselves:

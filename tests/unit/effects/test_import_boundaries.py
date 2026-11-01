@@ -48,7 +48,8 @@ _ALLOWED: dict[str, set[str] | None] = {
     # The cap flags every collecting supervisor carries, one definition for
     # match-outcomes and the effects collectors alike.
     "sealed.infrastructure.effect_collection_flags": {
-        "add_cap_flags", "announce_probe_state", "random_seat_error",
+        "add_cap_flags", "announce_probe_state", "dropped_events_report",
+        "random_seat_error",
     },
     "sealed.infrastructure.match_worker_connector": {"MatchWorkerConnector"},
     "sealed.infrastructure.pool_file_reader": {"format_generated_deck"},

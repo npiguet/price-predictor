@@ -22,11 +22,12 @@ from sealed.infrastructure.cli import build_parser as sealed_parser
 
 #: Every cap and its default, read off the dataclass the workers receive.
 #: ``random_seat_probability`` is left out: its flag defaults to None so that a
-#: share above 0 without it can be refused (FR-026).
+#: share above 0 without it can be refused (FR-026). So is ``aimed_at``, which
+#: no cap flag sets: the collectors stamp it from ``--directed-fork-rules``.
 CAP_DEFAULTS = {
     spec.name: spec.default
     for spec in fields(CollectionCaps)
-    if spec.name != "random_seat_probability"
+    if spec.name not in ("random_seat_probability", "aimed_at")
 }
 
 
@@ -188,6 +189,27 @@ class TestTheRandomSeatOnTheCollectors:
         collect.assert_not_called()
         assert f"{command}: " in caplog.text
         assert "--random-seat-probability" in caplog.text
+
+
+class TestCountDroppedEventsOnTheCollectors:
+    """FR-041: both collectors take ``--count-dropped-events`` as
+    ``match-outcomes`` does, off by default, and send it to the worker."""
+
+    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
+    def test_it_is_off_by_default(self, command):
+        from effects.infrastructure.cli import collection_caps
+
+        caps = collection_caps(parse(command))
+        assert caps.count_dropped_events is False
+        assert caps.as_system_properties()["effect.count.dropped.events"] == "false"
+
+    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
+    def test_the_flag_reaches_the_worker_property(self, command):
+        from effects.infrastructure.cli import collection_caps
+
+        caps = collection_caps(parse(command, "--count-dropped-events"))
+        assert caps.count_dropped_events is True
+        assert caps.as_system_properties()["effect.count.dropped.events"] == "true"
 
 
 class TestOneHoldoutSource:

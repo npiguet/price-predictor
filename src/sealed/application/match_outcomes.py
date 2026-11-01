@@ -9,6 +9,10 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool, WorkerLogFiles
+from sealed.infrastructure.effect_collection_flags import (
+    COUNT_DROPPED_EVENTS_PROPERTY,
+    dropped_events_report,
+)
 from sealed.infrastructure.match_worker_connector import (
     DEFAULT_SIDE_B_DECKS_WEIGHT,
     MatchWorkerConnector,
@@ -88,12 +92,23 @@ class MatchOutcomeSupervisor:
         return self._run_id
 
     def run(self) -> None:
-        """Start all workers and block until shutdown."""
+        """Start all workers and block until shutdown, then print the
+        dropped-event table when the run counted dropped events (FR-041)."""
         try:
             self._pool.run()
         finally:
             if self._worker_logs is not None:
                 self._worker_logs.close_all()
+        if self._counts_dropped_events():
+            print(dropped_events_report(self._effect_records_dir, self._run_id))
+
+    def _counts_dropped_events(self) -> bool:
+        """Whether the workers were told to count, read off what they were sent."""
+        return (
+            self._effect_records_dir is not None
+            and self._collection_caps is not None
+            and str(self._collection_caps.get(COUNT_DROPPED_EVENTS_PROPERTY)) == "true"
+        )
 
     def _start_worker(self, worker_id: int) -> subprocess.Popen:
         """Start one Java worker subprocess.

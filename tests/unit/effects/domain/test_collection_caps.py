@@ -29,6 +29,8 @@ from effects.domain.collection_caps import (
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME
 from sealed.infrastructure.cli import _effect_collection_caps
 from sealed.infrastructure.effect_collection_flags import (
+    DROPPED_EVENTS_SUFFIX,
+    EFFECT_COUNT_DROPPED_EVENTS,
     EFFECT_INTERVENTIONS_PER_GAME,
     EFFECT_MANA_CAP,
     EFFECT_PLAYABILITY_RATE,
@@ -81,6 +83,7 @@ class TestTheTwoSidesAgree:
         assert EFFECT_PROBE_KEYWORDS == CollectionCaps().probe_keywords
         assert EFFECT_RANDOM_SEAT_SHARE == DEFAULT_RANDOM_SEAT_SHARE
         assert EFFECT_RANDOM_SEAT_PROBABILITY == DEFAULT_RANDOM_SEAT_PROBABILITY
+        assert EFFECT_COUNT_DROPPED_EVENTS == CollectionCaps().count_dropped_events
 
     def test_the_property_names_match(self):
         """Both sides must spell the -D properties the worker reads identically."""
@@ -148,6 +151,37 @@ class TestTheAimedAtRules:
     def test_the_rules_travel_comma_separated(self):
         properties = CollectionCaps(aimed_at=("704.5f", "702.19b")).as_system_properties()
         assert properties["effect.aimed.at"] == "704.5f,702.19b"
+
+
+class TestTheDroppedEventCount:
+    """FR-041: ``effect.count.dropped.events`` is spelled ``true``/``false`` on
+    both sides, the spelling the worker's flag reader takes, and the file the
+    workers append to is the one the supervisors sum."""
+
+    def test_it_is_off_on_both_sides(self):
+        assert CollectionCaps().as_system_properties()[
+            "effect.count.dropped.events"
+        ] == "false"
+        assert _effect_collection_caps(argparse.Namespace())[
+            "effect.count.dropped.events"
+        ] == "false"
+
+    def test_both_sides_spell_it_on_alike(self):
+        assert CollectionCaps(count_dropped_events=True).as_system_properties()[
+            "effect.count.dropped.events"
+        ] == "true"
+        assert _effect_collection_caps(argparse.Namespace(count_dropped_events=True))[
+            "effect.count.dropped.events"
+        ] == "true"
+
+    @pytest.mark.skipif(
+        not _JAVA_CAPS.exists(), reason="the connector source is not checked out"
+    )
+    def test_the_counts_file_suffix_is_the_jvms(self):
+        source = (_JAVA_CAPS.parent / "DroppedEvents.java").read_text(encoding="utf-8")
+        assert re.search(
+            r'static final String SUFFIX = "([^"]+)";', source
+        ).group(1) == DROPPED_EVENTS_SUFFIX
 
 
 class TestNoSnapshotDepthKnob:
