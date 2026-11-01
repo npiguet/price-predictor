@@ -84,6 +84,13 @@ def check_holdout(
     return None
 
 
+def on_off(value: str) -> str:
+    """A switch spelled ``on`` or ``off``, as the CLI contract writes it."""
+    if value not in ("on", "off"):
+        raise ValueError(f"expected on or off, not {value!r}")
+    return value
+
+
 @dataclass
 class TrainEffectModelConfig:
     """The trainer's flag surface (contracts/cli.md § train-effect-model).
@@ -111,6 +118,11 @@ class TrainEffectModelConfig:
     )})
     variant: Baseline = Baseline.FULL
     e_dim: int = 64
+    relation_values: str = field(default="on", metadata={"type": on_off, "help": (
+        "on: the trunk's relations change what a slot receives as well as how "
+        "much it attends; off: the value tables stay at zero and untrained "
+        "(default: %(default)s)"
+    )})
     e_noise: float = field(default=0.1, metadata={"help": (
         "Noise ratio on e relative to e's running covariance (FR-056), ramped "
         "in over the first --steps-per-epoch steps (default: %(default)s)"
