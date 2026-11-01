@@ -58,3 +58,6 @@ output/
 
 # Comprehensive Rules catalogue: cached Forge card names
 /rules/.forge-card-names.txt
+
+# Working notes of the superpowers plugin
+.superpowers/
