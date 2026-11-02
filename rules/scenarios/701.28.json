@@ -101,7 +101,9 @@
           "event": "face_change",
           "api": "SetState"
         },
-        "needs": []
+        "needs": [
+          "face_change"
+        ]
       }
     },
     {
@@ -182,7 +184,9 @@
           "api": "SetState",
           "absent": true
         },
-        "needs": []
+        "needs": [
+          "face_change"
+        ]
       }
     },
     {
@@ -352,7 +356,9 @@
           "event": "face_change",
           "api": "SetState"
         },
-        "needs": []
+        "needs": [
+          "face_change"
+        ]
       }
     },
     {
@@ -435,7 +441,9 @@
           "api": "SetState",
           "absent": true
         },
-        "needs": []
+        "needs": [
+          "face_change"
+        ]
       }
     }
   ]

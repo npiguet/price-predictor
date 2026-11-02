@@ -249,7 +249,17 @@ two.
   the scenario's cards. 704.5f's detector tags any creature at toughness 0 or less dying in the check
   after any resolution, not Grizzly Bears after Shock. A detector written from the scenario's board
   matches that board and almost nothing in the corpus, so no family takes a card name, and `validate`
-  refuses a parameter value that names one (`Card.namedX`).
+  refuses a parameter value that names one (`Card.namedX`). `python -u scripts/rule_breadth.py
+  --records-dir <sample of shards> --workers 10` checks this against a corpus: per scenario it counts
+  the `fires` records the detector finds and those its family finds with the situation's parameters
+  dropped (event filters, script parameters, a trigger's zones; the family's condition and the
+  rule's API or keyword are kept), and lists the detectors tagging under 1% of a pool of 200 or more
+  records. A flag is a question, not a verdict: a rule about a rare situation looks the same.
+
+  A detector reads `observed`, whether the rule's outcome happened, from the record it tags. Where
+  the collector files the outcome in another record, the outcome is unreadable and the record goes
+  on no review list: a non-combat kill's game end is written in the game-end record after the
+  resolution, never in the resolution's own effect half.
 
 - **`operation`**, on every variant but the base, says which change a directed fork applies to make
   that variant out of a live board: `pt`, `keyword`, `colour_type`, `counters`, `tap`, `life` or

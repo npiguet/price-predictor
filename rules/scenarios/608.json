@@ -482,12 +482,16 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A destroy resolution produces a destroyed event that can't be regenerated (regenerable false), so a regeneration shield cannot save the permanent.",
-        "near_miss": "A destroy resolution whose destroyed events are all regenerable: no later text of the spell or ability modified its destroy instruction.",
+        "outcome": "A destroy resolution whose later text says the permanent can't be regenerated destroys it (a move from the battlefield to the graveyard), so a regeneration shield cannot save it.",
+        "near_miss": "A can't-be-regenerated destroy resolution that moves nothing to the graveyard.",
         "params": {
-          "event": "destroyed",
-          "regenerable": false,
-          "api": "Destroy"
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "graveyard",
+          "api": "Destroy",
+          "script_param": {
+            "NoRegen": "True"
+          }
         },
         "needs": []
       }

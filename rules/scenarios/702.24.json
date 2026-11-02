@@ -83,11 +83,14 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A keyword-generated upkeep-payment trigger (cumulative upkeep) resolves and the permanent is sacrificed because the cost was not paid in full.",
+        "outcome": "A keyword-generated upkeep-payment trigger (cumulative upkeep) resolves and the permanent is sacrificed because the cost was not paid in full (a move from the battlefield to the graveyard of the trigger's source).",
         "near_miss": "The same keyword trigger resolves, the cost is paid, and nothing is sacrificed.",
         "params": {
-          "event": "sacrificed",
-          "keyword": "Cumulative upkeep"
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "graveyard",
+          "keyword": "Cumulative upkeep",
+          "subject_is_source": true
         },
         "needs": []
       }
@@ -166,11 +169,14 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A keyword-generated upkeep-payment trigger (cumulative upkeep) resolves and the permanent is sacrificed because the cost was not paid in full.",
+        "outcome": "A keyword-generated upkeep-payment trigger (cumulative upkeep) resolves and the permanent is sacrificed because the cost was not paid in full (a move from the battlefield to the graveyard of the trigger's source).",
         "near_miss": "The same keyword trigger resolves, the cost is paid, and nothing is sacrificed.",
         "params": {
-          "event": "sacrificed",
-          "keyword": "Cumulative upkeep"
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "graveyard",
+          "keyword": "Cumulative upkeep",
+          "subject_is_source": true
         },
         "needs": []
       }

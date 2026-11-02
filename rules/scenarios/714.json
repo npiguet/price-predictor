@@ -485,11 +485,14 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A chapter ability resolves and its Saga, its lore count at or past its final chapter number and no chapter ability of it left on the stack, is sacrificed in the state-based check after the resolution.",
+        "outcome": "A chapter ability resolves and its Saga, its lore count at or past its final chapter number and no chapter ability of it left on the stack, is sacrificed in the state-based check after the resolution (a move from the battlefield to the graveyard of the chapter's source).",
         "near_miss": "A chapter ability resolves and nothing is sacrificed after it: the Saga is below its final chapter number, or another of its chapter abilities is still on the stack.",
         "params": {
-          "event": "sacrificed",
-          "keyword": "Chapter"
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "graveyard",
+          "keyword": "Chapter",
+          "subject_is_source": true
         },
         "needs": []
       }

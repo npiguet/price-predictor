@@ -355,10 +355,12 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "One resolution sacrifices two or more permanents together, so each death is seen by the other's leaves-the-battlefield triggers.",
-        "near_miss": "A sacrifice resolution that sacrifices fewer than two permanents.",
+        "outcome": "One sacrifice resolution moves two or more permanents from the battlefield to the graveyard together, so each death is seen by the other's leaves-the-battlefield triggers.",
+        "near_miss": "A sacrifice resolution that moves fewer than two permanents to the graveyard.",
         "params": {
-          "event": "sacrificed",
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "graveyard",
           "min_count": 2,
           "api": "Sacrifice"
         },

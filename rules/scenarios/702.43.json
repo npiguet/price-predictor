@@ -174,10 +174,11 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A permanent spell resolves and the permanent enters with +1/+1 counters put on it by an enters-with-counters keyword (modular).",
-        "near_miss": "The permanent enters with no counters. Not counted: a permanent spell's acting line is the implicit spell, which has no API type or keyword line for the detector to scope by.",
+        "near_miss": "A permanent whose card prints modular enters with no counters.",
         "params": {
           "event": "counter_change",
-          "counter_type": "+1/+1"
+          "counter_type": "+1/+1",
+          "source_keyword": "Modular"
         },
         "needs": []
       }
@@ -244,10 +245,11 @@
         "family": "outcome_event",
         "record_kind": "resolution",
         "outcome": "A permanent spell resolves and the permanent enters with +1/+1 counters put on it by an enters-with-counters keyword (several modular instances add up).",
-        "near_miss": "The permanent enters with no counters. Not counted: a permanent spell's acting line is the implicit spell, which has no API type or keyword line for the detector to scope by.",
+        "near_miss": "A permanent whose card prints modular enters with no counters.",
         "params": {
           "event": "counter_change",
-          "counter_type": "+1/+1"
+          "counter_type": "+1/+1",
+          "source_keyword": "Modular"
         },
         "needs": []
       }

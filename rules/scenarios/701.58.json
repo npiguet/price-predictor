@@ -595,7 +595,9 @@
           "api": "SetState",
           "absent": true
         },
-        "needs": []
+        "needs": [
+          "face_change"
+        ]
       }
     }
   ]

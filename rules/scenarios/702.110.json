@@ -86,10 +86,12 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "An exploit trigger's resolution sacrifices a permanent.",
+        "outcome": "An exploit trigger's resolution sacrifices a permanent (a move from the battlefield to the graveyard).",
         "near_miss": "An exploit trigger's resolution that sacrifices nothing.",
         "params": {
-          "event": "sacrificed",
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "graveyard",
           "keyword": "Exploit"
         },
         "needs": []

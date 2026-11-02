@@ -638,7 +638,9 @@
             "RevealFirst": "*"
           }
         },
-        "needs": []
+        "needs": [
+          "face_change"
+        ]
       }
     }
   ]

@@ -869,7 +869,9 @@
           "to_state": "transformed",
           "api": "SetState"
         },
-        "needs": []
+        "needs": [
+          "face_change"
+        ]
       }
     },
     {
@@ -1406,7 +1408,9 @@
           "event": "attached",
           "with_event": "face_change"
         },
-        "needs": []
+        "needs": [
+          "face_change"
+        ]
       }
     },
     {

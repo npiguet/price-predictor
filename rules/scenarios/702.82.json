@@ -81,12 +81,16 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolution in which creatures are sacrificed and +1/+1 counters are put on a permanent: an entering permanent gets counters for what was sacrificed as it entered.",
+        "outcome": "A resolution in which creatures are sacrificed (moved from the battlefield to the graveyard) and +1/+1 counters are put on a permanent: an entering permanent gets counters for what was sacrificed as it entered.",
         "near_miss": "A resolution that puts +1/+1 counters with no sacrifice in the same resolution.",
         "params": {
           "event": "counter_change",
           "counter_type": "P1P1",
-          "with_event": "sacrificed"
+          "with_event": {
+            "event": "zone_change",
+            "from_zone": "battlefield",
+            "to_zone": "graveyard"
+          }
         },
         "needs": []
       }
@@ -158,12 +162,16 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolution in which permanents are sacrificed and +1/+1 counters are put on a permanent, the counters scaled to the sacrifice.",
+        "outcome": "A resolution in which permanents are sacrificed (moved from the battlefield to the graveyard) and +1/+1 counters are put on a permanent, the counters scaled to the sacrifice.",
         "near_miss": "A resolution that puts +1/+1 counters with no sacrifice in the same resolution.",
         "params": {
           "event": "counter_change",
           "counter_type": "P1P1",
-          "with_event": "sacrificed"
+          "with_event": {
+            "event": "zone_change",
+            "from_zone": "battlefield",
+            "to_zone": "graveyard"
+          }
         },
         "needs": []
       }

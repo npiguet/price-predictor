@@ -90,10 +90,12 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A sacrifice effect resolves and a permanent is sacrificed (a sacrificed event in the resolution's effect half), bypassing any destruction replacement.",
+        "outcome": "A sacrifice effect resolves and a permanent is sacrificed: a move from the battlefield to the graveyard in the resolution's effect half, bypassing any destruction replacement.",
         "near_miss": "A sacrifice effect resolves and sacrifices nothing.",
         "params": {
-          "event": "sacrificed",
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "graveyard",
           "api": "Sacrifice"
         },
         "needs": []
