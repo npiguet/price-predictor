@@ -303,9 +303,10 @@ class StateBasedDeathTest {
     /**
      * Dead Weight resolves onto a 2/2, its static shrinks the creature to 0/0
      * once the resolution is over, and the check that follows kills it and
-     * sends the Aura after it. Both are the Aura spell's doing; the static's
-     * own stat change is not an event of the spell's, and belongs to the
-     * static's continuous record.
+     * sends the Aura after it. Both are the Aura spell's doing, and so is
+     * the shrink: made after the spell's snapshot, which shows the 2/2, it
+     * is one of the spell's events, as it was in a gen-2 game for a target
+     * the collector had read before.
      */
     @Test
     void aMinusAuraKillJoinsTheAuraSpellsRecord() throws Throwable {
@@ -327,9 +328,9 @@ class StateBasedDeathTest {
         String effect = halves.get(0);
         assertTrue(effect.contains(deathOf(bears)), effect);
         assertTrue(effect.contains(deathOf(aura)), "the Aura fell off: " + effect);
-        assertFalse(eventsNaming(effect, "E" + bears.getId()).stream()
+        assertTrue(eventsNaming(effect, "E" + bears.getId()).stream()
                         .anyMatch(event -> "pt_change".equals(event.get("type"))),
-                "the static's shrink is not the spell's event: " + effect);
+                "the shrink after the snapshot is the spell's event: " + effect);
     }
 
     /** A static that shrinks on entry kills in the check after its creature resolves. */

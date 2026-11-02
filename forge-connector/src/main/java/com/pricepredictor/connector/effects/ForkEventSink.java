@@ -176,7 +176,7 @@ final class ForkEventSink extends BusEventReader {
         this.acting = acting;
         this.combatDamage = combatDamage;
         this.phase = phase;
-        primeBattlefield();
+        rebaselineStats();
     }
 
     /**
@@ -250,6 +250,8 @@ final class ForkEventSink extends BusEventReader {
      */
     void beginMode(Integer option, Snapshot state) {
         modes.begin(option, state);
+        // The mode's stat changes are the ones after its snapshot, as live.
+        rebaselineStats();
     }
 
     /**

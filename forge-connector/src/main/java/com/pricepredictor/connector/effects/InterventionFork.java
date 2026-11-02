@@ -219,8 +219,8 @@ final class InterventionFork {
                 return null;
             }
             fork.copyLastState();
-            ForcedCast cast = new ForcedCast(fork, snapshots);
             ForkEventSink sink = ForkEventSink.forCast(fork, ability);
+            ForcedCast cast = new ForcedCast(fork, snapshots, sink::rebaselineStats);
             SpellAbility onStack = pushForcedCast(fork, ability, cast, sink);
             if (onStack == null) {
                 // Nothing reached the stack. Mostly a special action:
@@ -331,10 +331,17 @@ final class InterventionFork {
         private SpellAbility onStack;
         private Snapshot state;
         private String refs;
+        /**
+         * Re-reads the sink's stat differ once the board is taken, so the
+         * forced bracket's stat changes are the ones after its snapshot, as
+         * the live bracket's are.
+         */
+        private final Runnable atSnapshot;
 
-        ForcedCast(Game fork, SnapshotBuilder snapshots) {
+        ForcedCast(Game fork, SnapshotBuilder snapshots, Runnable atSnapshot) {
             this.fork = fork;
             this.snapshots = snapshots;
+            this.atSnapshot = atSnapshot;
         }
 
         /**
@@ -352,6 +359,7 @@ final class InterventionFork {
             onStack = StackActions.topAbility(fork.getStack());
             if (onStack != null) {
                 state = snapshots.ofResolving(onStack);
+                atSnapshot.run();
             }
         }
 

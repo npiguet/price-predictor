@@ -27,7 +27,13 @@ import java.util.Set;
  * on the card.
  *
  * <p>The remembered value updates on every diff, so two effects in one bracket
- * each report their own share rather than the second reporting both.
+ * each report their own share rather than the second reporting both. It also
+ * updates whenever a record that collects events takes its snapshot
+ * ({@link #rebaseline}): Forge can apply a change well before it publishes
+ * it — a state-based check applies the statics on every pass and announces
+ * the cards they moved once, at its end — so a change made before a
+ * snapshot, and therefore already shown in it, would otherwise be reported
+ * again as an event of that record.
  */
 final class StatDiffer {
 
@@ -91,6 +97,22 @@ final class StatDiffer {
         if (card != null) {
             last.put(card.getId(), read(card));
         }
+    }
+
+    /**
+     * Take a reading of every card in {@code cards}, as of a snapshot just
+     * taken, so that what changes from here is measured from what the
+     * snapshot shows.
+     *
+     * @return the changes the readings swallowed: made, and shown in the
+     *         snapshot, but not yet published, so no record reports them
+     */
+    List<EffectEvent> rebaseline(Iterable<Card> cards) {
+        List<EffectEvent> unreported = new ArrayList<>();
+        for (Card card : cards) {
+            unreported.addAll(diff(card));
+        }
+        return unreported;
     }
 
     /** Forget a card, so a re-entering permanent is a new object. */

@@ -110,11 +110,14 @@ final class CombatStepBracket {
      * A step has begun: in a combat damage step, the board is snapshotted now,
      * before the step deals any damage (FR-027). Taken for every damage step
      * with a combat and dropped at the step's end when no damage came.
+     *
+     * @return whether the board was snapshotted
      */
-    void beginStep(PhaseType step) {
+    boolean beginStep(PhaseType step) {
         stepStart = (step == PhaseType.COMBAT_FIRST_STRIKE_DAMAGE
                 || step == PhaseType.COMBAT_DAMAGE) && game.getCombat() != null
                 ? snapshots.ofBoard().render() : null;
+        return stepStart != null;
     }
 
     /** File an event into the damage step's bracket, opening it first if need be. */

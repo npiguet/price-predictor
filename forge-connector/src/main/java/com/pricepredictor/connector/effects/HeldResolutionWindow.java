@@ -126,8 +126,9 @@ final class HeldResolutionWindow {
      * static it brought does: a 2/2 under the Dead Weight that just resolved,
      * the creatures an entering Elesh Norn shrinks to nothing, the loser of
      * the legend rule, the Aura that falls off a creature the resolution
-     * killed. The static's own stat change stays out; it is the static's
-     * continuous record, and only the move it causes is the resolution's.
+     * killed. Only the move is filed here: the window takes no stat change,
+     * and the static's own, published while the resolution resolves, is the
+     * resolution's as any change after its snapshot is.
      * The window closes at the loop's end (or, without the hook, at the next
      * action), so a check after a land or a new cast is not this
      * resolution's.

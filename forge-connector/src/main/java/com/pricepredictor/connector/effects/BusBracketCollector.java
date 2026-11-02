@@ -203,6 +203,12 @@ public final class BusBracketCollector extends BusEventReader {
                 brackets.waitForResolution(cast);
             }
         } else {
+            if (cast != null) {
+                // The open bracket from here: its stat changes are measured
+                // from its snapshot. Not while an ability resolves, whose
+                // bracket keeps the events, and whose snapshot is older.
+                rebaselineAtSnapshot();
+            }
             brackets.openCast(cast);
             // What the card's move onto the stack set off is this cast's.
             if (cast != null) {
@@ -317,7 +323,9 @@ public final class BusBracketCollector extends BusEventReader {
         // to notice what it swept away.
         reconcilePending();
         turnActions.open(event.phase());
-        combatStep.beginStep(event.phase());
+        if (combatStep.beginStep(event.phase())) {
+            rebaselineAtSnapshot();
+        }
     }
 
     /**
@@ -765,6 +773,20 @@ public final class BusBracketCollector extends BusEventReader {
             return;
         }
         open.modes.begin(option, snapshots.ofResolving(open.ability));
+        rebaselineAtSnapshot();
+    }
+
+    /**
+     * A record that collects events has just taken its snapshot: the stat
+     * differ reads the board again, so the record's stat changes are the
+     * ones after it ({@link StatDiffer#rebaseline}). A change the snapshot
+     * already shows that Forge had not yet published reaches no record and
+     * is counted.
+     */
+    private void rebaselineAtSnapshot() {
+        for (EffectEvent unreported : rebaselineStats()) {
+            dropped.count(unreported.type(), DroppedEvents.phaseOf(game));
+        }
     }
 
     /**

@@ -27,6 +27,8 @@ import forge.game.spellability.SpellAbility;
 import forge.game.zone.CostPaymentStack;
 import forge.game.zone.ZoneType;
 
+import java.util.List;
+
 /**
  * The outcome events of the public bus, read once for every collector.
  *
@@ -280,19 +282,23 @@ abstract class BusEventReader {
     }
 
     /**
-     * Take a reading of every card on the battlefield.
+     * Take a reading of every card on the battlefield, as of now.
      *
      * <p>For a reader that starts listening to a game already in progress, such
      * as a fork: every card on the board is new to it, and its first change
-     * would otherwise be its baseline.
+     * would otherwise be its baseline. And at each snapshot of a record that
+     * collects events — a bracket opened at a cast, a mode's half, a damage
+     * step — taken just before: a record's stat changes are changes after its
+     * own snapshot ({@link StatDiffer#rebaseline}).
+     *
+     * @return the changes already made and shown on the board but not yet
+     *         published, which no record reports
      */
-    void primeBattlefield() {
+    List<EffectEvent> rebaselineStats() {
         if (game == null) {
-            return;
+            return List.of();
         }
-        for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
-            stats.prime(card);
-        }
+        return stats.rebaseline(game.getCardsIn(ZoneType.Battlefield));
     }
 
     /**
