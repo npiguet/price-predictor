@@ -462,6 +462,52 @@ class SnapshotBuilderTest {
                     "descended"), you.keySet());
         }
 
+        /** One land play a turn, written right after the turn's tallies it bounds. */
+        @Test
+        void oneLandPlayWithoutARaiseRightAfterThisTurn() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+
+            assertEquals(1L, playerOf(board, 0).get("max_land_plays"));
+            assertTrue(PlayerJson.render(board.game, board.you)
+                    .matches(".*\"this_turn\":\\{[^}]*},\"max_land_plays\":1,.*"),
+                    PlayerJson.render(board.game, board.you));
+        }
+
+        /** Exploration raises its controller's land plays, not the opponent's. */
+        @Test
+        void explorationOnTheBattlefieldAllowsTwo() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            board.battlefield("Exploration", board.you);
+            board.game.getAction().checkStaticAbilities();
+
+            assertEquals(2L, playerOf(board, 0).get("max_land_plays"));
+            assertEquals(1L, playerOf(board, 1).get("max_land_plays"));
+        }
+
+        /** Explore's raise lives on its effect card in the command zone. */
+        @Test
+        void exploreResolvedThisTurnAllowsTwo() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            board.game.getAction().moveToLibrary(board.card("Forest", board.you), null, null);
+            Card explore = board.hand("Explore", board.you);
+            board.resolve(board.spell(explore, board.you), board.you);
+            board.game.getAction().checkStaticAbilities();
+
+            assertEquals(2L, playerOf(board, 0).get("max_land_plays"));
+        }
+
+        /** Fastbond's {@code AdjustLandPlays$ Unlimited} is null, not a number. */
+        @Test
+        void fastbondMakesThemUnlimited() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            board.battlefield("Fastbond", board.you);
+            board.game.getAction().checkStaticAbilities();
+
+            Map<String, Object> you = playerOf(board, 0);
+            assertTrue(you.containsKey("max_land_plays"), you.toString());
+            assertNull(you.get("max_land_plays"));
+        }
+
         @Test
         void dayNightIsDayNightOrNeither() {
             CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
@@ -754,6 +800,17 @@ class SnapshotBuilderTest {
 
             assertEquals(List.of(Refs.of(bears)),
                     line(linesOf(board, anthem), "static").get("affected"));
+        }
+
+        /** A static that applies to a player lists the player after the permanents. */
+        @Test
+        void aStaticLineListsThePlayersItAffectsAfterThePermanents() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card exploration = board.battlefield("Exploration", board.you);
+            board.game.getAction().checkStaticAbilities();
+
+            assertEquals(List.of(Refs.of(board.you)),
+                    line(linesOf(board, exploration), "static").get("affected"));
         }
 
         /** The resolving ability's die results and coin flips, read off its events. */

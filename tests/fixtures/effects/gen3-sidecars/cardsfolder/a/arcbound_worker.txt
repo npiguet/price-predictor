@@ -1,0 +1,5 @@
+name: arcbound worker
+mana cost: {1}
+types: artifact creature construct
+power toughness: 0/0
+triggered: modular 1

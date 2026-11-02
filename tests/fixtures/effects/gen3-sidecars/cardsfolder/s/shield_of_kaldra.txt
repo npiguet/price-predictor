@@ -1,0 +1,6 @@
+name: shield of kaldra
+mana cost: {4}
+types: legendary artifact equipment
+activated[1]: equip {4}
+static: equipped creature has indestructible.
+static: equipment named sword of kaldra, shield of kaldra, and helm of kaldra have indestructible.

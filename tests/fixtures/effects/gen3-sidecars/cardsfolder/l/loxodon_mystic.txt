@@ -1,0 +1,5 @@
+name: loxodon mystic
+mana cost: {3}{W}{W}
+types: creature elephant cleric
+power toughness: 3/3
+activated[1]: {W}, {T}: tap target creature.

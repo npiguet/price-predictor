@@ -1,0 +1,4 @@
+name: fugue
+mana cost: {3}{B}{B}
+types: sorcery
+spell[1]: target player discards three cards.

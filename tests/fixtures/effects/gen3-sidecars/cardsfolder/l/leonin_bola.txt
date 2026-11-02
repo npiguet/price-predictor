@@ -1,0 +1,5 @@
+name: leonin bola
+mana cost: {1}
+types: artifact equipment
+activated[1]: equip {1}
+static: equipped creature has "{T}, unattach CARDNAME: tap target creature."

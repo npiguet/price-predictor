@@ -1,0 +1,6 @@
+name: rearing embermare
+mana cost: {4}{R}
+types: creature horse beast
+power toughness: 4/5
+static: reach
+static: haste

@@ -1,0 +1,5 @@
+name: nim abomination
+mana cost: {2}{B}
+types: creature zombie
+power toughness: 3/4
+triggered: at the beginning of your end step, if CARDNAME is untapped, you lose 3 life.

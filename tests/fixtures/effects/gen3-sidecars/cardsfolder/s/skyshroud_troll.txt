@@ -1,0 +1,5 @@
+name: skyshroud troll
+mana cost: {2}{G}{G}
+types: creature troll giant
+power toughness: 3/3
+activated[1]: {1}{G}: regenerate CARDNAME.

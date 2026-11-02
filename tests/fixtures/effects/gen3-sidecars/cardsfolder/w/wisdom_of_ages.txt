@@ -1,0 +1,5 @@
+name: wisdom of ages
+mana cost: {4}{U}{U}{U}
+types: sorcery
+spell[1]: return all instant and sorcery cards from your graveyard to your hand. you have no maximum hand size for the rest of the game.
+spell[2]: exile CARDNAME.

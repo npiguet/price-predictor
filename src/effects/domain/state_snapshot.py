@@ -105,7 +105,9 @@ class CommandZoneObject:
     #: The key of the ability that made it; empty where none did (the
     #: monarch, the initiative, the city's blessing).
     source_lines: tuple[ProvenanceKey, ...] = ()
-    #: The cards its statics apply to (a delayed trigger lists none).
+    #: The cards its statics apply to, then the players (an effect card's
+    #: "you may play an additional land" lists its caster); a timestamped
+    #: ``F`` effect lists cards only, a delayed trigger nothing.
     affected: tuple[str, ...] = ()
     #: Its remembered cards and players.
     remembered: tuple[str, ...] = ()
@@ -174,7 +176,7 @@ class PlayerState:
     ``floating_mana`` and ``untapped_production`` are keyed by the symbols in
     :data:`COLORS`; ``this_turn`` holds the per-turn counters (creatures died,
     spells cast, lands played) that trigger conditions read. The fields from
-    ``speed`` on are gen-3's, defaults on an earlier record.
+    ``max_land_plays`` on are gen-3's, defaults on an earlier record.
     """
 
     id: str
@@ -187,6 +189,15 @@ class PlayerState:
     this_turn: dict[str, int] = field(default_factory=dict)
     floating_mana: dict[str, int] = field(default_factory=dict)
     untapped_production: dict[str, int] = field(default_factory=dict)
+    #: The land plays this player's turn allows (Forge's ``getMaxLandPlays``:
+    #: 1 plus every raise in force), which bounds ``this_turn``'s
+    #: ``lands_played``. None where the record carries no number: unlimited
+    #: (``land_plays_unlimited``), or a record collected without the member
+    #: (gen-1, gen-2, a gen-3 record before it existed).
+    max_land_plays: int | None = None
+    #: Whether the collector wrote ``max_land_plays`` as null: a static such as
+    #: Fastbond lifts the limit. Kept apart so absent and unlimited stay distinct.
+    land_plays_unlimited: bool = False
     speed: int = 0
     city_blessing: bool = False
     rad: int = 0
@@ -313,8 +324,9 @@ class CardLine:
     #: ``Protection:Goblin``).
     fragment: str | None = None
     #: A static of the face up that Forge applies as a continuous effect: the
-    #: permanents it applies to. None on every other line, and on every line
-    #: of a ``continuous`` record's board, whose answer it would be.
+    #: permanents it applies to, then the players (``P`` refs; Exploration
+    #: lists its controller). None on every other line, and on every line of a
+    #: ``continuous`` record's board, whose answer it would be.
     affected: tuple[str, ...] | None = None
 
     @property

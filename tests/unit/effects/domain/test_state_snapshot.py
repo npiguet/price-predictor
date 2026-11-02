@@ -7,6 +7,7 @@ time.
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 
 from effects.domain.provenance import ProvenanceKey
@@ -278,6 +279,40 @@ class TestTheGen3FactsRead:
         assert all(isinstance(p.turn_counts, TurnCounts) for p in players)
         assert any(p.turn_counts.life_gained == 3 for p in players)
         assert any(p.monarch for p in players)
+
+    def test_a_player_carries_its_land_plays_and_unlimited_stays_apart_from_absent(self):
+        """1 on every golden player; null is unlimited (Fastbond), which a
+        player collected without the member is not (T074a)."""
+        from effects.infrastructure.record_codec import _player_from_json
+
+        players = [p for state in self._states() for p in state.players]
+        assert players and all(p.max_land_plays == 1 and not p.land_plays_unlimited
+                               for p in players)
+        base = {"id": "P0", "life": 20, "hand": 7, "library": 40, "graveyard": 0}
+        assert _player_from_json({**base, "max_land_plays": 2}).max_land_plays == 2
+        unlimited = _player_from_json({**base, "max_land_plays": None})
+        absent = _player_from_json(base)
+        assert (unlimited.max_land_plays, unlimited.land_plays_unlimited) == (None, True)
+        assert (absent.max_land_plays, absent.land_plays_unlimited) == (None, False)
+
+    def test_an_affected_list_and_an_affects_link_reach_players(self):
+        """Exploration's line affects its controller: cards first, then players."""
+        from effects.infrastructure.record_codec import record_from_dict
+
+        raw = json.loads(json.dumps(java_golden_records()[0]))
+        entity = raw["state"]["entities"][0]
+        key = {"script_file": "cardsfolder/e/exploration.txt", "face": 0,
+               "trait_kind": "static", "index_within_kind": 0}
+        entity["lines"].append({"keys": [key], "kind": "static", "granted": False,
+                                "active": True, "affected": [entity["id"], "P0"]})
+        raw["state"]["links"].append({"from": {"entity": entity["id"], "key": key},
+                                      "to": "P0", "type": "affects"})
+        state = record_from_dict(raw).state
+        read = next(each for e in state.entities if e.id == entity["id"]
+                    for each in e.lines if each.affected is not None)
+        assert read.affected[-1] == "P0"
+        link = state.links[-1]
+        assert (link.type, link.to, isinstance(link.from_, LineRef)) == ("affects", "P0", True)
 
     def test_a_floating_effect_names_the_line_that_made_it(self):
         effects = [made for state in self._states() for made in state.global_.floating_effects]

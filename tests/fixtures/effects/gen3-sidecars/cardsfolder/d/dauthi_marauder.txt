@@ -1,0 +1,5 @@
+name: dauthi marauder
+mana cost: {2}{B}
+types: creature dauthi minion
+power toughness: 3/1
+static: shadow

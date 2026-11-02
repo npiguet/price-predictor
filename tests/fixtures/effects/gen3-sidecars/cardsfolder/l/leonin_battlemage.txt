@@ -1,0 +1,6 @@
+name: leonin battlemage
+mana cost: {3}{W}
+types: creature cat wizard
+power toughness: 2/3
+activated[1]: {T}: target creature gets +1/+1 until end of turn.
+triggered: whenever you cast a spell, you may untap CARDNAME.

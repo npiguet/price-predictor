@@ -1,0 +1,6 @@
+name: rubble rouser
+mana cost: {2}{R}
+types: creature dwarf sorcerer
+power toughness: 1/4
+activated[1]: {T}, exile a card from your graveyard: add {R}. when you do, this creature deals 1 damage to each opponent.
+triggered: when this creature enters, you may discard a card. if you do, draw a card.

@@ -160,6 +160,35 @@ class SnapshotLinksTest {
                 "affects"), "the continuous record's answer");
     }
 
+    /** Exploration's static affects the player whose land plays it raises, and no card. */
+    @Test
+    void explorationAffectsItsControllerFromItsLine() {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        board.battlefield("Grizzly Bears", board.you);
+        Card exploration = board.battlefield("Exploration", board.you);
+        board.game.getAction().checkStaticAbilities();
+        StaticAbility stat = exploration.getStaticAbilities().get(0);
+
+        assertEquals(List.of(link(end(SnapshotLinks.line(exploration, stat)), board.you,
+                "affects")), links(board, "affects"));
+    }
+
+    /** Explore's effect card affects its caster, whose land plays it raises. */
+    @Test
+    void exploresEffectCardAffectsItsCaster() {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        board.game.getAction().moveToLibrary(board.card("Forest", board.you), null, null);
+        Card explore = board.hand("Explore", board.you);
+        board.resolve(board.spell(explore, board.you), board.you);
+        board.game.getAction().checkStaticAbilities();
+        Card effect = commandCard(board, card -> FloatingEffects.isEffectCard(card));
+
+        List<Map<String, Object>> affects = links(board, "affects");
+        assertEquals(1, affects.size(), affects.toString());
+        assertEquals(Refs.of(effect), entityOf(affects.get(0).get("from")));
+        assertEquals(Refs.of(board.you), affects.get(0).get("to"));
+    }
+
     /**
      * Falter's effect card is created by Falter's line and affects the
      * creatures that cannot block; it is a command-zone entity.

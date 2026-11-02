@@ -2036,6 +2036,8 @@ class TestGen3FieldPresence:
         ("state.global.day_night", lambda row: row["state"]["global"].pop("day_night")),
         ("state.players[].turn_counts",
          lambda row: row["state"]["players"][0].pop("turn_counts")),
+        ("state.players[].max_land_plays",
+         lambda row: row["state"]["players"][0].pop("max_land_plays")),
         ("state.entities[].owner", lambda row: row["state"]["entities"][0].pop("owner")),
         ("state.refs.random", lambda row: row["state"]["refs"].pop("random")),
     ])
@@ -2070,6 +2072,20 @@ class TestGen3FieldPresence:
         finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
         assert "payload.candidates[].verdict.timing 1" in finding.detail[0]
         assert "payload.candidates[].failed_checks 1" in finding.detail[0]
+
+    def test_a_candidate_without_land_play_is_short(self, tmp_path):
+        rows = self._golden()
+        candidate = next(row for row in rows
+                         if row.get("subkind") == "decision")["payload"]["candidates"][0]
+        del candidate["land_play"]
+        finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
+        assert not finding.ok and "payload.candidates[].land_play 1" in finding.detail[0]
+
+    def test_an_unlimited_land_play_count_is_carried_not_missing(self, tmp_path):
+        """Fastbond's null is the member written, not the member absent."""
+        rows = self._golden()
+        rows[0]["state"]["players"][0]["max_land_plays"] = None
+        assert _named(self._findings(tmp_path, rows), "gen-3 fields").ok
 
     def test_a_gen3_attackers_record_carrying_what_if_fails(self, tmp_path):
         rows = self._golden()

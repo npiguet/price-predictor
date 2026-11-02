@@ -43,8 +43,8 @@ import java.util.Set;
  * their own.
  *
  * <p>A static of the face up that Forge applies as a continuous effect lists
- * the permanents it affects ({@code affected}), from Forge's own static
- * effect; no static of a {@code continuous} record's board lists them, since
+ * the permanents, then the players, it affects ({@code affected}), from
+ * Forge's own static effect; no static of a {@code continuous} record's board lists them, since
  * which permanents a static touches is that record's answer.
  *
  * <p>The faces that are not up are listed too, every line flagged inactive:
@@ -257,8 +257,8 @@ final class CardLines {
         }
 
         /**
-         * The permanents a static applies to now, as Forge's own static effect
-         * lists them; null for a static Forge applies as no continuous effect
+         * The permanents, then the players, a static applies to now, as
+         * Forge's own static effect lists them; null for a static Forge applies as no continuous effect
          * (a restriction, a cost change), and on every static of a continuous
          * record's board. That record's answer is which permanents its static
          * touches, and hiding only its own static's list would both point at
@@ -272,11 +272,7 @@ final class CardLines {
             if (effect == null) {
                 return null;
             }
-            List<String> affected = new ArrayList<>();
-            for (Card each : effect.getAffectedCards()) {
-                affected.add(Refs.of(each));
-            }
-            return affected;
+            return Refs.affectedBy(effect);
         }
 
         /**

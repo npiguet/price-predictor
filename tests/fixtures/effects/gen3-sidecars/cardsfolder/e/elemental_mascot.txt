@@ -1,0 +1,7 @@
+name: elemental mascot
+mana cost: {1}{U}{R}
+types: creature elemental bird
+power toughness: 1/4
+static: flying
+static: vigilance
+triggered: opus — whenever you cast an instant or sorcery spell, this creature gets +1/+0 until end of turn. if five or more mana was spent to cast that spell, exile the top card of your library. you may play that card until the end of your next turn.

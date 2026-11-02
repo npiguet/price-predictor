@@ -546,6 +546,12 @@ def _player_to_json(player: PlayerState, gen3: bool) -> dict:
         "library": player.library, "graveyard": player.graveyard,
         "poison": player.poison, "energy": player.energy,
         "this_turn": dict(player.this_turn),
+    }
+    # Right after this_turn, on a gen-3 player that carried it: a gen-3
+    # record collected before the member existed writes back without it.
+    if gen3 and (player.max_land_plays is not None or player.land_plays_unlimited):
+        out["max_land_plays"] = player.max_land_plays
+    out |= {
         "floating_mana": dict(player.floating_mana),
         "untapped_production": dict(player.untapped_production),
     }
@@ -567,6 +573,8 @@ def _player_from_json(data: dict) -> PlayerState:
         this_turn=dict(data.get("this_turn", {})),
         floating_mana=dict(data.get("floating_mana", {})),
         untapped_production=dict(data.get("untapped_production", {})),
+        max_land_plays=data.get("max_land_plays"),
+        land_plays_unlimited="max_land_plays" in data and data["max_land_plays"] is None,
         speed=data.get("speed", 0), city_blessing=data.get("city_blessing", False),
         rad=data.get("rad", 0), monarch=data.get("monarch", False),
         initiative=data.get("initiative", False),
@@ -822,8 +830,8 @@ def _trigger_from_json(data: dict) -> TriggerPayload:
 
 
 def _candidate_to_json(candidate: Candidate) -> dict:
-    """One candidate; ``timing`` and ``failed_checks`` only where read, as
-    gen-3 writes them."""
+    """One candidate; ``timing``, ``failed_checks`` and ``land_play`` only
+    where read, as gen-3 writes them."""
     verdict = {
         "can_play": candidate.can_play,
         "affordable": candidate.affordable,
@@ -843,6 +851,8 @@ def _candidate_to_json(candidate: Candidate) -> dict:
             {"check": failed.check,
              "responsible_static": _keys_to_json(failed.responsible_static)}
             for failed in candidate.failed_checks]
+    if candidate.land_play is not None:
+        out["land_play"] = candidate.land_play
     return out
 
 
@@ -862,6 +872,7 @@ def _candidate_from_json(data: dict) -> Candidate:
             FailedCheck(check=entry["check"],
                         responsible_static=_keys_from_json(entry.get("responsible_static")))
             for entry in failed) if failed is not None else None,
+        land_play=data.get("land_play"),
     )
 
 

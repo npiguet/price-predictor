@@ -1,0 +1,6 @@
+name: arcbound slith
+mana cost: {2}
+types: artifact creature slith
+power toughness: 0/0
+triggered: modular 1
+triggered: whenever CARDNAME deals combat damage to a player, put a +1/+1 counter on it.

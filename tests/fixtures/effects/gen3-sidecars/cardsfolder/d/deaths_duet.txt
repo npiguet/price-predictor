@@ -1,0 +1,4 @@
+name: death's duet
+mana cost: {2}{B}
+types: sorcery
+spell[1]: return two target creature cards from your graveyard to your hand.

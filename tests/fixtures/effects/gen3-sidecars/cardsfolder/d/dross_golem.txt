@@ -1,0 +1,6 @@
+name: dross golem
+mana cost: {5}
+types: artifact creature golem
+power toughness: 3/2
+cost reduction: affinity for swamps
+static: fear

@@ -1,0 +1,5 @@
+name: chittering rats
+mana cost: {1}{B}{B}
+types: creature rat
+power toughness: 2/2
+triggered: when CARDNAME enters, target opponent puts a card from their hand on top of their library.

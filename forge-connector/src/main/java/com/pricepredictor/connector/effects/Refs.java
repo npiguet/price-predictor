@@ -1,10 +1,13 @@
 package com.pricepredictor.connector.effects;
 
+import forge.game.StaticEffect;
 import forge.game.card.Card;
 import forge.game.card.CardView;
 import forge.game.player.Player;
 import forge.game.player.PlayerView;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -78,6 +81,22 @@ public final class Refs {
             return Optional.of(of(player));
         }
         return Optional.empty();
+    }
+
+    /**
+     * What a static effect applies to now, as Forge lists it: the permanents,
+     * then the players (FR-026a). A static that raises a player's land plays
+     * (Exploration) or protects a player affects that player and no card.
+     */
+    static List<String> affectedBy(StaticEffect effect) {
+        List<String> affected = new ArrayList<>();
+        for (Card each : effect.getAffectedCards()) {
+            affected.add(of(each));
+        }
+        for (Player each : effect.getAffectedPlayers()) {
+            affected.add(of(each));
+        }
+        return affected;
     }
 
     /** Whether a ref names a card rather than a player. */

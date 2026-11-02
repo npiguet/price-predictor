@@ -284,6 +284,17 @@ def test_python_and_java_spell_the_playability_checks_alike_in_order():
     assert java and tuple(java) == tuple(check.value for check in PlayabilityCheck)
 
 
+def test_the_land_play_limit_is_a_check_of_its_own_after_the_activation_limit():
+    """A land play's limit counts the turn's land plays, not one ability's
+    activations (FR-032), and a candidate before gen-3 says nothing of land plays."""
+    order = list(PlayabilityCheck)
+    assert order[order.index(PlayabilityCheck.ACTIVATION_LIMIT) + 1] is (
+        PlayabilityCheck.LAND_PLAY_LIMIT)
+    assert PlayabilityCheck.LAND_PLAY_LIMIT == "land_play_limit"
+    candidate = Candidate(ability=(), can_play=True, affordable=True, has_legal_target=True)
+    assert candidate.land_play is None
+
+
 class TestGen2Flags:
     """``random_seat`` on every kind; ``what_if`` on legality records only (FR-031)."""
 
@@ -346,8 +357,9 @@ class TestPlayabilityCarriesNoPolicy:
         assert names == {
             "ability", "can_play", "affordable", "has_legal_target",
             "legal_targets", "cost_after_adjustment", "responsible_static",
-            # Gen-3: the timing rule and the rules checks that failed.
-            "timing", "failed_checks",
+            # Gen-3: the timing rule and the rules checks that failed, and
+            # whether the candidate is a land play.
+            "timing", "failed_checks", "land_play",
         }
 
     def test_the_attackers_payload_carries_only_legality(self):

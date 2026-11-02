@@ -1,0 +1,7 @@
+name: arcbound crusher
+mana cost: {4}
+types: artifact creature juggernaut
+power toughness: 0/0
+static: trample
+triggered: modular 1
+triggered: whenever another artifact enters, put a +1/+1 counter on CARDNAME.

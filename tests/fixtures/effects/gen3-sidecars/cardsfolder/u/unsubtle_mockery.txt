@@ -1,0 +1,4 @@
+name: unsubtle mockery
+mana cost: {2}{R}
+types: instant
+spell[1]: CARDNAME deals 4 damage to target creature. surveil 1.

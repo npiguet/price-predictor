@@ -55,6 +55,22 @@ class FloatingEffectsTest {
         assertNull(falter.get("shield_left"));
     }
 
+    /**
+     * "You may play an additional land this turn" is an effect card affecting
+     * its caster, the player whose land plays it raises, after any card.
+     */
+    @Test
+    void anAdditionalLandThisTurnAffectsItsCaster() {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        board.game.getAction().moveToLibrary(board.card("Forest", board.you), null, null);
+
+        resolveWithHook(board, board.hand("Explore", board.you), null);
+
+        Map<String, Object> explore = onlyFloating(board, "spell");
+        assertEquals("cardsfolder/e/explore.txt", onlyKey(explore).get("script_file"));
+        assertEquals(List.of(Refs.of(board.you)), explore.get("affected"));
+    }
+
     /** A prevention shield counts down from its amount, read off the effect card's SVar. */
     @Test
     void aPreventionShieldCarriesTheAmountLeft() {

@@ -1,0 +1,5 @@
+name: vulshok morningstar
+mana cost: {2}
+types: artifact equipment
+activated[1]: equip {2}
+static: equipped creature gets +2/+2.

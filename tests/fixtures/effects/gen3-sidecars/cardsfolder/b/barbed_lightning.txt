@@ -1,0 +1,7 @@
+name: barbed lightning
+mana cost: {2}{R}
+types: instant
+additional cost: entwine {2}
+spell[1]: choose one
+option[2]: CARDNAME deals 3 damage to target creature.
+option[3]: CARDNAME deals 3 damage to target player or planeswalker.

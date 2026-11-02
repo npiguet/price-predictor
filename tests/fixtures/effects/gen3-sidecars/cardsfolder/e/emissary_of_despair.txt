@@ -1,0 +1,6 @@
+name: emissary of despair
+mana cost: {1}{B}{B}
+types: creature spirit
+power toughness: 2/1
+static: flying
+triggered: whenever CARDNAME deals combat damage to a player, that player loses 1 life for each artifact they control.

@@ -1,0 +1,6 @@
+name: sword of light and shadow
+mana cost: {3}
+types: artifact equipment
+activated[1]: equip {2}
+triggered: whenever equipped creature deals combat damage to a player, you gain 3 life and you may return up to one target creature card from your graveyard to your hand. you may return up to one target creature card from your graveyard to your hand.
+static: equipped creature gets +2/+2 and has protection from white and from black.

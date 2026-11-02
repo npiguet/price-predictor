@@ -353,7 +353,10 @@ class TestTheGen3Fields:
         assert constant <= {
             "record.generation", "record.aimed_at", "record.directed",
             "record.state.entities[].printed_defense", "record.state.players[].rad",
-            "record.state.players[].initiative"}, sorted(constant)
+            "record.state.players[].initiative",
+            # Both pilots predate the member (T054a): absent on every player.
+            "record.state.players[].max_land_plays",
+            "record.state.players[].land_plays_unlimited"}, sorted(constant)
 
     def test_the_report_rows_each_gen3_field(self):
         lines = gen3_report_lines(field_coverage(self._golden()))

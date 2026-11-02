@@ -1,0 +1,5 @@
+name: serpent warrior
+mana cost: {2}{B}
+types: creature snake warrior
+power toughness: 3/3
+triggered: when CARDNAME enters, you lose 3 life.

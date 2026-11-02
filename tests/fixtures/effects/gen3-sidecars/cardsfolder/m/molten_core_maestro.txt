@@ -1,0 +1,6 @@
+name: molten-core maestro
+mana cost: {1}{R}
+types: creature goblin bard
+power toughness: 2/2
+static: menace
+triggered: opus — whenever you cast an instant or sorcery spell, put a +1/+1 counter on this creature. if five or more mana was spent to cast that spell, add an amount of {R} equal to this creature's power.

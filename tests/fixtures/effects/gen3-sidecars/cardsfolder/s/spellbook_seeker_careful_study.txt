@@ -1,0 +1,7 @@
+layout: prepare
+name: spellbook seeker
+mana cost: {3}{U}
+types: creature bird wizard
+power toughness: 3/3
+static: flying
+replacement: this creature enters prepared.

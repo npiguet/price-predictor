@@ -1,0 +1,5 @@
+name: twitch
+mana cost: {2}{U}
+types: instant
+spell[1]: you may tap or untap target artifact, creature, or land.
+spell[2]: draw a card.

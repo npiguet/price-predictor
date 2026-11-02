@@ -1,0 +1,4 @@
+name: death stroke
+mana cost: {B}{B}
+types: sorcery
+spell[1]: destroy target tapped creature.

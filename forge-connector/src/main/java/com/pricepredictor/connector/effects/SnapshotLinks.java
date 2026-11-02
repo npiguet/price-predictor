@@ -213,15 +213,16 @@ final class SnapshotLinks {
     }
 
     /**
-     * The permanents each static applies to, as Forge's own static effect
-     * lists them (the same list as the line's {@code affected}).
+     * The permanents, then the players, each static applies to, as Forge's
+     * own static effect lists them (the same list as the line's
+     * {@code affected}): Exploration's line affects its controller.
      */
     private void affects(Card card) {
         for (StaticAbility stat : card.getStaticAbilities()) {
             StaticEffect effect = ForgeFields.staticEffectOf(game, stat);
             if (effect != null) {
-                for (Card affected : effect.getAffectedCards()) {
-                    add(LinkFamily.AFFECTS, line(card, stat), card(affected));
+                for (String affected : Refs.affectedBy(effect)) {
+                    add(LinkFamily.AFFECTS, line(card, stat), Json.string(affected));
                 }
             }
         }

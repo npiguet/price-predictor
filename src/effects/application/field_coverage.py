@@ -83,12 +83,13 @@ GEN3_FIELDS: tuple[str, ...] = (
         "order_rank", "role")),
     f"{_ENTITY}.lines[].active", f"{_ENTITY}.lines[].affected",
     *(f"record.state.players[].{name}" for name in (
-        "speed", "city_blessing", "rad", "monarch", "initiative", "turn_counts")),
+        "max_land_plays", "land_plays_unlimited", "speed", "city_blessing", "rad",
+        "monarch", "initiative", "turn_counts")),
     *(f"record.state.global_.{name}" for name in (
         "day_night", "floating_effects", "delayed_triggers", "dungeons")),
     "record.state.refs.random", "record.state.links",
     "record.payload<ResolutionPayload>.conditions_met",
-    f"{_DECISION}.timing", f"{_DECISION}.failed_checks",
+    f"{_DECISION}.timing", f"{_DECISION}.failed_checks", f"{_DECISION}.land_play",
     *(f"{_ATTACKERS}.{name}" for name in (
         "anchor_attacker", "legal_defenders", "must_attack", "tapped_by_attack")),
     "record.payload<PlayabilityBlockersPayload>.must_block",

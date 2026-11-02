@@ -1,0 +1,5 @@
+name: pine barrens
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {T}: add {B} or {G}. CARDNAME deals 1 damage to you.
+replacement: CARDNAME enters tapped.

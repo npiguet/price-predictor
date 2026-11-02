@@ -1,0 +1,6 @@
+name: rehearsed debater
+mana cost: {2}{W}
+types: creature djinn bard
+power toughness: 3/3
+static: vigilance
+triggered: repartee — whenever you cast an instant or sorcery spell that targets a creature, this creature gets +1/+1 until end of turn.

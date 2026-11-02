@@ -14,7 +14,7 @@ import java.util.List;
 
 /**
  * A snapshot's {@code state.players} entry for one player: life, zone sizes,
- * this turn's tallies, the mana it holds and could still make, and the
+ * this turn's tallies and the land plays it allows, the mana it holds and could still make, and the
  * player-wide designations (speed, the city's blessing, rad counters, the
  * monarch, the initiative).
  */
@@ -38,6 +38,10 @@ final class PlayerJson {
                         .value("spells_cast", player.getSpellsCastThisTurn())
                         .value("lands_played", player.getLandsPlayedThisTurn())
                         .render())
+                // What bounds this_turn.lands_played: 1 plus every
+                // AdjustLandPlays$ raise in force, null when unlimited.
+                .value("max_land_plays", player.getMaxLandPlaysInfinite()
+                        ? null : player.getMaxLandPlays())
                 // Every symbol, zeros included, in ManaCounts' fixed order.
                 .raw("floating_mana",
                         ManaCounts.of(player.getManaPool()::getAmountOfColor).toJson())

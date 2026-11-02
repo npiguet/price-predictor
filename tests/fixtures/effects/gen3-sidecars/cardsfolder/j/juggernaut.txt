@@ -1,0 +1,6 @@
+name: juggernaut
+mana cost: {4}
+types: artifact creature juggernaut
+power toughness: 5/3
+static: CARDNAME attacks each combat if able.
+static: CARDNAME can't be blocked by walls.

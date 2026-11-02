@@ -1,0 +1,7 @@
+name: pristine angel
+mana cost: {4}{W}{W}
+types: creature angel
+power toughness: 4/4
+static: flying
+triggered: whenever you cast a spell, you may untap CARDNAME.
+static: as long as CARDNAME is untapped, it has protection from artifacts and from each color.

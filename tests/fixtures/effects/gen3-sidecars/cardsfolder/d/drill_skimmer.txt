@@ -1,0 +1,6 @@
+name: drill-skimmer
+mana cost: {4}
+types: artifact creature thopter
+power toughness: 2/1
+static: flying
+static: CARDNAME has shroud as long as you control another artifact creature.

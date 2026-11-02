@@ -1,0 +1,5 @@
+name: legacy's allure
+mana cost: {U}{U}
+types: enchantment
+activated[1]: sacrifice CARDNAME: gain control of target creature with power less than or equal to the number of treasure counters on CARDNAME.
+triggered: at the beginning of your upkeep, you may put a treasure counter on CARDNAME.

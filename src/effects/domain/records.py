@@ -500,6 +500,10 @@ class Candidate:
     #: Gen-3: every check the candidate failed, in :class:`PlayabilityCheck`
     #: order; empty for a playable one. None on gen-1 and gen-2.
     failed_checks: tuple[FailedCheck, ...] | None = None
+    #: Gen-3: whether the candidate is a land play (FR-033a), judged by
+    #: ``Player.canPlayLand``. None on gen-1 and gen-2, and on a gen-3 record
+    #: collected before land plays were candidates.
+    land_play: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)

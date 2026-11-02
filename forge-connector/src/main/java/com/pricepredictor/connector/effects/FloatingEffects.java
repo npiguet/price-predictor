@@ -36,7 +36,7 @@ import java.util.WeakHashMap;
  * <ul>
  *   <li><b>An effect card</b> ({@code Foo's Effect}) already sits in the
  *       command zone and carries everything: the ability that made it, its
- *       statics' affected cards, what it remembers, its {@code Duration$}, and
+ *       statics' affected cards and players, what it remembers, its {@code Duration$}, and
  *       a counting-down shield's amount in the SVar its replacement spends.
  *       It is an entity of the snapshot, and its floating effect carries its
  *       entity id.</li>
@@ -252,22 +252,27 @@ final class FloatingEffects {
 
     private static String effectCardJson(Game game, Card effect) {
         SpellAbility source = effect.getEffectSourceAbility();
-        Set<String> affected = new LinkedHashSet<>();
+        // Every static's cards, then every static's players: Explore's
+        // effect card affects its caster, whose land plays it raises.
+        Set<String> cards = new LinkedHashSet<>();
+        Set<String> players = new LinkedHashSet<>();
         for (StaticAbility stat : effect.getStaticAbilities()) {
             StaticEffect applied = ForgeFields.staticEffectOf(game, stat);
             if (applied != null) {
-                for (Card each : applied.getAffectedCards()) {
-                    affected.add(Refs.of(each));
+                for (String each : Refs.affectedBy(applied)) {
+                    (Refs.isEntity(each) ? cards : players).add(each);
                 }
             }
         }
+        List<String> affected = new ArrayList<>(cards);
+        affected.addAll(players);
         List<String> remembered = new ArrayList<>();
         for (Object each : effect.getRemembered()) {
             Refs.ofAny(each).ifPresent(remembered::add);
         }
         return objectJson(Refs.of(effect),
                 keysOf(source == null ? null : ProvenanceResolver.of(source)),
-                List.copyOf(affected), remembered,
+                affected, remembered,
                 // An effect no ability made is a designation's (the monarch,
                 // the initiative, the city's blessing): it lasts until the
                 // game takes it away.

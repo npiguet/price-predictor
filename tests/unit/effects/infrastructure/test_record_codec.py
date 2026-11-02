@@ -82,7 +82,6 @@ from tests.unit.effects.builders import (
     gen3_fixture_records,
     java_golden_records,
     make_record,
-    without_unread_members,
 )
 
 _KEY = ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "trigger", 0)
@@ -805,7 +804,7 @@ class TestTheGen2Fixture:
                 assert written["payload"].pop("probed_keyword") is None
                 assert written["payload"].pop("probed_entity") is None
             assert json.dumps(_spelling_free(written)) == json.dumps(
-                _spelling_free(without_unread_members(raw))), (
+                _spelling_free(raw)), (
                 raw["record_id"])
 
 
@@ -841,7 +840,7 @@ class TestTheGen3EntityShape:
         for raw in java_golden_records():
             written = record_to_dict(record_from_dict(raw))
             assert json.dumps(_spelling_free(written)) == json.dumps(
-                _spelling_free(without_unread_members(raw))), (
+                _spelling_free(raw)), (
                 raw["record_id"])
 
     def test_the_gen3_blocks_read_into_their_fields(self):
@@ -867,7 +866,7 @@ class TestTheGen3EntityShape:
         candidates = [c for r in records if isinstance(r.payload, PlayabilityDecisionPayload)
                       for c in r.payload.candidates]
         assert candidates and all(c.timing is True and c.failed_checks == ()
-                                  for c in candidates)
+                                  and c.land_play is False for c in candidates)
         attackers = [r.payload for r in records
                      if isinstance(r.payload, PlayabilityAttackersPayload)]
         assert {(a.anchor_attacker, a.legal_defenders, a.must_attack, a.tapped_by_attack)
@@ -882,7 +881,7 @@ class TestTheGen3EntityShape:
         entity = EntityState(
             id="E3", name="Morph", zone="battlefield", controller="P1", lines=(
                 CardLine(keys=(key,), kind="static", granted=False, active=True,
-                         affected=("E1", "E2")),),
+                         affected=("E1", "E2", "P0")),),
             owner="P0", face_state="face_down", mana_cost={"generic": 2, "W/U": 1},
             printed_loyalty=3, printed_defense=5,
             real_face=RealFace(name="Akroma", types=("creature",), subtypes=("angel",),
@@ -898,18 +897,25 @@ class TestTheGen3EntityShape:
         state = replace(_record().state, entities=(entity,), links=(
             Link(from_=LineRef("E3", key), to="P1", type="targets", index=1),
             Link(from_="P0", to="E3", type="owns"),
+            Link(from_=LineRef("E3", key), to="P0", type="affects"),
         ), global_=replace(_record().state.global_, day_night="night",
                            floating_effects=(CommandZoneObject(
                                id="F17", source_lines=(key,), affected=("E3",),
-                               duration="end_of_turn", shield_left=2),),
+                               duration="end_of_turn", shield_left=2), CommandZoneObject(
+                               id="E41", source_lines=(key,), affected=("E3", "P0"),
+                               duration="end_of_turn")),
                            delayed_triggers=(CommandZoneObject(
                                id="D4", source_lines=(key,), remembered=("E3", "P1")),),
                            dungeons=(Dungeon(player="P0", dungeon="E40",
                                              room="Yawning Portal"),)),
             players=(PlayerState(id="P0", life=20, hand=7, library=40, graveyard=0,
+                                 max_land_plays=3,
                                  speed=2, city_blessing=True, rad=3, monarch=True,
                                  initiative=True, turn_counts=TurnCounts(cards_drawn=2,
-                                                                         descended=1)),),
+                                                                         descended=1)),
+                     PlayerState(id="P1", life=20, hand=7, library=40, graveyard=0,
+                                 land_plays_unlimited=True,
+                                 turn_counts=TurnCounts())),
             refs=Refs(random=RandomResults(dice=(4, 17), coin_flips_won=1,
                                            coin_flips_lost=2)))
         records = [
@@ -921,7 +927,12 @@ class TestTheGen3EntityShape:
                         ability=(key,), can_play=False, affordable=True,
                         has_legal_target=True, responsible_static=(key,), timing=False,
                         failed_checks=(FailedCheck("casting_speed"),
-                                       FailedCheck("static_prohibition", (key,)))),))),
+                                       FailedCheck("static_prohibition", (key,))),
+                        land_play=False), Candidate(
+                        ability=(key,), can_play=False, affordable=True,
+                        has_legal_target=True, timing=True,
+                        failed_checks=(FailedCheck("land_play_limit"),),
+                        land_play=True)))),
             _record(kind=RecordKind.PLAYABILITY, moment=None, ability=None, link_id=None,
                     subkind=PlayabilitySubkind.ATTACKERS, state=state,
                     payload=PlayabilityAttackersPayload(
@@ -941,6 +952,35 @@ class TestTheGen3EntityShape:
             "legal_attackers", "forbidden"]
         assert list(record_to_dict(records[3])["payload"]) == [
             "anchor_attacker", "legal_blockers", "forbidden", "must_block", "min_blockers"]
+
+    def test_a_player_s_land_plays_read_and_write_right_after_this_turn(self):
+        """1 without a raise in every golden; null is unlimited, which an
+        absent member (a record collected before it) is not (T074a)."""
+        records = [record_from_dict(raw) for raw in java_golden_records()]
+        players = [p for r in records for p in r.state.players]
+        assert players and all(p.max_land_plays == 1 and not p.land_plays_unlimited
+                               for p in players)
+        raw = java_golden_records()[0]
+        members = list(raw["state"]["players"][0])
+        assert members[members.index("this_turn") + 1] == "max_land_plays"
+
+        unlimited = json.loads(json.dumps(raw))
+        unlimited["state"]["players"][0]["max_land_plays"] = None
+        read = record_from_dict(unlimited).state.players[0]
+        assert (read.max_land_plays, read.land_plays_unlimited) == (None, True)
+        written = record_to_dict(record_from_dict(unlimited))["state"]["players"][0]
+        assert "max_land_plays" in written and written["max_land_plays"] is None
+
+        before = json.loads(json.dumps(raw))
+        del before["state"]["players"][0]["max_land_plays"]
+        read = record_from_dict(before).state.players[0]
+        assert (read.max_land_plays, read.land_plays_unlimited) == (None, False)
+        assert "max_land_plays" not in record_to_dict(
+            record_from_dict(before))["state"]["players"][0]
+
+    def test_a_gen2_player_writes_no_land_plays(self):
+        player = record_to_dict(_record())["state"]["players"][0]
+        assert "max_land_plays" not in player
 
     def test_an_attackers_record_carries_no_what_if(self):
         attackers = [raw for raw in java_golden_records()
@@ -1030,7 +1070,7 @@ class TestTheGen3Fixture:
         for raw in gen3_fixture_records():
             written = record_to_dict(record_from_dict(raw))
             assert json.dumps(_spelling_free(written)) == json.dumps(
-                _spelling_free(without_unread_members(raw))), (
+                _spelling_free(raw)), (
                 raw["record_id"])
 
     def test_a_parsed_record_survives_a_write_and_a_read(self):

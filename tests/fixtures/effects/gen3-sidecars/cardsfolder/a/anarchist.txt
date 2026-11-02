@@ -1,0 +1,5 @@
+name: anarchist
+mana cost: {4}{R}
+types: creature human wizard
+power toughness: 2/2
+triggered: when CARDNAME enters, you may return target sorcery card from your graveyard to your hand.

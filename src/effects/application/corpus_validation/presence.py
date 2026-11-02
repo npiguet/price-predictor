@@ -34,8 +34,8 @@ CURATION_MEMBER = "curation"
 #: every record of their site (null or empty where there is nothing to say).
 GEN3_STATE_MEMBERS = ("links",)
 GEN3_GLOBAL_MEMBERS = ("day_night", "floating_effects", "delayed_triggers", "dungeons")
-GEN3_PLAYER_MEMBERS = ("speed", "city_blessing", "rad", "monarch", "initiative",
-                       "turn_counts")
+GEN3_PLAYER_MEMBERS = ("max_land_plays", "speed", "city_blessing", "rad", "monarch",
+                       "initiative", "turn_counts")
 GEN3_ENTITY_MEMBERS = (
     "owner", "face_state", "mana_cost", "base_pt", "pt_boosts", "printed_loyalty",
     "printed_defense", "real_face", "designations", "x_paid", "chosen", "costs_paid",
@@ -44,7 +44,7 @@ GEN3_ENTITY_MEMBERS = (
 GEN3_REFS_MEMBERS = ("random",)
 GEN3_ATTACKERS_MEMBERS = ("anchor_attacker", "legal_defenders", "must_attack")
 GEN3_BLOCKERS_MEMBERS = ("must_block",)
-GEN3_CANDIDATE_MEMBERS = ("failed_checks",)
+GEN3_CANDIDATE_MEMBERS = ("failed_checks", "land_play")
 GEN3_VERDICT_MEMBERS = ("timing",)
 #: A resolution's effect half: every one, its game-end rescue and mana ones too.
 GEN3_EFFECT_HALF_MEMBERS = ("conditions_met",)

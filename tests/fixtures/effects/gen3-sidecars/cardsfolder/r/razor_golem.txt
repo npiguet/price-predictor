@@ -1,0 +1,6 @@
+name: razor golem
+mana cost: {6}
+types: artifact creature golem
+power toughness: 3/4
+cost reduction: affinity for plains
+static: vigilance

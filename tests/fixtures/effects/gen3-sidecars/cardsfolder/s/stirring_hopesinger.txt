@@ -1,0 +1,7 @@
+name: stirring hopesinger
+mana cost: {2}{W}
+types: creature bird bard
+power toughness: 1/3
+static: flying
+static: lifelink
+triggered: repartee — whenever you cast an instant or sorcery spell that targets a creature, put a +1/+1 counter on each creature you control.

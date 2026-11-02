@@ -1,0 +1,5 @@
+name: practiced offense
+mana cost: {2}{W}
+types: sorcery
+alternate cost: flashback {1}{W}
+spell[1]: put a +1/+1 counter on each creature target player controls. target creature gains your choice of double strike or lifelink until end of turn.

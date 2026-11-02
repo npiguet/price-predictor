@@ -38,18 +38,21 @@ records to the fixture already on disk without rescanning, so every record an
 existing test names stays.
 
 ``--generation 3`` reads the T079 pilot (``output/effects/records-gen3-pilot``)
-and adds, before gen-2's categories, one per story-2 acceptance scenario
-(``a1-`` … ``a11-``: a permanent with a static, a trigger and a replacement
-line; a creature stripped of every ability; flying granted by another
-permanent's static; ward and annihilator fragments; protection; a first-strike
-combat; a burn kill, which also brings the dies-trigger records of its game; a
-sorcery off turn and a candidate of the seat without priority; an unmet
-condition; a declared anchor tapped and one with vigilance), one per
-``turn_action`` subkind and per failed check, the anchored legality shapes, and
-the new snapshot members (floating effects of both kinds, delayed triggers,
-dungeons, day and night, each extra-entity role, a face-down card, dice).
-Face-down keys name ``variant-scripts/``, so that tree is a sidecar root too.
-"""
+and then the second pilot (``records-gen3-pilot2``, the first collected with
+land-play candidates), each in its own interleaved order, and adds, before
+gen-2's categories, one per story-2 acceptance scenario (``a1-`` … ``a11-``: a
+permanent with a static, a trigger and a replacement line; a creature stripped
+of every ability; flying granted by another permanent's static; ward and
+annihilator fragments; protection; a first-strike combat; a burn kill, which
+also brings the dies-trigger records of its game; a sorcery off turn and a
+candidate of the seat without priority; an unmet condition; a declared anchor
+tapped and one with vigilance), one per ``turn_action`` subkind and per failed
+check, the anchored legality shapes, and the new snapshot members (floating
+effects of both kinds, delayed triggers, dungeons, day and night, each
+extra-entity role, a face-down card, dice), and land-play candidates: playable,
+past the turn's limit, off their player's turn, and on it at a time no sorcery
+could be cast. Face-down keys name ``variant-scripts/``, so that tree is a
+sidecar root too."""
 
 from __future__ import annotations
 
@@ -445,8 +448,8 @@ def _gen2_categories(sidecars: _Sidecars) -> dict[str, Callable[[dict], bool]]:
 _TURN_ACTION_SUBKINDS = ("draw", "cleanup_discard", "untap", "phasing", "day_night",
                          "lore_counter")
 _FAILED_CHECKS = ("split_second", "casting_speed", "whose_turn", "phase", "combat",
-                  "activation_limit", "script_condition", "zone", "static_prohibition",
-                  "cost", "script_restriction")
+                  "activation_limit", "land_play_limit", "script_condition", "zone",
+                  "static_prohibition", "cost", "script_restriction")
 _EXTRA_ROLES = ("library_card", "exiled_with", "mutate_component", "last_known")
 
 
@@ -545,6 +548,16 @@ def sorcery_off_turn(record: dict) -> bool:
             and "sorcery" in (card.get("types") or ())
             and verdict.get("timing") is False and verdict.get("can_play") is False
             and "casting_speed" in _failed(candidate))
+
+
+def _land_play(test: Callable[[dict, list[str]], bool]) -> Callable[[dict], bool]:
+    """A decision whose candidate is a land play (FR-033a) and passes ``test``
+    on its verdict and failed checks."""
+    def check(record: dict) -> bool:
+        candidate = _candidate(record)
+        return (candidate is not None and candidate.get("land_play") is True
+                and test(candidate.get("verdict") or {}, _failed(candidate)))
+    return check
 
 
 def other_seat_candidate(record: dict) -> bool:
@@ -698,6 +711,10 @@ def _gen3_categories(sidecars: _Sidecars) -> dict[str, Callable[[dict], bool]]:
         "blockers-must-block": lambda r: r["kind"] == "playability" and r.get(
             "subkind") == "blockers" and bool(r["payload"].get("must_block")),
         **{f"failed-check-{check}": failed_check(check) for check in _FAILED_CHECKS},
+        "land-play-playable": _land_play(lambda verdict, failed: verdict.get("can_play") is True),
+        "land-play-off-turn": _land_play(lambda verdict, failed: "whose_turn" in failed),
+        "land-play-not-sorcery-time": _land_play(
+            lambda verdict, failed: "casting_speed" in failed and "whose_turn" not in failed),
         "floating-effect-card": _floating("E"),
         "floating-effect-timestamp": _floating("F"),
         "delayed-trigger": lambda r: bool(r["state"]["global"].get("delayed_triggers")),
@@ -777,6 +794,11 @@ def _pinned_records(records_dir: Path, wanted: dict[str, str]) -> dict[str, dict
     return found
 
 
+def _interleaved(records_dir: Path) -> list[Path]:
+    shards = iter_shards(records_dir)
+    return shards[::7] + [s for i, s in enumerate(shards) if i % 7]
+
+
 def _read_fixture(path: Path) -> dict[str, dict]:
     with gzip.open(path, "rt", encoding="utf-8") as handle:
         return {r["record_id"]: r for r in (json.loads(line) for line in handle if line.strip())}
@@ -785,9 +807,10 @@ def _read_fixture(path: Path) -> dict[str, dict]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--generation", type=int, choices=(1, 2, 3), default=1)
-    parser.add_argument("--records-dir", type=Path,
-                        help="default output/effects/records, records-gen2 for --generation 2, "
-                             "records-gen3-pilot for --generation 3")
+    parser.add_argument("--records-dir", type=Path, action="append",
+                        help="repeatable, read in order; default output/effects/records, "
+                             "records-gen2 for --generation 2, records-gen3-pilot then "
+                             "records-gen3-pilot2 for --generation 3")
     parser.add_argument("--cards-folder", action="append", type=Path,
                         help="converted roots, named by tree (repeatable); "
                              "default output/cardsfolder and output/tokenscripts, "
@@ -802,9 +825,10 @@ def main() -> int:
                         help="gen-2: add the pinned records to the fixture on disk, no scan")
     args = parser.parse_args()
     gen = args.generation
-    args.records_dir = args.records_dir or Path(
-        {1: "output/effects/records", 2: "output/effects/records-gen2",
-         3: "output/effects/records-gen3-pilot"}[gen])
+    records_dirs = args.records_dir or [Path(name) for name in {
+        1: ["output/effects/records"], 2: ["output/effects/records-gen2"],
+        3: ["output/effects/records-gen3-pilot", "output/effects/records-gen3-pilot2"]}[gen]]
+    args.records_dir = records_dirs[0]
     args.output = args.output or Path(f"tests/fixtures/effects/gen{gen}-records.jsonl.gz")
     args.sidecars_out = args.sidecars_out or Path(f"tests/fixtures/effects/gen{gen}-sidecars")
 
@@ -828,10 +852,10 @@ def main() -> int:
             parser.error("--append adds gen-2's pinned records")
         return _append_pinned(args, sidecars)
 
-    shards = iter_shards(args.records_dir)
     # Interleave the collection runs rather than reading one run's shards first,
-    # so a category only another run reaches (probes, variants) is found early.
-    shards = shards[::7] + [s for i, s in enumerate(shards) if i % 7]
+    # so a category only another run reaches (probes, variants) is found early;
+    # a later directory only fills what the earlier ones left unfilled.
+    shards = [shard for directory in records_dirs for shard in _interleaved(directory)]
     forge_ai_wanted = gen >= 2
     for shard_no, shard in enumerate(shards[: args.max_shards]):
         followers: dict[str, int] = {}
