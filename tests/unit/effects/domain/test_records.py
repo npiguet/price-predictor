@@ -30,6 +30,7 @@ from effects.domain.records import (
     Moment,
     PlayabilityAttackersPayload,
     PlayabilityBlockersPayload,
+    PlayabilityCheck,
     PlayabilitySubkind,
     RecordKind,
     ResolutionOutcome,
@@ -275,6 +276,14 @@ class TestTheUnresolvedVocabularyIsOneSet:
         )
 
 
+def test_python_and_java_spell_the_playability_checks_alike_in_order():
+    """``failed_checks`` lists its entries in this order, so the order is pinned too."""
+    source = _JAVA_UNRESOLVED_REASON.with_name("PlayabilityCheck.java").read_text(
+        encoding="utf-8")
+    java = re.findall(r'^\s*[A-Z_]+\("([a-z_]+)"\)[,;]', source, re.MULTILINE)
+    assert java and tuple(java) == tuple(check.value for check in PlayabilityCheck)
+
+
 class TestGen2Flags:
     """``random_seat`` on every kind; ``what_if`` on legality records only (FR-031)."""
 
@@ -337,16 +346,24 @@ class TestPlayabilityCarriesNoPolicy:
         assert names == {
             "ability", "can_play", "affordable", "has_legal_target",
             "legal_targets", "cost_after_adjustment", "responsible_static",
+            # Gen-3: the timing rule and the rules checks that failed.
+            "timing", "failed_checks",
         }
 
     def test_the_attackers_payload_carries_only_legality(self):
         names = {f.name for f in fields(PlayabilityAttackersPayload)}
-        assert names == {"legal_attackers", "forbidden"}
+        assert names == {"legal_attackers", "forbidden",
+                         # Gen-3: the anchor, its defenders, its attack
+                         # requirement, and whether attacking tapped it.
+                         "anchor_attacker", "legal_defenders", "must_attack",
+                         "tapped_by_attack"}
 
     def test_the_blockers_payload_carries_only_legality_and_min_blockers(self):
         names = {f.name for f in fields(PlayabilityBlockersPayload)}
         assert names == {
             "anchor_attacker", "legal_blockers", "forbidden", "min_blockers",
+            # Gen-3: the block requirements (509.1c).
+            "must_block",
         }
 
 

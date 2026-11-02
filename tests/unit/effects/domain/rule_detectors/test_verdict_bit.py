@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from types import SimpleNamespace
 
 import pytest
 
-from effects.domain.records import PlayabilityDecisionPayload
+from effects.domain.records import FailedCheck, PlayabilityDecisionPayload
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors.acting_line import line_of, root_params_of
 from effects.domain.rule_detectors.verdict_bit import ACT, FAMILY, cost_of
@@ -43,16 +42,29 @@ def test_the_gen3_bits_need_their_gen3_fields():
 
 
 def test_a_failed_check_reads_the_named_identifier(by_kind):
-    """Gen-3 candidates carry ``failed_checks``; until the reader parses them
-    (T074) the candidate is a stand-in carrying the one field read."""
+    """A gen-2 candidate edited to carry gen-3's ``failed_checks``."""
     record = _unaffordable(by_kind)
-    failing = SimpleNamespace(responsible_static=(), failed_checks=("casting_speed",))
-    passing = SimpleNamespace(responsible_static=(), failed_checks=())
+    candidate = record.payload.candidates[0]
+    failing = replace(candidate, failed_checks=(FailedCheck("casting_speed"),))
+    passing = replace(candidate, failed_checks=())
     params = {"bit": "failed_check", "check": "casting_speed"}
-    for candidate, polarity in ((failing, Polarity.FIRES), (passing, Polarity.DOES_NOT_FIRE)):
-        edited = SimpleNamespace(kind=record.kind, subkind=record.subkind,
-                                 payload=SimpleNamespace(candidates=(candidate,)))
-        assert FAMILY.match(edited, None, params).polarity is polarity
+    for edited, polarity in ((failing, Polarity.FIRES), (passing, Polarity.DOES_NOT_FIRE)):
+        one = replace(record, payload=PlayabilityDecisionPayload(candidates=(edited,)))
+        assert FAMILY.match(one, None, params).polarity is polarity
+    unread = replace(record, payload=PlayabilityDecisionPayload(candidates=(candidate,)))
+    assert FAMILY.match(unread, None, params) is None
+
+
+def test_a_golden_candidate_reads_its_timing_bit():
+    from effects.infrastructure.record_codec import record_from_dict
+    from tests.unit.effects.builders import java_golden_records
+
+    decisions = [record_from_dict(raw) for raw in java_golden_records()
+                 if raw["kind"] == "playability" and raw["subkind"] == "decision"]
+    assert decisions
+    for record in decisions:
+        found = FAMILY.match(record, None, {"bit": "timing"})
+        assert found.polarity is Polarity.DOES_NOT_FIRE and found.observed is False
 
 
 def _decisions(by_kind):

@@ -120,8 +120,9 @@ PARTNERLESS_OUTCOMES: frozenset[ResolutionOutcome] = frozenset({
     ResolutionOutcome.COUNTERED,
 })
 
-#: The legality subkinds, the ones that carry ``what_if`` (FR-031); a
-#: ``decision`` is always a real evaluation.
+#: The legality subkinds, the ones that carry ``what_if`` (FR-031) up to
+#: gen-2; gen-3 writes it on ``blockers`` alone. A ``decision`` is always a
+#: real evaluation.
 LEGALITY_SUBKINDS: frozenset[PlayabilitySubkind] = frozenset({
     PlayabilitySubkind.ATTACKERS, PlayabilitySubkind.BLOCKERS,
 })
@@ -140,9 +141,17 @@ class LegalityDecision(StrEnum):
 
     @classmethod
     def of(cls, record) -> LegalityDecision:
-        """``record`` is anything carrying ``what_if``: a record or a result row."""
+        """``record`` is anything carrying ``what_if``, ``generation`` and
+        ``subkind``: a record or a result row.
+
+        A gen-3 attackers record carries no ``what_if``: the collector writes
+        one per creature of the declaration actually made, and none for a
+        query, so every one is real.
+        """
         if record.what_if is None:
-            return cls.UNKNOWN
+            gen3_attackers = (record.generation is not None and record.generation >= 3
+                              and record.subkind == PlayabilitySubkind.ATTACKERS)
+            return cls.REAL if gen3_attackers else cls.UNKNOWN
         return cls.WHAT_IF if record.what_if else cls.REAL
 
 
@@ -253,6 +262,16 @@ class ActivationPayload(_PayloadQueries):
 
 
 @dataclass(frozen=True, slots=True)
+class ConditionMet:
+    """Whether one conditional clause of a resolution met its condition."""
+
+    #: The clause, spelled as its events' ``attributed_to``: ``root`` or the
+    #: chain index as a string.
+    segment: str
+    met: bool
+
+
+@dataclass(frozen=True, slots=True)
 class ResolutionPayload(_PayloadQueries):
     """``resolution`` / ``resolution``: the effect half.
 
@@ -262,6 +281,9 @@ class ResolutionPayload(_PayloadQueries):
     """
 
     events: tuple[Event, ...] = ()
+    #: Gen-3: one entry per conditional clause that resolved in the half, in
+    #: resolution order; empty where none did. None on gen-1 and gen-2.
+    conditions_met: tuple[ConditionMet, ...] | None = None
 
     def happened_events(self) -> tuple[Event, ...]:
         return self.events
@@ -428,6 +450,34 @@ class TriggerPayload(_PayloadQueries):
         return (self.event,)
 
 
+class PlayabilityCheck(StrEnum):
+    """The checks a gen-3 candidate can fail, in the order the collector lists
+    them (``FE/PlayabilityCheck.java``, pinned by ``test_records.py``)."""
+
+    SPLIT_SECOND = "split_second"
+    CASTING_SPEED = "casting_speed"
+    WHOSE_TURN = "whose_turn"
+    PHASE = "phase"
+    COMBAT = "combat"
+    ACTIVATION_LIMIT = "activation_limit"
+    SCRIPT_CONDITION = "script_condition"
+    ZONE = "zone"
+    STATIC_PROHIBITION = "static_prohibition"
+    COST = "cost"
+    SCRIPT_RESTRICTION = "script_restriction"
+
+
+@dataclass(frozen=True, slots=True)
+class FailedCheck:
+    """One check a gen-3 candidate failed; the check keeps the string the
+    record carries (:class:`PlayabilityCheck`)."""
+
+    check: str
+    #: One key where a static decided the check (``static_prohibition``),
+    #: the candidate's own ``responsible_static``; else empty.
+    responsible_static: tuple[ProvenanceKey, ...] = ()
+
+
 @dataclass(frozen=True, slots=True)
 class Candidate:
     """One ability the engine evaluated for legality.
@@ -443,6 +493,12 @@ class Candidate:
     legal_targets: tuple[str, ...] = ()
     cost_after_adjustment: dict[str, int] = field(default_factory=dict)
     responsible_static: tuple[ProvenanceKey, ...] = ()
+    #: Gen-3: whether the play's timing allows it now (``can_play`` is
+    #: ``canPlay ∧ timing ∧`` no static prohibition). None on gen-1 and gen-2.
+    timing: bool | None = None
+    #: Gen-3: every check the candidate failed, in :class:`PlayabilityCheck`
+    #: order; empty for a playable one. None on gen-1 and gen-2.
+    failed_checks: tuple[FailedCheck, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -452,6 +508,8 @@ class PlayabilityDecisionPayload(_PayloadQueries):
     candidates: tuple[Candidate, ...] = ()
 
     def provenance_keys(self) -> Iterator[ProvenanceKey]:
+        # A failed check's key is its candidate's responsible_static again,
+        # so it is not yielded twice.
         for candidate in self.candidates:
             yield from candidate.ability
             yield from candidate.responsible_static
@@ -474,10 +532,25 @@ class ForbiddenEntity:
 
 @dataclass(frozen=True, slots=True)
 class PlayabilityAttackersPayload(_PayloadQueries):
-    """``playability`` / ``attackers``: who may attack, and what stops the rest."""
+    """``playability`` / ``attackers``: who may attack, and what stops the rest.
+
+    A gen-3 record is anchored: one per creature the attacking player
+    controls, naming the creature, the defenders it may attack and whether
+    it must attack. ``legal_attackers`` and ``forbidden`` are the
+    declaration's, the same on each of its records. ``anchor_attacker`` is
+    None on gen-1 and gen-2, which wrote one record per declaration.
+    """
 
     legal_attackers: tuple[str, ...] = ()
     forbidden: tuple[ForbiddenEntity, ...] = ()
+    anchor_attacker: str | None = None
+    #: The refs (``P``/``E``) of the defenders the anchor may attack, in
+    #: Forge's defender order; empty for a creature that may attack none.
+    legal_defenders: tuple[str, ...] = ()
+    #: An attack requirement applies to the anchor, whether or not it can attack.
+    must_attack: bool = False
+    #: A declared anchor only: whether declaring it tapped it. None otherwise.
+    tapped_by_attack: bool | None = None
 
     def provenance_keys(self) -> Iterator[ProvenanceKey]:
         return _forbidding_statics(self.forbidden)
@@ -491,6 +564,10 @@ class PlayabilityBlockersPayload(_PayloadQueries):
     legal_blockers: tuple[str, ...] = ()
     forbidden: tuple[ForbiddenEntity, ...] = ()
     min_blockers: int = 0
+    #: Gen-3: the listed creatures, legal or forbidden, in candidate order,
+    #: that a requirement makes block the anchor (509.1c), whether or not
+    #: they can obey it. None on gen-1 and gen-2.
+    must_block: tuple[str, ...] | None = None
 
     def provenance_keys(self) -> Iterator[ProvenanceKey]:
         return _forbidding_statics(self.forbidden)
@@ -740,16 +817,22 @@ def key_sites(record: EffectRecord) -> Iterator[ProvenanceKey]:
     """Every printed-line key a record names, except its emblems', in record order.
 
     The acting ``ability``, each entity's line keys (printed and granted, a
-    gen-3 face not up's included) and temporary grants, and every key its
-    payload carries. Emblems are left out: their engine-built traits key to a
-    script path in no converted tree, so a sidecar join would report every
-    planeswalker ultimate as a mismatch.
+    gen-3 face not up's included) and temporary grants, a gen-3 floating
+    effect's and delayed trigger's source lines and every line a link ends
+    at, and every key its payload carries. Emblems are left out: their
+    engine-built traits key to a script path in no converted tree, so a
+    sidecar join would report every planeswalker ultimate as a mismatch.
     """
     if record.ability:
         yield from record.ability
-    for entity in record.state.entities:
+    state = record.state
+    for entity in state.entities:
         yield from entity.line_keys
         yield from entity.granted_temporary.abilities
+    for made in (*state.global_.floating_effects, *state.global_.delayed_triggers):
+        yield from made.source_lines
+    for link in state.links or ():
+        yield from link.line_keys()
     yield from record.payload.provenance_keys()
 
 

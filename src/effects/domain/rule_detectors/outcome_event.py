@@ -121,8 +121,8 @@ def _is_token(entity: EntityState, state: StateSnapshot) -> bool | None:
 
 
 def _controller_is_owner(entity: EntityState, state: StateSnapshot) -> bool | None:
-    owner = getattr(entity, "owner", None)  # gen-3 snapshots only
-    return None if owner is None else owner == entity.controller
+    # None on a gen-1 or gen-2 snapshot, which records no owner.
+    return None if entity.owner is None else entity.owner == entity.controller
 
 
 def _is_source(entity: EntityState, state: StateSnapshot) -> bool | None:

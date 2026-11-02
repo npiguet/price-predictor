@@ -32,11 +32,13 @@ from effects.domain.records import (
     Candidate,
     CollectionMode,
     CombatPayload,
+    ConditionMet,
     ContinuousPayload,
     Contribution,
     Costs,
     DirectedTag,
     EffectRecord,
+    FailedCheck,
     ForbiddenEntity,
     Moment,
     PlayabilityAttackersPayload,
@@ -52,17 +54,28 @@ from effects.domain.records import (
     TurnActionPayload,
 )
 from effects.domain.state_snapshot import (
+    CardChoices,
+    CardHistory,
     CardLine,
     CombatStatus,
+    CommandZoneObject,
+    CostsPaid,
+    Dungeon,
     EntityState,
     GlobalState,
     GrantedTemporary,
     InclusionTier,
+    LineRef,
+    Link,
+    LinkEnd,
     PlayerState,
     PowerToughness,
+    RandomResults,
+    RealFace,
     Refs,
     StackExtras,
     StateSnapshot,
+    TurnCounts,
     normalize_counter_type,
 )
 
@@ -184,19 +197,106 @@ def _line_to_json(line: CardLine) -> dict:
         out["chosen"] = list(line.chosen)
     if line.fragment is not None:
         out["fragment"] = line.fragment
+    if line.affected is not None:
+        out["affected"] = list(line.affected)
     return out
 
 
 def _line_from_json(data: dict) -> CardLine:
-    chosen = data.get("chosen")
     return CardLine(
         keys=_keys_from_json(data.get("keys")),
         kind=data["kind"],
         granted=data.get("granted", False),
         active=data.get("active"),
         cast_with=data.get("cast_with"),
-        chosen=tuple(chosen) if chosen is not None else None,
+        chosen=_tuple_or_none(data.get("chosen")),
         fragment=data.get("fragment"),
+        affected=_tuple_or_none(data.get("affected")),
+    )
+
+
+def _tuple_or_none(data: Any) -> tuple | None:
+    """A list member as a tuple, keeping an absent or null one None."""
+    return tuple(data) if data is not None else None
+
+
+def _list_or_none(values: tuple | None) -> list | None:
+    return list(values) if values is not None else None
+
+
+def _absent_or[T, R](convert: Callable[[T], R], value: T | None) -> R | None:
+    """``convert(value)``, or None for null; unlike :func:`_optional`, an
+    empty block (gen-3's ``chosen: {}``) is a value."""
+    return convert(value) if value is not None else None
+
+
+# ── a gen-3 card's facts ────────────────────────────────────────────────
+
+
+def _real_face_to_json(face: RealFace) -> dict:
+    return {
+        "name": face.name, "types": list(face.types), "subtypes": list(face.subtypes),
+        "colors": list(face.colors), "mana_value": face.mana_value,
+        "base_pt": _list_or_none(face.base_pt),
+    }
+
+
+def _real_face_from_json(data: dict) -> RealFace:
+    return RealFace(
+        name=data["name"], types=tuple(data.get("types", ())),
+        subtypes=tuple(data.get("subtypes", ())), colors=tuple(data.get("colors", ())),
+        mana_value=data.get("mana_value", 0), base_pt=_tuple_or_none(data.get("base_pt")),
+    )
+
+
+#: A card's ``chosen`` members in the order the collector writes them, each
+#: only when set; the list-valued ones.
+_CHOICE_MEMBERS = ("colors", "type", "type2", "number", "player", "cards", "names",
+                   "direction", "mode", "even_odd", "sector", "stored_rolls")
+_CHOICE_LISTS = frozenset({"colors", "cards", "names", "stored_rolls"})
+
+
+def _choices_to_json(chosen: CardChoices) -> dict:
+    out: dict = {}
+    for name in _CHOICE_MEMBERS:
+        value = getattr(chosen, name)
+        if value is not None:
+            out[name] = list(value) if name in _CHOICE_LISTS else value
+    return out
+
+
+def _choices_from_json(data: dict) -> CardChoices:
+    return CardChoices(**{
+        name: tuple(data[name]) if name in _CHOICE_LISTS else data[name]
+        for name in _CHOICE_MEMBERS if data.get(name) is not None
+    })
+
+
+def _costs_paid_to_json(paid: CostsPaid) -> dict:
+    return {"mana": dict(paid.mana), "cast_from": paid.cast_from,
+            "mana_rider": paid.mana_rider}
+
+
+def _costs_paid_from_json(data: dict) -> CostsPaid:
+    return CostsPaid(mana=dict(data.get("mana", {})), cast_from=data.get("cast_from"),
+                     mana_rider=data.get("mana_rider", False))
+
+
+def _history_to_json(history: CardHistory) -> dict:
+    return {
+        "entered_this_turn": history.entered_this_turn,
+        "attacked_this_turn": history.attacked_this_turn,
+        "blocked_this_turn": history.blocked_this_turn,
+        "loyalty_activated": history.loyalty_activated,
+    }
+
+
+def _history_from_json(data: dict) -> CardHistory:
+    return CardHistory(
+        entered_this_turn=data.get("entered_this_turn", False),
+        attacked_this_turn=data.get("attacked_this_turn", False),
+        blocked_this_turn=data.get("blocked_this_turn", False),
+        loyalty_activated=data.get("loyalty_activated", False),
     )
 
 
@@ -269,16 +369,7 @@ def _entity_to_json(entity: EntityState) -> dict:
     }
     stack_extras = _optional(_stack_extras_to_json, entity.stack_extras)
     if entity.lines is not None:
-        pt = entity.pt
-        return {
-            **head,
-            "base_pt": list(pt.base) if pt is not None else None,
-            "pt_boosts": _pt_boosts_to_json(pt) if pt is not None else None,
-            **status,
-            "granted_temporary": _granted_temporary_to_json(entity.granted_temporary),
-            "lines": [_line_to_json(line) for line in entity.lines],
-            "stack_extras": stack_extras,
-        }
+        return _gen3_entity_to_json(entity, head, status, stack_extras)
     return {
         **head,
         "pt": _optional(_pt_to_json, entity.pt),
@@ -290,6 +381,37 @@ def _entity_to_json(entity: EntityState) -> dict:
     }
 
 
+def _gen3_entity_to_json(entity: EntityState, head: dict, status: dict,
+                         stack_extras: dict | None) -> dict:
+    """A gen-3 entity, its members in the order ``FE/EntityJson.java`` writes them."""
+    pt = entity.pt
+    return {
+        "id": head["id"], "name": head["name"], "zone": head["zone"],
+        "owner": entity.owner, "controller": head["controller"], "face": head["face"],
+        "face_state": entity.face_state, "copy_source": head["copy_source"],
+        "token_script_id": head["token_script_id"], "types": head["types"],
+        "subtypes": head["subtypes"], "supertypes": head["supertypes"],
+        "colors": head["colors"], "mana_value": head["mana_value"],
+        "mana_cost": _absent_or(dict, entity.mana_cost),
+        "base_pt": list(pt.base) if pt is not None else None,
+        "pt_boosts": _pt_boosts_to_json(pt) if pt is not None else None,
+        "printed_loyalty": entity.printed_loyalty,
+        "printed_defense": entity.printed_defense,
+        **status,
+        "real_face": _absent_or(_real_face_to_json, entity.real_face),
+        "designations": list(entity.designations),
+        "x_paid": entity.x_paid,
+        "chosen": _absent_or(_choices_to_json, entity.chosen),
+        "costs_paid": _absent_or(_costs_paid_to_json, entity.costs_paid),
+        "history": _absent_or(_history_to_json, entity.history),
+        "order_rank": entity.order_rank,
+        "granted_temporary": _granted_temporary_to_json(entity.granted_temporary),
+        "lines": [_line_to_json(line) for line in entity.lines],
+        "stack_extras": stack_extras,
+        "role": entity.role,
+    }
+
+
 def _entity_from_json(data: dict) -> EntityState:
     """One entity of either shape; a ``lines`` member makes it gen-3, whose
     ``printed`` :class:`EntityState` derives from the lines."""
@@ -298,6 +420,18 @@ def _entity_from_json(data: dict) -> EntityState:
         return _entity(
             data, pt=_gen3_pt_from_json(data),
             lines=tuple(_line_from_json(line) for line in lines),
+            owner=data.get("owner"), face_state=data.get("face_state"),
+            mana_cost=_absent_or(dict, data.get("mana_cost")),
+            printed_loyalty=data.get("printed_loyalty"),
+            printed_defense=data.get("printed_defense"),
+            real_face=_absent_or(_real_face_from_json, data.get("real_face")),
+            designations=tuple(data.get("designations", ())),
+            x_paid=data.get("x_paid"),
+            chosen=_absent_or(_choices_from_json, data.get("chosen")),
+            costs_paid=_absent_or(_costs_paid_from_json, data.get("costs_paid")),
+            history=_absent_or(_history_from_json, data.get("history")),
+            order_rank=data.get("order_rank"),
+            role=data.get("role"),
         )
     return _entity(
         data, pt=_optional(_pt_from_json, data.get("pt")),
@@ -331,8 +465,33 @@ def _entity(data: dict, **shaped) -> EntityState:
     )
 
 
-def _global_to_json(global_: GlobalState) -> dict:
+def _command_zone_object_to_json(made: CommandZoneObject) -> dict:
     return {
+        "id": made.id, "source_lines": _keys_to_json(made.source_lines),
+        "affected": list(made.affected), "remembered": list(made.remembered),
+        "duration": made.duration, "shield_left": made.shield_left,
+    }
+
+
+def _command_zone_object_from_json(data: dict) -> CommandZoneObject:
+    return CommandZoneObject(
+        id=data["id"], source_lines=_keys_from_json(data.get("source_lines")),
+        affected=tuple(data.get("affected", ())),
+        remembered=tuple(data.get("remembered", ())),
+        duration=data.get("duration", "permanent"), shield_left=data.get("shield_left"),
+    )
+
+
+def _dungeon_to_json(dungeon: Dungeon) -> dict:
+    return {"player": dungeon.player, "dungeon": dungeon.dungeon, "room": dungeon.room}
+
+
+def _dungeon_from_json(data: dict) -> Dungeon:
+    return Dungeon(player=data["player"], dungeon=data["dungeon"], room=data.get("room"))
+
+
+def _global_to_json(global_: GlobalState, gen3: bool) -> dict:
+    out = {
         "turn": global_.turn,
         "phase": global_.phase,
         "active": global_.active,
@@ -341,6 +500,16 @@ def _global_to_json(global_: GlobalState) -> dict:
         "combat_substep": global_.combat_substep,
         "emblems": _keys_to_json(global_.emblems),
     }
+    if gen3:
+        out |= {
+            "day_night": global_.day_night,
+            "floating_effects": [
+                _command_zone_object_to_json(made) for made in global_.floating_effects],
+            "delayed_triggers": [
+                _command_zone_object_to_json(made) for made in global_.delayed_triggers],
+            "dungeons": [_dungeon_to_json(dungeon) for dungeon in global_.dungeons],
+        }
+    return out
 
 
 def _global_from_json(data: dict) -> GlobalState:
@@ -349,11 +518,30 @@ def _global_from_json(data: dict) -> GlobalState:
         priority=data.get("priority"), stack_size=data.get("stack_size", 0),
         combat_substep=data.get("combat_substep"),
         emblems=_keys_from_json(data.get("emblems")),
+        day_night=data.get("day_night"),
+        floating_effects=tuple(
+            _command_zone_object_from_json(made) for made in data.get("floating_effects", ())),
+        delayed_triggers=tuple(
+            _command_zone_object_from_json(made) for made in data.get("delayed_triggers", ())),
+        dungeons=tuple(_dungeon_from_json(dungeon) for dungeon in data.get("dungeons", ())),
     )
 
 
-def _player_to_json(player: PlayerState) -> dict:
-    return {
+_TURN_COUNTS = ("cards_drawn", "life_gained", "life_lost", "damage_taken",
+                "permanents_to_graveyard", "spells_cast_last_turn", "dungeons_completed",
+                "descended")
+
+
+def _turn_counts_to_json(counts: TurnCounts) -> dict:
+    return {name: getattr(counts, name) for name in _TURN_COUNTS}
+
+
+def _turn_counts_from_json(data: dict) -> TurnCounts:
+    return TurnCounts(**{name: data.get(name, 0) for name in _TURN_COUNTS})
+
+
+def _player_to_json(player: PlayerState, gen3: bool) -> dict:
+    out = {
         "id": player.id, "life": player.life, "hand": player.hand,
         "library": player.library, "graveyard": player.graveyard,
         "poison": player.poison, "energy": player.energy,
@@ -361,6 +549,14 @@ def _player_to_json(player: PlayerState) -> dict:
         "floating_mana": dict(player.floating_mana),
         "untapped_production": dict(player.untapped_production),
     }
+    if gen3:
+        out |= {
+            "speed": player.speed, "city_blessing": player.city_blessing,
+            "rad": player.rad, "monarch": player.monarch,
+            "initiative": player.initiative,
+            "turn_counts": _absent_or(_turn_counts_to_json, player.turn_counts),
+        }
+    return out
 
 
 def _player_from_json(data: dict) -> PlayerState:
@@ -371,17 +567,36 @@ def _player_from_json(data: dict) -> PlayerState:
         this_turn=dict(data.get("this_turn", {})),
         floating_mana=dict(data.get("floating_mana", {})),
         untapped_production=dict(data.get("untapped_production", {})),
+        speed=data.get("speed", 0), city_blessing=data.get("city_blessing", False),
+        rad=data.get("rad", 0), monarch=data.get("monarch", False),
+        initiative=data.get("initiative", False),
+        turn_counts=_absent_or(_turn_counts_from_json, data.get("turn_counts")),
     )
 
 
-def _refs_to_json(refs: Refs) -> dict:
-    return {
+def _random_to_json(random: RandomResults) -> dict:
+    return {"dice": list(random.dice),
+            "coin_flips": {"won": random.coin_flips_won, "lost": random.coin_flips_lost}}
+
+
+def _random_from_json(data: dict) -> RandomResults:
+    flips = data.get("coin_flips") or {}
+    return RandomResults(dice=tuple(data.get("dice", ())),
+                         coin_flips_won=flips.get("won", 0),
+                         coin_flips_lost=flips.get("lost", 0))
+
+
+def _refs_to_json(refs: Refs, gen3: bool) -> dict:
+    out = {
         "targets": list(refs.targets),
         "source": refs.source,
         "modes": list(refs.modes),
         "x": refs.x,
         "choices": dict(refs.choices),
     }
+    if gen3:
+        out["random"] = _absent_or(_random_to_json, refs.random)
+    return out
 
 
 def _refs_from_json(data: dict) -> Refs:
@@ -391,15 +606,49 @@ def _refs_from_json(data: dict) -> Refs:
         modes=tuple(data.get("modes", ())),
         x=data.get("x"),
         choices=dict(data.get("choices", {})),
+        random=_absent_or(_random_from_json, data.get("random")),
     )
 
 
+def _link_end_to_json(end: LinkEnd) -> str | dict:
+    if isinstance(end, LineRef):
+        return {"entity": end.entity, "key": end.key.as_dict()}
+    return end
+
+
+def _link_end_from_json(data: str | dict) -> LinkEnd:
+    if isinstance(data, dict):
+        return LineRef(entity=data["entity"], key=_key_from_json(data["key"]))
+    return data
+
+
+def _link_to_json(link: Link) -> dict:
+    out = {"from": _link_end_to_json(link.from_), "to": _link_end_to_json(link.to),
+           "type": link.type}
+    if link.index is not None:
+        out["index"] = link.index
+    return out
+
+
+def _link_from_json(data: dict) -> Link:
+    return Link(from_=_link_end_from_json(data["from"]), to=_link_end_from_json(data["to"]),
+                type=data["type"], index=data.get("index"))
+
+
 def _snapshot_to_json(state: StateSnapshot) -> dict:
-    return {
-        "global": _global_to_json(state.global_),
-        "players": [_player_to_json(player) for player in state.players],
+    """A snapshot in the shape it was read in: ``links`` set makes it gen-3,
+    which also writes the gen-3 members of the global block, the players and
+    the refs."""
+    gen3 = state.links is not None
+    out: dict = {
+        "global": _global_to_json(state.global_, gen3),
+        "players": [_player_to_json(player, gen3) for player in state.players],
         "entities": [_entity_to_json(e) for e in state.entities],
-        "refs": _refs_to_json(state.refs),
+    }
+    if state.links is not None:
+        out["links"] = [_link_to_json(link) for link in state.links]
+    return out | {
+        "refs": _refs_to_json(state.refs, gen3),
         "pending_event": (
             state.pending_event.as_dict() if state.pending_event else None
         ),
@@ -409,6 +658,7 @@ def _snapshot_to_json(state: StateSnapshot) -> dict:
 
 def _snapshot_from_json(data: dict) -> StateSnapshot:
     pending = data.get("pending_event")
+    links = data.get("links")
     return StateSnapshot(
         global_=_global_from_json(data["global"]),
         players=tuple(_player_from_json(p) for p in data.get("players", ())),
@@ -416,6 +666,7 @@ def _snapshot_from_json(data: dict) -> StateSnapshot:
         refs=_refs_from_json(data.get("refs") or {}),
         pending_event=_event_from_json(pending) if pending else None,
         tiers=frozenset(InclusionTier(t) for t in data.get("tiers", ())),
+        links=tuple(_link_from_json(link) for link in links) if links is not None else None,
     )
 
 
@@ -456,11 +707,21 @@ def _activation_from_json(data: dict) -> ActivationPayload:
 
 
 def _resolution_to_json(payload: ResolutionPayload) -> dict:
-    return {"events": _events_to_json(payload.events)}
+    out: dict = {"events": _events_to_json(payload.events)}
+    if payload.conditions_met is not None:
+        out["conditions_met"] = [
+            {"segment": entry.segment, "met": entry.met} for entry in payload.conditions_met]
+    return out
 
 
 def _resolution_from_json(data: dict) -> ResolutionPayload:
-    return ResolutionPayload(events=_events_from_json(data.get("events")))
+    conditions = data.get("conditions_met")
+    return ResolutionPayload(
+        events=_events_from_json(data.get("events")),
+        conditions_met=tuple(
+            ConditionMet(segment=entry["segment"], met=entry["met"]) for entry in conditions
+        ) if conditions is not None else None,
+    )
 
 
 def _rewrite_to_json(payload: RewritePayload) -> dict:
@@ -531,6 +792,11 @@ def _combat_to_json(payload: CombatPayload) -> dict:
     }
 
 
+def _is_observed_combat(payload) -> bool:
+    return (isinstance(payload, CombatPayload)
+            and payload.probed_keyword is None and payload.probed_entity is None)
+
+
 def _combat_from_json(data: dict) -> CombatPayload:
     return CombatPayload(
         attackers=tuple(data.get("attackers", ())),
@@ -556,21 +822,33 @@ def _trigger_from_json(data: dict) -> TriggerPayload:
 
 
 def _candidate_to_json(candidate: Candidate) -> dict:
-    return {
+    """One candidate; ``timing`` and ``failed_checks`` only where read, as
+    gen-3 writes them."""
+    verdict = {
+        "can_play": candidate.can_play,
+        "affordable": candidate.affordable,
+        "has_legal_target": candidate.has_legal_target,
+    }
+    if candidate.timing is not None:
+        verdict["timing"] = candidate.timing
+    out = {
         "ability": _keys_to_json(candidate.ability),
-        "verdict": {
-            "can_play": candidate.can_play,
-            "affordable": candidate.affordable,
-            "has_legal_target": candidate.has_legal_target,
-        },
+        "verdict": verdict,
         "legal_targets": list(candidate.legal_targets),
         "cost_after_adjustment": dict(candidate.cost_after_adjustment),
         "responsible_static": _keys_to_json(candidate.responsible_static),
     }
+    if candidate.failed_checks is not None:
+        out["failed_checks"] = [
+            {"check": failed.check,
+             "responsible_static": _keys_to_json(failed.responsible_static)}
+            for failed in candidate.failed_checks]
+    return out
 
 
 def _candidate_from_json(data: dict) -> Candidate:
     verdict = data["verdict"]
+    failed = data.get("failed_checks")
     return Candidate(
         ability=_keys_from_json(data.get("ability")),
         can_play=verdict["can_play"],
@@ -579,6 +857,11 @@ def _candidate_from_json(data: dict) -> Candidate:
         legal_targets=tuple(data.get("legal_targets", ())),
         cost_after_adjustment=dict(data.get("cost_after_adjustment", {})),
         responsible_static=_keys_from_json(data.get("responsible_static")),
+        timing=verdict.get("timing"),
+        failed_checks=tuple(
+            FailedCheck(check=entry["check"],
+                        responsible_static=_keys_from_json(entry.get("responsible_static")))
+            for entry in failed) if failed is not None else None,
     )
 
 
@@ -613,7 +896,17 @@ def _forbidden_from_json(data: Any) -> tuple[ForbiddenEntity, ...]:
 
 
 def _attackers_to_json(payload: PlayabilityAttackersPayload) -> dict:
-    return {
+    """An anchored (gen-3) record writes its anchor's members first."""
+    out: dict = {}
+    if payload.anchor_attacker is not None:
+        out = {
+            "anchor_attacker": payload.anchor_attacker,
+            "legal_defenders": list(payload.legal_defenders),
+            "must_attack": payload.must_attack,
+        }
+        if payload.tapped_by_attack is not None:
+            out["tapped_by_attack"] = payload.tapped_by_attack
+    return out | {
         "legal_attackers": list(payload.legal_attackers),
         "forbidden": _forbidden_to_json(payload.forbidden),
     }
@@ -623,16 +916,23 @@ def _attackers_from_json(data: dict) -> PlayabilityAttackersPayload:
     return PlayabilityAttackersPayload(
         legal_attackers=tuple(data.get("legal_attackers", ())),
         forbidden=_forbidden_from_json(data.get("forbidden")),
+        anchor_attacker=data.get("anchor_attacker"),
+        legal_defenders=tuple(data.get("legal_defenders", ())),
+        must_attack=data.get("must_attack", False),
+        tapped_by_attack=data.get("tapped_by_attack"),
     )
 
 
 def _blockers_to_json(payload: PlayabilityBlockersPayload) -> dict:
-    return {
+    out = {
         "anchor_attacker": payload.anchor_attacker,
         "legal_blockers": list(payload.legal_blockers),
         "forbidden": _forbidden_to_json(payload.forbidden),
-        "min_blockers": payload.min_blockers,
     }
+    if payload.must_block is not None:
+        out["must_block"] = list(payload.must_block)
+    out["min_blockers"] = payload.min_blockers
+    return out
 
 
 def _blockers_from_json(data: dict) -> PlayabilityBlockersPayload:
@@ -641,6 +941,7 @@ def _blockers_from_json(data: dict) -> PlayabilityBlockersPayload:
         legal_blockers=tuple(data.get("legal_blockers", ())),
         forbidden=_forbidden_from_json(data.get("forbidden")),
         min_blockers=data.get("min_blockers", 0),
+        must_block=_tuple_or_none(data.get("must_block")),
     )
 
 
@@ -737,6 +1038,11 @@ def record_to_dict(record: EffectRecord) -> dict:
         "state": _snapshot_to_json(record.state),
         "payload": _payload_to_json(record.payload),
     }
+    if record.generation is not None and _is_observed_combat(record.payload):
+        # The gen-3 collector writes no probe member on an observed combat.
+        # Earlier generations keep the nulls this codec has always written,
+        # which the pinned bytes of their fixtures hold.
+        del out["payload"]["probed_keyword"], out["payload"]["probed_entity"]
     for key, value in record.extra_fields.items():
         out.setdefault(key, value)
     return out

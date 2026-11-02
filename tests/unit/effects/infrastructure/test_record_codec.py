@@ -20,10 +20,12 @@ from effects.domain.records import (
     ActivationPayload,
     Candidate,
     CombatPayload,
+    ConditionMet,
     ContinuousPayload,
     Contribution,
     Costs,
     EffectRecord,
+    FailedCheck,
     ForbiddenEntity,
     Moment,
     PlayabilityAttackersPayload,
@@ -39,17 +41,28 @@ from effects.domain.records import (
     TurnActionSubkind,
 )
 from effects.domain.state_snapshot import (
+    CardChoices,
+    CardHistory,
     CardLine,
     CombatStatus,
+    CommandZoneObject,
+    CostsPaid,
+    Dungeon,
     EntityState,
     GlobalState,
     GrantedTemporary,
     InclusionTier,
+    LineRef,
+    Link,
     PlayerState,
     PowerToughness,
+    RandomResults,
+    RealFace,
     Refs,
     StackExtras,
     StateSnapshot,
+    TurnCounts,
+    normalize_counter_type,
 )
 from effects.infrastructure.record_codec import (
     format_record_line,
@@ -64,15 +77,8 @@ from effects.infrastructure.shard_io import (
     write_shard,
 )
 from tests.unit.effects.builders import (
-    GEN3_UNREAD_ATTACKERS_MEMBERS,
-    GEN3_UNREAD_BLOCKERS_MEMBERS,
-    GEN3_UNREAD_CANDIDATE_MEMBERS,
-    GEN3_UNREAD_RESOLUTION_MEMBERS,
-    GEN3_UNREAD_STATE_MEMBERS,
-    GEN3_UNREAD_VERDICT_MEMBERS,
     java_golden_records,
     make_record,
-    without_unread_members,
 )
 
 _KEY = ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "trigger", 0)
@@ -366,6 +372,17 @@ class TestTheProbedPerturbation:
         loaded = record_from_dict(record_to_dict(observed))
         assert loaded.payload.probed_keyword is None
         assert loaded.payload.probed_entity is None
+
+    def test_a_gen3_observed_combat_record_is_written_without_them(self):
+        """As the gen-3 collector writes it; an earlier generation keeps the
+        nulls its pinned bytes hold."""
+        observed = dict(kind=RecordKind.COMBAT, moment=None, ability=None,
+                        payload=CombatPayload(attackers=("E12",)))
+        gen3 = record_to_dict(_record(generation=3, **observed))
+        assert not {"probed_keyword", "probed_entity"} & gen3["payload"].keys()
+        gen2 = record_to_dict(_record(**observed))
+        assert (gen2["payload"]["probed_keyword"], gen2["payload"]["probed_entity"]) == (
+            None, None)
 
     def test_a_record_written_before_the_fields_existed_still_reads(self):
         """Compatibility rule 1: the corpus is append-only, and a shard
@@ -773,10 +790,31 @@ class TestTheGen2Fixture:
         assert all(entity.lines is None for record in read_shard(_GEN2_FIXTURE)
                    for entity in record.state.entities)
 
+    def test_every_gen2_record_writes_back_as_it_was_read(self):
+        """Every member in its order, no gen-3 member added: gen-2 shards stay
+        gen-2 through a read and a write (T074). An observed combat gains the
+        null probe members this codec has always written for it."""
+        for line in iter_shard_lines(_GEN2_FIXTURE):
+            raw = parse_record_line(line)
+            written = record_to_dict(record_from_dict(raw))
+            if raw["kind"] == "combat" and not raw["fork"]:
+                assert written["payload"].pop("probed_keyword") is None
+                assert written["payload"].pop("probed_entity") is None
+            assert json.dumps(_spelling_free(written)) == json.dumps(_spelling_free(raw)), (
+                raw["record_id"])
 
-def _without_keyword_spellings(entity: dict) -> dict:
-    """An entity less its overlay keywords, which the reader normalizes by design."""
-    return {k: v for k, v in entity.items() if k != "granted_temporary"}
+
+def _spelling_free(value):
+    """A record's JSON less the spellings the reader normalizes by design: an
+    entity's overlay keywords and an event's counter type."""
+    if isinstance(value, dict):
+        return {k: (None if k == "granted_temporary"
+                    else normalize_counter_type(v) if k == "counter_type"
+                    else _spelling_free(v))
+                for k, v in value.items()}
+    if isinstance(value, list):
+        return [_spelling_free(v) for v in value]
+    return value
 
 
 class TestTheGen3EntityShape:
@@ -789,59 +827,111 @@ class TestTheGen3EntityShape:
         assert all(entity.lines is not None
                    for record in records for entity in record.state.entities)
 
-    def test_an_entity_writes_back_as_the_collector_wrote_it(self):
+    def test_a_golden_record_writes_back_as_the_collector_wrote_it(self):
+        """Every member, in the collector's order: nothing gen-3 writes is
+        dropped on a read and a write (T074)."""
         for raw in java_golden_records():
             written = record_to_dict(record_from_dict(raw))
-            for collected, after in zip(raw["state"]["entities"], written["state"]["entities"],
-                                        strict=True):
-                before = without_unread_members(collected)
-                assert list(after) == list(before)
-                assert _without_keyword_spellings(after) == _without_keyword_spellings(before)
+            assert json.dumps(_spelling_free(written)) == json.dumps(_spelling_free(raw)), (
+                raw["record_id"])
 
-    def test_a_state_writes_back_every_block_but_the_unread_ones(self):
-        for raw in java_golden_records():
-            written = record_to_dict(record_from_dict(raw))["state"]
-            assert list(written) == [
-                member for member in raw["state"] if member not in GEN3_UNREAD_STATE_MEMBERS]
-            assert GEN3_UNREAD_STATE_MEMBERS <= raw["state"].keys()
+    def test_the_gen3_blocks_read_into_their_fields(self):
+        records = [record_from_dict(raw) for raw in java_golden_records()]
+        states = [record.state for record in records]
+        assert all(state.links is not None for state in states)
+        assert any(link.type == "targets" and isinstance(link.from_, LineRef)
+                   and link.index == 0 for state in states for link in state.links)
+        assert all(player.turn_counts is not None
+                   for state in states for player in state.players)
+        assert any(made.source_lines for state in states
+                   for made in state.global_.floating_effects)
+        assert any(state.refs.random == RandomResults() for state in states)
+        entities = [entity for state in states for entity in state.entities]
+        assert all(entity.owner in ("P0", "P1") and entity.history is not None
+                   and entity.chosen == CardChoices() for entity in entities)
+        assert any(entity.mana_cost == {"generic": 1, "G": 1} for entity in entities)
 
-    def test_a_decision_candidate_writes_back_every_member_but_the_unread_ones(self):
-        decisions = [raw for raw in java_golden_records()
-                     if raw["kind"] == "playability" and raw["subkind"] == "decision"]
-        assert decisions
-        for raw in decisions:
-            written = record_to_dict(record_from_dict(raw))["payload"]["candidates"]
-            for collected, after in zip(raw["payload"]["candidates"], written, strict=True):
-                assert GEN3_UNREAD_CANDIDATE_MEMBERS <= collected.keys()
-                assert GEN3_UNREAD_VERDICT_MEMBERS <= collected["verdict"].keys()
-                assert list(after) == [
-                    m for m in collected if m not in GEN3_UNREAD_CANDIDATE_MEMBERS]
-                assert list(after["verdict"]) == [
-                    m for m in collected["verdict"] if m not in GEN3_UNREAD_VERDICT_MEMBERS]
+    def test_the_gen3_payload_members_read_into_their_fields(self):
+        records = [record_from_dict(raw) for raw in java_golden_records()]
+        halves = [r.payload for r in records if isinstance(r.payload, ResolutionPayload)]
+        assert halves and all(payload.conditions_met == () for payload in halves)
+        candidates = [c for r in records if isinstance(r.payload, PlayabilityDecisionPayload)
+                      for c in r.payload.candidates]
+        assert candidates and all(c.timing is True and c.failed_checks == ()
+                                  for c in candidates)
+        attackers = [r.payload for r in records
+                     if isinstance(r.payload, PlayabilityAttackersPayload)]
+        assert {(a.anchor_attacker, a.legal_defenders, a.must_attack, a.tapped_by_attack)
+                for a in attackers} == {("E2", ("P1",), False, True), ("E3", (), False, None)}
+        blockers = [r.payload for r in records
+                    if isinstance(r.payload, PlayabilityBlockersPayload)]
+        assert blockers and all(b.must_block == () for b in blockers)
 
-    @pytest.mark.parametrize(("subkind", "unread"), [
-        ("attackers", GEN3_UNREAD_ATTACKERS_MEMBERS),
-        ("blockers", GEN3_UNREAD_BLOCKERS_MEMBERS),
-    ])
-    def test_a_legality_payload_writes_back_every_member_but_the_unread_ones(
-            self, subkind, unread):
-        legality = [raw for raw in java_golden_records()
-                    if raw["kind"] == "playability" and raw["subkind"] == subkind]
-        assert legality
-        for raw in legality:
-            written = record_to_dict(record_from_dict(raw))["payload"]
-            assert list(written) == [m for m in raw["payload"] if m not in unread]
-        assert unread == {m for raw in legality for m in raw["payload"]} & unread
-
-    def test_a_resolution_effect_half_writes_back_every_member_but_the_unread_ones(self):
-        halves = [raw for raw in java_golden_records()
-                  if raw["kind"] == "resolution" and raw.get("moment") == "resolution"]
-        assert halves
-        for raw in halves:
-            assert GEN3_UNREAD_RESOLUTION_MEMBERS <= raw["payload"].keys()
-            written = record_to_dict(record_from_dict(raw))["payload"]
-            assert list(written) == [
-                m for m in raw["payload"] if m not in GEN3_UNREAD_RESOLUTION_MEMBERS]
+    def test_every_gen3_member_round_trips_where_set(self):
+        """The members the goldens leave at their empty value, each set."""
+        key = ProvenanceKey("cardsfolder/s/shock.txt", 0, "spell", 0)
+        entity = EntityState(
+            id="E3", name="Morph", zone="battlefield", controller="P1", lines=(
+                CardLine(keys=(key,), kind="static", granted=False, active=True,
+                         affected=("E1", "E2")),),
+            owner="P0", face_state="face_down", mana_cost={"generic": 2, "W/U": 1},
+            printed_loyalty=3, printed_defense=5,
+            real_face=RealFace(name="Akroma", types=("creature",), subtypes=("angel",),
+                               colors=("W",), mana_value=8, base_pt=(6, 6)),
+            designations=("goaded", "monstrous"), x_paid=4,
+            chosen=CardChoices(colors=("R",), type="Goblin", number=3, player="P1",
+                               cards=("E9",), names=("Shock",), direction="left",
+                               stored_rolls=(4, 6)),
+            costs_paid=CostsPaid(mana={"W": 1, "U": 1}, cast_from="hand", mana_rider=True),
+            history=CardHistory(entered_this_turn=True, loyalty_activated=True),
+            order_rank=2, role="exiled_with",
+        )
+        state = replace(_record().state, entities=(entity,), links=(
+            Link(from_=LineRef("E3", key), to="P1", type="targets", index=1),
+            Link(from_="P0", to="E3", type="owns"),
+        ), global_=replace(_record().state.global_, day_night="night",
+                           floating_effects=(CommandZoneObject(
+                               id="F17", source_lines=(key,), affected=("E3",),
+                               duration="end_of_turn", shield_left=2),),
+                           delayed_triggers=(CommandZoneObject(
+                               id="D4", source_lines=(key,), remembered=("E3", "P1")),),
+                           dungeons=(Dungeon(player="P0", dungeon="E40",
+                                             room="Yawning Portal"),)),
+            players=(PlayerState(id="P0", life=20, hand=7, library=40, graveyard=0,
+                                 speed=2, city_blessing=True, rad=3, monarch=True,
+                                 initiative=True, turn_counts=TurnCounts(cards_drawn=2,
+                                                                         descended=1)),),
+            refs=Refs(random=RandomResults(dice=(4, 17), coin_flips_won=1,
+                                           coin_flips_lost=2)))
+        records = [
+            _record(state=state, payload=ResolutionPayload(conditions_met=(
+                ConditionMet("root", True), ConditionMet("1", False)))),
+            _record(kind=RecordKind.PLAYABILITY, moment=None, ability=None, link_id=None,
+                    subkind=PlayabilitySubkind.DECISION, state=state,
+                    payload=PlayabilityDecisionPayload(candidates=(Candidate(
+                        ability=(key,), can_play=False, affordable=True,
+                        has_legal_target=True, responsible_static=(key,), timing=False,
+                        failed_checks=(FailedCheck("casting_speed"),
+                                       FailedCheck("static_prohibition", (key,)))),))),
+            _record(kind=RecordKind.PLAYABILITY, moment=None, ability=None, link_id=None,
+                    subkind=PlayabilitySubkind.ATTACKERS, state=state,
+                    payload=PlayabilityAttackersPayload(
+                        legal_attackers=("E3",), anchor_attacker="E3",
+                        legal_defenders=("P1", "E40"), must_attack=True,
+                        tapped_by_attack=False)),
+            _record(kind=RecordKind.PLAYABILITY, moment=None, ability=None, link_id=None,
+                    subkind=PlayabilitySubkind.BLOCKERS, state=state, what_if=False,
+                    payload=PlayabilityBlockersPayload(
+                        anchor_attacker="E3", legal_blockers=("E5",), must_block=("E5",),
+                        min_blockers=1)),
+        ]
+        for record in records:
+            assert record_from_dict(json.loads(json.dumps(record_to_dict(record)))) == record
+        assert list(record_to_dict(records[2])["payload"]) == [
+            "anchor_attacker", "legal_defenders", "must_attack", "tapped_by_attack",
+            "legal_attackers", "forbidden"]
+        assert list(record_to_dict(records[3])["payload"]) == [
+            "anchor_attacker", "legal_blockers", "forbidden", "must_block", "min_blockers"]
 
     def test_an_attackers_record_carries_no_what_if(self):
         attackers = [raw for raw in java_golden_records()

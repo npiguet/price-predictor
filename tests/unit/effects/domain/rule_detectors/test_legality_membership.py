@@ -101,3 +101,61 @@ class TestUniverse:
 def test_the_list_must_match_the_subkind(by_kind):
     record = _forbidden_block(by_kind)
     assert FAMILY.match(record, None, {"list": "legal_attackers"}) is None
+
+
+class TestTheGen3Lists:
+    """``legal_defenders`` and ``must_block`` on the Java goldens' gen-3 records."""
+
+    @staticmethod
+    def _golden(subkind: str):
+        from effects.infrastructure.record_codec import record_from_dict
+        from tests.unit.effects.builders import java_golden_records
+
+        return [record_from_dict(raw) for raw in java_golden_records()
+                if raw["kind"] == "playability" and raw["subkind"] == subkind]
+
+    def _anchor(self, anchor: str):
+        return next(r for r in self._golden("attackers") if r.payload.anchor_attacker == anchor)
+
+    def test_a_defender_the_anchor_may_attack_is_inside(self):
+        found = FAMILY.match(self._anchor("E2"), None,
+                             {"list": "legal_defenders", "fires_when": "inside"})
+        assert found.polarity is Polarity.FIRES and found.entities == ("P1",)
+
+    def test_a_creature_that_may_attack_nothing_lists_no_inside(self):
+        assert FAMILY.match(self._anchor("E3"), None,
+                            {"list": "legal_defenders", "fires_when": "inside"}) is None
+
+    def test_the_defender_universe_is_every_other_permanent_and_the_opponent(self):
+        record = self._anchor("E2")
+        found = FAMILY.match(record, None, {"list": "legal_defenders",
+                                            "universe": "battlefield_and_players"})
+        assert found.polarity is Polarity.FIRES
+        assert "E2" not in found.entities and not {"P0", "P1"} & set(found.entities)
+        assert set(found.entities) == {e.id for e in record.state.entities
+                                       if e.on_battlefield and e.id != "E2"}
+
+    def test_a_creature_no_requirement_binds_is_outside_must_block(self):
+        record = self._golden("blockers")[0]
+        found = FAMILY.match(record, None, {"list": "must_block", "fires_when": "inside"})
+        assert found.polarity is Polarity.DOES_NOT_FIRE
+        assert found.entities == (*record.payload.legal_blockers,
+                                  *(f.entity for f in record.payload.forbidden))
+
+    def test_a_creature_that_must_block_is_inside(self):
+        record = self._golden("blockers")[0]
+        bound = record.payload.legal_blockers[:1]
+        edited = replace(record, payload=replace(record.payload, must_block=bound))
+        found = FAMILY.match(edited, None, {"list": "must_block", "fires_when": "inside"})
+        assert found.polarity is Polarity.FIRES and found.entities == bound
+
+    def test_a_gen2_record_shows_neither_list(self, by_kind):
+        assert FAMILY.match(by_kind("playability", "attackers")[0], None,
+                            {"list": "legal_defenders", "universe": "battlefield"}) is None
+        assert FAMILY.match(by_kind("playability", "blockers")[0], None,
+                            {"list": "must_block"}) is None
+
+    def test_both_lists_need_their_gen3_field(self):
+        assert FAMILY.needs({"list": "legal_defenders"}) == {"legal_defenders"}
+        assert FAMILY.needs({"list": "must_block"}) == {"must_block"}
+        assert FAMILY.needs({"list": "legal_blockers"}) == frozenset()

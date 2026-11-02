@@ -9,17 +9,32 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from effects.domain.provenance import ProvenanceKey
 from effects.domain.state_snapshot import (
+    CardChoices,
+    CardHistory,
     CardLine,
+    CostsPaid,
+    EffectDuration,
+    EntityRole,
     EntityState,
+    FaceState,
     GlobalState,
     GrantedTemporary,
     LineKind,
+    LineRef,
+    Link,
     PlayerState,
     PowerToughness,
     StateSnapshot,
+    TurnCounts,
 )
-from tests.unit.effects.builders import java_golden_entities, make_entity, make_snapshot
+from tests.unit.effects.builders import (
+    java_golden_entities,
+    java_golden_records,
+    make_entity,
+    make_snapshot,
+)
 
 
 def _snapshot(**overrides) -> StateSnapshot:
@@ -207,3 +222,88 @@ class TestTheJavaGoldensRead:
         statics = [line for e in self._entities() for line in e.lines
                    if line.kind == LineKind.STATIC]
         assert statics and all(line.active is not None for line in statics)
+
+
+class TestTheGen3FactsRead:
+    """A card's, a player's and the board's gen-3 facts, from the goldens (T074)."""
+
+    @staticmethod
+    def _states() -> list[StateSnapshot]:
+        from effects.infrastructure.record_codec import record_from_dict
+
+        return [record_from_dict(raw).state for raw in java_golden_records()]
+
+    @staticmethod
+    def _entities() -> list[EntityState]:
+        from effects.infrastructure.record_codec import _entity_from_json
+
+        return [_entity_from_json(e) for e in java_golden_entities()]
+
+    def test_every_card_names_its_owner_face_and_history(self):
+        entities = self._entities()
+        assert all(e.owner in ("P0", "P1") for e in entities)
+        assert all(e.face_state in set(FaceState) for e in entities)
+        assert all(isinstance(e.history, CardHistory) for e in entities)
+        assert all(e.chosen == CardChoices() and e.role is None and e.in_tiers
+                   for e in entities)
+        assert any(e.history.entered_this_turn for e in entities)
+
+    def test_a_mana_cost_counts_its_symbols_and_a_land_has_none(self):
+        entities = self._entities()
+        assert any(e.mana_cost == {"generic": 1, "W": 2} for e in entities)
+        assert any(e.mana_cost is None and "land" in e.types for e in entities)
+
+    def test_a_planeswalker_prints_its_loyalty(self):
+        assert any(e.printed_loyalty in (3, 4) and "planeswalker" in e.types
+                   for e in self._entities())
+
+    def test_a_cast_card_says_what_paid_for_it(self):
+        paid = [e.costs_paid for e in self._entities() if e.costs_paid is not None]
+        assert CostsPaid(mana={"W": 1, "U": 0, "B": 0, "R": 1, "G": 0, "C": 0}) in paid
+        assert any(each.cast_from == "hand" for each in paid)
+
+    def test_an_order_rank_is_set_on_the_battlefield(self):
+        ranks = [e.order_rank for e in self._entities() if e.on_battlefield]
+        assert ranks and all(rank is not None for rank in ranks)
+
+    def test_a_static_names_the_permanents_it_affects(self):
+        lines = [line for e in self._entities() for line in e.lines
+                 if line.affected is not None]
+        assert lines and all(line.kind == LineKind.STATIC for line in lines)
+        assert any(len(line.affected) > 4 for line in lines)
+
+    def test_a_player_carries_the_turn_counts(self):
+        players = [p for state in self._states() for p in state.players]
+        assert all(isinstance(p.turn_counts, TurnCounts) for p in players)
+        assert any(p.turn_counts.life_gained == 3 for p in players)
+        assert any(p.monarch for p in players)
+
+    def test_a_floating_effect_names_the_line_that_made_it(self):
+        effects = [made for state in self._states() for made in state.global_.floating_effects]
+        assert {made.duration for made in effects} == {
+            EffectDuration.END_OF_TURN, EffectDuration.PERMANENT}
+        made = next(made for made in effects if made.source_lines)
+        assert made.source_lines[0].script_file == "cardsfolder/p/prodigal_pyromancer.txt"
+
+    def test_links_end_at_refs_or_lines(self):
+        links = [link for state in self._states() for link in state.links]
+        targets = [link for link in links if link.type == "targets"]
+        assert targets and all(isinstance(link.from_, LineRef) and link.index == 0
+                               for link in targets)
+        assert all(link.index is None for link in links if link.type != "targets")
+        assert {"controls", "owns", "attacks", "blocks"} <= {link.type for link in links}
+
+    def test_a_link_s_line_ends_give_their_keys(self):
+        key = ProvenanceKey("cardsfolder/s/shock.txt", 0, "spell", 0)
+        link = Link(from_=LineRef("E1", key), to="E2", type="targets", index=0)
+        assert link.line_keys() == (key,)
+        assert Link(from_="P0", to="E2", type="owns").line_keys() == ()
+
+    def test_an_extra_entity_is_not_one_of_the_tiers(self):
+        assert not make_entity("L7", "Bear", role=EntityRole.LAST_KNOWN).in_tiers
+        assert make_entity("E7", "Bear").in_tiers
+
+    def test_a_gen2_snapshot_reads_no_gen3_member(self):
+        snapshot = _snapshot()
+        assert snapshot.links is None and snapshot.global_.floating_effects == ()
+        assert all(player.turn_counts is None for player in snapshot.players)

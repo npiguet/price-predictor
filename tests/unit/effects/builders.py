@@ -83,45 +83,6 @@ def java_golden_entities() -> list[dict]:
     return [entity for snapshot in snapshots for entity in snapshot["entities"]]
 
 
-#: Card-slot members the collector writes (FR-024, T054-T057) that the codec
-#: does not read yet; T074's remainder parses them. A write-back of a golden
-#: entity is compared with the entity less these.
-GEN3_UNREAD_ENTITY_MEMBERS = frozenset({
-    "owner", "face_state", "mana_cost", "printed_loyalty", "printed_defense", "real_face",
-    "designations", "x_paid", "chosen", "costs_paid", "history", "order_rank", "role",
-})
-#: The line member a static line carries that the codec does not read yet.
-GEN3_UNREAD_LINE_MEMBERS = frozenset({"affected"})
-#: The snapshot member the collector writes (T058) that the codec does not read
-#: yet: the links between the snapshot's objects, which T074 parses.
-GEN3_UNREAD_STATE_MEMBERS = frozenset({"links"})
-#: The decision-candidate members the collector writes (T061) that the codec
-#: does not read yet: the checks a candidate failed, and in its verdict the
-#: timing bit; T074 parses them.
-GEN3_UNREAD_CANDIDATE_MEMBERS = frozenset({"failed_checks"})
-GEN3_UNREAD_VERDICT_MEMBERS = frozenset({"timing"})
-#: The legality-payload members the collector writes (T065, T066) that the codec
-#: does not read yet: an attackers record's anchor, legal defenders, attack
-#: requirement and, on a declared anchor only, its tap; a blockers record's
-#: creatures that must block. T074 parses them.
-GEN3_UNREAD_ATTACKERS_MEMBERS = frozenset({
-    "anchor_attacker", "legal_defenders", "must_attack", "tapped_by_attack",
-})
-GEN3_UNREAD_BLOCKERS_MEMBERS = frozenset({"must_block"})
-#: The resolution-payload member the collector writes (T068) that the codec does
-#: not read yet: whether each conditional clause met its condition. T074 parses it.
-GEN3_UNREAD_RESOLUTION_MEMBERS = frozenset({"conditions_met"})
-
-
-def without_unread_members(entity: dict) -> dict:
-    """A golden entity as the codec reads it: less the members it does not read yet."""
-    kept = {k: v for k, v in entity.items() if k not in GEN3_UNREAD_ENTITY_MEMBERS}
-    if kept.get("lines") is not None:
-        kept["lines"] = [{k: v for k, v in line.items() if k not in GEN3_UNREAD_LINE_MEMBERS}
-                         for line in kept["lines"]]
-    return kept
-
-
 _EVENT = Event(type=EventType.LIFE_CHANGE, params={"delta": 1})
 
 

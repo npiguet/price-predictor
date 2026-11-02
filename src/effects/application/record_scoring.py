@@ -82,6 +82,7 @@ def _record_result(
         family=family,
         random_seat=bool(record.random_seat),
         what_if=record.what_if,
+        generation=record.generation,
         keywords=record_keywords(record, batcher, resolver),
         losses=losses,
     )

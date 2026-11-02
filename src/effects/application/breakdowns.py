@@ -44,6 +44,8 @@ class RecordResult:
     family: str | None = None
     random_seat: bool = False
     what_if: bool | None = None
+    #: The record's generation, which says how a missing ``what_if`` reads.
+    generation: int | None = None
     keywords: frozenset[str] = field(default_factory=frozenset)
 
 

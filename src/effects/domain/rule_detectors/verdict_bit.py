@@ -132,11 +132,10 @@ def _passes(candidate: Candidate, lines: SidecarLookup | None,
 
 def _bit(candidate, bit: str, check: str | None) -> bool | None:
     if bit == "failed_check":
-        failed = getattr(candidate, "failed_checks", None)
-        if failed is None:
+        if candidate.failed_checks is None:
             return None
-        return not any(getattr(f, "check", f) == check for f in failed)
-    return getattr(candidate, bit, None)
+        return not any(failed.check == check for failed in candidate.failed_checks)
+    return getattr(candidate, bit)
 
 
 @dataclass(frozen=True, slots=True)

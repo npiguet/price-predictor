@@ -50,7 +50,6 @@ from effects.domain.state_snapshot import (
     StateSnapshot,
 )
 from tests.unit.effects.builders import (
-    GEN3_UNREAD_ENTITY_MEMBERS,
     java_golden_entities,
     make_entity,
     make_record,
@@ -127,8 +126,8 @@ _FROZEN_TURN_ACTION_SUBKINDS = {
 }
 
 #: A gen-3 card slot's members, in the order the collector writes them
-#: (``FE/EntityJson.java``). Members are added here as later tasks write them
-#: (``owner``, ``face_state``, ...); none may be removed or repurposed.
+#: (``FE/EntityJson.java``), and in the order the codec writes them back. A
+#: member may be added within gen-3; none may be removed or repurposed.
 _FROZEN_GEN3_ENTITY = (
     "id", "name", "zone", "owner", "controller", "face", "face_state", "copy_source",
     "token_script_id", "types", "subtypes", "supertypes", "colors", "mana_value",
@@ -137,10 +136,6 @@ _FROZEN_GEN3_ENTITY = (
     "designations", "x_paid", "chosen", "costs_paid", "history", "order_rank",
     "granted_temporary", "lines", "stack_extras", "role",
 )
-#: The members the codec writes back: the collector's, less those it does not
-#: read yet (T074's remainder).
-_WRITTEN_GEN3_ENTITY = tuple(
-    member for member in _FROZEN_GEN3_ENTITY if member not in GEN3_UNREAD_ENTITY_MEMBERS)
 #: A line's members (``FE/CardLines.java``): the ones always written, and the
 #: ones written only when set.
 _FROZEN_LINE_MEMBERS = {"keys", "kind", "granted"}
@@ -246,7 +241,7 @@ class TestTheGen3CardSlotIsPinned:
                              lines=())
         record = make_record(state=make_snapshot(entities=(entity,)))
         written = record_to_dict(record)["state"]["entities"][0]
-        assert tuple(written) == _WRITTEN_GEN3_ENTITY
+        assert tuple(written) == _FROZEN_GEN3_ENTITY
         assert not _REMOVED_IN_GEN3 & written.keys()
 
 
