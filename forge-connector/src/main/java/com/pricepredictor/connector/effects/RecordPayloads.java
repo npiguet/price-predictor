@@ -43,23 +43,26 @@ final class RecordPayloads {
 
     /**
      * ``{<combat fields>, "events": [...]}`` — an observed damage step, its
-     * combat as {@link CombatShape#writeTo} writes it.
+     * combat as {@link CombatShape#writeTo} writes it, each damage event
+     * naming its dealer ({@link EventAttribution#withCombatSources}).
      */
     static String combatPayload(CombatShape combat, List<EffectEvent> events) {
         return combat.writeTo(Json.object())
-                .raw("events", eventArray(events))
+                .raw("events", eventArray(EventAttribution.withCombatSources(events, combat)))
                 .render();
     }
 
     /**
      * A damage-step probe's combat payload, which also names what it
      * perturbed: the keyword it stripped and the creature it stripped it from.
+     * Its damage events name their dealers as the observed record's do
+     * (FR-035), so the two read alike.
      */
     static String probePayload(
             CombatShape combat, List<EffectEvent> events,
             String keyword, String carrier) {
         return combat.writeTo(Json.object())
-                .raw("events", eventArray(events))
+                .raw("events", eventArray(EventAttribution.withCombatSources(events, combat)))
                 .raw("probed_keyword", Json.string(keyword))
                 .raw("probed_entity", Json.string(carrier))
                 .render();

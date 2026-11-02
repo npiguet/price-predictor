@@ -146,6 +146,24 @@ class OutcomeHandlerTest {
     }
 
     /**
+     * A prevention that prevented nothing writes no event (FR-035): a used-up
+     * shield still answers the damage, with an amount of 0.
+     */
+    @Test
+    void aPreventionOfNothingWritesNoEvent() throws Throwable {
+        Card creature = TestCards.build("Grizzly Bears");
+
+        List<Map<String, Object>> events = outcomeEvents(
+                new Object[]{null, "damage_prevented",
+                        Map.of("amount", 0, "subjects", List.of(creature))},
+                new Object[]{null, "damage_prevented",
+                        Map.of("amount", 1, "subjects", List.of(creature))});
+
+        assertEquals(1, events.size(), events.toString());
+        assertEquals(1L, params(events.get(0)).get("amount"), events.toString());
+    }
+
+    /**
      * A reveal from a library names the players it came from; any other
      * reveal arrives with an empty list and names nobody.
      */

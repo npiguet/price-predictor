@@ -5,7 +5,9 @@ import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -212,6 +214,61 @@ final class EventAttribution {
         }
         String own = root.getParam("Duration");
         return own == null || own.isEmpty() ? null : own;
+    }
+
+    /**
+     * Name the creature that dealt each damage event of a combat record, as
+     * {@code source} (FR-035): a damage-step probe's, and the observed
+     * record it mirrors, so the two read alike.
+     *
+     * <p>The bus names the dealer as the event's {@code cause}, and that is
+     * the source where it does. Where it names none, the step's assignment
+     * does: the one source that assigned damage to the event's subject, or,
+     * when several did, the one that assigned exactly the event's amount. An
+     * assignment is read before prevention rewrote the damage, so a damage
+     * two sources could each have dealt names neither.
+     *
+     * <p>Edits the events in place, so a probe's held events and its
+     * rendered payload agree.
+     *
+     * @return the same events, each damage event carrying its {@code source}
+     *         where one could be named
+     */
+    static List<EffectEvent> withCombatSources(List<EffectEvent> events, CombatShape combat) {
+        for (EffectEvent event : events) {
+            if (event.type() != EventType.DAMAGE_DEALT || event.params().containsKey("source")) {
+                continue;
+            }
+            String source = combatSourceOf(event, combat);
+            if (source != null) {
+                event.param("source", source);
+            }
+        }
+        return events;
+    }
+
+    private static String combatSourceOf(EffectEvent event, CombatShape combat) {
+        if (event.params().get("cause") instanceof String named) {
+            return named;
+        }
+        if (event.subjects().size() != 1) {
+            return null;
+        }
+        Map<String, Integer> assigned = combat.assignedTo(event.subjects().get(0));
+        if (assigned.size() == 1) {
+            return assigned.keySet().iterator().next();
+        }
+        Object amount = event.params().get("amount");
+        String exact = null;
+        for (Map.Entry<String, Integer> entry : assigned.entrySet()) {
+            if (amount instanceof Number dealt && entry.getValue() == dealt.intValue()) {
+                if (exact != null) {
+                    return null;
+                }
+                exact = entry.getKey();
+            }
+        }
+        return exact;
     }
 
     /**

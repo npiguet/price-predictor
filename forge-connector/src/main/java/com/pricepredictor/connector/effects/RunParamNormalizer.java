@@ -69,6 +69,20 @@ final class RunParamNormalizer {
     }
 
     /**
+     * Whether this is a prevention that prevented nothing (FR-035), which is
+     * written nowhere: a shield whose amount is used up still answers the
+     * damage, and a {@code NoPreventDamage} event leaves a prevented amount
+     * of 0 in the map. Only a {@code damage_prevented} with a known amount
+     * of 0 or less is; an unread amount says nothing either way.
+     */
+    static boolean preventedNothing(EffectEvent event) {
+        return event != null
+                && event.type() == EventType.DAMAGE_PREVENTED
+                && event.params().get("amount") instanceof Number amount
+                && amount.intValue() <= 0;
+    }
+
+    /**
      * The run parameters keyed by the name Forge spells them with.
      *
      * <p>{@code AbilityKey.toString()} is the key's own name, so this is a

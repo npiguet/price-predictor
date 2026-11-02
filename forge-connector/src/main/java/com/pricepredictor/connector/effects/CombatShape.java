@@ -89,6 +89,21 @@ final class CombatShape {
     }
 
     /**
+     * The damage the assignment gave {@code target}, by the source that
+     * assigned it, in assignment order; empty when none did.
+     */
+    Map<String, Integer> assignedTo(String target) {
+        Map<String, Integer> sources = new LinkedHashMap<>();
+        assignment.forEach((source, targets) -> {
+            Integer amount = targets.get(target);
+            if (amount != null) {
+                sources.put(source, amount);
+            }
+        });
+        return sources;
+    }
+
+    /**
      * Write the three combat fields into {@code json}, in the order the
      * payload carries them, as they stand now.
      *

@@ -1,12 +1,19 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import forge.game.Game;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
+import forge.game.combat.Combat;
+import forge.game.phase.PhaseType;
+import forge.game.player.Player;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -183,5 +190,70 @@ class EventAttributionTest {
                 .toJson();
 
         assertFalse(json.contains("cause"), json);
+    }
+
+    // ── a damage-step probe's sources (FR-035) ──────────────────────────
+
+    private static EffectEvent damage(String subject, int amount) {
+        return new EffectEvent(EventType.DAMAGE_DEALT).subject(subject)
+                .param("amount", amount).param("combat", true);
+    }
+
+    /**
+     * A probe's damage events name their dealer as {@code source}: the bus's
+     * cause where it names one, else the step's assignment, which names the
+     * one creature that assigned damage to the subject, or among several the
+     * one that assigned exactly the amount dealt, and otherwise nothing.
+     */
+    @Test
+    void aProbesDamageEventsNameTheirSourceFromTheAssignment() {
+        Assumptions.assumeTrue(PatchHooks.ASSIGNED_DAMAGE.present(),
+                "../forge does not keep the step's damage assignment");
+        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DAMAGE);
+        Player you = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card bears = TestBoard.onBattlefield(game, you, "Grizzly Bears");
+        Card elves = TestBoard.onBattlefield(game, you, "Llanowar Elves");
+        Card giant = TestBoard.onBattlefield(game, you, "Hill Giant");
+        Card wall = TestBoard.onBattlefield(game, opponent, "Wall of Wood");
+        Combat combat = TestBoard.blockedCombat(game, you, opponent, bears, wall, elves, giant);
+        CombatShape shape = CombatShape.of(combat);
+        assertTrue(combat.assignCombatDamage(false), "the step assigned no damage");
+        shape.addAssignment(combat);
+
+        String player = Refs.of(opponent);
+        List<EffectEvent> events = EventAttribution.withCombatSources(List.of(
+                damage(Refs.of(wall), 2),
+                damage(player, 1),
+                damage(player, 5),
+                damage(player, 3).cause(Refs.of(giant))), shape);
+
+        assertEquals(Refs.of(bears), events.get(0).params().get("source"), "the wall's one assigner");
+        assertEquals(Refs.of(elves), events.get(1).params().get("source"), "the exact amount's assigner");
+        assertNull(events.get(2).params().get("source"), "no assigner of 5: none named");
+        assertEquals(Refs.of(giant), events.get(3).params().get("source"), "the bus's own cause");
+    }
+
+    /** Only damage gets a source; an assignment says nothing about a life change. */
+    @Test
+    void aProbesOtherEventsGetNoSource() {
+        List<EffectEvent> events = EventAttribution.withCombatSources(List.of(
+                new EffectEvent(EventType.LIFE_CHANGE).subject("P1").param("delta", -1)
+                        .cause("E1")), CombatShape.of(null));
+
+        assertFalse(events.get(0).params().containsKey("source"), events.get(0).toJson());
+    }
+
+    /** A prevention of nothing is no prevention (FR-035); one of something is. */
+    @Test
+    void aPreventionOfNothingIsRecognised() {
+        assertTrue(RunParamNormalizer.preventedNothing(
+                new EffectEvent(EventType.DAMAGE_PREVENTED).param("amount", 0)));
+        assertFalse(RunParamNormalizer.preventedNothing(
+                new EffectEvent(EventType.DAMAGE_PREVENTED).param("amount", 2)));
+        assertFalse(RunParamNormalizer.preventedNothing(
+                new EffectEvent(EventType.DAMAGE_PREVENTED)), "an unread amount says nothing");
+        assertFalse(RunParamNormalizer.preventedNothing(
+                new EffectEvent(EventType.DAMAGE_DEALT).param("amount", 0)));
     }
 }

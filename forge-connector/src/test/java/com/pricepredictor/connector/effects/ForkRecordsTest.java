@@ -245,10 +245,15 @@ class ForkRecordsTest {
 
         String record = ShardRun.readShard(writer.path()).stream()
                 .filter(r -> r.contains("\"kind\":\"combat\"")).findFirst().orElseThrow();
+        // Rendered as the branch's record renders it, which names each
+        // damage's dealer as the observed record does (FR-035).
+        String branch = held.payload();
         String onTheBears = damageTo(held.events(), bears).toJson();
         assertTrue(onTheBears.contains("\"combat\":true"), onTheBears);
         assertTrue(onTheBears.contains("\"cause\":\"E" + dreadmaw.getId() + "\""), onTheBears);
+        assertTrue(onTheBears.contains("\"source\":\"E" + dreadmaw.getId() + "\""), onTheBears);
         String onTheDreadmaw = damageTo(held.events(), dreadmaw).toJson();
+        assertTrue(branch.contains(onTheDreadmaw), branch);
         assertTrue(record.contains(onTheDreadmaw),
                 "the branch renders " + onTheDreadmaw + " and the observed record " + record);
         // The stripped keyword is the branch's input, not something its step did.

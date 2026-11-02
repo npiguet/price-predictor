@@ -228,6 +228,9 @@ final class ClauseOutcomeRouter {
             }
             EffectEvent event = outcomeEvent(
                     type.get(), args.get(2) instanceof Map<?, ?> params ? params : Map.of());
+            if (RunParamNormalizer.preventedNothing(event)) {
+                return;
+            }
             SpellAbility ability = args.get(0, SpellAbility.class);
             boolean liveGame = ability != null
                     ? live.owns(ability)
