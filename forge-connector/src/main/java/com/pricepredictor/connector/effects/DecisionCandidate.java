@@ -2,82 +2,71 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.json.Json;
 import forge.game.GameEntity;
+import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Supplier;
+import java.util.Set;
 
 /**
  * What a {@code decision} record says about its candidate, read into values
- * the moment the candidate is sampled in.
+ * the moment the candidate is evaluated.
  *
- * <p>Values rather than the ability: a verdict can be abandoned
- * mid-evaluation, and the legality check mutates the checked ability's
- * targets, so nothing may keep a reference to the ability object. What the
- * ability says at this instant is safe to keep, and without it the record
- * names no ability at all.
+ * <p>Values rather than the ability: the legality check sets the checked
+ * ability's activating player, and the AI may later choose targets on the
+ * same object, so nothing may keep a reference to it. What the ability says
+ * at this instant is safe to keep, and without it the record names no
+ * ability at all.
  *
  * @param keys         the candidate's printed line, as a list of at most one
- * @param legalTargets refs of what the rules allow it to target
+ * @param legalTargets refs of what the rules allow any of its clauses to target
  * @param manaCost     its total mana cost, or null where it has no costs
  * @param verdict      what the rules say of it on this board
  */
-record DecisionCandidate(
+public record DecisionCandidate(
         List<ProvenanceKey> keys,
         List<String> legalTargets,
         String manaCost,
         PlayabilityVerdict verdict) {
 
-    /** Legal-target refs one decision may carry before the payload is capped. */
-    private static final int MAX_LEGAL_TARGETS = 32;
-
     /**
-     * Read {@code candidate}, asking for its verdict first.
+     * Read {@code candidate} as {@code activator} would play it.
      *
-     * @return empty where the verdict's rules check throws: the engine cannot
-     *         evaluate that candidate on this board, the way the random seat
-     *         treats it, and it is not recorded
+     * @return empty where the rules check throws: the engine cannot evaluate
+     *         that candidate on this board, and it is neither recorded nor
+     *         played
      */
-    static Optional<DecisionCandidate> read(
-            SpellAbility candidate, Supplier<PlayabilityVerdict> verdictOf) {
-        PlayabilityVerdict verdict;
+    static Optional<DecisionCandidate> read(SpellAbility candidate, Player activator) {
         try {
-            verdict = verdictOf.get();
+            return Optional.of(PlayabilityVerdict.asActivator(candidate, activator,
+                    () -> new DecisionCandidate(
+                            ProvenanceResolver.keysOf(candidate),
+                            legalTargetsOf(candidate),
+                            candidate.getPayCosts() == null
+                                    ? null : String.valueOf(candidate.getPayCosts().getTotalMana()),
+                            PlayabilityVerdict.of(candidate, activator))));
         } catch (RuntimeException e) {
             return Optional.empty();
         }
-        if (candidate == null) {
-            return Optional.of(new DecisionCandidate(List.of(), List.of(), null, verdict));
-        }
-        return Optional.of(new DecisionCandidate(
-                ProvenanceResolver.keysOf(candidate),
-                legalTargetsOf(candidate),
-                candidate.getPayCosts() == null
-                        ? null : String.valueOf(candidate.getPayCosts().getTotalMana()),
-                verdict));
     }
 
     /**
-     * What the rules allowed this candidate to target, not what the AI picked.
+     * What the rules allowed this candidate to target, not what the AI picked:
+     * the union over every clause it offers, uncapped (FR-031).
      *
      * <p>Not {@code getTargets()}, which is the chosen set: the per-entity
      * target-legality head is specified to train on the legal set, and an AI's
      * choice is a policy judgment the spec keeps out of the corpus.
-     *
-     * <p>Capped, because a wide board can make this list longer than the record
-     * around it.
      */
     private static List<String> legalTargetsOf(SpellAbility candidate) {
-        List<String> ids = new ArrayList<>();
-        for (GameEntity entity : TargetingClauses.candidatesOf(candidate)) {
+        Set<String> ids = new LinkedHashSet<>();
+        for (GameEntity entity : TargetingClauses.legalTargets(candidate)) {
             Refs.ofAny(entity).ifPresent(ids::add);
-            if (ids.size() >= MAX_LEGAL_TARGETS) {
-                break;
-            }
         }
-        return ids;
+        return new ArrayList<>(ids);
     }
 
     /** The record's payload: this one candidate. */
@@ -86,22 +75,29 @@ record DecisionCandidate(
         if (manaCost != null) {
             cost.value("mana", manaCost);
         }
+        ProvenanceKey prohibiting = verdict.prohibitingStatic();
         String candidate = Json.object()
                 .raw("ability", ProvenanceKey.toJsonArray(keys))
                 .raw("verdict", Json.object()
                         .value("can_play", verdict.canPlay())
                         .value("affordable", verdict.affordable())
                         .value("has_legal_target", verdict.hasLegalTarget())
+                        .value("timing", verdict.timing())
                         .render())
                 .raw("legal_targets", Json.stringArray(legalTargets))
                 .raw("cost_after_adjustment", cost.render())
-                // responsible_static needs a cantBeCastStatic hook that does
-                // not exist; the attacker and blocker subkinds carry theirs,
-                // this one does not.
-                .raw("responsible_static", "[]")
+                .raw("responsible_static", keyArray(prohibiting))
+                .raw("failed_checks", Json.array(verdict.failedChecks(), check -> Json.object()
+                        .value("check", check.check())
+                        .raw("responsible_static", keyArray(check.responsibleStatic()))
+                        .render()))
                 .render();
         return Json.object()
                 .raw("candidates", Json.array(List.of(candidate), json -> json))
                 .render();
+    }
+
+    private static String keyArray(ProvenanceKey key) {
+        return ProvenanceKey.toJsonArray(key == null ? List.of() : List.of(key));
     }
 }

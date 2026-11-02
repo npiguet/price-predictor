@@ -199,8 +199,9 @@ static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of
 |---|---|---|
 | resolution | `conditions_met` | `[{segment, met}]` |
 | decision candidate | `verdict.timing` | bool |
-| decision candidate | `failed_checks` | `[{check, responsible_static}]`; `check` ∈ `split_second`, `casting_speed`, `whose_turn`, `phase`, `combat`, `activation_limit`, `script_condition`, `zone`, `static_prohibition`, `cost`, `script_restriction` |
+| decision candidate | `failed_checks` | `[{check, responsible_static}]`, after `responsible_static` in the candidate, one entry per failed check in the order listed here; `responsible_static` a key list, one key where a static decided the check (`static_prohibition`), else empty; `check` ∈ `split_second`, `casting_speed`, `whose_turn`, `phase`, `combat`, `activation_limit`, `script_condition`, `zone`, `static_prohibition`, `cost`, `script_restriction` |
 | decision candidate | `legal_targets` | union over every targeting clause, uncapped |
+| decision candidate | `responsible_static` | the key of the static forbidding the play (its `static_prohibition` entry's), else empty |
 | `attackers` | `anchor_attacker`, `legal_defenders`, `must_attack`, `tapped_by_attack?` | one record per attacker |
 | `blockers` | `must_block` per listed creature | bool |
 | probe `combat` | damage events' `source` | entity ref |
@@ -213,6 +214,11 @@ static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of
 - A prevention event with amount 0 is not written.
 - `can_play = canPlay ∧ timing ∧ no static prohibition`.
 - Decision candidates exist for both players at every priority stop.
+- A decision candidate is every spell ability of every card its player could play from, unplayable
+  ones included, lands and mana abilities aside; an alternative cost is a candidate of its own.
+- `whose_turn`, `phase` and `combat` name the parts of Forge's timing restrictions,
+  `activation_limit` and `script_condition` the parts of its other restrictions that fail;
+  `script_restriction` is a failed activator check, or a failed restriction none of those names.
 
 ## Removed
 

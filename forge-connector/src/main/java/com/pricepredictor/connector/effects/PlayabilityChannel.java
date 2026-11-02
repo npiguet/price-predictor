@@ -9,27 +9,23 @@ import forge.game.staticability.StaticAbility;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Random;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 /**
  * {@code playability} records: rules-level verdicts only.
  *
  * <p>The AI's policy judgments never reach a record: they are its opinion
  * rather than the game's rules, and training on them would teach the model
- * Forge's play style instead of Magic. So the decision hook hands over only
- * the candidate, and the verdict is {@link PlayabilityVerdict}'s, computed
- * here after the sampler draw. A patch that still passes three verdict
- * booleans after the candidate has them ignored: they were computed by the
- * AI's own cost check, which is policy.
+ * Forge's play style instead of Magic. So a {@code decision} record carries
+ * {@link PlayabilityVerdict}'s answer, computed from the rules for a
+ * candidate {@link PriorityCandidates} enumerated.
  *
  * <p>The {@code decision} subkind is sampled at {@code --playability-rate}
- * because the AI evaluates every candidate at every priority, which would
- * otherwise swamp the corpus. The {@code attackers} and {@code blockers}
- * subkinds are always logged: they fire once per combat, not once per
- * candidate.
+ * because both players' candidates are enumerated at every priority stop,
+ * which would otherwise swamp the corpus. The {@code attackers} and
+ * {@code blockers} subkinds are always logged: they fire once per combat, not
+ * once per candidate.
  */
 public final class PlayabilityChannel {
 
@@ -53,90 +49,39 @@ public final class PlayabilityChannel {
     // ── the decision subkind ────────────────────────────────────────────
 
     /**
-     * The decision hook's listener.
+     * Whether the next decision candidate is sampled in, at
+     * {@code --playability-rate}: one draw from the game's shared stream.
      *
-     * <p>Package-private: the argument order has no compiler behind it, so
-     * this hook's own game-identity test calls it with a synthesized argument
-     * array.
+     * <p>Drawn before the candidate is evaluated, so a candidate the sampler
+     * drops costs no rules check. {@link PriorityCandidates} draws only for
+     * the live game, whose signals alone reach it.
      */
-    PatchHooks.Listener decisionHandler() {
-        return PatchHooks.PLAYABILITY_LISTENER.listener((callback, args) -> {
-            // Checked before the sampler draw below, not after -- a fork's own candidates are
-            // evaluated for playability too (InterventionFork.forceResolution's
-            // chooseTargets, and GameSimulator's own AI decisions, both ask the
-            // same AiController this hook is installed on), and letting one
-            // consume from the shared `sampler` before being dropped would
-            // re-randomise the live sample stream for every other subkind that
-            // draws from it (trigger negatives, the mana reservoir) --
-            // exactly the cost the trigger hook's own identity check already
-            // avoids by running first. A null candidate is let through: its
-            // record names no ability either way.
-            SpellAbility candidate = args.get(0, SpellAbility.class);
-            if (live.foreign(candidate)) {
-                return;
-            }
-            recordCandidate(deciderOf(candidate), candidate,
-                    () -> PlayabilityVerdict.of(candidate));
-        });
+    boolean sampled() {
+        return sampler.nextDouble() <= playabilityRate;
     }
 
     /**
-     * The player a candidate ability belongs to (FR-030a).
+     * One {@code decision} record, for a candidate {@link PriorityCandidates}
+     * evaluated.
      *
-     * <p>The activator, which the AI sets before it evaluates; failing that
-     * the host's controller. Null for a candidate with neither, which the
-     * record then spells as the active player, the way gen-1 spelled every
-     * decision record.
+     * @param decider the candidate's player, written as {@code actor_player}
      */
-    private static Player deciderOf(SpellAbility candidate) {
-        if (candidate == null) {
-            return null;
-        }
-        if (candidate.getActivatingPlayer() != null) {
-            return candidate.getActivatingPlayer();
-        }
-        Card host = candidate.getHostCard();
-        return host == null ? null : host.getController();
-    }
-
-    /**
-     * One {@code decision} record, for a candidate someone evaluated.
-     *
-     * <p>Public because the random seat writes its own (FR-022d): when its
-     * draw succeeds the AI's evaluation never runs, so the hook that would
-     * have written this never fires, and the seat reports the candidates it
-     * drew from through the same door. Sampled at {@code --playability-rate}
-     * and de-duplicated here, so both callers get the same treatment.
-     *
-     * <p>The sampler draw comes first, so a candidate the sampler drops costs
-     * no rules check, and the candidate is read the moment it is sampled in.
-     *
-     * @param decider the candidate's controller, written as {@code actor_player}
-     */
-    public void recordCandidate(
-            Player decider, SpellAbility candidate, Supplier<PlayabilityVerdict> verdictOf) {
-        if (sampler.nextDouble() > playabilityRate) {
-            return;
-        }
-        Optional<DecisionCandidate> read = DecisionCandidate.read(candidate, verdictOf);
-        if (read.isEmpty()) {
-            return;
-        }
+    void recordDecision(Player decider, SpellAbility candidate, DecisionCandidate read) {
         // The candidate goes into the snapshot: without it refs.source is
         // null on every playability record, and a decision record would not
         // say which card the candidate is even on except through its key.
         String state = live.snapshots().ofAbility(
                 candidate,
-                candidate == null || candidate.getHostCard() == null
+                candidate.getHostCard() == null
                         ? List.of() : List.of(candidate.getHostCard())).render();
-        // Deduplicated because the AI re-asks the same question about the
-        // same board, and the answer repeats verbatim. The record names no
-        // acting line of its own; the candidate's key is in the payload, so
-        // two candidates on one host stay two records.
+        // Deduplicated because the same candidate at the next stop on an
+        // unchanged board answers the same question the same way. The record
+        // names no acting line of its own; the candidate's key is in the
+        // payload, so two candidates on one host stay two records.
         context.emitDistinct(context.newPlayability(PlayabilitySubkind.DECISION)
                 .actor(live.playerIdOrActive(decider))
                 .state(state)
-                .payload(read.get().payloadJson()), dedup);
+                .payload(read.payloadJson()), dedup);
     }
 
     // ── the legality subkinds ───────────────────────────────────────────
@@ -161,7 +106,9 @@ public final class PlayabilityChannel {
      * same way, and two records that would be byte-identical carry one
      * observation once.
      *
-     * <p>Package-private for the reason {@link #decisionHandler()} is.
+     * <p>Package-private: the argument order has no compiler behind it, so
+     * this hook's own game-identity test calls it with a synthesized argument
+     * array.
      */
     PatchHooks.Listener legalityHandler() {
         return PatchHooks.COMBAT_LISTENER.listener((callback, args) -> {

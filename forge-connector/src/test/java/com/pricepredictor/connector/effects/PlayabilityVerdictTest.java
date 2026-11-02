@@ -10,23 +10,28 @@ import forge.game.card.CounterEnumType;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
+import forge.game.staticability.StaticAbility;
+import forge.game.staticability.StaticAbilityMode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The rules' verdict on a candidate, on boards where the AI's answer and the
- * rules' answer disagree — the only boards where a test can tell them apart.
+ * rules' answer disagree — the only boards where a test can tell them apart —
+ * and the checks it names as failed (FR-031, FR-032).
  */
 @ExtendWith(ForgeExtension.class)
 class PlayabilityVerdictTest {
 
     private static SpellAbility abilityOn(Card host, String script) {
-        SpellAbility ability = AbilityFactory.getAbility(script, host);
-        ability.setActivatingPlayer(host.getController());
-        return ability;
+        return AbilityFactory.getAbility(script, host);
     }
 
     /** No target has been chosen, which is what the AI leaves when it stops early; the rules still offer one. */
@@ -38,7 +43,7 @@ class PlayabilityVerdictTest {
         SpellAbility pump = abilityOn(bears, "AB$ Pump | Cost$ 0 | ValidTgts$ Creature | NumAtt$ +1");
 
         assertTrue(pump.getTargets().isEmpty(), "the board under test has no chosen target");
-        assertTrue(PlayabilityVerdict.of(pump).hasLegalTarget());
+        assertTrue(PlayabilityVerdict.of(pump, a).hasLegalTarget());
     }
 
     /** And a target the rules do not offer is absent however the ability was left. */
@@ -49,15 +54,12 @@ class PlayabilityVerdictTest {
         Card bears = TestBoard.inPlay(game, a, "Grizzly Bears");
         SpellAbility destroy = abilityOn(bears, "AB$ Destroy | Cost$ 0 | ValidTgts$ Artifact");
 
-        assertFalse(PlayabilityVerdict.of(destroy).hasLegalTarget());
+        assertFalse(PlayabilityVerdict.of(destroy, a).hasLegalTarget());
     }
 
     /** Fiery Intervention: 5 damage to target creature, or destroy target artifact. */
     private static SpellAbility fieryIntervention(Game game, Player owner) {
-        Card card = TestBoard.inHand(game, owner, "Fiery Intervention");
-        SpellAbility charm = card.getFirstSpellAbility();
-        charm.setActivatingPlayer(owner);
-        return charm;
+        return TestBoard.inHand(game, owner, "Fiery Intervention").getFirstSpellAbility();
     }
 
     /** One choosable mode is all a choose-one charm asks for, and none is too few. */
@@ -67,10 +69,10 @@ class PlayabilityVerdictTest {
         Player a = game.getPlayers().get(0);
         SpellAbility charm = fieryIntervention(game, a);
 
-        assertFalse(PlayabilityVerdict.of(charm).hasLegalTarget(),
+        assertFalse(PlayabilityVerdict.of(charm, a).hasLegalTarget(),
                 "no creature and no artifact: neither mode can be chosen");
         TestBoard.inPlay(game, a, "Grizzly Bears");
-        assertTrue(PlayabilityVerdict.of(charm).hasLegalTarget(),
+        assertTrue(PlayabilityVerdict.of(charm, a).hasLegalTarget(),
                 "a creature makes the damage mode choosable");
     }
 
@@ -87,7 +89,7 @@ class PlayabilityVerdictTest {
         charm.setSubAbility(charm.getAdditionalAbilityList("Choices").stream()
                 .filter(mode -> mode.getApi() == ApiType.Destroy).findFirst().orElseThrow());
 
-        assertTrue(PlayabilityVerdict.of(charm).hasLegalTarget());
+        assertTrue(PlayabilityVerdict.of(charm, a).hasLegalTarget());
     }
 
     /**
@@ -109,16 +111,221 @@ class PlayabilityVerdictTest {
 
         assertFalse(ComputerUtilCost.canPayCost(minusOne, a, false),
                 "the board under test is one the AI's own check refuses");
-        assertTrue(PlayabilityVerdict.of(minusOne).affordable());
+        assertTrue(PlayabilityVerdict.of(minusOne, a).affordable());
+    }
+
+    /**
+     * The verdict is for the player it names, and leaves the candidate as it
+     * found it: a candidate with no activating player still has none.
+     */
+    @Test
+    void aVerdictIsForThePlayerItNamesAndLeavesTheActivatorAsItWas() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player b = game.getPlayers().get(1);
+        SpellAbility pump = abilityOn(TestBoard.inPlay(game, b, "Grizzly Bears"),
+                "AB$ Pump | Cost$ 0 | NumAtt$ +1");
+
+        assertTrue(PlayabilityVerdict.of(pump, b).canPlay(),
+                "an instant-speed ability of the player whose turn it is not");
+        assertNull(pump.getActivatingPlayer());
+    }
+
+    // ── timing and failed checks ────────────────────────────────────────
+
+    private static List<PlayabilityCheck> checks(PlayabilityVerdict verdict) {
+        return verdict.failedChecks().stream().map(PlayabilityVerdict.FailedCheck::check).toList();
+    }
+
+    /**
+     * Acceptance 8 on one candidate: a sorcery in the hand of the player
+     * whose turn it is not fails timing, and timing alone.
+     */
+    @Test
+    void aSorceryOnTheOpponentsTurnFailsCastingSpeed() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player b = game.getPlayers().get(1);
+        TestBoard.inPlay(game, b, "Island");
+        TestBoard.inPlay(game, b, "Island");
+        TestBoard.inPlay(game, b, "Island");
+        SpellAbility divination = TestBoard.inHand(game, b, "Divination").getFirstSpellAbility();
+
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(divination, b);
+
+        assertFalse(verdict.timing());
+        assertFalse(verdict.canPlay());
+        assertTrue(verdict.affordable(), "the islands pay for it; only timing is wrong");
+        assertEquals(List.of(PlayabilityCheck.CASTING_SPEED), checks(verdict));
     }
 
     @Test
-    void aCandidateWithNoActivatingPlayerGetsNoVerdict() {
+    void aSorceryInItsOwnersMainPhaseFailsNothing() {
         Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
-        Card bears = TestBoard.inPlay(game, game.getPlayers().get(0), "Grizzly Bears");
-        SpellAbility pump = AbilityFactory.getAbility("AB$ Pump | Cost$ 0 | NumAtt$ +1", bears);
+        Player a = game.getPlayers().get(0);
+        TestBoard.inPlay(game, a, "Island");
+        TestBoard.inPlay(game, a, "Island");
+        TestBoard.inPlay(game, a, "Island");
+        SpellAbility divination = TestBoard.inHand(game, a, "Divination").getFirstSpellAbility();
 
-        assertFalse(PlayabilityVerdict.of(pump).canPlay());
-        assertFalse(PlayabilityVerdict.of(null).affordable());
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(divination, a);
+
+        assertTrue(verdict.timing());
+        assertTrue(verdict.canPlay());
+        assertEquals(List.of(), verdict.failedChecks());
+    }
+
+    /** A split-second spell on the stack stops an instant, whose timing is fine. */
+    @Test
+    void aSplitSecondSpellOnTheStackFailsSplitSecond() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Player b = game.getPlayers().get(1);
+        TestBoard.inPlay(game, b, "Mountain");
+        SpellAbility bolt = TestBoard.inHand(game, b, "Lightning Bolt").getFirstSpellAbility();
+        TestBoard.cast(game, TestBoard.inHand(game, a, "Sudden Shock"), a, b);
+        assertTrue(game.getStack().isSplitSecondOnStack(), "the board under test");
+
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(bolt, b);
+
+        assertTrue(verdict.timing(), "an instant");
+        assertFalse(verdict.canPlay());
+        assertEquals(List.of(PlayabilityCheck.SPLIT_SECOND), checks(verdict));
+    }
+
+    private static StaticAbility staticOf(Card card, StaticAbilityMode mode) {
+        return card.getStaticAbilities().stream()
+                .filter(st -> st.checkMode(mode)).findFirst().orElseThrow();
+    }
+
+    /**
+     * Grand Abolisher forbids the opponent's instant on its controller's turn:
+     * Forge's {@code canPlay} allows it, the static does not, and the check
+     * names the static.
+     */
+    @Test
+    void aStaticProhibitionNamesItsStatic() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Player b = game.getPlayers().get(1);
+        Card abolisher = TestBoard.inPlay(game, a, "Grand Abolisher");
+        TestBoard.inPlay(game, b, "Mountain");
+        SpellAbility bolt = TestBoard.inHand(game, b, "Lightning Bolt").getFirstSpellAbility();
+        ProvenanceKey cantBeCast = ProvenanceResolver.of(staticOf(abolisher, StaticAbilityMode.CantBeCast));
+
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(bolt, b);
+
+        assertTrue(verdict.timing());
+        assertFalse(verdict.canPlay());
+        assertEquals(List.of(new PlayabilityVerdict.FailedCheck(
+                PlayabilityCheck.STATIC_PROHIBITION, cantBeCast)), verdict.failedChecks());
+        assertEquals(cantBeCast, verdict.prohibitingStatic());
+    }
+
+    /** Its other static stops an opponent's creature ability the same way. */
+    @Test
+    void anActivationProhibitionNamesItsStatic() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Player b = game.getPlayers().get(1);
+        Card abolisher = TestBoard.inPlay(game, a, "Grand Abolisher");
+        SpellAbility pump = abilityOn(TestBoard.inPlay(game, b, "Grizzly Bears"),
+                "AB$ Pump | Cost$ 0 | NumAtt$ +1");
+
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(pump, b);
+
+        assertFalse(verdict.canPlay());
+        assertEquals(ProvenanceResolver.of(staticOf(abolisher, StaticAbilityMode.CantBeActivated)),
+                verdict.prohibitingStatic());
+    }
+
+    /**
+     * A legendary sorcery with no legendary permanent fails a check Forge
+     * evaluates among a dozen others and does not name.
+     */
+    @Test
+    void aBundledRestrictionReportsScriptRestriction() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        SpellAbility blast = TestBoard.inHand(game, a, "Urza's Ruinous Blast").getFirstSpellAbility();
+
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(blast, a);
+
+        assertFalse(verdict.canPlay());
+        assertTrue(verdict.failed(PlayabilityCheck.SCRIPT_RESTRICTION), verdict.toString());
+        assertFalse(verdict.failed(PlayabilityCheck.SCRIPT_CONDITION), verdict.toString());
+    }
+
+    /** {@code Activation$ Threshold} is the script's own condition on the board. */
+    @Test
+    void anUnmetActivationConditionReportsScriptCondition() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        SpellAbility threshold = abilityOn(TestBoard.inPlay(game, a, "Grizzly Bears"),
+                "AB$ Pump | Cost$ 0 | Activation$ Threshold | NumAtt$ +1");
+
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(threshold, a);
+
+        assertFalse(verdict.canPlay());
+        assertEquals(List.of(PlayabilityCheck.SCRIPT_CONDITION), checks(verdict));
+    }
+
+    @Test
+    void aSpentActivationLimitReportsActivationLimit() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Card bears = TestBoard.inPlay(game, a, "Grizzly Bears");
+        SpellAbility once = abilityOn(bears, "AB$ Pump | Cost$ 0 | ActivationLimit$ 1 | NumAtt$ +1");
+        bears.addAbilityActivated(once);
+
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(once, a);
+
+        assertFalse(verdict.canPlay());
+        assertEquals(List.of(PlayabilityCheck.ACTIVATION_LIMIT), checks(verdict));
+    }
+
+    /** A loyalty ability after one this turn: a limit Forge checks among its other restrictions. */
+    @Test
+    void aSecondLoyaltyAbilityReportsActivationLimit() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Card jace = TestBoard.inPlay(game, a, "Jace Beleren");
+        jace.setCounters(CounterEnumType.LOYALTY, 3);
+        jace.addPlaneswalkerAbilityActivated();
+        SpellAbility loyalty = jace.getSpellAbilities().stream()
+                .filter(SpellAbility::isPwAbility).findFirst().orElseThrow();
+
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(loyalty, a);
+
+        assertFalse(verdict.canPlay());
+        assertEquals(List.of(PlayabilityCheck.ACTIVATION_LIMIT), checks(verdict));
+    }
+
+    /** An ability whose mana its player lacks fails the cost check and nothing else. */
+    @Test
+    void anUnaffordableAbilityReportsCost() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        SpellAbility pump = abilityOn(TestBoard.inPlay(game, a, "Grizzly Bears"),
+                "AB$ Pump | Cost$ 5 | NumAtt$ +1");
+
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(pump, a);
+
+        assertTrue(verdict.canPlay(), "cost is its own bit, not part of can_play");
+        assertFalse(verdict.affordable());
+        assertEquals(List.of(PlayabilityCheck.COST), checks(verdict));
+    }
+
+    /** Prey Upon targets a creature on each side: the record lists both. */
+    @Test
+    void aSpellWithTwoTargetingClausesListsTheirUnion() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Player b = game.getPlayers().get(1);
+        Card mine = TestBoard.inPlay(game, a, "Grizzly Bears");
+        Card theirs = TestBoard.inPlay(game, b, "Hill Giant");
+        SpellAbility preyUpon = TestBoard.inHand(game, a, "Prey Upon").getFirstSpellAbility();
+
+        DecisionCandidate read = DecisionCandidate.read(preyUpon, a).orElseThrow();
+
+        assertEquals(List.of(Refs.of(mine), Refs.of(theirs)), read.legalTargets());
     }
 }

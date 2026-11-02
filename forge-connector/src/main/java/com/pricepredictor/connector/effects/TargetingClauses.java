@@ -6,7 +6,9 @@ import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The targeting clauses of a spell ability, and whether each can reach its
@@ -54,6 +56,39 @@ public final class TargetingClauses {
             return List.of();
         }
         return clause.getTargetRestrictions().getAllCandidates(clause);
+    }
+
+    /**
+     * What the rules let any clause the ability offers target, each entity
+     * once, in the order the clauses first name them: the union a decision
+     * record's {@code legal_targets} lists (FR-031).
+     */
+    public static List<GameEntity> legalTargets(SpellAbility ability) {
+        Set<GameEntity> union = new LinkedHashSet<>();
+        for (SpellAbility clause : offered(ability)) {
+            union.addAll(candidatesOf(clause));
+        }
+        return new ArrayList<>(union);
+    }
+
+    /**
+     * Every clause the rules offer: the root chain up to a charm, then each
+     * of the charm's offered modes with its own chain.
+     */
+    static List<SpellAbility> offered(SpellAbility ability) {
+        List<SpellAbility> clauses = new ArrayList<>();
+        for (SpellAbility clause = ability; clause != null; clause = clause.getSubAbility()) {
+            clauses.add(clause);
+            if (clause.getApi() == ApiType.Charm) {
+                for (AbilitySub mode : clause.getAdditionalAbilityList("Choices")) {
+                    for (SpellAbility link = mode; link != null; link = link.getSubAbility()) {
+                        clauses.add(link);
+                    }
+                }
+                break;
+            }
+        }
+        return clauses;
     }
 
     /** Whether one clause is untargeted or has as many candidates as its minimum. */

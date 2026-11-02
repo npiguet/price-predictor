@@ -1,7 +1,6 @@
 package com.pricepredictor.connector;
 
-import com.pricepredictor.connector.effects.PlayabilityChannel;
-import com.pricepredictor.connector.effects.PlayabilityVerdict;
+import com.pricepredictor.connector.effects.PriorityCandidates;
 import com.pricepredictor.connector.effects.RandomChoices;
 import com.pricepredictor.connector.effects.TargetingClauses;
 import forge.LobbyPlayer;
@@ -55,13 +54,14 @@ import java.util.function.BooleanSupplier;
  * this seat is never attached, so every override there defers to
  * {@code super}.
  *
- * <p>When a draw succeeds the AI's decision code does not run, so the hook
- * that would have written the {@code decision} records never fires; the seat
- * writes them itself through {@link PlayabilityChannel}'s public emitter, from
- * the candidates it drew from (FR-022d). The {@code attackers} and
- * {@code blockers} records need no such help: the engine reports combat
- * legality from the turn-based declaration itself, before any controller
- * declares, so the seat's declarations are recorded like every other.
+ * <p>The seat writes no record of its own. The {@code decision} records come
+ * from {@link PriorityCandidates}, which enumerates both seats' candidates at
+ * every priority stop, and the seat draws its plays from that same stop, by
+ * the verdicts its records carry, so the two never disagree on
+ * {@code can_play} (FR-033, FR-040). The {@code attackers} and
+ * {@code blockers} records come from the engine's turn-based declaration
+ * itself, before any controller declares, so the seat's declarations are
+ * recorded like every other.
  */
 public final class RandomSeatController extends PlayerControllerAi {
 
@@ -71,8 +71,8 @@ public final class RandomSeatController extends PlayerControllerAi {
 
     /** The game this seat plays for real, or null for a fork's clone. */
     private Game liveGame;
-    /** Where the seat's own records go, or null when the run collects none. */
-    private PlayabilityChannel decisions;
+    /** The game's priority stops, or null when the run collects no records. */
+    private PriorityCandidates candidates;
 
     /** The play decision's draw, carried from one engine call to the next. */
     private final RandomPlayDraw playDraw;
@@ -88,19 +88,19 @@ public final class RandomSeatController extends PlayerControllerAi {
     }
 
     /**
-     * Make this seat live for {@code game}, writing its own records to
-     * {@code decisions}.
+     * Make this seat live for {@code game}, drawing its plays from
+     * {@code candidates}.
      *
      * <p>Called by {@link GamePlayer} after {@code match.createGame()}, which
      * is the first moment both exist. A controller never attached — the one
      * a fork clones — stays an ordinary AI.
      *
-     * @param decisions null when the run writes no effect records; the seat
-     *                  still plays at random, it just reports nothing
+     * @param candidates null when the run writes no effect records; the seat
+     *                   still plays at random, enumerating its own candidates
      */
-    public void attach(Game game, PlayabilityChannel decisions) {
+    public void attach(Game game, PriorityCandidates candidates) {
         this.liveGame = game;
-        this.decisions = decisions;
+        this.candidates = candidates;
     }
 
     /** Whether this controller is the live seat rather than a fork's copy. */
@@ -241,36 +241,25 @@ public final class RandomSeatController extends PlayerControllerAi {
     }
 
     /**
-     * What the rules let this seat play now: the {@link PlayabilityVerdict}
-     * plus timing over everything but lands and mana abilities (FR-022a),
-     * each candidate reported as a {@code decision} record through the hook's
-     * own emitter (FR-022d), with the verdict the AI seat's records carry.
+     * What the rules let this seat play now (FR-022a): the candidates of this
+     * priority stop whose {@link com.pricepredictor.connector.effects.PlayabilityVerdict}
+     * says they can be played, paid for and aimed — the stop the decision
+     * records were written of when the run records, so the seat plays only
+     * what its records call playable.
      */
     private List<SpellAbility> playableCandidates() {
-        Game game = player.getGame();
-        List<SpellAbility> all = ComputerUtilAbility.getSpellAbilities(
-                ComputerUtilAbility.getAvailableCards(game, player), player);
+        List<PriorityCandidates.Candidate> stop = candidates == null
+                ? PriorityCandidates.candidatesOf(player.getGame(), player)
+                : candidates.takeFor(player);
         List<SpellAbility> playable = new ArrayList<>();
-        for (SpellAbility sa : all) {
-            if (sa.isLandAbility() || sa.isManaAbility()) {
-                continue;
-            }
-            PlayabilityVerdict verdict;
-            boolean timing;
-            try {
-                sa.setActivatingPlayer(player);
-                verdict = PlayabilityVerdict.of(sa);
-                timing = sa.canCastTiming(player);
-            } catch (RuntimeException e) {
-                // A script whose restriction throws on this board is one the
-                // AI would have skipped the same way; it is not playable.
-                continue;
-            }
-            if (decisions != null) {
-                decisions.recordCandidate(player, sa, () -> verdict);
-            }
-            if (verdict.canPlay() && timing && verdict.affordable() && verdict.hasLegalTarget()) {
-                playable.add(sa);
+        for (PriorityCandidates.Candidate candidate : stop) {
+            // A script whose check throws on this board reads as unplayable,
+            // as the AI would have skipped it.
+            if (candidate.playable()) {
+                // The verdict put the ability's activating player back; the
+                // seat is about to play it, which is the seat's to write.
+                candidate.ability().setActivatingPlayer(player);
+                playable.add(candidate.ability());
             }
         }
         return playable;

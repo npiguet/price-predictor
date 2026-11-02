@@ -49,11 +49,6 @@ final class HookShapes {
         void onConditionEvaluated(Trigger trigger, Map<AbilityKey, Object> runParams, boolean fired);
     }
 
-    /** {@code AiController.EffectRecordPlayabilityListener}. */
-    interface Playability {
-        void onCandidate(SpellAbility candidate);
-    }
-
     /** {@code CombatLegalityObserver.EffectRecordCombatListener}. */
     interface CombatLegality {
         void onAttackersDeclarable(Player decider, GameEntity defender,
@@ -124,7 +119,6 @@ final class HookShapes {
                 new Declared(PatchHooks.CLAUSE_LISTENER, Clause.class, List.of()),
                 new Declared(PatchHooks.OUTCOME_LISTENER, Outcome.class, List.of()),
                 new Declared(PatchHooks.TRIGGER_LISTENER, TriggerFire.class, List.of()),
-                new Declared(PatchHooks.PLAYABILITY_LISTENER, Playability.class, List.of()),
                 new Declared(PatchHooks.COMBAT_LISTENER, CombatLegality.class, List.of()),
                 new Declared(PatchHooks.MANA_LISTENER, Mana.class, List.of()),
                 new Declared(PatchHooks.REPLACEMENT_LISTENER, Replacement.class,

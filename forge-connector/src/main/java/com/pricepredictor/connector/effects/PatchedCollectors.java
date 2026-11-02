@@ -11,13 +11,13 @@ import java.util.List;
  * <p>{@code rewrite}, {@code trigger}, {@code playability} and {@code mana}
  * records all need a hook at a point the bus never publishes: what a replacement
  * received before it rewrote it, a trigger condition that evaluated to false, a
- * legality verdict the rules computed and discarded, a mana ability that resolved
- * on the inline path. Each is installed reflectively and simply does not run on
+ * combat legality verdict the rules computed and discarded, the moment priority
+ * settles, a mana ability that resolved on the inline path. Each is installed reflectively and simply does not run on
  * an unpatched checkout. {@code continuous} records need the patch's layer
  * accessors rather than a hook, and are collected at each phase boundary.
- * The state-based-loop and priority-settled hooks write no record of their
- * own: {@link PhaseSignals} tells the game's collectors where each loop runs
- * and when priority settles.
+ * The state-based-loop hook writes no record of its own: {@link PhaseSignals}
+ * tells the game's collectors where each loop runs, and when priority settles,
+ * which is when {@link PriorityCandidates} writes the decision records.
  *
  * <p>The one owner of a game's listener hooks, the bracket's confirm listener
  * included: they are JVM statics with no game of their own, and installing
@@ -81,7 +81,6 @@ final class PatchedCollectors implements AutoCloseable {
         this.patchedOnly = List.of(
                 channels.rewrites().handler(),
                 channels.triggers().handler(),
-                channels.playability().decisionHandler(),
                 channels.mana().handler(),
                 channels.playability().legalityHandler(),
                 channels.clauses().clauseHandler(),
@@ -90,9 +89,14 @@ final class PatchedCollectors implements AutoCloseable {
                 channels.phase().prioritySettledHandler());
     }
 
-    /** The decision and legality channel, which the random seat also writes through. */
+    /** The decision and legality channel. */
     PlayabilityChannel playability() {
         return channels.playability();
+    }
+
+    /** The priority stops' candidates, which the random seat draws from. */
+    PriorityCandidates priorityCandidates() {
+        return channels.candidates();
     }
 
     /** The continuous channel, collected at each phase boundary rather than on a hook. */

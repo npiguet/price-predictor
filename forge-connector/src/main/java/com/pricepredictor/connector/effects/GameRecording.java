@@ -157,9 +157,12 @@ public final class GameRecording implements AutoCloseable {
         }
     }
 
-    /** Where the random seat writes the decisions its own draws made (FR-022d). */
-    public PlayabilityChannel playability() {
-        return patched.playability();
+    /**
+     * The priority stops' candidates, which the random seat draws from, so
+     * its plays and its decision records agree (FR-033, FR-040).
+     */
+    public PriorityCandidates priorityCandidates() {
+        return patched.priorityCandidates();
     }
 
     /**

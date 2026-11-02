@@ -33,7 +33,6 @@ public final class PatchHooks {
             "forge.game.replacement.ReplacementHandler";
     static final String ABILITY_UTILS = "forge.game.ability.AbilityUtils";
     static final String EFFECT_RECORD_OUTCOMES = "forge.game.ability.EffectRecordOutcomes";
-    static final String AI_CONTROLLER = "forge.ai.AiController";
     static final String COMBAT_LEGALITY_OBSERVER =
             "forge.game.combat.CombatLegalityObserver";
     static final String ABILITY_MANA_PART =
@@ -126,7 +125,6 @@ public final class PatchHooks {
     enum Callback {
         ON_REPLACEMENT("onReplacement", 3),
         ON_CONDITION_EVALUATED("onConditionEvaluated", 3),
-        ON_CANDIDATE("onCandidate", 1),
         ON_ATTACKERS_DECLARABLE("onAttackersDeclarable", 4),
         ON_BLOCKERS_DECLARABLE("onBlockersDeclarable", 5),
         ON_CLAUSE_RESOLVING("onClauseResolving", 1),
@@ -250,10 +248,6 @@ public final class PatchHooks {
             ABILITY_UTILS, "setEffectRecordClauseListener",
             "the events an effect API describes but the bus never announces",
             List.of(Callback.ON_CLAUSE_RESOLVING, Callback.ON_CLAUSE_RESOLVED));
-    static final Hook PLAYABILITY_LISTENER = new Hook(
-            AI_CONTROLLER, "setEffectRecordPlayabilityListener",
-            "playability records, the decision subkind",
-            List.of(Callback.ON_CANDIDATE));
     static final Hook COMBAT_LISTENER = new Hook(
             COMBAT_LEGALITY_OBSERVER, "setEffectRecordCombatListener",
             "the playability record's attackers and blockers subkinds",
@@ -336,7 +330,7 @@ public final class PatchHooks {
      */
     public static final List<Hook> REQUIRED = List.of(
             SUB_ABILITY, TRIGGER_LISTENER, REPLACEMENT_LISTENER, CLAUSE_LISTENER,
-            PLAYABILITY_LISTENER, COMBAT_LISTENER, CANT_ATTACK_STATIC,
+            COMBAT_LISTENER, CANT_ATTACK_STATIC,
             CANT_BLOCK_BY_STATIC, MANA_LISTENER, CHANGED_TYPES_BY_STATIC,
             CHANGED_COLORS_BY_STATIC, TYPE_WITHOUT, COLOR_WITHOUT, KEYWORDS_WITHOUT,
             CHANGED_NAMES, ASSIGNED_DAMAGE, CONFIRM_LISTENER, OUTCOME_LISTENER,

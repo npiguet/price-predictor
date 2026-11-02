@@ -261,6 +261,8 @@ class RecordCharacterizationTest {
     /**
      * The three subkinds: a {@code decision} with no {@code what_if}, and the
      * {@code attackers} and {@code blockers} legality records, which carry it.
+     * The decision is the one candidate written as a priority stop writes
+     * each it samples in; {@link PriorityCandidatesTest} covers the stop.
      * The defending player is the random seat, so the blockers record is the
      * one stamped {@code random_seat}.
      */
@@ -284,8 +286,8 @@ class RecordCharacterizationTest {
         List<String> records = ShardRun.records(
                 tempDir, board.game, CAPS, Refs.of(opponent),
                 (bracket, collectors) -> {
-            HookShapes.proxy(HookShapes.Playability.class, collectors.playability().decisionHandler())
-                    .onCandidate(bolt);
+            collectors.playability().recordDecision(
+                    you, bolt, DecisionCandidate.read(bolt, you).orElseThrow());
 
             HookShapes.CombatLegality listener = HookShapes.proxy(
                     HookShapes.CombatLegality.class, collectors.playability().legalityHandler());

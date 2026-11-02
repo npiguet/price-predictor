@@ -64,7 +64,9 @@ from effects.infrastructure.shard_io import (
     write_shard,
 )
 from tests.unit.effects.builders import (
+    GEN3_UNREAD_CANDIDATE_MEMBERS,
     GEN3_UNREAD_STATE_MEMBERS,
+    GEN3_UNREAD_VERDICT_MEMBERS,
     java_golden_records,
     make_record,
     without_unread_members,
@@ -799,6 +801,20 @@ class TestTheGen3EntityShape:
             assert list(written) == [
                 member for member in raw["state"] if member not in GEN3_UNREAD_STATE_MEMBERS]
             assert GEN3_UNREAD_STATE_MEMBERS <= raw["state"].keys()
+
+    def test_a_decision_candidate_writes_back_every_member_but_the_unread_ones(self):
+        decisions = [raw for raw in java_golden_records()
+                     if raw["kind"] == "playability" and raw["subkind"] == "decision"]
+        assert decisions
+        for raw in decisions:
+            written = record_to_dict(record_from_dict(raw))["payload"]["candidates"]
+            for collected, after in zip(raw["payload"]["candidates"], written, strict=True):
+                assert GEN3_UNREAD_CANDIDATE_MEMBERS <= collected.keys()
+                assert GEN3_UNREAD_VERDICT_MEMBERS <= collected["verdict"].keys()
+                assert list(after) == [
+                    m for m in collected if m not in GEN3_UNREAD_CANDIDATE_MEMBERS]
+                assert list(after["verdict"]) == [
+                    m for m in collected["verdict"] if m not in GEN3_UNREAD_VERDICT_MEMBERS]
 
     def test_a_golden_record_survives_a_write_and_a_read(self):
         for raw in java_golden_records():

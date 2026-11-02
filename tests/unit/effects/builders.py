@@ -95,6 +95,11 @@ GEN3_UNREAD_LINE_MEMBERS = frozenset({"affected"})
 #: The snapshot member the collector writes (T058) that the codec does not read
 #: yet: the links between the snapshot's objects, which T074 parses.
 GEN3_UNREAD_STATE_MEMBERS = frozenset({"links"})
+#: The decision-candidate members the collector writes (T061) that the codec
+#: does not read yet: the checks a candidate failed, and in its verdict the
+#: timing bit; T074 parses them.
+GEN3_UNREAD_CANDIDATE_MEMBERS = frozenset({"failed_checks"})
+GEN3_UNREAD_VERDICT_MEMBERS = frozenset({"timing"})
 
 
 def without_unread_members(entity: dict) -> dict:

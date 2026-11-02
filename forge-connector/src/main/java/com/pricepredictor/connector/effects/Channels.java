@@ -22,6 +22,7 @@ record Channels(
         RewriteChannel rewrites,
         TriggerChannel triggers,
         PlayabilityChannel playability,
+        PriorityCandidates candidates,
         ManaChannel mana,
         ClauseOutcomeRouter clauses,
         ContinuousChannel continuous,
@@ -30,7 +31,8 @@ record Channels(
     /**
      * @param seed    seeds the game's sampling stream
      * @param bracket where the clause and outcome hooks file their events,
-     *                and the state-based loop's signals go
+     *                and the state-based loop's signals go; the
+     *                priority-settled signal goes to the candidates
      */
     static Channels of(
             Game game, CollectorContext context, CollectionCaps caps, long seed,
@@ -38,14 +40,18 @@ record Channels(
         LiveGame live = new LiveGame(game);
         RecordDedup dedup = new RecordDedup();
         Random sampler = new Random(GameRecording.scramble(seed));
+        PlayabilityChannel playability =
+                new PlayabilityChannel(live, context, dedup, sampler, caps.playabilityRate());
+        PriorityCandidates candidates = new PriorityCandidates(live, playability);
         return new Channels(
                 new RewriteChannel(live, context, dedup),
                 new TriggerChannel(live, context, dedup, new TriggerNegativeSampler(sampler)),
-                new PlayabilityChannel(live, context, dedup, sampler, caps.playabilityRate()),
+                playability,
+                candidates,
                 new ManaChannel(live, context, new ManaReservoir(caps.manaCap(), sampler)),
                 new ClauseOutcomeRouter(live, bracket),
                 new ContinuousChannel(live, context, dedup),
-                new PhaseSignals(live, bracket.phaseSink()));
+                new PhaseSignals(live, PhaseSignals.Sink.both(bracket.phaseSink(), candidates.sink())));
     }
 
     @Override

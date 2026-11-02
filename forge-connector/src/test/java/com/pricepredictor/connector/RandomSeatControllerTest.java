@@ -227,6 +227,29 @@ class RandomSeatControllerTest {
     }
 
     /**
+     * The seat draws by the verdict its decision records carry (FR-033,
+     * FR-040): an instant a static forbids is no candidate, though Forge's
+     * own {@code canPlay} and timing allow it.
+     */
+    @Test
+    void aSpellAStaticForbidsIsNotACandidate() {
+        Game game = gameWithRandomSeatA(PhaseType.MAIN1, 1.0, 1L);
+        Player a = game.getPlayers().get(0);
+        Player b = game.getPlayers().get(1);
+        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, b);
+        TestBoard.inPlay(game, b, "Grand Abolisher");
+        TestBoard.inPlay(game, a, "Mountain");
+        SpellAbility bolt = TestBoard.inHand(game, a, "Lightning Bolt").getFirstSpellAbility();
+        RandomSeatController seat = seatOf(game);
+        seat.attach(game, null);
+
+        bolt.setActivatingPlayer(a);
+        assertTrue(bolt.canPlay() && bolt.canCastTiming(a), "the board under test");
+        assertNull(seat.chooseSpellAbilityToPlay(),
+                "Grand Abolisher forbids it on its controller's turn: nothing to draw, pass");
+    }
+
+    /**
      * Scenario 15: a randomly drawn charm's modes are drawn, not the AI's —
      * Fiery Confluence chooses three with repeats, and across seeds the
      * chosen lists differ, repeats included.
@@ -323,7 +346,7 @@ class RandomSeatControllerTest {
         try (GameRecording recording = new GameRecording(
                 game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L,
                 Refs.of(a))) {
-            seat.attach(game, recording.playability());
+            seat.attach(game, recording.priorityCandidates());
             for (int draw = 0; draw < draws; draw++) {
                 Combat combat = new Combat(a);
                 game.getPhaseHandler().setCombat(combat);
@@ -373,7 +396,7 @@ class RandomSeatControllerTest {
         try (GameRecording recording = new GameRecording(
                 game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L,
                 Refs.of(a))) {
-            seat.attach(game, recording.playability());
+            seat.attach(game, recording.priorityCandidates());
             for (int draw = 0; draw < 100; draw++) {
                 Combat combat = new Combat(b);
                 combat.addAttacker(attacker, a);

@@ -34,7 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The channels have tests of their own: {@link TriggerRecordTest},
  * {@link RewriteContractTest}, {@link OutcomeHandlerTest},
- * {@link PlayabilityChannelTest} and {@link ContinuousChannelTest}.
+ * {@link PlayabilityChannelTest}, {@link PriorityCandidatesTest} (which game a
+ * priority stop's decision records come from) and {@link ContinuousChannelTest}.
  */
 @ExtendWith(ForgeExtension.class)
 class PatchedCollectorTest {
@@ -44,8 +45,6 @@ class PatchedCollectorTest {
 
     private static final Method ON_CONDITION_EVALUATED =
             HookShapes.method(HookShapes.TriggerFire.class, "onConditionEvaluated");
-    private static final Method ON_CANDIDATE =
-            HookShapes.method(HookShapes.Playability.class, "onCandidate");
     private static final Method ON_ATTACKERS_DECLARABLE =
             HookShapes.method(HookShapes.CombatLegality.class, "onAttackersDeclarable");
     private static final Method ON_MANA_PRODUCED =
@@ -102,7 +101,7 @@ class PatchedCollectorTest {
         }
     }
 
-    // ── the other four handlers ─────────────────────────────────────────
+    // ── the other three handlers ────────────────────────────────────────
 
     /**
      * {@code TriggerChannel.handler} checks the game too. A fork's own trigger evaluations
@@ -120,26 +119,6 @@ class PatchedCollectorTest {
 
         assertFalse(Files.exists(shard),
                 "a fork's own trigger evaluation must not land in the live shard");
-    }
-
-    /**
-     * {@code PlayabilityChannel.decisionHandler} checks the game too.
-     * {@code playabilityRate(1.0)} forces the rate to 1.0 so
-     * the sampling gate ahead of the game check cannot flakily hide it.
-     */
-    @Test
-    void aPlayabilityCandidateFromAnotherGameDoesNotReachTheShard() throws Throwable {
-        Card forkCard = TestBoard.cardInAnotherGame("Grizzly Bears");
-        SpellAbility forkCandidate = AbilityFactory.getAbility(
-                "AB$ Pump | Cost$ 1 | NumAtt$ +1 | NumDef$ +1", forkCard);
-
-        Path shard = ShardRun.shardOf(tempDir, TestCards.game(),
-                caps().manaCap(0).playabilityRate(1.0).build(),
-                (bracket, collectors) -> collectors.playability().decisionHandler()
-                        .invoke(null, ON_CANDIDATE, new Object[]{forkCandidate}));
-
-        assertFalse(Files.exists(shard),
-                "a fork's own playability candidate must not land in the live shard");
     }
 
     /**
@@ -205,23 +184,6 @@ class PatchedCollectorTest {
                         new Object[]{liveTrigger, Map.of(), true}));
         assertTrue(lines.stream().anyMatch(l -> l.contains("\"kind\":\"trigger\"")),
                 "a live trigger evaluation must reach the shard: " + lines);
-    }
-
-    @Test
-    void aLivePlayabilityCandidateReachesTheShard() throws Throwable {
-        Card liveCard = TestCards.build("Grizzly Bears");
-        SpellAbility liveCandidate = AbilityFactory.getAbility(
-                "AB$ Pump | Cost$ 1 | NumAtt$ +1 | NumDef$ +1", liveCard);
-
-        // playabilityRate forced to 1.0: at the default 0.1 this record would
-        // be sampled out at random roughly nine times in ten, and a flaky pass
-        // here is exactly as uninformative as a vacuous one.
-        List<String> lines = ShardRun.records(tempDir, TestCards.game(),
-                caps().manaCap(0).playabilityRate(1.0).build(),
-                (bracket, collectors) -> collectors.playability().decisionHandler()
-                        .invoke(null, ON_CANDIDATE, new Object[]{liveCandidate}));
-        assertTrue(lines.stream().anyMatch(l -> l.contains("\"kind\":\"playability\"")),
-                "a live playability candidate must reach the shard: " + lines);
     }
 
     @Test

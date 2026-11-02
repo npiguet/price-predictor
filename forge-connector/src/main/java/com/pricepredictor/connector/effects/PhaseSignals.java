@@ -29,6 +29,29 @@ final class PhaseSignals {
 
         default void prioritySettled(Player priorityPlayer) {
         }
+
+        /** Both sinks, {@code first} told of each signal before {@code second}. */
+        static Sink both(Sink first, Sink second) {
+            return new Sink() {
+                @Override
+                public void stateBasedLoopBegan() {
+                    first.stateBasedLoopBegan();
+                    second.stateBasedLoopBegan();
+                }
+
+                @Override
+                public void stateBasedLoopEnded() {
+                    first.stateBasedLoopEnded();
+                    second.stateBasedLoopEnded();
+                }
+
+                @Override
+                public void prioritySettled(Player priorityPlayer) {
+                    first.prioritySettled(priorityPlayer);
+                    second.prioritySettled(priorityPlayer);
+                }
+            };
+        }
     }
 
     private final LiveGame live;

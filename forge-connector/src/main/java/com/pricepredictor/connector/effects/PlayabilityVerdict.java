@@ -1,14 +1,22 @@
 package com.pricepredictor.connector.effects;
 
 import forge.ai.ComputerUtilMana;
+import forge.game.card.Card;
 import forge.game.cost.Cost;
 import forge.game.cost.CostPayment;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
+import forge.game.staticability.StaticAbility;
+
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
- * The rules' three answers about a candidate ability, and the one place they
- * are computed for both seats.
+ * The rules' answers about a candidate ability, and the one place they are
+ * computed for both seats (FR-030–032).
  *
  * <p>Every answer is the game's, never the AI's. Two engine calls look like
  * rules checks and are not: {@code ComputerUtilCost.canPayCost} refuses costs
@@ -20,27 +28,111 @@ import forge.game.spellability.SpellAbility;
  * affordability is the mana and additional-cost checks those two delegate to,
  * and target legality counts candidates rather than reading choices.
  *
- * <p>Read-only on the game, so observing a candidate cannot change the game
- * that evaluates it.
+ * <p>{@code canPlay} is the record's {@code can_play}: Forge's
+ * {@code canPlay}, its {@code canCastTiming} and no static forbidding the
+ * play, together. {@code failedChecks} says which checks failed, in
+ * {@link PlayabilityCheck}'s order.
+ *
+ * <p>Never writes to the game: the activating player and the host's cast
+ * ability, the two things a check sets, are put back after it
+ * ({@link #asActivator}).
+ *
+ * @param timing       Forge's {@code canCastTiming} for the activator
+ * @param failedChecks every check the candidate failed, once each
  */
-public record PlayabilityVerdict(boolean canPlay, boolean affordable, boolean hasLegalTarget) {
-
-    /** The verdict for a candidate nobody can be asked about. */
-    static final PlayabilityVerdict NONE = new PlayabilityVerdict(false, false, false);
+public record PlayabilityVerdict(
+        boolean canPlay, boolean affordable, boolean hasLegalTarget, boolean timing,
+        List<FailedCheck> failedChecks) {
 
     /**
-     * The verdict for {@code candidate} as its activating player stands now.
+     * One check a candidate failed.
      *
-     * <p>A candidate without an activating player has no one to pay for it or
-     * to target with it, and gets {@link #NONE}.
+     * @param responsibleStatic the static that decided the check, or null
+     *                          where the rules themselves did
      */
-    public static PlayabilityVerdict of(SpellAbility candidate) {
-        Player activator = candidate == null ? null : candidate.getActivatingPlayer();
-        if (activator == null) {
-            return NONE;
+    public record FailedCheck(PlayabilityCheck check, ProvenanceKey responsibleStatic) {
+    }
+
+    public PlayabilityVerdict {
+        failedChecks = List.copyOf(failedChecks);
+    }
+
+    /**
+     * The verdict for {@code candidate} played by {@code activator} as the
+     * board stands now, whoever holds priority.
+     */
+    public static PlayabilityVerdict of(SpellAbility candidate, Player activator) {
+        Objects.requireNonNull(activator, "a verdict is for a player");
+        return asActivator(candidate, activator, () -> evaluate(candidate, activator));
+    }
+
+    /**
+     * Run {@code body} with {@code activator} as the candidate's activating
+     * player, then put back every activating player and the host's cast
+     * ability as they were: the checks set the candidate's activating player,
+     * the mana check those of the mana abilities it counts on, and Forge's
+     * cast-prohibition check the host's cast ability.
+     */
+    public static <T> T asActivator(SpellAbility candidate, Player activator, Supplier<T> body) {
+        Map<SpellAbility, Player> activators = new IdentityHashMap<>();
+        activators.put(candidate, candidate.getActivatingPlayer());
+        for (Card card : activator.getGame().getCardsInGame()) {
+            for (SpellAbility ability : card.getSpellAbilities()) {
+                activators.putIfAbsent(ability, ability.getActivatingPlayer());
+            }
         }
+        Card host = candidate.getHostCard();
+        SpellAbility castBefore = host == null ? null : host.getCastSA();
+        candidate.setActivatingPlayer(activator);
+        try {
+            return body.get();
+        } finally {
+            activators.forEach((ability, before) -> {
+                if (ability.getActivatingPlayer() != before) {
+                    ability.setActivatingPlayer(before);
+                }
+            });
+            // The candidate last: an ability of its host may have trickled
+            // another player down to it.
+            candidate.setActivatingPlayer(activators.get(candidate));
+            if (host != null && host.getCastSA() != castBefore) {
+                host.setCastSA(castBefore);
+            }
+        }
+    }
+
+    private static PlayabilityVerdict evaluate(SpellAbility candidate, Player activator) {
+        boolean forgeCanPlay = candidate.canPlay();
+        boolean timing = candidate.canCastTiming(activator);
+        boolean affordable = affordable(candidate, activator);
+        StaticAbility prohibiting = PlayabilityChecks.prohibitingStatic(candidate, activator);
+        List<FailedCheck> failed = PlayabilityChecks.failed(
+                candidate, activator, forgeCanPlay, timing, affordable, prohibiting);
         return new PlayabilityVerdict(
-                candidate.canPlay(), affordable(candidate, activator), TargetingClauses.reachMinimum(candidate));
+                forgeCanPlay && timing && prohibiting == null, affordable,
+                TargetingClauses.reachMinimum(candidate), timing, failed);
+    }
+
+    /** Whether the candidate failed {@code check}. */
+    public boolean failed(PlayabilityCheck check) {
+        return failedChecks.stream().anyMatch(f -> f.check() == check);
+    }
+
+    /**
+     * The static forbidding the play, the candidate's own
+     * {@code responsible_static} (its gen-2 meaning), or null.
+     */
+    public ProvenanceKey prohibitingStatic() {
+        return failedChecks.stream()
+                .filter(f -> f.check() == PlayabilityCheck.STATIC_PROHIBITION)
+                .map(FailedCheck::responsibleStatic)
+                .filter(Objects::nonNull)
+                .findFirst().orElse(null);
+    }
+
+    /** Whether the rules let the activator play it now: what the random seat draws from. */
+    public boolean playable() {
+        return canPlay && affordable && hasLegalTarget;
     }
 
     /** Whether the player has the mana and the additional costs, ignoring every AI preference. */

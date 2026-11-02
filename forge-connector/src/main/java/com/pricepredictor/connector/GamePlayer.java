@@ -237,7 +237,7 @@ public class GamePlayer {
             // at random and reports nothing -- FR-026 keeps that combination
             // out of a run.
             seat.ifPresent(s -> s.attach(
-                    game, recording == null ? null : recording.playability()));
+                    game, recording == null ? null : recording.priorityCandidates()));
             match.startGame(game); // blocks until game is finished
         } finally {
             if (recording != null) {

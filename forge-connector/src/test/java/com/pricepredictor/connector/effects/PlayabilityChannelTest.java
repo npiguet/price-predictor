@@ -2,12 +2,10 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
-import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.combat.Combat;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
-import forge.game.spellability.SpellAbility;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -37,17 +35,17 @@ class PlayabilityChannelTest {
     @TempDir
     Path tempDir;
 
-    private static final Method ON_CANDIDATE =
-            HookShapes.method(HookShapes.Playability.class, "onCandidate");
+    private static final Method ON_PRIORITY_SETTLED =
+            HookShapes.method(HookShapes.PrioritySettled.class, "onPrioritySettled");
     private static final Method ON_ATTACKERS_DECLARABLE =
             HookShapes.method(HookShapes.CombatLegality.class, "onAttackersDeclarable");
     private static final Method ON_BLOCKERS_DECLARABLE =
             HookShapes.method(HookShapes.CombatLegality.class, "onBlockersDeclarable");
 
     /**
-     * A fork candidate rejected on identity must not have drawn from the
-     * shared {@code sampler} on its way to being rejected -- checking identity
-     * before the {@code caps.playabilityRate()} draw is what this pins.
+     * A fork's priority stop must not draw from the shared {@code sampler}
+     * on its way to being rejected -- checking the game before any candidate
+     * is sampled is what this pins.
      *
      * <p>Both collectors share one seed (1) and one {@code playabilityRate}
      * (0.5). The sampler is <em>not</em> {@code new Random(1L)}: it is
@@ -57,44 +55,45 @@ class PlayabilityChannelTest {
      * the conclusion holds either way, so do not reproduce the latter against
      * the real {@code sampler}.
      *
-     * <p>A solo live candidate draws only the first (0.9245 &gt; 0.5, sampled
-     * out). If the identity check ran <em>after</em> the draw, the fork
-     * candidate ahead of it would consume that first draw before being dropped
-     * on identity, and the live candidate behind it would draw the second
-     * (0.1142 &le; 0.5, sampled in) -- a live record appearing only because a fork candidate
-     * happened to precede it. Checked first, the fork candidate never reaches
-     * the sampler at all, and the live candidate's own draw -- and therefore
-     * its own outcome -- is identical whether or not the fork one ran ahead
-     * of it.
+     * <p>The live board offers one candidate, which draws only the first
+     * (0.9245 &gt; 0.5, sampled out). If a fork's stop ahead of it drew for
+     * the fork's candidate before being dropped, the live candidate behind it
+     * would draw the second (0.1142 &le; 0.5, sampled in) -- a live record
+     * appearing only because a fork's stop happened to precede it.
      */
     @Test
-    void aRejectedForkCandidateDoesNotShiftTheLiveSampleStream() throws Throwable {
-        Card liveCard = TestCards.build("Grizzly Bears");
-        SpellAbility liveCandidate = AbilityFactory.getAbility(
-                "AB$ Pump | Cost$ 1 | NumAtt$ +1 | NumDef$ +1", liveCard);
+    void aForkPriorityStopDoesNotShiftTheLiveSampleStream() throws Throwable {
         CollectionCaps halfRate = caps().playabilityRate(0.5).build();
+        Game live = oneCandidate(TestBoard.twoPlayerGame(PhaseType.MAIN1));
+        Player seat = live.getPlayers().get(0);
+        Game fork = oneCandidate(TestBoard.twoPlayerGame(PhaseType.MAIN1));
 
-        Path solo = ShardRun.shardOf(tempDir.resolve("solo"), TestCards.game(), halfRate,
-                (bracket, collectors) -> collectors.playability().decisionHandler().invoke(null, ON_CANDIDATE,
-                        new Object[]{liveCandidate}));
+        Path solo = ShardRun.shardOf(tempDir.resolve("solo"), live, halfRate,
+                (bracket, collectors) -> settle(collectors, live, seat));
         boolean soloAdmitted = admitsAPlayabilityRecord(solo);
 
-        Card forkCard = TestBoard.cardInAnotherGame("Grizzly Bears");
-        SpellAbility forkCandidate = AbilityFactory.getAbility(
-                "AB$ Pump | Cost$ 1 | NumAtt$ +1 | NumDef$ +1", forkCard);
-        Path paired = ShardRun.shardOf(tempDir.resolve("paired"), TestCards.game(), halfRate,
+        Path paired = ShardRun.shardOf(tempDir.resolve("paired"), live, halfRate,
                 (bracket, collectors) -> {
-                    collectors.playability().decisionHandler().invoke(null, ON_CANDIDATE,
-                            new Object[]{forkCandidate});
-                    collectors.playability().decisionHandler().invoke(null, ON_CANDIDATE,
-                            new Object[]{liveCandidate});
+                    settle(collectors, fork, fork.getPlayers().get(0));
+                    settle(collectors, live, seat);
                 });
         boolean pairedAdmitted = admitsAPlayabilityRecord(paired);
 
         assertEquals(soloAdmitted, pairedAdmitted,
-                "a rejected fork candidate ahead of it must not change whether the "
-                        + "live candidate behind it is sampled in: solo=" + soloAdmitted
+                "a fork's stop ahead of it must not change whether the live candidate "
+                        + "behind it is sampled in: solo=" + soloAdmitted
                         + " paired=" + pairedAdmitted);
+    }
+
+    /** A board whose first seat has one candidate, a creature spell in hand. */
+    private static Game oneCandidate(Game game) {
+        TestBoard.inHand(game, game.getPlayers().get(0), "Grizzly Bears");
+        return game;
+    }
+
+    private static void settle(Channels collectors, Game game, Player priority) throws Throwable {
+        collectors.phase().prioritySettledHandler().invoke(
+                null, ON_PRIORITY_SETTLED, new Object[]{game, priority});
     }
 
     /** Whether a run sampled a playability record in; one that sampled none wrote no shard. */
@@ -253,22 +252,19 @@ class PlayabilityChannelTest {
     }
 
     /**
-     * FR-030a's decision row: a candidate evaluated on the opponent's turn
-     * names the candidate's controller, not the active player.
+     * FR-030a's decision row: a candidate of the player without priority
+     * names that player, not the active one, and carries no {@code what_if}.
      */
     @Test
-    void aDecisionRecordNamesTheCandidatesController() throws Throwable {
+    void aDecisionRecordNamesTheCandidatesPlayer() throws Throwable {
         Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player active = game.getPlayers().get(0);
         Player other = game.getPlayers().get(1);
-        Card theirs = TestBoard.inPlay(game, other, "Grizzly Bears");
-        SpellAbility candidate = AbilityFactory.getAbility(
-                "AB$ Pump | Cost$ 1 | NumAtt$ +1 | NumDef$ +1", theirs);
-        candidate.setActivatingPlayer(other);
+        TestBoard.inHand(game, other, "Lightning Bolt");
 
-        List<String> lines = ShardRun.records(tempDir, game, caps().manaCap(0).playabilityRate(1.0).build(), (bracket, collectors) -> {
-            collectors.playability().decisionHandler().invoke(null, ON_CANDIDATE,
-                    new Object[]{candidate});
-        });
+        List<String> lines = ShardRun.records(tempDir, game,
+                caps().manaCap(0).playabilityRate(1.0).build(),
+                (bracket, collectors) -> settle(collectors, game, active));
 
         List<String> records = recordsOf(lines);
         assertEquals(1, records.size(), records.toString());
