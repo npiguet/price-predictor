@@ -13,6 +13,7 @@ import forge.util.FileSection;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,10 +83,42 @@ public final class ProvenanceResolver {
      * option is read off the clause before the climb, because the root knows
      * nothing of which clone is resolving. A mode {@link CharmModes} cannot
      * place keeps the root key.
+     *
+     * <p>A charm cast through an alternative-cost keyword — Flashback — keys
+     * its root to the keyword's line, which has no modes: the sidecar writes
+     * a mode's line only under the charm's own spell line (FR-039). So a mode
+     * of such a cast keys to the printed spell its cast copies, plus the
+     * option, when one printed spell is that charm. A saga chapter's mode,
+     * whose keyword line does carry modes, is a trigger's and stays keyed to
+     * its keyword.
      */
     public static Resolved resolve(CardTraitBase trait) {
         Resolved root = resolveRoot(trait);
-        return root.key() == null ? root : root.withOption(CharmModes.optionOf(trait));
+        Integer option = CharmModes.optionOf(trait);
+        if (root.key() == null || option == null) {
+            return root;
+        }
+        if (root.key().traitKind() == TraitKind.KEYWORD) {
+            ProvenanceKey printed = printedSpellOf(trait);
+            if (printed != null) {
+                return new Resolved(printed.withOption(option), null);
+            }
+        }
+        return root.withOption(option);
+    }
+
+    /**
+     * The printed spell line a keyword-cast spell copies, by its script
+     * parameters ({@link #indexLike}), or null when the trait is not inside a
+     * spell or no single printed spell matches.
+     */
+    private static ProvenanceKey printedSpellOf(CardTraitBase trait) {
+        if (!(trait instanceof SpellAbility clause)) return null;
+        SpellAbility root = clause.getRootAbility();
+        if (root == null || !root.isSpell() || root.getKeyword() == null) return null;
+        CardState state = root.getCardState();
+        if (state == null || state.getCard() == null || isScriptless(state.getCard())) return null;
+        return keyAt(state, TraitKind.SPELL, indexLike(state, root, TraitKind.SPELL));
     }
 
     private static Resolved resolveRoot(CardTraitBase trait) {
@@ -390,9 +423,26 @@ public final class ProvenanceResolver {
         Map<String, String> want = trait.getOriginalMapParams();
         if (want == null || want.isEmpty()) return Pass.PASS;
         String svar = soleSVarParsingTo(state, want);
-        if (svar == null) return Pass.PASS;
-        CardTraitBase line = soleLineNaming(state, svar);
-        return line == null ? Pass.PASS : keyed(keyFor(line));
+        // The SVar may itself be named only by another SVar: a Clone's
+        // AddAbilities$ names the granted ability's SVar from the copy
+        // ability's own SVar, which the replacement line names (Gigantoplasm,
+        // FR-039). Climbed one SVar at a time, each step refusing two
+        // candidates, until a line names one.
+        Set<String> climbed = new HashSet<>();
+        for (int hop = 0; svar != null && hop < MAX_HOPS && climbed.add(svar); hop++) {
+            List<CardTraitBase> naming = linesNaming(state, svar);
+            if (naming.size() == 1) return keyed(keyFor(naming.get(0)));
+            if (naming.size() > 1) return Pass.PASS;
+            svar = soleSVarNaming(state, svar);
+        }
+        return Pass.PASS;
+    }
+
+    /** The one other SVar of {@code state} whose text names {@code svar}, or null. */
+    private static String soleSVarNaming(CardState state, String svar) {
+        Map.Entry<String, String> hit = sole(state.getSVars().entrySet(), other ->
+                !other.getKey().equals(svar) && textNames(other.getValue(), svar));
+        return hit == null ? null : hit.getKey();
     }
 
     /** The one SVar of {@code state} whose text parses to {@code want}, or null. */
@@ -405,13 +455,15 @@ public final class ProvenanceResolver {
         return hit == null ? null : hit.getKey();
     }
 
-    /** The one printed line of {@code state} that names {@code svar}, or null. */
-    private static CardTraitBase soleLineNaming(CardState state, String svar) {
-        List<CardTraitBase> lines = new ArrayList<>();
+    /** The printed lines of {@code state} that name {@code svar}. */
+    private static List<CardTraitBase> linesNaming(CardState state, String svar) {
+        List<CardTraitBase> naming = new ArrayList<>();
         for (TraitKind kind : TraitKind.values()) {
-            kind.slice(state).forEach(lines::add);
+            kind.slice(state).forEach(line -> {
+                if (namesSVar(line, svar)) naming.add(line);
+            });
         }
-        return sole(lines, line -> namesSVar(line, svar));
+        return naming;
     }
 
     /**
@@ -461,13 +513,23 @@ public final class ProvenanceResolver {
      * name {@code TrigA}; a substring test would also match {@code TrigAttack}.
      */
     private static boolean namesSVar(CardTraitBase trait, String svar) {
+        // A keyword-built line names its SVars in the keyword's own text,
+        // colon-separated: ETBReplacement:Copy:DBCopy:Optional.
+        KeywordInterface keyword = trait.getKeyword();
+        if (keyword != null && textNames(keyword.getOriginal().replace(':', ' '), svar)) return true;
         Map<String, String> params = trait.getOriginalMapParams();
         if (params == null) return false;
         for (String value : params.values()) {
-            if (value == null) continue;
-            for (String token : SVAR_LIST.split(value)) {
-                if (token.equals(svar)) return true;
-            }
+            if (textNames(value, svar)) return true;
+        }
+        return false;
+    }
+
+    /** Whether a parameter value or an SVar's text names {@code svar}, as a whole word. */
+    private static boolean textNames(String text, String svar) {
+        if (text == null) return false;
+        for (String token : SVAR_LIST.split(text)) {
+            if (token.equals(svar)) return true;
         }
         return false;
     }

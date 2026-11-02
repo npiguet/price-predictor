@@ -71,11 +71,19 @@ final class ScriptLocator {
                 .key();
     }
 
-    /** A staged variant's script, named from its card name: nothing else knows it. */
+    /**
+     * A staged variant's script, named from its card name: nothing else knows
+     * it. The name is the one the card shows, else the one its rules declare:
+     * a face-down variant (a morph) shows none, and keyed by its rules' file
+     * it would land under {@code cardsfolder/} (FR-039).
+     */
     private static Optional<ScriptFile> variantScriptOf(Card host) {
-        return VariantRegistry.isVariant(host.getName())
-                ? Optional.of(CardFilenames.scriptFile(SourceTree.VARIANT_SCRIPTS, host.getName()))
-                : Optional.empty();
+        CardRules rules = host.getRules();
+        return Optional.ofNullable(host.getName())
+                .filter(VariantRegistry::isVariant)
+                .or(() -> Optional.ofNullable(rules).map(CardRules::getName)
+                        .filter(VariantRegistry::isVariant))
+                .map(name -> CardFilenames.scriptFile(SourceTree.VARIANT_SCRIPTS, name));
     }
 
     /** The card-tree file the card reader actually opened, when it says so. */

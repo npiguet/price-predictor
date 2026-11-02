@@ -85,6 +85,25 @@ class VariantRegistryTest {
                 ScriptLocator.scriptFileOf(variant));
     }
 
+    /**
+     * FR-039: a face-down variant shows no name, so its key is read from the
+     * name its rules declare, and still names the variant tree. A real morph
+     * stands in for the staged variant: what is under test is the name lookup,
+     * and Echo Tracer is named by no other test, so registering it in this
+     * JVM-wide registry changes no other test's key.
+     */
+    @Test
+    void aFaceDownVariantsKeyStillNamesTheVariantTree(@TempDir Path dir)
+            throws IOException {
+        write(dir, "echo_tracer.txt", "Echo Tracer");
+        VariantRegistry.registerAll(dir);
+        Card variant = TestCards.build("Echo Tracer");
+        variant.turnFaceDown(true);
+
+        assertFalse("Echo Tracer".equals(variant.getName()), "face down, it shows no name");
+        assertEquals("variant-scripts/echo_tracer.txt", ScriptLocator.scriptFileOf(variant));
+    }
+
     private static void write(Path dir, String file, String name)
             throws IOException {
         Files.writeString(

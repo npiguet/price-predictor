@@ -350,6 +350,65 @@ class ProvenanceResolverTest {
         assertEquals("cardsfolder/b/blast_from_the_past.txt", key.scriptFile());
     }
 
+    /**
+     * FR-039: a mode of a charm cast through Flashback keys to the charm's
+     * printed spell line plus the mode's option, the line the sidecar writes
+     * modes under; the cast's own root still keys to the Flashback keyword.
+     */
+    @Test
+    void aFlashbackCharmsModeKeysToThePrintedSpellsMode() {
+        Card wreck = card("Wreck and Rebuild");
+        CardState state = wreck.getCurrentState();
+        KeywordInterface flashback = TestCards.flashbackOf(state);
+        SpellAbility printed = scriptedSpell(state, "Charm");
+        SpellAbility derived = printed.copy(wreck, null, false, true);
+        derived.setKeyword(flashback);
+        List<AbilitySub> modes = TestBoard.chain(derived, 1);
+
+        ProvenanceKey root = ProvenanceResolver.of(derived);
+        ProvenanceKey mode = ProvenanceResolver.of(modes.get(0));
+
+        assertEquals(TraitKind.KEYWORD, root.traitKind(), "the cast is the keyword's");
+        assertEquals(new ProvenanceKey(ProvenanceResolver.of(printed).scriptFile(), 0,
+                TraitKind.SPELL, ProvenanceResolver.of(printed).indexWithinKind()).withOption(1), mode);
+    }
+
+    /**
+     * FR-039: Gigantoplasm's copy gains "{X}: base power and toughness X/X"
+     * through its Clone's {@code AddAbilities$}, from an SVar only another
+     * SVar names; it keys to the line that names that one, the copy
+     * replacement's keyword. What the copy copies keys to the copied card.
+     */
+    @Test
+    void aClonesGainedAbilityKeysToTheLineThatGrantsIt() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        forge.game.player.Player you = game.getPlayers().get(0);
+        TestBoard.onBattlefield(game, you, "Prodigal Sorcerer");
+        Card plasm = TestBoard.onBattlefield(game, you, "Gigantoplasm");
+        SpellAbility copy = AbilityFactory.getAbility(plasm.getSVar("DBCopy")
+                .replace("Choices$ Creature.Other", "Choices$ Creature.namedProdigal Sorcerer"), plasm);
+        copy.setActivatingPlayer(you);
+        forge.game.ability.AbilityUtils.resolve(copy);
+        assertTrue(plasm.isCloned(), "the Gigantoplasm became a copy");
+
+        SpellAbility gained = null;
+        SpellAbility copied = null;
+        for (SpellAbility sa : plasm.getSpellAbilities()) {
+            if (String.valueOf(sa.getApi()).equals("Animate")) gained = sa;
+            if (String.valueOf(sa.getApi()).equals("DealDamage")) copied = sa;
+        }
+        assertNotNull(gained);
+        assertNotNull(copied);
+
+        ProvenanceKey gainedKey = ProvenanceResolver.of(gained);
+        assertNotNull(gainedKey, "the gained ability keys");
+        assertEquals("cardsfolder/g/gigantoplasm.txt", gainedKey.scriptFile());
+        assertEquals(TraitKind.KEYWORD, gainedKey.traitKind(), "the copy replacement's keyword line");
+        ProvenanceKey copiedKey = ProvenanceResolver.of(copied);
+        assertEquals("cardsfolder/p/prodigal_sorcerer.txt", copiedKey.scriptFile());
+        assertEquals(TraitKind.SPELL, copiedKey.traitKind());
+    }
+
     // ── the reason vocabulary ───────────────────────────────────────────
 
     /** A trait with no state has nothing to index against, and says so. */
