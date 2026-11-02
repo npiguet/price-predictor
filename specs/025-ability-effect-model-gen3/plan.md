@@ -139,6 +139,42 @@ bytes per game and games per hour against gen-2 with the same flags, because gen
 seats' candidates at every priority stop with uncapped `legal_targets` and lists every line of every
 permanent.
 
+**Stage-3 pilot, measured (T079, 2026-11-02): bytes per game more than double, so stage 5 waits on
+the user's decision.** Gen-3 writes about twenty times gen-2's gzipped bytes per game and plays about
+half as many games per worker-hour. Both runs are `match-outcomes --effect-records
+--random-seat-share 0.25 --random-seat-probability 0.5` at the default caps (`--playability-rate
+0.1`, two interventions and two probes per game). The gen-3 pilot adds `--count-dropped-events`
+(`output/effects/records-gen3-pilot/`, 10 workers, 30 minutes). The gen-2 baseline is the full-strength
+run that fed `corpus-gen2` (run `e4713c96`, `output/effects/records-gen2/full-strength/`, 12 workers,
+4.3 hours). Games are distinct `game_id`s; hours are the span of the run's record timestamps.
+
+| | gen-2 full-strength | gen-3 pilot | gen-3 / gen-2 |
+|---|---|---|---|
+| games (ended with `player_won`) | 21,372 (21,021) | 975 (931) | |
+| gzipped bytes per game | 145 KB | 2.85 MB | 19.7 |
+| JSON bytes per game | 6.6 MB | 56 MB | 8.6 |
+| records per game | 310 | 1,448 | 4.7 |
+| games per hour, all workers | 4,983 | 1,991 | 0.40 |
+| games per hour per worker | 415 | 199 | 0.48 |
+
+Decision records are the growth: 87% of gen-3's records and 88% of its JSON bytes. Each holds one
+candidate and a full snapshot, and the enumerator samples every spell ability of every card in
+`ComputerUtilAbility.getAvailableCards` for both players at every priority-settled signal. That list
+holds both players' battlefields, all exile, the top card of each library and the player's own
+graveyard, so most candidates are cards that cannot be played from where they are. Decision records
+by shape, as shares of all gen-3 records and of their JSON bytes:
+
+| decision shape | records | JSON bytes |
+|---|---|---|
+| fails `zone` (a permanent's own cast, a graveyard card without a graveyard ability, a library top card) | 59.7% | 63.1% |
+| unplayable for another reason | 19.6% | 17.4% |
+| `can_play`, not affordable | 4.6% | 3.7% |
+| `can_play` and affordable | 3.6% | 3.7% |
+
+Half of each shape belongs to the player without priority. The levers, for the user to choose
+between before stage 5: drop or subsample the `zone`-failing candidates, lower `--playability-rate`
+for gen-3's enumerator, or share one snapshot between the candidates of one priority stop.
+
 ## Project Structure
 
 ### Documentation (this feature)
