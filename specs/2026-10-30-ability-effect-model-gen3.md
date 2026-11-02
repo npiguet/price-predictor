@@ -491,9 +491,9 @@ bracket they follow.
 
   | bucket | candidate |
   |---|---|
-  | special | fails any check but `zone`, `cost` and `casting_speed` (a land play's `whose_turn` counts with `casting_speed`); or passes `zone` and is a spell or land play whose card is outside the hand, an activated ability whose card is off the battlefield, an alternative cost, a play a may-play static permits, or a spell or land play with flash only through a static while its player cannot act at sorcery speed |
-  | zone | not special; fails `zone` |
-  | plain | not special; passes `zone` |
+  | special | fails `static_prohibition`; or passes `zone` and fails any check but `cost` and `casting_speed` (a land play's `whose_turn` counts with `casting_speed`; `script_restriction` on a card another player controls counts with them too); or passes `zone` and is a spell or land play whose card is outside the hand, an activated ability whose card is off the battlefield, an alternative cost, a play a may-play static permits, or a spell or land play with flash only through a static while its player cannot act at sorcery speed |
+  | zone | not special; fails `zone`, or fails `script_restriction` on a card another player controls |
+  | plain | not special and not zone |
 
 - A run whose `--playability-rate` is 1 evaluates every candidate and writes every special one.
 - The random seat draws from every enumerated candidate, written or not.

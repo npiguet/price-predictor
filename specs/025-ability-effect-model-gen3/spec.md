@@ -768,15 +768,18 @@ and that the reporting half never enters the control score.
   each candidate at `--playability-rate` (default 0.01); a candidate it drops MUST NOT be
   evaluated for the record. Stage 2, after evaluation, keeps a candidate by its bucket, so the
   share of all enumerated candidates written is, per bucket:
-  - special, `--playability-rate` (stage 2 keeps every one): any failed check other than `zone`,
-    `cost` and `casting_speed`, a land play's `whose_turn` counting with `casting_speed` (rule
-    305.3 is a land's timing); or, passing `zone`, a spell or land play whose card is outside the
-    hand, an activated ability whose card is off the battlefield, an alternative cost
+  - special, `--playability-rate` (stage 2 keeps every one): a failed `static_prohibition`; or,
+    passing `zone`, any failed check other than `cost` and `casting_speed`, a land play's
+    `whose_turn` counting with `casting_speed` (rule 305.3 is a land's timing) and
+    `script_restriction` on a card another player controls (the activator check) counting with
+    them too; or, passing `zone`, a spell or land play whose card is outside the hand, an activated ability whose card is off the battlefield, an alternative cost
     (`SpellAbility.getAlternativeCost()`), a play a may-play static permits
     (`SpellAbility.getMayPlay()`), or a spell or land play with flash only through a static
     (`StaticAbilityCastWithFlash.anyWithFlash`) while its player cannot act at sorcery speed;
-  - zone, `--zone-candidate-rate` (default 0.0001): not special, fails `zone`;
-  - plain, `--plain-candidate-rate` (default 0.001): not special, passes `zone`.
+  - zone, `--zone-candidate-rate` (default 0.0001): not special, and fails `zone` (whatever else
+    it fails, a land on the battlefield's `land_play_limit` included) or fails
+    `script_restriction` on a card another player controls;
+  - plain, `--plain-candidate-rate` (default 0.001): neither special nor zone.
 
   Stage 2 keeps a zone or plain candidate with probability its rate divided by
   `--playability-rate`, and draws nothing for a special one. Every collecting command MUST refuse,

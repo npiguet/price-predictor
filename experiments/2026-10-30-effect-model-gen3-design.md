@@ -1351,8 +1351,8 @@ draw keeps a candidate with probability bucket rate divided by `--playability-ra
 
 | bucket | what it holds | kept, of all enumerated |
 |---|---|---|
-| special | a candidate the rules treat unusually: played from outside its usual zone, through an alternative cost or a static's permission, forbidden by a static, or failing any check but `zone`, `cost` and `casting_speed` | every one the first draw keeps: 1 in 100 |
-| zone | a candidate failing `zone`, and otherwise only `cost` or `casting_speed` | `--zone-candidate-rate`, 1 in 10,000 |
+| special | a candidate the rules treat unusually: forbidden by a static, played from outside its usual zone, through an alternative cost or a static's permission, or, in a zone it may be played from, failing any check but `cost` and `casting_speed` | every one the first draw keeps: 1 in 100 |
+| zone | a candidate that cannot be played from where it is (`zone` fails), or an ability of another player's permanent failing only the activator check | `--zone-candidate-rate`, 1 in 10,000 |
 | plain | a candidate in its usual zone failing nothing, or only `cost` or `casting_speed` | `--plain-candidate-rate`, 1 in 1,000 |
 
 **The special bucket is where the rules the catalogue counts live.** A flashback from the
@@ -1378,14 +1378,26 @@ candidate. At these rates a stop rarely keeps more than one candidate, so sharin
 save little, and it would end the rule that a record holds its own snapshot, which every reader of
 the corpus relies on.
 
+**A failed `zone` decides the bucket on its own, unless a static forbids the play.** A card that
+cannot be played from where it is says nothing about the other checks it fails. A land on the
+battlefield after the turn's land drop fails the land-play limit as well as `zone`, and every
+permanent land does so at every later stop of that turn. Counting such a land as a land-play-limit
+case would fill the special bucket with lands that were never playable. The same holds for an
+ability of another player's permanent, which fails Forge's activator check (`script_restriction`)
+at every stop because only its controller may activate it.
+
 The per-check rule the collector applies, check by check:
 
-- `zone`: the zone bucket, unless the candidate is special for another reason.
+- `zone`: the zone bucket, whatever else the candidate fails, unless it also fails
+  `static_prohibition`.
 - `cost`, `casting_speed`: bulk; the plain bucket when the candidate passes `zone`, the zone bucket
   when it fails it.
 - `whose_turn`: bulk on a land play, special on a spell or ability.
-- `split_second`, `phase`, `combat`, `activation_limit`, `land_play_limit`, `script_condition`,
-  `static_prohibition`, `script_restriction`: special.
+- `script_restriction`: the zone bucket on a card another player controls, where it is the activator
+  check; special otherwise.
+- `static_prohibition`: special, with or without a failed `zone`.
+- `split_second`, `phase`, `combat`, `activation_limit`, `land_play_limit`, `script_condition`:
+  special when `zone` passes.
 - A candidate that passes `zone` is also special when it is a spell or land play whose card is not
   in the hand, an activated ability whose card is not on the battlefield, an alternative cost, a play
   a may-play static permits, or a spell or land play that has flash only through a static while its
