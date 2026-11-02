@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import dataclasses
 
+import pytest
+
 from effects.application.field_coverage import (
     GEN3_FIELDS,
     KNOWN_CONSTANT_FIELDS,
@@ -277,8 +279,17 @@ class TestReportLines:
     def _coverage(self, *rows: FieldCoverage) -> dict[str, FieldCoverage]:
         return {row.path: row for row in rows}
 
+    #: A listed field for the tags' sake: the real list is empty since T079.
+    _KNOWN = "record.state.global_.emblems"
+
+    @pytest.fixture(autouse=True)
+    def _listed(self, monkeypatch):
+        from effects.application import field_coverage as module
+
+        monkeypatch.setattr(module, "KNOWN_CONSTANT_FIELDS", frozenset({self._KNOWN}))
+
     def test_constant_fields_are_tagged_known_or_new(self):
-        known = next(iter(sorted(KNOWN_CONSTANT_FIELDS)))
+        known = self._KNOWN
         lines = report_lines(self._coverage(
             FieldCoverage(path=known, populated=0, seen=3, varied=False),
             FieldCoverage(path="record.x", populated=0, seen=3, varied=False),
@@ -293,7 +304,7 @@ class TestReportLines:
         assert lines == ["  [varies] record.y   (2/3)"]
 
     def test_a_listed_field_that_varied_is_named_for_removal(self):
-        known = next(iter(sorted(KNOWN_CONSTANT_FIELDS)))
+        known = self._KNOWN
         lines = report_lines(self._coverage(
             FieldCoverage(path=known, populated=1, seen=3, varied=True),
         ))
@@ -328,6 +339,21 @@ class TestTheGen3Fields:
     def test_every_listed_path_is_one_the_walk_reaches(self):
         walked = field_coverage([*self._golden(), self._turn_action()])
         assert set(GEN3_FIELDS) <= set(walked), sorted(set(GEN3_FIELDS) - set(walked))
+
+    def test_the_gen3_fixture_reaches_every_listed_path_and_varies_most(self):
+        """The pilot's records (T079a) reach every root § 8.13 field, a real
+        turn_action included; the ones they hold constant are the ones the
+        pilot's report gave reasons for."""
+        from effects.infrastructure.record_codec import record_from_dict
+        from tests.unit.effects.builders import gen3_fixture_records
+
+        coverage = field_coverage(record_from_dict(raw) for raw in gen3_fixture_records())
+        assert set(GEN3_FIELDS) <= set(coverage), sorted(set(GEN3_FIELDS) - set(coverage))
+        constant = {path for path in GEN3_FIELDS if coverage[path].constant}
+        assert constant <= {
+            "record.generation", "record.aimed_at", "record.directed",
+            "record.state.entities[].printed_defense", "record.state.players[].rad",
+            "record.state.players[].initiative"}, sorted(constant)
 
     def test_the_report_rows_each_gen3_field(self):
         lines = gen3_report_lines(field_coverage(self._golden()))

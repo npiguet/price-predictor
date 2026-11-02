@@ -60,14 +60,11 @@ class FieldCoverage:
 #: ``attributed_to``, a record's ``ability_unresolved`` or a rewrite's
 #: ``result`` and ``replaced_by``: each read constant through a collector
 #: defect, and listing one would make a broken channel look like a known one.
-KNOWN_CONSTANT_FIELDS: frozenset[str] = frozenset({
-    # Forge has no cantBeCastStatic to name what forbids a decision; the
-    # attacker and blocker subkinds name theirs.
-    "record.payload<PlayabilityDecisionPayload>.candidates[].responsible_static",
-    # Collected, but a sealed pool essentially never resolves a planeswalker
-    # ultimate, so this reads constant on the format rather than the wiring.
-    "record.state.global_.emblems",
-})
+#:
+#: Empty since the gen-3 pilot (T079): a decision candidate's
+#: ``responsible_static`` now names the static of a ``static_prohibition``
+#: check, and ``global_.emblems`` carried emblems there.
+KNOWN_CONSTANT_FIELDS: frozenset[str] = frozenset()
 
 
 _ENTITY = "record.state.entities[]"
