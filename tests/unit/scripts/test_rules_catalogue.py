@@ -73,6 +73,12 @@ def test_each_check_refuses_its_one_edit(declared, families, edit, message):
     assert errors and any(message in error for error in errors), errors
 
 
+@pytest.mark.parametrize("operation", ["remove_permanent", "add_permanent", "move_card"])
+def test_a_variant_classified_into_a_board_edit_of_t031a_passes(declared, families, operation):
+    declared["variants"][1]["operation"] = operation
+    assert _errors(declared, families) == []
+
+
 def test_a_parameter_naming_a_card_is_refused(declared, families):
     declared["detector"] = {
         "family": "trigger_mode", "record_kind": "resolution", "outcome": "o", "near_miss": "n",

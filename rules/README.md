@@ -262,13 +262,35 @@ two.
   resolution, never in the resolution's own effect half.
 
 - **`operation`**, on every variant but the base, says which change a directed fork applies to make
-  that variant out of a live board: `pt`, `keyword`, `colour_type`, `counters`, `tap`, `life` or
-  `replace_card`. A change no fork operation can make, such as removing a permanent or a different
-  choice by a player, is `{"unclassifiable": reason}`. The base variant carries no operation.
+  that variant out of a live board. The base variant carries no operation. The ten operations:
+
+  | operation | change |
+  |---|---|
+  | `pt` | change a creature's power or toughness |
+  | `keyword` | add or remove a keyword |
+  | `colour_type` | change a colour or type |
+  | `counters` | add or remove counters |
+  | `tap` | tap or untap a permanent |
+  | `life` | change a life total |
+  | `replace_card` | replace one card with another |
+  | `remove_permanent` | take a permanent off the battlefield |
+  | `add_permanent` | put a card onto the battlefield |
+  | `move_card` | move a card between hand, library and graveyard, or change which card sits in one of them |
+
+  Each operation edits the fork's copy silently, without the event the change would raise in a
+  game. A removed permanent leaves combat, is unattached from what it was attached to and what was
+  attached to it, triggers no leaves-the-battlefield ability and goes to no zone. A card put onto
+  the battlefield arrives under the variant's controller, tapped, summoning-sick and with the
+  counters the variant states, and triggers no enters ability and no replacement. A moved card
+  counts as no draw, discard or mill. The players' per-turn counts stay as the live game left them.
+
+  A variant no operation can make is `{"unclassifiable": reason}`: one that differs by a choice, a
+  target or a decision of a player, by a timing, by the phase, step or turn, or by more than one
+  fact.
 
   ```json
-  {"label": "tougher", "polarity": "does_not_fire", "delta": "B's creature is Centaur Courser (3/3) instead of Grizzly Bears.",
-   "expected": "...", "operation": "replace_card"}
+  {"label": "no-servant", "polarity": "does_not_fire", "delta": "Painter's Servant is not on the battlefield.",
+   "expected": "...", "operation": "remove_permanent"}
   ```
 
 - **`departure`**, optional, records a disagreement between the scenario and Forge that survived

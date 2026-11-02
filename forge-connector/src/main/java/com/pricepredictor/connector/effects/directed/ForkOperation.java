@@ -3,7 +3,7 @@ package com.pricepredictor.connector.effects.directed;
 import com.pricepredictor.connector.WireNamed;
 
 /**
- * The seven changes a directed fork applies to a copied game (FR-011).
+ * The ten changes a directed fork applies to a copied game (FR-011).
  *
  * <p>A scenario variant's {@code operation} in {@code rules/scenarios/*.json}
  * names one, and a directed-fork record's {@code directed.operation} carries
@@ -25,7 +25,16 @@ public enum ForkOperation implements WireNamed {
     /** Set a player's life total. */
     LIFE("life"),
     /** Put another card in a permanent's place. */
-    REPLACE_CARD("replace_card");
+    REPLACE_CARD("replace_card"),
+    /** Take a permanent off the battlefield into no zone. */
+    REMOVE_PERMANENT("remove_permanent"),
+    /** Put a new card from the card database onto the battlefield. */
+    ADD_PERMANENT("add_permanent"),
+    /**
+     * Move a card between hand, library and graveyard, or put a new card
+     * at a position of one of them.
+     */
+    MOVE_CARD("move_card");
 
     private final String wireName;
 

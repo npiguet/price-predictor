@@ -64,7 +64,8 @@ def test_enum_spellings():
     assert POLARITIES == {"fires", "does_not_fire", "other"}
     assert {str(v) for v in MapVerdict} == {"trained", "recorded", "missing", "planned"}
     assert FORK_OPERATIONS == {
-        "pt", "keyword", "colour_type", "counters", "tap", "life", "replace_card"}
+        "pt", "keyword", "colour_type", "counters", "tap", "life", "replace_card",
+        "remove_permanent", "add_permanent", "move_card"}
 
 
 def test_a_detector_declaration_reads_from_json():
@@ -92,4 +93,5 @@ def test_a_map_entry_round_trips_to_json():
 
 def test_fork_operation_order_is_the_contract_order():
     assert [str(o) for o in ForkOperation] == [
-        "pt", "keyword", "colour_type", "counters", "tap", "life", "replace_card"]
+        "pt", "keyword", "colour_type", "counters", "tap", "life", "replace_card",
+        "remove_permanent", "add_permanent", "move_card"]

@@ -1,4 +1,4 @@
-"""The seven changes a directed fork applies to a copied game (FR-011).
+"""The ten changes a directed fork applies to a copied game (FR-011).
 
 A module of its own because both the record envelope (``records.py``, a
 directed fork's ``directed`` tag) and the rules catalogue (a variant's
@@ -22,3 +22,6 @@ class ForkOperation(StrEnum):
     TAP = "tap"
     LIFE = "life"
     REPLACE_CARD = "replace_card"
+    REMOVE_PERMANENT = "remove_permanent"
+    ADD_PERMANENT = "add_permanent"
+    MOVE_CARD = "move_card"
