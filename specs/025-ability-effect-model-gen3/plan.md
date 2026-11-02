@@ -175,6 +175,13 @@ Half of each shape belongs to the player without priority. The levers, for the u
 between before stage 5: drop or subsample the `zone`-failing candidates, lower `--playability-rate`
 for gen-3's enumerator, or share one snapshot between the candidates of one priority stop.
 
+**Decided (2026-11-02): two-stage decision sampling (FR-033b, T064d).** `--playability-rate` becomes
+stage 1 at 0.01, drawn before evaluation; stage 2 writes a zone candidate at 1 in 10,000 of those
+enumerated (`--zone-candidate-rate`), a plain one at 1 in 1,000 (`--plain-candidate-rate`), and every
+special one stage 1 kept. The shared snapshot is rejected: at these rates a stop rarely writes more
+than one candidate. The bucket is decided in `FE/DecisionSample.java` from the verdict and the
+ability; the stage-2 draw is in `FE/PlayabilityChannel.java`.
+
 ## Project Structure
 
 ### Documentation (this feature)
@@ -213,6 +220,7 @@ forge-connector/src/main/java/com/pricepredictor/connector/
 │   ├── SnapshotBuilder.java, EntityJson.java, PlayerJson.java  # lines, keyword lines, facts, links, base P/T
 │   ├── FloatingEffects.java                       # NEW: timestamp → line bookkeeping (C4)
 │   ├── PriorityCandidates.java                    # NEW: both seats' candidates and verdicts (C3)
+│   ├── DecisionSample.java                        # NEW: a decision candidate's sampling bucket (FR-033b)
 │   ├── TargetingClauses.java                      # NEW: extracted clause walk
 │   ├── MustBlock.java                             # NEW: per (blocker, attacker) requirement
 │   ├── PlayabilityVerdict.java, DecisionCandidate.java, PlayabilityChannel.java  # timing, failed_checks; per-attacker records

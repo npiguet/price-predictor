@@ -1329,6 +1329,68 @@ Further subsets cover casting speed under the same edits and a split-second spel
 Gen-2 has no such columns, so its baseline is `can_play` and its outcome predictions under the same
 edits.
 
+### Decision candidates are sampled twice, so a candidate that cannot be played from where it is costs almost nothing
+
+**Gen-3 keeps a decision candidate in two draws: one before the rules check, and one after it at a
+rate set by what the check found.** Enumerating both players' candidates at every priority stop
+offers thousands of candidates per game. Most of them are cards that cannot be played from where
+they are: a permanent's own cast, a graveyard card with no graveyard ability, the top card of a
+library. Gen-2's single draw at `--playability-rate` keeps a tenth of them, so decision records
+would outnumber every other kind many times over, and nearly all of them would repeat the same
+`zone` answer.
+
+**The first draw comes before evaluation, so a candidate it drops costs no rules check.** Each
+enumerated candidate is kept with probability `--playability-rate`, whose default falls from 1 in 10
+to 1 in 100. The flag keeps its name and its gen-2 meaning, the share of candidates evaluated; only
+the default changes.
+
+**The second draw keeps the common answers rarely and the unusual ones always.** Once a candidate is
+evaluated, its failed checks, its zone and how it is played put it in one of three buckets. A
+bucket's rate is the share of all enumerated candidates it keeps, both draws together, so the second
+draw keeps a candidate with probability bucket rate divided by `--playability-rate`.
+
+| bucket | what it holds | kept, of all enumerated |
+|---|---|---|
+| special | a candidate the rules treat unusually: played from outside its usual zone, through an alternative cost or a static's permission, forbidden by a static, or failing any check but `zone`, `cost` and `casting_speed` | every one the first draw keeps: 1 in 100 |
+| zone | a candidate failing `zone`, and otherwise only `cost` or `casting_speed` | `--zone-candidate-rate`, 1 in 10,000 |
+| plain | a candidate in its usual zone failing nothing, or only `cost` or `casting_speed` | `--plain-candidate-rate`, 1 in 1,000 |
+
+**The special bucket is where the rules the catalogue counts live.** A flashback from the
+graveyard, a spell cast through Leyline of Anticipation's flash, an ability one Grand Abolisher
+forbids, a second loyalty activation in a turn: each is a rule that decides playability in a way
+the ordinary hand-and-battlefield case never shows. Keeping every one the first draw reaches gives
+such a rule ten times the records a plain candidate gets, and a hundred times those of a candidate
+failing only `zone`.
+
+**Land plays fall in the same buckets, and a land in hand is a plain candidate.** A land is played
+from the hand, and a land that is not there fails `zone`. A land's `whose_turn` failure is part of
+its timing: rule 305.3 lets a player play a land only on their own turn, where a spell's
+`whose_turn` is a restriction its own text adds. A land therefore counts `whose_turn` beside
+`casting_speed`, and is special only for the reasons a spell is, the land-play limit among them.
+
+**The random seat still draws from every enumerated candidate.** Sampling decides which candidates
+are written, not which the seat may play, so its plays and its records still agree on every
+candidate they share.
+
+**Writing one snapshot per priority stop, shared by its candidates, was rejected.** Every candidate
+of one stop holds the same board, so storing it once would cut the bytes without dropping any
+candidate. At these rates a stop rarely keeps more than one candidate, so sharing the snapshot would
+save little, and it would end the rule that a record holds its own snapshot, which every reader of
+the corpus relies on.
+
+The per-check rule the collector applies, check by check:
+
+- `zone`: the zone bucket, unless the candidate is special for another reason.
+- `cost`, `casting_speed`: bulk; the plain bucket when the candidate passes `zone`, the zone bucket
+  when it fails it.
+- `whose_turn`: bulk on a land play, special on a spell or ability.
+- `split_second`, `phase`, `combat`, `activation_limit`, `land_play_limit`, `script_condition`,
+  `static_prohibition`, `script_restriction`: special.
+- A candidate that passes `zone` is also special when it is a spell or land play whose card is not
+  in the hand, an activated ability whose card is not on the battlefield, an alternative cost, a play
+  a may-play static permits, or a spell or land play that has flash only through a static while its
+  player could not play it at sorcery speed.
+
 ### Legality is an output of its own, and the affected gate learns only what an action changed
 
 **The affected gate answers whether an action changed an entity, and legality answers whether the

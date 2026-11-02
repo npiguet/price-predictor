@@ -136,6 +136,11 @@ State on master when this feature starts (the gen-3 record's Result):
   `this_turn.lands_played` (FR-024), the player slot reads it (FR-044), and the `affects` link
   family runs from a static or floating effect's line to each player it applies to, as it does to
   cards (FR-026a). Rule 305's land-play scenarios are then declared (FR-002a).
+- Q: Decision records are most of the T079 pilot's bytes, most of them candidates failing only
+  `zone`; how are candidates sampled? → A: In two stages (FR-033b): `--playability-rate` (default
+  0.01) before evaluation, then by bucket, so a zone candidate is written at 1 in 10,000, a plain
+  one at 1 in 1,000, and a special one whenever stage 1 kept it. One snapshot shared per priority
+  stop is rejected: not needed at these rates.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -758,6 +763,25 @@ and that the reporting half never enters the control score.
   land-play trait, which the sidecar lists in `dropped_keys` as it does a permanent's plain cast.
   Mana abilities MUST NOT be candidates. The random seat MUST NOT draw a land-play candidate: land
   plays stay the Forge AI's, as in gen-2.
+- **FR-033b**: Decision records MUST be written for a two-stage sample of the enumerated
+  candidates, both stages drawn from the game's sampling stream. Stage 1, before evaluation, keeps
+  each candidate at `--playability-rate` (default 0.01); a candidate it drops MUST NOT be
+  evaluated for the record. Stage 2, after evaluation, keeps a candidate by its bucket, so the
+  share of all enumerated candidates written is, per bucket:
+  - special, `--playability-rate` (stage 2 keeps every one): any failed check other than `zone`,
+    `cost` and `casting_speed`, a land play's `whose_turn` counting with `casting_speed` (rule
+    305.3 is a land's timing); or, passing `zone`, a spell or land play whose card is outside the
+    hand, an activated ability whose card is off the battlefield, an alternative cost
+    (`SpellAbility.getAlternativeCost()`), a play a may-play static permits
+    (`SpellAbility.getMayPlay()`), or a spell or land play with flash only through a static
+    (`StaticAbilityCastWithFlash.anyWithFlash`) while its player cannot act at sorcery speed;
+  - zone, `--zone-candidate-rate` (default 0.0001): not special, fails `zone`;
+  - plain, `--plain-candidate-rate` (default 0.001): not special, passes `zone`.
+
+  Stage 2 keeps a zone or plain candidate with probability its rate divided by
+  `--playability-rate`, and draws nothing for a special one. Every collecting command MUST refuse,
+  before any game, a rate outside [0, 1] or a candidate rate above `--playability-rate`. The
+  random seat MUST draw from every enumerated candidate, whether written or not.
 - **FR-034**: The resolution payload MUST carry `conditions_met`: for each chain segment with a
   `Condition$`, `{segment, met}`, keyed by the chain index `attributed_to` uses.
 - **FR-035**: A prevention that prevented nothing MUST write no note. A probe fork's damage events

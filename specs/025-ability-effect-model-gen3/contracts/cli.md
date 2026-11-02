@@ -43,6 +43,9 @@ holds no shard or mixes generations.
 
 | Flag | Default | Meaning |
 |---|---|---|
+| `--playability-rate P` | 0.01 (was 0.1) | stage 1 of decision sampling (FR-033b): the share of enumerated decision candidates evaluated; a dropped one is not evaluated for the record |
+| `--zone-candidate-rate R` | 0.0001 | share of zone-bucket candidates written, both stages together |
+| `--plain-candidate-rate R` | 0.001 | share of plain-bucket candidates written, both stages together |
 | `--count-dropped-events` | off | count events arriving with no open record, by event type and engine phase; print at the end |
 | `--directed-fork-rules LIST` | none | comma-separated rule ids |
 | `--directed-forks-per-game N` | 2 | directed-fork budget per game, beside the existing fork budgets |
@@ -57,6 +60,15 @@ Startup, exit 1 naming the rule when a listed rule:
 `--directed-fork-probability` outside (0, 1] exits 1. The flags ride the cap properties
 `effect.directed.fork.rules`, `effect.directed.forks.per.game`, `effect.directed.fork.probability`,
 `effect.count.dropped.events`.
+
+The three sampling rates ride `effect.playability.rate`, `effect.zone.candidate.rate` and
+`effect.plain.candidate.rate`, and are shared with `collect-coverage` and `collect-variants` through
+the common cap flags (`add_cap_flags`; Python `CollectionCaps.zone_candidate_rate`,
+`plain_candidate_rate`). A rate outside [0, 1], or a candidate rate above `--playability-rate`, is
+refused before any game, as the random-seat flags are (`candidate_rate_error`): exit 2 on
+`match-outcomes`, 1 on the `effects` collectors. A special candidate (FR-033b) is written whenever
+stage 1 keeps it. The held-out coverage round sets `--playability-rate` to 1 and keeps the two
+candidate rates.
 
 ## `python -m effects collect-coverage` (existing)
 

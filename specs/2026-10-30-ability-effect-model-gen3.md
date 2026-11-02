@@ -481,6 +481,22 @@ bracket they follow.
 - Each `failed_checks` entry carries `responsible_static` where a static decided it. A
   candidate whose `timing` bit is false carries a `casting_speed` entry. The candidate's own
   `responsible_static` keeps its gen-2 meaning.
+- Decision records are written for a sample of the candidates, drawn in two stages from the
+  game's sampling stream:
+  - stage 1, before evaluation: each candidate is kept at `--playability-rate`; a candidate it
+    drops is not evaluated;
+  - stage 2, after evaluation: a special candidate is kept; a zone candidate is kept at
+    `--zone-candidate-rate` divided by `--playability-rate`; a plain candidate at
+    `--plain-candidate-rate` divided by `--playability-rate`.
+
+  | bucket | candidate |
+  |---|---|
+  | special | fails any check but `zone`, `cost` and `casting_speed` (a land play's `whose_turn` counts with `casting_speed`); or passes `zone` and is a spell or land play whose card is outside the hand, an activated ability whose card is off the battlefield, an alternative cost, a play a may-play static permits, or a spell or land play with flash only through a static while its player cannot act at sorcery speed |
+  | zone | not special; fails `zone` |
+  | plain | not special; passes `zone` |
+
+- A run whose `--playability-rate` is 1 evaluates every candidate and writes every special one.
+- The random seat draws from every enumerated candidate, written or not.
 
 ## 8.9 Resolution branches
 
@@ -1109,6 +1125,9 @@ python -m effects rule-counts
     [--rules-dir DIR]                    default rules; scenarios and their detectors
 
 python -m sealed match-outcomes
+    [--playability-rate P]               default 0.01; stage 1: share of decision candidates evaluated (§ 8.8)
+    [--zone-candidate-rate R]            default 0.0001; share of zone candidates written, both stages
+    [--plain-candidate-rate R]           default 0.001; share of plain candidates written, both stages
     [--count-dropped-events]             off; counts events arriving with no open record
     [--directed-fork-rules LIST]         default none; rule ids whose directed forks run
     [--directed-forks-per-game N]        default 2
@@ -1126,8 +1145,9 @@ python -m effects train-effect-model
     [--patience N]                       default 5; epochs without a new best control score
 ```
 
-`collect-coverage` and `collect-variants` take `--count-dropped-events` as
-`match-outcomes` does.
+`collect-coverage` and `collect-variants` take `--count-dropped-events`,
+`--playability-rate`, `--zone-candidate-rate` and `--plain-candidate-rate` as
+`match-outcomes` does. The held-out coverage round sets `--playability-rate` to 1.
 
 `collect-variants` takes `--directed-fork-rules`, `--directed-forks-per-game` and
 `--directed-fork-probability` as `match-outcomes` does.
@@ -1141,6 +1161,9 @@ Startup validation
   check that every record carries `generation: 3`.
 - `train-effect-model` checks that the corpus manifest carries per-rule counts, and that
   the knowledge-probe set and rule tests are frozen for the corpus.
+- Every collecting command checks that `--playability-rate`, `--zone-candidate-rate` and
+  `--plain-candidate-rate` lie in [0, 1], and that neither candidate rate exceeds
+  `--playability-rate`.
 - `match-outcomes` and `collect-variants` check that every rule in
   `--directed-fork-rules` has a detector, a board precondition (§ 6) and at least one
   contrasting variant classified into a fork operation.
