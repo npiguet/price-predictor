@@ -1,0 +1,5 @@
+name: isshin, two heavens as one
+mana cost: {R}{W}{B}
+types: legendary creature human samurai
+power toughness: 3/4
+static: if a creature attacking causes a triggered ability of a permanent you control to trigger, that ability triggers an additional time.

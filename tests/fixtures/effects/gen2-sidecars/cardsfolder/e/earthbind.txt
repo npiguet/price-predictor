@@ -1,0 +1,5 @@
+name: earthbind
+mana cost: {R}
+types: enchantment aura
+static: enchant creature
+triggered: when CARDNAME enters, if enchanted creature has flying, CARDNAME deals 2 damage to that creature and CARDNAME gains "enchanted creature loses flying."

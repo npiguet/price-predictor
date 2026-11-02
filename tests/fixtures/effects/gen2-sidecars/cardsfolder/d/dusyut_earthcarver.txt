@@ -1,0 +1,6 @@
+name: dusyut earthcarver
+mana cost: {5}{G}
+types: creature elephant druid
+power toughness: 4/4
+static: reach
+triggered: when this creature enters, it endures 3.

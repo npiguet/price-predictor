@@ -1,0 +1,6 @@
+name: rafter demon
+mana cost: {2}{B}{R}
+types: creature demon
+power toughness: 4/2
+alternate cost: spectacle {3}{B}{R}
+triggered: when CARDNAME enters, if its spectacle cost was paid, each opponent discards a card.

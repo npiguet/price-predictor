@@ -1,0 +1,5 @@
+name: slither blade
+mana cost: {U}
+types: creature snake rogue
+power toughness: 1/2
+static: CARDNAME can't be blocked.

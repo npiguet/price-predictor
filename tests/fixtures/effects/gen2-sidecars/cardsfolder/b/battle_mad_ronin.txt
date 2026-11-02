@@ -1,0 +1,6 @@
+name: battle-mad ronin
+mana cost: {1}{R}
+types: creature human samurai
+power toughness: 1/1
+triggered: bushido 2
+static: CARDNAME attacks each combat if able.

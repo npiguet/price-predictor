@@ -200,3 +200,63 @@ def test_the_same_hit_from_a_deathtouch_source_fires(gen2_records):
         granted if e.id == source_id else e for e in record.state.entities))
     found = FAMILY.match(replace(record, state=state), None, {"check": "deathtouch_damage"})
     assert found.polarity is Polarity.FIRES and not found.observed  # the edit left no death
+
+
+#: Real gen-2 records the review list held before T036, each read by hand
+#: (``scripts/make_fixture_records.py``'s ``_GEN2_PINNED``), and what the
+#: family now says of them: ``(check, polarity, observed)``, or None for a
+#: record the check cannot read.
+_REVIEWED = {
+    # A death alone names no cause: Nyx Infusion's -2/-2 static kills with no P/T change.
+    "71253f20-5472-4ddd-8c58-27c78651878b.8-mv3ts9u2nlt0.11931": ("toughness_zero", None),
+    # The game-end rescue: its board is read after a whole turn of events.
+    "71253f20-5472-4ddd-8c58-27c78651878b.8-mv3ts9u2nlt0.12970": ("toughness_zero", None),
+    # Disintegrate's exile replaces the death: still the check's move.
+    "71253f20-5472-4ddd-8c58-27c78651878b.7-mv4cjj66gz7g.13429":
+        ("lethal_damage", (Polarity.FIRES, True)),
+    # Stuffy Doll is indestructible: 704.5g destroys, so it is no side.
+    "71253f20-5472-4ddd-8c58-27c78651878b.9-mv42599vpk5m.16775": ("lethal_damage", None),
+    # Pestilence takes a player to 0: the check ends the game, no creature dies.
+    "71253f20-5472-4ddd-8c58-27c78651878b.9-mv42599vpk5m.1744": ("lethal_damage", None),
+    # One damage from a deathtouch creature: 704.5h fires, 704.5g has no near miss.
+    "e4713c96-1647-4d93-ac89-039a435f0363.11-mv4w45ojam2q.11464": ("lethal_damage", None),
+    # Deathtouch granted by the resolution itself, then the fight.
+    "e4713c96-1647-4d93-ac89-039a435f0363.0-mv4yz1t23qrs.5464":
+        ("deathtouch_damage", (Polarity.FIRES, True)),
+    # Protection from white makes the white Aura fall.
+    "e4713c96-1647-4d93-ac89-039a435f0363.11-mv4w45ojam2q.15348":
+        ("aura_illegal", (Polarity.FIRES, True)),
+    # A bestowed Aura becomes a creature when its host leaves (702.103e).
+    "e4713c96-1647-4d93-ac89-039a435f0363.2-mv541ovjbkr3.2538": ("aura_illegal", None),
+    # Ordeal of Thassa sacrifices itself; gen-2 attributes it as it does the check.
+    "71253f20-5472-4ddd-8c58-27c78651878b.2-mv465aywnc5h.14696": ("aura_illegal", None),
+    # The Aura is the destroy spell's target.
+    "71253f20-5472-4ddd-8c58-27c78651878b.9-mv4cne1d8rhq.2995": ("aura_illegal", None),
+    # The host destroyed, its Aura exiled in the check.
+    "71253f20-5472-4ddd-8c58-27c78651878b.9-mv4cne1d8rhq.2092":
+        ("aura_illegal", (Polarity.FIRES, True)),
+    # The host stops being a creature: what the Aura enchants is on no record.
+    "50e3aa10-aa8d-4153-a614-e786a1dc6a6d.11-mv5epq5qc9mg.3703": ("aura_illegal", None),
+    # A lone legend entering at 0/0 dies by 704.5f, not the legend rule.
+    "50e3aa10-aa8d-4153-a614-e786a1dc6a6d.11-mv5g0s6bka1j.14623": ("legend_rule", None),
+    # A dies trigger's board shows its dead host at toughness 0.
+    "71253f20-5472-4ddd-8c58-27c78651878b.10-mv4aecvvg3eo.3650": ("toughness_zero", None),
+    # Losing an Aura's +0/+2 leaves marked damage lethal: 704.5g's.
+    "e4713c96-1647-4d93-ac89-039a435f0363.7-mv4yq1tr68fr.2370": ("toughness_zero", None),
+}
+
+
+@pytest.mark.parametrize("record_id", sorted(_REVIEWED))
+def test_a_reviewed_record_reads_as_judged(gen2_records, gen2_sidecars, record_id):
+    check, expected = _REVIEWED[record_id]
+    found = FAMILY.match(_by_id(gen2_records, record_id), gen2_sidecars, {"check": check})
+    if expected is None:
+        assert found is None
+    else:
+        assert (found.polarity, found.observed) == expected
+
+
+def test_a_saga_sacrificed_in_the_check_is_no_creature_check_s(gen2_records, gen2_sidecars):
+    """Summon: Shiva's last chapter: the Saga creature leaves with no P/T change."""
+    record = _by_id(gen2_records, "2ed74263-ee28-4948-9621-55dba1160c44.1-mv5im7i940u2.36687")
+    assert FAMILY.match(record, gen2_sidecars, {"check": "toughness_zero"}) is None

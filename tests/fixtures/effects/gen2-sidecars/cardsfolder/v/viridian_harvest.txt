@@ -1,0 +1,5 @@
+name: viridian harvest
+mana cost: {G}
+types: enchantment aura
+static: enchant artifact
+triggered: when enchanted artifact is put into a graveyard, you gain 6 life.

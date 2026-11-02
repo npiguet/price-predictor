@@ -1,0 +1,4 @@
+name: sunscorched desert
+types: land desert
+activated[1]: {T}: add {C}.
+triggered: when CARDNAME enters, it deals 1 damage to target player or planeswalker.

@@ -1,0 +1,5 @@
+name: devoted retainer
+mana cost: {W}
+types: creature human samurai
+power toughness: 1/1
+triggered: bushido 1

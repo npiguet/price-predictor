@@ -1,0 +1,13 @@
+layout: split
+name: commit
+mana cost: {3}{U}
+types: instant
+spell[1]: put target spell or nonland permanent into its owner's library second from the top.
+
+ALTERNATE
+
+name: memory
+mana cost: {4}{U}{U}
+types: sorcery
+static: aftermath
+spell[1]: each player shuffles their graveyard and hand into their library, then draws seven cards.

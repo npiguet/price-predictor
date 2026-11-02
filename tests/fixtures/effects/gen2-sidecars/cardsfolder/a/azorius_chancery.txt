@@ -1,0 +1,5 @@
+name: azorius chancery
+types: land
+activated[1]: {T}: add {W}{U}.
+triggered: when CARDNAME enters, return a land you control to its owner's hand.
+replacement: CARDNAME enters tapped.

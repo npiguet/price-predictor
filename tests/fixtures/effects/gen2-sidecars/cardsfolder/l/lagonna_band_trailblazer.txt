@@ -1,0 +1,5 @@
+name: lagonna-band trailblazer
+mana cost: {W}
+types: creature centaur scout
+power toughness: 0/4
+triggered: heroic — whenever you cast a spell that targets CARDNAME, put a +1/+1 counter on CARDNAME.

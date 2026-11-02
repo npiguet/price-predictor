@@ -1,0 +1,5 @@
+name: sauroform hybrid
+mana cost: {1}{G}
+types: creature human lizard warrior
+power toughness: 2/2
+activated[1]: {4}{G}{G}: adapt 4

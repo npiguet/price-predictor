@@ -1,0 +1,5 @@
+name: rescue leopard
+mana cost: {2}{R}
+types: creature cat
+power toughness: 4/2
+triggered: whenever this creature becomes tapped, you may discard a card. if you do, draw a card.

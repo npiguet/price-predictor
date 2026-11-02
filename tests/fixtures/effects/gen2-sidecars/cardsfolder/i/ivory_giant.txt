@@ -1,0 +1,6 @@
+name: ivory giant
+mana cost: {5}{W}{W}
+types: creature giant
+power toughness: 3/4
+alternate cost: suspend 5—{W}
+triggered: when CARDNAME enters, tap all nonwhite creatures.

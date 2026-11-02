@@ -1,0 +1,4 @@
+name: farseek
+mana cost: {1}{G}
+types: sorcery
+spell[1]: search your library for a plains, island, swamp, or mountain card, put it onto the battlefield tapped, then shuffle.

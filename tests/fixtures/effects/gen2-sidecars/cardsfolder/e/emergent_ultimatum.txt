@@ -1,0 +1,4 @@
+name: emergent ultimatum
+mana cost: {B}{B}{G}{G}{G}{U}{U}
+types: sorcery
+spell[1]: search your library for up to three monocolored cards with different names and exile them. an opponent chooses one of those cards. shuffle that card into your library. you may cast the other cards without paying their mana costs. exile CARDNAME.

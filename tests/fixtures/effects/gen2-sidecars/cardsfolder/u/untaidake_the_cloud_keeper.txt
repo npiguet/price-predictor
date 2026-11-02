@@ -1,0 +1,4 @@
+name: untaidake, the cloud keeper
+types: legendary land
+activated[1]: {T}, pay 2 life: add {C}{C}. spend this mana only to cast legendary spells.
+replacement: CARDNAME enters tapped.

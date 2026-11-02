@@ -9,7 +9,7 @@ Parameters:
 
 - ``field`` (required): ``pt``, ``keywords``, ``types`` or ``colors``;
 - ``value``: a keyword, type or colour the contribution must name (``flying``,
-  ``artifact``, ``U``), as the record spells it; a leading ``-`` names a
+  ``artifact``, ``U``), compared without case; a leading ``-`` names a
   removal, a lone ``=`` a characteristic set outright;
 - ``source_token_kind``: the static's source is a token of this kind (a
   Monster or a Royal Role, rule 111.10), found as ``outcome_event``'s is: a
@@ -78,7 +78,9 @@ def _carries(contribution: Contribution, field: str, value: str | None) -> bool:
         return bool(found)
     if field == "keywords":
         return normalize_keyword(value) in {normalize_keyword(k) for k in found}
-    return value in found
+    # The record spells types lower-case (``creature``, ``-creature``), a
+    # declaration as the rules do (``Creature``).
+    return value.lower() in {f.lower() for f in found}
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +88,7 @@ class ContinuousContribution:
     id: str = "continuous_contribution"
     params: frozenset[str] = frozenset(
         {"field", "value", "source_token_kind", "counter_condition"})
+    general: frozenset[str] = frozenset({"field", "value"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset()

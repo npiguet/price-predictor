@@ -1,0 +1,5 @@
+name: amrou scout
+mana cost: {1}{W}
+types: creature kithkin rebel scout
+power toughness: 2/1
+activated[1]: {4}, {T}: search your library for a rebel permanent card with mana value 3 or less, put it onto the battlefield, then shuffle.

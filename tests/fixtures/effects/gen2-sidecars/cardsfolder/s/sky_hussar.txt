@@ -1,0 +1,7 @@
+name: sky hussar
+mana cost: {3}{W}{U}
+types: creature human knight
+power toughness: 4/3
+static: flying
+activated[1]: forecast —  tap two untapped white and/or blue creatureses you control, reveal CARDNAME from your hand: draw a card.
+triggered: when CARDNAME enters, untap all creatures you control.

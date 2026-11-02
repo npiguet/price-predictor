@@ -1,0 +1,6 @@
+name: undying rage
+mana cost: {2}{R}
+types: enchantment aura
+static: enchant creature
+triggered: when CARDNAME is put into a graveyard from the battlefield, return CARDNAME to its owner's hand.
+static: enchanted creature gets +2/+2 and can't block.

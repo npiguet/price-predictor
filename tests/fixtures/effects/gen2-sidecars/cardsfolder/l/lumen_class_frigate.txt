@@ -1,0 +1,7 @@
+name: lumen-class frigate
+mana cost: {1}{W}
+types: artifact spacecraft
+power toughness: 3/5
+activated[1]: station 12
+static: station 2+ other creatures you control get +1/+1.
+static: station 12+ flying, lifelink

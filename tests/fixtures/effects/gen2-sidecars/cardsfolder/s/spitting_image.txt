@@ -1,0 +1,5 @@
+name: spitting image
+mana cost: {4}{G/U}{G/U}
+types: sorcery
+alternate cost: retrace
+spell[1]: create a token that's a copy of target creature.

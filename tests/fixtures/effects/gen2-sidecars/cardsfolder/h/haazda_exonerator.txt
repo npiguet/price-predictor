@@ -1,0 +1,5 @@
+name: haazda exonerator
+mana cost: {W}
+types: creature human cleric
+power toughness: 1/1
+activated[1]: {T}, sacrifice CARDNAME: destroy target aura.

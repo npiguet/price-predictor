@@ -1,0 +1,5 @@
+name: declaration of naught
+mana cost: {U}{U}
+types: enchantment
+replacement: as CARDNAME enters, choose a card name.
+activated[1]: {U}: counter target spell with the chosen name.

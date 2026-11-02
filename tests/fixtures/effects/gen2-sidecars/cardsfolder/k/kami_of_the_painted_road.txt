@@ -1,0 +1,5 @@
+name: kami of the painted road
+mana cost: {4}{W}
+types: creature spirit
+power toughness: 3/3
+triggered: whenever you cast a spirit or arcane spell, CARDNAME gains protection from the color of your choice until end of turn.

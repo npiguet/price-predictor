@@ -1,0 +1,15 @@
+layout: transform
+name: weaver of blossoms
+mana cost: {2}{G}
+types: creature human werewolf
+power toughness: 2/3
+triggered: daybound
+activated[1]: {T}: add one mana of any color.
+
+ALTERNATE
+
+name: blossom-clad werewolf
+types: creature werewolf
+power toughness: 3/4
+triggered: nightbound
+activated[1]: {T}: add two mana of any one color.

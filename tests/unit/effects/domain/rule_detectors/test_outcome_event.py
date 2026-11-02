@@ -266,3 +266,55 @@ def test_a_combat_records_events_show_too(by_kind):
         e.type is EventType.DAMAGE_DEALT for e in r.payload.events))
     assert FAMILY.match(record, None, {"event": "damage_dealt"}).polarity is Polarity.FIRES
     assert FAMILY.match(record, None, {"event": "damage_dealt", "api": "DealDamage"}) is None
+
+
+class TestT036Shapes:
+    """The shapes gen-2 writes where a declaration named an event it never writes."""
+
+    def test_a_counter_type_compares_in_one_spelling(self, gen2_records):
+        """Effect halves write ``+1/+1`` and ``P1P1`` both."""
+        record = next(r for r in gen2_records if r.kind.value == "resolution"
+                      and r.moment.value == "resolution" and any(
+                          e.type is EventType.COUNTER_CHANGE
+                          and str(e.params.get("counter_type")) in ("+1/+1", "P1P1")
+                          for e in r.payload.listed_events()))
+        for spelled in ("+1/+1", "P1P1", "p1p1"):
+            found = FAMILY.match(record, None, {"event": "counter_change",
+                                                "counter_type": spelled})
+            assert found.polarity is Polarity.FIRES, spelled
+
+    def _self_move(self, by_kind):
+        """A real effect half moving its own source off the battlefield, with
+        another event beside it (a Saga's last chapter, then its sacrifice)."""
+        for record in _effect_halves(by_kind):
+            source = record.state.refs.source
+            for event in record.payload.events:
+                if (event.type is EventType.ZONE_CHANGE and source in event.subjects
+                        and event.params.get("from_zone") == "battlefield"
+                        and len(record.payload.events) >= 2):
+                    return record, event
+        pytest.skip("no effect half in the fixture moves its own source")
+
+    def test_a_move_of_the_source_itself_is_what_subject_is_source_reads(self, by_kind):
+        record, event = self._self_move(by_kind)
+        declared = {"event": "zone_change", "from_zone": "battlefield",
+                    "subject_is_source": True}
+        found = FAMILY.match(record, None, declared)
+        assert found.polarity is Polarity.FIRES and record.state.refs.source in found.entities
+        elsewhere = replace(record, state=replace(record.state, refs=replace(
+            record.state.refs, source="E0")))
+        assert FAMILY.match(elsewhere, None, declared).polarity is Polarity.DOES_NOT_FIRE
+
+    def test_with_event_takes_the_event_s_filters(self, by_kind):
+        record, event = self._self_move(by_kind)
+        other = next(e for e in record.payload.events if e is not event)
+        to_zone = event.params.get("to_zone")
+        declared = {"event": other.type.value,
+                    "with_event": {"event": "zone_change", "from_zone": "battlefield",
+                                   "to_zone": to_zone}}
+        assert FAMILY.match(record, None, declared).polarity is Polarity.FIRES
+        declared["with_event"] = {**declared["with_event"], "to_zone": "nowhere"}
+        assert FAMILY.match(record, None, declared).polarity is Polarity.DOES_NOT_FIRE
+        with pytest.raises(ValueError, match="no parameter"):
+            FAMILY.match(record, None, {"event": other.type.value,
+                                        "with_event": {"event": "zone_change", "amount": 1}})

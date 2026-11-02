@@ -1,0 +1,6 @@
+name: bloodbraid marauder
+mana cost: {1}{R}
+types: creature human berserker
+power toughness: 3/1
+static: CARDNAME can't block.
+static: delirium — this spell has cascade as long as there are four or more card types among cards in your graveyard.

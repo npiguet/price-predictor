@@ -1,0 +1,5 @@
+name: timberpack wolf
+mana cost: {1}{G}
+types: creature wolf
+power toughness: 2/2
+static: CARDNAME gets +1/+1 for each other creature you control named timberpack wolf.

@@ -1,0 +1,5 @@
+name: kiln walker
+mana cost: {3}
+types: artifact creature phyrexian construct
+power toughness: 0/3
+triggered: whenever CARDNAME attacks, it gets +3/+0 until end of turn.

@@ -1,0 +1,5 @@
+name: ogre gatecrasher
+mana cost: {3}{R}
+types: creature ogre rogue
+power toughness: 3/3
+triggered: when CARDNAME enters, destroy target creature with defender.

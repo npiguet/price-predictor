@@ -1,0 +1,5 @@
+name: goblin battle jester
+mana cost: {3}{R}
+types: creature goblin
+power toughness: 2/2
+triggered: whenever you cast a red spell, target creature can't block this turn.

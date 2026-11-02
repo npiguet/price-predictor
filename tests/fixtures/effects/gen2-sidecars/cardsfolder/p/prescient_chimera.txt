@@ -1,0 +1,6 @@
+name: prescient chimera
+mana cost: {3}{U}{U}
+types: creature chimera
+power toughness: 3/4
+static: flying
+triggered: whenever you cast an instant or sorcery spell, scry 1.

@@ -1,0 +1,6 @@
+name: utvara scalper
+mana cost: {1}{R}
+types: creature goblin scout
+power toughness: 1/2
+static: flying
+static: CARDNAME attacks each combat if able.

@@ -1,0 +1,7 @@
+name: expel the unworthy
+mana cost: {1}{W}
+types: sorcery
+additional cost: kicker {2}{W}
+spell[1]: choose target creature with mana value 3 or less.
+spell[2]: if this spell was kicked, instead choose target creature. exile the chosen creature,
+spell[3]: then its controller gains life equal to its mana value.

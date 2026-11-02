@@ -1,0 +1,5 @@
+name: defensive stance
+mana cost: {U}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature gets -1/+1.

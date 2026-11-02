@@ -1,0 +1,5 @@
+name: kruge, genesis seeker
+mana cost: {2}{R}
+types: legendary creature klingon officer
+power toughness: 2/2
+triggered: whenever CARDNAME attacks, attacking klingons you control get +1/+1 until end of turn.

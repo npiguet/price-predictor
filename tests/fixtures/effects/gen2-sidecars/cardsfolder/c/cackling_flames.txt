@@ -1,0 +1,4 @@
+name: cackling flames
+mana cost: {3}{R}
+types: instant
+spell[1]: CARDNAME deals 3 damage to any target. hellbent — CARDNAME deals 5 damage to that permanent or player instead if you have no cards in hand.

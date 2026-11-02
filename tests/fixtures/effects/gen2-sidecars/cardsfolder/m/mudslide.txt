@@ -1,0 +1,5 @@
+name: mudslide
+mana cost: {2}{R}
+types: enchantment
+triggered: at the beginning of each player's upkeep, that player may choose any number of tapped creatures without flying they control and pay {2} for each creature chosen this way. if the player does, untap those creatures.
+replacement: creatures without flying don't untap during their controllers' untap steps.

@@ -1,0 +1,6 @@
+name: delta bloodflies
+mana cost: {1}{B}
+types: creature insect
+power toughness: 1/2
+static: flying
+triggered: whenever this creature attacks, if you control a creature with a counter on it, each opponent loses 1 life.

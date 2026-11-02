@@ -1,0 +1,6 @@
+name: yorvo, lord of garenbrig
+mana cost: {G}{G}{G}
+types: legendary creature giant noble
+power toughness: 0/0
+replacement: CARDNAME enters with four +1/+1 counters on it.
+triggered: whenever another green creature you control enters, put a +1/+1 counter on CARDNAME. then if that creature's power is greater than CARDNAME's power, put another +1/+1 counter on CARDNAME.

@@ -1,0 +1,5 @@
+name: censor
+mana cost: {1}{U}
+types: instant
+activated[1]: cycling {U}
+spell[2]: counter target spell unless its controller pays {1}.

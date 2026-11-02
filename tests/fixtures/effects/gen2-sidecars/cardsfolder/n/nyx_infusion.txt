@@ -1,0 +1,5 @@
+name: nyx infusion
+mana cost: {2}{B}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature gets +2/+2 as long as it's an enchantment. otherwise, it gets -2/-2.

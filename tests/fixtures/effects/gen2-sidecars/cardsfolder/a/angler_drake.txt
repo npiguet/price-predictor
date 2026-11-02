@@ -1,0 +1,6 @@
+name: angler drake
+mana cost: {4}{U}{U}
+types: creature drake
+power toughness: 4/4
+static: flying
+triggered: when CARDNAME enters, you may return target creature to its owner's hand.

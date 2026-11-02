@@ -1,0 +1,5 @@
+name: citanul hierophants
+mana cost: {3}{G}
+types: creature human druid
+power toughness: 3/2
+static: creatures you control have "{T}: add {G}."

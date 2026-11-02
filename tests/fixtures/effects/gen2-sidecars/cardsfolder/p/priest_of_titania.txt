@@ -1,0 +1,5 @@
+name: priest of titania
+mana cost: {1}{G}
+types: creature elf druid
+power toughness: 1/1
+activated[1]: {T}: add {G} for each elf on the battlefield.

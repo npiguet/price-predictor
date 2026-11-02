@@ -1,0 +1,4 @@
+name: vicious rumors
+mana cost: {B}
+types: sorcery
+spell[1]: CARDNAME deals 1 damage to each opponent. each opponent discards a card, then mills a card. you gain 1 life.

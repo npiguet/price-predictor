@@ -1,0 +1,5 @@
+name: dragonfire blade
+mana cost: {1}
+types: artifact equipment
+activated[1]: equip {4}. this ability costs {1} less to activate for each color of the creature it targets
+static: equipped creature gets +2/+2 and has hexproof from monocolored.

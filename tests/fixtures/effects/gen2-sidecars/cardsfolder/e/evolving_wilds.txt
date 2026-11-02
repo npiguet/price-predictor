@@ -1,0 +1,3 @@
+name: evolving wilds
+types: land
+activated[1]: {T}, sacrifice CARDNAME: search your library for a basic land card, put it onto the battlefield tapped, then shuffle.

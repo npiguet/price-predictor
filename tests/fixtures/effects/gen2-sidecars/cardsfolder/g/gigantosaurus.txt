@@ -1,0 +1,4 @@
+name: gigantosaurus
+mana cost: {G}{G}{G}{G}{G}
+types: creature dinosaur
+power toughness: 10/10

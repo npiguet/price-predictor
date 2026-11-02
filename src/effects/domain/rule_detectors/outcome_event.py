@@ -21,7 +21,8 @@ Parameters:
   ``from_zone``/``to_zone`` of a ``zone_change``, ``counter_type`` of a
   ``counter_change``, ``flag`` of a ``state_flag_change``, ``out`` of a
   ``phased`` …, each an equality the event must meet, text compared without
-  case;
+  case and a counter type in ``normalize_counter_type``'s spelling (records
+  write ``+1/+1`` and ``P1P1`` both);
 - ``token_kind``: a ``token_created`` event's token has this subtype
   (``Treasure``, ``Food``: a kind rule 111.10 defines);
 - ``min_count``: how many such events the record must hold, 1 by default;
@@ -31,6 +32,11 @@ Parameters:
   ``Cycling``, ``Outlast``: an ability a keyword generates acts through the
   keyword's own line, whose API is no API of its own), compared in
   ``keyword_names``' spelling; like ``api`` it restricts both sides;
+- ``source_keyword``: the acting line's card prints this keyword on any of its
+  lines, read off its sidecar as ``verdict_bit`` reads it: an enters-with-
+  counters keyword (amplify, modular, sunburst, bloodthirst, graft) works in
+  the permanent spell's resolution, whose acting line is the implicit spell,
+  no keyword's; it restricts both sides too;
 - ``script_param``: the acting line's root segment holds this parameter, a
   name (``Monstrosity``, for ``Monstrosity$ True``) or a name -> value map
   (``{"Mode": "TurnFaceUp"}``, ``"*"`` for any value), which tells apart the
@@ -54,9 +60,15 @@ leaving the battlefield that was not in combat):
   snapshot, false where it is a card;
 - ``controller_is_owner``: the subject's controller is (true) or is not
   (false) its owner, read off the snapshot's gen-3 ``owner``;
+- ``subject_is_source``: the subject is (true) or is not (false) the acting
+  ability's source, ``refs.source`` (a Saga sacrificing itself, a permanent
+  sacrificed for its own unpaid upkeep);
 - ``with_event``, ``without_event``: the same record does, or does not, hold
   an event of this type as well (the sacrifice beside the counters it pays for,
-  the Equipment entering with no ``attached`` event).
+  the Equipment entering with no ``attached`` event): a type, or a map of
+  ``event`` and that event's filters (``{"event": "zone_change", "from_zone":
+  "battlefield", "to_zone": "graveyard"}``, a sacrifice as a gen-2 record
+  writes one).
 
 A qualifier cannot be combined with ``absent``.
 
@@ -77,12 +89,13 @@ from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
 from effects.domain.rule_detectors.acting_line import (
     acting_line,
+    card_has_keyword,
     is_keyword_line,
     root_params_of,
     script_params_match,
     source_is_token_of_kind,
 )
-from effects.domain.state_snapshot import EntityState, StateSnapshot
+from effects.domain.state_snapshot import EntityState, StateSnapshot, normalize_counter_type
 
 __all__ = ["EVENT_FILTERS", "FAMILY", "acting_api", "event_filters", "source_is_token_of_kind",
            "token_kind_of"]
@@ -98,18 +111,22 @@ EVENT_FILTERS = frozenset(
     name for names in EVENT_PARAMS.values() for name in names) - _UNFILTERABLE
 
 
-def _in_combat(entity: EntityState) -> bool | None:
+def _in_combat(entity: EntityState, state: StateSnapshot) -> bool | None:
     combat = entity.combat
     return combat is not None and bool(combat.attacking or combat.blocking)
 
 
-def _is_token(entity: EntityState) -> bool | None:
+def _is_token(entity: EntityState, state: StateSnapshot) -> bool | None:
     return entity.token_script_id is not None
 
 
-def _controller_is_owner(entity: EntityState) -> bool | None:
+def _controller_is_owner(entity: EntityState, state: StateSnapshot) -> bool | None:
     owner = getattr(entity, "owner", None)  # gen-3 snapshots only
     return None if owner is None else owner == entity.controller
+
+
+def _is_source(entity: EntityState, state: StateSnapshot) -> bool | None:
+    return None if state.refs.source is None else entity.id == state.refs.source
 
 
 #: Qualifiers read off the event's subject in the snapshot; None is unreadable.
@@ -117,11 +134,12 @@ _SUBJECT_QUALIFIERS = {
     "subject_in_combat": _in_combat,
     "subject_is_token": _is_token,
     "controller_is_owner": _controller_is_owner,
+    "subject_is_source": _is_source,
 }
 _RECORD_QUALIFIERS = frozenset({"with_event", "without_event"})
 _QUALIFIERS = frozenset(_SUBJECT_QUALIFIERS) | _RECORD_QUALIFIERS
-_OWN = frozenset({"event", "min_count", "api", "keyword", "script_param", "absent",
-                  "token_kind", "source_token_kind"}) | _QUALIFIERS
+_OWN = frozenset({"event", "min_count", "api", "keyword", "source_keyword", "script_param",
+                  "absent", "token_kind", "source_token_kind"}) | _QUALIFIERS
 #: The record kinds whose payload lists the events a rule's outcome is.
 _EVENT_KINDS = frozenset({RecordKind.RESOLUTION, RecordKind.COMBAT, RecordKind.TURN_ACTION})
 
@@ -132,11 +150,33 @@ def acting_api(record: EffectRecord, lines: SidecarLookup | None) -> str | None:
     return line.script_api_type if line is not None else None
 
 
-def same_value(found: Any, wanted: Any) -> bool:
-    """An event parameter's equality, text compared without case."""
+def same_value(found: Any, wanted: Any, name: str | None = None) -> bool:
+    """An event parameter's equality, text compared without case; a counter
+    type (``name`` ``counter_type``) in ``normalize_counter_type``'s spelling."""
     if isinstance(found, str) and isinstance(wanted, str):
+        if name == "counter_type":
+            return normalize_counter_type(found) == normalize_counter_type(wanted)
         return found.lower() == wanted.lower()
     return found == wanted
+
+
+def meets_filters(event: Event, filters: Mapping[str, Any]) -> bool:
+    """Whether ``event`` meets every one of a declaration's equalities."""
+    found = event.params or {}
+    return all(same_value(found.get(name), value, name) for name, value in filters.items())
+
+
+def _event_spec(spec: Any) -> tuple[EventType, dict[str, Any]]:
+    """A ``with_event``/``without_event`` value: a type, or ``event`` and its filters."""
+    if isinstance(spec, Mapping):
+        event = EventType(spec["event"])
+        return event, event_filters("outcome_event", event, spec, frozenset({"event"}))
+    return EventType(spec), {}
+
+
+def _holds(listed: tuple[Event, ...], spec: Any) -> bool:
+    event, filters = _event_spec(spec)
+    return any(e.type is event and meets_filters(e, filters) for e in listed)
 
 
 def event_filters(family: str, event: EventType, params: Mapping[str, Any],
@@ -171,7 +211,7 @@ def _subject_verdict(event: Event, state: StateSnapshot,
     entities = [e for e in (state.entity(s) for s in event.subjects) if e is not None]
     verdicts = []
     for entity in entities:
-        found = [_SUBJECT_QUALIFIERS[name](entity) for name in wanted]
+        found = [_SUBJECT_QUALIFIERS[name](entity, state) for name in wanted]
         if None in found:
             continue
         verdicts.append(all(f == v for f, v in zip(found, wanted.values(), strict=True)))
@@ -182,6 +222,7 @@ def _subject_verdict(event: Event, state: StateSnapshot,
 class OutcomeEvent:
     id: str = "outcome_event"
     params: frozenset[str] = _OWN | EVENT_FILTERS
+    general: frozenset[str] = frozenset({"event", "api", "keyword", "source_keyword", "absent"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset({"owner"}) if "controller_is_owner" in params else frozenset()
@@ -191,7 +232,7 @@ class OutcomeEvent:
         if "token_kind" in params and event is not EventType.TOKEN_CREATED:
             raise ValueError("outcome_event: token_kind reads a token_created event")
         for name in _RECORD_QUALIFIERS & set(params):
-            EventType(params[name])  # an unknown type raises
+            _event_spec(params[name])  # an unknown type or filter raises
         return filters
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
@@ -199,12 +240,13 @@ class OutcomeEvent:
         event = EventType(params["event"])
         filters = self._filters(event, params)
         api, keyword = params.get("api"), params.get("keyword")
-        scoped = api is not None or keyword is not None
+        source_keyword = params.get("source_keyword")
+        scoped = api is not None or keyword is not None or source_keyword is not None
         absent = bool(params.get("absent"))
         qualified = bool(_QUALIFIERS & set(params))
         if absent and not scoped:
-            raise ValueError("outcome_event: absent needs api or keyword, or every "
-                             "resolution fires")
+            raise ValueError("outcome_event: absent needs api, keyword or source_keyword, "
+                             "or every resolution fires")
         if absent and qualified:
             raise ValueError("outcome_event: a qualifier picks among events that happened, "
                              "which absent says did not")
@@ -220,6 +262,9 @@ class OutcomeEvent:
             if "script_param" in params and not script_params_match(
                     root_params_of(line), params["script_param"]):
                 return None
+        if source_keyword is not None and not card_has_keyword(
+                record.ability or (), lines, source_keyword):
+            return None
         kind = params.get("source_token_kind")
         if kind is not None and not source_is_token_of_kind(record.state, kind, record.ability):
             return None
@@ -228,8 +273,7 @@ class OutcomeEvent:
         wanted = [
             e for e in listed
             if e.type is event
-            and all(same_value((e.params or {}).get(name), value)
-                    for name, value in filters.items())
+            and meets_filters(e, filters)
             and (token_kind is None or token_kind.lower() in token_kind_of(e))]
         if qualified:
             return self._qualified(record, params, wanted, listed, scoped)
@@ -250,10 +294,9 @@ class OutcomeEvent:
     def _qualified(record: EffectRecord, params: Mapping[str, Any], wanted: list[Event],
                    listed: tuple[Event, ...], scoped: bool) -> FamilyMatch | None:
         """The rule's side among the events that happened, by its qualifiers."""
-        types = {e.type for e in listed}
         record_ok = all((
-            "with_event" not in params or EventType(params["with_event"]) in types,
-            "without_event" not in params or EventType(params["without_event"]) not in types,
+            "with_event" not in params or _holds(listed, params["with_event"]),
+            "without_event" not in params or not _holds(listed, params["without_event"]),
         ))
         read = [(e, _subject_verdict(e, record.state, params)) for e in wanted]
         read = [(e, verdict) for e, verdict in read if verdict is not None]

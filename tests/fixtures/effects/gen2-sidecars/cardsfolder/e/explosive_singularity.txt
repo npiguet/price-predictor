@@ -1,0 +1,6 @@
+name: explosive singularity
+mana cost: {8}{R}{R}
+types: sorcery
+additional cost: you may tap any number of untapped creatures you control. this spell costs {1} less to cast for each creature tapped this way.
+spell[1]: CARDNAME deals 10 damage to any target.
+static: this spell costs {1} less to cast for each creature tapped this way.

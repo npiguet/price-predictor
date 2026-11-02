@@ -1,0 +1,5 @@
+name: hour of eternity
+mana cost: {X}{X}{U}{U}{U}
+types: sorcery
+spell[1]: exile X target creature cards from your graveyard. for each card exiled this way, create a token that's a copy of that card, except it's a 4/4 black zombie.
+spell[2]: for each card exiled this way, create a token that's a copy of that card, except it's a 4/4 black zombie.

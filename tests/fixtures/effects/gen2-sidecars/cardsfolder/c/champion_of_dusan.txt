@@ -1,0 +1,6 @@
+name: champion of dusan
+mana cost: {2}{G}
+types: creature human warrior
+power toughness: 4/2
+static: trample
+activated[1]: renew — {1}{G}, exile CARDNAME from your graveyard: put a +1/+1 counter and a trample counter on target creature. activate only as a sorcery.

@@ -1,0 +1,4 @@
+name: yoked ox
+mana cost: {W}
+types: creature ox
+power toughness: 0/4

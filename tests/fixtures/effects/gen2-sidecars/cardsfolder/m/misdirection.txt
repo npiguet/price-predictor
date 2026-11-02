@@ -1,0 +1,5 @@
+name: misdirection
+mana cost: {3}{U}{U}
+types: instant
+spell[1]: change the target of target spell with a single target.
+static: you may exile a blue card from your hand rather than pay this spell's mana cost.

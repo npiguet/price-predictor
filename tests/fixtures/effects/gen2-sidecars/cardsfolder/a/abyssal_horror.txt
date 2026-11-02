@@ -1,0 +1,6 @@
+name: abyssal horror
+mana cost: {4}{B}{B}
+types: creature horror
+power toughness: 2/2
+static: flying
+triggered: when CARDNAME enters, target player discards two cards.

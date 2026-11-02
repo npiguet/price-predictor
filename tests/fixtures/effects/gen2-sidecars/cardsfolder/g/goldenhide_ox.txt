@@ -1,0 +1,5 @@
+name: goldenhide ox
+mana cost: {5}{G}
+types: enchantment creature ox
+power toughness: 5/4
+triggered: constellation — whenever CARDNAME or another enchantment you control enters, target creature must be blocked this turn if able.

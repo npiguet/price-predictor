@@ -100,6 +100,24 @@ def test_a_record_whose_outcome_disagrees_with_its_side_goes_on_the_review_list(
     assert RuleTag("r", Polarity.OTHER, True, (), "s").needs_review is False
 
 
+def test_an_outcome_the_record_cannot_show_goes_on_no_review_list():
+    """A family answering ``observed=None`` (the outcome is filed in another
+    record) counts the record's side and disagrees with nothing."""
+    index = _index(("704.5a-1", ("704.5a",), _Fixed(FamilyMatch(Polarity.FIRES, None, ("P1",)))))
+    result = tag_record(make_record(), index)
+    (tag,) = result.tags
+    assert tag.polarity is Polarity.FIRES and tag.observed is None
+    assert not result.review
+
+
+def test_a_readable_outcome_beside_an_unreadable_one_decides_the_merge():
+    index = _index(
+        ("704.5a-1", ("704.5a",), _Fixed(FamilyMatch(Polarity.FIRES, None))),
+        ("704.5a-2", ("704.5a",), _Fixed(FamilyMatch(Polarity.FIRES, True))))
+    (tag,) = tag_record(make_record(), index).tags
+    assert tag.observed is True
+
+
 def test_only_the_record_s_own_kind_is_matched():
     index = _index(("1-1", ("1.1",), _Fixed(FamilyMatch(Polarity.FIRES, True))))
     from effects.domain.records import RecordKind

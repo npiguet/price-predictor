@@ -1,0 +1,5 @@
+name: consign to dust
+mana cost: {2}{G}
+types: instant
+additional cost: strive {2}{G}
+spell[1]: destroy any number of target artifacts and/or enchantments.

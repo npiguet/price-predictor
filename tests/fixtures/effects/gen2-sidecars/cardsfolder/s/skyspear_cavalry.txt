@@ -1,0 +1,6 @@
+name: skyspear cavalry
+mana cost: {3}{W}{W}
+types: creature human soldier
+power toughness: 2/2
+static: flying
+static: double strike

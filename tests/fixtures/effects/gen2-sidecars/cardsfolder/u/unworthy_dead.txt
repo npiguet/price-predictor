@@ -1,0 +1,5 @@
+name: unworthy dead
+mana cost: {1}{B}
+types: creature phyrexian skeleton
+power toughness: 1/1
+activated[1]: {B}: regenerate CARDNAME.

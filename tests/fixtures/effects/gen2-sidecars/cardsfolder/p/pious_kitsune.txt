@@ -1,0 +1,6 @@
+name: pious kitsune
+mana cost: {2}{W}
+types: creature fox cleric
+power toughness: 1/2
+activated[1]: {T}, remove a devotion counter from CARDNAME: you gain 1 life.
+triggered: at the beginning of your upkeep, put a devotion counter on CARDNAME. then if a creature named eight-and-a-half-tails is on the battlefield, you gain 1 life for each devotion counter on CARDNAME.

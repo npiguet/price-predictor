@@ -1,0 +1,5 @@
+name: rending flame
+mana cost: {2}{R}
+types: instant
+spell[1]: CARDNAME deals 5 damage to target creature or player. if that permanent is a spirit, CARDNAME also deals 2 damage to that permanent's controller.
+spell[2]: if that permanent is a spirit, CARDNAME also deals 2 damage to that permanent's controller.

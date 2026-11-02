@@ -1,0 +1,6 @@
+name: hazerider drake
+mana cost: {2}{W}{U}
+types: creature drake
+power toughness: 2/3
+static: flying
+static: protection from red

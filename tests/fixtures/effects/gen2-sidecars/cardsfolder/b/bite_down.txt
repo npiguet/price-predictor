@@ -1,0 +1,4 @@
+name: bite down
+mana cost: {1}{G}
+types: instant
+spell[1]: target creature you control deals damage equal to its power to target creature or planeswalker you don't control.

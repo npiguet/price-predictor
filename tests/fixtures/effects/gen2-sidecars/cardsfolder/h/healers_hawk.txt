@@ -1,0 +1,6 @@
+name: healer's hawk
+mana cost: {W}
+types: creature bird
+power toughness: 1/1
+static: flying
+static: lifelink

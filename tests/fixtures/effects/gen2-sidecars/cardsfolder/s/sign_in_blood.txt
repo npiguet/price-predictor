@@ -1,0 +1,4 @@
+name: sign in blood
+mana cost: {B}{B}
+types: sorcery
+spell[1]: target player draws two cards and loses 2 life.

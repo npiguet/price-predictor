@@ -1,0 +1,5 @@
+name: dwarven demolition team
+mana cost: {2}{R}
+types: creature dwarf
+power toughness: 1/1
+activated[1]: {T}: destroy target wall.

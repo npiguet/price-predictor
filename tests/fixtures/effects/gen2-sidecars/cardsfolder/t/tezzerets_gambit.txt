@@ -1,0 +1,4 @@
+name: tezzeret's gambit
+mana cost: {3}{U/P}
+types: sorcery
+spell[1]: draw two cards, then proliferate.

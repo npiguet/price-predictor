@@ -1,0 +1,5 @@
+name: boggart forager
+mana cost: {R}
+types: creature goblin rogue
+power toughness: 1/1
+activated[1]: {R}, sacrifice CARDNAME: target player shuffles their library.

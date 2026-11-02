@@ -91,3 +91,18 @@ def test_a_counter_condition_compares_in_one_spelling():
 def test_another_keyword_is_the_near_miss(by_kind):
     found = FAMILY.match(_trample_grant(by_kind), None, {"field": "keywords", "value": "flying"})
     assert found.polarity is Polarity.DOES_NOT_FIRE
+
+
+def test_a_type_is_compared_without_case(by_kind):
+    """The record spells types lower-case; a declaration writes ``Creature``."""
+    record = next((r for r in by_kind("continuous")
+                   if any(t.lstrip("-") for c in r.payload.contributions for t in c.types)),
+                  None)
+    if record is None:
+        import pytest
+
+        pytest.skip("no type-changing static in the fixture")
+    written = next(t for c in record.payload.contributions for t in c.types if t.lstrip("-"))
+    for spelled in (written, written.upper(), written.capitalize()):
+        found = FAMILY.match(record, None, {"field": "types", "value": spelled})
+        assert found.polarity is Polarity.FIRES, spelled

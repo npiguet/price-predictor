@@ -1,0 +1,5 @@
+name: focus the mind
+mana cost: {4}{U}
+types: instant
+spell[1]: draw three cards, then discard a card.
+static: this spell costs {2} less to cast if you've cast another spell this turn.

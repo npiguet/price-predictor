@@ -1,0 +1,5 @@
+name: healer of the pride
+mana cost: {3}{W}
+types: creature cat cleric
+power toughness: 2/3
+triggered: whenever another creature you control enters, you gain 2 life.

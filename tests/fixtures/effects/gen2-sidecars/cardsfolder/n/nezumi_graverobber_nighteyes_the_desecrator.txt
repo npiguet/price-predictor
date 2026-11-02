@@ -1,0 +1,14 @@
+layout: flip
+name: nezumi graverobber
+mana cost: {1}{B}
+types: creature rat rogue
+power toughness: 2/1
+activated[1]: {1}{B}: exile target card from an opponent's graveyard. if no cards are in that graveyard, flip CARDNAME.
+
+ALTERNATE
+
+name: nighteyes the desecrator
+mana cost: {1}{B}
+types: legendary creature rat wizard
+power toughness: 4/2
+activated[1]: {4}{B}: put target creature card from a graveyard onto the battlefield under your control.

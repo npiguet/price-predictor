@@ -1,0 +1,6 @@
+name: freewind equenaut
+mana cost: {2}{W}
+types: creature human archer
+power toughness: 2/2
+static: flying
+static: as long as CARDNAME is enchanted, it has "{T}: CARDNAME deals 2 damage to target attacking or blocking creature."

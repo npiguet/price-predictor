@@ -1,0 +1,5 @@
+name: shower of sparks
+mana cost: {R}
+types: instant
+spell[1]: CARDNAME deals 1 damage to target creature
+spell[2]: and 1 damage to target player or planeswalker.

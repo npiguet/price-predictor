@@ -30,6 +30,7 @@ from effects.domain.rule_detectors import FamilyMatch, register
 class ResolutionOutcomeFamily:
     id: str = "resolution_outcome"
     params: frozenset[str] = frozenset({"outcome", "near", "targeted"})
+    general: frozenset[str] = frozenset({"outcome", "near"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset()

@@ -1,0 +1,4 @@
+name: merfolk of the pearl trident
+mana cost: {U}
+types: creature merfolk
+power toughness: 1/1

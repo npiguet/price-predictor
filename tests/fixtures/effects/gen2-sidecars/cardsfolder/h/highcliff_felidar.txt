@@ -1,0 +1,6 @@
+name: highcliff felidar
+mana cost: {5}{W}{W}
+types: creature cat beast
+power toughness: 5/5
+static: vigilance
+triggered: when CARDNAME enters, for each opponent, choose a creature with the greatest power among creatures that player controls. destroy those creatures.

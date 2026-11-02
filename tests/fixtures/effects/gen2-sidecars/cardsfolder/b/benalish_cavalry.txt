@@ -1,0 +1,5 @@
+name: benalish cavalry
+mana cost: {1}{W}
+types: creature human knight
+power toughness: 2/2
+triggered: flanking

@@ -1,0 +1,6 @@
+name: trickster's elk
+mana cost: {2}{G}
+types: enchantment creature elk
+power toughness: 3/3
+alternate cost: bestow {1}{G}
+static: enchanted creature loses all abilities and is a green elk creature with base power and toughness 3/3.

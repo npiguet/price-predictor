@@ -1,0 +1,5 @@
+name: gateway plaza
+types: land gate
+activated[1]: {T}: add one mana of any color.
+triggered: when CARDNAME enters, sacrifice it unless you pay {1}.
+replacement: CARDNAME enters tapped.

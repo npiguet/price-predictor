@@ -1,0 +1,6 @@
+name: sagu pummeler
+mana cost: {3}{G}
+types: creature beast
+power toughness: 4/4
+static: reach
+activated[1]: renew — {4}{G}, exile CARDNAME from your graveyard: put two +1/+1 counters and a reach counter on target creature. activate only as a sorcery.

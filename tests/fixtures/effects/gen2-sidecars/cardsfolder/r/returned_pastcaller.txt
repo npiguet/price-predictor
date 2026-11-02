@@ -1,0 +1,6 @@
+name: returned pastcaller
+mana cost: {3}{R}{R/W}{W}
+types: creature spirit cleric
+power toughness: 4/2
+static: flying
+triggered: when CARDNAME enters, return target spirit, instant or sorcery card from your graveyard to your hand.

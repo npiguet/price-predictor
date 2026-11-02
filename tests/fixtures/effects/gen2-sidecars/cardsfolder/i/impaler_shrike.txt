@@ -1,0 +1,6 @@
+name: impaler shrike
+mana cost: {2}{U}{U}
+types: creature phyrexian bird
+power toughness: 3/1
+static: flying
+triggered: whenever CARDNAME deals combat damage to a player, you may sacrifice it. if you do, draw three cards.

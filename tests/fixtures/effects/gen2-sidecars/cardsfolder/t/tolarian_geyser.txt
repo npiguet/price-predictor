@@ -1,0 +1,5 @@
+name: tolarian geyser
+mana cost: {2}{U}
+types: sorcery
+additional cost: kicker {W}
+spell[1]: return target creature to its owner's hand. draw a card. if this spell was kicked, you gain 3 life.

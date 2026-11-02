@@ -1,0 +1,5 @@
+name: grim guardian
+mana cost: {2}{B}
+types: enchantment creature zombie
+power toughness: 1/4
+triggered: constellation — whenever CARDNAME or another enchantment you control enters, each opponent loses 1 life.

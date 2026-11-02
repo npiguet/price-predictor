@@ -29,6 +29,12 @@ candidate acting through a keyword's own line, a candidate whose card prints a
 keyword, a candidate whose cost has a part (``Sac<...>``), a candidate listing
 targets, a damage rewrite a prevention shield replaced, a creature leaving the
 battlefield in combat, a token's static and a counter-conditioned static.
+
+Gen-2 also pins records by id (``_GEN2_PINNED``): the shapes the rule
+detectors were corrected against in T036, each one record read and judged by
+hand, found by reading the shards their ids name. ``--append`` adds the pinned
+records to the fixture already on disk without rescanning, so every record an
+existing test names stays.
 """
 
 from __future__ import annotations
@@ -48,6 +54,53 @@ from effects.infrastructure.record_codec import record_from_dict
 from effects.infrastructure.shard_io import iter_shard_lines, iter_shards
 
 _KEY_FIELDS = {"script_file", "face", "trait_kind", "index_within_kind"}
+
+#: Gen-2 records pinned by id, with what each shows (T036, the rule detectors'
+#: review groups). A shard is named by its record id's prefix.
+_GEN2_PINNED: dict[str, str] = {
+    "71253f20-5472-4ddd-8c58-27c78651878b.3-mv4d43zn1o4f.6392":
+        "burn takes a player to 0 life; the game end is in the next record",
+    "71253f20-5472-4ddd-8c58-27c78651878b.3-mv4d43zn1o4f.6393":
+        "the game-end rescue of orphaned events holding player_won",
+    "71253f20-5472-4ddd-8c58-27c78651878b.8-mv3ts9u2nlt0.12970":
+        "a game-end rescue spanning a turn, its board read after its events",
+    "71253f20-5472-4ddd-8c58-27c78651878b.0-mv46oleh5eqw.8786":
+        "a combat dealing lethal damage and poison at once",
+    "71253f20-5472-4ddd-8c58-27c78651878b.7-mv4cjj66gz7g.13429":
+        "Disintegrate: lethal damage, the creature exiled instead of dying",
+    "71253f20-5472-4ddd-8c58-27c78651878b.9-mv42599vpk5m.16775":
+        "Stuffy Doll: lethal damage to an indestructible creature",
+    "71253f20-5472-4ddd-8c58-27c78651878b.9-mv42599vpk5m.1744":
+        "Pestilence ends the game in the check: no creature dies",
+    "71253f20-5472-4ddd-8c58-27c78651878b.8-mv3ts9u2nlt0.11931":
+        "Nyx Infusion: a death with no recorded P/T change",
+    "e4713c96-1647-4d93-ac89-039a435f0363.11-mv4w45ojam2q.11464":
+        "Bite Down: one damage from a deathtouch source kills",
+    "e4713c96-1647-4d93-ac89-039a435f0363.0-mv4yz1t23qrs.5464":
+        "Undercity Uprising: deathtouch granted by the resolution, then a fight",
+    "e4713c96-1647-4d93-ac89-039a435f0363.11-mv4w45ojam2q.15348":
+        "Kami of the Painted Road gains protection from white: its white Aura falls",
+    "e4713c96-1647-4d93-ac89-039a435f0363.2-mv541ovjbkr3.2538":
+        "a bestowed Aura's host leaves",
+    "71253f20-5472-4ddd-8c58-27c78651878b.2-mv465aywnc5h.14696":
+        "Ordeal of Thassa sacrifices itself, attributed unresolved",
+    "71253f20-5472-4ddd-8c58-27c78651878b.9-mv4cne1d8rhq.2995":
+        "an Aura destroyed as the target, attributed unresolved",
+    "71253f20-5472-4ddd-8c58-27c78651878b.9-mv4cne1d8rhq.2092":
+        "the host destroyed, its Aura exiled in the check",
+    "50e3aa10-aa8d-4153-a614-e786a1dc6a6d.11-mv5g0s6bka1j.14623":
+        "a lone legend entering at 0/0 dies",
+    "71253f20-5472-4ddd-8c58-27c78651878b.10-mv4aecvvg3eo.3650":
+        "a dies trigger whose board shows its dead host at toughness 0",
+    "e4713c96-1647-4d93-ac89-039a435f0363.7-mv4yq1tr68fr.2370":
+        "an Aura's toughness boost lost: marked damage now lethal",
+    "50e3aa10-aa8d-4153-a614-e786a1dc6a6d.11-mv5epq5qc9mg.3703":
+        "the host stops being a creature: its Aura falls",
+    "71253f20-5472-4ddd-8c58-27c78651878b.6-mv461fz6wqim.13501":
+        "an endure resolution writing its counters as P1P1",
+    "2ed74263-ee28-4948-9621-55dba1160c44.1-mv5im7i940u2.36687":
+        "a Saga's last chapter draws, then the Saga is sacrificed in the check",
+}
 
 #: Records that follow a fired trigger in its game, kept so an interaction join
 #: (trigger -> the resolution it put on the stack) has its second half.
@@ -398,6 +451,28 @@ def _categories(sidecars: _Sidecars) -> dict[str, Callable[[dict], bool]]:
     }
 
 
+def _pinned_records(records_dir: Path, wanted: dict[str, str]) -> dict[str, dict]:
+    """The pinned records, read from the shards their ids name."""
+    by_shard: dict[str, set[str]] = defaultdict(set)
+    for record_id in wanted:
+        by_shard[record_id.rsplit(".", 1)[0]].add(record_id)
+    paths = {path.name.split(".jsonl")[0]: path for path in iter_shards(records_dir)}
+    found: dict[str, dict] = {}
+    for name, ids in sorted(by_shard.items()):
+        if name not in paths:
+            continue
+        for line in iter_shard_lines(paths[name]):
+            record = json.loads(line)
+            if record["record_id"] in ids:
+                found[record["record_id"]] = record
+    return found
+
+
+def _read_fixture(path: Path) -> dict[str, dict]:
+    with gzip.open(path, "rt", encoding="utf-8") as handle:
+        return {r["record_id"]: r for r in (json.loads(line) for line in handle if line.strip())}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--generation", type=int, choices=(1, 2), default=1)
@@ -412,6 +487,8 @@ def main() -> int:
                         help="default tests/fixtures/effects/gen<N>-sidecars")
     parser.add_argument("--per-category", type=int, default=3)
     parser.add_argument("--max-shards", type=int, default=400)
+    parser.add_argument("--append", action="store_true",
+                        help="gen-2: add the pinned records to the fixture on disk, no scan")
     args = parser.parse_args()
     gen = args.generation
     args.records_dir = args.records_dir or Path(
@@ -428,6 +505,11 @@ def main() -> int:
     wanted_links: set[str] = set()
     wanted_mirrors: set[str] = set()
     extras: dict[str, dict] = {}
+
+    if args.append:
+        if gen != 2:
+            parser.error("--append adds gen-2's pinned records")
+        return _append_pinned(args, sidecars)
 
     shards = iter_shards(args.records_dir)
     # Interleave the collection runs rather than reading one run's shards first,
@@ -486,6 +568,8 @@ def main() -> int:
         for record in chosen[name]:
             records[record["record_id"]] = record
     records.update(extras)
+    if gen == 2:
+        records.update(_pinned_records(args.records_dir, _GEN2_PINNED))
     missing = [name for name in [*categories, *(["forge-ai"] if forge_ai_wanted else [])]
                if not chosen[name]]
 
@@ -493,26 +577,8 @@ def main() -> int:
     for record in records.values():
         record_from_dict(record)
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    with gzip.open(args.output, "wt", encoding="utf-8") as out:
-        for record in sorted(records.values(), key=lambda r: (r["game_id"], r["timestamp"])):
-            out.write(json.dumps(record, separators=(",", ":")) + "\n")
-
-    copied = 0
-    for script_file in sorted({key["script_file"]
-                               for record in records.values()
-                               for key in _keys_in(record)}):
-        source = sidecars.path(script_file)
-        if source is None or not source.exists():
-            continue
-        tree, _, relative = script_file.partition("/")
-        target = (args.sidecars_out / tree / relative).with_suffix(".provenance.json")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, target)
-        text = source.with_name(source.name[: -len(".provenance.json")] + ".txt")
-        if text.exists():
-            shutil.copyfile(text, target.with_name(text.name))
-        copied += 1
+    _write_fixture(args.output, records)
+    copied = _copy_sidecars(records, sidecars, args.sidecars_out, keep_existing=False)
 
     for name in chosen:
         print(f"{name:22s} {len(chosen[name])}", file=sys.stderr)
@@ -521,6 +587,55 @@ def main() -> int:
     if missing:
         print(f"no record found for: {', '.join(missing)}", file=sys.stderr)
     return 0
+
+
+def _write_fixture(output: Path, records: dict[str, dict]) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with gzip.open(output, "wt", encoding="utf-8") as out:
+        for record in sorted(records.values(), key=lambda r: (r["game_id"], r["timestamp"])):
+            out.write(json.dumps(record, separators=(",", ":")) + "\n")
+
+
+def _copy_sidecars(records: dict[str, dict], sidecars: _Sidecars, sidecars_out: Path,
+                   *, keep_existing: bool) -> int:
+    """Copy every sidecar and converted text the records name; with
+    ``keep_existing``, a file already in the fixture is left as it is."""
+    copied = 0
+    for script_file in sorted({key["script_file"]
+                               for record in records.values()
+                               for key in _keys_in(record)}):
+        source = sidecars.path(script_file)
+        if source is None or not source.exists():
+            continue
+        tree, _, relative = script_file.partition("/")
+        target = (sidecars_out / tree / relative).with_suffix(".provenance.json")
+        if keep_existing and target.exists():
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+        text = source.with_name(source.name[: -len(".provenance.json")] + ".txt")
+        if text.exists():
+            shutil.copyfile(text, target.with_name(text.name))
+        copied += 1
+    return copied
+
+
+def _append_pinned(args, sidecars: _Sidecars) -> int:
+    """Add the pinned records to the fixture on disk, leaving every record in it."""
+    records = _read_fixture(args.output)
+    pinned = _pinned_records(args.records_dir, _GEN2_PINNED)
+    for record in pinned.values():
+        record_from_dict(record)
+    added = {rid: r for rid, r in pinned.items() if rid not in records}
+    records.update(added)
+    _write_fixture(args.output, records)
+    copied = _copy_sidecars(added, sidecars, args.sidecars_out, keep_existing=True)
+    missing = sorted(set(_GEN2_PINNED) - set(pinned))
+    print(f"{len(added)} pinned records added ({len(records)} in all) -> {args.output}; "
+          f"{copied} sidecars -> {args.sidecars_out}", file=sys.stderr)
+    if missing:
+        print(f"pinned records not found: {', '.join(missing)}", file=sys.stderr)
+    return 1 if missing else 0
 
 
 if __name__ == "__main__":

@@ -42,28 +42,34 @@ class RuleTag:
     """One rule a record shows: which side of it, and whether its outcome happened.
 
     ``polarity`` comes from the board, the variant situation the record
-    matches; ``observed`` from the record's outcome. A tag whose two disagree
-    goes on the review list (FR-004).
+    matches; ``observed`` from the record's outcome, None where the record
+    cannot show it (the collector files it in another record). A tag whose
+    two disagree goes on the review list (FR-004); an unreadable outcome
+    disagrees with nothing.
     """
 
     rule: str
     polarity: Polarity
-    observed: bool
+    observed: bool | None
     entities: tuple[str, ...]
     scenario: str
 
     @property
     def needs_review(self) -> bool:
-        return self.polarity is not Polarity.OTHER and self.observed != (
-            self.polarity is Polarity.FIRES)
+        return (self.polarity is not Polarity.OTHER and self.observed is not None
+                and self.observed != (self.polarity is Polarity.FIRES))
 
 
 @dataclass(frozen=True, slots=True)
 class FamilyMatch:
-    """What a family finds in one record for one scenario, before the rule is attached."""
+    """What a family finds in one record for one scenario, before the rule is attached.
+
+    ``observed`` is None where the record cannot show the outcome at all, as
+    a gen-2 resolution cannot show the game ending in the check after it.
+    """
 
     polarity: Polarity
-    observed: bool
+    observed: bool | None
     entities: tuple[str, ...] = ()
 
 
@@ -74,6 +80,12 @@ class DetectorFamily(Protocol):
     id: str
     #: The parameters a declaration may pass: the rule's general conditions.
     params: frozenset[str]
+    #: Those that state the family's condition and the rule's subject (the
+    #: event, the check, the verdict bit; the API, the keyword); the rest pick
+    #: one situation of it (an event filter, a script parameter, a selector),
+    #: and the breadth check (``rule_breadth``) drops them to measure the pool
+    #: a rule's detector is cut from.
+    general: frozenset[str]
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         """The gen-3 fields the family reads under ``params``; empty on gen-2 records."""
@@ -162,11 +174,15 @@ _ORDER = {Polarity.FIRES: 0, Polarity.DOES_NOT_FIRE: 1, Polarity.OTHER: 2}
 
 def _merge(rule: str, found: Iterable[RuleTag]) -> RuleTag:
     """Several scenarios of one rule on one record: ``fires`` if any says so,
-    else ``does_not_fire``, else ``other``; entities the union (research R1)."""
+    else ``does_not_fire``, else ``other``; entities the union (research R1);
+    observed where any readable one of the chosen side says so, None where
+    none of them is readable."""
     found = list(found)
     best = min(found, key=lambda tag: _ORDER[tag.polarity])
     entities = tuple(dict.fromkeys(e for tag in found for e in tag.entities))
-    observed = any(tag.observed for tag in found if tag.polarity is best.polarity)
+    readable = [tag.observed for tag in found
+                if tag.polarity is best.polarity and tag.observed is not None]
+    observed = any(readable) if readable else None
     return RuleTag(rule, best.polarity, observed, entities, best.scenario)
 
 

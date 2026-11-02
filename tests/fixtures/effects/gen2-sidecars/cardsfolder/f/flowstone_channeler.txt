@@ -1,0 +1,5 @@
+name: flowstone channeler
+mana cost: {2}{R}
+types: creature human spellshaper
+power toughness: 2/2
+activated[1]: {1}{R}, {T}, discard a card: target creature gets +1/-1 and gains haste until end of turn.

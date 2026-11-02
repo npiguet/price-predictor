@@ -1,0 +1,6 @@
+name: alistair, the brigadier
+mana cost: {1}{G}{W}{U}
+types: legendary creature human soldier
+power toughness: 3/3
+triggered: whenever you cast a historic spell, create a 1/1 white soldier creature token.
+triggered: whenever CARDNAME attacks, you may pay {8}. if you do, creatures you control get +X/+X until end of turn, where X is the number of historic permanents you control.

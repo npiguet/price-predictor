@@ -1,0 +1,5 @@
+name: lantern kami
+mana cost: {W}
+types: creature spirit
+power toughness: 1/1
+static: flying

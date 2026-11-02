@@ -1,0 +1,6 @@
+name: junkyard genius
+mana cost: {1}{B}{R}
+types: creature human artificer
+power toughness: 2/2
+activated[1]: {1}{B}{R}, sacrifice another creature or artifact: until end of turn, other creatures you control get +1/+0 and gain menace and haste.
+triggered: when CARDNAME enters, create a tapped powerstone token.

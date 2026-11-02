@@ -1,0 +1,4 @@
+name: ranger's path
+mana cost: {3}{G}
+types: sorcery
+spell[1]: search your library for up to two forest cards, put them onto the battlefield tapped, then shuffle.

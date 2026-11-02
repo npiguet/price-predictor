@@ -1,0 +1,5 @@
+name: unhallowed phalanx
+mana cost: {4}{B}
+types: creature zombie soldier
+power toughness: 1/13
+replacement: CARDNAME enters tapped.

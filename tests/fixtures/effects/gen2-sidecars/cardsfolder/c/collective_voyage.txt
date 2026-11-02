@@ -1,0 +1,4 @@
+name: collective voyage
+mana cost: {G}
+types: sorcery
+spell[1]: join forces — starting with you, each player may pay any amount of mana. each player searches their library for up to X basic land cards, where X is the total amount of mana paid this way, puts them onto the battlefield tapped, then shuffles.

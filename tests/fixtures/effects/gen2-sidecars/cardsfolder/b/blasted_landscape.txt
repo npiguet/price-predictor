@@ -1,0 +1,4 @@
+name: blasted landscape
+types: land
+activated[1]: cycling {2}
+activated[2]: {T}: add {C}.

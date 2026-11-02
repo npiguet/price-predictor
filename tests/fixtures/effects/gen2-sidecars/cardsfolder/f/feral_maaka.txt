@@ -1,0 +1,4 @@
+name: feral maaka
+mana cost: {1}{R}
+types: creature cat
+power toughness: 2/2

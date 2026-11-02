@@ -1,0 +1,5 @@
+name: looming shade
+mana cost: {2}{B}
+types: creature shade
+power toughness: 1/1
+activated[1]: {B}: CARDNAME gets +1/+1 until end of turn.

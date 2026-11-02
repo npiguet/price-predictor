@@ -1,0 +1,6 @@
+name: kiki-jiki, mirror breaker
+mana cost: {2}{R}{R}{R}
+types: legendary creature goblin shaman
+power toughness: 2/2
+static: haste
+activated[1]: {T}: create a token that's a copy of target nonlegendary creature you control, except it has haste. sacrifice it at the beginning of the next end step.

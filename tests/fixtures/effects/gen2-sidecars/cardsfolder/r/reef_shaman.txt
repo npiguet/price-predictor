@@ -1,0 +1,5 @@
+name: reef shaman
+mana cost: {U}
+types: creature merfolk shaman
+power toughness: 0/2
+activated[1]: {T}: target land becomes the basic land type of your choice until end of turn.

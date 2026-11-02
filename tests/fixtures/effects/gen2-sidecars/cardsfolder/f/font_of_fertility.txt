@@ -1,0 +1,4 @@
+name: font of fertility
+mana cost: {G}
+types: enchantment
+activated[1]: {1}{G}, sacrifice CARDNAME: search your library for a basic land card and put it onto the battlefield tapped, then shuffle.

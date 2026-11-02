@@ -1,0 +1,5 @@
+name: lost leonin
+mana cost: {1}{W}
+types: creature phyrexian cat soldier
+power toughness: 2/1
+static: infect

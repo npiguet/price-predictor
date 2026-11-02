@@ -1,0 +1,7 @@
+name: k'rrik, son of yawgmoth
+mana cost: {4}{B/P}{B/P}{B/P}
+types: legendary creature phyrexian horror minion
+power toughness: 2/2
+static: lifelink
+triggered: whenever you cast a black spell, put a +1/+1 counter on CARDNAME.
+static: for each {B} in a cost, you may pay 2 life rather than pay that mana.

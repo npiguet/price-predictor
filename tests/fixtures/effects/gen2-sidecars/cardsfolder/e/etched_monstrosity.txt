@@ -1,0 +1,6 @@
+name: etched monstrosity
+mana cost: {5}
+types: artifact creature phyrexian golem
+power toughness: 10/10
+replacement: CARDNAME enters with five -1/-1 counters on it.
+activated[1]: {W}{U}{B}{R}{G}, remove five -1/-1 counters from CARDNAME: target player draws three cards.

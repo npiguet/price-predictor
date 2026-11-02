@@ -1,0 +1,6 @@
+name: avenger of the fallen
+mana cost: {2}{B}
+types: creature human warrior
+power toughness: 2/4
+static: deathtouch
+triggered: mobilize X

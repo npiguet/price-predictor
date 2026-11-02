@@ -1,0 +1,5 @@
+name: rumbling ruin
+mana cost: {5}{R}
+types: creature elemental
+power toughness: 6/6
+triggered: when CARDNAME enters, count the number of +1/+1 counters on creatures you control. creatures your opponents control with power less than or equal to that number can't block this turn.

@@ -1,0 +1,5 @@
+name: seeker of insight
+mana cost: {1}{U}
+types: creature human wizard
+power toughness: 1/3
+activated[1]: {T}: draw a card, then discard a card. activate only if you've cast a noncreature spell this turn.

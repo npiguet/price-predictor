@@ -1,0 +1,5 @@
+name: leyline of resonance
+mana cost: {2}{R}{R}
+types: enchantment
+triggered: if CARDNAME is in your opening hand, you may begin the game with it on the battlefield.
+triggered: whenever you cast an instant or sorcery spell that targets only a single creature you control, copy that spell. you may choose new targets for the copy.

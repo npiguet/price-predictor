@@ -144,6 +144,8 @@ class VerdictBit:
     id: str = "verdict_bit"
     params: frozenset[str] = frozenset(
         {"bit", "check", "fires_when", "responsible_static"}) | FILTERS
+    general: frozenset[str] = frozenset(
+        {"bit", "check", "fires_when", "keyword", "source_keyword", "cost_symbol", "cost_part"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         bit = params.get("bit")

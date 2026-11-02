@@ -1,0 +1,6 @@
+name: silklash spider
+mana cost: {3}{G}{G}
+types: creature spider
+power toughness: 2/7
+static: reach
+activated[1]: {X}{G}{G}: CARDNAME deals X damage to each creature with flying.

@@ -1,0 +1,4 @@
+name: demolish
+mana cost: {3}{R}
+types: sorcery
+spell[1]: destroy target artifact or land.

@@ -1,0 +1,5 @@
+name: chariot of victory
+mana cost: {3}
+types: artifact equipment
+activated[1]: equip {1}
+static: equipped creature has first strike, trample, and haste.

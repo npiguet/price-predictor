@@ -1,0 +1,5 @@
+name: leyline of the meek
+mana cost: {2}{W}{W}
+types: enchantment
+triggered: if CARDNAME is in your opening hand, you may begin the game with it on the battlefield.
+static: creature tokens get +1/+1.

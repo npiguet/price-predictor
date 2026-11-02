@@ -1,0 +1,5 @@
+name: furnace scamp
+mana cost: {R}
+types: creature phyrexian beast
+power toughness: 1/1
+triggered: whenever CARDNAME deals combat damage to a player, you may sacrifice it. if you do, CARDNAME deals 3 damage to that player.

@@ -1,0 +1,6 @@
+name: cage of hands
+mana cost: {2}{W}
+types: enchantment aura
+static: enchant creature
+activated[1]: {1}{W}: return CARDNAME to its owner's hand.
+static: enchanted creature can't attack or block.

@@ -1,0 +1,4 @@
+name: stormplain detainment
+mana cost: {2}{W}
+types: enchantment
+triggered: when this enchantment enters, exile target nonland permanent an opponent controls until this enchantment leaves the battlefield.

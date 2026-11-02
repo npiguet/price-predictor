@@ -1,0 +1,9 @@
+name: phoenix of ash
+mana cost: {1}{R}{R}
+types: creature phoenix
+power toughness: 2/2
+alternate cost: escape—{2}{R}{R}, exile three other cards from your graveyard
+static: flying
+static: haste
+replacement: CARDNAME escapes with a +1/+1 counter on it.
+activated[1]: {2}{R}: CARDNAME gets +2/+0 until end of turn.

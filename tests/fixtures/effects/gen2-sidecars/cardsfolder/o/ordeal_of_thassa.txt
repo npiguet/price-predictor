@@ -1,0 +1,6 @@
+name: ordeal of thassa
+mana cost: {1}{U}
+types: enchantment aura
+static: enchant creature
+triggered: whenever enchanted creature attacks, put a +1/+1 counter on it. then if it has three or more +1/+1 counters on it, sacrifice CARDNAME.
+triggered: when you sacrifice CARDNAME, draw two cards.

@@ -1,0 +1,5 @@
+name: torch song
+mana cost: {2}{R}
+types: enchantment
+activated[1]: {2}{R}, sacrifice CARDNAME: it deals X damage to any target, where X is the number of verse counters on CARDNAME.
+triggered: at the beginning of your upkeep, you may put a verse counter on CARDNAME.

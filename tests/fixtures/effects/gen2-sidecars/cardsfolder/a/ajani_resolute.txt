@@ -1,0 +1,9 @@
+name: ajani resolute
+mana cost: {1}{W}
+types: legendary planeswalker ajani
+loyalty: 2
+planeswalker[1]: [-0]: you gain 1 life.
+planeswalker[2]: [-4]: create a 2/2 white cat soldier creature token named ajani's pridemate with "whenever you gain life, put a +1/+1 counter on this token."
+planeswalker[3]: [-10]: you get an emblem with "creatures you control get +2/+2."
+triggered: whenever you gain life, put a loyalty counter on CARDNAME.
+replacement: CARDNAME enters with two loyalty counters on it.

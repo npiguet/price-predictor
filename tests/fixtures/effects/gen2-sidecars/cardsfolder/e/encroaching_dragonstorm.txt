@@ -1,0 +1,5 @@
+name: encroaching dragonstorm
+mana cost: {3}{G}
+types: enchantment
+triggered: when this enchantment enters, search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.
+triggered: when a dragon you control enters, return this enchantment to its owner's hand.

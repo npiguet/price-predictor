@@ -35,6 +35,7 @@ _ROWS = {row.keyword: row for row in DAMAGE_STEP_KEYWORDS}
 class KeywordCombat:
     id: str = "keyword_combat"
     params: frozenset[str] = frozenset({"keyword"})
+    general: frozenset[str] = frozenset({"keyword"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset()

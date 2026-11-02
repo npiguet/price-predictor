@@ -54,3 +54,31 @@ def test_poison_reads_its_own_counter(by_kind):
 def test_an_unknown_check_is_refused(by_kind):
     with pytest.raises(ValueError, match="unknown check"):
         FAMILY.match(by_kind("combat")[0], None, {"check": "commander_damage"})
+
+
+def _record(gen2_records, record_id):
+    return next(r for r in gen2_records if r.record_id == record_id)
+
+
+def test_a_burn_kill_s_game_end_is_in_the_next_record_so_unreadable(gen2_records):
+    """The resolution takes P1 to 0 life; the game-end rescue after it holds
+    player_won. The kill fires, its outcome unreadable, and is no review."""
+    kill = _record(gen2_records, "71253f20-5472-4ddd-8c58-27c78651878b.3-mv4d43zn1o4f.6392")
+    found = FAMILY.match(kill, None, {"check": "life_zero"})
+    assert found.polarity is Polarity.FIRES and found.observed is None
+    assert found.entities == ("P1",)
+
+
+def test_the_game_end_rescue_shows_no_side(gen2_records):
+    rescue = _record(gen2_records, "71253f20-5472-4ddd-8c58-27c78651878b.3-mv4d43zn1o4f.6393")
+    assert any(e.type is EventType.PLAYER_WON for e in rescue.payload.events)
+    assert FAMILY.match(rescue, None, {"check": "life_zero"}) is None
+
+
+def test_a_player_both_dead_and_poisoned_is_neither_check_s_near_miss(gen2_records):
+    """Twelve damage at 3 life and the ninth poison counter: the life loss
+    ends the game, so poison's near miss cannot say what ended it."""
+    combat = _record(gen2_records, "71253f20-5472-4ddd-8c58-27c78651878b.0-mv46oleh5eqw.8786")
+    found = FAMILY.match(combat, None, {"check": "life_zero"})
+    assert found.polarity is Polarity.FIRES and found.observed and found.entities == ("P0",)
+    assert FAMILY.match(combat, None, {"check": "poison_ten"}) is None

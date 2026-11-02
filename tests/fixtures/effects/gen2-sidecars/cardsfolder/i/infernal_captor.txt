@@ -1,0 +1,6 @@
+name: infernal captor
+mana cost: {3}{R}
+types: creature devil rogue
+power toughness: 3/3
+triggered: exploit
+triggered: when CARDNAME exploits a creature, gain control of target artifact or creature until end of turn. untap that permanent. it gains haste until end of turn.

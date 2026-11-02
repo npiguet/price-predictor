@@ -1,0 +1,5 @@
+name: coal stoker
+mana cost: {3}{R}
+types: creature elemental
+power toughness: 3/3
+triggered: when CARDNAME enters, if you cast it from your hand, add {R}{R}{R}.

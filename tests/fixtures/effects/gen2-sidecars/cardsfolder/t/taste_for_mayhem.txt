@@ -1,0 +1,6 @@
+name: taste for mayhem
+mana cost: {R}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature gets +2/+0.
+static: hellbent — enchanted creature gets an additional +2/+0 as long as you have no cards in hand.

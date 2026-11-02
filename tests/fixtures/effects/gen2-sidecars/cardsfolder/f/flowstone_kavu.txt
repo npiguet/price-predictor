@@ -1,0 +1,6 @@
+name: flowstone kavu
+mana cost: {2}{R}
+types: creature kavu
+power toughness: 2/3
+static: menace
+activated[1]: {R}: CARDNAME gets +1/-1 until end of turn.

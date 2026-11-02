@@ -1,0 +1,4 @@
+name: vapor snag
+mana cost: {U}
+types: instant
+spell[1]: return target creature to its owner's hand. its controller loses 1 life.

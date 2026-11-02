@@ -1,0 +1,6 @@
+name: bounty of might
+mana cost: {4}{G}{G}
+types: instant
+spell[1]: target creature gets +3/+3 until end of turn.,,,,,,
+spell[2]: target creature gets +3/+3 until end of turn.,,,,,,
+spell[3]: target creature gets +3/+3 until end of turn.

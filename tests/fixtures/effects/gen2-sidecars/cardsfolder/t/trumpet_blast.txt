@@ -1,0 +1,4 @@
+name: trumpet blast
+mana cost: {2}{R}
+types: instant
+spell[1]: attacking creatures get +2/+0 until end of turn.

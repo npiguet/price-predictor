@@ -1,0 +1,6 @@
+name: mortal obstinacy
+mana cost: {W}
+types: enchantment aura
+static: enchant creature you control
+triggered: whenever enchanted creature deals combat damage to a player, you may sacrifice CARDNAME. if you do, destroy target enchantment.
+static: enchanted creature gets +1/+1.

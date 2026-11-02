@@ -13,6 +13,18 @@ Parameter ``check``: ``life_zero`` or ``poison_ten``.
 A player's life loss is the record's ``life_change`` deltas for that player,
 or, where the record holds none for them, the damage dealt to them: combat
 damage to a player is not always filed with its own ``life_change``.
+
+A player the record takes over the other check's line too (a combat dealing
+lethal damage and the tenth poison counter at once) is on neither side: the
+game's end cannot say which rule ended it.
+
+The collector writes a non-combat kill's game end in a record of its own
+after the resolution, the game-end rescue of orphaned events, never in the
+resolution's effect half (gen-3's held half takes the check's moves from the
+battlefield, not the game's end), so an effect half holding no game-end event
+has its outcome unreadable (``observed`` None). The rescue record itself
+shows no side: its board is read at the game's end, with the loser gone. A
+combat record holds its damage step's game end.
 """
 
 from __future__ import annotations
@@ -26,8 +38,10 @@ from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, Moment, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors.acting_line import is_rescued_orphans
 
 CHECKS = frozenset({"life_zero", "poison_ten"})
+_GAME_END = frozenset({EventType.PLAYER_WON, EventType.PLAYER_LOST})
 
 
 def _changes(record: EffectRecord, player: str) -> tuple[int | None, int, int, bool]:
@@ -52,10 +66,19 @@ def _changes(record: EffectRecord, player: str) -> tuple[int | None, int, int, b
     return life, damage, poison, lost
 
 
+def _outcome_readable(record: EffectRecord) -> bool:
+    """Whether the record can hold the game's end: any but an effect half
+    without a game-end event, whose game end the collector files after it."""
+    if record.kind is not RecordKind.RESOLUTION:
+        return True
+    return any(event.type in _GAME_END for event in record.payload.listed_events())
+
+
 @dataclass(frozen=True, slots=True)
 class SbaGameLoss:
     id: str = "sba_game_loss"
     params: frozenset[str] = frozenset({"check"})
+    general: frozenset[str] = frozenset({"check"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset()
@@ -68,25 +91,33 @@ class SbaGameLoss:
         effect_half = record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION
         if not effect_half and record.kind is not RecordKind.COMBAT:
             return None
+        if is_rescued_orphans(record):
+            return None
         fires, spared, observed = [], [], []
         for player in record.state.players:
             life, damage, poison, lost = _changes(record, player.id)
+            loss = -life if life is not None else damage
+            dead = loss > 0 and player.life - loss <= 0
+            poisoned = poison > 0 and player.poison + poison >= 10
             if check == "life_zero":
-                loss = -life if life is not None else damage
-                if loss <= 0:
+                if loss <= 0 or poisoned:
                     continue
-                side = player.life - loss <= 0
+                side = dead
             else:
-                if poison <= 0:
+                if poison <= 0 or dead:
                     continue
-                side = player.poison + poison >= 10
+                side = poisoned
             (fires if side else spared).append(player.id)
             if lost:
                 observed.append(player.id)
+        readable = _outcome_readable(record)
         if fires:
-            return FamilyMatch(Polarity.FIRES, any(p in observed for p in fires), tuple(fires))
+            return FamilyMatch(Polarity.FIRES,
+                               any(p in observed for p in fires) if readable else None,
+                               tuple(fires))
         if spared:
-            return FamilyMatch(Polarity.DOES_NOT_FIRE, any(p in observed for p in spared),
+            return FamilyMatch(Polarity.DOES_NOT_FIRE,
+                               any(p in observed for p in spared) if readable else None,
                                tuple(spared))
         return None
 

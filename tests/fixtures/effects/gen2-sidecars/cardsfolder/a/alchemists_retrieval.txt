@@ -1,0 +1,5 @@
+name: alchemist's retrieval
+mana cost: {U}
+types: instant
+alternate cost: cleave {1}{U}
+spell[1]: return target nonland permanent [you control] to its owner's hand.

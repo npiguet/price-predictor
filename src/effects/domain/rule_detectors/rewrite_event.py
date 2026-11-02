@@ -52,6 +52,7 @@ from effects.domain.rule_detectors.acting_line import acting_line, is_keyword_li
 from effects.domain.rule_detectors.outcome_event import (
     EVENT_FILTERS,
     event_filters,
+    meets_filters,
     same_value,
 )
 
@@ -80,6 +81,7 @@ def _results(value: Any) -> frozenset[RewriteResult]:
 class RewriteEvent:
     id: str = "rewrite_event"
     params: frozenset[str] = _OWN | EVENT_FILTERS
+    general: frozenset[str] = frozenset({"event", "result", "prevention", "keyword"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset()
@@ -99,7 +101,7 @@ class RewriteEvent:
         found = incoming.params or {}
         if "mode" in params and not same_value(found.get("mode"), params["mode"]):
             return None
-        if not all(same_value(found.get(name), value) for name, value in filters.items()):
+        if not meets_filters(incoming, filters):
             return None
         result = record.payload.result
         if result is None:

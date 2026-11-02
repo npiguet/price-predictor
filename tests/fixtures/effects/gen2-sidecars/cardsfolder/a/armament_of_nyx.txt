@@ -1,0 +1,6 @@
+name: armament of nyx
+mana cost: {2}{W}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature has double strike as long as it's an enchantment. otherwise, prevent all damage that would be dealt by enchanted creature.
+replacement: otherwise, prevent all damage that would be dealt by enchanted creature.

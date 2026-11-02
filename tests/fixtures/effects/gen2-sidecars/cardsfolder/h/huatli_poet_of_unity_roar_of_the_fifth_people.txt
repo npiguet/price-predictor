@@ -1,0 +1,17 @@
+layout: transform
+name: huatli, poet of unity
+mana cost: {2}{G}
+types: legendary creature human warrior bard
+power toughness: 2/3
+activated[1]: {3}{R/W}{R/W}: exile CARDNAME, then return it to the battlefield transformed under its owner's control. activate only as a sorcery.
+triggered: when CARDNAME enters, search your library for a basic land card, reveal it, put it into your hand, then shuffle.
+
+ALTERNATE
+
+name: roar of the fifth people
+types: enchantment saga
+chapter: I — create two 3/3 green dinosaur creature tokens.
+chapter: II — CARDNAME gains "creatures you control have '{T}: add {R}, {G}, or {W}.'"
+chapter: III — search your library for a dinosaur card, reveal it, put it into your hand, then shuffle.
+chapter: IV — dinosaurs you control gain double strike and trample until end of turn.
+replacement: CARDNAME enters with a lore counter on it.

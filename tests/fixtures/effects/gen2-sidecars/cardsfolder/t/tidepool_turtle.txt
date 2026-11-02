@@ -1,0 +1,5 @@
+name: tidepool turtle
+mana cost: {3}{U}
+types: creature turtle
+power toughness: 2/5
+activated[1]: {2}{U}: scry 1.

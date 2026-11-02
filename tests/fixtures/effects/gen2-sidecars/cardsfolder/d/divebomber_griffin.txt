@@ -1,0 +1,6 @@
+name: divebomber griffin
+mana cost: {3}{W}{W}
+types: creature griffin
+power toughness: 3/2
+static: flying
+activated[1]: {T}, sacrifice CARDNAME: it deals 3 damage to target attacking or blocking creature.

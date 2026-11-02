@@ -1,0 +1,8 @@
+name: electrozoa
+mana cost: {2}{U}
+types: creature jellyfish
+power toughness: 3/1
+static: flash
+static: flying
+triggered: when CARDNAME enters, you get {E}{E}.
+triggered: at the beginning of your first main phase, tap CARDNAME unless you pay {E}.

@@ -1,0 +1,4 @@
+name: auroral procession
+mana cost: {G}{U}
+types: instant
+spell[1]: return target card from your graveyard to your hand.

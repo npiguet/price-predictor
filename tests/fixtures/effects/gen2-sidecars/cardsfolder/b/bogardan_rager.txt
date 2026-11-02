@@ -1,0 +1,6 @@
+name: bogardan rager
+mana cost: {5}{R}
+types: creature elemental
+power toughness: 3/4
+static: flash
+triggered: when CARDNAME enters, target creature gets +4/+0 until end of turn.

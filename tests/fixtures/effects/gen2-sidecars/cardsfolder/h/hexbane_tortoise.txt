@@ -1,0 +1,6 @@
+name: hexbane tortoise
+mana cost: {2}{G}
+types: creature turtle
+power toughness: 3/2
+static: ward {2}
+static: enlist

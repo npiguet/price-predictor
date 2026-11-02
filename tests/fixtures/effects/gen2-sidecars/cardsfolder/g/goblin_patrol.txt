@@ -1,0 +1,5 @@
+name: goblin patrol
+mana cost: {R}
+types: creature goblin
+power toughness: 2/1
+triggered: echo {R}

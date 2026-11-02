@@ -1,0 +1,15 @@
+layout: transform
+name: kindly ancestor
+mana cost: {2}{W}
+types: creature spirit
+power toughness: 2/3
+alternate cost: disturb {1}{W}
+static: lifelink
+
+ALTERNATE
+
+name: ancestor's embrace
+types: enchantment aura
+static: enchant creature
+static: enchanted creature has lifelink.
+replacement: if CARDNAME would be put into a graveyard from anywhere, exile it instead.

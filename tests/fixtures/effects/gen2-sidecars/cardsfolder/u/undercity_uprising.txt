@@ -1,0 +1,4 @@
+name: undercity uprising
+mana cost: {2}{B}{G}
+types: sorcery
+spell[1]: creatures you control gain deathtouch until end of turn. target creature you control fights target creature you don't control.

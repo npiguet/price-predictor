@@ -1,0 +1,5 @@
+name: chronosavant
+mana cost: {5}{W}
+types: creature giant
+power toughness: 5/5
+activated[1]: {1}{W}: return CARDNAME from your graveyard to the battlefield tapped. you skip your next turn.

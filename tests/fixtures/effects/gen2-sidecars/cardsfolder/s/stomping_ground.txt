@@ -1,0 +1,4 @@
+name: stomping ground
+types: land mountain forest
+replacement: as CARDNAME enters, you may pay 2 life. if you don't, it enters tapped.
+activated[1]: {T}: add {R} or {G}

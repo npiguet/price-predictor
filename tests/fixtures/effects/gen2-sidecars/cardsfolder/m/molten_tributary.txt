@@ -1,0 +1,4 @@
+name: molten tributary
+types: land island mountain
+replacement: CARDNAME enters tapped.
+activated[1]: {T}: add {U} or {R}

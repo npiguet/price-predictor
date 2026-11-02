@@ -1,0 +1,6 @@
+name: urabrask the hidden
+mana cost: {3}{R}{R}
+types: legendary creature phyrexian praetor
+power toughness: 4/4
+static: creatures you control have haste.
+replacement: creatures your opponents control enter tapped.

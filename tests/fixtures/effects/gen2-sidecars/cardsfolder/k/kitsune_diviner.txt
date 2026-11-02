@@ -1,0 +1,5 @@
+name: kitsune diviner
+mana cost: {W}
+types: creature fox cleric
+power toughness: 0/1
+activated[1]: {T}: tap target spirit.

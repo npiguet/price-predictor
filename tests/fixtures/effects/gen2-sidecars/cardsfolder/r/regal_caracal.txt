@@ -1,0 +1,6 @@
+name: regal caracal
+mana cost: {3}{W}{W}
+types: creature cat
+power toughness: 3/3
+triggered: when CARDNAME enters, create two 1/1 white cat creature tokens with lifelink.
+static: other cats you control get +1/+1 and have lifelink.

@@ -1,0 +1,6 @@
+name: blighted agent
+mana cost: {1}{U}
+types: creature phyrexian human rogue
+power toughness: 1/1
+static: infect
+static: CARDNAME can't be blocked.

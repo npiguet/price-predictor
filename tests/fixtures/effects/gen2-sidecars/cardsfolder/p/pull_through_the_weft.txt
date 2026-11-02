@@ -1,0 +1,4 @@
+name: pull through the weft
+mana cost: {3}{G}{G}
+types: sorcery
+spell[1]: return up to two target nonland permanent cards from your graveyard to your hand, then return up to two target land cards from your graveyard to the battlefield tapped.

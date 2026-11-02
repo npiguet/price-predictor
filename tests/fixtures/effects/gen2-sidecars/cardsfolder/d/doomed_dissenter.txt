@@ -1,0 +1,5 @@
+name: doomed dissenter
+mana cost: {1}{B}
+types: creature human
+power toughness: 1/1
+triggered: when CARDNAME dies, create a 2/2 black zombie creature token.

@@ -1,0 +1,7 @@
+name: skarrgan hellkite
+mana cost: {3}{R}{R}
+types: creature dragon
+power toughness: 4/4
+static: riot
+static: flying
+activated[1]: {3}{R}: CARDNAME deals 2 damage divided as you choose among one or two targets. activate only if CARDNAME has a +1/+1 counter on it.

@@ -1,0 +1,6 @@
+name: party thrasher
+mana cost: {1}{R}
+types: creature lizard wizard
+power toughness: 1/4
+triggered: at the beginning of your first main phase, you may discard a card. if you do, exile the top two cards of your library, then choose one of them. you may play that card this turn.
+static: noncreature spells you cast from exile have convoke.

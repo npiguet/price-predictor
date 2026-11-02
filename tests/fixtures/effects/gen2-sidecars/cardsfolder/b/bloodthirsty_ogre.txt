@@ -1,0 +1,6 @@
+name: bloodthirsty ogre
+mana cost: {2}{B}
+types: creature ogre warrior shaman
+power toughness: 3/1
+activated[1]: {T}: put a devotion counter on CARDNAME.
+activated[2]: {T}: target creature gets -X/-X until end of turn, where X is the number of devotion counters on CARDNAME. activate only if you control a demon.

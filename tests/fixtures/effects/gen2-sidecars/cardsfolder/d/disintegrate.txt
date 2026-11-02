@@ -1,0 +1,4 @@
+name: disintegrate
+mana cost: {X}{R}
+types: sorcery
+spell[1]: CARDNAME deals X damage to any target. if it's a creature, it can't be regenerated this turn, and if it would die this turn, exile it instead.

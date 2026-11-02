@@ -1,0 +1,6 @@
+name: eldrazi repurposer
+mana cost: {2}{G}
+types: creature eldrazi drone
+power toughness: 3/3
+static: devoid
+triggered: when you cast this spell and when CARDNAME dies, create a 0/1 colorless eldrazi spawn creature token with "sacrifice this creature: add {C}."

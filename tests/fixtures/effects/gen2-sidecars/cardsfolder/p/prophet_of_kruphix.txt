@@ -1,0 +1,6 @@
+name: prophet of kruphix
+mana cost: {3}{G}{U}
+types: creature human wizard
+power toughness: 2/3
+static: untap all creatures and lands you control during each other player's untap step.
+static: you may cast creature spells as though they had flash.

@@ -1,0 +1,5 @@
+name: dreadbringer lampads
+mana cost: {4}{B}
+types: enchantment creature nymph
+power toughness: 4/2
+triggered: constellation — whenever CARDNAME or another enchantment you control enters, target creature gains intimidate until end of turn.

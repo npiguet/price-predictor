@@ -1,0 +1,9 @@
+name: diabolic servitude
+mana cost: {3}{B}
+types: enchantment
+triggered: when CARDNAME enters, return target creature card from your graveyard to the battlefield.
+triggered: when the creature put onto the battlefield with CARDNAME dies, exile it and return CARDNAME to its owner's hand.
+triggered: when CARDNAME leaves the battlefield, exile the creature put onto the battlefield with CARDNAME.
+replacement: forget remembered card if it goes into exile.
+replacement: forget remembered card if it goes into hand.
+replacement: forget remembered card if it goes into library.

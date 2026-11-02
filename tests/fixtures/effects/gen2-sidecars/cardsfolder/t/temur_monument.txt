@@ -1,0 +1,5 @@
+name: temur monument
+mana cost: {2}
+types: artifact
+activated[1]: {3}{G}{U}{R}, {T}, sacrifice CARDNAME: create a 5/5 green elephant creature token. activate only as a sorcery.
+triggered: when this artifact enters, search your library for a basic forest, island, or mountain card, reveal it, put it into your hand, then shuffle.

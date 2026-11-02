@@ -1,0 +1,9 @@
+name: reality twist
+mana cost: {U}{U}{U}
+types: enchantment
+text: if tapped for mana, plains produce {R}, swamps produce {G}, mountains produce {W}, and forests produce {B} instead of any other type.
+triggered: cumulative upkeep {1}{U}{U}
+replacement: if tapped for mana, plains produce r.
+replacement: if tapped for mana, swamps produce g.
+replacement: if tapped for mana, mountains produce u.
+replacement: if tapped for mana, forests produce b.

@@ -1,0 +1,7 @@
+name: artifact ward
+mana cost: {W}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature can't be blocked by artifact creatures.
+static: enchanted creature can't be the target of abilities from artifact sources.
+replacement: prevent all damage that would be dealt to enchanted creature by artifact sources.

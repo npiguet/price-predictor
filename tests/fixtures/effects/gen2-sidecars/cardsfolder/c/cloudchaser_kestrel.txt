@@ -1,0 +1,7 @@
+name: cloudchaser kestrel
+mana cost: {1}{W}{W}
+types: creature bird
+power toughness: 2/2
+static: flying
+activated[1]: {W}: target permanent becomes white until end of turn.
+triggered: when CARDNAME enters, destroy target enchantment.

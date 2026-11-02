@@ -1,0 +1,5 @@
+name: cosi's trickster
+mana cost: {U}
+types: creature merfolk wizard
+power toughness: 1/1
+triggered: whenever an opponent shuffles their library, you may put a +1/+1 counter on CARDNAME.

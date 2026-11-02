@@ -1,0 +1,6 @@
+name: spire monitor
+mana cost: {4}{U}
+types: creature phyrexian drake
+power toughness: 3/3
+static: flash
+static: flying

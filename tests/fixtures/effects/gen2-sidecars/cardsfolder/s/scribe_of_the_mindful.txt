@@ -1,0 +1,5 @@
+name: scribe of the mindful
+mana cost: {2}{U}
+types: creature human cleric
+power toughness: 2/2
+activated[1]: {1}, {T}, sacrifice CARDNAME: return target instant or sorcery card from your graveyard to your hand.

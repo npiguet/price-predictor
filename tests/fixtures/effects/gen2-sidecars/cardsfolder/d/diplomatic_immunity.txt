@@ -1,0 +1,6 @@
+name: diplomatic immunity
+mana cost: {1}{U}
+types: enchantment aura
+static: enchant creature
+static: shroud
+static: enchanted creature has shroud.

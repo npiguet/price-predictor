@@ -1,0 +1,7 @@
+name: glyph keeper
+mana cost: {3}{U}{U}
+types: creature sphinx
+power toughness: 5/3
+alternate cost: embalm {5}{U}{U}
+static: flying
+triggered: whenever CARDNAME becomes the target of a spell or ability for the first time each turn, counter that spell or ability.

@@ -1,0 +1,4 @@
+name: breach
+mana cost: {2}{B}
+types: instant
+spell[1]: target creature gets +2/+0 and gains fear until end of turn.

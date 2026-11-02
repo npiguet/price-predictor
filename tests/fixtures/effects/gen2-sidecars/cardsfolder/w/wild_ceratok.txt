@@ -1,0 +1,4 @@
+name: wild ceratok
+mana cost: {3}{G}
+types: creature rhino
+power toughness: 4/3

@@ -1,0 +1,5 @@
+name: nylea's disciple
+mana cost: {2}{G}{G}
+types: creature centaur archer
+power toughness: 3/3
+triggered: when CARDNAME enters, you gain life equal to your devotion to green.

@@ -1,0 +1,5 @@
+name: fierce retribution
+mana cost: {1}{W}
+types: instant
+alternate cost: cleave {5}{W}
+spell[1]: destroy target [attacking] creature.

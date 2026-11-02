@@ -1,0 +1,4 @@
+name: first pick
+mana cost: {3}{G}
+types: instant
+spell[1]: destroy target artifact or enchantment. assemble a contraption.

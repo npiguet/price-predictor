@@ -1,0 +1,6 @@
+name: cartouche of ambition
+mana cost: {2}{B}
+types: enchantment aura cartouche
+static: enchant creature you control
+triggered: when CARDNAME enters, you may put a -1/-1 counter on target creature.
+static: enchanted creature gets +1/+1 and has lifelink.

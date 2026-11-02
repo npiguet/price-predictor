@@ -1,0 +1,4 @@
+name: plummet
+mana cost: {1}{G}
+types: instant
+spell[1]: destroy target creature with flying.

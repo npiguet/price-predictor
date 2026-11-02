@@ -1,0 +1,6 @@
+name: street savvy
+mana cost: {G}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature gets +0/+2 and can block creatures with landwalk abilities as though they didn't have those abilities.
+static: enchanted creature can block creatures with landwalk abilities as though they didn't have those abilities.

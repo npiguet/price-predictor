@@ -1,0 +1,6 @@
+name: ill-tempered cyclops
+mana cost: {3}{R}
+types: creature cyclops
+power toughness: 3/3
+static: trample
+activated[1]: {5}{R}: monstrosity 3

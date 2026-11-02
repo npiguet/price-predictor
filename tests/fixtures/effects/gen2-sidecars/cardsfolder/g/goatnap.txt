@@ -1,0 +1,4 @@
+name: goatnap
+mana cost: {2}{R}
+types: sorcery
+spell[1]: gain control of target creature until end of turn. untap that creature. it gains haste until end of turn. if that creature is a goat, it also gets +3/+0 until end of turn.

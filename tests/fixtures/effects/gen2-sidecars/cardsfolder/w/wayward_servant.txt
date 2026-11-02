@@ -1,0 +1,5 @@
+name: wayward servant
+mana cost: {W}{B}
+types: creature zombie
+power toughness: 2/2
+triggered: whenever another zombie you control enters, each opponent loses 1 life and you gain 1 life.

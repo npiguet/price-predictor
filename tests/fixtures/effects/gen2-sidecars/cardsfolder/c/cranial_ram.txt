@@ -1,0 +1,6 @@
+name: cranial ram
+mana cost: {B}{R}
+types: artifact equipment
+triggered: living weapon
+activated[1]: equip {2}
+static: equipped creature gets +X/+1, where X is the number of artifacts you control.

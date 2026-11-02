@@ -1,0 +1,4 @@
+name: guildmages' forum
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {1}, {T}: add one mana of any color. if that mana is spent on a multicolored creature spell, that creature enters with an additional +1/+1 counter on it.

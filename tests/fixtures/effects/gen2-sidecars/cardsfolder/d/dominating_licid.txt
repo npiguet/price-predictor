@@ -1,0 +1,6 @@
+name: dominating licid
+mana cost: {1}{U}{U}
+types: creature licid
+power toughness: 1/1
+activated[1]: {1}{U}{U}, {T}: CARDNAME loses this ability and becomes an aura enchantment with enchant creature. attach it to target creature. you may pay {U} to end this effect.
+static: you control enchanted creature.

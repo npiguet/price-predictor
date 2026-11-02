@@ -1,0 +1,5 @@
+name: blanchwood armor
+mana cost: {2}{G}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature gets +1/+1 for each forest you control.

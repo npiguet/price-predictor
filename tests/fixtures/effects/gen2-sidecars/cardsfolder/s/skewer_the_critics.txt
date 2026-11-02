@@ -1,0 +1,5 @@
+name: skewer the critics
+mana cost: {2}{R}
+types: sorcery
+alternate cost: spectacle {R}
+spell[1]: CARDNAME deals 3 damage to any target.

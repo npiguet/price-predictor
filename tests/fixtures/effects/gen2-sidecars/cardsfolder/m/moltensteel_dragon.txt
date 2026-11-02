@@ -1,0 +1,6 @@
+name: moltensteel dragon
+mana cost: {4}{R/P}{R/P}
+types: artifact creature phyrexian dragon
+power toughness: 4/4
+static: flying
+activated[1]: {R/P}: CARDNAME gets +1/+0 until end of turn.

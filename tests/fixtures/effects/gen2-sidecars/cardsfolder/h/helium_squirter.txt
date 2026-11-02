@@ -1,0 +1,6 @@
+name: helium squirter
+mana cost: {4}{U}
+types: creature beast mutant
+power toughness: 0/0
+triggered: graft 3
+activated[1]: {1}: target creature with a +1/+1 counter on it gains flying until end of turn.

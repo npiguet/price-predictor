@@ -1,0 +1,5 @@
+name: chronomaton
+mana cost: {1}
+types: artifact creature golem
+power toughness: 1/1
+activated[1]: {1}, {T}: put a +1/+1 counter on CARDNAME.

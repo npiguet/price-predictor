@@ -1,0 +1,5 @@
+name: search for tomorrow
+mana cost: {2}{G}
+types: sorcery
+alternate cost: suspend 2—{G}
+spell[1]: search your library for a basic land card, put it onto the battlefield, then shuffle.

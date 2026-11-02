@@ -1,0 +1,4 @@
+name: pristine talisman
+mana cost: {3}
+types: artifact
+activated[1]: {T}: add {C}. you gain 1 life.

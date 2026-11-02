@@ -1,0 +1,5 @@
+name: nature's panoply
+mana cost: {G}
+types: instant
+additional cost: strive {2}{G}
+spell[1]: choose any number of target creatures. put a +1/+1 counter on each of them.

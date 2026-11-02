@@ -1,0 +1,15 @@
+layout: omen
+name: dirgur island dragon
+mana cost: {5}{U}
+types: creature dragon
+power toughness: 4/4
+static: flying
+static: ward {2}
+
+ALTERNATE
+
+name: skimming strike
+mana cost: {1}{U}
+types: instant omen
+spell[1]: tap up to one target creature. draw a card.
+replacement: omen

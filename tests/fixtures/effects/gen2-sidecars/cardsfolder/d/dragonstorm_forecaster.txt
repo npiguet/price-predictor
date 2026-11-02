@@ -1,0 +1,5 @@
+name: dragonstorm forecaster
+mana cost: {U}
+types: creature human scout
+power toughness: 0/3
+activated[1]: {2}, {T}: search your library for a card named dragonstorm globe or boulderborn dragon, reveal it, put it into your hand, then shuffle.

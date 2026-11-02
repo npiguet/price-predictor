@@ -1,0 +1,5 @@
+name: otherworldly journey
+mana cost: {1}{W}
+types: instant arcane
+spell[1]: exile target creature. at end of turn, return that card to the battlefield under its owner's control with a +1/+1 counter on it.
+spell[2]: return exiled card to the battlefield with a +1/+1 counter on it.

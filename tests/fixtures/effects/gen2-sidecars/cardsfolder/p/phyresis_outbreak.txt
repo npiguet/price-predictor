@@ -1,0 +1,4 @@
+name: phyresis outbreak
+mana cost: {2}{B}
+types: sorcery
+spell[1]: each opponent gets a poison counter. then each creature your opponents control get -1/-1 for each poison counter its controller has.

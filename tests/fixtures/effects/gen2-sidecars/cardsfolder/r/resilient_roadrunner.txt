@@ -1,0 +1,7 @@
+name: resilient roadrunner
+mana cost: {1}{R}
+types: creature bird
+power toughness: 2/2
+static: haste
+static: protection from coyote
+activated[1]: {3}: CARDNAME can't be blocked this turn except by creatures with haste.

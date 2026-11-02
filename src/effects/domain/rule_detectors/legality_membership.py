@@ -92,6 +92,7 @@ def _sides(record: EffectRecord, listed: str, statics_only: bool, universe: str 
 class LegalityMembership:
     id: str = "legality_membership"
     params: frozenset[str] = frozenset({"list", "fires_when", "responsible_static", "universe"})
+    general: frozenset[str] = frozenset({"list", "fires_when", "universe"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset()

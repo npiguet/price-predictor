@@ -1,0 +1,5 @@
+name: soul of magma
+mana cost: {3}{R}{R}
+types: creature spirit
+power toughness: 2/2
+triggered: whenever you cast a spirit or arcane spell, CARDNAME deals 1 damage to target creature.

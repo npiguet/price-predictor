@@ -1,0 +1,5 @@
+name: hundred-talon strike
+mana cost: {W}
+types: instant arcane
+additional cost: splice onto arcane—tap an untapped white creature you control
+spell[1]: target creature gets +1/+0 and gains first strike until end of turn.

@@ -1,0 +1,4 @@
+name: molder
+mana cost: {X}{G}
+types: instant
+spell[1]: destroy target artifact or enchantment with mana value X. it can't be regenerated. you gain X life.

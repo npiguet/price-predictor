@@ -1,0 +1,4 @@
+name: magma jet
+mana cost: {1}{R}
+types: instant
+spell[1]: CARDNAME deals 2 damage to any target. scry 2.

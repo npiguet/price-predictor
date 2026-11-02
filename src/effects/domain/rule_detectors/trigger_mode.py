@@ -51,6 +51,7 @@ _SCRIPT_PARAMS = {"mode": "Mode", "origin": "Origin", "destination": "Destinatio
 class TriggerMode:
     id: str = "trigger_mode"
     params: frozenset[str] = frozenset(_SCRIPT_PARAMS) | {"keyword"}
+    general: frozenset[str] = frozenset({"mode", "keyword"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset()

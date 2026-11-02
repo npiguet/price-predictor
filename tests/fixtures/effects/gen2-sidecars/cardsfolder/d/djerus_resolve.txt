@@ -1,0 +1,6 @@
+name: djeru's resolve
+mana cost: {W}
+types: instant
+activated[1]: cycling {2}
+spell[2]: untap target creature. prevent all damage that would be dealt to it this turn.
+spell[3]: prevent all damage that would be dealt to that creature this turn.

@@ -1,0 +1,5 @@
+name: soaring drake
+mana cost: {2}{U}
+types: creature drake
+power toughness: 2/3
+static: flying

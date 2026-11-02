@@ -1,0 +1,5 @@
+name: launch the fleet
+mana cost: {W}
+types: sorcery
+additional cost: strive {1}
+spell[1]: until end of turn, any number of target creatures each gain "whenever this creature attacks, create a 1/1 white soldier creature token that's tapped and attacking."

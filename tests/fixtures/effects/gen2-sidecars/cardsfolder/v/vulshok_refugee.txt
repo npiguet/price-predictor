@@ -1,0 +1,5 @@
+name: vulshok refugee
+mana cost: {1}{R}{R}
+types: creature human warrior
+power toughness: 3/2
+static: protection from red

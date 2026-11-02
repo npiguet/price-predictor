@@ -1,0 +1,5 @@
+name: huang zhong, shu general
+mana cost: {2}{W}{W}
+types: legendary creature human soldier
+power toughness: 2/3
+static: CARDNAME can't be blocked by more than one creature.

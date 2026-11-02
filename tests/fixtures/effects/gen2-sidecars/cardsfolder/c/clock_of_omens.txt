@@ -1,0 +1,4 @@
+name: clock of omens
+mana cost: {4}
+types: artifact
+activated[1]: tap two untapped artifacts you control: untap target artifact.
