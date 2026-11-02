@@ -35,6 +35,70 @@ final class RefsJson {
      *                       an acting ability still names its own host
      */
     static String render(SpellAbility acting, Card sourceOverride) {
+        return render(acting, sourceOverride, "null");
+    }
+
+    /**
+     * The refs block read at the resolution's end, with the die results and
+     * coin flips the resolution's own events report ({@code random}).
+     *
+     * @param resolved the events of the resolution (or of one mode's half)
+     */
+    static String renderResolved(SpellAbility acting, List<EffectEvent> resolved) {
+        return render(acting, null, randomJson(resolved));
+    }
+
+    /**
+     * A refs block already rendered at the resolution's end, with its
+     * {@code random} filled from the resolution's events; for a caller that
+     * holds the rendered block rather than the ability.
+     */
+    static String withRandom(String refs, List<EffectEvent> resolved) {
+        String unread = "\"random\":null}";
+        if (refs == null || !refs.endsWith(unread)) {
+            return refs;
+        }
+        return refs.substring(0, refs.length() - unread.length())
+                + "\"random\":" + randomJson(resolved) + "}";
+    }
+
+    /**
+     * The random results a resolution came to, taken as given like a
+     * decision ({@code in.random_results}): every die's final value in the
+     * order rolled, and the coin flips won and lost (heads counts as won on an
+     * uncalled flip, as Forge's coin effects read it).
+     */
+    static String randomJson(List<EffectEvent> events) {
+        List<Object> dice = new ArrayList<>();
+        int won = 0;
+        int lost = 0;
+        for (EffectEvent event : events) {
+            if (event.type() == EventType.DICE_ROLLED
+                    && event.params().get("results") instanceof Iterable<?> results) {
+                for (Object die : results) {
+                    if (die instanceof java.util.Map<?, ?> rolled && rolled.get("final") != null) {
+                        dice.add(rolled.get("final"));
+                    }
+                }
+            } else if (event.type() == EventType.COIN_FLIPPED
+                    && event.params().get("results") instanceof Iterable<?> results) {
+                for (Object flip : results) {
+                    String result = String.valueOf(flip);
+                    if (result.equals("win") || result.equals("heads")) {
+                        won++;
+                    } else if (result.equals("loss") || result.equals("tails")) {
+                        lost++;
+                    }
+                }
+            }
+        }
+        return Json.object()
+                .value("dice", dice)
+                .raw("coin_flips", Json.object().value("won", won).value("lost", lost).render())
+                .render();
+    }
+
+    private static String render(SpellAbility acting, Card sourceOverride, String random) {
         List<String> targets = new ArrayList<>();
         String source = Refs.ofNullable(sourceOverride);
         Integer x = null;
@@ -58,6 +122,7 @@ final class RefsJson {
                 .raw("modes", modesJson(acting))
                 .value("x", x)
                 .raw("choices", choicesJson(acting))
+                .raw("random", random)
                 .render();
     }
 

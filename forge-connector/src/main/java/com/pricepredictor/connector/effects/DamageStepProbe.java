@@ -81,7 +81,7 @@ final class DamageStepProbe {
                 return null;
             }
 
-            SnapshotBuilder snapshots = new SnapshotBuilder(fork);
+            SnapshotBuilder snapshots = new SnapshotBuilder(fork, game);
             String state;
             ProbedStep dealt;
             try {

@@ -63,7 +63,11 @@ from effects.infrastructure.shard_io import (
     read_shard,
     write_shard,
 )
-from tests.unit.effects.builders import java_golden_records, make_record
+from tests.unit.effects.builders import (
+    java_golden_records,
+    make_record,
+    without_unread_members,
+)
 
 _KEY = ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "trigger", 0)
 _DONOR = ProvenanceKey("cardsfolder/a/anthem.txt", 0, "static", 1)
@@ -782,8 +786,9 @@ class TestTheGen3EntityShape:
     def test_an_entity_writes_back_as_the_collector_wrote_it(self):
         for raw in java_golden_records():
             written = record_to_dict(record_from_dict(raw))
-            for before, after in zip(raw["state"]["entities"], written["state"]["entities"],
-                                     strict=True):
+            for collected, after in zip(raw["state"]["entities"], written["state"]["entities"],
+                                        strict=True):
+                before = without_unread_members(collected)
                 assert list(after) == list(before)
                 assert _without_keyword_spellings(after) == _without_keyword_spellings(before)
 

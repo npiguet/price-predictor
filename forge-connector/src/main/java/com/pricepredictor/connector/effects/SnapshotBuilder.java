@@ -7,7 +7,9 @@ import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -47,9 +49,21 @@ import java.util.Set;
 public final class SnapshotBuilder {
 
     private final Game game;
+    /** Whose clause notes join a timestamped floating effect to its line. */
+    private final FloatingEffects floating;
 
     public SnapshotBuilder(Game game) {
+        this(game, game);
+    }
+
+    /**
+     * A builder over a fork's copy, reading the live game's clause notes: the
+     * copy keeps the rows' timestamps, and only the live game's clauses were
+     * noted.
+     */
+    SnapshotBuilder(Game game, Game notesOf) {
         this.game = game;
+        this.floating = FloatingEffects.of(notesOf);
     }
 
     /**
@@ -156,12 +170,84 @@ public final class SnapshotBuilder {
     private Snapshot snapshot(
             Iterable<Card> referenced, Long withoutStatic, SpellAbility acting, Card source,
             EffectEvent pending) {
-        String entities = Json.array(collectEntities(referenced),
-                card -> EntityJson.render(game, card, withoutStatic));
+        Set<Card> tiers = collectEntities(referenced);
+        List<String> entities = new ArrayList<>();
+        Set<String> present = new HashSet<>();
+        for (Card card : tiers) {
+            entities.add(EntityJson.render(game, card, withoutStatic));
+            present.add(Refs.of(card));
+        }
+        LibraryCapture libraries = LibraryCapture.of(game, withoutStatic, present);
+        addBeyondTheTiers(entities, present, tiers, withoutStatic, libraries, pending);
         String players = Json.array(game.getPlayers(), player -> PlayerJson.render(game, player));
         return new Snapshot(
-                globalToJson(), players, entities,
-                RefsJson.render(acting, source), pending == null ? "null" : pending.toJson());
+                globalToJson(tiers), players, "[" + String.join(",", entities) + "]",
+                RefsJson.render(acting, source), pending == null ? "null" : pending.toJson(),
+                libraries);
+    }
+
+    static final String ROLE_LIBRARY_CARD = "library_card";
+    static final String ROLE_EXILED_WITH = "exiled_with";
+    static final String ROLE_MUTATE_COMPONENT = "mutate_component";
+    static final String ROLE_LAST_KNOWN = "last_known";
+
+    /**
+     * The card entities beyond the four tiers (FR-024), each once, after
+     * them and with its {@code role}: each library's top card; the library
+     * cards a pending event names; the cards exiled with a permanent; a
+     * mutated permanent's components; and the pending event's subject as it
+     * last existed, under id {@code L<card id>} because the live card keeps
+     * its own. The library cards the record's later events name join at the
+     * write ({@link Snapshot#withEventCards}).
+     */
+    private void addBeyondTheTiers(
+            List<String> entities, Set<String> present, Set<Card> tiers, Long withoutStatic,
+            LibraryCapture libraries, EffectEvent pending) {
+        for (var player : game.getPlayers()) {
+            Card top = player.getCardsIn(ZoneType.Library).isEmpty()
+                    ? null : player.getCardsIn(ZoneType.Library).get(0);
+            addBeyond(entities, present, top, withoutStatic, ROLE_LIBRARY_CARD);
+        }
+        if (pending != null) {
+            for (String subject : pending.subjects()) {
+                LibraryCapture.Slot slot = libraries.byId().get(subject);
+                if (slot != null) {
+                    addBeyond(entities, present, slot.card(), withoutStatic, ROLE_LIBRARY_CARD);
+                }
+            }
+        }
+        for (Card card : tiers) {
+            if (card.isInPlay()) {
+                for (Card exiled : card.getExiledCards()) {
+                    addBeyond(entities, present, exiled, withoutStatic, ROLE_EXILED_WITH);
+                }
+            }
+        }
+        for (Card card : tiers) {
+            if (card.isInPlay() && card.isMutated()) {
+                for (Card component : card.getMergedCards()) {
+                    addBeyond(entities, present, component, withoutStatic, ROLE_MUTATE_COMPONENT);
+                }
+            }
+        }
+        Card lastKnown = pending == null ? null : pending.lastKnown();
+        if (lastKnown != null) {
+            // A last-known copy is in no zone; it names the one it was in.
+            var zone = lastKnown.getZone() != null ? lastKnown.getZone() : lastKnown.getLastKnownZone();
+            entities.add(EntityJson.render(game, lastKnown, withoutStatic, new EntityJson.Beyond(
+                    "L" + lastKnown.getId(),
+                    zone == null ? null : CardSpelling.zoneName(zone.getZoneType()),
+                    null, ROLE_LAST_KNOWN)));
+        }
+    }
+
+    private void addBeyond(
+            List<String> entities, Set<String> present, Card card, Long withoutStatic,
+            String role) {
+        if (card != null && present.add(Refs.of(card))) {
+            entities.add(EntityJson.render(game, card, withoutStatic,
+                    new EntityJson.Beyond(null, null, null, role)));
+        }
     }
 
     /**
@@ -183,8 +269,9 @@ public final class SnapshotBuilder {
         return entities;
     }
 
-    private String globalToJson() {
+    private String globalToJson(Collection<Card> cards) {
         var phase = game.getPhaseHandler();
+        Boolean night = game.getDayTime();
         return Json.object()
                 .value("turn", phase.getTurn())
                 .value("phase", phaseName(phase.getPhase()))
@@ -196,6 +283,12 @@ public final class SnapshotBuilder {
                 // substep tells apart.
                 .value("combat_substep", DamageStep.of(phase))
                 .raw("emblems", ProvenanceKey.toJsonArray(emblems()))
+                // Forge's daytime field is true at night, null for neither.
+                .value("day_night", night == null ? null : night ? "night" : "day")
+                .raw("floating_effects",
+                        floating.floatingEffectsJson(game, cards))
+                .raw("delayed_triggers", FloatingEffects.delayedTriggersJson(game))
+                .raw("dungeons", FloatingEffects.dungeonsJson(game))
                 .render();
     }
 

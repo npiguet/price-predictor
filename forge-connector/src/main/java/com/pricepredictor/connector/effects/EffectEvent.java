@@ -19,6 +19,12 @@ public final class EffectEvent {
     private final Map<String, Object> params = new LinkedHashMap<>();
     private EventDuration duration;
     private String attributedTo;
+    /**
+     * The subject as it last existed, where the engine handed one over (a
+     * trigger's or a replacement's {@code CardLKI}); never written into the
+     * event itself — the snapshot carries it as a card slot of its own.
+     */
+    private forge.game.card.Card lastKnown;
 
     public EffectEvent(EventType type) {
         this.type = type;
@@ -82,6 +88,17 @@ public final class EffectEvent {
     public EffectEvent attributedTo(String link) {
         this.attributedTo = link;
         return this;
+    }
+
+    /** Keep the subject's last-known state, for the snapshot to render. */
+    EffectEvent lastKnown(forge.game.card.Card card) {
+        this.lastKnown = card;
+        return this;
+    }
+
+    /** The subject's last-known state, or null when the engine handed none over. */
+    forge.game.card.Card lastKnown() {
+        return lastKnown;
     }
 
     public EventType type() {

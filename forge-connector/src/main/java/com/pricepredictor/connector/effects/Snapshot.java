@@ -21,9 +21,19 @@ import com.pricepredictor.connector.json.Json;
  * @param refs         the {@code refs} block for the acting line
  * @param pendingEvent the {@code pending_event} a trait is about to handle, or
  *                     {@code null} rendered
+ * @param libraries    where every library card sat when the board was
+ *                     captured, so the library cards the record's events
+ *                     later name can join the entities (FR-024); null where
+ *                     the snapshot was not built from a game
  */
 record Snapshot(
-        String global, String players, String entities, String refs, String pendingEvent) {
+        String global, String players, String entities, String refs, String pendingEvent,
+        LibraryCapture libraries) {
+
+    /** A snapshot assembled from rendered blocks alone, with no library capture. */
+    Snapshot(String global, String players, String entities, String refs, String pendingEvent) {
+        this(global, players, entities, refs, pendingEvent, null);
+    }
 
     /**
      * The {@code state.tiers} every snapshot carries: all four, always.
@@ -36,7 +46,28 @@ record Snapshot(
 
     /** The same board, with its refs block replaced by a later reading. */
     Snapshot withRefs(String laterRefs) {
-        return new Snapshot(global, players, entities, laterRefs, pendingEvent);
+        return new Snapshot(global, players, entities, laterRefs, pendingEvent, libraries);
+    }
+
+    /**
+     * The same board with the library cards {@code events} name added to its
+     * entities, each where it sat when the board was captured: a card the
+     * record's own effect drew, milled, revealed or searched out is read in
+     * the library it came from, as every other entity is read before the
+     * events.
+     */
+    Snapshot withEventCards(Iterable<EffectEvent> events) {
+        if (libraries == null) {
+            return this;
+        }
+        String named = libraries.render(events);
+        if (named.isEmpty()) {
+            return this;
+        }
+        String joined = entities.equals("[]")
+                ? "[" + named + "]"
+                : entities.substring(0, entities.length() - 1) + "," + named + "]";
+        return new Snapshot(global, players, joined, refs, pendingEvent, libraries);
     }
 
     /** The state as a record writes it, its blocks in the order the schema fixes. */

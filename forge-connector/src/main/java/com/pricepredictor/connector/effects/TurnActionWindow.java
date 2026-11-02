@@ -6,6 +6,7 @@ import forge.game.player.Player;
 import forge.game.zone.ZoneType;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -158,10 +159,13 @@ final class TurnActionWindow {
             return;
         }
         for (Map.Entry<TurnActionSubkind, EventBuffer> action : actions.entrySet()) {
+            List<EffectEvent> events = action.getValue().drain();
+            // A draw names the card it drew, which joins the board as the
+            // library card it was when the step began.
             context.emit(context.newTurnAction(action.getKey())
                     .actor(actor)
-                    .state(state.render())
-                    .payload(RecordPayloads.eventsPayload(action.getValue().drain())));
+                    .state(state.withEventCards(events).render())
+                    .payload(RecordPayloads.eventsPayload(events)));
         }
         actions.clear();
         step = null;

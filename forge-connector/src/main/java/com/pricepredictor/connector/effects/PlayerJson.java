@@ -14,7 +14,9 @@ import java.util.List;
 
 /**
  * A snapshot's {@code state.players} entry for one player: life, zone sizes,
- * this turn's tallies, and the mana it holds and could still make.
+ * this turn's tallies, the mana it holds and could still make, and the
+ * player-wide designations (speed, the city's blessing, rad counters, the
+ * monarch, the initiative).
  */
 final class PlayerJson {
 
@@ -40,6 +42,39 @@ final class PlayerJson {
                 .raw("floating_mana",
                         ManaCounts.of(player.getManaPool()::getAmountOfColor).toJson())
                 .raw("untapped_production", untappedProduction(player).toJson())
+                .value("speed", player.getSpeed())
+                .value("city_blessing", player.hasBlessing())
+                .value("rad", player.getCounters(CounterEnumType.RAD))
+                .value("monarch", game.getMonarch() == player)
+                .value("initiative", player.hasInitiative())
+                .raw("turn_counts", turnCountsJson(player))
+                .render();
+    }
+
+    /**
+     * What this player's turn has held so far, beside {@code this_turn}'s
+     * three counts (FR-024, {@code in.history}): many conditions ask about
+     * the turn rather than the board ("if you gained life this turn",
+     * revolt, descend), and the board alone cannot answer them.
+     *
+     * <p>{@code permanents_to_graveyard} counts the cards that came to this
+     * player's graveyard from the battlefield this turn, tokens included;
+     * {@code descended} is Forge's count of permanent cards put into it from
+     * anywhere. {@code descended} and {@code dungeons_completed} are
+     * whole-game counts, as Forge keeps them; every other count resets at the
+     * turn.
+     */
+    private static String turnCountsJson(Player player) {
+        return Json.object()
+                .value("cards_drawn", player.getNumDrawnThisTurn())
+                .value("life_gained", player.getLifeGainedThisTurn())
+                .value("life_lost", player.getLifeLostThisTurn())
+                .value("damage_taken", player.getAssignedDamage())
+                .value("permanents_to_graveyard", player.getZone(ZoneType.Graveyard)
+                        .getCardsAddedThisTurn(ZoneType.Battlefield).size())
+                .value("spells_cast_last_turn", player.getSpellsCastLastTurn())
+                .value("dungeons_completed", player.getCompletedDungeons().size())
+                .value("descended", player.getDescended())
                 .render();
     }
 

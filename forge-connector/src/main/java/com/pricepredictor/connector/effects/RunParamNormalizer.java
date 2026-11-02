@@ -62,6 +62,9 @@ final class RunParamNormalizer {
         }
         normalizeParams(event, mode, byName);
         event.cause(causeOf(byName));
+        if (byName.get("CardLKI") instanceof forge.game.card.Card lastKnown) {
+            event.lastKnown(lastKnown);
+        }
         return event;
     }
 

@@ -93,6 +93,9 @@ final class ClauseOutcomeRouter {
         // "resolved" cannot delimit modes; "resolving" of the first
         // clause is the one moment FR-029b's snapshot has to be taken.
         if (live.owns(clause)) {
+            // The timestamp a floating effect's rows will carry is drawn
+            // while this clause runs; the note is their only join to a line.
+            FloatingEffects.of(live.game()).clauseResolving(live.game(), clause);
             CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
             if (start != null) {
                 bracket.beginMode(clause, start.option());
@@ -108,6 +111,9 @@ final class ClauseOutcomeRouter {
         ApiEvents.ClauseObservation<?> observed = observations.isEmpty()
                 ? ApiEvents.unobserved(clause, rules)
                 : observations.pop();
+        if (live.owns(clause)) {
+            FloatingEffects.of(live.game()).clauseResolved(live.game(), clause);
+        }
         if (threw) {
             // A clause that threw did not finish, and an event claiming it
             // did would be a fact the game never contained.

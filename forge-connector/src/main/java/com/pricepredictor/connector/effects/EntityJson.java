@@ -24,8 +24,9 @@ import java.util.Set;
 
 /**
  * A snapshot's {@code state.entities} entry for one card: its computed
- * characteristics, its place in combat and on the stack, and the lines it
- * carries, printed and granted ({@link CardLines}).
+ * characteristics, its place in combat and on the stack, the card facts of
+ * FR-024 ({@link CardFacts}), and the lines it carries, printed and granted
+ * ({@link CardLines}).
  */
 final class EntityJson {
 
@@ -39,14 +40,42 @@ final class EntityJson {
      *                      the entity, or null to show it as it stands
      */
     static String render(Game game, Card card, Long withoutStatic) {
+        return render(game, card, withoutStatic, Beyond.NONE);
+    }
+
+    /**
+     * Why an entity beyond the four tiers is in the snapshot, and what it is
+     * rendered as there (FR-024).
+     *
+     * @param id   the id it is written under: its own, or a last-known copy's,
+     *             which must not collide with the live card's
+     * @param zone the zone it is written in, where the object Forge holds has
+     *             moved on since (a library card an event later names), or
+     *             null for the card's own
+     * @param rank its {@code order_rank} where the zone it is written in is
+     *             not the one it sits in now, or null for the card's own
+     * @param role {@code library_card}, {@code exiled_with},
+     *             {@code mutate_component} or {@code last_known}; null for an
+     *             entity of the tiers
+     */
+    record Beyond(String id, String zone, Integer rank, String role) {
+        static final Beyond NONE = new Beyond(null, null, null, null);
+    }
+
+    /** One entity, written as {@code beyond} says. */
+    static String render(Game game, Card card, Long withoutStatic, Beyond beyond) {
         Suppressed without = Suppressed.of(card, withoutStatic);
         CardTypeView type = without == null ? card.getType() : without.type();
+        SpellAbility onStack = CardLines.stackAbilityOf(game, card);
+        SpellAbility cast = CardLines.castSpellOf(card, onStack);
         return Json.object()
-                .value("id", Refs.of(card))
+                .value("id", beyond.id() != null ? beyond.id() : Refs.of(card))
                 .value("name", card.getName())
-                .value("zone", zoneName(card))
+                .value("zone", beyond.zone() != null ? beyond.zone() : zoneName(card))
+                .value("owner", CardFacts.ownerOf(card))
                 .value("controller", Refs.ofNullable(card.getController()))
                 .value("face", faceOf(card))
+                .value("face_state", CardFacts.faceState(card))
                 .value("copy_source", copySourceOf(card))
                 .value("token_script_id", CardSpelling.tokenScriptIdOf(card))
                 .raw("types", typeNamesJson(type.getCoreTypes()))
@@ -55,8 +84,11 @@ final class EntityJson {
                 .raw("colors", Json.stringArray(CardSpelling.colorLetters(
                         without == null ? card.getColor() : without.colors())))
                 .value("mana_value", card.getCMC())
+                .raw("mana_cost", CardFacts.manaCostJson(card))
                 .raw("base_pt", basePtJson(card))
                 .raw("pt_boosts", ptBoostsJson(card, without))
+                .value("printed_loyalty", CardFacts.printedLoyalty(card))
+                .value("printed_defense", CardFacts.printedDefense(card))
                 .value("tapped", card.isTapped())
                 .value("sick", card.isSick())
                 .value("damage", card.getDamage())
@@ -64,11 +96,20 @@ final class EntityJson {
                 .raw("combat", combatJson(game, card))
                 .value("attached_to", Refs.ofNullable(card.getAttachedTo()))
                 .value("face_down", card.isFaceDown())
+                .raw("real_face", CardFacts.realFaceJson(card))
+                .raw("designations", Json.stringArray(CardFacts.designations(card)))
+                .value("x_paid", CardFacts.xPaid(cast))
+                .raw("chosen", CardFacts.chosenJson(card))
+                .raw("costs_paid", CardFacts.costsPaidJson(card, cast))
+                .raw("history", CardFacts.historyJson(game, card))
+                .value("order_rank", beyond.rank() != null
+                        ? beyond.rank() : CardFacts.orderRank(game, card))
                 .raw("granted_temporary", grantedTemporaryJson(card, without))
                 .raw("lines", CardLines.render(game, card,
                         without == null ? card.getKeywords() : without.keywords(),
                         without == null ? null : withoutStatic))
-                .raw("stack_extras", stackExtrasJson(game, card))
+                .raw("stack_extras", stackExtrasJson(onStack))
+                .value("role", beyond.role())
                 .render();
     }
 
@@ -209,8 +250,7 @@ final class EntityJson {
      * other field records: a Fireball for 3 split two ways and one aimed at a
      * single creature have the same cost and the same text.
      */
-    private static String stackExtrasJson(Game game, Card card) {
-        SpellAbility onStack = CardLines.stackAbilityOf(game, card);
+    private static String stackExtrasJson(SpellAbility onStack) {
         if (onStack == null || onStack.getTargets() == null) {
             return "null";
         }

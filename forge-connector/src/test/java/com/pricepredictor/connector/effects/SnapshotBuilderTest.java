@@ -1,8 +1,13 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import forge.card.CardStateName;
+import forge.card.MagicColor;
+import forge.game.ability.AbilityKey;
 import forge.game.card.Card;
+import forge.game.card.CardCopyService;
 import forge.game.card.CounterEnumType;
+import forge.game.mana.Mana;
 import forge.game.phase.PhaseType;
 import forge.game.spellability.OptionalCost;
 import forge.game.spellability.SpellAbility;
@@ -13,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -48,7 +54,7 @@ class SnapshotBuilderTest {
     void refsRenderTheirFullShapeWithNoActingLine() {
         assertEquals(
                 "{\"targets\":[],\"source\":null,\"modes\":[],\"x\":null,"
-                        + "\"choices\":{}}",
+                        + "\"choices\":{},\"random\":null}",
                 RefsJson.render(null));
     }
 
@@ -353,10 +359,457 @@ class SnapshotBuilderTest {
         }
     }
 
+    // ── a continuous record's board (the removed static leaves no trace) ─
+
+    @Nested
+    @ExtendWith(ForgeExtension.class)
+    class WithoutTheStatic {
+
+        /**
+         * The board without Levitation lists no line of Levitation's on the
+         * creature: neither the flying keyword line nor the CantBlockBy static
+         * Forge builds for flying, which is the static the record is about.
+         */
+        @Test
+        void theRemovedStaticsKeywordLeavesNoLineBehind() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card bears = board.battlefield("Grizzly Bears", board.you);
+            Card levitation = board.battlefield("Levitation", board.you);
+            board.game.getAction().checkStaticAbilities();
+            long levitating = levitation.getStaticAbilities().get(0).getId();
+
+            Map<String, Object> without = entityIn(
+                    new SnapshotBuilder(board.game).ofBoardWithout(levitating).render(), bears);
+            Map<String, Object> with = entityIn(
+                    new SnapshotBuilder(board.game).ofBoard().render(), bears);
+
+            assertEquals(List.of(), without.get("lines"));
+            assertEquals(List.of("keyword"), kinds(lines(with)), with.toString());
+        }
+
+        /**
+         * Nor does any static say which permanents it affects: that is the
+         * record's answer, and hiding only the removed static's list would
+         * point at it.
+         */
+        @Test
+        void noStaticListsAffectedPermanents() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card bears = board.battlefield("Grizzly Bears", board.you);
+            Card levitation = board.battlefield("Levitation", board.you);
+            board.game.getAction().checkStaticAbilities();
+            long levitating = levitation.getStaticAbilities().get(0).getId();
+
+            Map<String, Object> without = line(lines(entityIn(
+                    new SnapshotBuilder(board.game).ofBoardWithout(levitating).render(),
+                    levitation)), "static");
+            Map<String, Object> with = line(linesOf(board, levitation), "static");
+
+            assertFalse(without.containsKey("affected"), without.toString());
+            assertEquals(List.of(Refs.of(bears)), with.get("affected"));
+        }
+    }
+
+    // ── player and global facts (FR-024, T054) ──────────────────────────
+
+    @Nested
+    @ExtendWith(ForgeExtension.class)
+    class PlayerAndGlobalFacts {
+
+        @Test
+        void speedBlessingRadMonarchAndInitiative() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            board.you.setSpeed(2);
+            board.you.setBlessing(true, null);
+            board.opponent.addCounterInternal(
+                    CounterEnumType.RAD, 3, board.you, false, null, AbilityKey.newMap());
+            board.game.setMonarch(board.you);
+            board.game.setHasInitiative(board.opponent);
+
+            Map<String, Object> you = playerOf(board, 0);
+            Map<String, Object> them = playerOf(board, 1);
+
+            assertEquals(2L, you.get("speed"));
+            assertEquals(true, you.get("city_blessing"));
+            assertEquals(false, them.get("city_blessing"));
+            assertEquals(3L, them.get("rad"));
+            assertEquals(true, you.get("monarch"));
+            assertEquals(false, them.get("monarch"));
+            assertEquals(false, you.get("initiative"));
+            assertEquals(true, them.get("initiative"));
+        }
+
+        @Test
+        void theTurnsCountsBesideThisTurn() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            board.game.getAction().moveToLibrary(board.card("Forest", board.you), null, null);
+            board.you.drawCard();
+            board.you.gainLife(3, null, null);
+            board.opponent.loseLife(2, false, false, null);
+            Card bears = board.battlefield("Grizzly Bears", board.you);
+            board.game.getAction().moveTo(ZoneType.Graveyard, bears, null, null);
+
+            Map<String, Object> you = RecordLines.asMap(playerOf(board, 0).get("turn_counts"));
+            Map<String, Object> them = RecordLines.asMap(playerOf(board, 1).get("turn_counts"));
+
+            assertEquals(1L, you.get("cards_drawn"));
+            assertEquals(3L, you.get("life_gained"));
+            assertEquals(2L, them.get("life_lost"));
+            assertEquals(1L, you.get("permanents_to_graveyard"));
+            assertEquals(1L, you.get("descended"));
+            assertEquals(Set.of("cards_drawn", "life_gained", "life_lost", "damage_taken",
+                    "permanents_to_graveyard", "spells_cast_last_turn", "dungeons_completed",
+                    "descended"), you.keySet());
+        }
+
+        @Test
+        void dayNightIsDayNightOrNeither() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            assertNull(globalOf(board).get("day_night"));
+            board.game.setDayTime(false);
+            assertEquals("day", globalOf(board).get("day_night"));
+            board.game.setDayTime(true);
+            assertEquals("night", globalOf(board).get("day_night"));
+        }
+
+        /** Owner is not controller: a control change leaves the owner alone. */
+        @Test
+        void anEntityNamesItsOwnerApartFromItsController() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card bears = board.battlefield("Grizzly Bears", board.you);
+            bears.addTempController(board.opponent, board.game.getNextTimestamp());
+
+            Map<String, Object> entity = entityOf(board, bears);
+
+            assertEquals(Refs.of(board.you), entity.get("owner"));
+            assertEquals(Refs.of(board.opponent), entity.get("controller"));
+        }
+    }
+
+    // ── card facts (FR-024, T055) ───────────────────────────────────────
+
+    @Nested
+    @ExtendWith(ForgeExtension.class)
+    class CardFactsOfASlot {
+
+        @Test
+        void faceStateNamesTheFaceUp() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card bears = board.battlefield("Grizzly Bears", board.you);
+            Card delver = board.battlefield("Delver of Secrets", board.you);
+            delver.setState(CardStateName.Backside, true);
+            Card bushi = board.battlefield("Bushi Tenderfoot", board.you);
+            bushi.setState(CardStateName.Flipped, true);
+            Card guide = board.battlefield("Foothill Guide", board.you);
+            guide.turnFaceDown(true);
+
+            assertEquals("front", entityOf(board, bears).get("face_state"));
+            assertEquals("back", entityOf(board, delver).get("face_state"));
+            assertEquals("flipped", entityOf(board, bushi).get("face_state"));
+            assertEquals("face_down", entityOf(board, guide).get("face_state"));
+        }
+
+        @Test
+        void designationsAreSortedNames() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card bears = board.battlefield("Grizzly Bears", board.you);
+            bears.setRenowned(true);
+            bears.setMonstrous(true);
+            bears.addGoad(board.game.getNextTimestamp(), board.opponent);
+
+            assertEquals(List.of("goaded", "monstrous", "renowned"),
+                    entityOf(board, bears).get("designations"));
+            assertEquals(List.of(), entityOf(board, board.battlefield("Forest", board.you))
+                    .get("designations"));
+        }
+
+        @Test
+        void xPaidAndCostsPaidAreTheSpells() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card mountain = board.battlefield("Mountain", board.you);
+            Card fireball = board.hand("Fireball", board.you);
+            Card onStack = board.game.getAction().moveToStack(fireball, null);
+            onStack.setCastFrom(board.you.getZone(ZoneType.Hand));
+            SpellAbility spell = board.spell(onStack, board.you);
+            spell.setXManaCostPaid(2);
+            for (int i = 0; i < 3; i++) {
+                spell.getPayingMana().add(
+                        new Mana(MagicColor.RED, mountain, null, board.you));
+            }
+            spell.resetTargets();
+            spell.getTargets().add(board.opponent);
+            board.game.getStack().add(spell);
+
+            Map<String, Object> entity = entityOf(board, onStack);
+
+            assertEquals(2L, entity.get("x_paid"));
+            Map<String, Object> paid = RecordLines.asMap(entity.get("costs_paid"));
+            assertEquals(3L, RecordLines.asMap(paid.get("mana")).get("R"));
+            assertEquals("hand", paid.get("cast_from"));
+            assertEquals(false, paid.get("mana_rider"));
+            Map<String, Object> bears = entityOf(board, board.hand("Grizzly Bears", board.you));
+            assertNull(bears.get("x_paid"));
+            assertNull(bears.get("costs_paid"));
+        }
+
+        @Test
+        void chosenValuesAreWhatTheCardRemembers() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card cavern = board.battlefield("Cavern of Souls", board.you);
+            cavern.setChosenType("Elf");
+            cavern.setChosenColors(List.of("blue"));
+
+            Map<String, Object> chosen = RecordLines.asMap(entityOf(board, cavern).get("chosen"));
+
+            assertEquals("Elf", chosen.get("type"));
+            assertEquals(List.of("blue"), chosen.get("colors"));
+            assertEquals(Map.of(), entityOf(board, board.battlefield("Forest", board.you))
+                    .get("chosen"));
+        }
+
+        @Test
+        void historyBitsAreThisTurns() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card fresh = board.battlefield("Grizzly Bears", board.you);
+            Card old = board.battlefield("Hill Giant", board.you);
+            old.setTurnInZone(0);
+            old.addBlockedThisTurn(fresh);
+            Card elspeth = board.battlefield("Elspeth, Knight-Errant", board.you);
+            elspeth.addPlaneswalkerAbilityActivated();
+
+            Map<String, Object> freshHistory = RecordLines.asMap(entityOf(board, fresh).get("history"));
+            Map<String, Object> oldHistory = RecordLines.asMap(entityOf(board, old).get("history"));
+
+            assertEquals(true, freshHistory.get("entered_this_turn"));
+            assertEquals(false, oldHistory.get("entered_this_turn"));
+            assertEquals(true, oldHistory.get("blocked_this_turn"));
+            assertEquals(false, freshHistory.get("blocked_this_turn"));
+            assertEquals(true, RecordLines.asMap(entityOf(board, elspeth).get("history"))
+                    .get("loyalty_activated"));
+        }
+
+        @Test
+        void orderRankIsTimestampOrderOnTheBattlefieldAndPositionElsewhere() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card older = board.battlefield("Grizzly Bears", board.you);
+            Card newer = board.battlefield("Hill Giant", board.opponent);
+            Card first = board.graveyard("Shock", board.you);
+            Card second = board.graveyard("Giant Growth", board.you);
+
+            assertEquals(0L, entityOf(board, older).get("order_rank"));
+            assertEquals(1L, entityOf(board, newer).get("order_rank"));
+            assertEquals(0L, entityOf(board, first).get("order_rank"));
+            assertEquals(1L, entityOf(board, second).get("order_rank"));
+        }
+
+        @Test
+        void aFaceDownCardCarriesItsRealFace() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card guide = board.battlefield("Foothill Guide", board.you);
+            assertNull(entityOf(board, guide).get("real_face"));
+            guide.turnFaceDown(true);
+
+            Map<String, Object> real = RecordLines.asMap(entityOf(board, guide).get("real_face"));
+
+            assertEquals("Foothill Guide", real.get("name"));
+            assertEquals(List.of("creature"), real.get("types"));
+            assertEquals(List.of(1L, 1L), real.get("base_pt"));
+        }
+
+        @Test
+        void printedLoyaltyAndDefense() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Map<String, Object> elspeth = entityOf(board,
+                    board.battlefield("Elspeth, Knight-Errant", board.you));
+            Map<String, Object> invasion = entityOf(board,
+                    board.hand("Invasion of Zendikar", board.you));
+            Map<String, Object> bears = entityOf(board, board.hand("Grizzly Bears", board.you));
+
+            assertEquals(4L, elspeth.get("printed_loyalty"));
+            assertNull(elspeth.get("printed_defense"));
+            assertEquals(3L, invasion.get("printed_defense"));
+            assertNull(bears.get("printed_loyalty"));
+        }
+
+        @Test
+        void manaCostCountsEachSymbolKind() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+
+            assertEquals(Map.of("generic", 1L, "G/W", 2L),
+                    entityOf(board, board.hand("Kitchen Finks", board.you)).get("mana_cost"));
+            assertEquals(Map.of("U/P", 1L),
+                    entityOf(board, board.hand("Gitaxian Probe", board.you)).get("mana_cost"));
+            assertEquals(Map.of("X", 1L, "R", 1L),
+                    entityOf(board, board.hand("Fireball", board.you)).get("mana_cost"));
+            assertEquals(Map.of(),
+                    entityOf(board, board.hand("Ornithopter", board.you)).get("mana_cost"));
+            assertNull(entityOf(board, board.hand("Forest", board.you)).get("mana_cost"));
+        }
+    }
+
+    // ── entities beyond the tiers (FR-024, T057) ────────────────────────
+
+    @Nested
+    @ExtendWith(ForgeExtension.class)
+    class BeyondTheTiers {
+
+        @Test
+        void eachLibrarysTopCardIsALibraryCard() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card bottom = board.game.getAction().moveToLibrary(
+                    board.card("Forest", board.you), null, null);
+            Card top = board.game.getAction().moveToLibrary(
+                    board.card("Grizzly Bears", board.you), 0, null, null);
+
+            String state = new SnapshotBuilder(board.game).ofBoard().render();
+            Map<String, Object> entity = entityIn(state, top);
+
+            assertEquals("library_card", entity.get("role"));
+            assertEquals("library", entity.get("zone"));
+            assertEquals(0L, entity.get("order_rank"));
+            assertFalse(idsIn(state).contains(Refs.of(bottom)), state);
+        }
+
+        /** A library card the record's events name joins at the write, where it sat. */
+        @Test
+        void aLibraryCardTheEventsNameJoinsWhereItSat() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            board.game.getAction().moveToLibrary(board.card("Forest", board.you), null, null);
+            Card second = board.game.getAction().moveToLibrary(
+                    board.card("Grizzly Bears", board.you), -1, null, null);
+            Snapshot before = new SnapshotBuilder(board.game).ofBoard();
+            long position = board.you.getCardsIn(ZoneType.Library).indexOf(second);
+            board.game.getAction().moveTo(ZoneType.Hand, second, null, null);
+
+            String state = before.withEventCards(List.of(
+                    new EffectEvent(EventType.ZONE_CHANGE).subject(Refs.of(second)))).render();
+
+            Map<String, Object> entity = entityIn(state, second);
+            assertEquals("library_card", entity.get("role"));
+            assertEquals("library", entity.get("zone"));
+            assertEquals(position, entity.get("order_rank"));
+            assertTrue(position > 0, "not the top, which the snapshot already holds");
+            assertEquals(before.render(), before.withEventCards(List.of()).render());
+        }
+
+        @Test
+        void theCardsExiledWithAPermanentAreSlots() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card ring = board.battlefield("Oblivion Ring", board.you);
+            Card exiled = board.game.getAction().exile(
+                    board.battlefield("Hill Giant", board.opponent), null, null);
+            exiled.setExiledWith(ring);
+            ring.addExiledCard(exiled);
+
+            Map<String, Object> entity = entityIn(
+                    new SnapshotBuilder(board.game).ofBoard().render(), exiled);
+
+            assertEquals("exiled_with", entity.get("role"));
+            assertEquals("exile", entity.get("zone"));
+        }
+
+        @Test
+        void aMutatedPermanentsComponentsAreSlots() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card top = board.battlefield("Grizzly Bears", board.you);
+            Card under = board.card("Hill Giant", board.you);
+            top.addMergedCard(top);
+            top.addMergedCard(under);
+            top.setMutatedTimestamp(board.game.getNextTimestamp());
+
+            String state = new SnapshotBuilder(board.game).ofBoard().render();
+
+            assertEquals("mutate_component", entityIn(state, under).get("role"));
+            assertNull(entityIn(state, top).get("role"));
+        }
+
+        /** The pending event's subject as it last existed, under an id of its own. */
+        @Test
+        void thePendingSubjectsLastKnownStateIsASlotOfItsOwn() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card bears = board.battlefield("Grizzly Bears", board.you);
+            Card lastKnown = CardCopyService.getLKICopy(bears);
+            Card dead = board.game.getAction().moveTo(ZoneType.Graveyard, bears, null, null);
+            EffectEvent died = new EffectEvent(EventType.ZONE_CHANGE)
+                    .subject(Refs.of(dead)).lastKnown(lastKnown);
+
+            String state = new SnapshotBuilder(board.game).ofTrait(null, died).render();
+
+            Map<String, Object> copy = entitiesIn(state).stream()
+                    .filter(e -> ("L" + bears.getId()).equals(e.get("id")))
+                    .findFirst().orElseThrow(() -> new AssertionError(state));
+            assertEquals("last_known", copy.get("role"));
+            assertEquals("battlefield", copy.get("zone"));
+            assertEquals("graveyard", entityIn(state, dead).get("zone"));
+        }
+
+        /** Per static line, the permanents it affects. */
+        @Test
+        void aStaticLineListsThePermanentsItAffects() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card bears = board.battlefield("Grizzly Bears", board.you);
+            board.battlefield("Hill Giant", board.opponent);
+            Card anthem = board.battlefield("Glorious Anthem", board.you);
+            board.game.getAction().checkStaticAbilities();
+
+            assertEquals(List.of(Refs.of(bears)),
+                    line(linesOf(board, anthem), "static").get("affected"));
+        }
+
+        /** The resolving ability's die results and coin flips, read off its events. */
+        @Test
+        void randomResultsAreTheResolutionsDiceAndCoins() {
+            EffectEvent dice = new EffectEvent(EventType.DICE_ROLLED).param("results", List.of(
+                    Map.of("natural", 3, "final", 4), Map.of("natural", 6, "final", 6)));
+            EffectEvent coins = new EffectEvent(EventType.COIN_FLIPPED)
+                    .param("results", List.of("win", "loss", "loss"));
+
+            Map<String, Object> random = RecordLines.asMap(RecordLines.parse(
+                    RefsJson.renderResolved(null, List.of(dice, coins))).get("random"));
+
+            assertEquals(List.of(4L, 6L), random.get("dice"));
+            assertEquals(Map.of("won", 1L, "lost", 2L), random.get("coin_flips"));
+            assertNull(RecordLines.parse(RefsJson.render(null)).get("random"),
+                    "unread before the resolution ends");
+        }
+    }
+
     // ── reading an entity ───────────────────────────────────────────────
 
     private static Map<String, Object> entityOf(CharacterizationBoard board, Card card) {
         return RecordLines.parse(EntityJson.render(board.game, card, null));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> entitiesIn(String state) {
+        return (List<Map<String, Object>>) RecordLines.parse(state).get("entities");
+    }
+
+    /** The entity of a rendered state written under this card's id. */
+    private static Map<String, Object> entityIn(String state, Card card) {
+        return entitiesIn(state).stream()
+                .filter(entity -> Refs.of(card).equals(entity.get("id")))
+                .findFirst().orElseThrow(() -> new AssertionError(card + " not in " + state));
+    }
+
+    private static List<Object> idsIn(String state) {
+        return entitiesIn(state).stream().map(entity -> entity.get("id")).toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> lines(Map<String, Object> entity) {
+        return (List<Map<String, Object>>) entity.get("lines");
+    }
+
+    private static Map<String, Object> globalOf(CharacterizationBoard board) {
+        return RecordLines.asMap(RecordLines.parse(
+                new SnapshotBuilder(board.game).ofBoard().render()).get("global"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> playerOf(CharacterizationBoard board, int index) {
+        return ((List<Map<String, Object>>) RecordLines.parse(
+                new SnapshotBuilder(board.game).ofBoard().render()).get("players")).get(index);
     }
 
     @SuppressWarnings("unchecked")

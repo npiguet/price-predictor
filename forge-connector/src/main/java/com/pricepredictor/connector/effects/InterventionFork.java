@@ -85,7 +85,7 @@ final class InterventionFork {
             }
 
             // The fork's own state, not the live game's.
-            SnapshotBuilder snapshots = new SnapshotBuilder(fork);
+            SnapshotBuilder snapshots = new SnapshotBuilder(fork, game);
             ForcedResolution resolution = forceResolution(fork, forked, actor, snapshots);
             if (resolution == null || resolution.isEmpty()) {
                 // An empty event list is not an observation. "The ability resolved
@@ -110,7 +110,8 @@ final class InterventionFork {
             for (HeldHalves.Half<ModeSplit.Mode> half : resolution.halves()) {
                 context.emit(forkedHalf(
                         actorId, keys.withOption(half.about().option()),
-                        resolution.render(half.about().state()), half.events()));
+                        resolution.render(half.about().state(), half.events()),
+                        half.events()));
             }
             return true;
         });
@@ -143,9 +144,14 @@ final class InterventionFork {
      */
     private record ForcedResolution(String refs, List<HeldHalves.Half<ModeSplit.Mode>> halves) {
 
-        /** A board this resolution read, paired with its refs as the live bracket pairs them. */
-        String render(Snapshot board) {
-            return (refs == null ? board : board.withRefs(refs)).render();
+        /**
+         * A board this resolution read, paired with its refs as the live
+         * bracket pairs them: the half's random results in the refs, and the
+         * library cards its events name among the entities.
+         */
+        String render(Snapshot board, List<EffectEvent> events) {
+            Snapshot read = refs == null ? board : board.withRefs(RefsJson.withRandom(refs, events));
+            return read.withEventCards(events).render();
         }
 
         /** Whether no half holds an event: the forced ability did nothing observable. */

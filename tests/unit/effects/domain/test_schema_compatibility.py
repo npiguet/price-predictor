@@ -50,6 +50,7 @@ from effects.domain.state_snapshot import (
     StateSnapshot,
 )
 from tests.unit.effects.builders import (
+    GEN3_UNREAD_ENTITY_MEMBERS,
     java_golden_entities,
     make_entity,
     make_record,
@@ -129,15 +130,21 @@ _FROZEN_TURN_ACTION_SUBKINDS = {
 #: (``FE/EntityJson.java``). Members are added here as later tasks write them
 #: (``owner``, ``face_state``, ...); none may be removed or repurposed.
 _FROZEN_GEN3_ENTITY = (
-    "id", "name", "zone", "controller", "face", "copy_source", "token_script_id",
-    "types", "subtypes", "supertypes", "colors", "mana_value", "base_pt", "pt_boosts",
-    "tapped", "sick", "damage", "counters", "combat", "attached_to", "face_down",
-    "granted_temporary", "lines", "stack_extras",
+    "id", "name", "zone", "owner", "controller", "face", "face_state", "copy_source",
+    "token_script_id", "types", "subtypes", "supertypes", "colors", "mana_value",
+    "mana_cost", "base_pt", "pt_boosts", "printed_loyalty", "printed_defense", "tapped",
+    "sick", "damage", "counters", "combat", "attached_to", "face_down", "real_face",
+    "designations", "x_paid", "chosen", "costs_paid", "history", "order_rank",
+    "granted_temporary", "lines", "stack_extras", "role",
 )
+#: The members the codec writes back: the collector's, less those it does not
+#: read yet (T074's remainder).
+_WRITTEN_GEN3_ENTITY = tuple(
+    member for member in _FROZEN_GEN3_ENTITY if member not in GEN3_UNREAD_ENTITY_MEMBERS)
 #: A line's members (``FE/CardLines.java``): the ones always written, and the
 #: ones written only when set.
 _FROZEN_LINE_MEMBERS = {"keys", "kind", "granted"}
-_FROZEN_OPTIONAL_LINE_MEMBERS = {"active", "cast_with", "chosen", "fragment"}
+_FROZEN_OPTIONAL_LINE_MEMBERS = {"active", "cast_with", "chosen", "fragment", "affected"}
 _FROZEN_LINE_KINDS = {"spell", "activated", "trigger", "static", "replacement", "keyword"}
 
 #: The gen-2 card-slot members gen-3 drops (FR-019): ``printed`` and
@@ -239,7 +246,7 @@ class TestTheGen3CardSlotIsPinned:
                              lines=())
         record = make_record(state=make_snapshot(entities=(entity,)))
         written = record_to_dict(record)["state"]["entities"][0]
-        assert tuple(written) == _FROZEN_GEN3_ENTITY
+        assert tuple(written) == _WRITTEN_GEN3_ENTITY
         assert not _REMOVED_IN_GEN3 & written.keys()
 
 

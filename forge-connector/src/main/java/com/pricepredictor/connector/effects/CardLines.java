@@ -5,6 +5,7 @@ import com.pricepredictor.connector.json.Json;
 import forge.card.CardStateName;
 import forge.game.CardTraitBase;
 import forge.game.Game;
+import forge.game.StaticEffect;
 import forge.game.card.Card;
 import forge.game.card.CardState;
 import forge.game.card.CardTraitChanges;
@@ -41,6 +42,11 @@ import java.util.Set;
  * abilities a keyword instance builds are that keyword's line, not lines of
  * their own.
  *
+ * <p>A static of the face up that Forge applies as a continuous effect lists
+ * the permanents it affects ({@code affected}), from Forge's own static
+ * effect; no static of a {@code continuous} record's board lists them, since
+ * which permanents a static touches is that record's answer.
+ *
  * <p>The faces that are not up are listed too, every line flagged inactive:
  * that is how a face-down permanent carries its real face, and how a
  * double-faced card carries the face it would turn to.
@@ -68,7 +74,7 @@ final class CardLines {
     /** One line of a card slot. Null members are absent from the JSON. */
     private record Line(
             List<ProvenanceKey> keys, String kind, boolean granted, Boolean active,
-            Integer castWith, List<Integer> chosen, String fragment) {
+            Integer castWith, List<Integer> chosen, String fragment, List<String> affected) {
 
         String toJson() {
             Json.ObjectWriter json = Json.object()
@@ -87,11 +93,15 @@ final class CardLines {
             if (fragment != null) {
                 json.value("fragment", fragment);
             }
+            if (affected != null) {
+                json.raw("affected", Json.stringArray(affected));
+            }
             return json.render();
         }
     }
 
     private static final class Builder {
+        private final Game game;
         private final Card card;
         private final Long withoutStatic;
         private final String ownScript;
@@ -108,6 +118,7 @@ final class CardLines {
         private final Set<ProvenanceKey> listed = new HashSet<>();
 
         Builder(Game game, Card card, Long withoutStatic) {
+            this.game = game;
             this.card = card;
             this.withoutStatic = withoutStatic;
             this.ownScript = ScriptLocator.scriptFileOf(card);
@@ -154,7 +165,7 @@ final class CardLines {
                 add(new Line(keysOf(key), "keyword",
                         !printed.contains(keyword) || notOwn(key),
                         faceUp ? null : Boolean.FALSE,
-                        castWith > 0 ? castWith : null, null, keyword.getOriginal()),
+                        castWith > 0 ? castWith : null, null, keyword.getOriginal(), null),
                         key, faceUp);
             }
         }
@@ -224,8 +235,11 @@ final class CardLines {
                     // The keyword's own line already stands for it.
                     return;
                 }
+                // A long against Forge's int id: Long.equals(Integer) is
+                // always false, which once let the removed static's flying
+                // back in as the CantBlockBy static it builds.
                 if (withoutStatic != null && keyword.getStatic() != null
-                        && withoutStatic.equals(keyword.getStatic().getId())) {
+                        && withoutStatic == keyword.getStatic().getId()) {
                     // A trait of the removed static's keyword grant.
                     return;
                 }
@@ -236,8 +250,33 @@ final class CardLines {
                     : Boolean.FALSE;
             List<Integer> chosen = faceUp && key != null && key.equals(stackKey)
                     ? chosenModes(onStack) : null;
+            List<String> affected = faceUp && trait instanceof StaticAbility stat
+                    ? affectedBy(stat) : null;
             add(new Line(keysOf(key), kind, layerGranted.contains(trait) || notOwn(key),
-                    active, null, chosen, null), key, faceUp);
+                    active, null, chosen, null, affected), key, faceUp);
+        }
+
+        /**
+         * The permanents a static applies to now, as Forge's own static effect
+         * lists them; null for a static Forge applies as no continuous effect
+         * (a restriction, a cost change), and on every static of a continuous
+         * record's board. That record's answer is which permanents its static
+         * touches, and hiding only its own static's list would both point at
+         * that static and set apart two records that otherwise say the same.
+         */
+        private List<String> affectedBy(StaticAbility stat) {
+            if (withoutStatic != null) {
+                return null;
+            }
+            StaticEffect effect = ForgeFields.staticEffectOf(game, stat);
+            if (effect == null) {
+                return null;
+            }
+            List<String> affected = new ArrayList<>();
+            for (Card each : effect.getAffectedCards()) {
+                affected.add(Refs.of(each));
+            }
+            return affected;
         }
 
         /**
@@ -288,7 +327,7 @@ final class CardLines {
             for (Card spliced : onStack.getSplicedCards()) {
                 SpellAbility spell = spliced.getFirstSpellAbility();
                 ProvenanceKey key = spell == null ? null : ProvenanceResolver.of(spell);
-                add(new Line(keysOf(key), "spell", true, null, null, null, null), key, true);
+                add(new Line(keysOf(key), "spell", true, null, null, null, null, null), key, true);
             }
         }
 
@@ -357,7 +396,7 @@ final class CardLines {
      * permanent resolved from, which Forge keeps while it is on the
      * battlefield for "if it was kicked".
      */
-    private static SpellAbility castSpellOf(Card card, SpellAbility onStack) {
+    static SpellAbility castSpellOf(Card card, SpellAbility onStack) {
         if (onStack != null && onStack.isSpell()) {
             return onStack;
         }

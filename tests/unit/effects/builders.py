@@ -83,6 +83,26 @@ def java_golden_entities() -> list[dict]:
     return [entity for snapshot in snapshots for entity in snapshot["entities"]]
 
 
+#: Card-slot members the collector writes (FR-024, T054-T057) that the codec
+#: does not read yet; T074's remainder parses them. A write-back of a golden
+#: entity is compared with the entity less these.
+GEN3_UNREAD_ENTITY_MEMBERS = frozenset({
+    "owner", "face_state", "mana_cost", "printed_loyalty", "printed_defense", "real_face",
+    "designations", "x_paid", "chosen", "costs_paid", "history", "order_rank", "role",
+})
+#: The line member a static line carries that the codec does not read yet.
+GEN3_UNREAD_LINE_MEMBERS = frozenset({"affected"})
+
+
+def without_unread_members(entity: dict) -> dict:
+    """A golden entity as the codec reads it: less the members it does not read yet."""
+    kept = {k: v for k, v in entity.items() if k not in GEN3_UNREAD_ENTITY_MEMBERS}
+    if kept.get("lines") is not None:
+        kept["lines"] = [{k: v for k, v in line.items() if k not in GEN3_UNREAD_LINE_MEMBERS}
+                         for line in kept["lines"]]
+    return kept
+
+
 _EVENT = Event(type=EventType.LIFE_CHANGE, params={"delta": 1})
 
 

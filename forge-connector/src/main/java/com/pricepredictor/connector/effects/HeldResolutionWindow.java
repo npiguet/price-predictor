@@ -70,7 +70,7 @@ final class HeldResolutionWindow {
         // the block that carries them is re-read here and paired with the
         // board each half was captured with: the cast's for a root half, the
         // mode's first clause's for a mode's.
-        String refs = RefsJson.render(resolved.ability);
+
         // A modal resolution on a patched worker writes one effect half per
         // chosen mode, each through the mode's own option line, every one of
         // them under the cost half's link (FR-029a, FR-029d). A mode that
@@ -79,9 +79,13 @@ final class HeldResolutionWindow {
         HeldHalves<HalfRecord> halves = new HeldHalves<>();
         for (ModeSplit.ModeHalf half
                 : resolved.modes.halves(resolved.state)) {
+            // The random results are the half's own, and the library cards
+            // its events name join the board they were captured with.
+            String refs = RefsJson.renderResolved(resolved.ability, half.events());
             halves.add(HalfRecord.of(
                     context.nextRecordId(), resolved.keys.withOption(half.mode().option()),
-                    half.mode().state().withRefs(refs).render()), half.events());
+                    half.mode().state().withRefs(refs).withEventCards(half.events()).render()),
+                    half.events());
         }
         held = new HeldResolution(resolved.ability, resolved.actor, link, halves);
     }
