@@ -23,9 +23,22 @@ final class RecordPayloads {
     private RecordPayloads() {
     }
 
-    /** ``{"events": [...]}`` — a resolution effect half. */
+    /** ``{"events": [...]}`` — a turn-based action's record. */
     static String eventsPayload(List<EffectEvent> events) {
         return Json.object().raw("events", eventArray(events)).render();
+    }
+
+    /**
+     * ``{"events": [...], "conditions_met": [{segment, met}]}`` — a resolution
+     * effect half: its events, and whether each conditional clause that
+     * resolved in it met its condition (FR-034), in resolution order; empty
+     * where none did.
+     */
+    static String resolutionPayload(List<EffectEvent> events, List<ConditionsMet> conditions) {
+        return Json.object()
+                .raw("events", eventArray(events))
+                .raw("conditions_met", ConditionsMet.toJsonArray(conditions))
+                .render();
     }
 
     /**

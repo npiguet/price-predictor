@@ -108,6 +108,9 @@ GEN3_UNREAD_ATTACKERS_MEMBERS = frozenset({
     "anchor_attacker", "legal_defenders", "must_attack", "tapped_by_attack",
 })
 GEN3_UNREAD_BLOCKERS_MEMBERS = frozenset({"must_block"})
+#: The resolution-payload member the collector writes (T068) that the codec does
+#: not read yet: whether each conditional clause met its condition. T074 parses it.
+GEN3_UNREAD_RESOLUTION_MEMBERS = frozenset({"conditions_met"})
 
 
 def without_unread_members(entity: dict) -> dict:

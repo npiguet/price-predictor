@@ -38,8 +38,12 @@ final class ModeSplit {
     record Mode(Integer option, Snapshot state) {
     }
 
-    /** One complete half: its mode, and the events filed while it resolved. */
-    record ModeHalf(Mode mode, List<EffectEvent> events) {
+    /**
+     * One complete half: its mode, the events filed while it resolved, and
+     * whether each conditional clause that resolved in it met its condition
+     * (FR-034), in the order the clauses resolved.
+     */
+    record ModeHalf(Mode mode, List<EffectEvent> events, List<ConditionsMet> conditions) {
     }
 
     /**
@@ -48,6 +52,8 @@ final class ModeSplit {
      * now, or the whole resolution where no mode has begun.
      */
     private final EventBuffer open = new EventBuffer();
+    /** The open span's conditional clauses, drained with its events. */
+    private final List<ConditionsMet> openConditions = new ArrayList<>();
     /** The modes whose halves are complete, in order. */
     private final List<ModeHalf> complete = new ArrayList<>();
     /** The mode whose clauses are resolving now, or null outside one. */
@@ -56,6 +62,13 @@ final class ModeSplit {
     /** Where the resolution's events are filed as they arrive. */
     EventBuffer buffer() {
         return open;
+    }
+
+    /** A conditional clause resolved in the open span. */
+    void noteCondition(ConditionsMet condition) {
+        if (condition != null) {
+            openConditions.add(condition);
+        }
     }
 
     /** Complete the current mode's half and open one for the next mode. */
@@ -69,7 +82,8 @@ final class ModeSplit {
         if (current == null) {
             return;
         }
-        complete.add(new ModeHalf(current, open.drain()));
+        complete.add(new ModeHalf(current, open.drain(), List.copyOf(openConditions)));
+        openConditions.clear();
         current = null;
     }
 
@@ -94,7 +108,9 @@ final class ModeSplit {
      */
     List<ModeHalf> halves(Snapshot rootState) {
         return complete.isEmpty()
-                ? List.of(new ModeHalf(new Mode(null, rootState), List.copyOf(open.events())))
+                ? List.of(new ModeHalf(
+                        new Mode(null, rootState), List.copyOf(open.events()),
+                        List.copyOf(openConditions)))
                 : List.copyOf(complete);
     }
 }

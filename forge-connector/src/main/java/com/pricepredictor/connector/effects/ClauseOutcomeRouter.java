@@ -100,6 +100,10 @@ final class ClauseOutcomeRouter {
             if (start != null) {
                 bracket.beginMode(clause, start.option());
             }
+            // Read now, on the state Forge's own metConditions() reads next,
+            // and after beginMode, so a mode's first clause files into its
+            // own half (FR-034).
+            bracket.recordClauseCondition(clause, ConditionsMet.of(clause));
         } else {
             Forks.noteClauseResolving(clause);
         }

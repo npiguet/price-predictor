@@ -15,6 +15,7 @@ import forge.game.event.GameEventTurnPhase;
 import forge.game.spellability.SpellAbility;
 
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -753,6 +754,27 @@ public final class BusBracketCollector extends BusEventReader {
         open.modes.begin(option, snapshots.ofResolving(open.ability));
     }
 
+    /**
+     * Whether a conditional clause about to resolve meets its condition
+     * (FR-034), filed into the half its events will join: called by the
+     * clause hook after {@link #beginMode}, so a mode's first clause files
+     * into its own mode's half. Filed by the test {@link #beginMode} applies:
+     * a consequence of the open bracket, of a clause on its card; a clause
+     * of a mana ability or a special action resolves at an action and is no
+     * resolution's.
+     */
+    void recordClauseCondition(SpellAbility clause, ConditionsMet condition) {
+        if (condition == null) {
+            return;
+        }
+        Cause cause = classifyNow().cause();
+        OpenResolution open = brackets.open();
+        if (open == null || !fromOpenBracket(cause) || !open.hosts(clause)) {
+            return;
+        }
+        open.modes.noteCondition(condition);
+    }
+
     private static String actorOf(SpellAbility ability) {
         return ability == null ? null : Refs.ofNullable(ability.getActivatingPlayer());
     }
@@ -951,6 +973,6 @@ public final class BusBracketCollector extends BusEventReader {
         context.emit(context.newResolution(Moment.RESOLUTION)
                 .ability(ProvenanceKey.Resolved.UNKNOWN)
                 .state(snapshots.ofBoard().render())
-                .payload(RecordPayloads.eventsPayload(brackets.drainOrphans())));
+                .payload(RecordPayloads.resolutionPayload(brackets.drainOrphans(), List.of())));
     }
 }

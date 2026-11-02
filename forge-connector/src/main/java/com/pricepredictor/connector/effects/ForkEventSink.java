@@ -71,7 +71,7 @@ final class ForkEventSink extends BusEventReader {
      * The forced resolution's effect halves once it has resolved, which the
      * deaths it left behind join; null until then.
      */
-    private HeldHalves<ModeSplit.Mode> held;
+    private HeldHalves<ModeSplit.ModeHalf> held;
 
     /**
      * Where the forced ability stands, which decides what an intervention
@@ -211,7 +211,7 @@ final class ForkEventSink extends BusEventReader {
     List<EffectEvent> events() {
         List<EffectEvent> all = new ArrayList<>();
         if (held != null) {
-            for (HeldHalves.Half<ModeSplit.Mode> half : held.halves()) {
+            for (HeldHalves.Half<ModeSplit.ModeHalf> half : held.halves()) {
                 all.addAll(half.events());
             }
         } else {
@@ -231,7 +231,7 @@ final class ForkEventSink extends BusEventReader {
      * forced ability never published one, so that what it filed is still
      * divided as it would have been.
      */
-    List<HeldHalves.Half<ModeSplit.Mode>> halves() {
+    List<HeldHalves.Half<ModeSplit.ModeHalf>> halves() {
         return hold().halves();
     }
 
@@ -253,17 +253,26 @@ final class ForkEventSink extends BusEventReader {
     }
 
     /**
+     * A conditional clause of the forced ability is about to resolve: whether
+     * it meets its condition joins the open span's half, as the live
+     * bracket's does (FR-034).
+     */
+    void noteCondition(ConditionsMet condition) {
+        modes.noteCondition(condition);
+    }
+
+    /**
      * The forced resolution is over: its halves are fixed, and from here only
      * the deaths it left behind join them.
      */
-    private HeldHalves<ModeSplit.Mode> hold() {
+    private HeldHalves<ModeSplit.ModeHalf> hold() {
         if (held == null) {
             // The last mode's half closes with the resolution, since no next
             // mode's first clause comes to close it.
             modes.close();
             held = new HeldHalves<>();
             for (ModeSplit.ModeHalf half : modes.halves(castState)) {
-                held.add(half.mode(), half.events());
+                held.add(half, half.events());
             }
             modes.buffer().clear();
         }

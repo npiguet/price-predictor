@@ -64,7 +64,9 @@ final class ManaChannel {
                     .actor(player)
                     .ability(ProvenanceResolver.resolve(ability))
                     .state(live.snapshots().ofBoard().render())
-                    .payload(RecordPayloads.eventsPayload(List.of(event)));
+                    // A mana ability resolves in place, at the player's
+                    // action, where no clause is filed: no condition is read.
+                    .payload(RecordPayloads.resolutionPayload(List.of(event), List.of()));
             reservoir.hold(key, slot, record);
         });
     }

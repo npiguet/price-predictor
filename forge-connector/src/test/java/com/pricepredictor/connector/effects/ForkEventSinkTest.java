@@ -311,7 +311,7 @@ class ForkEventSinkTest {
     /** Each held half's event types, in order. */
     private static List<List<EventType>> halfTypes(ForkEventSink sink) {
         List<List<EventType>> halves = new ArrayList<>();
-        for (HeldHalves.Half<ModeSplit.Mode> half : sink.halves()) {
+        for (HeldHalves.Half<ModeSplit.ModeHalf> half : sink.halves()) {
             halves.add(types(half.events()));
         }
         return halves;

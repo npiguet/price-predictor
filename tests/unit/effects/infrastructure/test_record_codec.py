@@ -67,6 +67,7 @@ from tests.unit.effects.builders import (
     GEN3_UNREAD_ATTACKERS_MEMBERS,
     GEN3_UNREAD_BLOCKERS_MEMBERS,
     GEN3_UNREAD_CANDIDATE_MEMBERS,
+    GEN3_UNREAD_RESOLUTION_MEMBERS,
     GEN3_UNREAD_STATE_MEMBERS,
     GEN3_UNREAD_VERDICT_MEMBERS,
     java_golden_records,
@@ -831,6 +832,16 @@ class TestTheGen3EntityShape:
             written = record_to_dict(record_from_dict(raw))["payload"]
             assert list(written) == [m for m in raw["payload"] if m not in unread]
         assert unread == {m for raw in legality for m in raw["payload"]} & unread
+
+    def test_a_resolution_effect_half_writes_back_every_member_but_the_unread_ones(self):
+        halves = [raw for raw in java_golden_records()
+                  if raw["kind"] == "resolution" and raw.get("moment") == "resolution"]
+        assert halves
+        for raw in halves:
+            assert GEN3_UNREAD_RESOLUTION_MEMBERS <= raw["payload"].keys()
+            written = record_to_dict(record_from_dict(raw))["payload"]
+            assert list(written) == [
+                m for m in raw["payload"] if m not in GEN3_UNREAD_RESOLUTION_MEMBERS]
 
     def test_an_attackers_record_carries_no_what_if(self):
         attackers = [raw for raw in java_golden_records()

@@ -3,6 +3,8 @@ package com.pricepredictor.connector.effects;
 import forge.game.card.CardView;
 import forge.game.spellability.SpellAbility;
 
+import java.util.List;
+
 /**
  * The live collector's resolution whose effect halves wait for its
  * state-based consequences.
@@ -47,10 +49,14 @@ final class HeldResolutionWindow {
      * grow, by the deaths the resolution's own effects cause.
      */
     private record HalfRecord(
-            String recordId, String timestamp, ProvenanceKey.Resolved keys, String state) {
+            String recordId, String timestamp, ProvenanceKey.Resolved keys, String state,
+            List<ConditionsMet> conditions) {
 
-        static HalfRecord of(String recordId, ProvenanceKey.Resolved keys, String state) {
-            return new HalfRecord(recordId, RecordShardWriter.timestamp(), keys, state);
+        static HalfRecord of(
+                String recordId, ProvenanceKey.Resolved keys, String state,
+                List<ConditionsMet> conditions) {
+            return new HalfRecord(
+                    recordId, RecordShardWriter.timestamp(), keys, state, conditions);
         }
     }
 
@@ -84,7 +90,8 @@ final class HeldResolutionWindow {
             String refs = RefsJson.renderResolved(resolved.ability, half.events());
             halves.add(HalfRecord.of(
                     context.nextRecordId(), resolved.keys.withOption(half.mode().option()),
-                    half.mode().state().withRefs(refs).withEventCards(half.events()).render()),
+                    half.mode().state().withRefs(refs).withEventCards(half.events()).render(),
+                    half.conditions()),
                     half.events());
         }
         held = new HeldResolution(resolved.ability, resolved.actor, link, halves);
@@ -154,7 +161,8 @@ final class HeldResolutionWindow {
                     .ability(record.keys())
                     .linkId(writing.linkId())
                     .state(record.state())
-                    .payload(RecordPayloads.eventsPayload(half.events())));
+                    .payload(RecordPayloads.resolutionPayload(
+                            half.events(), record.conditions())));
         }
     }
 }

@@ -107,11 +107,11 @@ final class InterventionFork {
             // option line and with the board as it stood when that mode's
             // first clause began. Events before the first mode's clause — the
             // charm's own, of which there are none — ride with the first.
-            for (HeldHalves.Half<ModeSplit.Mode> half : resolution.halves()) {
+            for (HeldHalves.Half<ModeSplit.ModeHalf> half : resolution.halves()) {
                 context.emit(forkedHalf(
-                        actorId, keys.withOption(half.about().option()),
-                        resolution.render(half.about().state(), half.events()),
-                        half.events()));
+                        actorId, keys.withOption(half.about().mode().option()),
+                        resolution.render(half.about().mode().state(), half.events()),
+                        half.events(), half.about().conditions()));
             }
             return true;
         });
@@ -123,14 +123,14 @@ final class InterventionFork {
      */
     private EffectRecord forkedHalf(
             String actorId, ProvenanceKey.Resolved keys, String state,
-            List<EffectEvent> events) {
+            List<EffectEvent> events, List<ConditionsMet> conditions) {
         return context.newResolution(Moment.RESOLUTION)
                 .interventional(true)
                 .fork(true)
                 .actor(actorId)
                 .ability(keys)
                 .state(state)
-                .payload(RecordPayloads.eventsPayload(events));
+                .payload(RecordPayloads.resolutionPayload(events, conditions));
     }
 
     /**
@@ -142,7 +142,7 @@ final class InterventionFork {
      *             resolving, where the live bracket re-reads it, or null
      *             when the fork never saw it finish
      */
-    private record ForcedResolution(String refs, List<HeldHalves.Half<ModeSplit.Mode>> halves) {
+    private record ForcedResolution(String refs, List<HeldHalves.Half<ModeSplit.ModeHalf>> halves) {
 
         /**
          * A board this resolution read, paired with its refs as the live
@@ -156,7 +156,7 @@ final class InterventionFork {
 
         /** Whether no half holds an event: the forced ability did nothing observable. */
         boolean isEmpty() {
-            for (HeldHalves.Half<ModeSplit.Mode> half : halves) {
+            for (HeldHalves.Half<ModeSplit.ModeHalf> half : halves) {
                 if (!half.events().isEmpty()) {
                     return false;
                 }
@@ -250,6 +250,11 @@ final class InterventionFork {
                 CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
                 if (start != null && start.charm() == onStack) {
                     sink.beginMode(start.option(), snapshots.ofResolving(onStack));
+                }
+                // The forced ability's own clauses only, by the same test: its
+                // chain, the chosen modes included, is rooted in it.
+                if (clause.getRootAbility() == onStack) {
+                    sink.noteCondition(ConditionsMet.of(clause));
                 }
             };
             Forks.listeningForClauses(modeStarts, () -> {
