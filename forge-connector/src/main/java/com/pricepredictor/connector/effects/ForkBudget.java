@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.effects.directed.KeywordEdit;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -71,7 +73,7 @@ final class ForkBudget {
         // of a keyword spelled differently would silently decline here.
         if (keyword == null || probeKeywords.isEmpty()
                 || !probeKeywords.contains(
-                        ProbeScheduler.normalizeKeyword(keyword))) {
+                        KeywordEdit.normalize(keyword))) {
             return false;
         }
         return probesUsed < probesPerGame;

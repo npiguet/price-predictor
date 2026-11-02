@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.effects.directed.KeywordEdit;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.keyword.KeywordInterface;
@@ -116,7 +117,7 @@ final class ProbeScheduler {
                 // (first_strike); the card carries Forge's (First Strike).
                 // Matched on the normalized form and stripped by the card's own,
                 // so neither side has to guess the other's.
-                String normalized = normalizeKeyword(original);
+                String normalized = KeywordEdit.normalize(original);
                 if (!caps.probeKeywords().contains(normalized)
                         || (focus != null && !focus.equals(normalized))) {
                     continue;
@@ -145,20 +146,6 @@ final class ProbeScheduler {
     /** Is this creature in the combat about to deal damage? */
     private boolean inCombat(Card card) {
         return CombatShape.isCombatant(game.getCombat(), card);
-    }
-
-    /**
-     * Forge's spelling of a keyword in the one every reader uses.
-     *
-     * <p>Mirrors {@code effects.domain.state_snapshot.normalize_keyword}: the
-     * parameter after {@code :} goes, spaces become underscores. Two spellings
-     * of first strike is exactly the mismatch that made gate 2 report zero
-     * observations of it.
-     */
-    static String normalizeKeyword(String original) {
-        int parameter = original.indexOf(':');
-        String base = parameter < 0 ? original : original.substring(0, parameter);
-        return base.trim().toLowerCase(java.util.Locale.ROOT).replace(' ', '_');
     }
 
     /**

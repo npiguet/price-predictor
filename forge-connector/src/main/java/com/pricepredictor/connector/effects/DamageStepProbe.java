@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.effects.directed.KeywordEdit;
 import forge.game.Game;
 import forge.game.card.Card;
 
@@ -71,13 +72,13 @@ final class DamageStepProbe {
             }
             // A stripped keyword reaches combat states ordinary play does
             // not; Forks.ForkRun discards the fork when one throws.
-            stripKeyword(fork, forkCarrier, keyword);
+            KeywordEdit.remove(fork, forkCarrier, keyword);
             // The state is the board as the step began, with the keyword
             // already gone: that is the input the counterfactual answers for.
             String state = snapshots.ofBoard().render();
             ProbedStep dealt = runDamageStep(fork, step == DamageStep.FIRST_STRIKE);
             return new HeldProbe(
-                    ProbeScheduler.normalizeKeyword(keyword),
+                    KeywordEdit.normalize(keyword),
                     Refs.of(carrier), state, dealt.events(),
                     Refs.of(verified.perspective()), dealt.combat(),
                     step,
@@ -87,19 +88,6 @@ final class DamageStepProbe {
                     // belongs to.
                     liveTurn());
         }, (verified, held) -> held);
-    }
-
-    /**
-     * Take {@code keyword} away from the fork's copy of the carrier.
-     *
-     * <p>Through the layer system rather than off the printed list: the
-     * keyword may be printed, equipped or granted until end of turn, and a
-     * removal layer takes it away in all three cases the way the rules would.
-     */
-    private static void stripKeyword(Game fork, Card forkCarrier, String keyword) {
-        forkCarrier.addChangedCardKeywords(
-                null, List.of(keyword), false,
-                fork.getNextTimestamp(), null);
     }
 
     /**
