@@ -9,12 +9,16 @@ Parameters:
 
 - ``bit`` (required): ``can_play``, ``affordable``, ``has_legal_target``,
   or on gen-3 records ``timing`` or ``failed_check``;
-- ``check``: with ``bit = failed_check``, the ``failed_checks`` identifier;
+- ``check``: with ``bit = failed_check``, the ``failed_checks`` identifier
+  (:class:`PlayabilityCheck`, ``land_play_limit`` among them);
 - ``fires_when``: the bit's value on the ``fires`` side, ``false`` by default;
 - ``responsible_static``: true to count only candidates a static restricts.
 
 The candidates a rule speaks for, each filter narrowing both sides:
 
+- ``land_play``: true for land-play candidates only (FR-033a), false for
+  every other; read off the gen-3 candidate, so a gen-2 candidate, or one
+  collected before land plays were candidates, is unreadable;
 - ``keyword``: the candidate is the line this keyword produced (a Crew,
   Cycling, Flashback, Dash or Disguise ability, which acts through the
   keyword's own line), compared in ``keyword_names``' spelling;
@@ -47,7 +51,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from effects.domain.provenance import SidecarLookup
-from effects.domain.records import Candidate, EffectRecord, PlayabilitySubkind, RecordKind
+from effects.domain.records import (
+    Candidate,
+    EffectRecord,
+    PlayabilityCheck,
+    PlayabilitySubkind,
+    RecordKind,
+)
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
 from effects.domain.rule_detectors.acting_line import (
@@ -61,7 +71,9 @@ from effects.domain.rule_detectors.acting_line import (
 GEN2_BITS = frozenset({"can_play", "affordable", "has_legal_target"})
 GEN3_BITS = frozenset({"timing", "failed_check"})
 ACT = "[ACT]"
-FILTERS = frozenset({"keyword", "source_keyword", "cost_symbol", "cost_part", "script_param"})
+FILTERS = frozenset({"keyword", "source_keyword", "cost_symbol", "cost_part", "script_param",
+                     "land_play"})
+CHECKS = frozenset(check.value for check in PlayabilityCheck)
 
 #: A mana symbol as ``Cost$`` spells it (``W``, ``12``, ``W/U``, ``2/W``,
 #: ``W/P``); ``T`` and ``Q`` are symbols too, and any other token is a part.
@@ -110,6 +122,8 @@ def _holds_symbol(symbols: frozenset[str], wanted: str) -> bool:
 def _passes(candidate: Candidate, lines: SidecarLookup | None,
             params: Mapping[str, Any]) -> bool:
     """Whether the candidate is one the declaration's filters speak for."""
+    if "land_play" in params and candidate.land_play is not bool(params["land_play"]):
+        return False
     if "keyword" in params and not is_keyword_line(
             line_of(candidate.ability, lines), params["keyword"]):
         return False
@@ -144,23 +158,26 @@ class VerdictBit:
     params: frozenset[str] = frozenset(
         {"bit", "check", "fires_when", "responsible_static"}) | FILTERS
     general: frozenset[str] = frozenset(
-        {"bit", "check", "fires_when", "keyword", "source_keyword", "cost_symbol", "cost_part"})
+        {"bit", "check", "fires_when", "keyword", "source_keyword", "cost_symbol", "cost_part",
+         "land_play"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         bit = params.get("bit")
+        needs = {"land_play"} if "land_play" in params else set()
         if bit == "timing":
-            return frozenset({"timing"})
+            needs.add("timing")
         if bit == "failed_check":
-            return frozenset({"failed_checks"})
-        return frozenset()
+            needs.add("failed_checks")
+        return frozenset(needs)
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
         bit = params.get("bit")
         if bit not in GEN2_BITS | GEN3_BITS:
             raise ValueError(f"verdict_bit: unknown bit {bit!r}")
-        if bit == "failed_check" and not params.get("check"):
-            raise ValueError("verdict_bit: a failed_check declaration names its check")
+        if bit == "failed_check" and params.get("check") not in CHECKS:
+            raise ValueError(f"verdict_bit: a failed_check declaration names its check, "
+                             f"one of {sorted(CHECKS)}; got {params.get('check')!r}")
         if record.kind is not RecordKind.PLAYABILITY or (
                 record.subkind is not PlayabilitySubkind.DECISION):
             return None
