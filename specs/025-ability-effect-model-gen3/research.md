@@ -125,13 +125,13 @@ playability targets, the Poisson, gate 1's deviance, `HEAD_OUTPUTS`, game routin
 | Copying a game and checking the copy | `Forks.copyAndVerify`, `GameStateEvaluator` score check | **Reuse.** The directed fork spends its budget before verifying, as `InterventionFork.intervene :47-57` does. |
 | Playing a copied game forward | Forge's `PhaseHandler.mainLoopStep()` (`FG/phase/PhaseHandler.java:1045`, public); `forge-gui-desktop/src/test/java/forge/ai/AITest.java:92` drives a game by it | **Wrap.** `ForkPlayForward` loops `mainLoopStep` until the turn number changes or the game ends. It is a spike task first: nothing here has run it on a `GameCopier` copy. |
 | What a fork copy loses | `forge/.../GameCopier.java`: delayed triggers, `addUntil` closures, `ExiledWith :352`, attacked this turn `:115`, this-turn casts `:181`, counters added this turn `:233`, controller timestamps `:357` | **Patch Forge** (Decision D3). |
-| Fork operations | `Card.addNewPT :4509`, `addPTBoost :4684`, `addChangedCardKeywords :5140`, `addColor :4291`, `addChangedCardTypes :4247`, `GameEntity.setCounters :326`, `Card.setTapped :4767`, `Player.setLife :414`, `CardFactory.getCard`, `Zone.remove/add`, `GameAction.checkStaticAbilities` | **Reuse**, silent edits where Forge has them (Decision D2). |
+| Fork operations | `Card.addNewPT :4509`, `addPTBoost :4684`, `addChangedCardKeywords :5140`, `addColor :4291`, `addChangedCardTypes :4247`, `GameEntity.setCounters :326`, `Card.setTapped :4767`, `Player.setLife :414`, `CardFactory.getCard :169`, `Zone.remove :162` / `Zone.add(card, index) :91` (`FG/zone/Zone.java`), `Combat.removeFromCombat :608`, `Card.unattachFromEntity :4015`, `Card.setSickness :3686`, `Card.setGameTimestamp :6908`, `GameAction.checkStaticAbilities` | **Reuse**, silent edits where Forge has them (Decision D2). |
 | Static condition, live trait lists | `Card.getTriggers :7119`, `getStaticAbilities :7081`, `getReplacementEffects :7143` (live via `CardState.getTriggers :688-697`); `StaticAbility.checkConditions :362` | **Reuse**, public and read-only. |
 | Keyword instances | `Card.getKeywords :5091`, `KeywordInterface.getOriginal()` | **Reuse.** Protection lines read the instance's fragment. |
-| Player and global facts | `Player.getSpeed :1882`, `hasBlessing :3657`, `hasInitiative :3551`, `Game.getMonarch :171`, `Game.getDayTime :1404`, `Card.getCurrentRoom :2332`, `StaticEffects.getStaticEffect(stAb).getAffectedCards()` (`StaticEffects.java:59`, `StaticEffect.java:109`), `getXManaCostPaid :1636`, chosen values `:2158-2302` | **Reuse.** |
+| Player and global facts | `Player.getMaxLandPlays :1696`, `getMaxLandPlaysInfinite :1732`, `getLandsPlayedThisTurn :2230`, `StaticEffect.getAffectedPlayers :130` (`FG/StaticEffect.java`), `Player.getSpeed :1882`, `hasBlessing :3657`, `hasInitiative :3551`, `Game.getMonarch :171`, `Game.getDayTime :1404`, `Card.getCurrentRoom :2332`, `StaticEffects.getStaticEffect(stAb).getAffectedCards()` (`StaticEffects.java:59`, `StaticEffect.java:109`), `getXManaCostPaid :1636`, chosen values `:2158-2302` | **Reuse.** |
 | Pending delayed triggers | `TriggerHandler.delayedTriggers`, `thisTurnDelayedTriggers`, `playerDefinedDelayedTriggers` (`FG/trigger/TriggerHandler.java:49-51`, private, no getter) | **Patch Forge** with an accessor, shared with Decision D3. |
 | Relation sources | `getExiledWith :2172`, `getMergedCards :1447`, `getMustBlockCards :1685`, `getGoaded :7798`, `getEncodingCard :1440`, `getHaunting :1398`, `getPairedWith :1405`, `getPromisedGift :2137`, `getProtectingPlayer :2146`, `getCopiedPermanent :3592`, `getCloneOrigin :1705`, `getCrewedByThisTurn :6821`, `getSaddledByThisTurn :6632`, `getBlockedThisTurn :1663`, `getDamageHistory :6103`, `getEffectSource :7248` | **Reuse**; `pending on` reads the new accessor. |
-| Per-check playability | `SpellAbilityRestriction.checkActivatorRestrictions :330`, `checkTimingRestrictions :282`, `checkZoneRestrictions :193`, `checkOtherRestrictions :349`, `getLimitToCheck`/`getGameLimitToCheck :580-598`; `SpellAbility.canCastTiming :2574`; `MagicStack.isSplitSecondOnStack`; `StaticAbilityCantBeCast.applyCantBeCastAbility :99`, `applyCantBeActivatedAbility :156` | **Reuse** (Decision C3). |
+| Per-check playability | `Player.canPlayLand :1659` (its turn, sorcery-timing, zone, prohibition and limit parts, for land plays; `LandAbility.canPlay :51`), `StaticAbilityCantBeCast.cantPlayLandAbility :73`, `SpellAbilityRestriction.checkActivatorRestrictions :330`, `checkTimingRestrictions :282`, `checkZoneRestrictions :193`, `checkOtherRestrictions :349`, `getLimitToCheck`/`getGameLimitToCheck :580-598`; `SpellAbility.canCastTiming :2574`; `MagicStack.isSplitSecondOnStack`; `StaticAbilityCantBeCast.applyCantBeCastAbility :99`, `applyCantBeActivatedAbility :156` | **Reuse** (Decision C3). |
 | Conditions at resolution | the clause hook fires right before `sa.metConditions()` (`FG/ability/AbilityUtils.java:1446-1473`) | **Reuse.** The collector calls `metConditions()` on identical state. The GIFT trigger runs between the two calls (`:1469`); a gift segment is read after it. |
 | Attack constraints and taps | `combat.getAttackConstraints().getRequirements().get(c).hasRequirement()` (`Combat.java:197`, `AttackRequirement.java:84`); `GameEventCardTapped` at `PhaseHandler.java:607`, then `GameEventAttackersDeclared` at `:629` | **Reuse.** The second event flushes the held attackers records. |
 | "Must block" | `CombatUtil.java:640-660, 843-955` (`getMustBlockCards`, `MustBeBlockedBy`, `MustBeBlockedByAll`, "All creatures able to block CARDNAME do so.", `StaticAbilityMustBlock`) | **Reimplement** as a collector-side `MustBlock` predicate, documented reason: Forge has no per-(blocker, attacker) predicate. One JUnit case per source pins it. |
@@ -367,6 +367,15 @@ The AI playability hook no longer produces decision records.
 The verdict must not write to the game. `cantBeCastAbility` calls `card.setCastSA(spell)` and
 `setActivatingPlayer` writes too, so the enumerator saves and restores both around each check.
 
+Land plays are candidates too (FR-033a, user decision 2026-11-02): each land ability of an available
+card (`SpellAbility.isLandAbility()`), marked `land_play`, its verdict `Player.canPlayLand` split
+into `whose_turn`, `casting_speed`, `zone`, `static_prohibition` (`cantPlayLandAbility`) and a new
+`land_play_limit` (`getLandsPlayedThisTurn() >= getMaxLandPlays()`, never under
+`getMaxLandPlaysInfinite()`). The limit gets its own identifier rather than `activation_limit`,
+which is `getLimitToCheck`/`getGameLimitToCheck` on one ability. Mana abilities stay out. The random
+seat filters land-play candidates out of its draw, keeping gen-2's rule that the AI makes land drops
+(`RandomSeatController.landDropPending`).
+
 **Rationale**: in the patched `canPlayAndPayFor` (`FA/AiController.java:840-868`), a spell returns
 `CantPlaySa` before the hook when `canPlayFromHost()` is null. The hook's list is pre-filtered (lands,
 `RemAIDeck`, storm), and it fires for the priority holder only. FR-030 and FR-033 cannot be met
@@ -477,11 +486,24 @@ supervisor has to ask the JVM.
 | tap or untap | `setTapped` (silent) |
 | life total | `setLife` (fires life-gain and life-loss triggers; Forge has no silent path) |
 | replace a card | `CardFactory.getCard`, raw `Zone.remove/add`, carrying controller, tapped state, summoning sickness, damage, counters, attachments and combat status to the new card |
+| remove a permanent | `Combat.removeFromCombat`, unattach what is attached to it and what it is attached to (`unattachFromEntity`), raw `Zone.remove` from the battlefield; the card goes to no zone |
+| add a permanent | `CardFactory.getCard` from the card database under the variant's owner, `setGameTimestamp` fresh, raw `Zone.add` to the controller's battlefield, then `setTapped`, `setSickness` and `setCounters` as the variant states |
+| move a card | raw `Zone.remove` from one of hand, library and graveyard and `Zone.add(card, index)` to another (a library position from the top), or `CardFactory.getCard` for a new card put at the old one's position, the old one going to no zone |
 
-Every operation ends with `fork.getAction().checkStaticAbilities()`.
+`replace_card` is `remove_permanent` then `add_permanent`, carrying the old card's state, and shares
+their code. Every operation ends with `fork.getAction().checkStaticAbilities()`. None goes through
+`GameAction.moveTo`, which would fire zone-change triggers, replacements and the per-turn counts
+(cards drawn, permanents to the graveyard, lands played) a variant does not change.
 
 **Rationale**: a scenario variant describes a different board, not an event on the board. A silent
 edit gives the minimal pair the scenario names; firing triggers would add changes no variant states.
+The three board-membership operations exist because the first classification pass found most
+variants add or remove a permanent or change a card in a hand, library or graveyard (user decision,
+2026-11-02).
+
+**Alternatives considered**: forcing a choice, a target or a timing on a seat inside the fork
+(rejected by the user for gen-3: each kind of choice is a separate AI callback to override, and a
+timing variant changes when to fork rather than the board; such variants stay unclassifiable).
 
 #### D3. `GameCopier` carries delayed triggers and end-of-turn commands (user decision)
 

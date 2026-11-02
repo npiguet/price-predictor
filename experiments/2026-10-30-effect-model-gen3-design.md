@@ -492,7 +492,8 @@ the plan rests on them:
    a verdict failed, whose turn it is, combat as it starts, each action's state-based deaths in the
    action's own record, and gen-2's collector defects closed.
 
-The subsections below take these in order, then two options still open. Each points to its outcome
+The subsections below take these in order, then the random seat's share, which the per-rule counts
+settle, and one option still open. Each points to its outcome
 in [Result](#result) where one exists. The catalogue, the mapping of rules to inputs and outputs,
 and the fixes to gen-2's defects have run so far, and no gen-3 corpus has been collected.
 
@@ -594,12 +595,45 @@ watches for on a live board during collection. Each other variant's change is th
 directed fork applies to that board. The decisions are
 the ones the game made, so they need no conversion.
 
-**The variants' changes have to become fork operations.** Each change is an English sentence. A
-pass classifies every change into a small set of operations: change a creature's power or
-toughness, add or remove a keyword, change a colour or type, add or remove counters, tap or untap a
-permanent, change a life total, or replace one card with another. The counts per operation show
-which few operations reach the most rules, and so which to build first. Gen-2's damage-step probe is
+**The variants' changes have to become fork operations, and most of them add, remove or move a
+card.** Each change is an English sentence. A pass classifies every change into one of ten
+operations, or marks it as one no operation makes. Seven operations edit what is already on the
+board:
+
+- change a creature's power or toughness;
+- add or remove a keyword;
+- change a colour or type;
+- add or remove counters;
+- tap or untap a permanent;
+- change a life total;
+- replace one card with another.
+
+Those seven leave most variants without an operation. The variants they leave mostly add or remove
+a permanent, change a card in a hand, a library or a graveyard, or differ by a choice, a target or
+the timing.
+"Thalia is not on the battlefield", "a second Goblin King is" and "the top card of the library is a
+land" are each one fact of the board. Three more operations make those changes:
+
+- remove a permanent from the copied battlefield;
+- put a card onto the copied battlefield;
+- move a card between hand, library and graveyard, or change which card sits there.
+
+The counts per operation show which operations reach the most rules. Gen-2's damage-step probe is
 already one of them.
+
+**Every operation edits the copy without the event a game would raise.** A removed permanent
+triggers no leaves-the-battlefield ability and reaches no graveyard. A card put onto the
+battlefield triggers no enters ability. A moved card counts as no draw, discard or mill. A variant
+describes a different board, not an event on the board, and a trigger the edit fired would add a
+change no variant states.
+
+**Forcing a choice, a target or a timing in a fork is rejected, so those variants keep no operation
+in gen-3.** From the fork on, each seat decides afresh with its own controller. Forge's AI makes each
+kind of choice through its own callback: targets, modes, payment, attackers and blockers. Forcing one
+choice would mean overriding that callback inside the fork's controllers, for every kind of choice a
+variant names. A variant that differs by timing needs the fork to wait for another step, which
+changes when the collector forks rather than what the board holds. Random-seat games already hold
+the choices Forge's AI would not make.
 
 **The collector checks each enabled rule's board precondition at each phase boundary, the moment
 interventional forks already use.** When the board meets the precondition, it forks, applies the
@@ -628,6 +662,18 @@ A common precondition holds at many boundaries of one game. Forking at the first
 the budget in the opening turns, so fork records would show mostly early boards. When several rules
 match at one boundary, the rule with the fewest directed forks so far goes first. Trying rules in a
 fixed order would let the earliest-matching rule take every fork and starve the others.
+
+**Directed forks go to the rules gen-2's corpus shows rarely or on one side only.** The per-rule
+counts over gen-2's corpus pick them. A rule is enabled when gen-2 holds fewer than 100 records in
+which its effect happens, or no near-miss record at all, and one of its variants has an operation.
+704.5f is enabled as well, because the first pilot checks the directed forks on it. Each enabled
+rule gets its hand-written board precondition.
+
+**One coverage round deals the cards of the rare and one-sided rules' scenarios.** A directed fork
+waits for its rule's base board, and a rule that needs a card self-play rarely deals rarely gets that
+board. `collect-coverage --wording-cards` narrows a coverage round to a list of cards, here every
+card named in those rules' scenarios. The round runs beside the coverage round of cards with an
+activated "any target" damage ability.
 
 **A directed-fork record says so on the record itself.** It carries the envelope field `aimed_at`
 naming its rule, the variant and operation applied, and a pointer to its live twin. Every record of
@@ -1017,7 +1063,7 @@ have to record the exiling ability itself. The same holds for a card or player a
 | | a lure, "must block" | `getMustBlockCards` | must block |
 | | goad | `getGoaded` | goaded by, from a card to a player |
 | the stack | targets, a source, the object a trigger is about | each stack object's targets and source, the triggered object | targets, source of, triggered by |
-| statics and floating effects | an anthem, "creatures can't block this turn" | a new snapshot field per static line and floating effect, `getEffectSource` | affects, created by |
+| statics and floating effects | an anthem, "creatures can't block this turn", Exploration raising its controller's land plays | a new snapshot field per static line and floating effect, listing the cards and players it applies to; `getEffectSource` | affects, created by |
 | delayed effects | "return it at the beginning of the next end step", Sneak Attack's sacrifice | the objects a delayed trigger holds | pending on |
 | linked by a line's text, rule 607 | Oblivion Ring, Banisher Priest, champion, imprint, hideaway, Forge's lasting remembered objects | `getExiledWith`, `getImprintedCards`, `getUntilLeavesBattlefield`, `getRemembered` | linked by text, from the line |
 | an exiled card acting through a permanent | cipher, haunt | `getEncodingCard`, `getHaunting` | bound to, from the exiled card to the permanent |
@@ -1216,6 +1262,21 @@ it. Forge groups most of these inside `SpellAbilityRestriction.canPlay`, so the 
 parts separately where Forge exposes them, and the implementation has to confirm how finely it can
 split them. The verdict head gains a column per check.
 
+**Land plays are candidates too, and the land-play limit is a check of its own.** Playing a land is
+a special action, not a spell, and gen-2's candidates leave it out. No record then shows rule 305:
+whether a player may play another land this turn. Gen-3 lists every land a player could play beside
+its spells and abilities, with the same verdict bits and checks. A land play past the limit fails a
+check named `land_play_limit`, not `activation_limit`. The two limits count different things: an
+activation limit counts one ability's activations, while rule 305.2 counts the turn's land plays
+against a limit that statics raise. Mana abilities stay out of the candidates.
+
+**The player slot reads how many land plays the turn allows.** The snapshot already counts the lands
+a player played this turn. Gen-3 adds Forge's limit, `max_land_plays`, beside that count, so the
+model compares the two directly. A static such as Exploration raises the limit, and so does a
+floating effect such as Explore's "you may play an additional land this turn". The `affects` link
+then runs from that line to the player whose limit it raises, as it runs from an anthem's line to the
+creatures it pumps.
+
 **A resolution records which branches of its chain ran.** Forge evaluates each chain segment's
 `Condition$` as it resolves. The resolution payload gains `conditions_met`, one entry per segment
 the chain conditions, saying whether the condition held, keyed by the segment index `attributed_to`
@@ -1385,7 +1446,12 @@ lists the fixes.
 - **The random seat stops looping on a free, repeatable ability**, and the snapshot's report of a
   set base under a boost is checked on more cards than the Gigantoplasm.
 
-### A random seat in more matches is an option, to be decided by what it adds per rule
+### The random seat keeps gen-2's share of one match in four
+
+**Gen-3 keeps gen-2's random-seat share.** The rules the per-rule counts over gen-2's corpus find
+rare or one-sided go to directed forks and to a coverage round of their scenarios' cards instead
+([above](#a-directed-fork-needs-an-operation-and-a-trigger-on-the-live-board)). The paragraphs below
+give the case for and against a larger share.
 
 **Gen-3 could put a random seat in far more matches than gen-2's one in four.** One option is a
 random seat in every match, acting at random at half its decisions. Gen-2's second pilot found that
@@ -1420,7 +1486,7 @@ between two Forge AIs. A rule found mostly in random-seat games argues for a lar
 found only in rich boards argues against. Whatever share is chosen, the validation strata keep
 games between two Forge AIs.
 
-**A softer random seat is a second option.** Instead of drawing uniformly at half its decisions,
+**A softer random seat stays outside gen-3.** Instead of drawing uniformly at half its decisions,
 the seat would choose among the Forge AI's better options with some temperature. Its play would
 stay plausible but differ from the AI's, without throwing creatures away. It depends on whether
 Forge's AI exposes a ranking of its options, which has not been checked.
@@ -2077,7 +2143,7 @@ line gives every field's card-disjoint explained deviance, and each run's "Const
 - **Run the per-rule detectors over gen-2's corpus.** The counts, split by random-seat games, games
   between two Forge AIs and aimed records, say which rules self-play covers,
   which need directed forks, and how large a share of matches the random seat should get.
-- **Classify the scenarios' variant changes into fork operations**, build all seven operations and
+- **Classify the scenarios' variant changes into fork operations**, build all ten operations and
   a board precondition for each rule enabled for directed forks, and leave puzzle-style setups for
   the rules that remain.
 - **Compare the scenarios with Forge**, starting with the ten suspected Forge departures in

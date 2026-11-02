@@ -83,8 +83,8 @@ Out of scope
   mask modes only).
 - Puzzle-style starting states as a source of rule records: considered once detectors and
   directed forks show which rules remain.
-- A larger random-seat share, or a softer random seat: decided from the per-rule detector
-  counts (§ 5.2).
+- A larger random-seat share, or a softer random seat.
+- A directed fork that forces a choice, a target or a timing on a seat (§ 6).
 - Lethality copies for combat: decided once the gen-3 combat changes (§ 8.6) are measured.
 - Rule-labelled copies other than gen-2's lethality copies and the protection copies of
   § 12.3.
@@ -260,18 +260,30 @@ from a real game.
 - Each variant's change is classified into one fork operation, or marked unclassifiable
   with a reason:
 
-  | operation |
-  |---|
-  | change a creature's power or toughness |
-  | add or remove a keyword |
-  | change a colour or type |
-  | add or remove counters |
-  | tap or untap a permanent |
-  | change a life total |
-  | replace one card with another |
+  | operation | change |
+  |---|---|
+  | `pt` | change a creature's power or toughness |
+  | `keyword` | add or remove a keyword |
+  | `colour_type` | change a colour or type |
+  | `counters` | add or remove counters |
+  | `tap` | tap or untap a permanent |
+  | `life` | change a life total |
+  | `replace_card` | replace one card with another |
+  | `remove_permanent` | take a permanent off the battlefield |
+  | `add_permanent` | put a card onto the battlefield |
+  | `move_card` | move a card between hand, library and graveyard, or change which card sits in one of them |
 
-- All seven operations are built. The damage-step probe is the existing "remove a keyword"
+- All ten operations are built. The damage-step probe is the existing "remove a keyword"
   operation. A variant marked unclassifiable has no operation.
+- An operation edits the fork's copy without the event the change would raise in a game: a
+  removed permanent triggers no leaves-the-battlefield ability and goes to no zone, a card
+  put onto the battlefield triggers no enters ability and no replacement, and a moved card
+  counts as no draw, discard or mill. The per-turn counts stay as the live game left them.
+- No operation forces a choice, a target or a timing on a seat. A variant that differs only
+  by one is unclassifiable.
+- Directed forks are registered for 704.5f and for every rule that gen-2's per-rule counts
+  (§ 5.2) show with fewer than 100 `fires` records or with no `does_not_fire` record, where
+  one of its variants has an operation.
 - The collector evaluates each enabled rule's board precondition at every phase
   boundary. When it holds, the collector may fork, apply the operation and play the fork
   on to the end of the current turn, recording it. The fork is then discarded, and the
@@ -373,8 +385,9 @@ output heads as the code builds them.
 
 The snapshot gains the facts `rules/gen3-fields.json` marks `new`:
 
-- per player: speed, the city's blessing, rad counters, the monarch, the initiative, and
-  the per-turn counts of `in.history`;
+- per player: speed, the city's blessing, rad counters, the monarch, the initiative, the
+  per-turn counts of `in.history`, and the number of land plays the turn allows, Forge's
+  `getMaxLandPlays()`, or unlimited;
 - global: day, night or neither;
 - per entity: `owner`;
 - per card: designations, X paid, chosen values, costs paid, history bits, order rank,
@@ -388,7 +401,7 @@ The snapshot gains the facts `rules/gen3-fields.json` marks `new`:
 - the components of a mutated permanent;
 - the pending event's subject as it last existed;
 - the resolving ability's die results and coin flips;
-- for each static line, the permanents it affects.
+- for each static line, the permanents and players it affects.
 
 The snapshot reports a creature's set base power and toughness as its base, and its
 boosts apart from it.
@@ -425,6 +438,15 @@ bracket they follow.
 
 - The collector enumerates the decision candidates of both players itself, at every
   priority stop once the state-based check is over, the player without priority included.
+- A candidate is every spell and ability a player could play, the unplayable ones included,
+  and every land it could play. Mana abilities are not candidates.
+- A land-play candidate carries `land_play = true`; every other candidate carries `false`.
+  Its verdict is Forge's `canPlayLand`: `affordable` and `has_legal_target` are true,
+  `timing` is false outside its player's turn or where the player could not cast a sorcery
+  and the play has no flash, and its failed checks are among `whose_turn`, `casting_speed`,
+  `zone`, `static_prohibition` and `land_play_limit`.
+- The random seat leaves land plays to the Forge AI, as in gen-2: it never draws a
+  land-play candidate.
   The AI's playability hook produces no decision records, because Forge filters a spell on
   timing before the hook and calls it for the player with priority only.
 - The collector's `PlayabilityVerdict` computes `can_play`, `affordable` and
@@ -448,6 +470,7 @@ bracket they follow.
   | `phase` | the phase or step a restriction names |
   | `combat` | a "during combat" restriction |
   | `activation_limit` | activations per turn or per game |
+  | `land_play_limit` | a land play once the turn's land plays have reached the player's limit |
   | `script_condition` | a script's own condition on the board, such as "only if you control an artifact" |
   | `zone` | the zone the card must be in |
   | `static_prohibition` | a static that forbids the play |
@@ -487,6 +510,8 @@ uses.
   declaring the attack tapped the anchor, read from the declaration's tap events. The
   collector holds the record open until they arrive.
 - A coverage round targets cards with an activated "any target" damage ability.
+- A coverage round targets the cards named in the scenarios of the rules § 6 registers for
+  their gen-2 counts.
 
 ## 8.12 Keying, random seat and dropped events
 
@@ -509,6 +534,8 @@ uses.
 | `owner` | each snapshot entity | player ref |
 | `timing` | each decision candidate's `verdict` | bool |
 | `failed_checks` | each decision candidate | list of `{check, responsible_static}`, `check` an identifier of § 8.8 |
+| `land_play` | each decision candidate | bool: the candidate plays a land (§ 8.8) |
+| `max_land_plays` | each player | integer, or null where the player may play any number of lands |
 | `conditions_met` | resolution payload | list of `{segment, met}`, `segment` the chain index `attributed_to` uses |
 | `active` | each listed static line | bool |
 | `anchor_attacker`, `legal_defenders`, `must_attack` | `attackers` payload | entity ref; list of player or entity refs; bool |
@@ -558,14 +585,15 @@ The ability encoder, `e` and the trunk are each 256 wide.
 
 ## 9.4 New inputs
 
-The 33 inputs of `rules/gen3-fields.json` go into these places:
+The 33 inputs of `rules/gen3-fields.json`, and the land-play limit of § 8.4, go into these
+places:
 
 | where | inputs |
 |---|---|
 | card slot | subtypes, face state, is a copy, is a token, pending-event details, mana cost, printed loyalty and defense, designations, X paid, chosen values, costs paid, history, order rank |
 | ability slot | line flags (§ 9.2) |
 | relations (§ 10) | attached to, attacks, targets, source of, paired with (soulbond), protects (a battle's protector), linked by text (exiled with), merged with, has the same name |
-| player slot | speed, city's blessing, rad counters, monarch, initiative |
+| player slot | speed, city's blessing, rad counters, monarch, initiative, land-play limit |
 | global slot | day or night |
 | command-zone and library card slots | floating effects, dungeons, library cards an effect touches |
 | acting-ability slot | die results and coin flips |
@@ -699,7 +727,7 @@ This section replaces the gen-2 spec's rule that no other positional scheme is a
 | | a lure, "must block" | `getMustBlockCards` | must block |
 | | goad | `getGoaded` | goaded by, from a card to a player |
 | the stack | targets, a source, the object a trigger is about | each stack object's targets and source, the triggered object | targets (one type per target index), source of, triggered by |
-| statics and floating effects | an anthem, "creatures can't block this turn" | the per-static affected list (§ 8.4), `getEffectSource` | affects, created by |
+| statics and floating effects | an anthem, "creatures can't block this turn", Exploration's extra land play | the per-static affected list of cards and players (§ 8.4), `getEffectSource` | affects, from the line to a card or a player; created by |
 | delayed effects | "return it at the beginning of the next end step", Sneak Attack's sacrifice | the objects a delayed trigger holds | pending on |
 | linked by a line's text, rule 607 | Oblivion Ring, Banisher Priest, champion, imprint, hideaway, lasting remembered objects | `getExiledWith`, `getImprintedCards`, `getUntilLeavesBattlefield`, `getRemembered` | linked by text, from the line |
 | an exiled card acting through a permanent | cipher, haunt | `getEncodingCard`, `getHaunting` | bound to, from the exiled card to the permanent |

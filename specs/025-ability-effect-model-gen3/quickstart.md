@@ -71,8 +71,9 @@ Check: the rules newly learnable are printed and committed with the change.
 ## Stage 5 — full collection, coverage and variants
 
 ```bash
-python -u -m sealed match-outcomes --effect-records --directed-fork-rules <from stage 1> <run flags>
+python -u -m sealed match-outcomes --effect-records --directed-fork-rules "$(paste -sd, rules/directed-fork-rules.txt)" <run flags>
 python -u -m effects collect-coverage --wording-cards <any-target cards> <run flags>
+python -u -m effects collect-coverage --wording-cards rules/coverage-wording-cards.txt --directed-fork-rules "$(paste -sd, rules/directed-fork-rules.txt)" <run flags>
 python -u -m effects collect-variants --directed-fork-rules 702.16 <run flags>
 ```
 

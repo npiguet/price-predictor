@@ -13,11 +13,11 @@ falls into six layers, built in the spec's story order:
    `rule-counts` runs them over gen-2's corpus before any gen-3 collection.
 2. **Collection.** A gen-3 record schema with every line of a permanent, keyword lines, the new
    snapshot facts and relation sources, the combat snapshot before damage, a held effect half that
-   spans the state-based loop, a collector-side playability enumerator for both seats with
+   spans the state-based loop, a collector-side playability enumerator for both seats, land plays included, with
    `timing` and `failed_checks`, `turn_action` records, per-attacker records, and the dropped-event
    count. Three engine hooks and a `GameCopier` patch land on `effect-record-hooks`.
 3. **Directed forks.** A Java registry of directed rules (board precondition plus per-variant
-   applications), seven fork operations, and a driver that plays a fork to the end of the turn with
+   applications), ten fork operations, and a driver that plays a fork to the end of the turn with
    its own collectors and seats.
 4. **Model.** Width 256 throughout, the gen-3 input layout, a relation-aware attention layer replacing
    `nn.TransformerEncoderLayer`, the 22 new outputs, gate-free legality outputs, and the negative
@@ -186,7 +186,7 @@ forge-connector/src/main/java/com/pricepredictor/connector/
 │   ├── InterventionFork.java, InterventionScheduler.java  # FR-057 scheduling; FR-058 protection forks played on
 │   ├── CollectionCaps.java                        # directed-fork and dropped-event properties
 │   └── directed/                                  # NEW: DirectedRules, DirectedRule, BoardPrecondition, Binding,
-│                                                  #      ForkOperation, KeywordEdit, the seven operations, DirectedForkScheduler
+│                                                  #      ForkOperation, KeywordEdit, the ten operations, DirectedForkScheduler
 ├── RandomSeatController.java, GamePlayer.java     # FR-040; seats inside a fork; JVM-lifetime directed counters
 ├── MatchWorkerMain.java                           # new properties
 └── DirectedRulesMain.java                         # NEW: print registered rule ids

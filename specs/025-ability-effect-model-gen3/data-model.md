@@ -54,8 +54,10 @@ A rule with any scenario at `confirmed/unpatched` has no rule-test records (FR-0
 
 ### ForkOperation (enum, new)
 
-`pt`, `keyword`, `colour_type`, `counters`, `tap`, `life`, `replace_card`. Mirrored by the Java
-`ForkOperation` enum; a contract test pins both spellings.
+`pt`, `keyword`, `colour_type`, `counters`, `tap`, `life`, `replace_card`, `remove_permanent`,
+`add_permanent`, `move_card`. Mirrored by the Java `ForkOperation` enum; a contract test pins both
+spellings. Each is a silent edit of the fork's copy (FR-011a); none forces a choice, a target or a
+timing.
 
 ### RuleMapEntry (snapshot, new)
 
@@ -121,12 +123,15 @@ Per entity: `owner`. Per card: `lines` (spell, activated, trigger, static, repla
 lines, each `{keys, kind, granted, active?, cast_with?, chosen?}`), `face_state`, `base_pt`
 (set base) and `pt_boosts`, `designations`, `x_paid`, `chosen`, `costs_paid`, `history`, `order_rank`,
 `real_face` (face-down only), `printed_loyalty`, `printed_defense`, `mana_cost`, `counters` (every
-named type). Per player: `speed`, `city_blessing`, `rad`, `monarch`, `initiative`, `turn_counts`.
+named type). Per player: `speed`, `city_blessing`, `rad`, `monarch`, `initiative`, `turn_counts`,
+`max_land_plays` (int, null when unlimited; beside `this_turn.lands_played`).
 Global: `day_night` (`day` | `night` | null). Command zone: `floating_effects` and `delayed_triggers`
 (`{source_lines, affected, remembered, duration, shield_left}`), `dungeons` (`{player, dungeon,
 room}`). Extra card entities: `library_cards` (top card plus every one the events name, with
 position), `exiled_with`, `mutate_components`, `last_known` (the pending event's subject). Relations:
-`links: [{from, to, type}]` with the § 10.3 family names and target index. Shapes as
+`links: [{from, to, type}]` with the § 10.3 family names and target index; an `affects` link ends at
+a card or a player (FR-026a), and a static line's or floating effect's `affected` lists cards, then
+players. Shapes as
 `rules/gen3-fields.json` gives them; wire form in [contracts/record-schema-delta.md](contracts/record-schema-delta.md).
 
 ### Payload changes
@@ -134,7 +139,7 @@ position), `exiled_with`, `mutate_components`, `last_known` (the pending event's
 | Payload | Field | Rule |
 |---|---|---|
 | resolution | `conditions_met: [{segment, met}]` | one entry per chain segment with `Condition$` |
-| playability `decision` candidate | `verdict.timing`, `failed_checks: [{check, responsible_static}]`, `legal_targets` (all clauses, no cap) | `timing = false` ⇒ a `casting_speed` entry |
+| playability `decision` candidate | `verdict.timing`, `failed_checks: [{check, responsible_static}]`, `legal_targets` (all clauses, no cap), `land_play` | `timing = false` ⇒ a `casting_speed` entry; a land-play candidate (`land_play = true`, FR-033a) fails only `whose_turn`, `casting_speed`, `zone`, `static_prohibition` or `land_play_limit` |
 | `attackers` | `anchor_attacker`, `legal_defenders`, `must_attack`, `tapped_by_attack?` | one record per attacker; `tapped_by_attack` only when the anchor was declared |
 | `blockers` | `must_block` per listed creature | |
 | `turn_action` | `events` | |

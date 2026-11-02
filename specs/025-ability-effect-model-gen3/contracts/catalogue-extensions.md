@@ -31,11 +31,15 @@ or
 ```json
 {"label": "tougher", "polarity": "does_not_fire", "delta": "…", "expected": "…", "operation": "pt"}
 {"label": "no-thalia", "polarity": "does_not_fire", "delta": "Thalia is not on the battlefield.", "expected": "…",
- "operation": {"unclassifiable": "removes a permanent; no fork operation removes one"}}
+ "operation": "remove_permanent"}
+{"label": "other-target", "polarity": "does_not_fire", "delta": "A targets Hill Giant instead.", "expected": "…",
+ "operation": {"unclassifiable": "a different target; no fork operation forces a choice"}}
 ```
 
-`operation` ∈ `pt`, `keyword`, `colour_type`, `counters`, `tap`, `life`, `replace_card`. The base variant
-carries none.
+`operation` ∈ `pt`, `keyword`, `colour_type`, `counters`, `tap`, `life`, `replace_card`,
+`remove_permanent`, `add_permanent`, `move_card`. The base variant carries none. A variant that
+differs by a choice, a target or a timing, changes the phase or the turn, or changes more than one
+fact is unclassifiable.
 
 ## Scenario `departure`
 

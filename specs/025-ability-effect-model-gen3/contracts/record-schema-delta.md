@@ -50,7 +50,7 @@ Shapes follow `rules/gen3-fields.json`; the collector writes the field names bel
 | card | `counters` | `{type: n}` over every named type |
 | card | `designations`, `x_paid`, `chosen`, `costs_paid`, `history`, `order_rank`, `real_face`, `printed_loyalty`, `printed_defense`, `mana_cost` | below, "A card's facts" |
 | entity | `role` | `null` on an entity of the four tiers; else `library_card`, `exiled_with`, `mutate_component` or `last_known` (below, "Entities beyond the tiers") |
-| player | `speed`, `city_blessing`, `rad`, `monarch`, `initiative`, `turn_counts` | below, "A player's facts" |
+| player | `max_land_plays`, `speed`, `city_blessing`, `rad`, `monarch`, `initiative`, `turn_counts` | below, "A player's facts" |
 | global | `day_night` | `"day"` \| `"night"` \| `null` |
 | global | `floating_effects`, `delayed_triggers` | `{id, source_lines, affected, remembered, duration, shield_left}`; `duration` ∈ `end_of_turn`, `until_leaves`, `permanent` (below, "Command-zone objects") |
 | global | `dungeons` | `{player, dungeon, room}` |
@@ -68,7 +68,7 @@ A card's `lines` members:
 | `cast_with` | int ≥ 1: times the spell this card was cast as paid the line's cost (1 for an alternative cost or kicker, the count for multikicker) | `keyword` lines of a card on the stack or a permanent cast so |
 | `chosen` | list of `Choices$` positions the ability on the stack chose, in chain order | the line of a modal ability on the stack |
 | `fragment` | the keyword instance's own fragment as Forge writes it (`Ward:2`, `Annihilator:2`, `Protection:Goblin`) | `keyword` lines |
-| `affected` | list of entity refs: the permanents the static applies to, from Forge's static effect | statics of the face up that Forge applies as a continuous effect; absent on every line of a `continuous` record's board, whose answer it would be |
+| `affected` | list of refs: the permanents the static applies to, then the players (`P…`), from Forge's static effect (`StaticEffect.getAffectedCards`, `getAffectedPlayers`) | statics of the face up that Forge applies as a continuous effect; absent on every line of a `continuous` record's board, whose answer it would be |
 
 A `keyword` line's keys name the keyword line the card prints, else the static that granted the
 keyword; a keyword a resolved effect granted has `keys: []` and is read by its `fragment`. The
@@ -107,6 +107,7 @@ static granted, including a trait built by a keyword instance it granted.
 
 | member | shape |
 |---|---|
+| `max_land_plays` | int: the land plays this player's turn allows, Forge's `Player.getMaxLandPlays()` (1 plus every `AdjustLandPlays$` raise in force); `null` when `getMaxLandPlaysInfinite()` holds. Written right after `this_turn`, whose `lands_played` it bounds |
 | `speed`, `rad` | int |
 | `city_blessing`, `monarch`, `initiative` | bool |
 | `turn_counts` | `{cards_drawn, life_gained, life_lost, damage_taken, permanents_to_graveyard, spells_cast_last_turn, dungeons_completed, descended}`, ints. `permanents_to_graveyard` counts cards put into this player's graveyard from the battlefield this turn; `descended` and `dungeons_completed` are whole-game counts, as Forge keeps them |
@@ -115,7 +116,7 @@ static granted, including a trait built by a keyword instance it granted.
 
 | list | one object per | `id` | `source_lines` | `affected` | `remembered` | `duration` | `shield_left` |
 |---|---|---|---|---|---|---|---|
-| `floating_effects` | effect card in a command zone (not an emblem, not a dungeon) | its entity id `E<card id>` | the key of the ability that made it; `[]` when none did (the monarch, the initiative, the city's blessing) | the cards its statics apply to | its remembered cards and players | its maker's `Duration$`, bucketed; `permanent` when no ability made it | the `Number$` SVar its replacement's `Amount$` spends, else `null` |
+| `floating_effects` | effect card in a command zone (not an emblem, not a dungeon) | its entity id `E<card id>` | the key of the ability that made it; `[]` when none did (the monarch, the initiative, the city's blessing) | the cards its statics apply to, then the players | its remembered cards and players | its maker's `Duration$`, bucketed; `permanent` when no ability made it | the `Number$` SVar its replacement's `Amount$` spends, else `null` |
 | `floating_effects` | timestamp of a static-id-0 layer-table row on a snapshot entity (P/T set and boost, keywords, traits, types, colours, names) drawn while a noted live clause resolved | `F<timestamp>` | the key of that clause | the entities carrying a row of that timestamp | `[]` | the clause's `Duration$`, else its root's, bucketed | `null` |
 | `delayed_triggers` | pending delayed trigger, each once | `D<trigger id>` | the key of the ability that spawned it | `[]` | the trigger's remembered cards and players | `end_of_turn` for a this-turn trigger, else `permanent` | `null` |
 
@@ -170,7 +171,7 @@ entity for is still named.
 | `targets` | a stack object's line (the acting ability's too, before it is on the stack) | each target: a card or player; a spell by its card; an ability by its line | each clause's targets |
 | `source_of` | the stack object's host card | its line | the stack object's host |
 | `triggered_by` | a triggered ability's line on the stack | each card or player among its triggering objects | `getTriggeringObjects` |
-| `affects` | a static line; a timestamped floating effect `F<ts>` | each permanent it applies to | the static's `affected`; the floating effect's `affected` |
+| `affects` | a static line, a command-zone effect card's included; a timestamped floating effect `F<ts>` | each permanent it applies to, and each player (`StaticEffect.getAffectedPlayers`); an `F<ts>` reaches cards only | the static's `affected`; the floating effect's `affected` |
 | `created_by` | a command-zone effect card or emblem; `F<ts>`; `D<id>` | the line that made it, else the effect's source card | `getEffectSourceAbility`, `getEffectSource`; the clause note; the delayed trigger's own key |
 | `pending_on` | `D<id>` | each card or player it holds | `getTriggerRemembered` |
 | `linked_by_text` | the line that exiled the object (`getExiledSA`), else the card | each exiled, imprinted, until-leaves or lasting remembered card or player | `getExiledCards`, `getExiledWith`, `getImprintedCards`, `getUntilLeavesBattlefield`, `getRemembered` |
@@ -198,7 +199,8 @@ static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of
 |---|---|---|
 | resolution | `conditions_met` | `[{segment, met}]`, after `events`, on every effect half: one entry per conditional clause that resolved in the half, in resolution order; a clause is conditional when it carries a parameter `SpellAbilityCondition.setConditions` reads (`Condition$`, `ConditionPresent$`, `ConditionCheckSVar$`, …; not `ConditionDescription$`); `segment` is spelled as the clause's events' `attributed_to` (`root`, or the chain index as a string), `met` is `metConditions()` read at the clause hook, before the engine reads it; `[]` where no conditional clause resolved, and always on a mana ability's record and the game-end rescue record |
 | decision candidate | `verdict.timing` | bool |
-| decision candidate | `failed_checks` | `[{check, responsible_static}]`, after `responsible_static` in the candidate, one entry per failed check in the order listed here; `responsible_static` a key list, one key where a static decided the check (`static_prohibition`), else empty; `check` ∈ `split_second`, `casting_speed`, `whose_turn`, `phase`, `combat`, `activation_limit`, `script_condition`, `zone`, `static_prohibition`, `cost`, `script_restriction` |
+| decision candidate | `failed_checks` | `[{check, responsible_static}]`, after `responsible_static` in the candidate, one entry per failed check in the order listed here; `responsible_static` a key list, one key where a static decided the check (`static_prohibition`), else empty; `check` ∈ `split_second`, `casting_speed`, `whose_turn`, `phase`, `combat`, `activation_limit`, `land_play_limit`, `script_condition`, `zone`, `static_prohibition`, `cost`, `script_restriction` |
+| decision candidate | `land_play` | bool, after `failed_checks`, on every candidate: `true` on a land-play candidate (`SpellAbility.isLandAbility()`), else `false` |
 | decision candidate | `legal_targets` | union over every targeting clause, uncapped |
 | decision candidate | `responsible_static` | the key of the static forbidding the play (its `static_prohibition` entry's), else empty |
 | `attackers` | `anchor_attacker`, `legal_defenders`, `must_attack`, `tapped_by_attack?` | one record per creature the attacking player controls, these four first and `legal_attackers`, `forbidden` after them; `anchor_attacker` a card ref; `legal_defenders` the refs (`P`/`E`) of the declaration's defenders (players, planeswalkers, battles) the anchor may attack, in Forge's defender order, `[]` for a creature that may attack none; `must_attack` whether an attack requirement applies to the anchor (`AttackRequirement.hasRequirement`), whether or not it can attack; `tapped_by_attack` on a declared anchor only: whether a `GameEventCardTapped` for it arrived between the engine's first question and `GameEventAttackersDeclared`. `legal_attackers` and `forbidden` keep their gen-2 shape and are the declaration's, the same on each of its records: a creature is legal when it may attack at least one defender, and a forbidden one's `responsible_static` is the first static, in defender order, keeping it from a defender |
@@ -222,7 +224,21 @@ static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of
 - `can_play = canPlay ∧ timing ∧ no static prohibition`.
 - Decision candidates exist for both players at every priority stop.
 - A decision candidate is every spell ability of every card its player could play from, unplayable
-  ones included, lands and mana abilities aside; an alternative cost is a candidate of its own.
+  ones included, land plays included and mana abilities aside; an alternative cost is a candidate of
+  its own.
+- A land-play candidate (`land_play: true`) is judged by `Player.canPlayLand`, split into its parts:
+  `whose_turn` when it is not the player's turn (rule 305.3); `casting_speed` whenever `timing` is
+  false, `timing` being the player's turn with `canCastSorcery()`, or the play's flash; `zone` when
+  the land is on the battlefield, or outside the hand with no effect letting it be played from
+  there, or owned by another player without one; `static_prohibition`, with its static, when
+  `StaticAbilityCantBeCast.cantPlayLandAbility` forbids it; `land_play_limit` when the player's
+  `this_turn.lands_played` has reached `max_land_plays`. `can_play` is `canPlayLand`'s answer;
+  `affordable` and `has_legal_target` are `true`, `legal_targets` `[]` and `cost_after_adjustment`
+  carries no mana. Its `ability` is the card's land-play trait, which the sidecar lists in
+  `dropped_keys`, as it does a permanent's plain cast. The random seat never draws one.
+- `land_play_limit` is an identifier of its own, not `activation_limit`: `activation_limit` counts
+  one ability's activations per turn or per game (`getLimitToCheck`, `getGameLimitToCheck`), while
+  the land-play limit counts the turn's land plays against `max_land_plays`.
 - `whose_turn`, `phase` and `combat` name the parts of Forge's timing restrictions,
   `activation_limit` and `script_condition` the parts of its other restrictions that fail;
   `script_restriction` is a failed activator check, or a failed restriction none of those names.

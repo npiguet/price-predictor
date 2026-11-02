@@ -49,7 +49,7 @@ State on master when this feature starts (the gen-3 record's Result):
   keyword, change a colour or type, add or remove counters, tap or untap, change a life total,
   replace one card with another, the damage-step probe's keyword removal reused. Every classified
   variant then has its operation, and `match-outcomes` refuses only a rule with no detector or no
-  classified variant (FR-014).
+  classified variant (FR-014). Session 2026-11-02 adds three more, below.
 - Q: Root § 6 says a directed fork "plays on". How far does it play before it stops? → A: To the
   end of the current turn, then the fork is discarded (FR-010). Interventional forks resolve the
   stack and stop, so playing a fork on is new; the fork's copy carries the live game's delayed
@@ -112,6 +112,30 @@ State on master when this feature starts (the gen-3 record's Result):
   per rule and polarity, three sources — natural random-seat games, natural Forge-AI games, and
   aimed records (carrying `aimed_at`) — in `rule-counts` and in the manifest's per-class counts
   (FR-008, FR-060).
+
+### Session 2026-11-02
+
+- Q: Most non-base variants are classified unclassifiable, chiefly because they add or remove a
+  permanent, change a card in a hand, library or graveyard, or differ by a choice, target or timing.
+  Which of these do directed forks cover? → A: The first two, through three more operations,
+  `remove_permanent`, `add_permanent` and `move_card` (FR-011), each a silent edit of the fork's
+  copy (FR-011a). Forcing a choice, a target or a timing on a seat stays out of gen-3, and such a
+  variant stays unclassifiable. The classification is rerun with the ten operations (FR-003).
+- Q: Which rules are enabled for directed forks? → A: 704.5f, and every rule gen-2's counts show
+  with fewer than 100 `fires` records, or with no `does_not_fire` record, that has a variant
+  classified into an operation (FR-014b).
+- Q: What random-seat share, and how many coverage rounds? → A: Gen-2's share, unchanged. One
+  coverage round beside FR-038's, over every card named in the scenarios of the rules FR-014b
+  enables for their counts (FR-038a).
+- Q: Are land plays playability candidates? → A: Yes, with verdicts and failed checks; mana
+  abilities stay out (FR-033a). The per-turn land limit is a new failed-check identifier,
+  `land_play_limit`, not `activation_limit`, which counts one ability's activations (FR-032). The
+  random seat still leaves land plays to the Forge AI.
+- Q: How does the model read the land limit and what raises it? → A: The player carries
+  `max_land_plays` (Forge's `getMaxLandPlays()`, null when unlimited) beside
+  `this_turn.lands_played` (FR-024), the player slot reads it (FR-044), and the `affects` link
+  family runs from a static or floating effect's line to each player it applies to, as it does to
+  cards (FR-026a). Rule 305's land-play scenarios are then declared (FR-002a).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -217,6 +241,15 @@ only if the collector writes them. The corpus is collected from scratch and cann
 12. **Given** `--count-dropped-events`, **When** the run ends, **Then** the dropped events are
     printed by event type and engine phase, and the pilot report gives the number of
     `mana_produced` events with an empty `mana_by_color`.
+13. **Given** a player in their first main phase who has played a land this turn and holds another
+    land, **When** the collector evaluates candidates, **Then** the land's candidate carries
+    `land_play = true`, `can_play = false` and a `land_play_limit` entry in `failed_checks`, the
+    player carries `max_land_plays = 1` and `this_turn.lands_played = 1`, and no mana ability is a
+    candidate. **Given** the same player controlling Exploration, **Then** the candidate is playable,
+    `max_land_plays = 2`, and an `affects` link runs from Exploration's static line to the player.
+14. **Given** a land in the hand of the player without priority, **When** candidates are evaluated,
+    **Then** its candidate carries `timing = false` with `whose_turn` and `casting_speed` entries,
+    and the random seat never plays it.
 
 ---
 
@@ -245,11 +278,15 @@ score-checked before the change, and counts against `--directed-forks-per-game`.
    unclassifiable, or which has no board precondition in `forge-connector`, **When**
    `match-outcomes` starts, **Then** it exits 1 naming the rule.
 3. **Given** one scenario variant per fork operation, **When** each is enabled in turn, **Then**
-   each of the seven operations produces a fork that differs from its real twin by that one fact.
+   each of the ten operations produces a fork that differs from its real twin by that one fact.
 4. **Given** a fork whose copy already disagrees with the live game's score, **When** it is
    checked, **Then** it is discarded and still counts against the per-game budget.
 5. **Given** directed-fork records placed in a validation game, **When** rule tests are frozen,
    **Then** none of them is a rule-test record.
+6. **Given** a variant that removes a permanent, adds one, or moves a card between hand, library and
+   graveyard, **When** its operation is applied, **Then** the fork's board differs by that card
+   alone, no trigger or replacement fires from the edit, and the players' per-turn counts are
+   unchanged.
 
 ---
 
@@ -321,6 +358,9 @@ previous run.
    for that player and 0 for the other.
 7. **Given** a gen-3 change to the input layout, **When** the map reruns, **Then** it reports the
    rules newly learnable and writes `rules/heads/` lines for the new layout.
+8. **Given** a record whose board holds Exploration, **When** it is encoded, **Then** the player
+   slot reads `max_land_plays` beside the lands played this turn, and an `affects` relation runs
+   from Exploration's static line to its controller's player slot.
 
 ---
 
@@ -499,9 +539,13 @@ and that the reporting half never enters the control score.
   detector looks for, and the near miss its contrasting variant gives; or `none`, with a reason,
   where no record field or event shows the outcome. `rules_catalogue.py validate` MUST fail on a
   scenario with neither.
-- **FR-003**: Every non-base variant's `delta` MUST be classified into exactly one fork operation of
-  root § 6, or marked unclassifiable with a reason. `validate` MUST check the classification's
-  enum.
+- **FR-002a**: Rule 305's land-play scenarios MUST declare detectors over land-play candidates
+  (FR-033a): the land-play limit through the `land_play_limit` check, and the turn and timing
+  restrictions on candidates with `land_play = true`.
+- **FR-003**: Every non-base variant's `delta` MUST be classified into exactly one of the ten fork
+  operations of root § 6, or marked unclassifiable with a reason. `validate` MUST check the
+  classification's enum. A variant that differs by a choice, a target or a timing is
+  unclassifiable.
 - **FR-004**: A record whose detector-assigned polarity's observed outcome differs from its
   scenario's `expected` MUST be listed for review, by record id and scenario id. The review
   rereads the rule, the card scripts and the record, and corrects the scenario where it was wrong.
@@ -566,11 +610,24 @@ and that the reporting half never enters the control score.
   directed forks each has taken so far in the worker JVM's lifetime, ties broken by their order in
   `--directed-fork-rules`; each fork taken, kept or discarded, counts against
   `--directed-forks-per-game`, and no rule is tried once the budget is spent.
-- **FR-011**: The fork operations are: change a creature's power or toughness; add or remove a
-  keyword; change a colour or type; add or remove counters; tap or untap a permanent; change a life
-  total; replace one card with another. The existing damage-step probe is the "remove a keyword"
-  operation. This feature MUST build all seven operations, the existing one reused, so every
-  classified variant has its operation; a variant marked unclassifiable (FR-003) has none.
+- **FR-011**: The fork operations are: change a creature's power or toughness (`pt`); add or
+  remove a keyword (`keyword`); change a colour or type (`colour_type`); add or remove counters
+  (`counters`); tap or untap a permanent (`tap`); change a life total (`life`); replace one card
+  with another (`replace_card`); take a permanent off the battlefield (`remove_permanent`); put a
+  card onto the battlefield (`add_permanent`); move a card between hand, library and graveyard, or
+  change which card sits in one of them (`move_card`). The existing damage-step probe is the
+  "remove a keyword" operation. This feature MUST build all ten operations, the existing one
+  reused, so every classified variant has its operation; a variant marked unclassifiable (FR-003)
+  has none. No operation forces a choice, a target or a timing on a seat.
+- **FR-011a**: Each operation MUST edit the fork's copy without the event the change would raise in
+  a game. `remove_permanent` removes the permanent from combat, unattaches what is attached to it
+  and what it is attached to, and puts it in no zone: no leaves-the-battlefield trigger, no
+  graveyard. `add_permanent` puts a new card from the card database onto the battlefield under the
+  variant's controller, tapped, summoning-sick and with counters as the variant states: no enters
+  trigger, no replacement. `move_card` moves a card between hand, library (at a stated position) and
+  graveyard, or replaces the card at a position of one of them with a new card from the database:
+  no draw, discard or mill event. The players' per-turn counts stay as the live game left them.
+  Every operation ends with the engine's static-ability check.
 - **FR-012**: `match-outcomes`, and `collect-variants`, MUST take `--directed-fork-rules LIST`
   (default none), `--directed-forks-per-game N` (default 2), a budget of its own beside the
   existing fork budgets, and `--directed-fork-probability P` (default 0.25, in (0, 1]), the chance
@@ -588,6 +645,12 @@ and that the reporting half never enters the control score.
   exists only for rules enabled for directed forks. It decides only when to fork: the fork's
   records are tagged afterwards by the Python detectors like any other record, so counts, budgets,
   the mask and rule tests read detector tags alone. The JVM makes no call to Python during a game.
+- **FR-014b**: Board preconditions MUST be registered for 704.5f and for every rule that gen-2's
+  per-rule counts (`output/effects/rule-counts-gen2.json`) show with fewer than 100 `fires` records
+  over all sources, or with no `does_not_fire` record, and that has a non-base variant classified
+  into an operation after the rerun of FR-003. The list is checked in as
+  `rules/directed-fork-rules.txt`, one rule id per line, and is what the full collection passes to
+  `--directed-fork-rules`.
 
 #### Rules-to-fields map (root § 7)
 
@@ -632,18 +695,25 @@ and that the reporting half never enters the control score.
 
 - **FR-024**: The snapshot MUST carry the facts `rules/gen3-fields.json` marks `new`, in the
   shapes it gives: per player speed, city's blessing, rad counters, monarch, initiative and the
-  per-turn counts of `in.history`; global day, night or neither; per entity `owner`; per card
+  per-turn counts of `in.history`, and `max_land_plays` (Forge's `Player.getMaxLandPlays()`, null
+  when `getMaxLandPlaysInfinite()` holds) beside `this_turn.lands_played`; global day, night or
+  neither; per entity `owner`; per card
   designations, X paid, chosen values, costs paid, history bits, order rank, a face-down card's
   real face, printed loyalty and defense, mana cost symbols; floating effects and pending delayed
   triggers as command-zone objects with their source lines, affected or remembered objects,
   duration and the amount left on a counting-down shield; each player's dungeon and current room;
   each library's top card and every library card the record's events name; the cards exiled with a
   permanent; a mutated permanent's components; the pending event's subject as it last existed; the
-  resolving ability's die results and coin flips; and, per static line, the permanents it affects.
+  resolving ability's die results and coin flips; and, per static line, the permanents and players
+  it affects.
 - **FR-025**: The snapshot MUST report a creature's set base power and toughness as its base, and
   its boosts apart from it.
 - **FR-026**: Each relation type of root § 10.3 MUST be collected from the Forge source its table
   row names. A link made by an ability MUST be recorded from that ability's line, not from its card.
+- **FR-026a**: The `affects` family MUST run from a static line, or a floating effect, to each
+  player it applies to (`StaticEffect.getAffectedPlayers`) as well as to each card. A static or
+  floating effect that raises land plays (Exploration, "you may play an additional land this
+  turn") thereby links to the player whose limit it raises.
 - **FR-027**: A combat record's snapshot MUST be taken at the start of the damage step, before any
   damage is dealt. Its shape MUST be read at the first damage event, and its assignment at any point
   of the step.
@@ -670,13 +740,24 @@ and that the reporting half never enters the control score.
   `canCastTiming` together, and false when a static forbids the play.
 - **FR-032**: Each candidate MUST carry `failed_checks`, a list of `{check, responsible_static}`
   over the identifiers `split_second`, `casting_speed`, `whose_turn`, `phase`, `combat`,
-  `activation_limit`, `script_condition`, `zone`, `static_prohibition`, `cost`,
-  `script_restriction`. A check Forge evaluates apart from the others MUST be reported under its own
+  `activation_limit`, `land_play_limit`, `script_condition`, `zone`, `static_prohibition`, `cost`,
+  `script_restriction`. `land_play_limit` is a land play once the player's lands played this turn
+  have reached `max_land_plays`; `activation_limit` stays the activations of one ability per turn
+  or per game. A check Forge evaluates apart from the others MUST be reported under its own
   identifier; `script_restriction` only where Forge evaluates several together. A candidate whose
   `timing` is false MUST carry a `casting_speed` entry. `responsible_static` is set where a static
   decided the check; the candidate's own `responsible_static` keeps its gen-2 meaning.
 - **FR-033**: The collector MUST enumerate and evaluate both players' candidates at every
   priority stop, once the state-based check is over, the player without priority included.
+- **FR-033a**: Every land a player could play MUST be a candidate of its own, carrying
+  `land_play = true` (every other candidate `false`), its verdict Forge's `canPlayLand`:
+  `affordable` and `has_legal_target` true, `legal_targets` empty, `timing` false outside its
+  player's turn or where the player could not cast a sorcery and the play has no flash, and
+  `failed_checks` among `whose_turn` (not its player's turn), `casting_speed` (whenever `timing` is
+  false), `zone`, `static_prohibition` (with its static) and `land_play_limit`. Its `ability` is the
+  land-play trait, which the sidecar lists in `dropped_keys` as it does a permanent's plain cast.
+  Mana abilities MUST NOT be candidates. The random seat MUST NOT draw a land-play candidate: land
+  plays stay the Forge AI's, as in gen-2.
 - **FR-034**: The resolution payload MUST carry `conditions_met`: for each chain segment with a
   `Condition$`, `{segment, met}`, keyed by the chain index `attributed_to` uses.
 - **FR-035**: A prevention that prevented nothing MUST write no note. A probe fork's damage events
@@ -694,6 +775,10 @@ and that the reporting half never enters the control score.
   `must_block` per listed creature.
 - **FR-038**: `collect-coverage --wording-cards PATH` MUST run a coverage round over the listed
   cards, those with an activated "any target" damage ability.
+- **FR-038a**: The full collection MUST run one more coverage round, `collect-coverage
+  --wording-cards`, over every card named in the scenarios of the rules FR-014b enables for their
+  counts (`rules/coverage-wording-cards.txt`, converted lower-case names). The random seat keeps
+  gen-2's share of matches.
 - **FR-039**: A charm mode cast through Flashback MUST be keyed to a sidecar line. An ability a
   clone gains from the card it copies MUST be keyed to that card's line. A variant record's key
   MUST name its file under `variant-scripts/`.
@@ -715,6 +800,8 @@ and that the reporting half never enters the control score.
   last known subject, the library cards of FR-024, cards exiled with a permanent and a mutated
   permanent's components; the 33 inputs of `rules/gen3-fields.json` in the places root § 9.4 gives;
   the six turn, priority and control inputs of root § 9.5 beside gen-2's acting-player inputs;
+  the player slot's `max_land_plays` beside its lands played this turn, as raw plus log1p with a
+  flag for unlimited;
   amounts as raw plus log1p, with thermometers where root § 9.4 names them; subtypes as one learned
   embedding per subtype, shared with chosen creature types; face state one-hot over front, back,
   flipped, melded, face down, replacing the face-down flag.
@@ -986,7 +1073,7 @@ and that the reporting half never enters the control score.
   variants each with a polarity, its detector declaration, and any recorded Forge departure.
 - **Detector**: a function from one record to the rules it shows, each with polarity and the
   entities the outcome names. Its tags drive counts, budgets, the mask and rule tests.
-- **Fork operation**: one of seven one-fact changes a directed fork applies to a live board.
+- **Fork operation**: one of ten one-fact changes a directed fork applies to a live board.
 - **Board precondition**: a Java predicate per directed-fork rule, judging on the live game
   whether the board meets the scenario's base variant; it decides when to fork and tags nothing.
 - **Directed fork**: a fork taken when a live board meets a rule's base variant, applying one
@@ -1048,7 +1135,8 @@ and that the reporting half never enters the control score.
   `rules/FINDINGS.md`.
 - Which rules to enable for directed forks, how many coverage rounds to run, the random-seat share,
   and whether to try the soft mask are run-time decisions recorded in the gen-3 record, not
-  defaults this feature fixes. The run plan trains with the hard mask first.
+  defaults this feature fixes; the first three were taken on 2026-11-02 (FR-014b, FR-038a). The run
+  plan trains with the hard mask first.
 - The rule that tells a lasting remembered-list entry from a transient one is FR-050's, decided in
   [research.md](research.md) Decision C8.
 - Target-index relation types are capped at four per direction (FR-050, research Decision M3); the

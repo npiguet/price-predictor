@@ -13,7 +13,7 @@ No new flag. Also fails on:
 
 - a scenario with neither a `detector` declaration nor `{"none": reason}`;
 - an unknown detector family, or parameters the family does not declare;
-- a non-base variant with neither `operation` (one of the seven) nor `{"unclassifiable": reason}`;
+- a non-base variant with neither `operation` (one of the ten) nor `{"unclassifiable": reason}`;
 - a `departure` outside its enums, or `resolution` without `status = confirmed`.
 
 The enums are imported from `effects.domain.rule_catalogue`.
