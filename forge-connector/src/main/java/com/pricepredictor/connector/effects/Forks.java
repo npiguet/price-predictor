@@ -8,6 +8,7 @@ import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 
 import java.util.Optional;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -182,6 +183,76 @@ final class Forks {
             return Optional.empty();
         }
         return Optional.of(new VerifiedFork(copier, fork, from));
+    }
+
+    // ── one fork, start to finish ───────────────────────────────────────
+
+    /**
+     * What a fork does once the copy has passed its score check: map the
+     * live objects it needs into the copy and run on it.
+     *
+     * @param <R> what the run produced, for the fork's writer
+     */
+    @FunctionalInterface
+    interface ForkBody<R> {
+        /**
+         * @param snapshots reads the copy's state, the live game beside it
+         * @return what the run produced, or null when the fork has nothing
+         *         to write: an object the copy could not map, or a run that
+         *         observed nothing
+         */
+        R run(VerifiedFork verified, SnapshotBuilder snapshots);
+    }
+
+    /**
+     * One fork's whole life, in the order every kind of fork takes it: mark
+     * the thread ({@link #asFork}), spend the budget, copy and score-check
+     * ({@link #copyAndVerify}), run the fork's body under the guard, and hand
+     * what it produced to the fork's writer, which stamps its own flags.
+     *
+     * <p>The budget is spent before the score check, so a discarded fork
+     * still counts: otherwise a systematically failing copy would retry
+     * until the game ended. The guard catches {@code RuntimeException} and
+     * {@code StackOverflowError}: a fork reaches states ordinary play does
+     * not (an ability resolving with no legal target, a combat without a
+     * stripped keyword), and a card that throws there is one this fork
+     * cannot describe. Discarding is right; failing the worker is not. The
+     * writer runs outside the guard, so a record that cannot be written
+     * fails as a live one does.
+     *
+     * @param live        the game the fork copies
+     * @param spend       spends the fork's budget
+     * @param perspective the live player the copy's score is checked from,
+     *                    read after the copy
+     */
+    record ForkRun(Game live, Runnable spend, Supplier<Player> perspective) {
+
+        /**
+         * Take the fork.
+         *
+         * @return what {@code write} returned, or null when the copy failed
+         *         its check, the body threw, or the body produced nothing
+         */
+        <R, W> W take(ForkBody<R> body, BiFunction<VerifiedFork, R, W> write) {
+            // The whole span is the fork, not just its run: see FORK_RUNNING
+            // for what a narrower scope left uncovered.
+            return asFork(() -> {
+                spend.run();
+                Optional<VerifiedFork> verified = copyAndVerify(live, perspective);
+                if (verified.isEmpty()) {
+                    return null;
+                }
+                // The fork's own state, read against the live game it came from.
+                SnapshotBuilder snapshots = new SnapshotBuilder(verified.get().fork(), live);
+                R produced;
+                try {
+                    produced = body.run(verified.get(), snapshots);
+                } catch (RuntimeException | StackOverflowError e) {
+                    return null;
+                }
+                return produced == null ? null : write.apply(verified.get(), produced);
+            });
+        }
     }
 
     // ── mapping live objects into the copy ──────────────────────────────

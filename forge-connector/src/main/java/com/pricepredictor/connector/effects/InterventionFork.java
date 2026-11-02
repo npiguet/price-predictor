@@ -9,7 +9,6 @@ import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.Random;
 import java.util.function.Consumer;
 
@@ -60,61 +59,56 @@ final class InterventionFork {
         if (!budget.mayIntervene(realResolutionId)) {
             return false;
         }
-        // The whole method is the fork, not just the forced resolution: see
-        // Forks.FORK_RUNNING for what the narrower scope left uncovered.
-        return Forks.asFork(() -> {
-            // Counted before the score check, so a discarded fork still spends its
-            // budget.
-            budget.spendIntervention(realResolutionId);
-
-            Optional<Forks.VerifiedFork> verified = Forks.copyAndVerify(
-                    game,
-                    () -> ability.getActivatingPlayer() != null
-                            ? ability.getActivatingPlayer()
-                            : game.getPhaseHandler().getPlayerTurn());
-            if (verified.isEmpty()) {
-                return false;
-            }
-            Game fork = verified.get().fork();
-            Player perspective = verified.get().perspective();
-            SpellAbility forked = Forks.findInFork(verified.get().copier(), ability);
+        Forks.ForkRun run = new Forks.ForkRun(
+                game,
+                () -> budget.spendIntervention(realResolutionId),
+                () -> ability.getActivatingPlayer() != null
+                        ? ability.getActivatingPlayer()
+                        : game.getPhaseHandler().getPlayerTurn());
+        Boolean written = run.take((verified, snapshots) -> {
+            SpellAbility forked = Forks.findInFork(verified.copier(), ability);
             Player actor = forked == null
-                    ? null : Forks.mappedPlayer(verified.get().copier(), perspective);
+                    ? null : Forks.mappedPlayer(verified.copier(), verified.perspective());
             if (forked == null || actor == null) {
-                return false;
+                return null;
             }
-
-            // The fork's own state, not the live game's.
-            SnapshotBuilder snapshots = new SnapshotBuilder(fork, game);
-            ForcedResolution resolution = forceResolution(fork, forked, actor, snapshots);
-            if (resolution == null || resolution.isEmpty()) {
-                // An empty event list is not an observation. "The ability resolved
-                // and did nothing" and "the ability never got to act" render the
-                // same record, and nothing in it tells them apart. A
-                // counterfactual nobody can read is worse than one that was never
-                // written, so this drops it.
-                return false;
-            }
-
-            // The *live* ability's keys, not the fork's. A provenance key
-            // names a printed line, which the copy shares — but keying off
-            // the copy would make the record's identity depend on a game
-            // that no longer exists.
-            ProvenanceKey.Resolved keys = ProvenanceResolver.resolve(ability);
-            String actorId = Refs.of(perspective);
-            // A modal resolution writes one half per chosen mode, by the same
-            // rule the live bracket applies (FR-029f), each through the mode's
-            // option line and with the board as it stood when that mode's
-            // first clause began. Events before the first mode's clause — the
-            // charm's own, of which there are none — ride with the first.
-            for (HeldHalves.Half<ModeSplit.ModeHalf> half : resolution.halves()) {
-                context.emit(forkedHalf(
-                        actorId, keys.withOption(half.about().mode().option()),
-                        resolution.render(half.about().mode().state(), half.events()),
-                        half.events(), half.about().conditions()));
-            }
-            return true;
+            ForcedResolution resolution = forceResolution(verified.fork(), forked, actor, snapshots);
+            // An empty event list is not an observation. "The ability resolved
+            // and did nothing" and "the ability never got to act" render the
+            // same record, and nothing in it tells them apart. A
+            // counterfactual nobody can read is worse than one that was never
+            // written, so this drops it.
+            return resolution == null || resolution.isEmpty() ? null : resolution;
+        }, (verified, resolution) -> {
+            write(resolution, ability, verified.perspective());
+            return Boolean.TRUE;
         });
+        return Boolean.TRUE.equals(written);
+    }
+
+    /**
+     * Write a forced resolution's effect halves.
+     *
+     * @param perspective the live player the fork acted for
+     */
+    private void write(ForcedResolution resolution, SpellAbility ability, Player perspective) {
+        // The *live* ability's keys, not the fork's. A provenance key
+        // names a printed line, which the copy shares — but keying off
+        // the copy would make the record's identity depend on a game
+        // that no longer exists.
+        ProvenanceKey.Resolved keys = ProvenanceResolver.resolve(ability);
+        String actorId = Refs.of(perspective);
+        // A modal resolution writes one half per chosen mode, by the same
+        // rule the live bracket applies (FR-029f), each through the mode's
+        // option line and with the board as it stood when that mode's
+        // first clause began. Events before the first mode's clause — the
+        // charm's own, of which there are none — ride with the first.
+        for (HeldHalves.Half<ModeSplit.ModeHalf> half : resolution.halves()) {
+            context.emit(forkedHalf(
+                    actorId, keys.withOption(half.about().mode().option()),
+                    resolution.render(half.about().mode().state(), half.events()),
+                    half.events(), half.about().conditions()));
+        }
     }
 
     /**
@@ -214,61 +208,55 @@ final class InterventionFork {
      */
     private ForcedResolution forceResolution(
             Game fork, SpellAbility ability, Player actor, SnapshotBuilder snapshots) {
-        try {
-            if (!drawForcedChoices(ability, actor)) {
-                return null;
-            }
-            fork.copyLastState();
-            ForkEventSink sink = ForkEventSink.forCast(fork, ability);
-            ForcedCast cast = new ForcedCast(fork, snapshots, sink::rebaselineStats);
-            SpellAbility onStack = pushForcedCast(fork, ability, cast, sink);
-            if (onStack == null) {
-                // Nothing reached the stack. Mostly a special action:
-                // foretell, plot and suspend are AbilityStatic, which
-                // MagicStack.add resolves on the spot without a push, and
-                // live opens no bracket for one either, so there is no
-                // resolution record to write. Otherwise a frozen stack parked
-                // it or its targeting was refused, and nothing will resolve.
-                return null;
-            }
-            // The ability on the stack is the sink's root from here, as the
-            // live bracket's root is the stack's: an event's attributed_to is
-            // read against the ability the bracket belongs to, and a fork's
-            // bracket is exactly this one forced resolution.
-            sink.castAs(onStack, cast.state());
-            // A mode's first clause is the boundary between per-mode halves, and
-            // the moment its snapshot is taken (FR-029b, FR-029f). Only this
-            // ability's own modes count: the live clause handler forwards every
-            // clause it drops, and anything else resolving on the fork's stack
-            // may be modal too. Neither the host card nor the key can tell them
-            // apart: a creature spell's own modal enters trigger shares its
-            // host, and a copy of the forced charm a cast trigger made (Double
-            // Vision) shares its key too, so its modes would cut halves the
-            // forced charm's events never reach. The mode's charm must be the
-            // very ability on the stack, the one this record is about.
-            Consumer<SpellAbility> modeStarts = clause -> {
-                CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
-                if (start != null && start.charm() == onStack) {
-                    sink.beginMode(start.option(), snapshots.ofResolving(onStack));
-                }
-                // The forced ability's own clauses only, by the same test: its
-                // chain, the chosen modes included, is rooted in it.
-                if (clause.getRootAbility() == onStack) {
-                    sink.noteCondition(ConditionsMet.of(clause));
-                }
-            };
-            Forks.listeningForClauses(modeStarts, () -> {
-                GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
-                return null;
-            });
-            return new ForcedResolution(cast.refs(), sink.halves());
-        } catch (RuntimeException | StackOverflowError e) {
-            // A forced resolution reaches states ordinary play does not — an
-            // ability resolving with no legal target, a cost that was never
-            // paid — and a card that throws is one this fork cannot describe.
-            // Discarding is right; failing the worker is not.
+        // Not guarded here: a forced resolution reaches states ordinary play
+        // does not, and Forks.ForkRun discards the fork when a card throws.
+        if (!drawForcedChoices(ability, actor)) {
             return null;
         }
+        fork.copyLastState();
+        ForkEventSink sink = ForkEventSink.forCast(fork, ability);
+        ForcedCast cast = new ForcedCast(fork, snapshots, sink::rebaselineStats);
+        SpellAbility onStack = pushForcedCast(fork, ability, cast, sink);
+        if (onStack == null) {
+            // Nothing reached the stack. Mostly a special action:
+            // foretell, plot and suspend are AbilityStatic, which
+            // MagicStack.add resolves on the spot without a push, and
+            // live opens no bracket for one either, so there is no
+            // resolution record to write. Otherwise a frozen stack parked
+            // it or its targeting was refused, and nothing will resolve.
+            return null;
+        }
+        // The ability on the stack is the sink's root from here, as the
+        // live bracket's root is the stack's: an event's attributed_to is
+        // read against the ability the bracket belongs to, and a fork's
+        // bracket is exactly this one forced resolution.
+        sink.castAs(onStack, cast.state());
+        // A mode's first clause is the boundary between per-mode halves, and
+        // the moment its snapshot is taken (FR-029b, FR-029f). Only this
+        // ability's own modes count: the live clause handler forwards every
+        // clause it drops, and anything else resolving on the fork's stack
+        // may be modal too. Neither the host card nor the key can tell them
+        // apart: a creature spell's own modal enters trigger shares its
+        // host, and a copy of the forced charm a cast trigger made (Double
+        // Vision) shares its key too, so its modes would cut halves the
+        // forced charm's events never reach. The mode's charm must be the
+        // very ability on the stack, the one this record is about.
+        Consumer<SpellAbility> modeStarts = clause -> {
+            CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
+            if (start != null && start.charm() == onStack) {
+                sink.beginMode(start.option(), snapshots.ofResolving(onStack));
+            }
+            // The forced ability's own clauses only, by the same test: its
+            // chain, the chosen modes included, is rooted in it.
+            if (clause.getRootAbility() == onStack) {
+                sink.noteCondition(ConditionsMet.of(clause));
+            }
+        };
+        Forks.listeningForClauses(modeStarts, () -> {
+            GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
+            return null;
+        });
+        return new ForcedResolution(cast.refs(), sink.halves());
     }
 
     /**

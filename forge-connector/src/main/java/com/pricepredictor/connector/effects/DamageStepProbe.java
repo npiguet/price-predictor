@@ -2,11 +2,9 @@ package com.pricepredictor.connector.effects;
 
 import forge.game.Game;
 import forge.game.card.Card;
-import forge.game.player.Player;
 
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * A <b>damage-step probe</b>: a fork that re-runs one combat with a keyword
@@ -60,52 +58,35 @@ final class DamageStepProbe {
         if (!budget.mayProbe(keyword) || carrier == null) {
             return null;
         }
-        // The whole method is the fork, not just the damage it deals: see
-        // Forks.FORK_RUNNING for what the narrower scope left uncovered.
-        return Forks.asFork(() -> {
-            // Counted before the score check, like an intervention: a copy that
-            // systematically fails must not retry until the game ends.
-            budget.spendProbe();
-
-            Optional<Forks.VerifiedFork> verified = Forks.copyAndVerify(
-                    game,
-                    () -> game.getPhaseHandler() == null
-                            ? null : game.getPhaseHandler().getPlayerTurn());
-            if (verified.isEmpty()) {
-                return null;
-            }
-            Game fork = verified.get().fork();
-            Player perspective = verified.get().perspective();
-            Card forkCarrier = Forks.mappedCard(verified.get().copier(), carrier);
+        Forks.ForkRun run = new Forks.ForkRun(
+                game,
+                budget::spendProbe,
+                () -> game.getPhaseHandler() == null
+                        ? null : game.getPhaseHandler().getPlayerTurn());
+        return run.take((verified, snapshots) -> {
+            Game fork = verified.fork();
+            Card forkCarrier = Forks.mappedCard(verified.copier(), carrier);
             if (forkCarrier == null || fork.getCombat() == null) {
                 return null;
             }
-
-            SnapshotBuilder snapshots = new SnapshotBuilder(fork, game);
-            String state;
-            ProbedStep dealt;
-            try {
-                stripKeyword(fork, forkCarrier, keyword);
-                // The state is the board as the step began, with the keyword
-                // already gone: that is the input the counterfactual answers for.
-                state = snapshots.ofBoard().render();
-                dealt = runDamageStep(fork, step == DamageStep.FIRST_STRIKE);
-            } catch (RuntimeException | StackOverflowError e) {
-                // A stripped keyword reaches combat states ordinary play does not.
-                // Discarding is right; failing the worker is not.
-                return null;
-            }
+            // A stripped keyword reaches combat states ordinary play does
+            // not; Forks.ForkRun discards the fork when one throws.
+            stripKeyword(fork, forkCarrier, keyword);
+            // The state is the board as the step began, with the keyword
+            // already gone: that is the input the counterfactual answers for.
+            String state = snapshots.ofBoard().render();
+            ProbedStep dealt = runDamageStep(fork, step == DamageStep.FIRST_STRIKE);
             return new HeldProbe(
                     ProbeScheduler.normalizeKeyword(keyword),
                     Refs.of(carrier), state, dealt.events(),
-                    Refs.of(perspective), dealt.combat(),
+                    Refs.of(verified.perspective()), dealt.combat(),
                     step,
                     // The *live* game's turn, which is also the fork's: the copier
                     // carries the counter across (GameCopier hands it to
                     // devModeSet). Read here so the branch remembers the step it
                     // belongs to.
                     liveTurn());
-        });
+        }, (verified, held) -> held);
     }
 
     /**
