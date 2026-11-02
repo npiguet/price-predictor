@@ -122,6 +122,11 @@ final class LiveGame {
      *   outside {@code intervene} and {@code probe}.
      * </ol>
      *
+     * <p>The first gives way to a fork {@link Forks#playingForward played on}
+     * with collectors of its own: while it plays, a null-ability outcome on
+     * this thread is the fork's turn-based action, and the fork's collectors
+     * own it as the live game's own its turn-based actions.
+     *
      * <p>Neither fires for a real combat-damage prevention on the live game —
      * {@code Combat.dealAssignedDamage} is a turn-based action, outside any
      * resolution and any fork — so that falls through to "belongs".
@@ -131,7 +136,10 @@ final class LiveGame {
      * card to key on.
      */
     boolean ownsNullAbilityOutcome() {
-        if (Forks.isForkRunningOnThisThread()) {
+        // A fork played on to the end of the turn is a game of its own for
+        // the span: its collectors own its turn-based outcomes, the live
+        // game's own none.
+        if (Forks.isForkRunningOnThisThread() && Forks.playingForwardOnThisThread() != game) {
             return false;
         }
         if (PatchHooks.currentSubAbility() instanceof SpellAbility resolving) {

@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects;
 import forge.game.Game;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * The channels the engine patch unlocks, for one game, and the hooks they
@@ -69,6 +70,20 @@ final class PatchedCollectors implements AutoCloseable {
     private final List<PatchHooks.Listener> patchedOnly;
 
     /**
+     * Whether these are a fork's collectors, which install no hook: the
+     * live game's collectors hand them the fork's callbacks while it plays
+     * on ({@link #routingTo}).
+     */
+    private final boolean forkBound;
+
+    /**
+     * The fork's collectors while one {@link #routingTo plays on} from this
+     * game, or null. Volatile: the AI evaluates candidates on a thread of
+     * its own, and the fork's callbacks from there must find them too.
+     */
+    private volatile PatchedCollectors routedFork;
+
+    /**
      * @param seed    seeds the game's sampling stream
      * @param bracket where the clause and outcome hooks file their events,
      *                and whose confirm listener this installs
@@ -76,6 +91,23 @@ final class PatchedCollectors implements AutoCloseable {
     PatchedCollectors(
             Game game, CollectorContext context, CollectionCaps caps, long seed,
             BusBracketCollector bracket) {
+        this(game, context, caps, seed, bracket, false);
+    }
+
+    /**
+     * The collectors of a fork played on from a live game: they install no
+     * hook and take none down, and their game is not one the run counts.
+     */
+    static PatchedCollectors forFork(
+            Game fork, CollectorContext context, CollectionCaps caps, long seed,
+            BusBracketCollector bracket) {
+        return new PatchedCollectors(fork, context, caps, seed, bracket, true);
+    }
+
+    private PatchedCollectors(
+            Game game, CollectorContext context, CollectionCaps caps, long seed,
+            BusBracketCollector bracket, boolean forkBound) {
+        this.forkBound = forkBound;
         this.context = context;
         this.channels = Channels.of(game, context, caps, seed, bracket);
         this.everyMode = List.of(bracket.confirmHandler());
@@ -112,6 +144,9 @@ final class PatchedCollectors implements AutoCloseable {
      * @return how many were found
      */
     int install() {
+        if (forkBound) {
+            throw new IllegalStateException("a fork's collectors install no hook");
+        }
         int installed = install(everyMode);
         if (context.mode() == AttributionMode.DEGRADED) {
             return installed;
@@ -119,14 +154,65 @@ final class PatchedCollectors implements AutoCloseable {
         return installed + install(patchedOnly);
     }
 
-    private static int install(List<PatchHooks.Listener> listeners) {
+    /**
+     * Install each listener's routing handler: the listener's own body, and
+     * then the same callback for the fork playing on, if one is.
+     *
+     * <p>The hooks are JVM statics, so a fork's callbacks reach the live
+     * game's handlers. Every channel already keeps only its own game's
+     * reports, checking before it draws from the sampler or writes, so
+     * offering each callback to both sets of collectors hands each its own:
+     * dispatch by game identity, on whatever thread the callback comes.
+     */
+    private int install(List<PatchHooks.Listener> listeners) {
         int installed = 0;
         for (PatchHooks.Listener listener : listeners) {
-            if (listener.install()) {
+            PatchHooks.Listener routing = listener.hook().listener((callback, args) -> {
+                listener.body().on(callback, args);
+                PatchedCollectors fork = routedFork;
+                if (fork != null) {
+                    fork.dispatch(listener.hook(), callback, args);
+                }
+            });
+            if (routing.install()) {
                 installed++;
             }
         }
         return installed;
+    }
+
+    /** Hand one callback of {@code hook} to this fork's own listener for it, if it has one. */
+    private void dispatch(PatchHooks.Hook hook, PatchHooks.Callback callback, PatchHooks.Args args) {
+        for (PatchHooks.Listener listener : everyMode) {
+            if (listener.hook() == hook) {
+                listener.body().on(callback, args);
+                return;
+            }
+        }
+        if (context.mode() == AttributionMode.DEGRADED) {
+            return;
+        }
+        for (PatchHooks.Listener listener : patchedOnly) {
+            if (listener.hook() == hook) {
+                listener.body().on(callback, args);
+                return;
+            }
+        }
+    }
+
+    /**
+     * Run {@code span} with the callbacks this game's hooks receive also
+     * handed to {@code fork}'s collectors, and stop handing them afterwards
+     * however the span ends.
+     */
+    <T> T routingTo(PatchedCollectors fork, Supplier<T> span) {
+        PatchedCollectors was = routedFork;
+        routedFork = fork;
+        try {
+            return span.get();
+        } finally {
+            routedFork = was;
+        }
     }
 
     /**
@@ -138,6 +224,12 @@ final class PatchedCollectors implements AutoCloseable {
      */
     @Override
     public void close() {
+        if (forkBound) {
+            // What the fork's channels hold, and nothing taken down: the
+            // hooks are the live game's, still installed.
+            channels.close(false);
+            return;
+        }
         try {
             // Before the hooks come down: the channels write what they hold
             // at the end of the game.

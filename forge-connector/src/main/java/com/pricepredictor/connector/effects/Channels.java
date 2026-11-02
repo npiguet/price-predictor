@@ -56,6 +56,14 @@ record Channels(
 
     @Override
     public void close() {
+        close(true);
+    }
+
+    /**
+     * @param countGame whether this was a game of the run's, which the
+     *                  rewrite tally counts; a fork played on from one is not
+     */
+    void close(boolean countGame) {
         try {
             // A declaration of attackers the game ended before it was made.
             playability.close();
@@ -65,7 +73,9 @@ record Channels(
         } finally {
             // In the finally: the question the tally answers is about the run,
             // so it is asked once per game whatever the game did.
-            RewriteChannel.JVM_REWRITES.endOfGame();
+            if (countGame) {
+                RewriteChannel.JVM_REWRITES.endOfGame();
+            }
         }
     }
 }

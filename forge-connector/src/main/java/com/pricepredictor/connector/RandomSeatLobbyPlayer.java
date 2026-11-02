@@ -45,8 +45,11 @@ public final class RandomSeatLobbyPlayer extends LobbyPlayerAi {
     @Override
     public Player createIngamePlayer(Game game, final int id) {
         Player seat = new Player(getName(), game, id);
+        // The seed is drawn when the live game attaches the seat, not here:
+        // a fork's GameCopier builds its copy of the seat through this method
+        // too, and a draw here would shift every later game's seat.
         seat.setFirstController(new RandomSeatController(
-                game, seat, this, probability, new Random(seeds.nextLong())));
+                game, seat, this, probability, () -> new Random(seeds.nextLong())));
         return seat;
     }
 }

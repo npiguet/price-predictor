@@ -6,7 +6,9 @@ import forge.game.event.GameEventTurnPhase;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -36,9 +38,30 @@ public final class GameRecording implements AutoCloseable {
     private final Optional<ProbeScheduler> probes;
     /** Where the game's dropped-event counts go when it ends, or null when the run counts none. */
     private final Path droppedEventsFile;
+    /**
+     * What a fork's recording is built from: the game's envelope, which a
+     * fork's records share.
+     */
+    private final CollectorContext envelope;
+    private final CollectionCaps caps;
+    /** Plays forks of this game on to the end of the turn; null on a fork's own recording. */
+    private final ForkPlayForward playForward;
+    /** Whether this records a fork played on from a live game rather than the live game. */
+    private final boolean fork;
 
     /** Said once per worker: a counts file that cannot be written is no reason to stop collecting. */
     private static final OnceWarning DROPPED_EVENTS_UNWRITABLE = new OnceWarning();
+
+    /**
+     * Build one game's collectors, for a match whose seats need no attaching
+     * in a fork; see {@link #GameRecording(Game, RecordShardWriter, String,
+     * CollectionCaps, long, String, ForkSeats)}.
+     */
+    public GameRecording(
+            Game game, RecordShardWriter writer, String gameId, CollectionCaps caps,
+            long seed, String randomSeatPlayerId) {
+        this(game, writer, gameId, caps, seed, randomSeatPlayerId, ForkSeats.NONE);
+    }
 
     /**
      * Build one game's collectors.
@@ -51,16 +74,21 @@ public final class GameRecording implements AutoCloseable {
      *                           another
      * @param randomSeatPlayerId the match's random seat, as a player id, or
      *                           null when it has none
+     * @param forkSeats          attaches a fork's seats when a fork of this
+     *                           game plays on
      */
     public GameRecording(
             Game game, RecordShardWriter writer, String gameId, CollectionCaps caps,
-            long seed, String randomSeatPlayerId) {
+            long seed, String randomSeatPlayerId, ForkSeats forkSeats) {
         this.game = game;
+        this.fork = false;
+        this.caps = caps;
         AttributionMode mode = AttributionMode.detect();
         // One context per collector, because each counts its own records.
         Supplier<CollectorContext> context =
                 () -> new CollectorContext(
                         writer, gameId, mode, randomSeatPlayerId, caps.aimedAt().orElse(null));
+        this.envelope = context.get();
         // Stage three. Nothing is copied unless a budget says so, because a
         // fork costs a game copy and a stack resolution, and nothing on a
         // stock checkout, where no fork could be attributed. Both kinds share
@@ -83,6 +111,64 @@ public final class GameRecording implements AutoCloseable {
                 recordId -> probes.ifPresent(probe -> probe.writeHeldProbes(recordId)));
         this.patched = new PatchedCollectors(game, context.get(), caps, seed, bracket);
         this.droppedEventsFile = caps.countDroppedEvents() ? droppedEventsFile(writer) : null;
+        this.playForward = new ForkPlayForward(this, forkSeats, seed);
+    }
+
+    /**
+     * A fork's recording: the live game's collectors, built over the fork
+     * and writing through {@code context}, with no fork of its own and no
+     * hook installed (D4).
+     *
+     * <p>No intervention, probe or directed fork is scheduled from a fork,
+     * so a fork never forks. Its dropped events are not counted: the counts
+     * file has one line per real game.
+     *
+     * @param seed seeds the fork's sampling stream
+     */
+    private GameRecording(Game fork, CollectorContext context, CollectionCaps caps, long seed) {
+        this.game = fork;
+        this.fork = true;
+        this.caps = caps;
+        this.envelope = context;
+        this.interventions = Optional.empty();
+        this.probes = Optional.empty();
+        this.bracket = new BusBracketCollector(fork, context, recordId -> { });
+        this.patched = PatchedCollectors.forFork(fork, context, caps, seed, bracket);
+        this.droppedEventsFile = null;
+        this.playForward = null;
+    }
+
+    /**
+     * The recording of a fork of this game played on to the end of the turn.
+     *
+     * @param flags the flags every record of the fork carries
+     * @param held  where the fork's finished lines go until the fork is kept
+     * @param seed  seeds the fork's sampling stream
+     */
+    GameRecording forkRecording(
+            Game fork, Consumer<EffectRecord> flags, Consumer<String> held, long seed) {
+        return new GameRecording(fork, envelope.forFork(flags, held), caps, seed);
+    }
+
+    /** Plays forks of this game on to the end of the turn (D4). */
+    ForkPlayForward playForward() {
+        if (playForward == null) {
+            throw new IllegalStateException("a fork's recording plays no fork on");
+        }
+        return playForward;
+    }
+
+    /** Write a kept fork's lines to this game's shard. */
+    void writeForkLines(List<String> lines) {
+        envelope.writeHeld(lines);
+    }
+
+    /**
+     * Run {@code span} with this game's hooks also handing their callbacks
+     * to {@code forkRecording}'s collectors.
+     */
+    <T> T routingTo(GameRecording forkRecording, Supplier<T> span) {
+        return patched.routingTo(forkRecording.patched, span);
     }
 
     /**
@@ -120,7 +206,12 @@ public final class GameRecording implements AutoCloseable {
      */
     public void open() {
         game.subscribeToEvents(bracket);
-        patched.install();
+        if (!fork) {
+            // A fork's collectors are handed the live hooks' callbacks
+            // instead (routingTo): installing would take them from the
+            // live game.
+            patched.install();
+        }
         // The declaration's taps and its end, which hold its attackers
         // records; it is asked nothing on a checkout without the combat hook.
         game.subscribeToEvents(patched.playability().declaration());

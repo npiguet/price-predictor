@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * What a collector of one game writes its records through.
@@ -33,15 +34,50 @@ final class CollectorContext {
      * forked for.
      */
     private final List<String> aimedAt;
+    /**
+     * The flags a fork's collectors set on every record they write, before
+     * the stamps above; nothing for a live game's.
+     */
+    private final Consumer<EffectRecord> forkFlags;
+    /** Where a finished record's line goes: the shard, or a fork's held lines. */
+    private final Consumer<String> out;
 
     CollectorContext(
             RecordShardWriter writer, String gameId, AttributionMode mode,
             String randomSeatPlayerId, List<String> aimedAt) {
+        this(writer, gameId, mode, randomSeatPlayerId,
+                aimedAt == null ? null : List.copyOf(aimedAt), record -> { },
+                // Not writer::write, which would dereference a writer a
+                // collector that never writes is built without.
+                line -> writer.write(line));
+    }
+
+    private CollectorContext(
+            RecordShardWriter writer, String gameId, AttributionMode mode,
+            String randomSeatPlayerId, List<String> aimedAt,
+            Consumer<EffectRecord> forkFlags, Consumer<String> out) {
         this.writer = writer;
         this.gameId = gameId;
         this.mode = mode;
         this.randomSeatPlayerId = randomSeatPlayerId;
-        this.aimedAt = aimedAt == null ? null : List.copyOf(aimedAt);
+        this.aimedAt = aimedAt;
+        this.forkFlags = forkFlags;
+        this.out = out;
+    }
+
+    /**
+     * The context a fork played on from this game writes through: the same
+     * game id, run, mode, random seat and aim, every record first given
+     * {@code flags}, and each finished line handed to {@code out} rather
+     * than the shard, so a fork that ends in a throw can be dropped whole.
+     */
+    CollectorContext forFork(Consumer<EffectRecord> flags, Consumer<String> out) {
+        return new CollectorContext(writer, gameId, mode, randomSeatPlayerId, aimedAt, flags, out);
+    }
+
+    /** Write lines a {@link #forFork fork's} context held, to this context's shard. */
+    void writeHeld(List<String> lines) {
+        lines.forEach(line -> writer.write(line));
     }
 
     AttributionMode mode() {
@@ -119,17 +155,19 @@ final class CollectorContext {
     }
 
     /**
-     * Stamp {@code random_seat} and the run's {@code aimed_at}, and write.
+     * Set a fork's flags, stamp {@code random_seat} and the run's
+     * {@code aimed_at}, and write.
      *
      * <p>A record already aimed keeps its own: a directed fork names the one
      * rule it forked for, which is narrower than the run's list.
      */
     void emit(EffectRecord record) {
+        forkFlags.accept(record);
         record.randomSeat(
                 randomSeatPlayerId != null && randomSeatPlayerId.equals(record.actorPlayer()));
         if (aimedAt != null && !record.isAimed()) {
             record.aimedAt(aimedAt);
         }
-        writer.write(record.toJson());
+        out.accept(record.toJson());
     }
 }

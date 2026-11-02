@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.function.BiPredicate;
 import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 
 /**
  * The random seat: a Forge AI that, with probability {@code P} at each of
@@ -50,10 +51,11 @@ import java.util.function.BooleanSupplier;
  * relative is {@code InterventionFork}, which draws the same choices for an
  * ability it forces on a fork; it acts only <em>inside</em> a fork and this
  * acts only outside one, through the same test inverted: a controller is
- * live only once {@link GamePlayer} has attached it to the game it created,
- * and the controller a fork's {@code GameCopier} clone builds for its copy of
- * this seat is never attached, so every override there defers to
- * {@code super}.
+ * live only once {@link GamePlayer} has attached it to the game it created.
+ * The controller a fork's {@code GameCopier} clone builds for its copy of
+ * this seat is attached only when the fork is played on to the end of the
+ * turn ({@link GamePlayer#attachForkSeats}); in an intervention or a probe it
+ * never is, so every override there defers to {@code super}.
  *
  * <p>The seat writes no record of its own. The {@code decision} records come
  * from {@link PriorityCandidates}, which enumerates both seats' candidates at
@@ -67,8 +69,15 @@ import java.util.function.BooleanSupplier;
 public final class RandomSeatController extends PlayerControllerAi {
 
     private final double probability;
-    private final Random random;
-    private final RandomChoices choices;
+    /**
+     * The seat's draws for the game it plays in, drawn from the match's
+     * source when the live game attaches it and never for a fork, so a fork
+     * leaves later games' seats as they would have been.
+     */
+    private final Supplier<Random> liveRandom;
+    /** The seat's draws, set when it is attached; null before. */
+    private Random random;
+    private RandomChoices choices;
 
     /** The game this seat plays for real, or null for a fork's clone. */
     private Game liveGame;
@@ -80,17 +89,19 @@ public final class RandomSeatController extends PlayerControllerAi {
      */
     private FruitlessActivations fruitless;
 
-    /** The play decision's draw, carried from one engine call to the next. */
-    private final RandomPlayDraw playDraw;
+    /** The play decision's draw, carried from one engine call to the next; set when attached. */
+    private RandomPlayDraw playDraw;
 
+    /**
+     * @param liveRandom the seat's draws for the live game, asked for once,
+     *                   when {@link GamePlayer} attaches it
+     */
     public RandomSeatController(
             Game game, Player player, LobbyPlayer lobbyPlayer,
-            double probability, Random random) {
+            double probability, Supplier<Random> liveRandom) {
         super(game, player, lobbyPlayer);
         this.probability = probability;
-        this.random = random;
-        this.choices = new RandomChoices(random);
-        this.playDraw = new RandomPlayDraw(random);
+        this.liveRandom = liveRandom;
     }
 
     /**
@@ -98,8 +109,9 @@ public final class RandomSeatController extends PlayerControllerAi {
      * {@code candidates}.
      *
      * <p>Called by {@link GamePlayer} after {@code match.createGame()}, which
-     * is the first moment both exist. A controller never attached — the one
-     * a fork clones — stays an ordinary AI.
+     * is the first moment both exist; the seat's draws come from the match's
+     * source now. A controller never attached — the one an intervention or a
+     * probe clones — stays an ordinary AI.
      *
      * @param candidates null when the run writes no effect records; the seat
      *                   still plays at random, enumerating its own candidates
@@ -107,9 +119,23 @@ public final class RandomSeatController extends PlayerControllerAi {
      *                   changed nothing this turn, or null with no records
      */
     public void attach(Game game, PriorityCandidates candidates, FruitlessActivations fruitless) {
+        attach(game, candidates, fruitless, liveRandom.get());
+    }
+
+    /**
+     * Make this seat live for {@code game} with draws of its own: a fork's
+     * copy of the seat, played on with the seat choosing afresh (D4), takes
+     * a {@code Random} seeded from the game's fork seed rather than one from
+     * the match's source.
+     */
+    public void attach(
+            Game game, PriorityCandidates candidates, FruitlessActivations fruitless, Random random) {
         this.liveGame = game;
         this.candidates = candidates;
         this.fruitless = fruitless;
+        this.random = random;
+        this.choices = new RandomChoices(random);
+        this.playDraw = new RandomPlayDraw(random);
     }
 
     /** Whether this controller is the live seat rather than a fork's copy. */

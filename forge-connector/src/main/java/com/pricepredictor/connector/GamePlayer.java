@@ -1,7 +1,9 @@
 package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.CollectionCaps;
+import com.pricepredictor.connector.effects.FruitlessActivations;
 import com.pricepredictor.connector.effects.GameRecording;
+import com.pricepredictor.connector.effects.PriorityCandidates;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import com.pricepredictor.connector.effects.Refs;
 import forge.ai.LobbyPlayerAi;
@@ -224,7 +226,7 @@ public class GamePlayer {
         Optional<RandomSeatController> seat = randomSeatOf(game);
         GameRecording recording = effectRecords == null ? null : new GameRecording(
                 game, effectRecords, effectRecords.nextGameId(), caps, gameSeed,
-                seat.map(s -> Refs.of(s.getPlayer())).orElse(null));
+                seat.map(s -> Refs.of(s.getPlayer())).orElse(null), GamePlayer::attachForkSeats);
         try {
             // Inside the try: open() installs JVM-static hooks one by one, and
             // a hook left behind by an open() that threw part way would hand
@@ -232,10 +234,11 @@ public class GamePlayer {
             if (recording != null) {
                 recording.open();
             }
-            // Live from here: a fork's clone of this seat is never attached
-            // and plays as the ordinary AI. Without a recording the seat plays
-            // at random and reports nothing -- FR-026 keeps that combination
-            // out of a run.
+            // Live from here. A fork's clone of this seat plays as the
+            // ordinary AI unless the fork is played on, which attaches it
+            // (attachForkSeats). Without a recording the seat plays at random
+            // and reports nothing -- FR-026 keeps that combination out of a
+            // run.
             seat.ifPresent(s -> s.attach(
                     game, recording == null ? null : recording.priorityCandidates(),
                     recording == null ? null : recording.fruitlessActivations()));
@@ -258,6 +261,19 @@ public class GamePlayer {
         return Optional.of(new GameOutcome(
                 winner, playFirst,
                 collector.getCards(Side.A), collector.getCards(Side.B)));
+    }
+
+    /**
+     * Attach a fork's seats to the fork, as {@link #playGame} attaches the
+     * live game's (D4): the random seat with draws seeded from the game's
+     * fork seed, so it chooses afresh in the fork as it would live, and
+     * nothing drawn from the match's source. Both other seats are the
+     * plain AI the copy built.
+     */
+    public static void attachForkSeats(
+            forge.game.Game fork, PriorityCandidates candidates,
+            FruitlessActivations fruitless, java.util.Random random) {
+        randomSeatOf(fork).ifPresent(s -> s.attach(fork, candidates, fruitless, random));
     }
 
     /** The game's random seat, by its controller, or empty when it has none. */

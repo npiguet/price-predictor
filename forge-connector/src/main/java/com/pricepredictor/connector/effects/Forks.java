@@ -71,6 +71,28 @@ final class Forks {
     }
 
     /**
+     * The fork being played on to the end of the turn on this thread, with
+     * collectors of its own, or null.
+     *
+     * <p>{@link #FORK_RUNNING} says a fork runs, which is all a fork that
+     * writes its records itself needs: nothing a live collector sees during
+     * it is the live game's. A fork {@code ForkPlayForward} plays on is
+     * recorded by collectors bound to it, which do need its turn-based
+     * outcomes, and this names the game they belong to.
+     */
+    private static final ThreadLocal<Game> PLAYING_FORWARD = new ThreadLocal<>();
+
+    /** The fork played on to the end of the turn on this thread, or null. */
+    static Game playingForwardOnThisThread() {
+        return PLAYING_FORWARD.get();
+    }
+
+    /** Run {@code action} with {@code fork} marked as played on on this thread; see {@link #PLAYING_FORWARD}. */
+    static <T> T playingForward(Game fork, Supplier<T> action) {
+        return withThreadLocal(PLAYING_FORWARD, fork, action);
+    }
+
+    /**
      * Where a forced resolution's clauses report in, while one is running.
      *
      * <p>The clause hook is a JVM static that {@code ClauseOutcomeRouter} owns,
