@@ -400,9 +400,16 @@ def _collect_coverage_parser(subparsers) -> None:
     # so it has to be the one build-corpus is given.
     _add_holdout_flags(parser)
     add_config_flags(parser, CollectCoverageConfig, only=(
-        "min_text_games", "target_records", "no_progress_rounds",
+        "wording_cards", "min_text_games", "target_records", "no_progress_rounds",
         "decks_per_round", "workers", "seed",
     ))
+    parser.add_argument(
+        "--directed-fork-rules", type=rule_list, default=(),
+        help=(
+            "Comma-separated rule ids written to every record's aimed_at "
+            "(FR-009a, FR-012); a label only: this command runs no directed fork"
+        ),
+    )
     add_cap_flags(parser)
 
 
@@ -431,7 +438,18 @@ def _collect_variants_parser(subparsers) -> None:
     add_cap_flags(parser)
 
 
+def rule_list(text: str) -> tuple[str, ...]:
+    """``--directed-fork-rules``: comma-separated rule ids, blanks dropped, so
+    an empty value names no rule."""
+    return tuple(rule.strip() for rule in text.split(",") if rule.strip())
+
+
 def collection_caps(args: argparse.Namespace) -> CollectionCaps:
+    """The caps of a ``collect-coverage`` or ``collect-variants`` run.
+
+    Every record of either is aimed (FR-009a): ``aimed_at`` lists the run's
+    ``--directed-fork-rules``, and is empty, never absent, where it names none.
+    """
     # An unset --random-seat-probability is None so a share above 0 without
     # one can be refused; with the share at 0 the worker never reads it.
     probability = args.random_seat_probability
@@ -440,6 +458,7 @@ def collection_caps(args: argparse.Namespace) -> CollectionCaps:
         random_seat_probability=(
             DEFAULT_RANDOM_SEAT_PROBABILITY if probability is None else probability
         ),
+        aimed_at=tuple(getattr(args, "directed_fork_rules", ())),
     )
 
 

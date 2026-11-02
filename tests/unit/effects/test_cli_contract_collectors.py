@@ -273,3 +273,79 @@ class TestTheHeldOutCoverageRound:
             collector_config(CollectCoverageConfig, parse(
                 "collect-coverage", "--only-cards", "h.txt", "--exclude-cards", "h.txt",
             ))
+
+
+class TestTheWordingRound:
+    """contracts/cli.md § collect-coverage: ``--wording-cards PATH`` (FR-038)."""
+
+    def test_it_is_off_by_default(self):
+        assert parse("collect-coverage").wording_cards is None
+
+    def test_the_list_reaches_the_config(self):
+        from unittest.mock import patch
+
+        with patch("effects.application.collect_coverage.run", return_value=0) as collect:
+            assert run_collect_coverage(parse(
+                "collect-coverage", "--wording-cards", "any-target.txt",
+            )) == 0
+        assert collect.call_args.args[0].wording_cards == Path("any-target.txt")
+
+    def test_beside_only_cards_it_is_refused_before_any_worker(self, caplog):
+        from unittest.mock import patch
+
+        with patch("effects.application.collect_coverage.run") as collect:
+            assert run_collect_coverage(parse(
+                "collect-coverage", "--wording-cards", "w.txt", "--only-cards", "h.txt",
+            )) == 1
+        collect.assert_not_called()
+        assert "collect-coverage: " in caplog.text
+        assert "--wording-cards or --only-cards" in caplog.text
+
+    def test_collect_variants_takes_no_list(self):
+        with pytest.raises(SystemExit):
+            parse("collect-variants", "--wording-cards", "w.txt")
+
+
+class TestEveryCollectorRecordIsAimed:
+    """FR-009a, FR-012: every ``collect-coverage`` and ``collect-variants``
+    record carries ``aimed_at``, empty where the run names no rule; on
+    ``collect-coverage`` ``--directed-fork-rules`` is a label only."""
+
+    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
+    def test_a_run_naming_no_rule_is_aimed_at_none(self, command):
+        from effects.infrastructure.cli import collection_caps
+
+        caps = collection_caps(parse(command))
+        assert caps.aimed_at == ()
+        assert caps.as_system_properties()["effect.aimed.at"] == ""
+
+    def test_the_listed_rules_reach_the_worker_property(self):
+        from effects.infrastructure.cli import collection_caps
+
+        caps = collection_caps(parse(
+            "collect-coverage", "--directed-fork-rules", "704.5f, 702.19b",
+        ))
+        assert caps.aimed_at == ("704.5f", "702.19b")
+        assert caps.as_system_properties()["effect.aimed.at"] == "704.5f,702.19b"
+
+    def test_an_empty_list_names_no_rule(self):
+        assert parse("collect-coverage", "--directed-fork-rules", "").directed_fork_rules == ()
+
+    def test_the_rules_reach_the_config_the_collector_runs(self):
+        from unittest.mock import patch
+
+        with patch("effects.application.collect_coverage.run", return_value=0) as collect:
+            assert run_collect_coverage(parse(
+                "collect-coverage", "--directed-fork-rules", "704.5f",
+            )) == 0
+        assert collect.call_args.args[0].caps.aimed_at == ("704.5f",)
+
+    def test_the_label_takes_no_startup_check(self):
+        """A rule no detector knows still runs: no directed fork is taken."""
+        from unittest.mock import patch
+
+        with patch("effects.application.collect_coverage.run", return_value=0) as collect:
+            assert run_collect_coverage(parse(
+                "collect-coverage", "--directed-fork-rules", "no-such-rule",
+            )) == 0
+        collect.assert_called_once()

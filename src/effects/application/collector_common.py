@@ -83,7 +83,9 @@ class CollectorConfig:
     workers: int = field(default=DEFAULT_WORKERS, metadata={
         "help": "Parallel Java worker processes (default: %(default)s)",
     })
-    caps: CollectionCaps = CollectionCaps()
+    #: Every record a collector writes is aimed (FR-009a): at the run's
+    #: ``--directed-fork-rules``, and at no rule, ``[]``, where it names none.
+    caps: CollectionCaps = CollectionCaps(aimed_at=())
     seed: int = field(default=RANDOM_SEED, metadata={
         "help": (
             "Seeds the per-round deck draw, so which cards fill a round is "

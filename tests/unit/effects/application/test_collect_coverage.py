@@ -1115,3 +1115,82 @@ class TestHeldOutRoundCaps:
         from effects.domain.collection_caps import CollectionCaps
 
         assert held_out_round_caps(CollectionCaps()).playability_rate == 1.0
+
+
+class TestTheWordingRound:
+    """FR-038: ``--wording-cards`` runs the card round over the listed cards
+    alone, the coverage unit and the decks both, with the holdout still kept
+    out."""
+
+    @staticmethod
+    def _cards(tmp_path: Path) -> Path:
+        cards = tmp_path / "cardsfolder"
+        (cards / "a").mkdir(parents=True)
+        # Converted text spells names in lower case, as convert writes them.
+        for stem, name in (("prodigal", "prodigal pyromancer"), ("bears", "grizzly bears"),
+                           ("pinger", "cunning sparkmage")):
+            (cards / "a" / f"{stem}.txt").write_text(
+                f"name: {name}\nmana cost: {{R}}\ntypes: creature\n", encoding="utf-8",
+            )
+        (tmp_path / "records").mkdir()
+        return cards
+
+    def _run(self, tmp_path, listed: str, **config):
+        from effects.application import collect_coverage
+
+        cards = self._cards(tmp_path)
+        wording = tmp_path / "wording.txt"
+        wording.write_text(listed, encoding="utf-8")
+        consulted: list[list[str]] = []
+
+        def _consult(names):
+            consulted.append(list(names))
+            return {}
+
+        with patch.object(collect_coverage, "consult_castability", _consult):
+            code = collect_coverage.run(collect_coverage.CollectCoverageConfig(
+                effect_records=tmp_path / "records", cards_folders=(cards,),
+                target_records=1, decks_per_round=5, no_progress_rounds=1,
+                wording_cards=wording, **config,
+            ))
+        return code, consulted
+
+    def test_the_unit_and_the_decks_hold_only_listed_cards(self, tmp_path, fake_supervisor):
+        code, consulted = self._run(tmp_path, "prodigal pyromancer\nCunning Sparkmage\n")
+
+        assert code == 0
+        assert consulted == [["cunning sparkmage", "prodigal pyromancer"]]
+        decked = {name for deck in fake_supervisor.play_round.call_args.args[0]
+                  for name in deck}
+        assert "grizzly bears" not in decked
+        assert decked & {"cunning sparkmage", "prodigal pyromancer"}
+
+    def test_a_held_out_listed_card_stays_out(self, tmp_path, fake_supervisor):
+        holdout = tmp_path / "holdout-cards.txt"
+        holdout.write_text("Cunning Sparkmage\n", encoding="utf-8")
+
+        _, consulted = self._run(
+            tmp_path, "Prodigal Pyromancer\nCunning Sparkmage\n",
+            deck_holdout=DeckHoldout(exclude_cards=holdout),
+        )
+
+        assert consulted == [["prodigal pyromancer"]]
+
+    def test_a_listed_name_with_no_card_is_named(self, tmp_path, fake_supervisor, caplog):
+        self._run(tmp_path, "Prodigal Pyromancer\nTim the Enchanter\n")
+
+        assert "tim the enchanter" in caplog.text
+
+    def test_a_list_matching_no_card_starts_no_round(self, tmp_path, fake_supervisor):
+        code, consulted = self._run(tmp_path, "Tim the Enchanter\n")
+
+        assert code == 1
+        assert consulted == []
+        fake_supervisor.play_round.assert_not_called()
+
+    def test_it_is_refused_beside_the_held_out_round(self, tmp_path):
+        with pytest.raises(ValueError, match="--wording-cards or --only-cards"):
+            CollectCoverageConfig(
+                wording_cards=tmp_path / "w.txt",
+                deck_holdout=DeckHoldout(only_cards=tmp_path / "h.txt"),
+            )

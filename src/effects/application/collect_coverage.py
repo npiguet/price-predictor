@@ -5,6 +5,10 @@ the fewest records, and played until every card is satisfied or retired.
 Coverage matches write effect records only, because their decks are no fair
 self-play sample; the guard is the Java worker's records-only mode, where the
 writers are constructed.
+
+``--wording-cards`` narrows the card run to a list (FR-038): the cards with an
+activated "any target" damage ability, say, so the wording reaches the corpus
+in games of its own rather than at the rate the whole corpus would deck it.
 """
 
 from __future__ import annotations
@@ -63,6 +67,12 @@ DEFAULT_NO_PROGRESS_ROUNDS = 3
 PROGRESS_EVERY_SHARDS = 10
 
 
+WORDING_BESIDE_ONLY_CARDS = (
+    "pass --wording-cards or --only-cards, not both: one is a card round over "
+    "a list, the other the held-out round counted per text"
+)
+
+
 @dataclass
 class CollectCoverageConfig(CollectorConfig):
     target_records: int = field(default=DEFAULT_TARGET_RECORDS, metadata={
@@ -80,6 +90,18 @@ class CollectCoverageConfig(CollectorConfig):
             "be satisfied (FR-036; default: %(default)s)"
         ),
     })
+    wording_cards: Path | None = field(default=None, metadata={
+        "help": (
+            "A coverage round over these cards alone, one card name per line "
+            "(FR-038): the coverage unit and the decks, the holdout still kept "
+            "out. Refused beside --only-cards"
+        ),
+    })
+
+    def __post_init__(self) -> None:
+        if self.wording_cards is not None and self.deck_holdout.only_cards is not None:
+            raise ValueError(WORDING_BESIDE_ONLY_CARDS)
+
 
 
 def no_converted_cards(trees: ConvertedTrees) -> str:
@@ -367,6 +389,15 @@ def run(config: CollectCoverageConfig) -> int:
         logger.error("%s", no_converted_cards(trees))
         return 1
 
+    if config.wording_cards is not None:
+        converted = wording_cards_of(converted, config.wording_cards)
+        if not converted:
+            logger.error(
+                "None of the cards in %s has converted text under %s",
+                config.wording_cards, trees.cards_folder,
+            )
+            return 1
+
     held_out = config.deck_holdout.exclusions()
     texts = {name: card.text for name, card in converted.items()}
     non_deck = non_deck_names(texts)
@@ -406,6 +437,25 @@ def run(config: CollectCoverageConfig) -> int:
         },
     )
     return _play_to_completion(rounds, config, config.caps)
+
+
+def wording_cards_of[C](converted: Mapping[str, C], path: Path) -> dict[str, C]:
+    """The converted cards ``path`` lists, matched by folded name; the listed
+    names with no converted card are logged, since a typo would otherwise
+    shrink the round without a word."""
+    listed = read_name_list(path)
+    kept = {
+        name: card for name, card in converted.items() if fold_card_name(name) in listed
+    }
+    missing = listed - {fold_card_name(name) for name in kept}
+    logger.info(
+        "Wording round: %d of %d listed card(s) have converted text", len(kept), len(listed),
+    )
+    if missing:
+        logger.warning(
+            "Listed in %s with no converted card: %s", path, ", ".join(sorted(missing)),
+        )
+    return kept
 
 
 def consult_castability(names: list[str]) -> dict[str, ConsultVerdict]:
