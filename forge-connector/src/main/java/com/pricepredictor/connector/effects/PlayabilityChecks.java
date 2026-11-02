@@ -13,6 +13,7 @@ import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.AbilityActivated;
 import forge.game.spellability.AbilityStatic;
+import forge.game.spellability.AlternativeCost;
 import forge.game.spellability.Spell;
 import forge.game.spellability.SpellAbility;
 import forge.game.spellability.SpellAbilityRestriction;
@@ -21,6 +22,7 @@ import forge.game.staticability.StaticAbilityAdditionalActivations;
 import forge.game.staticability.StaticAbilityCantBeCast;
 import forge.game.staticability.StaticAbilityMode;
 import forge.game.staticability.StaticAbilityNumLoyaltyAct;
+import forge.game.zone.Zone;
 import forge.game.zone.ZoneType;
 import forge.util.Expressions;
 import forge.util.collect.FCollection;
@@ -120,6 +122,12 @@ final class PlayabilityChecks {
                 && holds(() -> CostPayment.canPayAdditionalCosts(sa.getPayCosts(), sa, false))) {
             failed.add(PlayabilityCheck.SCRIPT_RESTRICTION);
         }
+        return named(failed, prohibiting);
+    }
+
+    /** The failed checks in {@link PlayabilityCheck}'s order, the prohibition naming its static. */
+    private static List<PlayabilityVerdict.FailedCheck> named(
+            Set<PlayabilityCheck> failed, StaticAbility prohibiting) {
         ProvenanceKey prohibitor = prohibiting == null ? null : ProvenanceResolver.of(prohibiting);
         List<PlayabilityVerdict.FailedCheck> checks = new ArrayList<>();
         for (PlayabilityCheck check : failed) {
@@ -127,6 +135,84 @@ final class PlayabilityChecks {
                     check, check == PlayabilityCheck.STATIC_PROHIBITION ? prohibitor : null));
         }
         return checks;
+    }
+
+    /**
+     * Every check a land play fails for {@code activator}: the parts of
+     * {@code Player.canPlayLand}, asked as it asks them (FR-033a).
+     *
+     * <p>{@code whose_turn} outside the player's turn (rule 305.3);
+     * {@code casting_speed} whenever {@code timing} is false; {@code zone}
+     * for a land on the battlefield, another owner's without a may-play
+     * permission, or one outside the hand without one; the prohibiting
+     * static; {@code land_play_limit} once the turn's land plays have reached
+     * the player's limit, never when the player may play any number. A
+     * {@code canPlay} false none of them explains is
+     * {@code script_restriction}.
+     *
+     * @param canPlay     {@code LandAbility.canPlay}
+     * @param timing      {@link #landTiming}
+     * @param prohibiting the static forbidding the play, or null
+     */
+    static List<PlayabilityVerdict.FailedCheck> failedLand(
+            SpellAbility play, Player activator, boolean canPlay, boolean timing,
+            StaticAbility prohibiting) {
+        Set<PlayabilityCheck> failed = EnumSet.noneOf(PlayabilityCheck.class);
+        if (!activator.getGame().getPhaseHandler().isPlayerTurn(activator)) {
+            failed.add(PlayabilityCheck.WHOSE_TURN);
+        }
+        if (!timing) {
+            failed.add(PlayabilityCheck.CASTING_SPEED);
+        }
+        if (holds(() -> landZoneFails(play, activator))) {
+            failed.add(PlayabilityCheck.ZONE);
+        }
+        if (prohibiting != null) {
+            failed.add(PlayabilityCheck.STATIC_PROHIBITION);
+        }
+        if (!activator.getMaxLandPlaysInfinite()
+                && activator.getLandsPlayedThisTurn() >= activator.getMaxLandPlays()) {
+            failed.add(PlayabilityCheck.LAND_PLAY_LIMIT);
+        }
+        if (!canPlay && failed.isEmpty()) {
+            failed.add(PlayabilityCheck.SCRIPT_RESTRICTION);
+        }
+        return named(failed, prohibiting);
+    }
+
+    /** A land play's timing: its player's turn, at sorcery timing or with the play's flash. */
+    static boolean landTiming(SpellAbility play, Player activator) {
+        return activator.getGame().getPhaseHandler().isPlayerTurn(activator)
+                && (activator.canCastSorcery()
+                        || holds(() -> play.withFlash(play.getHostCard(), activator)));
+    }
+
+    /** {@code canPlayLand}'s zone and ownership checks. */
+    private static boolean landZoneFails(SpellAbility play, Player activator) {
+        Card land = play.getHostCard();
+        if (land.isInZone(ZoneType.Battlefield)) {
+            return true;
+        }
+        boolean mayPlay = play.getMayPlay() != null;
+        if (land.getOwner() != activator && !mayPlay) {
+            return true;
+        }
+        Zone zone = activator.getGame().getZoneOf(land);
+        return zone != null && !zone.is(ZoneType.Hand) && !mayPlay
+                && !play.isAlternativeCost(AlternativeCost.Mayhem);
+    }
+
+    /**
+     * The static that forbids playing {@code play}'s land, found the way
+     * {@code StaticAbilityCantBeCast.cantPlayLandAbility} finds one, which
+     * answers only whether one exists.
+     */
+    static StaticAbility prohibitingLandStatic(SpellAbility play, Player activator) {
+        Card land = play.getHostCard();
+        CardCollection sources = new CardCollection(
+                activator.getGame().getCardsIn(ZoneType.STATIC_ABILITIES_SOURCE_ZONES));
+        return firstApplying(sources, StaticAbilityMode.CantPlayLand,
+                stAb -> StaticAbilityCantBeCast.applyCantPlayLandAbility(stAb, land, activator));
     }
 
     /**

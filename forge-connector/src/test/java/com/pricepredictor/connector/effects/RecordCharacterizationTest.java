@@ -53,7 +53,7 @@ class RecordCharacterizationTest {
 
     /** Every sampled channel at full rate, no forks unless a test adds them. */
     private static final CollectionCaps CAPS =
-            TestCaps.caps().playabilityRate(1.0).interventions(0).probes(0).build();
+            TestCaps.caps().everyDecision().interventions(0).probes(0).build();
 
     @TempDir
     Path tempDir;
@@ -415,7 +415,7 @@ class RecordCharacterizationTest {
         Card bears = board.battlefield("Grizzly Bears", opponent);
         Combat combat = TestBoard.blockedCombat(
                 board.game, you, opponent, dreadmaw, bears, soldier);
-        CollectionCaps caps = TestCaps.caps().playabilityRate(1.0)
+        CollectionCaps caps = TestCaps.caps().everyDecision()
                 .interventions(0).probes(1).probeKeywords("trample").build();
 
         RecordShardWriter writer = ShardRun.writer(tempDir);
@@ -457,7 +457,7 @@ class RecordCharacterizationTest {
         board.battlefield("Mountain", you);
         board.battlefield("Grizzly Bears", board.opponent);
         SpellAbility pyroclasm = board.spell(board.hand("Pyroclasm", you), you);
-        CollectionCaps caps = TestCaps.caps().playabilityRate(1.0)
+        CollectionCaps caps = TestCaps.caps().everyDecision()
                 .interventions(1).probes(0).build();
 
         ShardRun.Fork fork = ShardRun.forked(tempDir, board.game, caps, 1L, pyroclasm);

@@ -41,7 +41,7 @@ class PriorityCandidatesTest {
 
     /** Every candidate sampled in, so a record's absence means none was written. */
     private static final CollectionCaps EVERY_CANDIDATE =
-            caps().manaCap(0).playabilityRate(1.0).build();
+            caps().manaCap(0).everyDecision().build();
 
     private static void settle(Channels collectors, Game game, Player priority) throws Throwable {
         collectors.phase().prioritySettledHandler().invoke(
@@ -189,6 +189,127 @@ class PriorityCandidatesTest {
                 "A's own stop was left for A");
     }
 
+    // ── land plays (FR-033a) ────────────────────────────────────────────
+
+    /** The decision record whose snapshot's source is {@code card}. */
+    private static String recordOf(List<String> records, Card card) {
+        return records.stream()
+                .filter(r -> Refs.of(card).equals(RecordLines.asMap(RecordLines.asMap(
+                        RecordLines.parse(r).get("state")).get("refs")).get("source")))
+                .findFirst().orElseThrow(
+                        () -> new AssertionError("no record of " + card + ": " + records));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> failedChecks(String record) {
+        return ((List<Object>) candidateOf(record).get("failed_checks")).stream()
+                .map(c -> (String) RecordLines.asMap(c).get("check")).toList();
+    }
+
+    private static Map<String, Object> verdictOf(String record) {
+        return RecordLines.asMap(candidateOf(record).get("verdict"));
+    }
+
+    /**
+     * Story 2 acceptance 13: a second land after one played is a land-play
+     * candidate past its limit, and no mana ability is a candidate.
+     */
+    @Test
+    void aSecondLandIsALandPlayPastTheLimit() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        a.playLand(TestBoard.inHand(game, a, "Forest"), null);
+        Card mountain = TestBoard.inHand(game, a, "Mountain");
+
+        List<String> records = decisions(ShardRun.records(tempDir, game, EVERY_CANDIDATE,
+                (bracket, collectors) -> settle(collectors, game, a)));
+
+        String second = recordOf(records, mountain);
+        assertEquals(true, candidateOf(second).get("land_play"), second);
+        assertEquals(false, verdictOf(second).get("can_play"), second);
+        assertEquals(true, verdictOf(second).get("affordable"), second);
+        assertEquals(true, verdictOf(second).get("has_legal_target"), second);
+        assertEquals(List.of("land_play_limit"), failedChecks(second));
+        assertEquals(List.of(), candidateOf(second).get("legal_targets"));
+        assertEquals(Map.of(), candidateOf(second).get("cost_after_adjustment"));
+        for (Player player : game.getPlayers()) {
+            assertTrue(PriorityCandidates.candidatesOf(game, player).stream()
+                    .noneMatch(c -> c.ability().isManaAbility()), "a mana ability is no candidate");
+        }
+    }
+
+    /** Exploration raises the limit: the same second land is playable. */
+    @Test
+    void explorationMakesTheSecondLandPlayable() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        TestBoard.inPlay(game, a, "Exploration");
+        game.getAction().checkStaticAbilities();
+        a.playLand(TestBoard.inHand(game, a, "Forest"), null);
+        Card mountain = TestBoard.inHand(game, a, "Mountain");
+
+        PriorityCandidates.Candidate second = PriorityCandidates.candidatesOf(game, a).stream()
+                .filter(c -> c.ability().getHostCard() == mountain).findFirst().orElseThrow();
+
+        assertTrue(second.read().orElseThrow().landPlay());
+        assertTrue(second.playable(), second.read().orElseThrow().verdict().toString());
+    }
+
+    /**
+     * Story 2 acceptance 14: the land of the player without priority fails
+     * its timing, whose turn and casting speed both.
+     */
+    @Test
+    void aLandOfThePlayerWithoutPriorityFailsWhoseTurnAndCastingSpeed() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Player b = game.getPlayers().get(1);
+        Card island = TestBoard.inHand(game, b, "Island");
+
+        List<String> records = decisions(ShardRun.records(tempDir, game, EVERY_CANDIDATE,
+                (bracket, collectors) -> settle(collectors, game, a)));
+
+        String land = recordOf(records, island);
+        assertTrue(land.contains("\"actor_player\":\"" + Refs.of(b) + "\""), land);
+        assertEquals(true, candidateOf(land).get("land_play"), land);
+        assertEquals(false, verdictOf(land).get("timing"), land);
+        assertEquals(false, verdictOf(land).get("can_play"), land);
+        assertEquals(List.of("casting_speed", "whose_turn"), failedChecks(land));
+    }
+
+    /** A modal double-faced card's land face is a land-play candidate; its spell face is not. */
+    @Test
+    void aModalDoubleFacedCardsLandFaceIsALandPlay() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Card awakening = TestBoard.inHand(game, a, "Agadeem's Awakening");
+
+        List<PriorityCandidates.Candidate> on = PriorityCandidates.candidatesOf(game, a).stream()
+                .filter(c -> c.ability().getHostCard() == awakening).toList();
+
+        PriorityCandidates.Candidate land = on.stream()
+                .filter(c -> c.ability().isLandAbility()).findFirst().orElseThrow(
+                        () -> new AssertionError("no land face: " + on));
+        assertTrue(land.read().orElseThrow().landPlay());
+        assertTrue(land.playable(), land.read().orElseThrow().verdict().toString());
+        assertTrue(on.stream().anyMatch(c -> c.ability().isSpell()
+                && !c.read().orElseThrow().landPlay()), "the spell face: " + on);
+    }
+
+    /** Every spell candidate carries {@code land_play = false}. */
+    @Test
+    void aSpellCandidateIsNoLandPlay() throws Throwable {
+        Game game = aSorceryInTheHandOfThePlayerWithoutPriority();
+        Player a = game.getPlayers().get(0);
+
+        List<String> records = decisions(ShardRun.records(tempDir, game, EVERY_CANDIDATE,
+                (bracket, collectors) -> settle(collectors, game, a)));
+
+        String bears = records.stream()
+                .filter(r -> names(r, "cardsfolder/g/grizzly_bears.txt")).findFirst().orElseThrow();
+        assertEquals(false, candidateOf(bears).get("land_play"), bears);
+    }
+
     // ── read-only ───────────────────────────────────────────────────────
 
     /**
@@ -232,6 +353,18 @@ class PriorityCandidatesTest {
         TestBoard.inHand(game, b, "Lightning Bolt");
         TestBoard.inHand(game, b, "Divination");
         TestBoard.inGraveyard(game, b, "Grizzly Bears");
+        // Land plays: in hand on both sides, past the limit, a modal
+        // double-faced land face, one a static forbids, one a static permits.
+        TestBoard.inPlay(game, a, "Exploration");
+        TestBoard.inPlay(game, b, "Aggressive Mining");
+        TestBoard.inPlay(game, a, "Crucible of Worlds");
+        TestBoard.inGraveyard(game, a, "Swamp");
+        game.getAction().checkStaticAbilities();
+        a.playLand(TestBoard.inHand(game, a, "Plains"), null);
+        a.playLand(TestBoard.inHand(game, a, "Plains"), null);
+        TestBoard.inHand(game, a, "Agadeem's Awakening");
+        TestBoard.inHand(game, a, "Forest");
+        TestBoard.inHand(game, b, "Island");
         TestBoard.cast(game, TestBoard.inHand(game, a, "Sudden Shock"), a, b);
         String before = digest(game);
 
@@ -247,7 +380,9 @@ class PriorityCandidatesTest {
         assertTrue(read > 5, "the board offers candidates to evaluate: " + read);
         assertEquals(before, digest(game));
         assertEquals(1, game.getStack().size());
-        assertEquals(2, a.getCardsIn(ZoneType.Hand).size());
-        assertEquals(2, b.getCardsIn(ZoneType.Hand).size());
+        assertEquals(4, a.getCardsIn(ZoneType.Hand).size());
+        assertEquals(3, b.getCardsIn(ZoneType.Hand).size());
+        assertEquals(2, a.getLandsPlayedThisTurn());
+        assertEquals(1, a.getCardsIn(ZoneType.Graveyard).size());
     }
 }

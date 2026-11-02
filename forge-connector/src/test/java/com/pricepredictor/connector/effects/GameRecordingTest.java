@@ -46,7 +46,7 @@ class GameRecordingTest {
         RecordShardWriter writer = ShardRun.writer(tempDir);
         GameRecording recording = new GameRecording(
                 TestCards.game(), writer, ShardRun.GAME_ID,
-                TestCaps.caps().playabilityRate(1.0).interventions(0).probes(0).build(), 1L, null);
+                TestCaps.caps().everyDecision().interventions(0).probes(0).build(), 1L, null);
 
         recording.open();
         Object manaListener = installed(AbilityManaPart.class, "MANA_HOOK");

@@ -460,6 +460,7 @@ class PlayabilityCheck(StrEnum):
     PHASE = "phase"
     COMBAT = "combat"
     ACTIVATION_LIMIT = "activation_limit"
+    LAND_PLAY_LIMIT = "land_play_limit"
     SCRIPT_CONDITION = "script_condition"
     ZONE = "zone"
     STATIC_PROHIBITION = "static_prohibition"

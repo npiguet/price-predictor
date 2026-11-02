@@ -250,6 +250,34 @@ class RandomSeatControllerTest {
     }
 
     /**
+     * Land plays are candidates (FR-033a) but never the seat's draw: they
+     * stay the AI's. Crucible of Worlds lets A play the Forest in its
+     * graveyard; the AI's land-drop check reads the card's plain land play,
+     * which Crucible does not reach, so the seat draws, and the permitted
+     * land play is the one playable candidate it leaves out.
+     */
+    @Test
+    void theSeatNeverDrawsALandPlay() {
+        Game game = gameWithRandomSeatA(PhaseType.MAIN1, 1.0, 1L);
+        Player a = game.getPlayers().get(0);
+        TestBoard.inPlay(game, a, "Crucible of Worlds");
+        Card forest = TestBoard.inGraveyard(game, a, "Forest");
+        game.getAction().checkStaticAbilities();
+        RandomSeatController seat = seatOf(game);
+        seat.attach(game, null, null);
+
+        assertTrue(com.pricepredictor.connector.effects.PriorityCandidates.candidatesOf(game, a)
+                        .stream().anyMatch(c -> c.ability().isLandAbility()
+                                && c.ability().getHostCard() == forest && c.playable()),
+                "the board under test: a playable land play from the graveyard");
+        for (int i = 0; i < 10; i++) {
+            List<SpellAbility> chosen = seat.chooseSpellAbilityToPlay();
+            assertTrue(chosen == null || chosen.stream().noneMatch(SpellAbility::isLandAbility),
+                    "the seat drew a land play: " + chosen);
+        }
+    }
+
+    /**
      * Scenario 15: a randomly drawn charm's modes are drawn, not the AI's —
      * Fiery Confluence chooses three with repeats, and across seeds the
      * chosen lists differ, repeats included.

@@ -22,9 +22,11 @@ import java.util.function.Function;
  * {@link PlayabilityVerdict}'s answer, computed from the rules for a
  * candidate {@link PriorityCandidates} enumerated.
  *
- * <p>The {@code decision} subkind is sampled at {@code --playability-rate}
+ * <p>The {@code decision} subkind is sampled in two stages (FR-033b),
  * because both players' candidates are enumerated at every priority stop,
- * which would otherwise swamp the corpus. The {@code attackers} and
+ * which would otherwise swamp the corpus: stage 1 at
+ * {@code --playability-rate} before a candidate is evaluated, stage 2 by its
+ * {@link DecisionSample} bucket after. The {@code attackers} and
  * {@code blockers} subkinds are always logged: they fire once per combat, not
  * once per candidate.
  *
@@ -40,17 +42,21 @@ public final class PlayabilityChannel {
     /** The game's shared sampling stream; see {@link PatchedCollectors}. */
     private final Random sampler;
     private final double playabilityRate;
+    private final double zoneCandidateRate;
+    private final double plainCandidateRate;
     /** The declaration of attackers being asked about, held until it is made. */
     private final AttackDeclaration declaration;
 
     PlayabilityChannel(
             LiveGame live, CollectorContext context, RecordDedup dedup, Random sampler,
-            double playabilityRate) {
+            CollectionCaps caps) {
         this.live = live;
         this.context = context;
         this.dedup = dedup;
         this.sampler = sampler;
-        this.playabilityRate = playabilityRate;
+        this.playabilityRate = caps.playabilityRate();
+        this.zoneCandidateRate = caps.zoneCandidateRate();
+        this.plainCandidateRate = caps.plainCandidateRate();
         this.declaration = new AttackDeclaration(live,
                 this::emitAttackers,
                 PlayabilityChannel::cantAttackStatic);
@@ -72,7 +78,7 @@ public final class PlayabilityChannel {
     // ── the decision subkind ────────────────────────────────────────────
 
     /**
-     * Whether the next decision candidate is sampled in, at
+     * Stage 1: whether the next decision candidate is evaluated, at
      * {@code --playability-rate}: one draw from the game's shared stream.
      *
      * <p>Drawn before the candidate is evaluated, so a candidate the sampler
@@ -80,7 +86,28 @@ public final class PlayabilityChannel {
      * the live game, whose signals alone reach it.
      */
     boolean sampled() {
-        return sampler.nextDouble() <= playabilityRate;
+        return sampler.nextDouble() < playabilityRate;
+    }
+
+    /**
+     * Stage 2: whether a candidate stage 1 kept is written, by its bucket.
+     *
+     * <p>A bulk bucket's rate is a share of every candidate enumerated, so its
+     * chance here is that rate over the stage-1 rate. A special candidate,
+     * or a bucket whose rate reaches the stage-1 rate, is kept without a
+     * draw, which leaves the stream as one draw per candidate when every
+     * rate is 1.
+     */
+    boolean keeps(DecisionSample sample) {
+        double rate = switch (sample) {
+            case SPECIAL -> playabilityRate;
+            case ZONE -> zoneCandidateRate;
+            case PLAIN -> plainCandidateRate;
+        };
+        if (rate >= playabilityRate) {
+            return true;
+        }
+        return sampler.nextDouble() < rate / playabilityRate;
     }
 
     /**

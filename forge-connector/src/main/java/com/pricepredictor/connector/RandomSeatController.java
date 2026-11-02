@@ -254,7 +254,8 @@ public final class RandomSeatController extends PlayerControllerAi {
      * priority stop whose {@link com.pricepredictor.connector.effects.PlayabilityVerdict}
      * says they can be played, paid for and aimed — the stop the decision
      * records were written of when the run records, so the seat plays only
-     * what its records call playable. Of those it leaves out a free
+     * what its records call playable. Of those it leaves out a land play,
+     * which stays the AI's ({@link #landDropPending}, FR-033a), and a free
      * activation that changed nothing earlier this turn (FR-040): still
      * playable, and still recorded so, but not drawn again until the turn
      * ends.
@@ -268,6 +269,7 @@ public final class RandomSeatController extends PlayerControllerAi {
             // A script whose check throws on this board reads as unplayable,
             // as the AI would have skipped it.
             if (candidate.playable()
+                    && !candidate.ability().isLandAbility()
                     && (fruitless == null || !fruitless.isFruitless(candidate.ability()))) {
                 // The verdict put the ability's activating player back; the
                 // seat is about to play it, which is the seat's to write.

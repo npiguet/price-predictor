@@ -14,7 +14,15 @@ from collections import Counter
 from pathlib import Path
 
 EFFECT_MANA_CAP = 1
-EFFECT_PLAYABILITY_RATE = 0.1
+#: Stage 1 of decision sampling (FR-033b): the share of enumerated decision
+#: candidates evaluated.
+EFFECT_PLAYABILITY_RATE = 0.01
+#: Stage 2's buckets, each the share of every enumerated candidate written,
+#: both stages together: a candidate failing ``zone`` and otherwise only
+#: ``cost``/``casting_speed``, and a plain one in its usual zone. A special
+#: candidate is written whenever stage 1 keeps it.
+EFFECT_ZONE_CANDIDATE_RATE = 0.0001
+EFFECT_PLAIN_CANDIDATE_RATE = 0.001
 EFFECT_INTERVENTIONS_PER_GAME = 2
 EFFECT_PROBES_PER_GAME = 2
 #: Every damage-step keyword gate 2 checks, in the spelling the JVM compares a
@@ -46,8 +54,25 @@ def add_cap_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--playability-rate", type=float, default=EFFECT_PLAYABILITY_RATE,
         help=(
-            "Fraction of decision-subkind logging points sampled (default: "
-            "%(default)s); legality records are coalesced instead"
+            "Stage 1 of decision sampling: the share of decision candidates "
+            "evaluated (default: %(default)s); legality records are coalesced "
+            "instead"
+        ),
+    )
+    parser.add_argument(
+        "--zone-candidate-rate", type=float, default=EFFECT_ZONE_CANDIDATE_RATE,
+        help=(
+            "Share of decision candidates failing only zone (and cost or "
+            "timing) written, both sampling stages together (default: "
+            "%(default)s); at most --playability-rate"
+        ),
+    )
+    parser.add_argument(
+        "--plain-candidate-rate", type=float, default=EFFECT_PLAIN_CANDIDATE_RATE,
+        help=(
+            "Share of plain decision candidates (usual zone, failing at most "
+            "cost or timing) written, both sampling stages together (default: "
+            "%(default)s); at most --playability-rate"
         ),
     )
     parser.add_argument(
@@ -109,6 +134,35 @@ def random_seat_error(args: argparse.Namespace) -> str | None:
         )
     if share > 0 and probability is None:
         return "--random-seat-share above 0 needs --random-seat-probability"
+    return None
+
+
+def candidate_rate_error(args: argparse.Namespace) -> str | None:
+    """Why the decision-sampling rates cannot run, or None when they can
+    (FR-033b).
+
+    A bucket's rate is a share of every candidate enumerated, both stages
+    together, so it cannot exceed the stage-1 share it is drawn from.
+    """
+    rates = {
+        "--playability-rate": getattr(args, "playability_rate", EFFECT_PLAYABILITY_RATE),
+        "--zone-candidate-rate": getattr(
+            args, "zone_candidate_rate", EFFECT_ZONE_CANDIDATE_RATE
+        ),
+        "--plain-candidate-rate": getattr(
+            args, "plain_candidate_rate", EFFECT_PLAIN_CANDIDATE_RATE
+        ),
+    }
+    for flag, rate in rates.items():
+        if not 0.0 <= rate <= 1.0:
+            return f"{flag} must be between 0 and 1, got {rate}"
+    stage_one = rates["--playability-rate"]
+    for flag in ("--zone-candidate-rate", "--plain-candidate-rate"):
+        if rates[flag] > stage_one:
+            return (
+                f"{flag} {rates[flag]} exceeds --playability-rate {stage_one}: "
+                "a bucket cannot keep more candidates than stage 1 evaluates"
+            )
     return None
 
 

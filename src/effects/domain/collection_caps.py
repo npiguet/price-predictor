@@ -7,7 +7,9 @@ from dataclasses import dataclass, fields
 from effects.domain.damage_step_keywords import DAMAGE_STEP_KEYWORDS
 
 DEFAULT_MANA_CAP = 1
-DEFAULT_PLAYABILITY_RATE = 0.1
+DEFAULT_PLAYABILITY_RATE = 0.01
+DEFAULT_ZONE_CANDIDATE_RATE = 0.0001
+DEFAULT_PLAIN_CANDIDATE_RATE = 0.001
 DEFAULT_INTERVENTIONS_PER_GAME = 2
 DEFAULT_PROBES_PER_GAME = 2
 #: In gate 2's table spelling, which is what the JVM compares a normalized
@@ -26,9 +28,15 @@ class CollectionCaps:
 
     #: Records per unique (mana ability, mana produced) per game.
     mana_cap: int = DEFAULT_MANA_CAP
-    #: Share of `decision`-subkind logging points kept; the legality subkinds
-    #: are coalesced instead.
+    #: Stage 1 of decision sampling (FR-033b): share of enumerated decision
+    #: candidates evaluated; the legality subkinds are coalesced instead.
     playability_rate: float = DEFAULT_PLAYABILITY_RATE
+    #: Stage 2: share of all enumerated candidates written, both stages
+    #: together, for a candidate failing ``zone`` (and otherwise only cost or
+    #: timing), and for a plain one; a special candidate is written whenever
+    #: stage 1 keeps it.
+    zone_candidate_rate: float = DEFAULT_ZONE_CANDIDATE_RATE
+    plain_candidate_rate: float = DEFAULT_PLAIN_CANDIDATE_RATE
     interventions_per_game: int = DEFAULT_INTERVENTIONS_PER_GAME
     probes_per_game: int = DEFAULT_PROBES_PER_GAME
     #: Comma-separated keywords to probe; empty takes no probe fork at all.

@@ -23,6 +23,8 @@ public enum PlayabilityCheck implements WireNamed {
     COMBAT("combat"),
     /** Activations per turn or per game, a loyalty ability's included. */
     ACTIVATION_LIMIT("activation_limit"),
+    /** A land play once the turn's land plays have reached the player's limit (rule 305.2). */
+    LAND_PLAY_LIMIT("land_play_limit"),
     /** A script's own condition on the board ({@code Activation$}, {@code IsPresent$}, ...). */
     SCRIPT_CONDITION("script_condition"),
     /** The zone the card must be in. */

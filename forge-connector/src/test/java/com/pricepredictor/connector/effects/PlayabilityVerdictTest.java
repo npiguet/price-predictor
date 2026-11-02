@@ -328,4 +328,120 @@ class PlayabilityVerdictTest {
 
         assertEquals(List.of(Refs.of(mine), Refs.of(theirs)), read.legalTargets());
     }
+
+    // ── land plays (FR-033a) ────────────────────────────────────────────
+
+    private static SpellAbility landPlayOf(Card land) {
+        return land.getSpellAbilities().stream()
+                .filter(SpellAbility::isLandAbility).findFirst().orElseThrow();
+    }
+
+    /** A land in hand on its owner's turn, the drop unused: playable, nothing failed. */
+    @Test
+    void aLandInHandOnItsOwnersTurnFailsNothing() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        SpellAbility forest = landPlayOf(TestBoard.inHand(game, a, "Forest"));
+
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(forest, a);
+
+        assertTrue(verdict.canPlay());
+        assertTrue(verdict.timing());
+        assertTrue(verdict.affordable() && verdict.hasLegalTarget(), "a land costs and targets nothing");
+        assertEquals(List.of(), verdict.failedChecks());
+        assertNull(forest.getActivatingPlayer(), "the verdict puts the activator back");
+    }
+
+    /** A second land in one turn fails the land-play limit, not the activation limit. */
+    @Test
+    void aSecondLandFailsTheLandPlayLimit() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        a.playLand(TestBoard.inHand(game, a, "Forest"), null);
+        SpellAbility mountain = landPlayOf(TestBoard.inHand(game, a, "Mountain"));
+
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(mountain, a);
+
+        assertFalse(verdict.canPlay());
+        assertTrue(verdict.timing());
+        assertEquals(List.of(PlayabilityCheck.LAND_PLAY_LIMIT), checks(verdict));
+    }
+
+    /** Exploration's second land play makes it playable again. */
+    @Test
+    void explorationRaisesTheLandPlayLimit() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        TestBoard.inPlay(game, a, "Exploration");
+        game.getAction().checkStaticAbilities();
+        a.playLand(TestBoard.inHand(game, a, "Forest"), null);
+        SpellAbility mountain = landPlayOf(TestBoard.inHand(game, a, "Mountain"));
+
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(mountain, a);
+
+        assertEquals(2, a.getMaxLandPlays(), "the board under test");
+        assertTrue(verdict.canPlay());
+        assertEquals(List.of(), verdict.failedChecks());
+    }
+
+    /** Rule 305.3: a land off its owner's turn fails whose turn, and with it timing. */
+    @Test
+    void aLandOffTurnFailsWhoseTurnAndCastingSpeed() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player b = game.getPlayers().get(1);
+        SpellAbility island = landPlayOf(TestBoard.inHand(game, b, "Island"));
+
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(island, b);
+
+        assertFalse(verdict.canPlay());
+        assertFalse(verdict.timing());
+        assertEquals(List.of(PlayabilityCheck.CASTING_SPEED, PlayabilityCheck.WHOSE_TURN),
+                checks(verdict));
+    }
+
+    /** Aggressive Mining's "You can't play lands" is a static prohibition naming its static. */
+    @Test
+    void aStaticThatForbidsLandPlaysNamesItsStatic() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Card mining = TestBoard.inPlay(game, a, "Aggressive Mining");
+        SpellAbility forest = landPlayOf(TestBoard.inHand(game, a, "Forest"));
+        ProvenanceKey cantPlayLand =
+                ProvenanceResolver.of(staticOf(mining, StaticAbilityMode.CantPlayLand));
+
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(forest, a);
+
+        assertFalse(verdict.canPlay());
+        assertEquals(List.of(new PlayabilityVerdict.FailedCheck(
+                PlayabilityCheck.STATIC_PROHIBITION, cantPlayLand)), verdict.failedChecks());
+        assertEquals(cantPlayLand, verdict.prohibitingStatic());
+    }
+
+    /** A land on the battlefield fails zone. */
+    @Test
+    void aLandOnTheBattlefieldFailsZone() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        SpellAbility forest = landPlayOf(TestBoard.inPlay(game, a, "Forest"));
+
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(forest, a);
+
+        assertFalse(verdict.canPlay());
+        assertEquals(List.of(PlayabilityCheck.ZONE), checks(verdict));
+    }
+
+    /** A land play's record carries no mana, no target and {@code land_play = true}. */
+    @Test
+    void aLandPlaysCandidateCarriesLandPlayAndNoCost() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        SpellAbility forest = landPlayOf(TestBoard.inHand(game, a, "Forest"));
+
+        DecisionCandidate read = DecisionCandidate.read(forest, a).orElseThrow();
+
+        assertTrue(read.landPlay());
+        assertNull(read.manaCost());
+        assertEquals(List.of(), read.legalTargets());
+        assertTrue(read.payloadJson().contains("\"land_play\":true"), read.payloadJson());
+    }
 }

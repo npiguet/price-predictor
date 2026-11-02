@@ -20,13 +20,16 @@ from sealed.infrastructure.effect_collection_flags import (
     EFFECT_COUNT_DROPPED_EVENTS,
     EFFECT_INTERVENTIONS_PER_GAME,
     EFFECT_MANA_CAP,
+    EFFECT_PLAIN_CANDIDATE_RATE,
     EFFECT_PLAYABILITY_RATE,
     EFFECT_PROBE_KEYWORDS,
     EFFECT_PROBES_PER_GAME,
     EFFECT_RANDOM_SEAT_PROBABILITY,
     EFFECT_RANDOM_SEAT_SHARE,
+    EFFECT_ZONE_CANDIDATE_RATE,
     add_cap_flags,
     announce_probe_state,
+    candidate_rate_error,
     random_seat_error,
 )
 from sealed.infrastructure.match_worker_connector import DEFAULT_SIDE_B_DECKS_WEIGHT
@@ -1013,6 +1016,12 @@ def _effect_collection_caps(args: argparse.Namespace) -> dict[str, str]:
         "effect.playability.rate": str(
             getattr(args, "playability_rate", EFFECT_PLAYABILITY_RATE)
         ),
+        "effect.zone.candidate.rate": str(
+            getattr(args, "zone_candidate_rate", EFFECT_ZONE_CANDIDATE_RATE)
+        ),
+        "effect.plain.candidate.rate": str(
+            getattr(args, "plain_candidate_rate", EFFECT_PLAIN_CANDIDATE_RATE)
+        ),
         "effect.interventions.per.game": str(
             getattr(args, "interventions_per_game", EFFECT_INTERVENTIONS_PER_GAME)
         ),
@@ -1765,6 +1774,11 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
     seat_error = check_random_seat_flags(args)
     if seat_error is not None:
         print(f"Error: {seat_error}", file=sys.stderr)
+        return 2
+
+    rate_error = candidate_rate_error(args)
+    if rate_error is not None:
+        print(f"Error: {rate_error}", file=sys.stderr)
         return 2
 
     output_path = Path("output") / "sealed" / "match-outcomes.txt"

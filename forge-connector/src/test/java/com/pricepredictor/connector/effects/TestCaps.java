@@ -12,6 +12,8 @@ public final class TestCaps {
 
     private int manaCap;
     private double playabilityRate;
+    private double zoneCandidateRate;
+    private double plainCandidateRate;
     private int interventions;
     private int probes;
     private List<String> probeKeywords;
@@ -23,6 +25,8 @@ public final class TestCaps {
     private TestCaps(CollectionCaps from) {
         manaCap = from.manaCap();
         playabilityRate = from.playabilityRate();
+        zoneCandidateRate = from.zoneCandidateRate();
+        plainCandidateRate = from.plainCandidateRate();
         interventions = from.interventionsPerGame();
         probes = from.probesPerGame();
         probeKeywords = from.probeKeywords();
@@ -45,6 +49,18 @@ public final class TestCaps {
     public TestCaps playabilityRate(double rate) {
         playabilityRate = rate;
         return this;
+    }
+
+    /** The shares of zone and plain candidates written, both stages together (FR-033b). */
+    public TestCaps candidateRates(double zone, double plain) {
+        zoneCandidateRate = zone;
+        plainCandidateRate = plain;
+        return this;
+    }
+
+    /** Every decision candidate evaluated and written: both sampling stages keep all. */
+    public TestCaps everyDecision() {
+        return playabilityRate(1.0).candidateRates(1.0, 1.0);
     }
 
     public TestCaps interventions(int perGame) {
@@ -81,7 +97,8 @@ public final class TestCaps {
     }
 
     public CollectionCaps build() {
-        return new CollectionCaps(manaCap, playabilityRate, interventions, probes,
+        return new CollectionCaps(manaCap, playabilityRate, zoneCandidateRate,
+                plainCandidateRate, interventions, probes,
                 probeKeywords, randomSeatShare, randomSeatProbability, aimedAt,
                 countDroppedEvents);
     }

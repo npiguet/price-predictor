@@ -60,6 +60,7 @@ from price_predictor.domain.dataclass_defaults import field_default
 from sealed.infrastructure.effect_collection_flags import (
     add_cap_flags,
     announce_probe_state,
+    candidate_rate_error,
     random_seat_error,
 )
 
@@ -500,7 +501,7 @@ def _collector_runner(command: str, config_type: type, module: str) -> Callable:
 
     @exits_with({CollectorRefusal: 1, _LAYOUT_REFUSED: 1})
     def run(args: argparse.Namespace) -> int:
-        error = random_seat_error(args)
+        error = random_seat_error(args) or candidate_rate_error(args)
         if error is not None:
             raise CollectorRefusal(f"{command}: {error}")
         try:

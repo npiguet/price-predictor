@@ -33,6 +33,11 @@ import java.util.function.Supplier;
  * play, together. {@code failedChecks} says which checks failed, in
  * {@link PlayabilityCheck}'s order.
  *
+ * <p>A land play is judged by Forge's {@code canPlayLand} instead
+ * (FR-033a): it costs nothing and targets nothing, so {@code affordable} and
+ * {@code hasLegalTarget} are true, and its failed checks are the parts of
+ * {@code canPlayLand} ({@link PlayabilityChecks#failedLand}).
+ *
  * <p>Never writes to the game: the activating player and the host's cast
  * ability, the two things a check sets, are put back after it
  * ({@link #asActivator}).
@@ -102,6 +107,9 @@ public record PlayabilityVerdict(
     }
 
     private static PlayabilityVerdict evaluate(SpellAbility candidate, Player activator) {
+        if (candidate.isLandAbility()) {
+            return evaluateLand(candidate, activator);
+        }
         boolean forgeCanPlay = candidate.canPlay();
         boolean timing = candidate.canCastTiming(activator);
         boolean affordable = affordable(candidate, activator);
@@ -111,6 +119,19 @@ public record PlayabilityVerdict(
         return new PlayabilityVerdict(
                 forgeCanPlay && timing && prohibiting == null, affordable,
                 TargetingClauses.reachMinimum(candidate), timing, failed);
+    }
+
+    /**
+     * A land play: {@code canPlay} is {@code LandAbility.canPlay}, which is
+     * {@code canPlayLand}; {@code timing} its player's turn with sorcery
+     * timing or the play's flash.
+     */
+    private static PlayabilityVerdict evaluateLand(SpellAbility play, Player activator) {
+        boolean canPlay = play.canPlay();
+        boolean timing = PlayabilityChecks.landTiming(play, activator);
+        StaticAbility prohibiting = PlayabilityChecks.prohibitingLandStatic(play, activator);
+        return new PlayabilityVerdict(canPlay, true, true, timing,
+                PlayabilityChecks.failedLand(play, activator, canPlay, timing, prohibiting));
     }
 
     /** Whether the candidate failed {@code check}. */

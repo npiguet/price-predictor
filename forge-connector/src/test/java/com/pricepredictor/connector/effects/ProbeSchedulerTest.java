@@ -28,7 +28,7 @@ class ProbeSchedulerTest {
 
     private static ProbeScheduler probing(RecordShardWriter writer) {
         CollectionCaps probing =
-                TestCaps.caps().playabilityRate(1.0).probeKeywords("trample").build();
+                TestCaps.caps().everyDecision().probeKeywords("trample").build();
         return new ProbeScheduler(TestCards.game(), ShardRun.GAME_ID, probing,
                 new DamageStepProbe(null, TestCollectors.context(writer, ShardRun.GAME_ID), new ForkBudget(probing)));
     }

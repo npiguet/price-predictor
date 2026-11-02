@@ -24,11 +24,12 @@ import java.util.List;
  * and uninstalling them in one place is what keeps one from outliving its
  * game.
  *
- * <p>Two caps live here rather than in the supervisor, because both are
+ * <p>These caps live here rather than in the supervisor, because all are
  * per-worker-process quantities the Python side cannot see: {@code --mana-cap}
  * counts resolution records per unique mana-ability text in this JVM, and
- * {@code --playability-rate} samples the {@code decision}-subkind logging points
- * (the {@code attackers} and {@code blockers} ones are always logged, because
+ * {@code --playability-rate}, {@code --zone-candidate-rate} and
+ * {@code --plain-candidate-rate} sample the {@code decision}-subkind logging
+ * points in two stages (FR-033b; the {@code attackers} and {@code blockers} ones are always logged, because
  * they fire once per combat rather than once per candidate).
  *
  * <p><b>One sampling stream per game.</b> The trigger negatives, the decision

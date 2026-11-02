@@ -126,7 +126,7 @@ public final class TestBoard {
         return game.getAction().moveTo(ZoneType.Hand, card(game, owner, name), null, null);
     }
 
-    static Card inGraveyard(Game game, Player owner, String name) {
+    public static Card inGraveyard(Game game, Player owner, String name) {
         return game.getAction().moveTo(ZoneType.Graveyard, card(game, owner, name), null, null);
     }
 

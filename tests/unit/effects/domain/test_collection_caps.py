@@ -19,11 +19,13 @@ import pytest
 from effects.domain.collection_caps import (
     DEFAULT_INTERVENTIONS_PER_GAME,
     DEFAULT_MANA_CAP,
+    DEFAULT_PLAIN_CANDIDATE_RATE,
     DEFAULT_PLAYABILITY_RATE,
     DEFAULT_PROBE_KEYWORDS,
     DEFAULT_PROBES_PER_GAME,
     DEFAULT_RANDOM_SEAT_PROBABILITY,
     DEFAULT_RANDOM_SEAT_SHARE,
+    DEFAULT_ZONE_CANDIDATE_RATE,
     CollectionCaps,
 )
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME
@@ -33,11 +35,13 @@ from sealed.infrastructure.effect_collection_flags import (
     EFFECT_COUNT_DROPPED_EVENTS,
     EFFECT_INTERVENTIONS_PER_GAME,
     EFFECT_MANA_CAP,
+    EFFECT_PLAIN_CANDIDATE_RATE,
     EFFECT_PLAYABILITY_RATE,
     EFFECT_PROBE_KEYWORDS,
     EFFECT_PROBES_PER_GAME,
     EFFECT_RANDOM_SEAT_PROBABILITY,
     EFFECT_RANDOM_SEAT_SHARE,
+    EFFECT_ZONE_CANDIDATE_RATE,
     announce_probe_state,
 )
 
@@ -78,6 +82,8 @@ class TestTheTwoSidesAgree:
     def test_the_defaults_match(self):
         assert EFFECT_MANA_CAP == DEFAULT_MANA_CAP
         assert EFFECT_PLAYABILITY_RATE == DEFAULT_PLAYABILITY_RATE
+        assert EFFECT_ZONE_CANDIDATE_RATE == DEFAULT_ZONE_CANDIDATE_RATE
+        assert EFFECT_PLAIN_CANDIDATE_RATE == DEFAULT_PLAIN_CANDIDATE_RATE
         assert EFFECT_INTERVENTIONS_PER_GAME == DEFAULT_INTERVENTIONS_PER_GAME
         assert EFFECT_PROBES_PER_GAME == DEFAULT_PROBES_PER_GAME
         assert EFFECT_PROBE_KEYWORDS == CollectionCaps().probe_keywords
@@ -182,6 +188,39 @@ class TestTheDroppedEventCount:
         assert re.search(
             r'static final String SUFFIX = "([^"]+)";', source
         ).group(1) == DROPPED_EVENTS_SUFFIX
+
+
+class TestDecisionSampling:
+    """FR-033b: stage 1 at 1 in 100, a zone candidate written at 1 in 10,000
+    and a plain one at 1 in 1,000, on both sides and in the JVM's defaults."""
+
+    def test_the_defaults(self):
+        assert DEFAULT_PLAYABILITY_RATE == 0.01
+        assert DEFAULT_ZONE_CANDIDATE_RATE == 0.0001
+        assert DEFAULT_PLAIN_CANDIDATE_RATE == 0.001
+
+    @pytest.mark.skipif(
+        not _JAVA_CAPS.exists(), reason="the connector source is not checked out"
+    )
+    def test_the_jvm_defaults_are_the_same(self):
+        """A worker started without the properties samples as a supervisor
+        that sends the defaults would."""
+        source = _JAVA_CAPS.read_text(encoding="utf-8")
+        defaults = re.search(
+            r"return new CollectionCaps\(\s*\d+, ([0-9.]+), ([0-9.]+), ([0-9.]+),", source
+        )
+        assert tuple(float(v) for v in defaults.groups()) == (
+            DEFAULT_PLAYABILITY_RATE, DEFAULT_ZONE_CANDIDATE_RATE,
+            DEFAULT_PLAIN_CANDIDATE_RATE,
+        )
+
+    def test_the_rates_reach_their_properties(self):
+        properties = CollectionCaps(
+            playability_rate=0.5, zone_candidate_rate=0.125, plain_candidate_rate=0.25,
+        ).as_system_properties()
+        assert properties["effect.playability.rate"] == "0.5"
+        assert properties["effect.zone.candidate.rate"] == "0.125"
+        assert properties["effect.plain.candidate.rate"] == "0.25"
 
 
 class TestNoSnapshotDepthKnob:

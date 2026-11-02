@@ -19,6 +19,7 @@ from sealed.infrastructure.cli import (
 from sealed.infrastructure.effect_collection_flags import (
     EFFECT_PROBE_KEYWORDS,
     announce_probe_state,
+    candidate_rate_error,
 )
 
 
@@ -47,7 +48,9 @@ class TestCapAndBudgetFlags:
     def test_the_defaults_are_the_contracts(self):
         args = parse("match-outcomes")
         assert args.mana_cap == 1
-        assert args.playability_rate == 0.1
+        assert args.playability_rate == 0.01
+        assert args.zone_candidate_rate == 0.0001
+        assert args.plain_candidate_rate == 0.001
         assert args.interventions_per_game == 2
         assert args.probes_per_game == 2
         assert args.probe_keywords == (
@@ -64,11 +67,15 @@ class TestCapAndBudgetFlags:
             "match-outcomes",
             "--mana-cap", "50",
             "--playability-rate", "0.5",
+            "--zone-candidate-rate", "0.125",
+            "--plain-candidate-rate", "0.25",
             "--interventions-per-game", "4",
             "--probes-per-game", "1",
         )
         assert args.mana_cap == 50
         assert args.playability_rate == 0.5
+        assert args.zone_candidate_rate == 0.125
+        assert args.plain_candidate_rate == 0.25
         assert args.interventions_per_game == 4
         assert args.probes_per_game == 1
 
@@ -185,3 +192,44 @@ class TestRandomSeatFlags:
         args = parse("match-outcomes", "--random-seat-share", "0.125")
         assert run_match_outcomes(args) == 2
         assert "--random-seat-probability" in capsys.readouterr().err
+
+
+class TestDecisionSamplingRates:
+    """FR-033b: the rates travel as worker properties, and a bucket rate above
+    the stage-1 rate is refused before any game."""
+
+    def test_the_rates_reach_the_worker_properties(self):
+        args = parse(
+            "match-outcomes", "--playability-rate", "0.5",
+            "--zone-candidate-rate", "0.125", "--plain-candidate-rate", "0.25",
+        )
+        properties = _effect_collection_caps(args)
+        assert properties["effect.playability.rate"] == "0.5"
+        assert properties["effect.zone.candidate.rate"] == "0.125"
+        assert properties["effect.plain.candidate.rate"] == "0.25"
+
+    @pytest.mark.parametrize(
+        ("argv", "complaint"),
+        [
+            (("--plain-candidate-rate", "0.5"), "exceeds --playability-rate"),
+            (("--playability-rate", "0.0005"), "exceeds --playability-rate"),
+            (("--playability-rate", "2"), "between 0 and 1"),
+            (("--plain-candidate-rate", "-1"), "between 0 and 1"),
+        ],
+    )
+    def test_a_bad_rate_is_refused(self, argv, complaint):
+        assert complaint in candidate_rate_error(parse("match-outcomes", *argv))
+
+    def test_the_defaults_are_accepted(self):
+        assert candidate_rate_error(parse("match-outcomes")) is None
+
+    def test_the_refusal_happens_before_any_game(self, monkeypatch, capsys):
+        import sealed.application.match_outcomes as module
+
+        def no_supervisor(*args, **kwargs):
+            raise AssertionError("a refused run must not start a supervisor")
+
+        monkeypatch.setattr(module, "MatchOutcomeSupervisor", no_supervisor)
+        args = parse("match-outcomes", "--zone-candidate-rate", "0.5")
+        assert run_match_outcomes(args) == 2
+        assert "--zone-candidate-rate" in capsys.readouterr().err

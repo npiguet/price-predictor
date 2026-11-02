@@ -23,14 +23,20 @@ import java.util.Set;
  *
  * @param keys         the candidate's printed line, as a list of at most one
  * @param legalTargets refs of what the rules allow any of its clauses to target
- * @param manaCost     its total mana cost, or null where it has no costs
+ * @param manaCost     its total mana cost, or null where it has no costs or
+ *                     is a land play
  * @param verdict      what the rules say of it on this board
+ * @param landPlay     whether it plays a land (FR-033a), written as
+ *                     {@code land_play}
+ * @param sample       its stage-2 sampling bucket (FR-033b); never written
  */
 public record DecisionCandidate(
         List<ProvenanceKey> keys,
         List<String> legalTargets,
         String manaCost,
-        PlayabilityVerdict verdict) {
+        PlayabilityVerdict verdict,
+        boolean landPlay,
+        DecisionSample sample) {
 
     /**
      * Read {@code candidate} as {@code activator} would play it.
@@ -41,13 +47,19 @@ public record DecisionCandidate(
      */
     static Optional<DecisionCandidate> read(SpellAbility candidate, Player activator) {
         try {
-            return Optional.of(PlayabilityVerdict.asActivator(candidate, activator,
-                    () -> new DecisionCandidate(
-                            ProvenanceResolver.keysOf(candidate),
-                            legalTargetsOf(candidate),
-                            candidate.getPayCosts() == null
-                                    ? null : String.valueOf(candidate.getPayCosts().getTotalMana()),
-                            PlayabilityVerdict.of(candidate, activator))));
+            return Optional.of(PlayabilityVerdict.asActivator(candidate, activator, () -> {
+                boolean landPlay = candidate.isLandAbility();
+                PlayabilityVerdict verdict = PlayabilityVerdict.of(candidate, activator);
+                return new DecisionCandidate(
+                        ProvenanceResolver.keysOf(candidate),
+                        // A land play targets nothing and costs nothing (FR-033a).
+                        landPlay ? List.of() : legalTargetsOf(candidate),
+                        landPlay || candidate.getPayCosts() == null
+                                ? null : String.valueOf(candidate.getPayCosts().getTotalMana()),
+                        verdict,
+                        landPlay,
+                        DecisionSample.of(candidate, activator, verdict));
+            }));
         } catch (RuntimeException e) {
             return Optional.empty();
         }
@@ -91,6 +103,7 @@ public record DecisionCandidate(
                         .value("check", check.check())
                         .raw("responsible_static", keyArray(check.responsibleStatic()))
                         .render()))
+                .value("land_play", landPlay)
                 .render();
         return Json.object()
                 .raw("candidates", Json.array(List.of(candidate), json -> json))

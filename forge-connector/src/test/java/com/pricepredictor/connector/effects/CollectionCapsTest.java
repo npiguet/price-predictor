@@ -26,7 +26,12 @@ class CollectionCapsTest {
         // One record per mana ability per game: this collector is built per
         // game, and a Mountain's dozen taps observe a board that barely moved.
         assertEquals(1, defaults.manaCap());
-        assertEquals(0.1, defaults.playabilityRate());
+        // Two-stage decision sampling (FR-033b): one candidate in a hundred
+        // evaluated, one in ten thousand failing only zone written, one in a
+        // thousand plain candidates.
+        assertEquals(0.01, defaults.playabilityRate());
+        assertEquals(0.0001, defaults.zoneCandidateRate());
+        assertEquals(0.001, defaults.plainCandidateRate());
         assertEquals(2, defaults.interventionsPerGame());
         assertEquals(2, defaults.probesPerGame());
         // A worker started without the property probes nothing; the eight
@@ -46,6 +51,8 @@ class CollectionCapsTest {
         Map<String, String> properties = Map.of(
                 "effect.mana.cap", "7",
                 "effect.playability.rate", "0.5",
+                "effect.zone.candidate.rate", "0.125",
+                "effect.plain.candidate.rate", "0.25",
                 "effect.interventions.per.game", "3",
                 "effect.probes.per.game", "4",
                 "effect.probe.keywords", "wither, infect");
@@ -54,6 +61,8 @@ class CollectionCapsTest {
             CollectionCaps caps = CollectionCaps.fromSystemProperties();
             assertEquals(7, caps.manaCap());
             assertEquals(0.5, caps.playabilityRate());
+            assertEquals(0.125, caps.zoneCandidateRate());
+            assertEquals(0.25, caps.plainCandidateRate());
             assertEquals(3, caps.interventionsPerGame());
             assertEquals(4, caps.probesPerGame());
             assertEquals(List.of("wither", "infect"), caps.probeKeywords());

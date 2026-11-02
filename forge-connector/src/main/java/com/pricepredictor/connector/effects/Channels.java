@@ -41,7 +41,7 @@ record Channels(
         RecordDedup dedup = new RecordDedup();
         Random sampler = new Random(GameRecording.scramble(seed));
         PlayabilityChannel playability =
-                new PlayabilityChannel(live, context, dedup, sampler, caps.playabilityRate());
+                new PlayabilityChannel(live, context, dedup, sampler, caps);
         PriorityCandidates candidates = new PriorityCandidates(live, playability);
         return new Channels(
                 new RewriteChannel(live, context, dedup),

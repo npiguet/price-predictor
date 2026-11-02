@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A decision candidate's {@code failed_checks} identifiers are the record
- * contract's eleven, spelled and ordered as its payload table lists them
+ * contract's twelve, spelled and ordered as its payload table lists them
  * (FR-032): the rule detectors' {@code verdict_bit} declarations name a check
  * by that spelling.
  */
@@ -42,7 +42,7 @@ class PlayabilityCheckContractTest {
         while (identifier.find()) {
             contract.add(identifier.group(1));
         }
-        assertEquals(11, contract.size(), shape);
+        assertEquals(12, contract.size(), shape);
         assertEquals(contract,
                 Arrays.stream(PlayabilityCheck.values()).map(WireNamed::wireName).toList());
     }

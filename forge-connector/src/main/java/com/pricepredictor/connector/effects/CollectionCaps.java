@@ -9,6 +9,12 @@ import java.util.Optional;
 /**
  * The caps and budgets every collecting supervisor shares (FR-028).
  *
+ * @param playabilityRate stage 1 of decision sampling (FR-033b): the share of
+ *                enumerated decision candidates evaluated
+ * @param zoneCandidateRate the share of zone-bucket candidates written, both
+ *                stages together ({@link DecisionSample#ZONE})
+ * @param plainCandidateRate the share of plain-bucket candidates written,
+ *                both stages together ({@link DecisionSample#PLAIN})
  * @param aimedAt the rules a {@code collect-coverage} or {@code
  *                collect-variants} run aims at (FR-009a), stamped on every
  *                record it writes as {@code aimed_at}, possibly empty; absent
@@ -20,6 +26,8 @@ import java.util.Optional;
 public record CollectionCaps(
         int manaCap,
         double playabilityRate,
+        double zoneCandidateRate,
+        double plainCandidateRate,
         int interventionsPerGame,
         int probesPerGame,
         List<String> probeKeywords,
@@ -30,11 +38,13 @@ public record CollectionCaps(
 
     public static CollectionCaps defaults() {
         return new CollectionCaps(
-                1, 0.1, 2, 2, List.of(), 0.0, 0.0, Optional.empty(), false);
+                1, 0.01, 0.0001, 0.001, 2, 2, List.of(), 0.0, 0.0, Optional.empty(), false);
     }
 
     public static final String MANA_CAP = "effect.mana.cap";
     public static final String PLAYABILITY_RATE = "effect.playability.rate";
+    public static final String ZONE_CANDIDATE_RATE = "effect.zone.candidate.rate";
+    public static final String PLAIN_CANDIDATE_RATE = "effect.plain.candidate.rate";
     public static final String INTERVENTIONS_PER_GAME = "effect.interventions.per.game";
     public static final String PROBES_PER_GAME = "effect.probes.per.game";
     public static final String PROBE_KEYWORDS = "effect.probe.keywords";
@@ -58,6 +68,10 @@ public record CollectionCaps(
                 WorkerProperties.intProperty(MANA_CAP, defaults.manaCap(), policy),
                 WorkerProperties.doubleProperty(
                         PLAYABILITY_RATE, defaults.playabilityRate(), policy),
+                WorkerProperties.doubleProperty(
+                        ZONE_CANDIDATE_RATE, defaults.zoneCandidateRate(), policy),
+                WorkerProperties.doubleProperty(
+                        PLAIN_CANDIDATE_RATE, defaults.plainCandidateRate(), policy),
                 WorkerProperties.intProperty(
                         INTERVENTIONS_PER_GAME, defaults.interventionsPerGame(), policy),
                 WorkerProperties.intProperty(

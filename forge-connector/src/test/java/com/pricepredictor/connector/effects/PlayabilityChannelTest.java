@@ -63,7 +63,8 @@ class PlayabilityChannelTest {
      */
     @Test
     void aForkPriorityStopDoesNotShiftTheLiveSampleStream() throws Throwable {
-        CollectionCaps halfRate = caps().playabilityRate(0.5).build();
+        // Stage 2 keeps whatever stage 1 does, so the stream is stage 1's alone.
+        CollectionCaps halfRate = caps().playabilityRate(0.5).candidateRates(0.5, 0.5).build();
         Game live = oneCandidate(TestBoard.twoPlayerGame(PhaseType.MAIN1));
         Player seat = live.getPlayers().get(0);
         Game fork = oneCandidate(TestBoard.twoPlayerGame(PhaseType.MAIN1));
@@ -272,7 +273,7 @@ class PlayabilityChannelTest {
         TestBoard.inHand(game, other, "Lightning Bolt");
 
         List<String> lines = ShardRun.records(tempDir, game,
-                caps().manaCap(0).playabilityRate(1.0).build(),
+                caps().manaCap(0).everyDecision().build(),
                 (bracket, collectors) -> settle(collectors, game, active));
 
         List<String> records = recordsOf(lines);

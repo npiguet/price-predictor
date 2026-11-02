@@ -82,6 +82,7 @@ from tests.unit.effects.builders import (
     gen3_fixture_records,
     java_golden_records,
     make_record,
+    without_unread_members,
 )
 
 _KEY = ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "trigger", 0)
@@ -803,7 +804,8 @@ class TestTheGen2Fixture:
             if raw["kind"] == "combat" and not raw["fork"]:
                 assert written["payload"].pop("probed_keyword") is None
                 assert written["payload"].pop("probed_entity") is None
-            assert json.dumps(_spelling_free(written)) == json.dumps(_spelling_free(raw)), (
+            assert json.dumps(_spelling_free(written)) == json.dumps(
+                _spelling_free(without_unread_members(raw))), (
                 raw["record_id"])
 
 
@@ -838,7 +840,8 @@ class TestTheGen3EntityShape:
         dropped on a read and a write (T074)."""
         for raw in java_golden_records():
             written = record_to_dict(record_from_dict(raw))
-            assert json.dumps(_spelling_free(written)) == json.dumps(_spelling_free(raw)), (
+            assert json.dumps(_spelling_free(written)) == json.dumps(
+                _spelling_free(without_unread_members(raw))), (
                 raw["record_id"])
 
     def test_the_gen3_blocks_read_into_their_fields(self):
@@ -1026,7 +1029,8 @@ class TestTheGen3Fixture:
     def test_every_record_writes_back_as_the_collector_wrote_it(self):
         for raw in gen3_fixture_records():
             written = record_to_dict(record_from_dict(raw))
-            assert json.dumps(_spelling_free(written)) == json.dumps(_spelling_free(raw)), (
+            assert json.dumps(_spelling_free(written)) == json.dumps(
+                _spelling_free(without_unread_members(raw))), (
                 raw["record_id"])
 
     def test_a_parsed_record_survives_a_write_and_a_read(self):

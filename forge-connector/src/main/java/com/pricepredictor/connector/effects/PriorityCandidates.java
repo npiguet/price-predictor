@@ -29,17 +29,18 @@ import java.util.Optional;
  *
  * <p>A candidate is every spell ability of every card the player could play
  * from (the AI's own list of available cards), the unplayable ones included,
- * lands and mana abilities aside, as the random seat has always left them
- * out. Each is sampled at
- * {@code --playability-rate} before anything is evaluated, so a candidate the
- * sampler drops costs no rules check.
+ * land plays included (FR-033a), mana abilities aside. Each is sampled in
+ * two stages (FR-033b): at {@code --playability-rate} before anything is
+ * evaluated, so a candidate the sampler drops costs no rules check, then by
+ * its {@link DecisionSample} bucket once evaluated.
  *
  * <p>The random seat reads the same stop (FR-033 with FR-040's filter): when
  * the stop is for the seat's own priority, the seat draws from the candidates
  * the records were written of, by the verdicts they carry, so its plays and
  * its records cannot disagree on {@code can_play}. A seat asking at any
  * other moment, or in a run that records nothing, gets the same enumeration
- * evaluated afresh.
+ * evaluated afresh. The seat draws from every candidate of the stop, written
+ * or not, and never from a land play: land drops stay the AI's.
  */
 public final class PriorityCandidates {
 
@@ -105,7 +106,7 @@ public final class PriorityCandidates {
 
     /**
      * A priority stop: enumerate both players' candidates, and record each
-     * the sampler draws, the player without priority included.
+     * both sampling stages keep, the player without priority included.
      */
     void settle(Player priorityPlayer) {
         Game game = live.game();
@@ -115,8 +116,10 @@ public final class PriorityCandidates {
         }
         for (Candidate candidate : candidates) {
             if (records.sampled()) {
-                candidate.read().ifPresent(read ->
-                        records.recordDecision(candidate.player(), candidate.ability(), read));
+                candidate.read()
+                        .filter(read -> records.keeps(read.sample()))
+                        .ifPresent(read -> records.recordDecision(
+                                candidate.player(), candidate.ability(), read));
             }
         }
         current = new Stop(priorityPlayer, candidates);
@@ -139,13 +142,13 @@ public final class PriorityCandidates {
     /**
      * Every candidate of {@code player} on the board as it stands, none read
      * yet: every spell ability of the cards it could play from (the AI's own
-     * list of available cards), lands and mana abilities aside.
+     * list of available cards), land plays included, mana abilities aside.
      */
     public static List<Candidate> candidatesOf(Game game, Player player) {
         List<Candidate> candidates = new ArrayList<>();
         for (Card card : ComputerUtilAbility.getAvailableCards(game, player)) {
             for (SpellAbility ability : abilitiesOf(card, player)) {
-                if (!ability.isLandAbility() && !ability.isManaAbility()) {
+                if (!ability.isManaAbility()) {
                     candidates.add(new Candidate(player, ability));
                 }
             }

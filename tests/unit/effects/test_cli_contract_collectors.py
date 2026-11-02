@@ -76,7 +76,9 @@ class TestSharedCapFlags:
     def test_the_defaults_are_the_contracts(self):
         args = parse("collect-coverage")
         assert args.mana_cap == 1
-        assert args.playability_rate == 0.1
+        assert args.playability_rate == 0.01
+        assert args.zone_candidate_rate == 0.0001
+        assert args.plain_candidate_rate == 0.001
         assert args.interventions_per_game == 2
         assert args.probes_per_game == 2
         assert args.probe_keywords == (
@@ -110,11 +112,58 @@ class TestSharedCapFlags:
         args = parse(
             "collect-coverage",
             "--mana-cap", "10", "--playability-rate", "1.0",
+            "--zone-candidate-rate", "0.25", "--plain-candidate-rate", "0.5",
             "--probe-keywords", "wither",
         )
         assert args.mana_cap == 10
         assert args.playability_rate == 1.0
+        assert args.zone_candidate_rate == 0.25
+        assert args.plain_candidate_rate == 0.5
         assert args.probe_keywords == "wither"
+
+
+class TestDecisionSamplingOnTheCollectors:
+    """FR-033b: the three sampling rates reach the worker, and a bucket rate
+    above the stage-1 rate it is drawn from is refused before any worker."""
+
+    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
+    def test_the_rates_reach_the_worker_properties(self, command):
+        from effects.infrastructure.cli import collection_caps
+
+        args = parse(
+            command, "--playability-rate", "0.5",
+            "--zone-candidate-rate", "0.125", "--plain-candidate-rate", "0.25",
+        )
+        properties = collection_caps(args).as_system_properties()
+        assert properties["effect.playability.rate"] == "0.5"
+        assert properties["effect.zone.candidate.rate"] == "0.125"
+        assert properties["effect.plain.candidate.rate"] == "0.25"
+
+    @pytest.mark.parametrize("argv,message", [
+        (("--zone-candidate-rate", "0.5"), "exceeds --playability-rate"),
+        (("--plain-candidate-rate", "0.02"), "exceeds --playability-rate"),
+        (("--playability-rate", "1.5"), "between 0 and 1"),
+        (("--zone-candidate-rate", "-0.1"), "between 0 and 1"),
+    ])
+    def test_a_bad_rate_is_refused(self, argv, message):
+        from effects.infrastructure.cli import candidate_rate_error
+
+        assert message in candidate_rate_error(parse("collect-coverage", *argv))
+
+    def test_the_defaults_are_accepted(self):
+        from effects.infrastructure.cli import candidate_rate_error
+
+        assert candidate_rate_error(parse("collect-coverage")) is None
+
+    @COLLECTORS
+    def test_a_bad_rate_starts_no_worker(self, command, module, runner, caplog):
+        from unittest.mock import patch
+
+        with patch(module) as collect:
+            assert runner(parse(command, "--zone-candidate-rate", "0.5")) == 1
+        collect.assert_not_called()
+        assert f"{command}: " in caplog.text
+        assert "--zone-candidate-rate" in caplog.text
 
 
 class TestNoSnapshotTierFlag:

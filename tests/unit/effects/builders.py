@@ -59,6 +59,21 @@ JAVA_GOLDENS = (
 #: The one golden that is no collected record: an AI what-if blockers record
 #: pinned for its envelope alone, with an empty payload no collector writes.
 _ENVELOPE_ONLY_GOLDENS = frozenset({"record-what-if.jsonl"})
+#: Decision-candidate members the collector writes and the codec does not read
+#: yet: ``land_play`` (T064a), which T074a parses and then removes from here.
+GEN3_UNREAD_CANDIDATE_MEMBERS: tuple[str, ...] = ("land_play",)
+
+
+def without_unread_members(raw: dict) -> dict:
+    """``raw`` without the members the codec does not read yet, for a test
+    comparing a written-back record with the collector's."""
+    candidates = (raw.get("payload") or {}).get("candidates")
+    if not candidates:
+        return raw
+    return {**raw, "payload": {**raw["payload"], "candidates": [
+        {k: v for k, v in candidate.items() if k not in GEN3_UNREAD_CANDIDATE_MEMBERS}
+        for candidate in candidates
+    ]}}
 
 
 def java_golden_records() -> list[dict]:
