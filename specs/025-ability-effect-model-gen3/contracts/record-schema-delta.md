@@ -20,7 +20,7 @@ within gen-3. Relative to gen-2 a field may change meaning or go away.
 | Field | Shape | Present on |
 |---|---|---|
 | `generation` | `3` | every record |
-| `aimed_at` | `["704.5f", …]` | aimed records only; `[]` allowed |
+| `aimed_at` | `["704.5f", …]` | aimed records only: every `collect-coverage` and `collect-variants` record (the run's `--directed-fork-rules`, `[]` when it names none) and every directed fork (`[rule]`); never another `match-outcomes` record |
 | `directed` | `{"variant": "tougher", "operation": "pt"}` | directed-fork records only |
 
 Flag signatures, added row:
@@ -68,7 +68,6 @@ A card's `lines` members:
 | `cast_with` | int ≥ 1: times the spell this card was cast as paid the line's cost (1 for an alternative cost or kicker, the count for multikicker) | `keyword` lines of a card on the stack or a permanent cast so |
 | `chosen` | list of `Choices$` positions the ability on the stack chose, in chain order | the line of a modal ability on the stack |
 | `fragment` | the keyword instance's own fragment as Forge writes it (`Ward:2`, `Annihilator:2`, `Protection:Goblin`) | `keyword` lines |
-
 | `affected` | list of entity refs: the permanents the static applies to, from Forge's static effect | statics of the face up that Forge applies as a continuous effect; absent on every line of a `continuous` record's board, whose answer it would be |
 
 A `keyword` line's keys name the keyword line the card prints, else the static that granted the
@@ -215,6 +214,11 @@ static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of
 - A resolution's effect half holds every death of the state-based loop after it. A trigger record
   never holds one.
 - A prevention event with amount 0 is not written.
+- A record's stat-change events (`pt_change`, `keyword_change`, `type_change`, `color_change`,
+  `control_change`) are changes after its own snapshot: the differ re-reads the battlefield when a
+  bracket opened at a cast, a mode's half or a damage step takes its snapshot. A change Forge
+  applied before such a snapshot and published after it reaches no record and is counted as
+  dropped.
 - `can_play = canPlay ∧ timing ∧ no static prohibition`.
 - Decision candidates exist for both players at every priority stop.
 - A decision candidate is every spell ability of every card its player could play from, unplayable

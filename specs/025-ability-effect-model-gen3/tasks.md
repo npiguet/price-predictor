@@ -235,7 +235,7 @@ spans the state-based loop; candidates come from a collector-side enumerator for
 
 ### Documentation of the schema (FR-019)
 
-- [ ] T077 [P] [US2] Add the "Gen-3" section to `specs/023-ability-effect-model/contracts/record-schema.md` from contracts/record-schema-delta.md — load the feature-workflow skill first
+- [X] T077 [P] [US2] Add the "Gen-3" section to `specs/023-ability-effect-model/contracts/record-schema.md` from contracts/record-schema-delta.md — load the feature-workflow skill first — Done as: the delta's sections under `## Gen-3` before the compatibility rules, which now name gen-3 as a schema generation of its own; the delta gained the stat-change rule (a record's stat changes are after its own snapshot, 4687e819) and `aimed_at`'s population, and its split `lines` table was rejoined
 - [ ] T078 [P] [US2] Update the effect-record shard paragraph of `CLAUDE.md` (root): `generation`, `aimed_at`, `directed`, `turn_action`, the directed-fork flag signature, the gen-3 reader rule (gen-3 only except `rule-counts`)
 
 ### Pilot (quickstart stage 3)
