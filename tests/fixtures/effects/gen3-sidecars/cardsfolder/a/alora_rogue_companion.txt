@@ -1,0 +1,47 @@
+layout: specialize
+name: alora, rogue companion
+mana cost: {3}{U}
+types: legendary creature halfling rogue
+power toughness: 3/3
+activated[1]: specialize {2}
+triggered: whenever you attack, up to one target attacking creature can't be blocked this turn. at the beginning of the next end step, return that creature to its owner's hand. at the beginning of the next end step, return that creature to its owner's hand.
+
+ALTERNATE
+
+name: alora, cheerful mastermind
+mana cost: {3}{W}{U}
+types: legendary creature halfling rogue
+power toughness: 4/4
+triggered: whenever you attack, up to one target attacking creature can't be blocked this turn. at the beginning of the next end step, return that creature to its owner's hand. if you do, create a 1/1 white soldier creature token. at the beginning of the next end step, return that creature to its owner's hand. if you do, create a 1/1 white soldier creature token.
+
+ALTERNATE
+
+name: alora, cheerful thief
+mana cost: {3}{U}{U}
+types: legendary creature halfling rogue
+power toughness: 4/4
+triggered: whenever you attack, up to one target attacking creature can't be blocked this turn. at the beginning of the next end step, return that creature to its owner's hand. if you do, a creature of your choice an opponent controls perpetually gets -1/-0. at the beginning of the next end step, return that creature to its owner's hand. if you do, a creature of your choice an opponent controls perpetually gets -1/-0.
+
+ALTERNATE
+
+name: alora, cheerful assassin
+mana cost: {3}{U}{B}
+types: legendary creature halfling rogue assassin
+power toughness: 4/4
+triggered: whenever you attack, up to one target attacking creature can't be blocked this turn. at the beginning of the next end step, return that creature to its owner's hand. if you do, each opponent loses 2 life. at the beginning of the next end step, return that creature to its owner's hand. if you do, each opponent loses 2 life.
+
+ALTERNATE
+
+name: alora, cheerful swashbuckler
+mana cost: {3}{U}{R}
+types: legendary creature halfling rogue
+power toughness: 4/4
+triggered: whenever you attack, up to one target attacking creature can't be blocked this turn. at the beginning of the next end step, return that creature to its owner's hand. if you do, create a treasure token. at the beginning of the next end step, return that creature to its owner's hand. if you do, create a treasure token.
+
+ALTERNATE
+
+name: alora, cheerful scout
+mana cost: {3}{G}{U}
+types: legendary creature halfling rogue scout
+power toughness: 4/4
+triggered: whenever you attack, up to one target attacking creature can't be blocked this turn. at the beginning of the next end step, return that creature to its owner's hand. if you do, it perpetually gets +1/+1. at the beginning of the next end step, return that creature to its owner's hand. if you do, it perpetually gets +1/+1.

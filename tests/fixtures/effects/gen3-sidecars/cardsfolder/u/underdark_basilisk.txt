@@ -1,0 +1,5 @@
+name: underdark basilisk
+mana cost: {1}{G}
+types: creature basilisk
+power toughness: 1/2
+static: deathtouch

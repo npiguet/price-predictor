@@ -1,0 +1,6 @@
+name: night market
+types: land
+replacement: as this land enters, choose a color.
+activated[1]: cycling {3}
+activated[2]: {T}: add one mana of the chosen color.
+replacement: this land enters tapped.

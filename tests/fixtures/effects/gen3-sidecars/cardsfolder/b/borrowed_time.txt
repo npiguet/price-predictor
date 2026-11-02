@@ -1,0 +1,4 @@
+name: borrowed time
+mana cost: {2}{W}
+types: enchantment
+triggered: when CARDNAME enters, exile target nonland permanent an opponent controls until CARDNAME leaves the battlefield.

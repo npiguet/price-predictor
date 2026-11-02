@@ -1,0 +1,6 @@
+name: carrion wall
+mana cost: {1}{B}{B}
+types: creature wall
+power toughness: 3/2
+static: defender
+activated[1]: {1}{B}: regenerate CARDNAME.

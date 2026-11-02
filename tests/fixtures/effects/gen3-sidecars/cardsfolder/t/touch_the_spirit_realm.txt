@@ -1,0 +1,5 @@
+name: touch the spirit realm
+mana cost: {2}{W}
+types: enchantment
+activated[1]: channel — {1}{W}, discard CARDNAME: exile target artifact or creature. return it to the battlefield under its owner's control at the beginning of the next end step. return exiled permanent to the battlefield.
+triggered: when CARDNAME enters, exile up to one target artifact or creature until CARDNAME leaves the battlefield.

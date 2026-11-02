@@ -1,0 +1,6 @@
+name: razorfoot griffin
+mana cost: {3}{W}
+types: creature griffin
+power toughness: 2/2
+static: flying
+static: first strike

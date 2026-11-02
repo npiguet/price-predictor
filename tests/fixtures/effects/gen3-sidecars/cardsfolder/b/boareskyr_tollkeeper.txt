@@ -1,0 +1,5 @@
+name: boareskyr tollkeeper
+mana cost: {1}{W}
+types: creature orc knight
+power toughness: 3/1
+triggered: when CARDNAME enters, target opponent reveals all creature and land cards in their hand. choose one of them. that card perpetually gains "this permanent enters tapped."

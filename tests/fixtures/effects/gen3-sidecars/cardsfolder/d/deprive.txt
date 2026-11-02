@@ -1,0 +1,5 @@
+name: deprive
+mana cost: {U}{U}
+types: instant
+additional cost: return a land you control to its owner's hand.
+spell[1]: counter target spell.

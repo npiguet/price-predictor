@@ -1,0 +1,6 @@
+name: rob the archives
+mana cost: {1}{R}
+types: sorcery
+additional cost: casualty 1
+spell[1]: exile the top two cards of your library. you may play those cards this turn.
+spell[2]: you may play those cards this turn.

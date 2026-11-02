@@ -1,0 +1,6 @@
+name: pseudodragon familiar
+mana cost: {2}{U}
+types: creature dragon
+power toughness: 2/1
+static: flying
+activated[1]: {2}{U}: target creature gains flying until end of turn.

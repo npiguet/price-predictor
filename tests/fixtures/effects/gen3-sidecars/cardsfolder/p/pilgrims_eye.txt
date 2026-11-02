@@ -1,0 +1,6 @@
+name: pilgrim's eye
+mana cost: {3}
+types: artifact creature thopter
+power toughness: 1/1
+static: flying
+triggered: when CARDNAME enters, you may search your library for a basic land card, reveal it, put it into your hand, then shuffle.

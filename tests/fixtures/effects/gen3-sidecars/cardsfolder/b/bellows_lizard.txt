@@ -1,0 +1,5 @@
+name: bellows lizard
+mana cost: {R}
+types: creature lizard
+power toughness: 1/1
+activated[1]: {1}{R}: CARDNAME gets +1/+0 until end of turn.

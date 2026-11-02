@@ -1,0 +1,5 @@
+name: armory mice
+mana cost: {1}{W}
+types: creature mouse
+power toughness: 3/1
+static: celebration — CARDNAME gets +0/+2 as long as two or more nonland permanents entered the battlefield under your control this turn.

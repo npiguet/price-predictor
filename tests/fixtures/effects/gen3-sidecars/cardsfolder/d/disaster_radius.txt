@@ -1,0 +1,5 @@
+name: disaster radius
+mana cost: {5}{R}{R}
+types: sorcery
+additional cost: reveal a creature card from your hand.
+spell[1]: CARDNAME deals X damage to each creature your opponents control, where X is the revealed card's mana value.

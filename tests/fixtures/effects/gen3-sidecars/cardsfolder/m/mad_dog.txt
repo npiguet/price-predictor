@@ -1,0 +1,5 @@
+name: mad dog
+mana cost: {1}{R}
+types: creature dog
+power toughness: 2/2
+triggered: at the beginning of your end step, if CARDNAME didn't attack or come under your control this turn, sacrifice it.

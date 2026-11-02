@@ -1,0 +1,6 @@
+name: sporesower thallid
+mana cost: {2}{G}{G}
+types: creature fungus
+power toughness: 4/4
+activated[1]: remove three spore counters from CARDNAME: create a 1/1 green saproling creature token.
+triggered: at the beginning of your upkeep, put a spore counter on each fungus you control.

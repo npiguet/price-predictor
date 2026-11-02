@@ -1,0 +1,6 @@
+name: owlbear
+mana cost: {3}{G}{G}
+types: creature bird bear
+power toughness: 4/4
+static: trample
+triggered: keen senses — when CARDNAME enters, draw a card.

@@ -1,0 +1,5 @@
+name: unscrupulous agent
+mana cost: {1}{B}
+types: creature elf detective
+power toughness: 1/1
+triggered: when CARDNAME enters, target opponent exiles a card from their hand.

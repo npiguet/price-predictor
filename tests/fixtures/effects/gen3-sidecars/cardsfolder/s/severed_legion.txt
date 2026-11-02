@@ -1,0 +1,5 @@
+name: severed legion
+mana cost: {1}{B}{B}
+types: creature zombie
+power toughness: 2/2
+static: fear

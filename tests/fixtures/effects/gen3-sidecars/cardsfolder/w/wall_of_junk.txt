@@ -1,0 +1,6 @@
+name: wall of junk
+mana cost: {2}
+types: artifact creature wall
+power toughness: 0/7
+static: defender
+triggered: when CARDNAME blocks, return it to its owner's hand at end of combat.

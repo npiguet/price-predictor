@@ -1,0 +1,4 @@
+name: revoke existence
+mana cost: {1}{W}
+types: sorcery
+spell[1]: exile target artifact or enchantment.

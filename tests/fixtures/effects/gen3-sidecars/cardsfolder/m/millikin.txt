@@ -1,0 +1,5 @@
+name: millikin
+mana cost: {2}
+types: artifact creature construct
+power toughness: 0/1
+activated[1]: {T}, mill 1 card: add {C}.

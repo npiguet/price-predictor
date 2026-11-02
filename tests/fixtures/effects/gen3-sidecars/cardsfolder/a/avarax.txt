@@ -1,0 +1,7 @@
+name: avarax
+mana cost: {3}{R}{R}
+types: creature beast
+power toughness: 3/3
+static: haste
+activated[1]: {1}{R}: CARDNAME gets +1/+0 until end of turn.
+triggered: when CARDNAME enters, you may search your library for a card named avarax, reveal it, put it into your hand, then shuffle.

@@ -1,0 +1,5 @@
+name: marchesa's decree
+mana cost: {3}{B}
+types: enchantment
+triggered: when CARDNAME enters, you become the monarch.
+triggered: whenever a creature attacks you or a planeswalker you control, that creature's controller loses 1 life.

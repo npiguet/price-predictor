@@ -1,0 +1,8 @@
+name: one last job
+mana cost: {2}{W}
+types: sorcery
+additional cost: spree
+spell[1]: choose one or more
+option[2]: {2} — return target creature card from your graveyard to the battlefield.
+option[3]: {1} — return target mount or vehicle card from your graveyard to the battlefield.
+option[4]: {1} — return target aura or equipment card from your graveyard to the battlefield attached to a creature you control.

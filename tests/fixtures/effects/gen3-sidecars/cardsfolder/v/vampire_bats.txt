@@ -1,0 +1,6 @@
+name: vampire bats
+mana cost: {B}
+types: creature bat
+power toughness: 0/1
+static: flying
+activated[1]: {B}: CARDNAME gets +1/+0 until end of turn. activate no more than twice each turn.

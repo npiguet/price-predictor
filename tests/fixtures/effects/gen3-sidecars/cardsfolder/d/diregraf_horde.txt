@@ -1,0 +1,5 @@
+name: diregraf horde
+mana cost: {4}{B}
+types: creature zombie
+power toughness: 3/4
+triggered: when CARDNAME enters, create two 2/2 black zombie creature tokens with decayed. when you do, exile up to two target cards from graveyards. when you do, exile up to two target cards from graveyards.

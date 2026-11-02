@@ -1,0 +1,6 @@
+name: you meet in a tavern
+mana cost: {2}{G}{G}
+types: sorcery
+spell[1]: choose one
+option[2]: form a party — look at the top five cards of your library. you may reveal any number of creature cards from among them and put them into your hand. put the rest on the bottom of your library in a random order.
+option[3]: start a brawl — creatures you control get +2/+2 until end of turn.

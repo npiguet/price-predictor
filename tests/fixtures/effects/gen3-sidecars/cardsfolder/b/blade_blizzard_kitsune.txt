@@ -1,0 +1,6 @@
+name: blade-blizzard kitsune
+mana cost: {2}{W}
+types: creature fox ninja
+power toughness: 2/2
+alternate cost: ninjutsu {3}{W}
+static: double strike

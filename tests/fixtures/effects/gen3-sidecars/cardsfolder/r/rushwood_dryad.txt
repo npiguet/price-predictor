@@ -1,0 +1,5 @@
+name: rushwood dryad
+mana cost: {1}{G}
+types: creature dryad
+power toughness: 2/1
+static: forestwalk

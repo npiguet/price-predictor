@@ -1,0 +1,5 @@
+name: druid lyrist
+mana cost: {G}
+types: creature human druid
+power toughness: 1/1
+activated[1]: {G}, {T}, sacrifice CARDNAME: destroy target enchantment.

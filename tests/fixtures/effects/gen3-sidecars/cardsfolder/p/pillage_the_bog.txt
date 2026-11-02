@@ -1,0 +1,5 @@
+name: pillage the bog
+mana cost: {B}{G}
+types: sorcery
+alternate cost: plot {1}{B}{G}
+spell[1]: look at the top X cards of your library, where X is twice the number of lands you control. put one of them into your hand and the rest on the bottom of your library in a random order.

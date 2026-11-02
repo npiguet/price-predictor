@@ -1,0 +1,7 @@
+name: enclave cryptologist
+mana cost: {U}
+types: creature merfolk wizard
+power toughness: 0/1
+activated[1]: level up {1}{U}
+static: level 1-2 {T}: draw a card, then discard a card.
+static: level 3+ {T}: draw a card.

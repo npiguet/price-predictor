@@ -1,0 +1,5 @@
+name: elephant ambush
+mana cost: {2}{G}{G}
+types: instant
+alternate cost: flashback {6}{G}{G}
+spell[1]: create a 3/3 green elephant creature token.

@@ -1,0 +1,4 @@
+name: terminate
+mana cost: {B}{R}
+types: instant
+spell[1]: destroy target creature. it can't be regenerated.

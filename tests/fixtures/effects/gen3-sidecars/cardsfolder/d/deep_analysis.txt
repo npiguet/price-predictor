@@ -1,0 +1,5 @@
+name: deep analysis
+mana cost: {3}{U}
+types: sorcery
+alternate cost: flashback—{1}{U}, pay 3 life
+spell[1]: target player draws two cards.

@@ -1,0 +1,6 @@
+name: yavimaya dryad
+mana cost: {1}{G}{G}
+types: creature dryad
+power toughness: 2/1
+static: forestwalk
+triggered: when CARDNAME enters, you may search your library for a forest card, put it onto the battlefield tapped under target player's control, then shuffle.

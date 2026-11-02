@@ -1,0 +1,7 @@
+name: crimestopper sprite
+mana cost: {2}{U}
+types: creature faerie detective
+power toughness: 2/2
+additional cost: you may collect evidence 6.
+static: flying
+triggered: when CARDNAME enters, tap target creature. if evidence was collected, put a stun counter on it.

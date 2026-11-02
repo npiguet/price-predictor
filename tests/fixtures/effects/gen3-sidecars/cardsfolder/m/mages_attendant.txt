@@ -1,0 +1,5 @@
+name: mage's attendant
+mana cost: {2}{W}
+types: creature cat rogue
+power toughness: 3/2
+triggered: when CARDNAME enters, create a 1/1 blue wizard creature token with "{1}, sacrifice this creature: counter target noncreature spell unless its controller pays {1}."

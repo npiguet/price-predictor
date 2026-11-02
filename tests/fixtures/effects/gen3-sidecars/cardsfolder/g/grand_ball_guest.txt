@@ -1,0 +1,5 @@
+name: grand ball guest
+mana cost: {1}{R}
+types: creature human peasant
+power toughness: 2/2
+static: celebration — CARDNAME gets +1/+1 and has trample as long as two or more nonland permanents entered the battlefield under your control this turn.

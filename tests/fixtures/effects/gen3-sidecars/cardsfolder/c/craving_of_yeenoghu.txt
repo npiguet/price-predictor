@@ -1,0 +1,6 @@
+name: craving of yeenoghu
+mana cost: {2}{R}
+types: enchantment aura
+static: enchant creature you control
+activated[1]: {R}: return CARDNAME from your graveyard to the battlefield attached to target creature you control. CARDNAME perpetually gains "enchanted creature gets -1/-1." activate only as a sorcery.
+static: enchanted creature gets +3/+2, has haste, and attacks each combat if able.

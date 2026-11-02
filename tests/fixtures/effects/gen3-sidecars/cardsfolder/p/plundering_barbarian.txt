@@ -1,0 +1,7 @@
+name: plundering barbarian
+mana cost: {2}{R}
+types: creature dwarf barbarian
+power toughness: 2/2
+triggered: when CARDNAME enters, choose one
+option[1]: smash the chest — destroy target artifact.
+option[2]: pry it open — create a treasure token.

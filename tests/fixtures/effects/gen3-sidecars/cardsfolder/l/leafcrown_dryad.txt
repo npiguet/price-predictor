@@ -1,0 +1,7 @@
+name: leafcrown dryad
+mana cost: {1}{G}
+types: enchantment creature nymph dryad
+power toughness: 2/2
+alternate cost: bestow {3}{G}
+static: reach
+static: enchanted creature gets +2/+2 and has reach.

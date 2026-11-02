@@ -1,0 +1,5 @@
+name: cloak of feathers
+mana cost: {U}
+types: sorcery
+spell[1]: target creature gains flying until end of turn.
+spell[2]: draw a card.

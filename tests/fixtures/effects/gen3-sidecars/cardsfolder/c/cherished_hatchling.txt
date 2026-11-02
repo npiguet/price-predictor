@@ -1,0 +1,5 @@
+name: cherished hatchling
+mana cost: {1}{G}
+types: creature dinosaur
+power toughness: 2/1
+triggered: when CARDNAME dies, you may cast dinosaur spells this turn as though they had flash, and whenever you cast a dinosaur spell this turn, it gains "when this creature enters, you may have it fight another target creature."

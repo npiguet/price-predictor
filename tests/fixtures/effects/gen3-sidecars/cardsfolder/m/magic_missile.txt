@@ -1,0 +1,5 @@
+name: magic missile
+mana cost: {1}{R}{R}
+types: sorcery
+spell[1]: CARDNAME deals 3 damage divided as you choose among one, two, or three targets.
+replacement: this spell can't be countered.

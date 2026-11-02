@@ -1,0 +1,5 @@
+name: momentary blink
+mana cost: {1}{W}
+types: instant
+alternate cost: flashback {3}{U}
+spell[1]: exile target creature you control, then return it to the battlefield under its owner's control.

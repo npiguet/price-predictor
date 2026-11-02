@@ -1,0 +1,5 @@
+name: snapsail glider
+mana cost: {3}
+types: artifact creature construct
+power toughness: 2/2
+static: metalcraft — CARDNAME has flying as long as you control three or more artifacts.

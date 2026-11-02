@@ -1,0 +1,6 @@
+name: swallow whole
+mana cost: {W}
+types: sorcery
+additional cost: tap an untapped creature you control.
+spell[1]: exile target tapped creature.
+spell[2]: put a +1/+1 counter on the creature tapped to cast this spell.

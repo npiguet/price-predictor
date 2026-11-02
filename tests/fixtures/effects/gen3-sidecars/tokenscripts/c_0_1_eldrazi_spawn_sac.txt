@@ -1,0 +1,4 @@
+name: eldrazi spawn token
+types: creature eldrazi spawn
+power toughness: 0/1
+activated[1]: sacrifice CARDNAME: add {C}.

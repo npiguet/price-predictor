@@ -1,0 +1,6 @@
+name: voldaren stinger
+mana cost: {R}
+types: creature vampire warrior
+power toughness: 1/1
+activated[1]: {2}{R}: CARDNAME gets +2/+0 until end of turn.
+static: CARDNAME has first strike as long as it's attacking.

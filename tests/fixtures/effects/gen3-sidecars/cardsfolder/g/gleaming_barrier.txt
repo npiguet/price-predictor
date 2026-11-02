@@ -1,0 +1,6 @@
+name: gleaming barrier
+mana cost: {2}
+types: artifact creature wall
+power toughness: 0/4
+static: defender
+triggered: when CARDNAME dies, create a treasure token.

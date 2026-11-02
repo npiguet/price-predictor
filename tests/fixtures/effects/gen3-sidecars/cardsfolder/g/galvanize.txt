@@ -1,0 +1,4 @@
+name: galvanize
+mana cost: {1}{R}
+types: instant
+spell[1]: CARDNAME deals 3 damage to target creature. if you've drawn two or more cards this turn, CARDNAME deals 5 damage to that creature instead.

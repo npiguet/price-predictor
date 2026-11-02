@@ -1,0 +1,4 @@
+name: seal of primordium
+mana cost: {1}{G}
+types: enchantment
+activated[1]: sacrifice CARDNAME: destroy target artifact or enchantment.

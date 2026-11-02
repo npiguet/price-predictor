@@ -1,0 +1,6 @@
+name: netcaster spider
+mana cost: {2}{G}
+types: creature spider
+power toughness: 2/3
+static: reach
+triggered: whenever CARDNAME blocks a creature with flying, CARDNAME gets +2/+0 until end of turn.

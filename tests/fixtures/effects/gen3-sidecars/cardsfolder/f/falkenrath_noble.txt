@@ -1,0 +1,6 @@
+name: falkenrath noble
+mana cost: {3}{B}
+types: creature vampire noble
+power toughness: 2/2
+static: flying
+triggered: whenever CARDNAME or another creature dies, target player loses 1 life and you gain 1 life.

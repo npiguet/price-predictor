@@ -1,0 +1,6 @@
+name: thragtusk
+mana cost: {4}{G}
+types: creature beast
+power toughness: 5/3
+triggered: when CARDNAME enters, you gain 5 life.
+triggered: when CARDNAME leaves the battlefield, create a 3/3 green beast creature token.

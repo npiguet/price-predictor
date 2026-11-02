@@ -1,0 +1,7 @@
+name: impetuous lootmonger
+mana cost: {1}{R}
+types: creature human rogue
+power toughness: 2/2
+static: first strike
+triggered: when CARDNAME enters, discard a card, then heist target opponent's library.
+triggered: whenever you cast a spell you don't own, create a tapped treasure token.

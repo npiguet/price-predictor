@@ -1,0 +1,5 @@
+name: make disappear
+mana cost: {1}{U}
+types: instant
+additional cost: casualty 1
+spell[1]: counter target spell unless its controller pays {2}.

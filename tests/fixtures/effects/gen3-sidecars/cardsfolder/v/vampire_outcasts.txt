@@ -1,0 +1,6 @@
+name: vampire outcasts
+mana cost: {2}{B}{B}
+types: creature vampire
+power toughness: 2/2
+static: bloodthirst 2
+static: lifelink

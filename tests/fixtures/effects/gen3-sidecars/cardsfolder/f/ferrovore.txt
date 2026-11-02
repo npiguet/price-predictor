@@ -1,0 +1,5 @@
+name: ferrovore
+mana cost: {2}{R}
+types: creature beast
+power toughness: 2/2
+activated[1]: {R}, sacrifice an artifact: CARDNAME gets +3/+0 until end of turn.

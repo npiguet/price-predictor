@@ -1,0 +1,5 @@
+name: priest of ancient lore
+mana cost: {2}{W}
+types: creature dwarf cleric
+power toughness: 2/1
+triggered: when CARDNAME enters, you gain 1 life and draw a card.

@@ -14,6 +14,7 @@ so a ``SidecarCache`` rooted there resolves every key.
 
     python scripts/make_fixture_records.py                 # gen-1
     python scripts/make_fixture_records.py --generation 2  # gen-2
+    python scripts/make_fixture_records.py --generation 3 --per-category 2  # gen-3
 
 ``--generation 2`` adds the categories the rule detectors are tested on: a
 resolution whose effect half kills a creature at toughness 0 or less in the
@@ -35,6 +36,19 @@ detectors were corrected against in T036, each one record read and judged by
 hand, found by reading the shards their ids name. ``--append`` adds the pinned
 records to the fixture already on disk without rescanning, so every record an
 existing test names stays.
+
+``--generation 3`` reads the T079 pilot (``output/effects/records-gen3-pilot``)
+and adds, before gen-2's categories, one per story-2 acceptance scenario
+(``a1-`` … ``a11-``: a permanent with a static, a trigger and a replacement
+line; a creature stripped of every ability; flying granted by another
+permanent's static; ward and annihilator fragments; protection; a first-strike
+combat; a burn kill, which also brings the dies-trigger records of its game; a
+sorcery off turn and a candidate of the seat without priority; an unmet
+condition; a declared anchor tapped and one with vigilance), one per
+``turn_action`` subkind and per failed check, the anchored legality shapes, and
+the new snapshot members (floating effects of both kinds, delayed triggers,
+dungeons, day and night, each extra-entity role, a face-down card, dice).
+Face-down keys name ``variant-scripts/``, so that tree is a sidecar root too.
 """
 
 from __future__ import annotations
@@ -44,9 +58,11 @@ import gzip
 import json
 import shutil
 import sys
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Callable, Iterator
 from pathlib import Path
+
+import orjson
 
 from effects.domain.script_text import params as params_of
 from effects.domain.script_text import root as root_of
@@ -105,6 +121,8 @@ _GEN2_PINNED: dict[str, str] = {
 #: Records that follow a fired trigger in its game, kept so an interaction join
 #: (trigger -> the resolution it put on the stack) has its second half.
 _FOLLOWERS_PER_TRIGGER = 6
+#: Trigger records kept per game to find the ones a chosen kill fired.
+_RECENT_TRIGGERS = 12
 
 
 def _keys_in(obj) -> Iterator[dict]:
@@ -172,6 +190,12 @@ class _Sidecars:
 
 
 def _toughness(entity: dict) -> int | None:
+    """Net toughness: gen-2's ``pt`` triple, or gen-3's ``base_pt`` and ``pt_boosts``."""
+    if "base_pt" in entity:
+        base, boosts = entity["base_pt"], entity.get("pt_boosts")
+        if base is None or boosts is None:
+            return None
+        return base[1] + boosts["temporary"][1] + boosts["counters"][1]
     pt = entity.get("pt")
     if not pt:
         return None
@@ -416,6 +440,291 @@ def _gen2_categories(sidecars: _Sidecars) -> dict[str, Callable[[dict], bool]]:
     }
 
 
+#: Gen-3 ``turn_action`` subkinds and decision ``failed_checks`` identifiers,
+#: one fixture category each (contracts/record-schema-delta.md).
+_TURN_ACTION_SUBKINDS = ("draw", "cleanup_discard", "untap", "phasing", "day_night",
+                         "lore_counter")
+_FAILED_CHECKS = ("split_second", "casting_speed", "whose_turn", "phase", "combat",
+                  "activation_limit", "script_condition", "zone", "static_prohibition",
+                  "cost", "script_restriction")
+_EXTRA_ROLES = ("library_card", "exiled_with", "mutate_component", "last_known")
+
+
+def _lines(entity: dict) -> list[dict]:
+    return entity.get("lines") or []
+
+
+def _fragments(entity: dict) -> list[str]:
+    """The keyword lines' fragments, lower-cased (``ward:2``, ``flying``)."""
+    return [str(line.get("fragment") or "").lower() for line in _lines(entity)
+            if line["kind"] == "keyword"]
+
+
+def _has_keyword(entity: dict, *names: str) -> bool:
+    return any(fragment.split(":", 1)[0] in names for fragment in _fragments(entity))
+
+
+def _on_battlefield(entity: dict) -> bool:
+    return entity.get("zone") == "battlefield" and entity.get("role") is None
+
+
+def _is_creature(entity: dict) -> bool:
+    return "creature" in (entity.get("types") or ())
+
+
+def _deaths(events, *, unresolved: bool = True) -> set[str]:
+    """Subjects of battlefield-to-graveyard moves (no clause's doing, by default)."""
+    return {subject for event in events or ()
+            if event["type"] == "zone_change"
+            and (event.get("params") or {}).get("from_zone") == "battlefield"
+            and (event.get("params") or {}).get("to_zone") == "graveyard"
+            and (not unresolved or event.get("attributed_to") == "unresolved")
+            for subject in event.get("subjects") or ()}
+
+
+def _acting_kind(record: dict) -> str | None:
+    keys = record.get("ability") or ()
+    return keys[0]["trait_kind"] if keys else None
+
+
+def _burn_kill(record: dict) -> set[str]:
+    """Story 2 acceptance 7's first half: a spell's effect half dealing damage
+    to a creature that then dies in the state-based check; the dead subjects."""
+    if not _effect_resolution(record) or _acting_kind(record) != "spell":
+        return set()
+    events = record["payload"].get("events") or ()
+    damaged = {subject for event in events if event["type"] == "damage_dealt"
+               for subject in event.get("subjects") or ()}
+    return damaged & _deaths(events)
+
+
+def trigger_held_check_deaths(record: dict) -> set[str]:
+    """SC-004's violation: a triggered ability's effect half holding a death of
+    the check its trigger reached the stack during. Such a death happened before
+    the half's snapshot, so the snapshot no longer shows its subject on the
+    battlefield; a death the trigger's own resolution causes still does."""
+    if not _effect_resolution(record) or _acting_kind(record) != "trigger":
+        return set()
+    zones = {e["id"]: e.get("zone") for e in record["state"]["entities"]
+             if e.get("role") is None}
+    return {subject for subject in _deaths(record["payload"].get("events"))
+            if zones.get(subject, "battlefield") != "battlefield"}
+
+
+def _candidate(record: dict) -> dict | None:
+    if record["kind"] != "playability" or record.get("subkind") != "decision":
+        return None
+    candidates = record["payload"].get("candidates") or ()
+    return candidates[0] if candidates else None
+
+
+def _candidate_card(record: dict, candidate: dict) -> dict | None:
+    """The entity whose lines carry the candidate's key."""
+    keys = candidate.get("ability") or ()
+    if not keys:
+        return None
+    for entity in record["state"]["entities"]:
+        if any(keys[0] in line["keys"] for line in _lines(entity)):
+            return entity
+    return None
+
+
+def _failed(candidate: dict) -> list[str]:
+    return [entry["check"] for entry in candidate.get("failed_checks") or ()]
+
+
+def sorcery_off_turn(record: dict) -> bool:
+    """Story 2 acceptance 8: a sorcery in hand at a priority stop of the
+    opponent's turn reads timing false, can_play false, casting_speed failed."""
+    candidate = _candidate(record)
+    if candidate is None or record["state"]["global"].get("active") == record["actor_player"]:
+        return False
+    card = _candidate_card(record, candidate)
+    verdict = candidate.get("verdict") or {}
+    return (card is not None and card.get("zone") == "hand"
+            and "sorcery" in (card.get("types") or ())
+            and verdict.get("timing") is False and verdict.get("can_play") is False
+            and "casting_speed" in _failed(candidate))
+
+
+def other_seat_candidate(record: dict) -> bool:
+    """Story 2 acceptance 8: a candidate of the player without priority."""
+    return (_candidate(record) is not None
+            and record["state"]["global"].get("priority") not in (None, record["actor_player"]))
+
+
+def lost_all_abilities(record: dict, sidecars: _Sidecars) -> bool:
+    """Story 2 acceptance 2: a battlefield creature some static or floating
+    effect strips of every ability (``RemoveAllAbilities$``) lists no line."""
+    state = record["state"]
+    stripped: set[str] = set()
+    for entity in state["entities"]:
+        for line in _lines(entity):
+            if (line["kind"] == "static" and line.get("active") and line["keys"]
+                    and "RemoveAllAbilities" in sidecars.script(line["keys"][0])):
+                stripped.update(line.get("affected") or ())
+    for effect in state["global"].get("floating_effects") or ():
+        if any("RemoveAllAbilities" in sidecars.script(key)
+               for key in effect.get("source_lines") or ()):
+            stripped.update(effect.get("affected") or ())
+    return any(entity["id"] in stripped and _on_battlefield(entity) and _is_creature(entity)
+               and not _lines(entity) for entity in state["entities"])
+
+
+def _own_files(entity: dict) -> set[str]:
+    return {key["script_file"] for line in _lines(entity) if not line["granted"]
+            for key in line["keys"]}
+
+
+def granted_by_other_static(record: dict, keyword: str = "flying") -> bool:
+    """Story 2 acceptance 3: a permanent carries a keyword line granted by
+    another permanent's static, keyed to that static."""
+    for entity in record["state"]["entities"]:
+        if not _on_battlefield(entity):
+            continue
+        own = _own_files(entity)
+        for line in _lines(entity):
+            if (line["kind"] == "keyword" and line["granted"]
+                    and str(line.get("fragment") or "").lower() == keyword
+                    and any(key["trait_kind"] == "static" and key["script_file"] not in own
+                            for key in line["keys"])):
+                return True
+    return False
+
+
+def static_trigger_replacement(record: dict) -> bool:
+    """Story 2 acceptance 1: a permanent listing a static (flagged ``active``),
+    a trigger and a replacement line, each keyed."""
+    for entity in record["state"]["entities"]:
+        if not _on_battlefield(entity):
+            continue
+        kinds = {line["kind"] for line in _lines(entity) if line["keys"]}
+        if {"static", "trigger", "replacement"} <= kinds and all(
+                "active" in line for line in _lines(entity) if line["kind"] == "static"):
+            return True
+    return False
+
+
+def _fragment_prefix(prefix: str) -> Callable[[dict], bool]:
+    return lambda record: any(
+        fragment.startswith(prefix) for entity in record["state"]["entities"]
+        if _on_battlefield(entity) for fragment in _fragments(entity))
+
+
+def first_strike_combat(record: dict) -> bool:
+    """Story 2 acceptance 6: an observed combat with a first or double striker,
+    its shape and assignment filled."""
+    if record["kind"] != "combat" or record["fork"]:
+        return False
+    payload = record["payload"]
+    combatants = set(payload.get("attackers") or ()) | {
+        blocker for blockers in (payload.get("blocks") or {}).values() for blocker in blockers}
+    return bool(payload.get("assignment_choices")) and any(
+        entity["id"] in combatants and _has_keyword(entity, "first strike", "double strike")
+        for entity in record["state"]["entities"])
+
+
+def _anchor(record: dict) -> dict | None:
+    if record["kind"] != "playability" or record.get("subkind") != "attackers":
+        return None
+    anchor = record["payload"].get("anchor_attacker")
+    return next((e for e in record["state"]["entities"] if e["id"] == anchor), None)
+
+
+def _attackers(test: Callable[[dict, dict], bool]) -> Callable[[dict], bool]:
+    def check(record: dict) -> bool:
+        anchor = _anchor(record)
+        return anchor is not None and test(record["payload"], anchor)
+    return check
+
+
+def _floating(prefix: str) -> Callable[[dict], bool]:
+    return lambda record: any(
+        str(effect["id"]).startswith(prefix)
+        for effect in record["state"]["global"].get("floating_effects") or ())
+
+
+def _empty_mana(record: dict) -> bool:
+    return any(event["type"] == "mana_produced" and not any(
+        amount > 0 for amount in ((event.get("params") or {}).get("mana_by_color") or {}).values())
+        for event in (record["payload"].get("events") or ()))
+
+
+def _gen3_categories(sidecars: _Sidecars) -> dict[str, Callable[[dict], bool]]:
+    """Gen-3's own categories: story 2's acceptance scenarios, each
+    ``turn_action`` subkind and failed check, the anchored legality records and
+    the new snapshot members. Matched before gen-2's and the shared ones."""
+    def turn_action(subkind: str) -> Callable[[dict], bool]:
+        def test(record: dict) -> bool:
+            if record["kind"] != "turn_action" or record.get("subkind") != subkind:
+                return False
+            return subkind != "draw" or any(
+                e["type"] == "card_drawn" for e in record["payload"].get("events") or ())
+        return test
+
+    def failed_check(check: str) -> Callable[[dict], bool]:
+        def test(record: dict) -> bool:
+            candidate = _candidate(record)
+            return candidate is not None and check in _failed(candidate)
+        return test
+
+    def role(name: str) -> Callable[[dict], bool]:
+        return lambda record: any(e.get("role") == name for e in record["state"]["entities"])
+
+    return {
+        "a1-static-trigger-replacement": static_trigger_replacement,
+        "a2-lost-all-abilities": lambda r: lost_all_abilities(r, sidecars),
+        "a3-granted-flying": granted_by_other_static,
+        "a4-ward": _fragment_prefix("ward:"),
+        "a4-annihilator": _fragment_prefix("annihilator:"),
+        "a5-protection-from-goblins": lambda r: any(
+            f.startswith("protection") and "goblin" in f for e in r["state"]["entities"]
+            if _on_battlefield(e) for f in _fragments(e)),
+        "a5-protection": _fragment_prefix("protection"),
+        "a6-first-strike-combat": first_strike_combat,
+        "a7-burn-kill": lambda r: bool(_burn_kill(r)),
+        "a8-sorcery-off-turn": sorcery_off_turn,
+        "a8-other-seat": other_seat_candidate,
+        "a9-condition-unmet": lambda r: _effect_resolution(r) and any(
+            entry.get("met") is False for entry in r["payload"].get("conditions_met") or ()),
+        **{f"turn-action-{subkind}": turn_action(subkind) for subkind in _TURN_ACTION_SUBKINDS},
+        "a11-attacker-tapped": _attackers(
+            lambda p, anchor: p.get("tapped_by_attack") is True),
+        "a11-attacker-vigilance": _attackers(
+            lambda p, anchor: p.get("tapped_by_attack") is False
+            and _has_keyword(anchor, "vigilance")),
+        "attacker-must-attack": _attackers(lambda p, anchor: p.get("must_attack") is True),
+        "attacker-no-defender": _attackers(lambda p, anchor: p.get("legal_defenders") == []),
+        "blockers-must-block": lambda r: r["kind"] == "playability" and r.get(
+            "subkind") == "blockers" and bool(r["payload"].get("must_block")),
+        **{f"failed-check-{check}": failed_check(check) for check in _FAILED_CHECKS},
+        "floating-effect-card": _floating("E"),
+        "floating-effect-timestamp": _floating("F"),
+        "delayed-trigger": lambda r: bool(r["state"]["global"].get("delayed_triggers")),
+        "dungeon": lambda r: bool(r["state"]["global"].get("dungeons")),
+        "day-night": lambda r: r["state"]["global"].get("day_night") is not None,
+        **{f"role-{name}": role(name) for name in _EXTRA_ROLES},
+        "face-down": lambda r: any(e.get("face_state") == "face_down"
+                                   for e in r["state"]["entities"]),
+        "dice-rolled": lambda r: bool(((r["state"].get("refs") or {}).get("random") or {})
+                                      .get("dice")),
+        "mana-empty-colors": _empty_mana,
+        # The rarer § 8.13 members, so each varies within the fixture too.
+        "player-speed": lambda r: any(p.get("speed") for p in r["state"]["players"]),
+        "city-blessing": lambda r: any(p.get("city_blessing") for p in r["state"]["players"]),
+        "monarch": lambda r: any(p.get("monarch") for p in r["state"]["players"]),
+        "x-paid": lambda r: any(e.get("x_paid") for e in r["state"]["entities"]),
+        "designations": lambda r: any(e.get("designations") for e in r["state"]["entities"]),
+        "printed-loyalty": lambda r: any(e.get("printed_loyalty") is not None
+                                         for e in r["state"]["entities"]),
+        "chosen-color": lambda r: any((e.get("chosen") or {}).get("colors")
+                                      for e in r["state"]["entities"]),
+        "keyword-granted-by-effect": lambda r: any(
+            line["kind"] == "keyword" and line["granted"] and not line["keys"]
+            for e in r["state"]["entities"] for line in _lines(e)),
+    }
+
+
 def _categories(sidecars: _Sidecars) -> dict[str, Callable[[dict], bool]]:
     def acting_api(record: dict) -> str | None:
         keys = record.get("ability") or ()
@@ -475,12 +784,14 @@ def _read_fixture(path: Path) -> dict[str, dict]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
-    parser.add_argument("--generation", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--generation", type=int, choices=(1, 2, 3), default=1)
     parser.add_argument("--records-dir", type=Path,
-                        help="default output/effects/records, or records-gen2 for --generation 2")
+                        help="default output/effects/records, records-gen2 for --generation 2, "
+                             "records-gen3-pilot for --generation 3")
     parser.add_argument("--cards-folder", action="append", type=Path,
                         help="converted roots, named by tree (repeatable); "
-                             "default output/cardsfolder and output/tokenscripts")
+                             "default output/cardsfolder and output/tokenscripts, "
+                             "and output/effects/variant-scripts for --generation 3")
     parser.add_argument("--output", type=Path,
                         help="default tests/fixtures/effects/gen<N>-records.jsonl.gz")
     parser.add_argument("--sidecars-out", type=Path,
@@ -492,15 +803,21 @@ def main() -> int:
     args = parser.parse_args()
     gen = args.generation
     args.records_dir = args.records_dir or Path(
-        "output/effects/records" if gen == 1 else "output/effects/records-gen2")
+        {1: "output/effects/records", 2: "output/effects/records-gen2",
+         3: "output/effects/records-gen3-pilot"}[gen])
     args.output = args.output or Path(f"tests/fixtures/effects/gen{gen}-records.jsonl.gz")
     args.sidecars_out = args.sidecars_out or Path(f"tests/fixtures/effects/gen{gen}-sidecars")
 
-    folders = args.cards_folder or [Path("output/cardsfolder"), Path("output/tokenscripts")]
+    folders = args.cards_folder or [
+        Path("output/cardsfolder"), Path("output/tokenscripts"),
+        # A face-down card's keys name its variant script (T071).
+        *([Path("output/effects/variant-scripts")] if gen == 3 else [])]
     sidecars = _Sidecars({folder.name: folder for folder in folders})
     categories = _categories(sidecars)
-    if gen == 2:
+    if gen >= 2:
         categories = {**_gen2_categories(sidecars), **categories}
+    if gen == 3:
+        categories = {**_gen3_categories(sidecars), **categories}
     chosen: dict[str, list[dict]] = defaultdict(list)
     wanted_links: set[str] = set()
     wanted_mirrors: set[str] = set()
@@ -515,15 +832,20 @@ def main() -> int:
     # Interleave the collection runs rather than reading one run's shards first,
     # so a category only another run reaches (probes, variants) is found early.
     shards = shards[::7] + [s for i, s in enumerate(shards) if i % 7]
-    forge_ai_wanted = gen == 2
+    forge_ai_wanted = gen >= 2
     for shard_no, shard in enumerate(shards[: args.max_shards]):
         followers: dict[str, int] = {}
+        # The trigger records just written in each game: a dies trigger's record
+        # precedes the held effect half of the kill that fired it (acceptance 7).
+        recent_triggers: dict[str, deque] = defaultdict(lambda: deque(maxlen=_RECENT_TRIGGERS))
         seat_games: set[str] = set()
         plain: dict[str, list[dict]] = defaultdict(list)
         for line in iter_shard_lines(shard):
             try:
-                record = json.loads(line)
-            except json.JSONDecodeError:
+                # orjson, as the codec reads: a gen-3 shard is tens of
+                # gigabytes of JSON.
+                record = orjson.loads(line)
+            except orjson.JSONDecodeError:
                 continue
             record_id = record["record_id"]
             game = record["game_id"]
@@ -538,6 +860,8 @@ def main() -> int:
                 extras[record_id] = record
             if record_id in wanted_mirrors:
                 extras[record_id] = record
+            if record["kind"] == "trigger":
+                recent_triggers[game].append(record)
             for name, test in categories.items():
                 if len(chosen[name]) >= args.per_category or not test(record):
                     continue
@@ -546,8 +870,14 @@ def main() -> int:
                     wanted_links.add(record["link_id"])
                 if record.get("mirror_of"):
                     wanted_mirrors.add(record["mirror_of"])
-                if name == "trigger-fired":
+                if name in ("trigger-fired", "a7-burn-kill"):
                     followers[game] = _FOLLOWERS_PER_TRIGGER
+                if name == "a7-burn-kill":
+                    dead = _burn_kill(record)
+                    for trigger in recent_triggers[game]:
+                        event = trigger["payload"].get("event") or {}
+                        if set(event.get("subjects") or ()) & dead:
+                            extras[trigger["record_id"]] = trigger
                 break
         if forge_ai_wanted:
             # Games never span shards, so a game is known to be Forge AI on

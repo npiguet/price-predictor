@@ -1,0 +1,5 @@
+name: stromkirk bloodthief
+mana cost: {2}{B}
+types: creature vampire rogue
+power toughness: 2/2
+triggered: at the beginning of your end step, if an opponent lost life this turn, put a +1/+1 counter on target vampire you control.

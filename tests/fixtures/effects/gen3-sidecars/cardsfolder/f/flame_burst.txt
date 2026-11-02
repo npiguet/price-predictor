@@ -1,0 +1,4 @@
+name: flame burst
+mana cost: {1}{R}
+types: instant
+spell[1]: CARDNAME deals X damage to any target, where X is 2 plus the number of cards named flame burst in all graveyards.

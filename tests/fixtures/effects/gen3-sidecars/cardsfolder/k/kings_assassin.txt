@@ -1,0 +1,5 @@
+name: king's assassin
+mana cost: {1}{B}{B}
+types: creature human assassin
+power toughness: 1/1
+activated[1]: {T}: destroy target tapped creature. activate only during your turn, before attackers are declared.

@@ -1,0 +1,6 @@
+name: shimian specter
+mana cost: {2}{B}{B}
+types: creature specter
+power toughness: 2/2
+static: flying
+triggered: whenever CARDNAME deals combat damage to a player, that player reveals their hand. you choose a nonland card from it. search that player's graveyard, hand, and library for all cards with the same name as that card and exile them. then that player shuffles.

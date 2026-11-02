@@ -1,0 +1,6 @@
+name: aven smokeweaver
+mana cost: {2}{U}{U}
+types: creature bird soldier
+power toughness: 2/3
+static: flying
+static: protection from red

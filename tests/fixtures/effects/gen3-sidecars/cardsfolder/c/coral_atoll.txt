@@ -1,0 +1,5 @@
+name: coral atoll
+types: land
+activated[1]: {T}: add {C}{U}.
+triggered: when CARDNAME enters, sacrifice it unless you return an untapped island you control to its owner's hand.
+replacement: CARDNAME enters tapped.

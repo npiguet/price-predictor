@@ -1,0 +1,6 @@
+name: gravestone strider
+mana cost: {2}
+types: artifact creature golem
+power toughness: 1/3
+activated[1]: {1}: add one mana of any color. activate only once each turn.
+activated[2]: {2}, exile CARDNAME from your graveyard: exile target card from a graveyard.

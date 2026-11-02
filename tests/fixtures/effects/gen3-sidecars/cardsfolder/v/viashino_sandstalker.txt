@@ -1,0 +1,6 @@
+name: viashino sandstalker
+mana cost: {1}{R}{R}
+types: creature lizard warrior
+power toughness: 4/2
+static: haste
+triggered: at the beginning of the end step, return CARDNAME to its owner's hand.

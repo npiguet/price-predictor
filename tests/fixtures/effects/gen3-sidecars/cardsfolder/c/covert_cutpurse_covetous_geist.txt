@@ -1,0 +1,16 @@
+layout: transform
+name: covert cutpurse
+mana cost: {2}{B}
+types: creature human rogue
+power toughness: 2/1
+alternate cost: disturb {4}{B}
+triggered: when CARDNAME enters, destroy target creature you don't control that was dealt damage this turn.
+
+ALTERNATE
+
+name: covetous geist
+types: creature spirit rogue
+power toughness: 2/2
+static: flying
+static: deathtouch
+replacement: if CARDNAME would be put into a graveyard from anywhere, exile it instead.

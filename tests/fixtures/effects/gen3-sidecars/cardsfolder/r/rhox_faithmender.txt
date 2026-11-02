@@ -1,0 +1,6 @@
+name: rhox faithmender
+mana cost: {3}{W}
+types: creature rhino monk
+power toughness: 1/5
+static: lifelink
+replacement: if you would gain life, you gain twice that much life instead.

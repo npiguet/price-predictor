@@ -1,0 +1,5 @@
+name: tormented soul
+mana cost: {B}
+types: creature spirit
+power toughness: 1/1
+static: CARDNAME can't block and can't be blocked.

@@ -1,0 +1,15 @@
+layout: transform
+name: tireless hauler
+mana cost: {4}{G}
+types: creature human werewolf
+power toughness: 4/5
+static: vigilance
+triggered: daybound
+
+ALTERNATE
+
+name: dire-strain brawler
+types: creature werewolf
+power toughness: 6/6
+static: vigilance
+triggered: nightbound

@@ -1,0 +1,8 @@
+name: swarming goblins
+mana cost: {4}{R}
+types: creature goblin
+power toughness: 4/3
+triggered: when CARDNAME enters, roll a d20.
+option[1]: 1—9 | create a 1/1 red goblin creature token.
+option[2]: 10—19 | create two of those tokens.
+option[3]: 20 | create three of those tokens.

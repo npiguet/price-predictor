@@ -1,0 +1,5 @@
+name: civil servant
+mana cost: {G}{W}
+types: creature cat citizen
+power toughness: 2/3
+triggered: whenever CARDNAME attacks, you may tap another untapped citizen you control. if you do, CARDNAME gets +1/+0 and gains lifelink until end of turn.

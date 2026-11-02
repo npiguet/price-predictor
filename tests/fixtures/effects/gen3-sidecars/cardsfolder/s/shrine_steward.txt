@@ -1,0 +1,5 @@
+name: shrine steward
+mana cost: {5}
+types: artifact creature construct
+power toughness: 3/2
+triggered: when CARDNAME enters, you may search your library for an aura or shrine card, reveal it, put it into your hand, then shuffle.

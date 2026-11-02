@@ -1,0 +1,5 @@
+name: stonewood invocation
+mana cost: {3}{G}
+types: instant
+static: split second
+spell[1]: target creature gets +5/+5 and gains shroud until end of turn.

@@ -1,0 +1,5 @@
+name: witch's mark
+mana cost: {1}{R}
+types: sorcery
+spell[1]: you may discard a card. if you do, draw two cards.
+spell[2]: create a wicked role token attached to up to one target creature you control.

@@ -1,0 +1,5 @@
+name: returned centaur
+mana cost: {3}{B}
+types: creature zombie centaur
+power toughness: 2/4
+triggered: when CARDNAME enters, target player mills four cards.

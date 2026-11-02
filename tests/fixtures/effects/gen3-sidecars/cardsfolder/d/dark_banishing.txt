@@ -1,0 +1,4 @@
+name: dark banishing
+mana cost: {2}{B}
+types: instant
+spell[1]: destroy target nonblack creature. it can't be regenerated.

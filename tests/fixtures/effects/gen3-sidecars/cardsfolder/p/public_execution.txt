@@ -1,0 +1,4 @@
+name: public execution
+mana cost: {5}{B}
+types: instant
+spell[1]: destroy target creature an opponent controls. each other creature that player controls gets -2/-0 until end of turn.

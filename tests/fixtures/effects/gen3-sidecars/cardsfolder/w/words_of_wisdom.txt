@@ -1,0 +1,4 @@
+name: words of wisdom
+mana cost: {1}{U}
+types: instant
+spell[1]: you draw two cards, then each other player draws a card.

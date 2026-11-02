@@ -1,0 +1,6 @@
+name: ambush gigapede
+mana cost: {4}{B}{B}
+types: creature insect
+power toughness: 6/2
+static: flash
+triggered: when CARDNAME enters, target creature an opponent controls gets -2/-2 until end of turn.

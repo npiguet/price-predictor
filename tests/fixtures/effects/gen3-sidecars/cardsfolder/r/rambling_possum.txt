@@ -1,0 +1,6 @@
+name: rambling possum
+mana cost: {2}{G}
+types: creature possum mount
+power toughness: 3/3
+activated[1]: saddle 1
+triggered: whenever CARDNAME attacks while saddled, it gains +1/+2 until end of turn. then you may return any number of creatures that saddled it this turn to their owner's hand.

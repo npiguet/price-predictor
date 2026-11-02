@@ -1,0 +1,7 @@
+name: gate colossus
+mana cost: {8}
+types: artifact creature construct
+power toughness: 8/8
+cost reduction: affinity for gates
+triggered: whenever a gate you control enters, you may put CARDNAME from your graveyard on top of your library.
+static: CARDNAME can't be blocked by creatures with power 2 or less.

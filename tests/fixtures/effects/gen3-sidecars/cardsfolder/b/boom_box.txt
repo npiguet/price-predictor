@@ -1,0 +1,4 @@
+name: boom box
+mana cost: {2}
+types: artifact
+activated[1]: {6}, {T}, sacrifice CARDNAME: destroy up to one target artifact, up to one target creature, and up to one target land.

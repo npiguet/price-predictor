@@ -1,0 +1,6 @@
+name: wylie duke, atiin hero
+mana cost: {1}{G}{W}
+types: legendary creature human ranger
+power toughness: 4/2
+static: vigilance
+triggered: whenever CARDNAME becomes tapped, you gain 1 life and draw a card.

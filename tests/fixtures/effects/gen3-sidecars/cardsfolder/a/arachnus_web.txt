@@ -1,0 +1,6 @@
+name: arachnus web
+mana cost: {2}{G}
+types: enchantment aura
+static: enchant creature
+triggered: at the beginning of the end step, if enchanted creature's power is 4 or greater, destroy CARDNAME.
+static: enchanted creature can't attack or block and its activated abilities can't be activated.

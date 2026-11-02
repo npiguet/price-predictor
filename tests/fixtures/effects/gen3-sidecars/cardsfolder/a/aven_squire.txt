@@ -1,0 +1,6 @@
+name: aven squire
+mana cost: {1}{W}
+types: creature bird soldier
+power toughness: 1/1
+static: flying
+triggered: exalted

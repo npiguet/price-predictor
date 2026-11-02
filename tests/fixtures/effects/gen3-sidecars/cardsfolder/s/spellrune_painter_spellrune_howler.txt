@@ -1,0 +1,15 @@
+layout: transform
+name: spellrune painter
+mana cost: {2}{R}
+types: creature human shaman werewolf
+power toughness: 2/3
+triggered: daybound
+triggered: whenever you cast an instant or sorcery spell, CARDNAME gets +1/+1 until end of turn.
+
+ALTERNATE
+
+name: spellrune howler
+types: creature werewolf
+power toughness: 3/4
+triggered: nightbound
+triggered: whenever you cast an instant or sorcery spell, CARDNAME gets +2/+2 until end of turn.

@@ -1,0 +1,8 @@
+name: nashi, illusion gadgeteer
+mana cost: {1}{B}{G}{U}
+types: legendary creature rat rogue
+power toughness: 4/4
+static: flash
+static: menace
+static: ward {2}
+triggered: when CARDNAME enters, secretly choose a card in your graveyard and conjure a duplicate of it into your hand. if the duplicate isn't a land card, it perpetually gains flash.

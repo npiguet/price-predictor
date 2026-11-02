@@ -1,0 +1,6 @@
+name: gatecreeper vine
+mana cost: {1}{G}
+types: creature plant
+power toughness: 0/2
+static: defender
+triggered: when CARDNAME enters, you may search your library for a basic land card or a gate card, reveal it, put it into your hand, then shuffle.

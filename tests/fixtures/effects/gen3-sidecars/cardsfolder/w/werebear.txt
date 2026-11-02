@@ -1,0 +1,6 @@
+name: werebear
+mana cost: {1}{G}
+types: creature human bear druid
+power toughness: 1/1
+activated[1]: {T}: add {G}.
+static: threshold — CARDNAME gets +3/+3 as long as there are seven or more cards in your graveyard.

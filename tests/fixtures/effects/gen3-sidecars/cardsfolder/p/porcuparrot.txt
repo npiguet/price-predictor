@@ -1,0 +1,6 @@
+name: porcuparrot
+mana cost: {3}{R}
+types: creature bird beast
+power toughness: 3/4
+alternate cost: mutate {2}{R}
+activated[1]: {T}: this creature deals X damage to any target, where X is the number of times this creature has mutated.

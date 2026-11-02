@@ -1,0 +1,5 @@
+name: backup agent
+mana cost: {1}{W}
+types: creature human citizen
+power toughness: 1/1
+triggered: when CARDNAME enters, put a +1/+1 counter on target creature.

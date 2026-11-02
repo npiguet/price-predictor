@@ -1,0 +1,7 @@
+name: aloe alchemist
+mana cost: {1}{G}
+types: creature plant warlock
+power toughness: 3/2
+alternate cost: plot {1}{G}
+static: trample
+triggered: when CARDNAME becomes plotted, target creature gets +3/+2 and gains trample until end of turn.

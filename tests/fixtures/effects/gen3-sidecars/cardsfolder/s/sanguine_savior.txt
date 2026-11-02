@@ -1,0 +1,8 @@
+name: sanguine savior
+mana cost: {1}{W}{B}
+types: creature vampire cleric
+power toughness: 2/1
+alternate cost: disguise {W/B}{W/B}
+static: flying
+static: lifelink
+triggered: when CARDNAME is turned face up, another target creature you control gains lifelink until end of turn.

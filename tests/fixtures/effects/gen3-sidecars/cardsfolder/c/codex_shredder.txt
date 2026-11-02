@@ -1,0 +1,5 @@
+name: codex shredder
+mana cost: {1}
+types: artifact
+activated[1]: {T}: target player mills a card.
+activated[2]: {5}, {T}, sacrifice CARDNAME: return target card from your graveyard to your hand.

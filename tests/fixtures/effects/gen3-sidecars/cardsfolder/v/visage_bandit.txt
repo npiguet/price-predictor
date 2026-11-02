@@ -1,0 +1,6 @@
+name: visage bandit
+mana cost: {3}{U}
+types: creature shapeshifter rogue
+power toughness: 2/2
+alternate cost: plot {2}{U}
+replacement: you may have CARDNAME enter as a copy of a creature you control, except it's a shapeshifter rogue in addition to its other types.

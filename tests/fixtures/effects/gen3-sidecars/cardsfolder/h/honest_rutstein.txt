@@ -1,0 +1,6 @@
+name: honest rutstein
+mana cost: {1}{B}{G}
+types: legendary creature human warlock
+power toughness: 3/2
+triggered: when CARDNAME enters, return target creature card from your graveyard to your hand.
+static: creature spells you cast cost {1} less to cast.

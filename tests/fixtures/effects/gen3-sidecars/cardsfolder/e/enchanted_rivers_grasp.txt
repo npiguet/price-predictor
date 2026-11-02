@@ -1,0 +1,7 @@
+name: enchanted river's grasp
+mana cost: {2}{U}
+types: enchantment aura
+static: enchant creature
+triggered: when this aura enters, tap enchanted creature and remove all counters from it.
+static: enchanted creature loses all abilities and doesn't untap during its controller's untap step.
+replacement: enchanted creature doesn't untap during its controller's untap step.

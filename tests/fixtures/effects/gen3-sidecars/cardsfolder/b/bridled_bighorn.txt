@@ -1,0 +1,7 @@
+name: bridled bighorn
+mana cost: {3}{W}
+types: creature sheep mount
+power toughness: 3/4
+static: vigilance
+activated[1]: saddle 2
+triggered: whenever CARDNAME attacks while saddled, create a 1/1 white sheep creature token.

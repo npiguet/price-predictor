@@ -1,0 +1,5 @@
+name: grapeshot
+mana cost: {1}{R}
+types: sorcery
+triggered: storm
+spell[1]: CARDNAME deals 1 damage to any target.

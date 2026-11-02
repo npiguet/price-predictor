@@ -1,0 +1,4 @@
+name: terror
+mana cost: {1}{B}
+types: instant
+spell[1]: destroy target nonartifact, nonblack creature. it can't be regenerated.

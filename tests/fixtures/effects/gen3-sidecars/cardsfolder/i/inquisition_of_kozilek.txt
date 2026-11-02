@@ -1,0 +1,4 @@
+name: inquisition of kozilek
+mana cost: {B}
+types: sorcery
+spell[1]: target player reveals their hand. you choose a nonland card from it with mana value 3 or less. that player discards that card.

@@ -1,0 +1,5 @@
+name: murmuring mystic
+mana cost: {3}{U}
+types: creature human wizard
+power toughness: 1/5
+triggered: whenever you cast an instant or sorcery spell, create a 1/1 blue bird illusion creature token with flying.

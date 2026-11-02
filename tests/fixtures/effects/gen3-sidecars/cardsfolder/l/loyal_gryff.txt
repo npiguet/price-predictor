@@ -1,0 +1,7 @@
+name: loyal gryff
+mana cost: {2}{W}
+types: creature hippogriff
+power toughness: 2/2
+static: flash
+static: flying
+triggered: when CARDNAME enters, you may return another creature you control to its owner's hand.

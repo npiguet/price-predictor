@@ -1,0 +1,5 @@
+name: holy strength
+mana cost: {W}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature gets +1/+2.

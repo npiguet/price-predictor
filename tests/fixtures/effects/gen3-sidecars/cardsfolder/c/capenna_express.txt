@@ -1,0 +1,6 @@
+name: capenna express
+mana cost: {3}{G}
+types: artifact vehicle
+power toughness: 6/6
+activated[1]: crew 3
+activated[2]: sacrifice a treasure: CARDNAME becomes an artifact creature until end of turn.

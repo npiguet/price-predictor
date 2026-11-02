@@ -1,0 +1,5 @@
+name: siege zombie
+mana cost: {1}{B}
+types: creature zombie
+power toughness: 2/2
+activated[1]: tap three untapped creatures you control: each opponent loses 1 life.

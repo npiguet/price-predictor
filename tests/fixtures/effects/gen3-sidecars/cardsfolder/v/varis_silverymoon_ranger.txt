@@ -1,0 +1,8 @@
+name: varis, silverymoon ranger
+mana cost: {1}{G}{G}
+types: legendary creature human elf ranger
+power toughness: 3/3
+static: reach
+static: ward {1}
+triggered: whenever you cast a creature or planeswalker spell, venture into the dungeon. this ability triggers only once each turn.
+triggered: whenever you complete a dungeon, create a 2/2 green wolf creature token.

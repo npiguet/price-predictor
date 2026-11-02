@@ -1,0 +1,4 @@
+name: strangle
+mana cost: {R}
+types: sorcery
+spell[1]: CARDNAME deals 3 damage to target creature or planeswalker.

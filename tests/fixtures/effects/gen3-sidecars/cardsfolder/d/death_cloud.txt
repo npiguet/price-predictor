@@ -1,0 +1,4 @@
+name: death cloud
+mana cost: {X}{B}{B}{B}
+types: sorcery
+spell[1]: each player loses X life, discards X cards, sacrifices X creatures, then sacrifices X lands.

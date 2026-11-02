@@ -1,0 +1,6 @@
+name: icatian javelineers
+mana cost: {W}
+types: creature human soldier
+power toughness: 1/1
+replacement: CARDNAME enters with a javelin counter on it.
+activated[1]: {T}, remove a javelin counter from CARDNAME: it deals 1 damage to any target.

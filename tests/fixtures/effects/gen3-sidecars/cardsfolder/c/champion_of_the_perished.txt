@@ -1,0 +1,5 @@
+name: champion of the perished
+mana cost: {B}
+types: creature zombie
+power toughness: 1/1
+triggered: whenever another zombie you control enters, put a +1/+1 counter on CARDNAME.

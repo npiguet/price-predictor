@@ -1,0 +1,4 @@
+name: manalith
+mana cost: {3}
+types: artifact
+activated[1]: {T}: add one mana of any color.

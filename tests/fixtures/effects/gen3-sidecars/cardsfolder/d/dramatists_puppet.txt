@@ -1,0 +1,5 @@
+name: dramatist's puppet
+mana cost: {4}
+types: artifact creature construct
+power toughness: 2/4
+triggered: when CARDNAME enters, for each kind of counter on target permanent, put another counter of that kind on it or remove one from it.

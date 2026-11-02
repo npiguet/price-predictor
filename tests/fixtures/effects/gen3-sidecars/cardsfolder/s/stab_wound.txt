@@ -1,0 +1,6 @@
+name: stab wound
+mana cost: {2}{B}
+types: enchantment aura
+static: enchant creature
+triggered: at the beginning of the upkeep of enchanted creature's controller, that player loses 2 life.
+static: enchanted creature gets -2/-2.

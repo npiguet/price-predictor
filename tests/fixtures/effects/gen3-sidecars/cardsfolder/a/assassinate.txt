@@ -1,0 +1,4 @@
+name: assassinate
+mana cost: {2}{B}
+types: sorcery
+spell[1]: destroy target tapped creature.

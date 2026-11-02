@@ -1,0 +1,6 @@
+name: surrakar spellblade
+mana cost: {1}{U}{U}
+types: creature surrakar
+power toughness: 2/1
+triggered: whenever you cast a instant or sorcery spell, you may put a charge counter on CARDNAME.
+triggered: whenever CARDNAME deals combat damage to a player, you may draw X cards, where X is the number of charge counters on CARDNAME.

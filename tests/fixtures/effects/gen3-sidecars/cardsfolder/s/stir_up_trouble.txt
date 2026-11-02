@@ -1,0 +1,5 @@
+name: stir up trouble
+mana cost: {B}
+types: sorcery
+additional cost: sacrifice an artifact or creature or pay {4}
+spell[1]: destroy target creature.

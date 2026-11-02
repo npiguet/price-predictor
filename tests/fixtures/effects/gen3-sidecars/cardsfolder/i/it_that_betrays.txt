@@ -1,0 +1,6 @@
+name: it that betrays
+mana cost: {12}
+types: creature eldrazi
+power toughness: 11/11
+triggered: annihilator 2
+triggered: whenever an opponent sacrifices a nontoken permanent, put that card onto the battlefield under your control.

@@ -1,0 +1,7 @@
+name: master's councillors
+mana cost: {1}{U}
+types: creature human advisor
+power toughness: 1/3
+static: vigilance
+triggered: whenever you draw your second card each turn, target player mills three cards.
+static: this creature gets +2/+0 for each graveyard with seven or more cards in it.

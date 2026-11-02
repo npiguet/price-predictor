@@ -1,0 +1,7 @@
+name: rooftop nuisance
+mana cost: {2}{U}
+types: sorcery
+additional cost: casualty 1
+spell[1]: tap target creature. it doesn't untap during its controller's next untap step.
+spell[2]: it doesn't untap during its controller's next untap step.
+spell[3]: draw a card.

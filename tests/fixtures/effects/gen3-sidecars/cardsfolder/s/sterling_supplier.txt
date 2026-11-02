@@ -1,0 +1,6 @@
+name: sterling supplier
+mana cost: {4}{W}
+types: creature bird soldier
+power toughness: 3/4
+static: flying
+triggered: when CARDNAME enters, put a +1/+1 counter on another target creature you control.

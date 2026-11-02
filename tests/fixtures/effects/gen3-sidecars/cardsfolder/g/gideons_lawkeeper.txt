@@ -1,0 +1,5 @@
+name: gideon's lawkeeper
+mana cost: {W}
+types: creature human soldier
+power toughness: 1/1
+activated[1]: {W}, {T}: tap target creature.

@@ -1,0 +1,5 @@
+name: scorching winds
+mana cost: {R}
+types: instant
+text: cast this spell only during the declare attackers step and only if you've been attacked this step.\r\n
+spell[1]: CARDNAME deals 1 damage to each attacking creature.

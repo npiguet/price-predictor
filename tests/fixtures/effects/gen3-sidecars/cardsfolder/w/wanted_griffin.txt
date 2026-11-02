@@ -1,0 +1,6 @@
+name: wanted griffin
+mana cost: {3}{W}
+types: creature griffin
+power toughness: 3/2
+static: flying
+triggered: when CARDNAME dies, create a 1/1 red mercenary creature token with "{T}: target creature you control gets +1/+0 until end of turn. activate only as a sorcery."

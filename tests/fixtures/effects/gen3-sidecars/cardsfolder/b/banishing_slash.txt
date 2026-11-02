@@ -1,0 +1,5 @@
+name: banishing slash
+mana cost: {W}{W}
+types: sorcery
+spell[1]: destroy up to one target artifact, enchantment, or tapped creature.
+spell[2]: then if you control an artifact and an enchantment, create a 2/2 white samurai creature token with vigilance.

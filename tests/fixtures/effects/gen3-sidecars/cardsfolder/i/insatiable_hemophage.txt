@@ -1,0 +1,7 @@
+name: insatiable hemophage
+mana cost: {3}{B}
+types: creature nightmare
+power toughness: 3/3
+alternate cost: mutate {2}{B}
+static: deathtouch
+triggered: whenever this creature mutates, each opponent loses X life and you gain X life, where X is the number of times this creature has mutated.

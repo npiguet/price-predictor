@@ -1,0 +1,6 @@
+name: plague stinger
+mana cost: {1}{B}
+types: creature phyrexian insect horror
+power toughness: 1/1
+static: flying
+static: infect

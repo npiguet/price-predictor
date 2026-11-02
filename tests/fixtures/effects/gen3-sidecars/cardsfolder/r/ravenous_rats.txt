@@ -1,0 +1,5 @@
+name: ravenous rats
+mana cost: {1}{B}
+types: creature rat
+power toughness: 1/1
+triggered: when CARDNAME enters, target opponent discards a card.

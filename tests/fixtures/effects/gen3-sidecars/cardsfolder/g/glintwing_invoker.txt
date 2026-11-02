@@ -1,0 +1,5 @@
+name: glintwing invoker
+mana cost: {4}{U}
+types: creature human wizard mutant
+power toughness: 3/3
+activated[1]: {7}{U}: CARDNAME gets +3/+3 and gains flying until end of turn.

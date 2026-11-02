@@ -1,0 +1,14 @@
+layout: transform
+name: flame channeler
+mana cost: {1}{R}
+types: creature human wizard
+power toughness: 2/2
+triggered: when a spell you control deals damage, transform CARDNAME.
+
+ALTERNATE
+
+name: embodiment of flame
+types: creature elemental wizard
+power toughness: 3/3
+activated[1]: {1}, remove a flame counter from CARDNAME: exile the top card of your library. you may play that card this turn.
+triggered: whenever a spell you control deals damage, put a flame counter on CARDNAME.

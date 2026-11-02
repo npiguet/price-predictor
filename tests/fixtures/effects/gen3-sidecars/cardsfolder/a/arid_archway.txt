@@ -1,0 +1,5 @@
+name: arid archway
+types: land desert
+activated[1]: {T}: add {C}{C}.
+triggered: when CARDNAME enters, return a land you control to its owner's hand. if another desert was returned this way, surveil 1.
+replacement: CARDNAME enters tapped.

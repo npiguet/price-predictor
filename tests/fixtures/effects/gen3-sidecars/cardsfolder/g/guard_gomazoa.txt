@@ -1,0 +1,7 @@
+name: guard gomazoa
+mana cost: {2}{U}
+types: creature jellyfish
+power toughness: 1/3
+static: defender
+static: flying
+static: prevent all combat damage that would be dealt to CARDNAME.

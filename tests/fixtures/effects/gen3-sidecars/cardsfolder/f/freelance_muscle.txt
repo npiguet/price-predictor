@@ -1,0 +1,5 @@
+name: freelance muscle
+mana cost: {4}{G}
+types: creature rhino warrior
+power toughness: 4/4
+triggered: whenever CARDNAME attacks or blocks, it gets +X/+X until end of turn, where X is the greatest power and/or toughness among other creatures you control.

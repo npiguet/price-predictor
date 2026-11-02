@@ -1,0 +1,6 @@
+name: vampire interloper
+mana cost: {1}{B}
+types: creature vampire scout
+power toughness: 2/1
+static: flying
+static: CARDNAME can't block.

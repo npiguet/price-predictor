@@ -1,0 +1,5 @@
+name: abraded bluffs
+types: land desert
+activated[1]: {T}: add {R} or {W}.
+triggered: when CARDNAME enters, it deals 1 damage to target opponent.
+replacement: CARDNAME enters tapped.

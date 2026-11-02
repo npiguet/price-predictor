@@ -1,0 +1,5 @@
+name: pyre-sledge arsonist
+mana cost: {2}{R}
+types: creature lizard shaman
+power toughness: 2/2
+activated[1]: {1}, {T}: CARDNAME deals X damage to any target, where X is the number of permanents you've sacrificed this turn.

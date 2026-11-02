@@ -1,0 +1,4 @@
+name: ob nixilis's cruelty
+mana cost: {2}{B}
+types: instant
+spell[1]: target creature gets -5/-5 until end of turn. if that creature would die this turn, exile it instead.

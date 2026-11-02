@@ -1,0 +1,6 @@
+name: hoard-smelter dragon
+mana cost: {4}{R}{R}
+types: creature dragon
+power toughness: 5/5
+static: flying
+activated[1]: {3}{R}: destroy target artifact. CARDNAME gets +X/+0 until end of turn, where X is that artifact's mana value.

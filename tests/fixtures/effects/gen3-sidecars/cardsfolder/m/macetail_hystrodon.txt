@@ -1,0 +1,7 @@
+name: macetail hystrodon
+mana cost: {6}{R}
+types: creature beast
+power toughness: 4/4
+static: first strike
+static: haste
+activated[1]: cycling {3}

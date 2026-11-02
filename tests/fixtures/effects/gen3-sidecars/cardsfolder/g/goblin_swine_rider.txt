@@ -1,0 +1,5 @@
+name: goblin swine-rider
+mana cost: {R}
+types: creature goblin
+power toughness: 1/1
+triggered: whenever CARDNAME becomes blocked, it deals 2 damage to each attacking creature and each blocking creature.

@@ -1,0 +1,5 @@
+name: public thoroughfare
+types: land
+activated[1]: {T}: add one mana of any color.
+triggered: when CARDNAME enters, sacrifice it unless you tap an untapped artifact or land you control.
+replacement: CARDNAME enters tapped.

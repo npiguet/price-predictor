@@ -1,0 +1,5 @@
+name: yavimaya enchantress
+mana cost: {2}{G}
+types: creature human druid
+power toughness: 2/2
+static: CARDNAME gets +1/+1 for each enchantment on the battlefield.

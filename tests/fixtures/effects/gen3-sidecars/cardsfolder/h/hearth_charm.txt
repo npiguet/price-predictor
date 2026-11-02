@@ -1,0 +1,7 @@
+name: hearth charm
+mana cost: {R}
+types: instant
+spell[1]: choose one
+option[2]: destroy target artifact creature.
+option[3]: attacking creatures get +1/+0 until end of turn.
+option[4]: target creature with power 2 or less can't be blocked this turn.

@@ -1,0 +1,4 @@
+name: celestial purge
+mana cost: {1}{W}
+types: instant
+spell[1]: exile target black or red permanent.

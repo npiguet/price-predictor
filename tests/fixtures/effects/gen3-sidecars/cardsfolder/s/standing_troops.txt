@@ -1,0 +1,5 @@
+name: standing troops
+mana cost: {2}{W}
+types: creature human soldier
+power toughness: 1/4
+static: vigilance

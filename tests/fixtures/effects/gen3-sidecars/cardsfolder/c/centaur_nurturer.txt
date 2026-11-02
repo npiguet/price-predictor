@@ -1,0 +1,6 @@
+name: centaur nurturer
+mana cost: {3}{G}
+types: creature centaur druid
+power toughness: 2/4
+activated[1]: {T}: add one mana of any color.
+triggered: when CARDNAME enters, you gain 3 life.

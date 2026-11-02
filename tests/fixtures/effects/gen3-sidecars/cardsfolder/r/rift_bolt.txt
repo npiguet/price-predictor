@@ -1,0 +1,5 @@
+name: rift bolt
+mana cost: {2}{R}
+types: sorcery
+alternate cost: suspend 1—{R}
+spell[1]: CARDNAME deals 3 damage to any target.

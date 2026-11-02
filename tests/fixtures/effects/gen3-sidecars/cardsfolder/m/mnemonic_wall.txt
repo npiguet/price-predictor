@@ -1,0 +1,6 @@
+name: mnemonic wall
+mana cost: {4}{U}
+types: creature wall
+power toughness: 0/4
+static: defender
+triggered: when CARDNAME enters, you may return target instant or sorcery card from your graveyard to your hand.

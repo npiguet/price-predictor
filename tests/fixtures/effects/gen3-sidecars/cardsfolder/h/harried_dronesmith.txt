@@ -1,0 +1,5 @@
+name: harried dronesmith
+mana cost: {3}{R}
+types: creature human artificer
+power toughness: 2/3
+triggered: at the beginning of combat on your turn, create a 1/1 colorless thopter artifact creature token with flying. it gains haste until end of turn. sacrifice it at the beginning of your next end step.

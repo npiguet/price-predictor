@@ -1,0 +1,5 @@
+name: ghost warden
+mana cost: {1}{W}
+types: creature spirit
+power toughness: 1/1
+activated[1]: {T}: target creature gets +1/+1 until end of turn.

@@ -1,0 +1,6 @@
+name: suq'ata lancer
+mana cost: {2}{R}
+types: creature human knight
+power toughness: 2/2
+static: haste
+triggered: flanking

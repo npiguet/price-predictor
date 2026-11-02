@@ -1,0 +1,5 @@
+name: curious inquiry
+mana cost: {U}
+types: enchantment aura
+static: enchant creature
+static: enchanted creature gets +1/+1 and has "whenever this creature deals combat damage to a player, investigate."

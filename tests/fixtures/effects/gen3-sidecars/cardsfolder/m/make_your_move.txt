@@ -1,0 +1,4 @@
+name: make your move
+mana cost: {2}{W}
+types: instant
+spell[1]: destroy target artifact, enchantment, or creature with power 4 or greater.

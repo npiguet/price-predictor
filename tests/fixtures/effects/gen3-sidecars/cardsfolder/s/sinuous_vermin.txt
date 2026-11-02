@@ -1,0 +1,6 @@
+name: sinuous vermin
+mana cost: {1}{B}
+types: creature rat horror
+power toughness: 2/2
+activated[1]: {3}{B}{B}: monstrosity 3
+static: as long as CARDNAME is monstrous, it has menace.

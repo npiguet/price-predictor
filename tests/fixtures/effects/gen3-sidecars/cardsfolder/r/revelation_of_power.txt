@@ -1,0 +1,4 @@
+name: revelation of power
+mana cost: {1}{W}
+types: instant
+spell[1]: target creature gets +2/+2 until end of turn. if it has a counter on it, it also gains flying and lifelink until end of turn.

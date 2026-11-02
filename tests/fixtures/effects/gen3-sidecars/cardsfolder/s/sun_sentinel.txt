@@ -1,0 +1,5 @@
+name: sun sentinel
+mana cost: {1}{W}
+types: creature human soldier
+power toughness: 2/2
+static: vigilance

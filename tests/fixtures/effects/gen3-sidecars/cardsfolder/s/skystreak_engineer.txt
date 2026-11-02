@@ -1,0 +1,6 @@
+name: skystreak engineer
+mana cost: {1}{U}
+types: creature human pilot
+power toughness: 1/3
+static: flying
+activated[1]: exhaust —  {4}{U}: put two +1/+1 counters on this creature.

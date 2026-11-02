@@ -1,0 +1,5 @@
+name: naomi, pillar of order
+mana cost: {3}{W}{B}
+types: legendary creature human advisor
+power toughness: 4/4
+triggered: whenever CARDNAME enters or attacks, if you control an artifact and an enchantment, create a 2/2 white samurai creature token with vigilance.

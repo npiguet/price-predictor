@@ -1,0 +1,6 @@
+name: fists of ironwood
+mana cost: {1}{G}
+types: enchantment aura
+static: enchant creature
+triggered: when CARDNAME enters, create two 1/1 green saproling creature tokens.
+static: enchanted creature has trample.

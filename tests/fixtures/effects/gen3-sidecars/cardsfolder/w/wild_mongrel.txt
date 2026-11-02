@@ -1,0 +1,5 @@
+name: wild mongrel
+mana cost: {1}{G}
+types: creature dog
+power toughness: 2/2
+activated[1]: discard a card: CARDNAME gets +1/+1 and becomes the color of your choice until end of turn.

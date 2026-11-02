@@ -1,0 +1,4 @@
+name: buried ruin
+types: land
+activated[1]: {T}: add {C}.
+activated[2]: {2}, {T}, sacrifice CARDNAME: return target artifact card from your graveyard to your hand.

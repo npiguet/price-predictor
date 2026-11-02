@@ -1,0 +1,5 @@
+name: betrayal at the vault
+mana cost: {4}{G}{G}
+types: instant
+spell[1]: target creature you control
+spell[2]: deals damage equal to its power to each of two other target creatures.

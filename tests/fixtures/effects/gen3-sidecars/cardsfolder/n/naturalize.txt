@@ -1,0 +1,4 @@
+name: naturalize
+mana cost: {1}{G}
+types: instant
+spell[1]: destroy target artifact or enchantment.

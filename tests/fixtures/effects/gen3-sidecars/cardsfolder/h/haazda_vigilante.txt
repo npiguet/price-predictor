@@ -1,0 +1,5 @@
+name: haazda vigilante
+mana cost: {4}{W}
+types: creature giant soldier
+power toughness: 4/4
+triggered: whenever CARDNAME enters or attacks, put a +1/+1 counter on target creature you control with power 2 or less.

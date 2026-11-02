@@ -1,0 +1,6 @@
+name: corpse cur
+mana cost: {4}
+types: artifact creature phyrexian dog
+power toughness: 2/2
+static: infect
+triggered: when CARDNAME enters, you may return target creature card with infect from your graveyard to your hand.

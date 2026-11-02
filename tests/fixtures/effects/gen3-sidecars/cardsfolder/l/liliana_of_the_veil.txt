@@ -1,0 +1,8 @@
+name: liliana of the veil
+mana cost: {1}{B}{B}
+types: legendary planeswalker liliana
+loyalty: 3
+planeswalker[1]: [+1]: each player discards a card.
+planeswalker[2]: [-2]: target player sacrifices a creature.
+planeswalker[3]: [-6]: separate all permanents target player controls into two piles. that player sacrifices all permanents in the pile of their choice.
+replacement: CARDNAME enters with three loyalty counters on it.

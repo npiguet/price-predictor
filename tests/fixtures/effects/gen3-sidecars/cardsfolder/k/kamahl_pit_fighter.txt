@@ -1,0 +1,6 @@
+name: kamahl, pit fighter
+mana cost: {4}{R}{R}
+types: legendary creature human barbarian
+power toughness: 6/1
+static: haste
+activated[1]: {T}: CARDNAME deals 3 damage to any target.

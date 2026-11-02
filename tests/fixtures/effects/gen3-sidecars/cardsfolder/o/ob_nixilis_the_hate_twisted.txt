@@ -1,0 +1,7 @@
+name: ob nixilis, the hate-twisted
+mana cost: {3}{B}{B}
+types: legendary planeswalker nixilis
+loyalty: 5
+planeswalker[1]: [-2]: destroy target creature. its controller draws two cards.
+triggered: whenever an opponent draws a card, CARDNAME deals 1 damage to that player.
+replacement: CARDNAME enters with five loyalty counters on it.

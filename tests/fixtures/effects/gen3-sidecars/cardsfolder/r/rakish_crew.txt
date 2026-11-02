@@ -1,0 +1,5 @@
+name: rakish crew
+mana cost: {2}{B}
+types: enchantment
+triggered: when CARDNAME enters, create a 1/1 red mercenary creature token with "{T}: target creature you control gets +1/+0 until end of turn. activate only as a sorcery."
+triggered: whenever an outlaw you control dies, each opponent loses 1 life and you gain 1 life.

@@ -1,0 +1,5 @@
+name: betrayal
+mana cost: {U}
+types: enchantment aura
+static: enchant creature an opponent controls
+triggered: whenever enchanted creature becomes tapped, you draw a card.

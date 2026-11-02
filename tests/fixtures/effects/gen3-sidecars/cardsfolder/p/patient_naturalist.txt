@@ -1,0 +1,5 @@
+name: patient naturalist
+mana cost: {2}{G}
+types: creature human scout
+power toughness: 2/3
+triggered: when CARDNAME enters, mill three cards. put a land card from among the milled cards into your hand. if you can't, create a treasure token.

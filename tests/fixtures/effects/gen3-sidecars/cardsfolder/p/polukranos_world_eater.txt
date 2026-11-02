@@ -1,0 +1,6 @@
+name: polukranos, world eater
+mana cost: {2}{G}{G}
+types: legendary creature hydra
+power toughness: 5/5
+activated[1]: {X}{X}{G}: monstrosity X
+triggered: when CARDNAME becomes monstrous, it deals X damage divided as you choose among any number of target creatures your opponents control. each of those creatures deals damage equal to its power to CARDNAME.

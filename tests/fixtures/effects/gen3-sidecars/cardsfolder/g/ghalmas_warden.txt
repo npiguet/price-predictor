@@ -1,0 +1,5 @@
+name: ghalma's warden
+mana cost: {3}{W}
+types: creature elephant soldier
+power toughness: 2/4
+static: metalcraft — CARDNAME gets +2/+2 as long as you control three or more artifacts.

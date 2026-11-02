@@ -1,0 +1,5 @@
+name: perilous myr
+mana cost: {2}
+types: artifact creature phyrexian myr
+power toughness: 1/1
+triggered: when CARDNAME dies, it deals 2 damage to any target.

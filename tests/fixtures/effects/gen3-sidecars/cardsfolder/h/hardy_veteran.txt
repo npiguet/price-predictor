@@ -1,0 +1,5 @@
+name: hardy veteran
+mana cost: {1}{G}
+types: creature human warrior
+power toughness: 2/2
+static: during your turn, CARDNAME gets +0/+2.

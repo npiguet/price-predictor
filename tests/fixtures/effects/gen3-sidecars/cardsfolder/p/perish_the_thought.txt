@@ -1,0 +1,5 @@
+name: perish the thought
+mana cost: {2}{B}
+types: sorcery
+spell[1]: target opponent reveals their hand.
+spell[2]: you choose a card from it. that player shuffles that card into their library.

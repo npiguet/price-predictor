@@ -1,0 +1,6 @@
+name: cursed monstrosity
+mana cost: {4}{B}
+types: creature horror
+power toughness: 4/3
+static: flying
+triggered: when CARDNAME becomes the target of a spell or ability, sacrifice it unless you discard a land card.

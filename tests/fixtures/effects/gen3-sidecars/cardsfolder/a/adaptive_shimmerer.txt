@@ -1,0 +1,6 @@
+name: adaptive shimmerer
+mana cost: {5}
+types: creature insect
+power toughness: 0/0
+static: flash
+replacement: CARDNAME enters with three +1/+1 counters on it.

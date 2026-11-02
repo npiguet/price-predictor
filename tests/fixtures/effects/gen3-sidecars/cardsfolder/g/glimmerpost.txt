@@ -1,0 +1,4 @@
+name: glimmerpost
+types: land locus
+activated[1]: {T}: add {C}.
+triggered: when CARDNAME enters, you gain 1 life for each locus on the battlefield.

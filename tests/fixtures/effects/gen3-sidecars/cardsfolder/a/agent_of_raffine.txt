@@ -1,0 +1,5 @@
+name: agent of raffine
+mana cost: {U}
+types: creature human rogue
+power toughness: 1/2
+activated[1]: {2}, {T}: choose target opponent. conjure a duplicate of the top card of their library into your hand. it perpetually gains "you may spend mana as though it were mana of any color to cast this spell." then they exile the top card of their library face down.

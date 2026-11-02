@@ -1,0 +1,6 @@
+name: viashino sandscout
+mana cost: {1}{R}
+types: creature lizard scout
+power toughness: 2/1
+static: haste
+triggered: at the beginning of the end step, return CARDNAME to its owner's hand.

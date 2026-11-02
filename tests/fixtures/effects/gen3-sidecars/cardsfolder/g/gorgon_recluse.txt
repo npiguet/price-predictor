@@ -1,0 +1,6 @@
+name: gorgon recluse
+mana cost: {3}{B}{B}
+types: creature gorgon
+power toughness: 2/4
+alternate cost: madness {B}{B}
+triggered: whenever CARDNAME blocks or becomes blocked by a nonblack creature, destroy that creature at end of combat.

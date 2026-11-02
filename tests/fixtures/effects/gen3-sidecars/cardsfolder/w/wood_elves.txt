@@ -1,0 +1,5 @@
+name: wood elves
+mana cost: {2}{G}
+types: creature elf scout
+power toughness: 1/1
+triggered: when CARDNAME enters, search your library for a forest card, put that card onto the battlefield, then shuffle.

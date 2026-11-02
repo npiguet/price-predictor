@@ -1,0 +1,5 @@
+name: zombie cannibal
+mana cost: {B}
+types: creature zombie
+power toughness: 1/1
+triggered: whenever CARDNAME deals combat damage to a player, you may exile target card from that player's graveyard.

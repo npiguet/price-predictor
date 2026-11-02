@@ -1,0 +1,6 @@
+name: moonfolk puzzlemaker
+mana cost: {2}{U}
+types: artifact creature moonfolk wizard
+power toughness: 1/4
+static: flying
+triggered: whenever CARDNAME becomes tapped, scry 1.

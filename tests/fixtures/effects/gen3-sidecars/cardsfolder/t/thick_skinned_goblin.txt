@@ -1,0 +1,6 @@
+name: thick-skinned goblin
+mana cost: {1}{R}
+types: creature goblin shaman
+power toughness: 2/1
+activated[1]: {R}: CARDNAME gains protection from red until end of turn.
+static: you may pay {0} rather than pay the echo cost for permanents you control.

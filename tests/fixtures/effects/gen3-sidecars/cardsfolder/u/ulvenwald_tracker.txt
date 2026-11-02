@@ -1,0 +1,5 @@
+name: ulvenwald tracker
+mana cost: {G}
+types: creature human shaman
+power toughness: 1/1
+activated[1]: {1}{G}, {T}: target creature you control fights another target creature.

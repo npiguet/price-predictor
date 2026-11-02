@@ -1,0 +1,4 @@
+name: lapis orb of dragonkind
+mana cost: {2}{U}
+types: artifact
+activated[1]: {T}: add {U}. when you spend this mana to cast a dragon creature spell, scry 2.

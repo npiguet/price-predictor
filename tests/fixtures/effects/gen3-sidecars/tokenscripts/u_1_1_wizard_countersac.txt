@@ -1,0 +1,4 @@
+name: wizard token
+types: creature wizard
+power toughness: 1/1
+activated[1]: {1}, sacrifice CARDNAME: counter target noncreature spell unless its controller pays {1}.

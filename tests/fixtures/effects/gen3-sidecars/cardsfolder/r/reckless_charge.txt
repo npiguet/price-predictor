@@ -1,0 +1,5 @@
+name: reckless charge
+mana cost: {R}
+types: sorcery
+alternate cost: flashback {2}{R}
+spell[1]: target creature gets +3/+0 and gains haste until end of turn.

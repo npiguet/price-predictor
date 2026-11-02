@@ -1,0 +1,5 @@
+name: leather armor
+mana cost: {1}
+types: artifact equipment
+activated[1]: equip {0}
+static: equipped creature gets +0/+1 and has ward {1}.

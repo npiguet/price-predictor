@@ -1,0 +1,7 @@
+name: inspiring bard
+mana cost: {3}{G}
+types: creature elf bard
+power toughness: 3/3
+triggered: when CARDNAME enters, choose one
+option[1]: bardic inspiration — target creature gets +2/+2 until end of turn.
+option[2]: song of rest — you gain 3 life.

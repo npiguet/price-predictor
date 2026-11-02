@@ -1,0 +1,6 @@
+name: heavy arbalest
+mana cost: {3}
+types: artifact equipment
+activated[1]: equip {4}
+static: equipped creature has "{T}: this creature deals 2 damage to any target."
+replacement: equipped creature doesn't untap during its controller's untap step.

@@ -1,0 +1,5 @@
+name: saiba trespassers
+mana cost: {4}{U}
+types: artifact creature moonfolk rogue
+power toughness: 3/5
+activated[1]: channel — {3}{U}, discard CARDNAME: tap up to two target creatures you don't control. those creatures don't untap during their controller's next untap step.

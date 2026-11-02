@@ -1,0 +1,6 @@
+name: eriette, the beguiler
+mana cost: {1}{W}{U}{B}
+types: legendary creature human warlock
+power toughness: 4/4
+static: lifelink
+triggered: whenever an aura you control becomes attached to a nonland permanent an opponent controls with mana value less than or equal to that aura's mana value, gain control of that permanent for as long as that aura is attached to it.

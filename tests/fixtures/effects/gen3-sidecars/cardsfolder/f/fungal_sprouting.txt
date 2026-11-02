@@ -1,0 +1,4 @@
+name: fungal sprouting
+mana cost: {3}{G}
+types: sorcery
+spell[1]: create X 1/1 green saproling creature tokens, where X is the greatest power among creatures you control.

@@ -1,0 +1,6 @@
+name: sun-crested pterodon
+mana cost: {4}{W}
+types: creature dinosaur
+power toughness: 2/5
+static: flying
+static: CARDNAME has vigilance as long as you control another dinosaur.

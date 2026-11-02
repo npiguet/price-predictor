@@ -1,0 +1,5 @@
+name: tah-crop skirmisher
+mana cost: {1}{U}
+types: creature snake warrior
+power toughness: 2/1
+alternate cost: embalm {3}{U}

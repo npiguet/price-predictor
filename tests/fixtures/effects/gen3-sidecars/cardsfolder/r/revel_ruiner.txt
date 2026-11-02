@@ -1,0 +1,6 @@
+name: revel ruiner
+mana cost: {3}{B}
+types: creature octopus rogue
+power toughness: 3/1
+static: menace
+triggered: when CARDNAME enters, it connives.

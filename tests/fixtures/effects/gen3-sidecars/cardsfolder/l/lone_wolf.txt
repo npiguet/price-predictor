@@ -1,0 +1,5 @@
+name: lone wolf
+mana cost: {2}{G}
+types: creature wolf
+power toughness: 2/2
+static: you may have CARDNAME assign its combat damage as though it weren't blocked.

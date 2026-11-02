@@ -1,0 +1,5 @@
+name: daggerback basilisk
+mana cost: {2}{G}
+types: creature basilisk
+power toughness: 2/2
+static: deathtouch

@@ -1,0 +1,4 @@
+name: brood birthing
+mana cost: {1}{R}
+types: sorcery
+spell[1]: if you control an eldrazi spawn, create three 0/1 colorless eldrazi spawn creature tokens. they have "sacrifice this creature: add {C}." otherwise, create one of those tokens.

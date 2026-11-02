@@ -1,0 +1,5 @@
+name: merry bards
+mana cost: {2}{R}
+types: creature human bard
+power toughness: 3/2
+triggered: when CARDNAME enters, you may pay {1}. when you do, create a young hero role token attached to target creature you control.

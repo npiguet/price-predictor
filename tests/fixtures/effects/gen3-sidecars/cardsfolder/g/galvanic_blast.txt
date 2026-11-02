@@ -1,0 +1,4 @@
+name: galvanic blast
+mana cost: {R}
+types: instant
+spell[1]: CARDNAME deals 2 damage to any target. metalcraft — CARDNAME deals 4 damage instead if you control 3 or more artifacts.

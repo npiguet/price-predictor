@@ -1,0 +1,4 @@
+name: skull of orm
+mana cost: {3}
+types: artifact
+activated[1]: {5}, {T}: return target enchantment card from your graveyard to your hand.

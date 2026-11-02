@@ -1,0 +1,5 @@
+name: trelasarra, moon dancer
+mana cost: {G}{W}
+types: legendary creature elf cleric
+power toughness: 2/2
+triggered: whenever you gain life, put a +1/+1 counter on CARDNAME and scry 1.

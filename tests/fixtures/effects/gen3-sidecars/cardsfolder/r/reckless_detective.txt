@@ -1,0 +1,5 @@
+name: reckless detective
+mana cost: {1}{R}
+types: creature devil detective
+power toughness: 0/3
+triggered: whenever CARDNAME attacks, you may sacrifice an artifact or discard a card. if you do, draw a card and CARDNAME gets +2/+0 until end of turn.

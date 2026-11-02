@@ -1,0 +1,5 @@
+name: dragon's fire
+mana cost: {1}{R}
+types: instant
+additional cost: you may reveal a dragon card from your hand or choose a dragon you control.
+spell[1]: CARDNAME deals 3 damage to target creature or planeswalker. if you revealed a dragon card or chose a dragon as you cast this spell, CARDNAME deals damage equal to the power of that card or creature instead.

@@ -1,0 +1,6 @@
+name: cursed courtier
+mana cost: {2}{W}
+types: creature human noble
+power toughness: 3/3
+static: lifelink
+triggered: when CARDNAME enters, create a cursed role token attached to it.

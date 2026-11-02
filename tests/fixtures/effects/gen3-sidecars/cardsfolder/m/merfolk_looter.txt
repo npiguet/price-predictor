@@ -1,0 +1,5 @@
+name: merfolk looter
+mana cost: {1}{U}
+types: creature merfolk rogue
+power toughness: 1/1
+activated[1]: {T}: draw a card, then discard a card.

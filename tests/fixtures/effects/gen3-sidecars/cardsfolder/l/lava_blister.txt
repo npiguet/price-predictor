@@ -1,0 +1,4 @@
+name: lava blister
+mana cost: {1}{R}
+types: sorcery
+spell[1]: destroy target nonbasic land unless its controller has CARDNAME deal 6 damage to them.

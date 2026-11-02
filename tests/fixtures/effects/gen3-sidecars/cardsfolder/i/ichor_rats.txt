@@ -1,0 +1,6 @@
+name: ichor rats
+mana cost: {1}{B}{B}
+types: creature phyrexian rat
+power toughness: 2/1
+static: infect
+triggered: when CARDNAME enters, each player gets a poison counter.

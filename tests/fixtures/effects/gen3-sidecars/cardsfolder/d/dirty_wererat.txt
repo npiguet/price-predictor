@@ -1,0 +1,7 @@
+name: dirty wererat
+mana cost: {3}{B}
+types: creature human rat minion
+power toughness: 2/3
+activated[1]: {B}, discard a card: regenerate CARDNAME.
+static: threshold — as long as there are seven or more cards in your graveyard, CARDNAME gets +2/+2 and can't block.
+static: enchanted threshold — as long as there are seven or more cards in your graveyard, CARDNAME gets +2/+2 and can't block.

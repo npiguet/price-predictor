@@ -1,0 +1,4 @@
+name: burning hands
+mana cost: {1}{R}
+types: instant
+spell[1]: CARDNAME deals 2 damage to target creature or planeswalker. if that permanent is green, CARDNAME deals 6 damage instead.

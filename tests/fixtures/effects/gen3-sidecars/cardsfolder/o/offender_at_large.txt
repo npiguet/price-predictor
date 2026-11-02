@@ -1,0 +1,6 @@
+name: offender at large
+mana cost: {4}{R}
+types: creature giant rogue
+power toughness: 5/4
+alternate cost: disguise {4}{R}
+triggered: when CARDNAME enters or is turned face up, up to one target creature gets +2/+0 until end of turn.

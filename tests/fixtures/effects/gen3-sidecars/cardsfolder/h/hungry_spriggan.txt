@@ -1,0 +1,6 @@
+name: hungry spriggan
+mana cost: {2}{G}
+types: creature goblin warrior
+power toughness: 1/1
+static: trample
+triggered: whenever CARDNAME attacks, it gets +3/+3 until end of turn.

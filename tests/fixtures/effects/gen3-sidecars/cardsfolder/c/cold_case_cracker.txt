@@ -1,0 +1,6 @@
+name: cold case cracker
+mana cost: {3}{U}
+types: creature spirit detective
+power toughness: 3/3
+static: flying
+triggered: when CARDNAME dies, investigate.

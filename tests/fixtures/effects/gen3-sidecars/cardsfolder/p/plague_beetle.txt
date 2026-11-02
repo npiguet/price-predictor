@@ -1,0 +1,5 @@
+name: plague beetle
+mana cost: {B}
+types: creature insect
+power toughness: 1/1
+static: swampwalk

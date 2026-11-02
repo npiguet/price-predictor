@@ -1,0 +1,6 @@
+name: sigarda's splendor
+mana cost: {2}{W}{W}
+types: enchantment
+replacement: as CARDNAME enters, note your life total.
+triggered: at the beginning of your upkeep, draw a card if your life total is greater than or equal to the last noted life total for CARDNAME. then note your life total. as CARDNAME enters, note your life total.
+triggered: whenever you cast a white spell, you gain 1 life.

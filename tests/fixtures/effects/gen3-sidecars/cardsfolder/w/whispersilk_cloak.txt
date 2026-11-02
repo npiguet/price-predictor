@@ -1,0 +1,5 @@
+name: whispersilk cloak
+mana cost: {3}
+types: artifact equipment
+activated[1]: equip {2}
+static: equipped creature can't be blocked and has shroud.

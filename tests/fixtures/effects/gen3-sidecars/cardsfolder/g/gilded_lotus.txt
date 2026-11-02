@@ -1,0 +1,4 @@
+name: gilded lotus
+mana cost: {5}
+types: artifact
+activated[1]: {T}: add three mana of any one color.

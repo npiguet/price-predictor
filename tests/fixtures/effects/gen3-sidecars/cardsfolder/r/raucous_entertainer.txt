@@ -1,0 +1,5 @@
+name: raucous entertainer
+mana cost: {1}{G}
+types: creature plant bard
+power toughness: 2/2
+activated[1]: {1}, {T}: put a +1/+1 counter on each creature you control that entered this turn.

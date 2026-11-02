@@ -1,0 +1,6 @@
+name: ogre jailbreaker
+mana cost: {3}{B}
+types: creature ogre rogue
+power toughness: 4/4
+static: defender
+static: CARDNAME can attack as though it didn't have defender as long as you control a gate.

@@ -1,0 +1,5 @@
+name: celebrity fencer
+mana cost: {3}{W}
+types: creature elf druid
+power toughness: 3/2
+triggered: alliance — whenever another creature you control enters, put a +1/+1 counter on CARDNAME.

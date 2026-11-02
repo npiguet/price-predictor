@@ -1,0 +1,5 @@
+name: phyrexian rager
+mana cost: {2}{B}
+types: creature phyrexian horror
+power toughness: 2/2
+triggered: when CARDNAME enters, you draw a card and you lose 1 life.

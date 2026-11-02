@@ -1,0 +1,5 @@
+name: ratchet bomb
+mana cost: {2}
+types: artifact
+activated[1]: {T}: put a charge counter on CARDNAME.
+activated[2]: {T}, sacrifice CARDNAME: destroy each nonland permanent with mana value equal to the number of charge counters on CARDNAME.

@@ -1,0 +1,7 @@
+name: darksteel sentinel
+mana cost: {6}
+types: artifact creature golem
+power toughness: 3/3
+static: vigilance
+static: indestructible
+static: flash

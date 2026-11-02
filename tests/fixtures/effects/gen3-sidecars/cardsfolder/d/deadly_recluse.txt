@@ -1,0 +1,6 @@
+name: deadly recluse
+mana cost: {1}{G}
+types: creature spider
+power toughness: 1/2
+static: reach
+static: deathtouch

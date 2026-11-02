@@ -1,0 +1,5 @@
+name: lure
+mana cost: {1}{G}{G}
+types: enchantment aura
+static: enchant creature
+static: all creatures able to block enchanted creature do so.

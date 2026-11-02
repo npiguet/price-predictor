@@ -1,0 +1,5 @@
+name: child of night
+mana cost: {1}{B}
+types: creature vampire
+power toughness: 2/1
+static: lifelink

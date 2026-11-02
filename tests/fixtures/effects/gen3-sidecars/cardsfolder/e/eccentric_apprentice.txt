@@ -1,0 +1,7 @@
+name: eccentric apprentice
+mana cost: {2}{U}
+types: creature tiefling wizard
+power toughness: 2/2
+static: flying
+triggered: when CARDNAME enters, venture into the dungeon.
+triggered: at the beginning of combat on your turn, if you've completed a dungeon, up to one target creature becomes a bird with base power and toughness 1/1 and flying until end of turn.

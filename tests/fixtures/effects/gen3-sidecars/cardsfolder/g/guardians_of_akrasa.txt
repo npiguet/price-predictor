@@ -1,0 +1,6 @@
+name: guardians of akrasa
+mana cost: {2}{W}
+types: creature human soldier
+power toughness: 0/4
+static: defender
+triggered: exalted

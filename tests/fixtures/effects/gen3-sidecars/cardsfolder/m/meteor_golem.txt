@@ -1,0 +1,5 @@
+name: meteor golem
+mana cost: {7}
+types: artifact creature golem
+power toughness: 3/3
+triggered: when CARDNAME enters, destroy target nonland permanent an opponent controls.

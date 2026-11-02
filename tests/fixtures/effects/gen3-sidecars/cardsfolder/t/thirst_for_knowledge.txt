@@ -1,0 +1,4 @@
+name: thirst for knowledge
+mana cost: {2}{U}
+types: instant
+spell[1]: draw three cards. then discard two cards unless you discard an artifact card.

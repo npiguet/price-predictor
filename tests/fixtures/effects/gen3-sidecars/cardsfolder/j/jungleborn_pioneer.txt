@@ -1,0 +1,5 @@
+name: jungleborn pioneer
+mana cost: {2}{G}
+types: creature merfolk scout
+power toughness: 2/2
+triggered: when CARDNAME enters, create a 1/1 blue merfolk creature token with hexproof.

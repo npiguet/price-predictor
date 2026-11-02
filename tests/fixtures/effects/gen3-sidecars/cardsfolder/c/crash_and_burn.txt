@@ -1,0 +1,6 @@
+name: crash and burn
+mana cost: {3}{R}
+types: instant
+spell[1]: choose one
+option[2]: destroy target vehicle.
+option[3]: CARDNAME deals 6 damage to target creature or planeswalker.

@@ -1,0 +1,5 @@
+name: runecarved obelisk
+mana cost: {4}
+types: artifact
+activated[1]: {T}: add {C}{C}. put two charge counters on CARDNAME.
+activated[2]: {T}, sacrifice CARDNAME: seek a card with the highest mana value among cards in your library with mana value X or less, where X is the number of charge counters on CARDNAME.

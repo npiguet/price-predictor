@@ -1,0 +1,6 @@
+name: fallen angel
+mana cost: {3}{B}{B}
+types: creature angel
+power toughness: 3/3
+static: flying
+activated[1]: sacrifice a creature: CARDNAME gets +2/+1 until end of turn.

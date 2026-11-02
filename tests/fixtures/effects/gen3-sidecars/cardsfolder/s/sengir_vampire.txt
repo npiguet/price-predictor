@@ -1,0 +1,6 @@
+name: sengir vampire
+mana cost: {3}{B}{B}
+types: creature vampire
+power toughness: 4/4
+static: flying
+triggered: whenever a creature dealt damage by CARDNAME this turn dies, put a +1/+1 counter on CARDNAME.

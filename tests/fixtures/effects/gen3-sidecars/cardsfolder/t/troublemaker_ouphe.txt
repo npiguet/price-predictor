@@ -1,0 +1,6 @@
+name: troublemaker ouphe
+mana cost: {1}{G}
+types: creature ouphe
+power toughness: 2/2
+additional cost: bargain
+triggered: when CARDNAME enters, if it was bargained, exile target artifact or enchantment an opponent controls.

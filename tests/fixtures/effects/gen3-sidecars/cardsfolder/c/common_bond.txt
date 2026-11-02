@@ -1,0 +1,5 @@
+name: common bond
+mana cost: {1}{G}{W}
+types: instant
+spell[1]: put a +1/+1 counter on target creature.
+spell[2]: put a +1/+1 counter on target creature.

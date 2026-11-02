@@ -1,0 +1,5 @@
+name: goblin raider
+mana cost: {1}{R}
+types: creature goblin warrior
+power toughness: 2/2
+static: CARDNAME can't block.

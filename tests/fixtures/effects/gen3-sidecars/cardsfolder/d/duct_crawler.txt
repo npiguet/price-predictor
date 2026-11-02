@@ -1,0 +1,5 @@
+name: duct crawler
+mana cost: {R}
+types: creature insect
+power toughness: 1/1
+activated[1]: {1}{R}: target creature can't block CARDNAME this turn.

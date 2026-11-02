@@ -1,0 +1,6 @@
+name: aven fisher
+mana cost: {3}{U}
+types: creature bird soldier
+power toughness: 2/2
+static: flying
+triggered: when CARDNAME dies, you may draw a card.

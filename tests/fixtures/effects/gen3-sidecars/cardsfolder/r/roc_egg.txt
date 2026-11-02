@@ -1,0 +1,6 @@
+name: roc egg
+mana cost: {2}{W}
+types: creature bird egg
+power toughness: 0/3
+static: defender
+triggered: when CARDNAME dies, create a 3/3 white bird creature token with flying.

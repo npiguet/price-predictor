@@ -1,0 +1,5 @@
+name: concordia pegasus
+mana cost: {1}{W}
+types: creature pegasus
+power toughness: 1/3
+static: flying

@@ -1,0 +1,5 @@
+name: cathartic reunion
+mana cost: {1}{R}
+types: sorcery
+additional cost: discard two cards.
+spell[1]: draw three cards.

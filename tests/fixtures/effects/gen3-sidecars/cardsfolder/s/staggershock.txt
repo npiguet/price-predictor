@@ -1,0 +1,5 @@
+name: staggershock
+mana cost: {2}{R}
+types: instant
+static: rebound
+spell[1]: CARDNAME deals 2 damage to any target.

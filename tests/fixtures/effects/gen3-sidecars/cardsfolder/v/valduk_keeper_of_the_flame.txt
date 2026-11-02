@@ -1,0 +1,5 @@
+name: valduk, keeper of the flame
+mana cost: {2}{R}
+types: legendary creature human shaman
+power toughness: 3/2
+triggered: at the beginning of combat on your turn, for each aura and equipment attached to CARDNAME, create a 3/1 red elemental creature token with trample and haste. exile those tokens at the beginning of the next end step.

@@ -1,0 +1,5 @@
+name: man-o'-war
+mana cost: {2}{U}
+types: creature jellyfish
+power toughness: 2/2
+triggered: when CARDNAME enters, return target creature to its owner's hand.

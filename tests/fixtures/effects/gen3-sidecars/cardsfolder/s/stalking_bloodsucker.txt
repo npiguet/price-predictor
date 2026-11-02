@@ -1,0 +1,6 @@
+name: stalking bloodsucker
+mana cost: {4}{B}{B}
+types: creature vampire
+power toughness: 4/4
+static: flying
+activated[1]: {1}{B}, discard a card: CARDNAME gets +2/+2 until end of turn.

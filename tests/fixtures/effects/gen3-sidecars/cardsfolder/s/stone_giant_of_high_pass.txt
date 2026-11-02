@@ -1,0 +1,6 @@
+name: stone-giant of high pass
+mana cost: {5}{R}{R}
+types: creature giant
+power toughness: 7/7
+activated[1]: {2}{R}, sacrifice an artifact: this creature deals 4 damage to any target.
+triggered: whenever this creature enters or attacks, create a 3/1 colorless wall artifact creature token with defender named stone boulder.

@@ -1,0 +1,6 @@
+name: you hear something on watch
+mana cost: {1}{W}
+types: instant
+spell[1]: choose one
+option[2]: rouse the party — creatures you control get +1/+1 until end of turn.
+option[3]: set off traps — this spell deals 5 damage to target attacking creature.

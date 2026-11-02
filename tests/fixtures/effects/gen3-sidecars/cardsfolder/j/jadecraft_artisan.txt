@@ -1,0 +1,5 @@
+name: jadecraft artisan
+mana cost: {3}{G}
+types: creature merfolk shaman
+power toughness: 3/3
+triggered: when CARDNAME enters, target creature gets +2/+2 until end of turn.

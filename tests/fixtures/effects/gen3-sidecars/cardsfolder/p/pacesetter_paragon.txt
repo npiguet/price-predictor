@@ -1,0 +1,5 @@
+name: pacesetter paragon
+mana cost: {2}{R}
+types: creature human pilot
+power toughness: 2/3
+activated[1]: exhaust —  {2}{R}: put a +1/+1 counter on this creature. it gains double strike until end of turn.

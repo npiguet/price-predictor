@@ -1,0 +1,7 @@
+name: smuggler captain
+mana cost: {3}{B}
+types: creature human pirate
+power toughness: 2/2
+draft: draft CARDNAME face up.
+draft: as you draft a card, you may reveal it, note its name, then turn CARDNAME face down.
+triggered: when CARDNAME enters, you may search your library for a card with a name you noted for cards named smuggler captain, reveal it, put it into your hand, then shuffle.

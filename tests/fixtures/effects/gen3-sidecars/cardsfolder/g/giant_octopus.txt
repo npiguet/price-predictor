@@ -1,0 +1,4 @@
+name: giant octopus
+mana cost: {3}{U}
+types: creature octopus
+power toughness: 3/3

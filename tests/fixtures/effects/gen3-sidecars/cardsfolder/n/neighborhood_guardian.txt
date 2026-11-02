@@ -1,0 +1,5 @@
+name: neighborhood guardian
+mana cost: {1}{W}
+types: creature unicorn
+power toughness: 2/2
+triggered: whenever another creature you control with power 2 or less enters, target creature you control gets +1/+1 until end of turn.

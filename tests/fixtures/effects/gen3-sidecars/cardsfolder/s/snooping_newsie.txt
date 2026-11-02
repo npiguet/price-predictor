@@ -1,0 +1,6 @@
+name: snooping newsie
+mana cost: {U}{B}
+types: creature human rogue
+power toughness: 2/2
+triggered: when CARDNAME enters, mill two cards.
+static: as long as there are five or more mana values among cards in your graveyard, CARDNAME gets +1/+1 and has lifelink.

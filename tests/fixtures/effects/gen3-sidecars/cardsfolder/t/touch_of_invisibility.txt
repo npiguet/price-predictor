@@ -1,0 +1,5 @@
+name: touch of invisibility
+mana cost: {3}{U}
+types: sorcery
+spell[1]: target creature can't be blocked this turn.
+spell[2]: draw a card.

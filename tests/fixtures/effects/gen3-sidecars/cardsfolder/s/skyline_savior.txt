@@ -1,0 +1,6 @@
+name: skyline savior
+mana cost: {1}{W}{W}
+types: creature angel
+power toughness: 3/4
+static: flying
+triggered: when CARDNAME enters, return a permanent you control to its owner's hand. if it's a non-angel creature card, it perpetually gets +1/+1, gains flying, and becomes an angel in addition to its other types.

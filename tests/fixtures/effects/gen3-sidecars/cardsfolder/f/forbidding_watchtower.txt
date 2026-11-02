@@ -1,0 +1,5 @@
+name: forbidding watchtower
+types: land
+activated[1]: {T}: add {W}.
+activated[2]: {1}{W}: CARDNAME becomes a 1/5 white soldier creature until end of turn. it's still a land.
+replacement: CARDNAME enters tapped.

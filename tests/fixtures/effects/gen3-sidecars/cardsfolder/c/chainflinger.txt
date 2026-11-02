@@ -1,0 +1,6 @@
+name: chainflinger
+mana cost: {3}{R}
+types: creature beast
+power toughness: 2/2
+activated[1]: {1}{R}, {T}: CARDNAME deals 1 damage to any target.
+activated[2]: threshold — {2}{R}, {T}: CARDNAME deals 2 damage to any target. activate only if there are seven or more cards in your graveyard.

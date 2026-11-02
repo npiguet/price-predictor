@@ -1,0 +1,4 @@
+name: jaya's greeting
+mana cost: {1}{R}
+types: instant
+spell[1]: CARDNAME deals 3 damage to target creature. scry 1.

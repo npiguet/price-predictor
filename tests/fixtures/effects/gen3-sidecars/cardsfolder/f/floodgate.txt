@@ -1,0 +1,7 @@
+name: floodgate
+mana cost: {3}{U}
+types: creature wall
+power toughness: 0/5
+static: defender
+triggered: when CARDNAME has flying, sacrifice it.
+triggered: when CARDNAME leaves the battlefield, it deals damage equal to half the number of islands you control, rounded down, to each nonblue creature without flying.

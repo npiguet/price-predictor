@@ -1,0 +1,5 @@
+name: bloodfell caves
+types: land
+activated[1]: {T}: add {B} or {R}.
+triggered: when CARDNAME enters, you gain 1 life.
+replacement: CARDNAME enters tapped.

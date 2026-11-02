@@ -1,0 +1,5 @@
+name: denizen of the deep
+mana cost: {6}{U}{U}
+types: creature serpent
+power toughness: 11/11
+triggered: when CARDNAME enters, return each other creature you control to its owner's hand.

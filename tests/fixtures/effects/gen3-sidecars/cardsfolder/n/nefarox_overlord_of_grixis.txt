@@ -1,0 +1,7 @@
+name: nefarox, overlord of grixis
+mana cost: {4}{B}{B}
+types: legendary creature demon
+power toughness: 5/5
+static: flying
+triggered: exalted
+triggered: whenever CARDNAME attacks alone, defending player sacrifices a creature.

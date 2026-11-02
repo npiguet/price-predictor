@@ -1,0 +1,5 @@
+name: cut in
+mana cost: {3}{R}
+types: sorcery
+spell[1]: CARDNAME deals 4 damage to target creature.
+spell[2]: create a young hero role token attached to up to one target creature you control.

@@ -1,0 +1,6 @@
+name: attended knight
+mana cost: {2}{W}
+types: creature human knight
+power toughness: 2/2
+static: first strike
+triggered: when CARDNAME enters, create a 1/1 white soldier creature token.

@@ -1,0 +1,6 @@
+name: korlessa, scale singer
+mana cost: {G}{U}
+types: legendary creature dragon bard
+power toughness: 1/4
+static: you may look at the top card of your library any time.
+static: you may cast dragon spells from the top of your library.

@@ -1,0 +1,5 @@
+name: plan the heist
+mana cost: {2}{U}{U}
+types: sorcery
+alternate cost: plot {3}{U}
+spell[1]: surveil 3 if you have no cards in hand. then draw three cards.

@@ -1,0 +1,6 @@
+name: cloud elemental
+mana cost: {2}{U}
+types: creature elemental
+power toughness: 2/3
+static: flying
+static: CARDNAME can block only creatures with flying.

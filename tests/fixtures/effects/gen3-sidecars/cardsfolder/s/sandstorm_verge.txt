@@ -1,0 +1,4 @@
+name: sandstorm verge
+types: land desert
+activated[1]: {T}: add {C}.
+activated[2]: {3}, {T}: target creature can't block this turn. activate only as a sorcery.

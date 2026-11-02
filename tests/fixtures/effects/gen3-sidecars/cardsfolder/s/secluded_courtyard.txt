@@ -1,0 +1,5 @@
+name: secluded courtyard
+types: land
+replacement: as CARDNAME enters, choose a creature type.
+activated[1]: {T}: add {C}.
+activated[2]: {T}: add one mana of any color. spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature or creature card of the chosen type.

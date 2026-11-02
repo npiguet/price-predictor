@@ -1,0 +1,6 @@
+name: iron golem
+mana cost: {4}
+types: artifact creature golem
+power toughness: 5/3
+static: vigilance
+static: CARDNAME attacks or blocks each combat if able.

@@ -1,0 +1,5 @@
+name: voyaging satyr
+mana cost: {1}{G}
+types: creature satyr druid
+power toughness: 1/2
+activated[1]: {T}: untap target land.

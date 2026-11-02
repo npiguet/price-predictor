@@ -1,0 +1,5 @@
+name: vault plunderer
+mana cost: {2}{B}
+types: creature human rogue
+power toughness: 3/1
+triggered: when CARDNAME enters, target player draws a card and loses 1 life.

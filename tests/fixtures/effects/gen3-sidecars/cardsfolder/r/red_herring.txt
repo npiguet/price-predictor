@@ -1,0 +1,7 @@
+name: red herring
+mana cost: {1}{R}
+types: artifact creature clue fish
+power toughness: 2/2
+static: haste
+activated[1]: {2}, sacrifice CARDNAME: draw a card.
+static: CARDNAME attacks each combat if able.

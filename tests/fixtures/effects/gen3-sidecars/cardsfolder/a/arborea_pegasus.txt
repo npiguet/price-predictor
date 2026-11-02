@@ -1,0 +1,6 @@
+name: arborea pegasus
+mana cost: {3}{W}
+types: creature pegasus
+power toughness: 2/3
+static: flying
+triggered: when CARDNAME enters, target creature gets +1/+1 and gains flying until end of turn.

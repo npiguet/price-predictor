@@ -1,0 +1,5 @@
+name: tinybones joins up
+mana cost: {B}
+types: legendary enchantment
+triggered: when CARDNAME enters, any number of target players each discard a card.
+triggered: whenever a legendary creature you control enters, any number of target players each mill a card and lose 1 life.

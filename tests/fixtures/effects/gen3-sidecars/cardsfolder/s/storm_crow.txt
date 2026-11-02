@@ -1,0 +1,5 @@
+name: storm crow
+mana cost: {1}{U}
+types: creature bird
+power toughness: 1/2
+static: flying

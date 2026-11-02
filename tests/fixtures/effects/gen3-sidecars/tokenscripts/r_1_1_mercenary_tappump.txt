@@ -1,0 +1,4 @@
+name: mercenary token
+types: creature mercenary
+power toughness: 1/1
+activated[1]: {T}: target creature you control gets +1/+0 until end of turn. activate only as a sorcery.

@@ -83,6 +83,24 @@ def java_golden_entities() -> list[dict]:
     return [entity for snapshot in snapshots for entity in snapshot["entities"]]
 
 
+#: Real gen-3 records cut from the T079 pilot (``scripts/make_fixture_records.py
+#: --generation 3``), with the sidecars every key they name resolves to.
+GEN3_RECORDS = EFFECTS_FIXTURES / "gen3-records.jsonl.gz"
+GEN3_SIDECAR_FOLDERS = (
+    EFFECTS_FIXTURES / "gen3-sidecars" / "cardsfolder",
+    EFFECTS_FIXTURES / "gen3-sidecars" / "tokenscripts",
+)
+
+
+def gen3_fixture_records() -> list[dict]:
+    """The gen-3 fixture's records, as the raw JSON objects the collector wrote."""
+    import gzip
+    import json
+
+    with gzip.open(GEN3_RECORDS, "rt", encoding="utf-8") as handle:
+        return [json.loads(line) for line in handle if line.strip()]
+
+
 _EVENT = Event(type=EventType.LIFE_CHANGE, params={"delta": 1})
 
 

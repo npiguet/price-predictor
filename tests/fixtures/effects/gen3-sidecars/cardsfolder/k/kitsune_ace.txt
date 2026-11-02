@@ -1,0 +1,7 @@
+name: kitsune ace
+mana cost: {1}{W}
+types: creature fox pilot
+power toughness: 2/2
+triggered: whenever a vehicle you control attacks, choose one
+option[1]: that vehicle gains first strike until end of turn.
+option[2]: untap CARDNAME.

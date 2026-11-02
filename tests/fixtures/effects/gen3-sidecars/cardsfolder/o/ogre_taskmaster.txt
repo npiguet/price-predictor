@@ -1,0 +1,5 @@
+name: ogre taskmaster
+mana cost: {3}{R}
+types: creature ogre
+power toughness: 4/3
+static: CARDNAME can't block.

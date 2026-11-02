@@ -1,0 +1,5 @@
+name: teyo's lightshield
+mana cost: {2}{W}
+types: creature illusion
+power toughness: 0/3
+triggered: when CARDNAME enters, put a +1/+1 counter on target creature you control.

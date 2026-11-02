@@ -1,0 +1,4 @@
+name: lightning blast
+mana cost: {3}{R}
+types: instant
+spell[1]: CARDNAME deals 4 damage to any target.

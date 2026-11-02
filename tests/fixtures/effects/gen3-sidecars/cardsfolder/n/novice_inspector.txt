@@ -1,0 +1,5 @@
+name: novice inspector
+mana cost: {W}
+types: creature human detective
+power toughness: 1/2
+triggered: when CARDNAME enters, investigate.

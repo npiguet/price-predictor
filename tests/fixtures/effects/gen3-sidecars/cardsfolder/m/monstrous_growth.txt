@@ -1,0 +1,4 @@
+name: monstrous growth
+mana cost: {1}{G}
+types: sorcery
+spell[1]: target creature gets +4/+4 until end of turn.

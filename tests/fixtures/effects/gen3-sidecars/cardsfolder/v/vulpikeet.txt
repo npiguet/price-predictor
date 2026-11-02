@@ -1,0 +1,7 @@
+name: vulpikeet
+mana cost: {3}{W}
+types: creature fox bird
+power toughness: 2/3
+alternate cost: mutate {2}{W}
+static: flying
+triggered: whenever this creature mutates, put a +1/+1 counter on it.

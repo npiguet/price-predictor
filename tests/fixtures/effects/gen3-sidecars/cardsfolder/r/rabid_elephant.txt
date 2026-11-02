@@ -1,0 +1,5 @@
+name: rabid elephant
+mana cost: {4}{G}
+types: creature elephant
+power toughness: 3/4
+triggered: whenever CARDNAME becomes blocked, it gets +2/+2 until end of turn for each creature blocking it.

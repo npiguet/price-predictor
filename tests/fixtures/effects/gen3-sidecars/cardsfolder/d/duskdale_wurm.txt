@@ -1,0 +1,5 @@
+name: duskdale wurm
+mana cost: {5}{G}{G}
+types: creature wurm
+power toughness: 7/7
+static: trample

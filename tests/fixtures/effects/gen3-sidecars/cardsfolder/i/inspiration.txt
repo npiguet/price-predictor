@@ -1,0 +1,4 @@
+name: inspiration
+mana cost: {3}{U}
+types: instant
+spell[1]: target player draws two cards.

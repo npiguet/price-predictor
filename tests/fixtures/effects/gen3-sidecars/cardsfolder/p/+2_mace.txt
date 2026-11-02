@@ -1,0 +1,5 @@
+name: +2 mace
+mana cost: {1}{W}
+types: artifact equipment
+activated[1]: equip {3}
+static: equipped creature gets +2/+2.

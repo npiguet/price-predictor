@@ -1,0 +1,6 @@
+name: frostwind invoker
+mana cost: {4}{U}
+types: creature merfolk wizard
+power toughness: 3/3
+static: flying
+activated[1]: {8}: creatures you control gain flying until end of turn.

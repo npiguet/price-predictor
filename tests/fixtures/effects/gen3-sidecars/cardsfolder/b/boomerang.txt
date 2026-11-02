@@ -1,0 +1,4 @@
+name: boomerang
+mana cost: {U}{U}
+types: instant
+spell[1]: return target permanent to its owner's hand.

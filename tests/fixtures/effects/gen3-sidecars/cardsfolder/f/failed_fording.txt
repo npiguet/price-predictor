@@ -1,0 +1,5 @@
+name: failed fording
+mana cost: {1}{U}
+types: instant
+spell[1]: return target nonland permanent to its owner's hand.
+spell[2]: if you control a desert, surveil 1.

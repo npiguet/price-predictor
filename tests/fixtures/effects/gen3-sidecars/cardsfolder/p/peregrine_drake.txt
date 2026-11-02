@@ -1,0 +1,6 @@
+name: peregrine drake
+mana cost: {4}{U}
+types: creature drake
+power toughness: 2/3
+static: flying
+triggered: when CARDNAME enters, untap up to five lands.

@@ -1,0 +1,6 @@
+name: you're confronted by robbers
+mana cost: {3}{W}
+types: instant
+spell[1]: choose one
+option[2]: stall for time — tap up to three target creatures.
+option[3]: call for aid — create three 1/1 white soldier creature tokens.

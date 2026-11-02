@@ -1,0 +1,6 @@
+name: breezekeeper
+mana cost: {3}{U}
+types: creature djinn
+power toughness: 4/4
+static: flying
+static: phasing

@@ -1,0 +1,5 @@
+name: lavafume invoker
+mana cost: {2}{R}
+types: creature goblin shaman
+power toughness: 2/2
+activated[1]: {8}: creatures you control get +3/+0 until end of turn.

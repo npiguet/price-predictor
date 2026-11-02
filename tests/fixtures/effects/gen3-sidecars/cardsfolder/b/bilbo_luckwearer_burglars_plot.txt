@@ -1,0 +1,15 @@
+layout: adventure
+name: bilbo, luckwearer
+mana cost: {1}{U}
+types: legendary creature halfling rogue
+power toughness: 1/1
+triggered: whenever CARDNAME deals combat damage to a player, draw a card, then discard a card.
+static: CARDNAME can't be blocked.
+
+ALTERNATE
+
+name: burglar's plot
+mana cost: {4}{U}
+types: sorcery adventure
+spell[1]: exchange control of two target nonland permanents that share a card type.
+replacement: adventure

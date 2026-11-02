@@ -1,0 +1,5 @@
+name: spawning breath
+mana cost: {1}{R}
+types: instant
+spell[1]: CARDNAME deals 1 damage to any target.
+spell[2]: create a 0/1 colorless eldrazi spawn creature token. it has "sacrifice this creature: add {C}."

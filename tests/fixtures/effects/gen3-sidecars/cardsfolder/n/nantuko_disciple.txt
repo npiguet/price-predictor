@@ -1,0 +1,5 @@
+name: nantuko disciple
+mana cost: {3}{G}
+types: creature insect druid
+power toughness: 2/2
+activated[1]: {G}, {T}: target creature gets +2/+2 until end of turn.

@@ -1,0 +1,5 @@
+name: mortician beetle
+mana cost: {B}
+types: creature insect
+power toughness: 1/1
+triggered: whenever a player sacrifices a creature, you may put a +1/+1 counter on CARDNAME.

@@ -1,0 +1,7 @@
+name: ezrim, agency chief
+mana cost: {1}{W}{W}{U}{U}
+types: legendary creature archon detective
+power toughness: 5/5
+static: flying
+activated[1]: {1}, sacrifice an artifact: CARDNAME gains your choice of vigilance, lifelink, or hexproof until end of turn.
+triggered: when CARDNAME enters, investigate twice.

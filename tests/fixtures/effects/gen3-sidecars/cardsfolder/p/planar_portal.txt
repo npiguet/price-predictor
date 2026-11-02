@@ -1,0 +1,4 @@
+name: planar portal
+mana cost: {6}
+types: artifact
+activated[1]: {6}, {T}: search your library for a card, put that card into your hand, then shuffle.

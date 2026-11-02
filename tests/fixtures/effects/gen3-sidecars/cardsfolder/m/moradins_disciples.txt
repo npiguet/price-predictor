@@ -1,0 +1,6 @@
+name: moradin's disciples
+mana cost: {3}{W}
+types: creature dwarf cleric
+power toughness: 2/3
+triggered: double team
+triggered: whenever CARDNAME attacks, tap target creature defending player controls.

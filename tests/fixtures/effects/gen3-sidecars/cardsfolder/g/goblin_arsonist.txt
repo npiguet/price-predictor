@@ -1,0 +1,5 @@
+name: goblin arsonist
+mana cost: {R}
+types: creature goblin shaman
+power toughness: 1/1
+triggered: when CARDNAME dies, you may have it deal 1 damage to any target.

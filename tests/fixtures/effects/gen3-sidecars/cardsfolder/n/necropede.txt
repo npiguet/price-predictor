@@ -1,0 +1,6 @@
+name: necropede
+mana cost: {2}
+types: artifact creature phyrexian insect
+power toughness: 1/1
+static: infect
+triggered: when CARDNAME dies, you may put a -1/-1 counter on target creature.

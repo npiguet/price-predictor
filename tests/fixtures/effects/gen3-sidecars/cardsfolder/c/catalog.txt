@@ -1,0 +1,4 @@
+name: catalog
+mana cost: {2}{U}
+types: instant
+spell[1]: draw two cards, then discard a card.

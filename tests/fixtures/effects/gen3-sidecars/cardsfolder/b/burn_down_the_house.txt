@@ -1,0 +1,6 @@
+name: burn down the house
+mana cost: {3}{R}{R}
+types: sorcery
+spell[1]: choose one
+option[2]: CARDNAME deals 5 damage to each creature and each planeswalker.
+option[3]: create three 1/1 red devil creature tokens with "when this token dies, it deals 1 damage to any target." they gain haste until end of turn.

@@ -1,0 +1,5 @@
+name: arch of orazca
+types: land
+triggered: ascend
+activated[1]: {T}: add {C}.
+activated[2]: {5}, {T}: draw a card. activate only if you have the city's blessing.

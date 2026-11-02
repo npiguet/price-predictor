@@ -1,0 +1,7 @@
+name: weave the nightmare
+mana cost: {1}{U}{B}
+types: instant
+spell[1]: if you control a nonland permanent you don't own as you cast this spell, you may choose two instead.
+option[2]: heist target opponent's library.
+option[3]: target creature gets -5/-5 until end of turn.
+option[4]: counter target noncreature spell.

@@ -1,0 +1,6 @@
+name: battle rampart
+mana cost: {2}{R}
+types: creature wall
+power toughness: 1/3
+static: defender
+activated[1]: {T}: target creature gains haste until end of turn.

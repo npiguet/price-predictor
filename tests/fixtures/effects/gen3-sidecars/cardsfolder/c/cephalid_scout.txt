@@ -1,0 +1,6 @@
+name: cephalid scout
+mana cost: {1}{U}
+types: creature octopus wizard scout
+power toughness: 1/1
+static: flying
+activated[1]: {2}{U}, sacrifice a land: draw a card.

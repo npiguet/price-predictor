@@ -1,0 +1,7 @@
+name: clockwork hydra
+mana cost: {5}
+types: artifact creature hydra
+power toughness: 0/0
+replacement: CARDNAME enters with four +1/+1 counters on it.
+activated[1]: {T}: put a +1/+1 counter on CARDNAME.
+triggered: whenever CARDNAME attacks or blocks, remove a +1/+1 counter from it. if you do, CARDNAME deals 1 damage to any target.

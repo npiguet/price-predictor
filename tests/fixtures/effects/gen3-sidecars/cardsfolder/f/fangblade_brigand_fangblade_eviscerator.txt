@@ -1,0 +1,16 @@
+layout: transform
+name: fangblade brigand
+mana cost: {3}{R}
+types: creature human werewolf
+power toughness: 3/4
+triggered: daybound
+activated[1]: {1}{R}: CARDNAME gets +1/+0 and gains first strike until end of turn.
+
+ALTERNATE
+
+name: fangblade eviscerator
+types: creature werewolf
+power toughness: 4/5
+triggered: nightbound
+activated[1]: {1}{R}: CARDNAME gets +1/+0 and gains first strike until end of turn.
+activated[2]: {4}{R}: creatures you control get +2/+0 until end of turn.

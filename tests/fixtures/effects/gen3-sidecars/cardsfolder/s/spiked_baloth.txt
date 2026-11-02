@@ -1,0 +1,5 @@
+name: spiked baloth
+mana cost: {3}{G}
+types: creature beast
+power toughness: 4/2
+static: trample

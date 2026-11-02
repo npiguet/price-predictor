@@ -1,0 +1,5 @@
+name: vigilant sentry
+mana cost: {1}{W}{W}
+types: creature human nomad
+power toughness: 2/2
+static: threshold — as long as there are seven or more cards in your graveyard, CARDNAME gets +1/+1 and has "{T}: target attacking or blocking creature gets +3/+3 until end of turn."

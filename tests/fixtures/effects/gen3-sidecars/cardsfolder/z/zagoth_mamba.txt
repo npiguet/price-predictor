@@ -1,0 +1,5 @@
+name: zagoth mamba
+mana cost: {B}
+types: creature nightmare snake
+power toughness: 1/1
+triggered: whenever this creature mutates, target creature an opponent controls gets -2/-2 until end of turn.

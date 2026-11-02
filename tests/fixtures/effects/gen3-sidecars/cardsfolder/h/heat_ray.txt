@@ -1,0 +1,4 @@
+name: heat ray
+mana cost: {X}{R}
+types: instant
+spell[1]: CARDNAME deals X damage to target creature.

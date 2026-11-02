@@ -1,0 +1,7 @@
+name: kasmina, enigmatic mentor
+mana cost: {3}{U}
+types: legendary planeswalker kasmina
+loyalty: 5
+planeswalker[1]: [-2]: create a 2/2 blue wizard creature token. draw a card, then discard a card.
+static: spells your opponents cast that target a creature or planeswalker you control cost {2} more to cast.
+replacement: CARDNAME enters with five loyalty counters on it.

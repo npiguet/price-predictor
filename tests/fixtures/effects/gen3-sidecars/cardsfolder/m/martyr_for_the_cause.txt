@@ -1,0 +1,5 @@
+name: martyr for the cause
+mana cost: {1}{W}
+types: creature human soldier
+power toughness: 2/2
+triggered: when CARDNAME dies, proliferate.

@@ -1,0 +1,14 @@
+layout: adventure
+name: ratcatcher trainee
+mana cost: {1}{R}
+types: creature human peasant
+power toughness: 2/1
+static: during your turn, CARDNAME has first strike.
+
+ALTERNATE
+
+name: pest problem
+mana cost: {2}{R}
+types: instant adventure
+spell[1]: create two 1/1 black rat creature tokens with "this creature can't block."
+replacement: adventure

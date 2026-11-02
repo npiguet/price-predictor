@@ -1,0 +1,4 @@
+name: predatory rampage
+mana cost: {3}{G}{G}
+types: sorcery
+spell[1]: creatures you control get +3/+3 until end of turn. each creature your opponents control blocks this turn if able.

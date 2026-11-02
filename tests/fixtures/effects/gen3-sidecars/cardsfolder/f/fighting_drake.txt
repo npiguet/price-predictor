@@ -1,0 +1,5 @@
+name: fighting drake
+mana cost: {2}{U}{U}
+types: creature drake
+power toughness: 2/4
+static: flying

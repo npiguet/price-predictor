@@ -1,0 +1,5 @@
+name: razzle-dazzler
+mana cost: {1}{U}
+types: creature human wizard
+power toughness: 1/2
+triggered: whenever you cast your second spell each turn, put a +1/+1 counter on CARDNAME. it can't be blocked this turn.

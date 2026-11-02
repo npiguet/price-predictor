@@ -1,0 +1,6 @@
+name: beastbond outcaster
+mana cost: {2}{G}
+types: creature human druid
+power toughness: 3/3
+alternate cost: plot {1}{G}
+triggered: when CARDNAME enters, if you control a creature with power 4 or greater, draw a card.

@@ -1,0 +1,5 @@
+name: knight of the stampede
+mana cost: {3}{G}
+types: creature human knight
+power toughness: 2/4
+static: dinosaur spells you cast cost {2} less to cast.

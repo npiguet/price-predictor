@@ -1,0 +1,5 @@
+name: pactdoll terror
+mana cost: {3}{B}
+types: artifact creature toy
+power toughness: 3/4
+triggered: whenever this creature or another artifact you control enters, each opponent loses 1 life and you gain 1 life.

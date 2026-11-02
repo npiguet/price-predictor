@@ -1,0 +1,4 @@
+name: consume spirit
+mana cost: {X}{1}{B}
+types: sorcery
+spell[1]: spend only black mana on X. CARDNAME deals X damage to any target and you gain X life.

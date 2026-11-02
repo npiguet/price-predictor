@@ -1,0 +1,4 @@
+name: hobbit hole
+types: land
+activated[1]: halflingcycling {4}
+activated[2]: {T}, sacrifice this land: search your library for a basic land card, put it onto the battlefield tapped, then shuffle.

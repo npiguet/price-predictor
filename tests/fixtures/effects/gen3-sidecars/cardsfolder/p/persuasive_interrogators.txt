@@ -1,0 +1,6 @@
+name: persuasive interrogators
+mana cost: {4}{B}{B}
+types: creature gorgon detective
+power toughness: 5/6
+triggered: when CARDNAME enters, investigate.
+triggered: whenever you sacrifice a clue, target opponent gets two poison counters.

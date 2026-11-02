@@ -1,0 +1,6 @@
+name: imperial recovery unit
+mana cost: {2}{W}
+types: artifact vehicle
+power toughness: 3/4
+activated[1]: crew 2
+triggered: whenever CARDNAME attacks, return target creature or vehicle card with mana value 2 or less from your graveyard to your hand.

@@ -1,0 +1,5 @@
+name: sudden death
+mana cost: {1}{B}{B}
+types: instant
+static: split second
+spell[1]: target creature gets -4/-4 until end of turn.

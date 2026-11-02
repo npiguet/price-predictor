@@ -30,6 +30,7 @@ from effects.domain.state_snapshot import (
     TurnCounts,
 )
 from tests.unit.effects.builders import (
+    gen3_fixture_records,
     java_golden_entities,
     java_golden_records,
     make_entity,
@@ -307,3 +308,104 @@ class TestTheGen3FactsRead:
         snapshot = _snapshot()
         assert snapshot.links is None and snapshot.global_.floating_effects == ()
         assert all(player.turn_counts is None for player in snapshot.players)
+
+
+class TestTheGen3FixtureRead:
+    """Story 2's snapshot scenarios on real records: the gen-3 fixture cut from
+    the T079 pilot, through the codec (T074, T079a)."""
+
+    @staticmethod
+    def _states() -> list[StateSnapshot]:
+        from effects.infrastructure.record_codec import record_from_dict
+
+        return [record_from_dict(raw).state for raw in gen3_fixture_records()]
+
+    @staticmethod
+    def _permanents() -> list[EntityState]:
+        return [e for state in TestTheGen3FixtureRead._states() for e in state.entities
+                if e.on_battlefield and e.role is None]
+
+    def test_a_permanent_lists_its_static_trigger_and_replacement_lines(self):
+        """Acceptance 1: each line keyed, the static flagged active."""
+        found = [e for e in self._permanents()
+                 if {LineKind.STATIC, LineKind.TRIGGER, LineKind.REPLACEMENT}
+                 <= {line.kind for line in e.lines if line.keys}]
+        assert found
+        for entity in found:
+            assert all(line.active is not None
+                       for line in entity.lines if line.kind == LineKind.STATIC)
+
+    def test_a_creature_stripped_of_its_abilities_lists_no_line(self):
+        """Acceptance 2: a creature an Aura's ``RemoveAllAbilities$`` static
+        applies to (Enchanted River's Grasp, Witness Protection) keeps no line."""
+        stripped = [
+            e for state in self._states() for host in state.entities
+            for line in host.lines or ()
+            if line.kind == LineKind.STATIC and line.affected and line.keys
+            and _removes_all_abilities(line.keys[0])
+            for e in state.entities if e.id in line.affected and "creature" in e.types]
+        assert stripped and all(e.lines == () for e in stripped)
+
+    def test_flying_granted_by_another_permanent_s_static_is_listed_on_it(self):
+        """Acceptance 3."""
+        granted = [line for e in self._permanents() for line in e.keyword_lines
+                   if line.keyword == "flying" and line.granted and line.keys
+                   and line.keys[0].trait_kind == "static"
+                   and line.keys[0].script_file not in {
+                       k.script_file for own in e.lines if not own.granted for k in own.keys}]
+        assert granted
+
+    def test_ward_and_annihilator_carry_their_own_instance_s_value(self):
+        """Acceptance 4: the fragment, value included."""
+        fragments = {line.fragment for e in self._permanents() for line in e.keyword_lines}
+        assert any(f.startswith("Ward:") and f.split(":", 1)[1] for f in fragments)
+        assert any(f.startswith("Annihilator:") and f.split(":", 1)[1].isdigit()
+                   for f in fragments)
+
+    def test_a_protection_line_names_what_it_protects_from(self):
+        """Acceptance 5, on whatever protection the pilot reached."""
+        protections = [line for e in self._permanents() for line in e.keyword_lines
+                       if line.keyword is not None and line.keyword.startswith("protection")]
+        assert protections
+        assert all(len(line.fragment) > len("Protection") for line in protections)
+        assert "Protection from red" in {line.fragment for line in protections}
+
+    def test_a_keyword_an_effect_granted_has_no_key(self):
+        assert any(line.granted and line.keys == () and line.fragment
+                   for e in self._permanents() for line in e.keyword_lines)
+
+    def test_floating_effects_of_both_kinds_and_delayed_triggers_read(self):
+        states = self._states()
+        effects = [made for state in states for made in state.global_.floating_effects]
+        assert {made.id[0] for made in effects} == {"E", "F"}
+        assert all(made.duration in set(EffectDuration) for made in effects)
+        assert any(made.source_lines for made in effects)
+        assert any(state.global_.delayed_triggers for state in states)
+        assert any(state.global_.dungeons for state in states)
+        assert any(state.global_.day_night is not None for state in states)
+
+    def test_every_extra_entity_role_reads(self):
+        roles = {e.role for state in self._states() for e in state.entities}
+        assert roles == {None, *EntityRole}
+
+    def test_a_face_down_card_reads_its_real_face(self):
+        face_down = [e for state in self._states() for e in state.entities
+                     if e.face_state == FaceState.FACE_DOWN and e.role is None]
+        assert face_down and any(e.real_face is not None for e in face_down)
+
+
+def _removes_all_abilities(key: ProvenanceKey) -> bool:
+    """Whether the fixture sidecar line ``key`` names strips every ability."""
+    import json
+
+    from tests.unit.effects.builders import EFFECTS_FIXTURES
+
+    tree, _, relative = key.script_file.partition("/")
+    path = (EFFECTS_FIXTURES / "gen3-sidecars" / tree / relative).with_suffix(".provenance.json")
+    if not path.exists():
+        return False
+    for line in json.loads(path.read_text(encoding="utf-8"))["lines"]:
+        if any((k["face"], k["trait_kind"], k["index_within_kind"])
+               == (key.face, key.trait_kind, key.index_within_kind) for k in line["provenance"]):
+            return "RemoveAllAbilities" in (line.get("script_text") or "")
+    return False

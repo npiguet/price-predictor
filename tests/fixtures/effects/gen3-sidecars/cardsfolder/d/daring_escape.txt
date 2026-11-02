@@ -1,0 +1,4 @@
+name: daring escape
+mana cost: {R}
+types: instant
+spell[1]: target creature gets +1/+0 and gains first strike until end of turn. scry 1.

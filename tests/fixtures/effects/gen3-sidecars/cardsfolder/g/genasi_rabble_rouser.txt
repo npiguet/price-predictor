@@ -1,0 +1,6 @@
+name: genasi rabble-rouser
+mana cost: {1}{R}
+types: creature elemental shaman
+power toughness: 1/3
+triggered: double team
+activated[1]: {1}{R}: creatures you control named genasi rabble-rouser get +1/+0 until end of turn.

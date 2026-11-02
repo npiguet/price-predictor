@@ -1,0 +1,4 @@
+name: goblin token
+types: creature goblin
+power toughness: 1/1
+static: CARDNAME can't block.

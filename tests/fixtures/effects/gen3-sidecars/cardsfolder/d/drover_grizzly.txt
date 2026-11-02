@@ -1,0 +1,6 @@
+name: drover grizzly
+mana cost: {2}{G}
+types: creature bear mount
+power toughness: 4/2
+activated[1]: saddle 1
+triggered: whenever CARDNAME attacks while saddled, creatures you control gain trample until end of turn.

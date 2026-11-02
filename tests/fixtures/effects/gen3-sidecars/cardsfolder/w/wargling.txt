@@ -1,0 +1,5 @@
+name: wargling
+mana cost: {1}{G}
+types: creature wolf
+power toughness: 2/2
+triggered: ferocious — whenever this creature attacks while you control a creature with power 4 or greater, until end of turn, this creature gets +1/+0 and creatures you control gain trample.

@@ -1,0 +1,6 @@
+name: windrider patrol
+mana cost: {3}{U}{U}
+types: creature merfolk wizard
+power toughness: 4/3
+static: flying
+triggered: whenever CARDNAME deals combat damage to a player, scry 2.

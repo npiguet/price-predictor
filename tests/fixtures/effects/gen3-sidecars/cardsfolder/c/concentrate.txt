@@ -1,0 +1,4 @@
+name: concentrate
+mana cost: {2}{U}{U}
+types: sorcery
+spell[1]: draw three cards.

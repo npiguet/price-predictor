@@ -1,0 +1,4 @@
+name: refresh
+mana cost: {2}{G}
+types: instant
+spell[1]: regenerate target creature. draw a card.

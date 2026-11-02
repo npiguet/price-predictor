@@ -1,0 +1,6 @@
+name: domesticated hydra
+mana cost: {2}{G}{G}
+types: creature hydra
+power toughness: 3/3
+activated[1]: {X}{G}{G}{G}: monstrosity X
+static: as long as CARDNAME is monstrous, it has trample.

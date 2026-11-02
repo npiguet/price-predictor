@@ -1,0 +1,6 @@
+name: loxodon smiter
+mana cost: {1}{G}{W}
+types: creature elephant soldier
+power toughness: 4/4
+replacement: this spell can't be countered.
+replacement: if a spell or ability an opponent controls causes you to discard CARDNAME, put it onto the battlefield instead of putting it into your graveyard.

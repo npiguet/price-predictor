@@ -1,0 +1,6 @@
+name: turret ogre
+mana cost: {3}{R}
+types: creature ogre warrior
+power toughness: 4/3
+static: reach
+triggered: when CARDNAME enters, if you control another creature with power 4 or greater, CARDNAME deals 2 damage to each opponent.

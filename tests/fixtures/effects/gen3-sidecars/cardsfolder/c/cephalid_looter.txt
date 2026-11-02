@@ -1,0 +1,5 @@
+name: cephalid looter
+mana cost: {2}{U}
+types: creature octopus rogue
+power toughness: 2/1
+activated[1]: {T}: target player draws a card, then discards a card.

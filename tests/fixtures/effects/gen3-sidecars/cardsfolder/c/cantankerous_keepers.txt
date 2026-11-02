@@ -1,0 +1,6 @@
+name: cantankerous keepers
+mana cost: {5}{G}
+types: creature elf soldier
+power toughness: 4/3
+cost reduction: affinity for elves
+triggered: when this creature enters, mill four cards, then put all elf cards from among them into your hand.

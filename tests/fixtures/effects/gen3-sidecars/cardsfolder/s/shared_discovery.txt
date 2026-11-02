@@ -1,0 +1,5 @@
+name: shared discovery
+mana cost: {U}
+types: sorcery
+additional cost: tap four untapped creatures you control.
+spell[1]: draw three cards.

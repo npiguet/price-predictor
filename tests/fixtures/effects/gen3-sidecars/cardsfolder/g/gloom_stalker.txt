@@ -1,0 +1,5 @@
+name: gloom stalker
+mana cost: {2}{W}
+types: creature dwarf ranger
+power toughness: 2/3
+static: as long as you've completed a dungeon, CARDNAME has double strike.

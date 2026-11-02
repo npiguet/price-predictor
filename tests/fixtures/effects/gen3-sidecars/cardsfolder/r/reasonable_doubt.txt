@@ -1,0 +1,5 @@
+name: reasonable doubt
+mana cost: {1}{U}
+types: instant
+spell[1]: counter target spell unless its controller pays {2}.
+spell[2]: suspect up to one target creature.

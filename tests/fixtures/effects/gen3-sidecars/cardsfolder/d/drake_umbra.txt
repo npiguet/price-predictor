@@ -1,0 +1,6 @@
+name: drake umbra
+mana cost: {4}{U}
+types: enchantment aura
+static: enchant creature
+static: umbra armor
+static: enchanted creature gets +3/+3 and has flying.

@@ -1,0 +1,5 @@
+name: arrogant outlaw
+mana cost: {2}{B}
+types: creature vampire noble
+power toughness: 3/2
+triggered: when CARDNAME enters, if an opponent lost life this turn, each opponent loses 2 life and you gain 2 life.

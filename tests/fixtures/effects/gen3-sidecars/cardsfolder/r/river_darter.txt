@@ -1,0 +1,5 @@
+name: river darter
+mana cost: {2}{U}
+types: creature merfolk warrior
+power toughness: 2/3
+static: CARDNAME can't be blocked by dinosaurs.

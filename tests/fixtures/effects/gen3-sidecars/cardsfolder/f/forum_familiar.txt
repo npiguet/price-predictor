@@ -1,0 +1,6 @@
+name: forum familiar
+mana cost: {W}
+types: creature cat
+power toughness: 1/1
+alternate cost: disguise {1}{W}
+triggered: when CARDNAME is turned face up, return another target permanent you control to its owner's hand and put a +1/+1 counter on CARDNAME.

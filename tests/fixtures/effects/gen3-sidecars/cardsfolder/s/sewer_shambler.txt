@@ -1,0 +1,6 @@
+name: sewer shambler
+mana cost: {2}{B}
+types: creature zombie
+power toughness: 2/1
+static: swampwalk
+activated[1]: scavenge {2}{B}

@@ -1,0 +1,5 @@
+name: nimble thopterist
+mana cost: {3}{U}
+types: creature vedalken artificer
+power toughness: 3/2
+triggered: when this creature enters, create a 1/1 colorless thopter artifact creature token with flying.

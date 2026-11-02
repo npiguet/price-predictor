@@ -1,0 +1,5 @@
+name: talruum piper
+mana cost: {4}{R}
+types: creature minotaur
+power toughness: 3/3
+static: mustbeblockedbyall:creature.withflying:all creatures with flying able to block CARDNAME do so.

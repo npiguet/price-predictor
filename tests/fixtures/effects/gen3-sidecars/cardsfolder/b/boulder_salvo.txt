@@ -1,0 +1,5 @@
+name: boulder salvo
+mana cost: {4}{R}
+types: sorcery
+alternate cost: surge {1}{R}
+spell[1]: CARDNAME deals 4 damage to target creature.

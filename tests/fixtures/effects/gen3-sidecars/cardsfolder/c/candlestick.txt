@@ -1,0 +1,6 @@
+name: candlestick
+mana cost: {U}
+types: artifact clue equipment
+activated[1]: equip {2}
+activated[2]: {2}, sacrifice CARDNAME: draw a card.
+static: equipped creature gets +1/+1 and has "whenever this creature attacks, surveil 2."

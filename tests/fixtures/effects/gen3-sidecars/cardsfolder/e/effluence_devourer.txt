@@ -1,0 +1,6 @@
+name: effluence devourer
+mana cost: {B}{R}{G}
+types: creature crocodile
+power toughness: 4/3
+alternate cost: blitz {B}{R}{G}
+triggered: whenever you sacrifice CARDNAME or another creature, it perpetually gains "{2}, exile this card from your graveyard: create an X/X green ooze creature token, where X is this card's power. activate only as a sorcery."

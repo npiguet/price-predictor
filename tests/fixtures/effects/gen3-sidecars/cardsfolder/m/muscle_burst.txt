@@ -1,0 +1,4 @@
+name: muscle burst
+mana cost: {1}{G}
+types: instant
+spell[1]: target creature gets +X/+X until end of turn, where X is 3 plus the number of cards named muscle burst in all graveyards.

@@ -1,0 +1,15 @@
+layout: adventure
+name: grabby giant
+mana cost: {3}{R}
+types: creature giant
+power toughness: 4/3
+static: reach
+activated[1]: {2}{R}, sacrifice an artifact or land: draw a card.
+
+ALTERNATE
+
+name: that's mine
+mana cost: {1}{R}
+types: instant adventure
+spell[1]: create a treasure token.
+replacement: adventure

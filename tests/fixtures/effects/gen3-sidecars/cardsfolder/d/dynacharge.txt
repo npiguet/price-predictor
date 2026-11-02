@@ -1,0 +1,5 @@
+name: dynacharge
+mana cost: {R}
+types: instant
+alternate cost: overload {2}{R}
+spell[1]: target creature you control gets +2/+0 until end of turn.

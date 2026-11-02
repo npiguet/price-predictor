@@ -1,0 +1,6 @@
+name: fang of the pack
+mana cost: {5}{G}
+types: creature wolf
+power toughness: 5/3
+triggered: melee
+triggered: at the beginning of combat on your turn, another target creature you control gains melee until end of turn.

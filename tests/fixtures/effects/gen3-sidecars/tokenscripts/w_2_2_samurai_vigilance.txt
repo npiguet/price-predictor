@@ -1,0 +1,4 @@
+name: samurai token
+types: creature samurai
+power toughness: 2/2
+static: vigilance

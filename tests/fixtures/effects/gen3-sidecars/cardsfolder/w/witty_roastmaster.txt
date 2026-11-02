@@ -1,0 +1,5 @@
+name: witty roastmaster
+mana cost: {2}{R}
+types: creature devil citizen
+power toughness: 3/2
+triggered: alliance — whenever another creature you control enters, CARDNAME deals 1 damage to each opponent.

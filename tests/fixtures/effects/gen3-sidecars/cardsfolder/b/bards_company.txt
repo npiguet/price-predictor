@@ -1,0 +1,7 @@
+name: bard's company
+mana cost: {2}{W}{U}
+types: creature human citizen
+power toughness: 4/3
+triggered: whenever this creature enters or attacks, recruit.
+static: you may cast this spell as though it had flash if you control a human.
+static: other creatures you control get +1/+1.

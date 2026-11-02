@@ -1,0 +1,5 @@
+name: arcane archery
+mana cost: {2}{G}
+types: instant
+spell[1]: target creature gets +3/+3 and gains reach and trample until end of turn.
+spell[2]: ,,,,,,you get a boon with "when you cast your next creature spell, that creature enters with an additional +1/+1 counter, reach counter, and trample counter on it."

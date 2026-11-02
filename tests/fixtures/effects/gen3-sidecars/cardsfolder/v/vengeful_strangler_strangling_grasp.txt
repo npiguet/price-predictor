@@ -1,0 +1,14 @@
+layout: transform
+name: vengeful strangler
+mana cost: {1}{B}
+types: creature human rogue
+power toughness: 2/1
+triggered: when CARDNAME dies, return it to the battlefield transformed under your control attached to target creature or planeswalker an opponent controls.
+static: CARDNAME can't block.
+
+ALTERNATE
+
+name: strangling grasp
+types: enchantment aura
+static: enchant creature or planeswalker an opponent controls
+triggered: at the beginning of your upkeep, enchanted permanent's controller sacrifices a nonland permanent and loses 1 life.

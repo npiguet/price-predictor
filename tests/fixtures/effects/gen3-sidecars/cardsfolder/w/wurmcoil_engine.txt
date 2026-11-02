@@ -1,0 +1,7 @@
+name: wurmcoil engine
+mana cost: {6}
+types: artifact creature phyrexian wurm
+power toughness: 6/6
+static: deathtouch
+static: lifelink
+triggered: when CARDNAME dies, create a 3/3 colorless phyrexian wurm artifact creature token with deathtouch and a 3/3 colorless phyrexian wurm artifact creature token with lifelink.

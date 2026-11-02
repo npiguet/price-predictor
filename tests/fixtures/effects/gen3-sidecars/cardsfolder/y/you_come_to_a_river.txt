@@ -1,0 +1,6 @@
+name: you come to a river
+mana cost: {1}{U}
+types: instant
+spell[1]: choose one
+option[2]: fight the current — return target nonland permanent to its owner's hand.
+option[3]: find a crossing — target creature gets +1/+0 until end of turn and can't be blocked this turn.

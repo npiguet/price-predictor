@@ -1,0 +1,5 @@
+name: spring splasher
+mana cost: {1}{U}
+types: creature frog beast
+power toughness: 2/1
+triggered: whenever CARDNAME attacks, target creature defending player controls gets -3/-0 until end of turn.

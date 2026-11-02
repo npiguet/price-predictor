@@ -1,0 +1,6 @@
+name: bristlepack sentry
+mana cost: {1}{G}
+types: creature plant wolf
+power toughness: 3/3
+static: defender
+static: as long as you control a creature with power 4 or greater, CARDNAME can attack as though it didn't have defender.

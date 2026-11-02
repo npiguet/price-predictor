@@ -1,0 +1,5 @@
+name: armory veteran
+mana cost: {1}{R}
+types: creature orc warrior
+power toughness: 2/2
+static: as long as CARDNAME is equipped, it has menace.

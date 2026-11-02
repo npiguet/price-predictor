@@ -1,0 +1,3 @@
+name: cabaretti courtyard
+types: land
+triggered: when CARDNAME enters, sacrifice it. when you do, search your library for a basic mountain, forest, or plains card, put it onto the battlefield tapped, then shuffle and you gain 1 life. search your library for a basic mountain, forest, or plains card, put it onto the battlefield tapped, then shuffle and you gain 1 life.

@@ -1,0 +1,5 @@
+name: war priest of thune
+mana cost: {1}{W}
+types: creature human cleric
+power toughness: 2/2
+triggered: when CARDNAME enters, you may destroy target enchantment.

@@ -1,0 +1,6 @@
+name: voice of the vermin
+mana cost: {3}{G}
+types: creature human citizen
+power toughness: 2/2
+replacement: CARDNAME enters with a shield counter on it.
+triggered: whenever CARDNAME attacks, target creature you control has base power and toughness 4/4 until end of turn.

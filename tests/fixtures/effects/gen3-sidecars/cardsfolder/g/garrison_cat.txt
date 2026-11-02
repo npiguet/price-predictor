@@ -1,0 +1,5 @@
+name: garrison cat
+mana cost: {W}
+types: creature cat
+power toughness: 1/1
+triggered: when CARDNAME dies, create a 1/1 white human soldier creature token.

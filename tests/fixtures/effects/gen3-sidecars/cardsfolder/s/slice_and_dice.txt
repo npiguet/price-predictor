@@ -1,0 +1,6 @@
+name: slice and dice
+mana cost: {4}{R}{R}
+types: sorcery
+activated[1]: cycling {2}{R}
+spell[2]: CARDNAME deals 4 damage to each creature.
+triggered: when you cycle CARDNAME, you may have it deal 1 damage to each creature.

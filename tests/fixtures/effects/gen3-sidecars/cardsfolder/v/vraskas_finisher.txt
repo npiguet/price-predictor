@@ -1,0 +1,5 @@
+name: vraska's finisher
+mana cost: {2}{B}
+types: creature gorgon assassin
+power toughness: 3/2
+triggered: when CARDNAME enters, destroy target creature or planeswalker an opponent controls that was dealt damage this turn.

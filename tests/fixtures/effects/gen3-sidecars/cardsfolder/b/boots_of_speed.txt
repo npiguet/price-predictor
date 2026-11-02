@@ -1,0 +1,5 @@
+name: boots of speed
+mana cost: {R}
+types: artifact equipment
+activated[1]: equip {1}
+static: equipped creature gets +1/+0 and has haste.

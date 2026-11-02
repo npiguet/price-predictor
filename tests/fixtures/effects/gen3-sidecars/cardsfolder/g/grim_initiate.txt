@@ -1,0 +1,6 @@
+name: grim initiate
+mana cost: {R}
+types: creature zombie warrior
+power toughness: 1/1
+static: first strike
+triggered: when CARDNAME dies, amass zombies 1.

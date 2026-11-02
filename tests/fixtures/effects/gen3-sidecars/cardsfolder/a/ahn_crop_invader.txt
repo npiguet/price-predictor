@@ -1,0 +1,6 @@
+name: ahn-crop invader
+mana cost: {2}{R}
+types: creature zombie minotaur warrior
+power toughness: 2/2
+activated[1]: {1}, sacrifice another creature: CARDNAME gets +2/+0 until end of turn.
+static: during your turn, CARDNAME has first strike.

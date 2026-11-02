@@ -1,0 +1,4 @@
+name: vicious hunger
+mana cost: {B}{B}
+types: sorcery
+spell[1]: CARDNAME deals 2 damage to target creature and you gain 2 life.

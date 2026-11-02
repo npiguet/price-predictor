@@ -1,0 +1,5 @@
+name: centaur healer
+mana cost: {1}{G}{W}
+types: creature centaur cleric
+power toughness: 3/3
+triggered: when CARDNAME enters, you gain 3 life.

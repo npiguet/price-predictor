@@ -1,0 +1,5 @@
+name: toxin analysis
+mana cost: {B}
+types: instant
+spell[1]: target creature gains deathtouch and lifelink until end of turn.
+spell[2]: investigate.

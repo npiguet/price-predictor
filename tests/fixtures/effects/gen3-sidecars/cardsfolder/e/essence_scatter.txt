@@ -1,0 +1,4 @@
+name: essence scatter
+mana cost: {1}{U}
+types: instant
+spell[1]: counter target creature spell.

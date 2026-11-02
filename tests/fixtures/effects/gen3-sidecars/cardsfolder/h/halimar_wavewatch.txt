@@ -1,0 +1,7 @@
+name: halimar wavewatch
+mana cost: {1}{U}
+types: creature merfolk soldier
+power toughness: 0/3
+activated[1]: level up {2}
+static: level 1-4 0/6
+static: level 5+ 6/6 islandwalk

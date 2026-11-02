@@ -1,0 +1,6 @@
+name: boneyard desecrator
+mana cost: {3}{B}
+types: creature zombie mercenary
+power toughness: 3/4
+static: menace
+activated[1]: {1}{B}, sacrifice another creature: put a +1/+1 counter on CARDNAME. if an outlaw was sacrificed this way, create a treasure token.

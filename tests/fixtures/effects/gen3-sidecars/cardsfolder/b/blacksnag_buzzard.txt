@@ -1,0 +1,7 @@
+name: blacksnag buzzard
+mana cost: {2}{B}
+types: creature bird
+power toughness: 2/1
+alternate cost: plot {1}{B}
+static: flying
+replacement: CARDNAME enters with a +1/+1 counter on it if a creature died this turn.

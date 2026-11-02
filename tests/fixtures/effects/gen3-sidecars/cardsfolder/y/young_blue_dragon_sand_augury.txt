@@ -1,0 +1,15 @@
+layout: adventure
+name: young blue dragon
+mana cost: {4}{U}
+types: creature dragon
+power toughness: 3/3
+static: flying
+
+ALTERNATE
+
+name: sand augury
+mana cost: {1}{U}
+types: sorcery adventure
+spell[1]: scry 1,
+spell[2]: then draw a card.
+replacement: adventure

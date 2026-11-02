@@ -1,0 +1,6 @@
+name: backstreet bruiser
+mana cost: {1}{U}
+types: creature octopus rogue
+power toughness: 3/3
+static: defender
+static: as long as there are two or more counters among creatures you control, CARDNAME can attack as though it didn't have defender.

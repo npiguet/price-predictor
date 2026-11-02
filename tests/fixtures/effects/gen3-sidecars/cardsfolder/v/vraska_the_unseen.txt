@@ -1,0 +1,8 @@
+name: vraska the unseen
+mana cost: {3}{B}{G}
+types: legendary planeswalker vraska
+loyalty: 5
+planeswalker[1]: [+1]: until your next turn, whenever a creature deals combat damage to CARDNAME, destroy that creature.
+planeswalker[2]: [-3]: destroy target nonland permanent.
+planeswalker[3]: [-7]: create three 1/1 black assassin creature tokens with "whenever this token deals combat damage to a player, that player loses the game."
+replacement: CARDNAME enters with five loyalty counters on it.

@@ -1,0 +1,5 @@
+name: lightning elemental
+mana cost: {3}{R}
+types: creature elemental
+power toughness: 4/1
+static: haste

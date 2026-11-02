@@ -1,0 +1,4 @@
+name: planar cleansing
+mana cost: {3}{W}{W}{W}
+types: sorcery
+spell[1]: destroy all nonland permanents.

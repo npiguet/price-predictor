@@ -1,0 +1,7 @@
+name: labyrinth raptor
+mana cost: {B}{R}
+types: creature nightmare dinosaur
+power toughness: 2/2
+static: menace
+activated[1]: {B}{R}: creatures you control with menace get +1/+0 until end of turn.
+triggered: whenever a creature you control with menace becomes blocked, defending player sacrifices a creature blocking it.

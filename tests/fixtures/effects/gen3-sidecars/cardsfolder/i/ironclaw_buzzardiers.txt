@@ -1,0 +1,6 @@
+name: ironclaw buzzardiers
+mana cost: {2}{R}
+types: creature orc scout
+power toughness: 2/2
+activated[1]: {R}: CARDNAME gains flying until end of turn.
+static: CARDNAME can't block creatures with power 2 or greater.

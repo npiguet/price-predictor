@@ -1,0 +1,5 @@
+name: seafloor debris
+types: land
+activated[1]: {T}: add {U}.
+activated[2]: {T}, sacrifice CARDNAME: add one mana of any color.
+replacement: CARDNAME enters tapped.

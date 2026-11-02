@@ -1,0 +1,15 @@
+layout: transform
+name: harvesttide infiltrator
+mana cost: {2}{R}
+types: creature human werewolf
+power toughness: 3/2
+static: trample
+triggered: daybound
+
+ALTERNATE
+
+name: harvesttide assailant
+types: creature werewolf
+power toughness: 4/4
+static: trample
+triggered: nightbound

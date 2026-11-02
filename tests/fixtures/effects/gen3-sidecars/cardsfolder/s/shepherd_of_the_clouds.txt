@@ -1,0 +1,7 @@
+name: shepherd of the clouds
+mana cost: {4}{W}
+types: creature pegasus
+power toughness: 4/3
+static: flying
+static: vigilance
+triggered: when CARDNAME enters, return target permanent card with mana value 3 or less from your graveyard to your hand. return that card to the battlefield instead if you control a mount.

@@ -1,0 +1,7 @@
+name: wormfang drake
+mana cost: {2}{U}
+types: creature nightmare drake
+power toughness: 3/4
+static: flying
+triggered: when CARDNAME enters, sacrifice it unless you exile a creature you control other than CARDNAME.
+triggered: when CARDNAME leaves the battlefield, return the exiled card to the battlefield under its owner's control.

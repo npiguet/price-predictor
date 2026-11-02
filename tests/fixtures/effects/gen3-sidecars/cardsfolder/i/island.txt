@@ -1,0 +1,3 @@
+name: island
+types: basic land island
+activated[1]: {T}: add {U}

@@ -1,0 +1,5 @@
+name: mystical tether
+mana cost: {2}{W}
+types: enchantment
+additional cost: you may cast CARDNAME as though it had flash if you pay {2} more to cast it.
+triggered: when CARDNAME enters, exile target artifact or creature an opponent controls until CARDNAME leaves the battlefield.

@@ -1,0 +1,5 @@
+name: owlbear shepherd
+mana cost: {2}{G}
+types: creature goblin druid
+power toughness: 1/4
+triggered: at the beginning of your end step, if creatures you control have total power 8 or greater, draw a card.

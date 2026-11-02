@@ -1,0 +1,5 @@
+name: copperhorn scout
+mana cost: {G}
+types: creature elf scout
+power toughness: 1/1
+triggered: whenever CARDNAME attacks, untap each other creature you control.

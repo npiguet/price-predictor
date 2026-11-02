@@ -1,0 +1,6 @@
+name: gate to tumbledown
+types: land mountain gate
+text: {T}: add {R}.
+activated[1]: {3}{R}, {T}: seek a nonland card. activate only once.
+replacement: CARDNAME enters tapped.
+activated[2]: {T}: add {R}

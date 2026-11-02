@@ -1,0 +1,5 @@
+name: giant badger
+mana cost: {1}{G}{G}
+types: creature badger
+power toughness: 2/2
+triggered: whenever CARDNAME blocks, it gets +2/+2 until end of turn.

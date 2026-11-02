@@ -1,0 +1,5 @@
+name: borderland explorer
+mana cost: {1}{G}
+types: creature elf scout
+power toughness: 3/1
+triggered: when CARDNAME enters, each player may discard a card. each player who discarded a card this way may search their library for a basic land card, reveal it, put it into their hand, then shuffle.

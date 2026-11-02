@@ -1,0 +1,5 @@
+name: elven riders
+mana cost: {3}{G}{G}
+types: creature elf
+power toughness: 3/3
+static: CARDNAME can't be blocked except by walls and/or creatures with flying.

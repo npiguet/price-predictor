@@ -1,0 +1,5 @@
+name: coursers' accord
+mana cost: {4}{G}{W}
+types: sorcery
+spell[1]: create a 3/3 green centaur creature token, then populate.
+spell[2]: populate

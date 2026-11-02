@@ -1,0 +1,5 @@
+name: llanowar sentinel
+mana cost: {2}{G}
+types: creature elf
+power toughness: 2/3
+triggered: when CARDNAME enters, you may pay {1}{G}. if you do, search your library for a card named llanowar sentinel, put that card onto the battlefield, then shuffle.

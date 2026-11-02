@@ -1,0 +1,5 @@
+name: druidic ritual
+mana cost: {2}{G}
+types: sorcery
+spell[1]: you may mill three cards.
+spell[2]: then return up to one creature card and up to one land card from your graveyard to your hand.

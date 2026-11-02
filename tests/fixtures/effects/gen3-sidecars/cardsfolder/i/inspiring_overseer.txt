@@ -1,0 +1,6 @@
+name: inspiring overseer
+mana cost: {2}{W}
+types: creature angel cleric
+power toughness: 2/1
+static: flying
+triggered: when CARDNAME enters, you gain 1 life and draw a card.

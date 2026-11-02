@@ -1,0 +1,6 @@
+name: dreg mangler
+mana cost: {1}{B}{G}
+types: creature plant zombie
+power toughness: 3/3
+static: haste
+activated[1]: scavenge {3}{B}{G}

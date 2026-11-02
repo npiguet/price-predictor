@@ -1,0 +1,4 @@
+name: warrior's charge
+mana cost: {2}{W}
+types: sorcery
+spell[1]: creatures you control get +1/+1 until end of turn.

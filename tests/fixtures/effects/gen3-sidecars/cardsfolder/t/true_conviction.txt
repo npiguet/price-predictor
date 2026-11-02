@@ -1,0 +1,4 @@
+name: true conviction
+mana cost: {3}{W}{W}{W}
+types: enchantment
+static: creatures you control have double strike and lifelink.

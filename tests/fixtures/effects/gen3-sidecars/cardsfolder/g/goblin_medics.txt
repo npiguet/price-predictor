@@ -1,0 +1,5 @@
+name: goblin medics
+mana cost: {2}{R}
+types: creature goblin shaman
+power toughness: 1/1
+triggered: whenever CARDNAME becomes tapped, it deals 1 damage to any target.

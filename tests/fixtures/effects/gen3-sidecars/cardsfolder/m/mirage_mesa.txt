@@ -1,0 +1,5 @@
+name: mirage mesa
+types: land desert
+replacement: as CARDNAME enters, choose a color.
+activated[1]: {T}: add one mana of the chosen color.
+replacement: CARDNAME enters tapped.

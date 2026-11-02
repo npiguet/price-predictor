@@ -1,0 +1,4 @@
+name: dark tutelage
+mana cost: {2}{B}
+types: enchantment
+triggered: at the beginning of your upkeep, reveal the top card of your library and put that card into your hand. you lose life equal to its mana value.

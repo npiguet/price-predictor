@@ -1,0 +1,5 @@
+name: bog wreckage
+types: land
+activated[1]: {T}: add {B}.
+activated[2]: {T}, sacrifice CARDNAME: add one mana of any color.
+replacement: CARDNAME enters tapped.

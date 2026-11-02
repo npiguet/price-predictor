@@ -1,0 +1,5 @@
+name: surreal memoir
+mana cost: {3}{R}
+types: sorcery
+static: rebound
+spell[1]: return an instant card at random from your graveyard to your hand.

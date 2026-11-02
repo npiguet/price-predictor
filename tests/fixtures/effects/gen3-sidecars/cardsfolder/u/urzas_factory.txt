@@ -1,0 +1,4 @@
+name: urza's factory
+types: land urza's
+activated[1]: {T}: add {C}.
+activated[2]: {7}, {T}: create a 2/2 colorless assembly-worker artifact creature token.

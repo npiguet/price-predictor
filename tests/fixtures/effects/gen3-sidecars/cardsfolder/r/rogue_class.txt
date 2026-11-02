@@ -1,0 +1,6 @@
+name: rogue class
+mana cost: {U}{B}
+types: enchantment class
+level[1]: whenever a creature you control deals combat damage to a player, exile the top card of that player's library face down. you may look at it for as long as it remains exiled.
+level[2]: {1}{U}{B}: creatures you control have menace.
+level[3]: {2}{U}{B}: you may play cards exiled with CARDNAME, and you may spend mana as though it were mana of any color to cast those spells.

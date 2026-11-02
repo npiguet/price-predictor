@@ -1,0 +1,6 @@
+name: tiger-tribe hunter
+mana cost: {3}{R}{R}
+types: creature human barbarian
+power toughness: 4/4
+static: trample
+triggered: pack tactics — whenever CARDNAME attacks, if you attacked with creatures with total power 6 or greater this combat, you may sacrifice another creature. when you do, CARDNAME deals damage equal to the sacrificed creature's power to target creature.

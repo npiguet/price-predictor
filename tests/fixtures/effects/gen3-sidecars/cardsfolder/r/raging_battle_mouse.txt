@@ -1,0 +1,6 @@
+name: raging battle mouse
+mana cost: {1}{R}
+types: creature mouse
+power toughness: 2/1
+triggered: celebration — at the beginning of combat on your turn, if two or more nonland permanents entered the battlefield under your control this turn, target creature you control gets +1/+1 until end of turn.
+static: the second spell you cast each turn costs {1} less to cast.

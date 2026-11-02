@@ -1,0 +1,6 @@
+name: patchwork automaton
+mana cost: {2}
+types: artifact creature construct
+power toughness: 1/1
+static: ward {2}
+triggered: whenever you cast an artifact spell, put a +1/+1 counter on CARDNAME.

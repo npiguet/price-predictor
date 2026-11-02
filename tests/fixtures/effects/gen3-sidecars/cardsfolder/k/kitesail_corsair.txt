@@ -1,0 +1,5 @@
+name: kitesail corsair
+mana cost: {1}{U}
+types: creature human pirate
+power toughness: 2/1
+static: CARDNAME has flying as long as it's attacking.

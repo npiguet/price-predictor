@@ -1,0 +1,5 @@
+name: viashino racketeer
+mana cost: {2}{R}
+types: creature lizard rogue
+power toughness: 2/1
+triggered: when CARDNAME enters, you may discard a card. if you do, draw a card.

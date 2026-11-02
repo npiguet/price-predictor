@@ -1,0 +1,6 @@
+name: security bypass
+mana cost: {1}{U}
+types: enchantment aura
+static: enchant creature
+static: as long as enchanted creature is attacking alone, it can't be blocked.
+static: enchanted creature has "whenever this creature deals combat damage to a player, it connives."

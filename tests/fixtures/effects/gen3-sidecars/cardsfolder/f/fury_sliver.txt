@@ -1,0 +1,5 @@
+name: fury sliver
+mana cost: {5}{R}
+types: creature sliver
+power toughness: 3/3
+static: all sliver creatures have double strike.

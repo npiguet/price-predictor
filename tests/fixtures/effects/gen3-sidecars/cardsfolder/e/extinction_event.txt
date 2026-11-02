@@ -1,0 +1,4 @@
+name: extinction event
+mana cost: {3}{B}
+types: sorcery
+spell[1]: choose odd or even. exile each creature with mana value of the chosen quality.

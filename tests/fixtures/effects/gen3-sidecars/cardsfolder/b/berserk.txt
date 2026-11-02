@@ -1,0 +1,5 @@
+name: berserk
+mana cost: {G}
+types: instant
+spell[1]: cast CARDNAME only before the combat damage step. target creature gains trample and gets +X/+0 until end of turn, where X is its power.
+spell[2]: at the beginning of the next end step, destroy that creature if it attacked this turn.

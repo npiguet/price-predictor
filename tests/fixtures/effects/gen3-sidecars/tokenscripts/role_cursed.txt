@@ -1,0 +1,4 @@
+name: cursed
+types: enchantment aura role
+static: enchant creature
+static: enchanted creature is 1/1.

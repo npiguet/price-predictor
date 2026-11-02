@@ -1,0 +1,6 @@
+name: festerleech
+mana cost: {B}
+types: creature zombie leech
+power toughness: 1/1
+activated[1]: {1}{B}: CARDNAME gets +2/+2 until end of turn. activate only once each turn.
+triggered: whenever CARDNAME deals combat damage to a player, you mill two cards.

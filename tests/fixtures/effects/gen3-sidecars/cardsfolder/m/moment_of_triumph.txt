@@ -1,0 +1,4 @@
+name: moment of triumph
+mana cost: {W}
+types: instant
+spell[1]: target creature gets +2/+2 until end of turn. you gain 2 life.

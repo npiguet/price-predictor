@@ -1,0 +1,6 @@
+name: hobbling zombie
+mana cost: {2}{B}
+types: creature zombie
+power toughness: 2/2
+static: deathtouch
+triggered: when CARDNAME dies, create a 2/2 black zombie creature with decayed.

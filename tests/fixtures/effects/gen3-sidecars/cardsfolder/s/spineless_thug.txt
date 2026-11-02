@@ -1,0 +1,5 @@
+name: spineless thug
+mana cost: {1}{B}
+types: creature phyrexian zombie mercenary
+power toughness: 2/2
+static: CARDNAME can't block.

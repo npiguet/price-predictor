@@ -1,0 +1,7 @@
+name: aetherjacket
+mana cost: {3}
+types: artifact creature thopter
+power toughness: 2/1
+static: flying
+static: vigilance
+activated[1]: {2}, {T}, sacrifice CARDNAME: destroy another target artifact. activate only as a sorcery.

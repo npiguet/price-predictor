@@ -1,0 +1,4 @@
+name: disrupting scepter
+mana cost: {3}
+types: artifact
+activated[1]: {3}, {T}: target player discards a card. activate only during your turn.

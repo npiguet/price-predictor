@@ -1,0 +1,6 @@
+name: goblin gaveleer
+mana cost: {R}
+types: creature goblin warrior
+power toughness: 1/1
+static: trample
+static: CARDNAME gets +2/+0 for each equipment attached to it.

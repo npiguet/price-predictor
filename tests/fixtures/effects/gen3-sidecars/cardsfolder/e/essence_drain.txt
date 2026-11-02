@@ -1,0 +1,4 @@
+name: essence drain
+mana cost: {4}{B}
+types: sorcery
+spell[1]: CARDNAME deals 3 damage to any target and you gain 3 life.

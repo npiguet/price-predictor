@@ -1,0 +1,5 @@
+name: eaten alive
+mana cost: {B}
+types: sorcery
+additional cost: sacrifice a creature or pay {3}{B}
+spell[1]: exile target creature or planeswalker.

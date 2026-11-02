@@ -1,0 +1,6 @@
+name: zanikev locust
+mana cost: {5}{B}
+types: creature insect
+power toughness: 3/3
+static: flying
+activated[1]: scavenge {2}{B}{B}

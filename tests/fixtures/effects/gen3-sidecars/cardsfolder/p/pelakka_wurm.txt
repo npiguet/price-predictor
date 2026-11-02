@@ -1,0 +1,7 @@
+name: pelakka wurm
+mana cost: {4}{G}{G}{G}
+types: creature wurm
+power toughness: 7/7
+static: trample
+triggered: when CARDNAME enters, you gain 7 life.
+triggered: when CARDNAME dies, draw a card.

@@ -1,0 +1,6 @@
+name: mogg war marshal
+mana cost: {1}{R}
+types: creature goblin warrior
+power toughness: 1/1
+triggered: echo {1}{R}
+triggered: when CARDNAME enters or dies, create a 1/1 red goblin creature token.

@@ -1,0 +1,4 @@
+name: soldier token
+types: creature soldier
+power toughness: 1/2
+static: defender

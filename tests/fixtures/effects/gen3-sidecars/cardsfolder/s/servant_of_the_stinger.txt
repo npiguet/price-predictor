@@ -1,0 +1,6 @@
+name: servant of the stinger
+mana cost: {1}{B}
+types: creature human warlock
+power toughness: 1/3
+static: deathtouch
+triggered: whenever CARDNAME deals combat damage to a player, if you've committed a crime this turn, you may sacrifice CARDNAME. if you do, search your library for a card, put it into your hand, then shuffle.

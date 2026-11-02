@@ -1,0 +1,6 @@
+name: hopeless nightmare
+mana cost: {B}
+types: enchantment
+activated[1]: {2}{B}: sacrifice CARDNAME.
+triggered: when CARDNAME enters, each opponent discards a card and loses 2 life.
+triggered: when CARDNAME is put into a graveyard from the battlefield, scry 2.

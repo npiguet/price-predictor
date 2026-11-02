@@ -1,0 +1,7 @@
+name: deathspore thallid
+mana cost: {1}{B}
+types: creature zombie fungus
+power toughness: 1/1
+activated[1]: remove three spore counters from CARDNAME: create a 1/1 green saproling creature token.
+activated[2]: sacrifice a saproling: target creature gets -1/-1 until end of turn.
+triggered: at the beginning of your upkeep, put a spore counter on CARDNAME.

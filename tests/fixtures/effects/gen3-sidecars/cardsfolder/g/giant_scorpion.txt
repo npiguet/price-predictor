@@ -1,0 +1,5 @@
+name: giant scorpion
+mana cost: {2}{B}
+types: creature scorpion
+power toughness: 1/3
+static: deathtouch

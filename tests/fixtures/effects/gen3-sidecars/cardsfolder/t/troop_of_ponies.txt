@@ -1,0 +1,5 @@
+name: troop of ponies
+mana cost: {2}
+types: creature horse
+power toughness: 2/1
+activated[1]: {2}, {T}, sacrifice CARDNAME: search your library for up to two basic land cards, reveal those cards, put one onto the battlefield tapped and the other into your hand, then shuffle.

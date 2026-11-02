@@ -1,0 +1,6 @@
+name: eternity snare
+mana cost: {5}{U}
+types: enchantment aura
+static: enchant creature
+triggered: when CARDNAME enters, draw a card.
+replacement: enchanted creature doesn't untap during its controller's untap step.

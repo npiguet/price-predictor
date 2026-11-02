@@ -1,0 +1,5 @@
+name: uneasy partings
+mana cost: {3}{U}
+types: instant
+spell[1]: target creature's owner puts it on their choice of the top or bottom of their library.
+static: this spell costs {1} less to cast if it targets an attacking nontoken creature.

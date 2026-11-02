@@ -1,0 +1,5 @@
+name: clever conjurer
+mana cost: {2}{U}
+types: creature gnome wizard
+power toughness: 2/3
+activated[1]: mage hand — {T}: untap target permanent not named clever conjurer. activate only as a sorcery.

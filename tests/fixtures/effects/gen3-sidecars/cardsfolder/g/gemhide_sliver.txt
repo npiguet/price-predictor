@@ -1,0 +1,5 @@
+name: gemhide sliver
+mana cost: {1}{G}
+types: creature sliver
+power toughness: 1/1
+static: all slivers have "{T}: add one mana of any color."

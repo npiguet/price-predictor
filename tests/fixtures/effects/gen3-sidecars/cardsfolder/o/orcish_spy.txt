@@ -1,0 +1,5 @@
+name: orcish spy
+mana cost: {R}
+types: creature orc rogue
+power toughness: 1/1
+activated[1]: {T}: look at the top three cards of target player's library.

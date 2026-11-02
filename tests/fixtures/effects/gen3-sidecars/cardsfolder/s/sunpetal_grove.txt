@@ -1,0 +1,4 @@
+name: sunpetal grove
+types: land
+activated[1]: {T}: add {G} or {W}.
+replacement: CARDNAME enters tapped unless you control a forest or a plains.

@@ -1,0 +1,4 @@
+name: explosive impact
+mana cost: {5}{R}
+types: instant
+spell[1]: CARDNAME deals 5 damage to any target.

@@ -1,0 +1,5 @@
+name: master decoy
+mana cost: {1}{W}
+types: creature human soldier
+power toughness: 1/2
+activated[1]: {W}, {T}: tap target creature.

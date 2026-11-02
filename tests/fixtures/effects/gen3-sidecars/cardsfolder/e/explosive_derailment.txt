@@ -1,0 +1,7 @@
+name: explosive derailment
+mana cost: {R}
+types: instant
+additional cost: spree
+spell[1]: choose one or both
+option[2]: {2} — CARDNAME deals 4 damage to target creature.
+option[3]: {2} — destroy target artifact.

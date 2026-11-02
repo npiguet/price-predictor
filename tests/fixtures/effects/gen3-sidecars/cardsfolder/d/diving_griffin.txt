@@ -1,0 +1,6 @@
+name: diving griffin
+mana cost: {1}{W}{W}
+types: creature griffin
+power toughness: 2/2
+static: flying
+static: vigilance

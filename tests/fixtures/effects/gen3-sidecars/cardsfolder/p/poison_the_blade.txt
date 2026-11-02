@@ -1,0 +1,5 @@
+name: poison the blade
+mana cost: {1}{G}
+types: instant
+spell[1]: target creature gains deathtouch until end of turn.
+spell[2]: draw a card.

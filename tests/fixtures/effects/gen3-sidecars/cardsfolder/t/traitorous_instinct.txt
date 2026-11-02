@@ -1,0 +1,4 @@
+name: traitorous instinct
+mana cost: {3}{R}
+types: sorcery
+spell[1]: gain control of target creature until end of turn. untap that creature. until end of turn, it gets +2/+0 and gains haste.

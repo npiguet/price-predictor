@@ -1,0 +1,5 @@
+name: ferocious tigorilla
+mana cost: {3}{R}
+types: creature cat ape
+power toughness: 4/3
+replacement: CARDNAME enters with your choice of a trample counter or a menace counter on it.

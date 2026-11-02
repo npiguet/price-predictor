@@ -1,0 +1,7 @@
+name: bedlam reveler
+mana cost: {6}{R}{R}
+types: creature devil horror
+power toughness: 3/4
+triggered: prowess
+triggered: when CARDNAME enters, discard your hand, then draw three cards.
+static: this spell costs {1} less to cast for each instant and sorcery card in your graveyard.

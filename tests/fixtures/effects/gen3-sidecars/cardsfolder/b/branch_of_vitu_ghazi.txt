@@ -1,0 +1,5 @@
+name: branch of vitu-ghazi
+types: land
+alternate cost: disguise {3}
+activated[1]: {T}: add {C}.
+triggered: when CARDNAME is turned face up, add two mana of any one color. until end of turn, you don't lose this mana as steps and phases end.

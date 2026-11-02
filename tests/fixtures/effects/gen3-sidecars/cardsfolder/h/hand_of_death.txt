@@ -1,0 +1,4 @@
+name: hand of death
+mana cost: {2}{B}
+types: sorcery
+spell[1]: destroy target nonblack creature.

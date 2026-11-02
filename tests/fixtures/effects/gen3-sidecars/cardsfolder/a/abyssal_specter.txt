@@ -1,0 +1,6 @@
+name: abyssal specter
+mana cost: {2}{B}{B}
+types: creature specter
+power toughness: 2/3
+static: flying
+triggered: whenever CARDNAME deals damage to a player, that player discards a card.

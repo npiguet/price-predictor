@@ -1,0 +1,5 @@
+name: tithebearer giant
+mana cost: {5}{B}
+types: creature giant warrior
+power toughness: 4/5
+triggered: when CARDNAME enters, you draw a card and you lose 1 life.

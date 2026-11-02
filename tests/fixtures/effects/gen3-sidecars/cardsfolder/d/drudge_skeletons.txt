@@ -1,0 +1,5 @@
+name: drudge skeletons
+mana cost: {1}{B}
+types: creature skeleton
+power toughness: 1/1
+activated[1]: {B}: regenerate CARDNAME.

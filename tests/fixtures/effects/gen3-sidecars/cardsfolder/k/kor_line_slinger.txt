@@ -1,0 +1,5 @@
+name: kor line-slinger
+mana cost: {1}{W}
+types: creature kor scout
+power toughness: 0/1
+activated[1]: {T}: tap target creature with power 3 or less.

@@ -1,0 +1,5 @@
+name: stormfront pegasus
+mana cost: {1}{W}
+types: creature pegasus
+power toughness: 2/1
+static: flying

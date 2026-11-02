@@ -1,0 +1,6 @@
+name: whitemane lion
+mana cost: {1}{W}
+types: creature cat
+power toughness: 2/2
+static: flash
+triggered: when CARDNAME enters, return a creature you control to its owner's hand.

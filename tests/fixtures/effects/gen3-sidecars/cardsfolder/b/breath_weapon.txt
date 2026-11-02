@@ -1,0 +1,4 @@
+name: breath weapon
+mana cost: {2}{R}
+types: instant
+spell[1]: CARDNAME deals 2 damage to each non-dragon creature.

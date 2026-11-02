@@ -1,0 +1,5 @@
+name: draconic muralists
+mana cost: {3}{G}
+types: creature dragon bard
+power toughness: 4/3
+triggered: when CARDNAME dies, you may search your library for a dragon card, reveal it, put it into your hand, then shuffle.

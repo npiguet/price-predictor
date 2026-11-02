@@ -1,0 +1,7 @@
+name: magmakin artillerist
+mana cost: {2}{R}
+types: creature elemental pirate
+power toughness: 1/4
+activated[1]: cycling {1}{R}
+triggered: whenever you discard one or more cards, this creature deals that much damage to each opponent.
+triggered: when you cycle this card, it deals 1 damage to each opponent.
