@@ -59,6 +59,16 @@ final class ManaCounts {
         return new ManaCounts(counts);
     }
 
+    /** Whether no mana of any symbol is counted. */
+    boolean isZero() {
+        for (int count : counts) {
+            if (count != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** The letter a symbol is spelled with, which is also its JSON key. */
     static String letter(byte symbol) {
         return MagicColor.toShortString(symbol);

@@ -91,7 +91,7 @@ class RandomSeatControllerTest {
         TestBoard.inPlay(game, a, "Forest");
         TestBoard.inPlay(game, a, "Forest");
         RandomSeatController seat = seatOf(game);
-        seat.attach(game, null);
+        seat.attach(game, null, null);
 
         assertNull(seat.chooseSpellAbilityToPlay(), "nothing but mana to play: pass");
     }
@@ -106,7 +106,7 @@ class RandomSeatControllerTest {
         Player a = game.getPlayers().get(0);
         Card pacifism = pacifismWithOnlyAnOwnTarget(game, a);
         RandomSeatController seat = seatOf(game);
-        seat.attach(game, null);
+        seat.attach(game, null, null);
 
         List<SpellAbility> chosen = seat.chooseSpellAbilityToPlay();
 
@@ -127,7 +127,7 @@ class RandomSeatControllerTest {
         TestBoard.inPlay(game, a, "Forest");
         TestBoard.inHand(game, a, "Grizzly Bears");
         RandomSeatController seat = seatOf(game);
-        seat.attach(game, null);
+        seat.attach(game, null, null);
 
         SpellAbility bears = seat.chooseSpellAbilityToPlay().get(0);
         assertTrue(seat.playChosenSpellAbility(bears));
@@ -147,7 +147,7 @@ class RandomSeatControllerTest {
         pacifismWithOnlyAnOwnTarget(game, a);
         Card land = TestBoard.inHand(game, a, "Plains");
         RandomSeatController seat = seatOf(game);
-        seat.attach(game, null);
+        seat.attach(game, null, null);
 
         // A draw never picks a land, so a land played is the AI deciding.
         List<SpellAbility> first = seat.chooseSpellAbilityToPlay();
@@ -169,7 +169,7 @@ class RandomSeatControllerTest {
         Player a = game.getPlayers().get(0);
         pacifismWithOnlyAnOwnTarget(game, a);
         RandomSeatController seat = seatOf(game);
-        seat.attach(game, null);
+        seat.attach(game, null, null);
 
         for (int i = 0; i < 20; i++) {
             List<SpellAbility> chosen = seat.chooseSpellAbilityToPlay();
@@ -197,7 +197,7 @@ class RandomSeatControllerTest {
             TestBoard.inHand(game, a, "Fiery Intervention");
             TestBoard.inHand(game, a, "Shock");
             RandomSeatController seat = seatOf(game);
-            seat.attach(game, null);
+            seat.attach(game, null, null);
 
             List<SpellAbility> chosen = seat.chooseSpellAbilityToPlay();
             assertNotNull(chosen, "both are playable");
@@ -221,7 +221,7 @@ class RandomSeatControllerTest {
         }
         TestBoard.inHand(game, a, "Fiery Intervention");
         RandomSeatController seat = seatOf(game);
-        seat.attach(game, null);
+        seat.attach(game, null, null);
 
         assertNull(seat.chooseSpellAbilityToPlay(), "no creature, no artifact: nothing to draw, pass");
     }
@@ -241,7 +241,7 @@ class RandomSeatControllerTest {
         TestBoard.inPlay(game, a, "Mountain");
         SpellAbility bolt = TestBoard.inHand(game, a, "Lightning Bolt").getFirstSpellAbility();
         RandomSeatController seat = seatOf(game);
-        seat.attach(game, null);
+        seat.attach(game, null, null);
 
         bolt.setActivatingPlayer(a);
         assertTrue(bolt.canPlay() && bolt.canCastTiming(a), "the board under test");
@@ -266,7 +266,7 @@ class RandomSeatControllerTest {
             }
             TestBoard.inHand(game, a, "Fiery Confluence");
             RandomSeatController seat = seatOf(game);
-            seat.attach(game, null);
+            seat.attach(game, null, null);
 
             SpellAbility charm = seat.chooseSpellAbilityToPlay().get(0);
             assertTrue(seat.playChosenSpellAbility(charm), "seed " + seed);
@@ -308,7 +308,7 @@ class RandomSeatControllerTest {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, 1L);
         Player a = game.getPlayers().get(0);
         pacifismWithOnlyAnOwnTarget(game, a);
-        seatOf(game).attach(game, null);
+        seatOf(game).attach(game, null, null);
 
         Game fork = new GameCopier(game).makeCopy();
         RandomSeatController forked = GamePlayer.randomSeatOf(fork).orElseThrow(
@@ -317,6 +317,74 @@ class RandomSeatControllerTest {
 
         List<SpellAbility> chosen = forked.chooseSpellAbilityToPlay();
         assertFalse(plays(chosen, "Pacifism"), "a fork's seat defers to the AI: " + chosen);
+    }
+
+    /** Counts the resolutions of abilities of one card, off the game's bus. */
+    public static final class ResolutionsOf {
+        private final Card host;
+        private final java.util.Map<Integer, Integer> byTurn = new java.util.TreeMap<>();
+        private final Game game;
+
+        ResolutionsOf(Game game, Card host) {
+            this.game = game;
+            this.host = host;
+        }
+
+        @com.google.common.eventbus.Subscribe
+        public void onResolved(forge.game.event.GameEventSpellResolved event) {
+            if (event.spell() != null && event.spell().getHostCard() != null
+                    && event.spell().getHostCard().getId() == host.getId()) {
+                byTurn.merge(game.getPhaseHandler().getTurn(), 1, Integer::sum);
+            }
+        }
+    }
+
+    /**
+     * FR-040 (research C9): a free activation whose resolution changed
+     * nothing is not drawn again until the turn ends. The seat's bears carry
+     * "{0}: this creature has base power and toughness 2/2", which on a 2/2
+     * changes nothing; the seat, which never passes while something is
+     * playable, would otherwise activate it at every priority. Played on the
+     * real loop over three turns, both players' priorities included: once a
+     * turn, and again the next turn.
+     */
+    @Test
+    void aFreeActivationThatChangedNothingIsNotDrawnAgainThisTurn() {
+        Game game = gameWithRandomSeatA(PhaseType.MAIN1, 1.0, 7L);
+        game.setAge(forge.game.GameStage.Play);
+        Player a = game.getPlayers().get(0);
+        Player b = game.getPlayers().get(1);
+        for (Player player : List.of(a, b)) {
+            for (int i = 0; i < 5; i++) {
+                game.getAction().moveToLibrary(TestBoard.card(game, player, "Plains"), null, null);
+            }
+        }
+        Card bears = TestBoard.inPlay(game, a, "Grizzly Bears");
+        bears.addSpellAbility(forge.game.ability.AbilityFactory.getAbility(
+                "AB$ Animate | Cost$ 0 | Power$ 2 | Toughness$ 2 | Defined$ Self"
+                        + " | Duration$ Permanent | SpellDescription$ Base 2/2.", bears));
+        ResolutionsOf resolutions = new ResolutionsOf(game, bears);
+        game.subscribeToEvents(resolutions);
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        RandomSeatController seat = seatOf(game);
+        try (GameRecording recording = new GameRecording(
+                game, writer, "run.0-l1.0", TestCaps.caps().interventions(0).probes(0).build(),
+                1L, Refs.of(a))) {
+            recording.open();
+            seat.attach(game, recording.priorityCandidates(), recording.fruitlessActivations());
+            for (int step = 0; step < 400 && game.getPhaseHandler().getTurn() <= 3
+                    && !game.isGameOver(); step++) {
+                game.getPhaseHandler().mainLoopStep();
+            }
+        } finally {
+            writer.close();
+        }
+
+        assertTrue(game.getPhaseHandler().getTurn() > 3, "the loop reached turn 4: turn "
+                + game.getPhaseHandler().getTurn() + " " + game.getPhaseHandler().getPhase()
+                + ", resolutions " + resolutions.byTurn + ", over " + game.isGameOver());
+        assertEquals(java.util.Map.of(1, 1, 2, 1, 3, 1), resolutions.byTurn,
+                "one activation per turn");
     }
 
     // ── attacks and blocks ──────────────────────────────────────────────
@@ -346,7 +414,7 @@ class RandomSeatControllerTest {
         try (GameRecording recording = new GameRecording(
                 game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L,
                 Refs.of(a))) {
-            seat.attach(game, recording.priorityCandidates());
+            seat.attach(game, recording.priorityCandidates(), recording.fruitlessActivations());
             for (int draw = 0; draw < draws; draw++) {
                 Combat combat = new Combat(a);
                 game.getPhaseHandler().setCombat(combat);
@@ -396,7 +464,7 @@ class RandomSeatControllerTest {
         try (GameRecording recording = new GameRecording(
                 game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L,
                 Refs.of(a))) {
-            seat.attach(game, recording.priorityCandidates());
+            seat.attach(game, recording.priorityCandidates(), recording.fruitlessActivations());
             for (int draw = 0; draw < 100; draw++) {
                 Combat combat = new Combat(b);
                 combat.addAttacker(attacker, a);

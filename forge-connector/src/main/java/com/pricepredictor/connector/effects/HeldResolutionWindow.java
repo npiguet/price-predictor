@@ -34,12 +34,15 @@ import java.util.List;
 final class HeldResolutionWindow {
 
     private final CollectorContext context;
+    /** Where a free activation that changed nothing is reported (FR-040). */
+    private final FruitlessActivations fruitless;
 
     /** The resolution waiting for its consequences, or null when none is. */
     private HeldResolution held;
 
-    HeldResolutionWindow(CollectorContext context) {
+    HeldResolutionWindow(CollectorContext context, FruitlessActivations fruitless) {
         this.context = context;
+        this.fruitless = fruitless;
     }
 
     /**
@@ -60,9 +63,15 @@ final class HeldResolutionWindow {
         }
     }
 
-    /** @param root the resolved ability, which the deaths are stamped against */
+    /**
+     * @param root the resolved ability, which the deaths are stamped against
+     * @param key  its line, for {@link FruitlessActivations}
+     * @param free whether it is an activation whose cost spent no mana and
+     *             moved no card
+     */
     private record HeldResolution(
-            SpellAbility root, String actor, String linkId, HeldHalves<HalfRecord> halves) {
+            SpellAbility root, ProvenanceKey key, boolean free, String actor, String linkId,
+            HeldHalves<HalfRecord> halves) {
     }
 
     /**
@@ -70,8 +79,11 @@ final class HeldResolutionWindow {
      *
      * <p>Held rather than written: the deaths this resolution causes have not
      * happened yet.
+     *
+     * @param free whether it is an activation whose cost spent no mana and
+     *             moved no card, which is reported when it changed nothing
      */
-    void hold(OpenResolution resolved, String link) {
+    void hold(OpenResolution resolved, String link, boolean free) {
         // Modes, X and the named card are set while the ability resolves, so
         // the block that carries them is re-read here and paired with the
         // board each half was captured with: the cast's for a root half, the
@@ -94,7 +106,8 @@ final class HeldResolutionWindow {
                     half.conditions()),
                     half.events());
         }
-        held = new HeldResolution(resolved.ability, resolved.actor, link, halves);
+        held = new HeldResolution(
+                resolved.ability, resolved.keys.key(), free, resolved.actor, link, halves);
     }
 
     /** Whether a resolution's halves are waiting for its consequences. */
@@ -153,6 +166,12 @@ final class HeldResolutionWindow {
         }
         HeldResolution writing = held;
         held = null;
+        // Reported once its state-based consequences are in: a free activation
+        // that changed nothing the seat will not repeat this turn (FR-040).
+        if (writing.free() && writing.halves().halves().stream()
+                .allMatch(half -> FruitlessActivations.changesNothing(half.events()))) {
+            fruitless.report(writing.root().getHostCard(), writing.key());
+        }
         for (HeldHalves.Half<HalfRecord> half : writing.halves().halves()) {
             HalfRecord record = half.about();
             context.emit(context.newResolution(

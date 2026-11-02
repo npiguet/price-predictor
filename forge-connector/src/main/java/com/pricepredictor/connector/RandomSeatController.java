@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.effects.FruitlessActivations;
 import com.pricepredictor.connector.effects.PriorityCandidates;
 import com.pricepredictor.connector.effects.RandomChoices;
 import com.pricepredictor.connector.effects.TargetingClauses;
@@ -73,6 +74,11 @@ public final class RandomSeatController extends PlayerControllerAi {
     private Game liveGame;
     /** The game's priority stops, or null when the run collects no records. */
     private PriorityCandidates candidates;
+    /**
+     * The free activations that changed nothing this turn, or null when the
+     * run collects no records (FR-040).
+     */
+    private FruitlessActivations fruitless;
 
     /** The play decision's draw, carried from one engine call to the next. */
     private final RandomPlayDraw playDraw;
@@ -97,10 +103,13 @@ public final class RandomSeatController extends PlayerControllerAi {
      *
      * @param candidates null when the run writes no effect records; the seat
      *                   still plays at random, enumerating its own candidates
+     * @param fruitless  the collector's report of free activations that
+     *                   changed nothing this turn, or null with no records
      */
-    public void attach(Game game, PriorityCandidates candidates) {
+    public void attach(Game game, PriorityCandidates candidates, FruitlessActivations fruitless) {
         this.liveGame = game;
         this.candidates = candidates;
+        this.fruitless = fruitless;
     }
 
     /** Whether this controller is the live seat rather than a fork's copy. */
@@ -245,7 +254,10 @@ public final class RandomSeatController extends PlayerControllerAi {
      * priority stop whose {@link com.pricepredictor.connector.effects.PlayabilityVerdict}
      * says they can be played, paid for and aimed — the stop the decision
      * records were written of when the run records, so the seat plays only
-     * what its records call playable.
+     * what its records call playable. Of those it leaves out a free
+     * activation that changed nothing earlier this turn (FR-040): still
+     * playable, and still recorded so, but not drawn again until the turn
+     * ends.
      */
     private List<SpellAbility> playableCandidates() {
         List<PriorityCandidates.Candidate> stop = candidates == null
@@ -255,7 +267,8 @@ public final class RandomSeatController extends PlayerControllerAi {
         for (PriorityCandidates.Candidate candidate : stop) {
             // A script whose check throws on this board reads as unplayable,
             // as the AI would have skipped it.
-            if (candidate.playable()) {
+            if (candidate.playable()
+                    && (fruitless == null || !fruitless.isFruitless(candidate.ability()))) {
                 // The verdict put the ability's activating player back; the
                 // seat is about to play it, which is the seat's to write.
                 candidate.ability().setActivatingPlayer(player);

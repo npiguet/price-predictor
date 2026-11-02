@@ -58,6 +58,15 @@ record PaidCosts(
         exiled = List.copyOf(exiled);
     }
 
+    /**
+     * Whether the payment spent no mana and moved no card (nothing
+     * sacrificed, discarded or exiled), so that paying it again costs nothing
+     * the game keeps (research C9).
+     */
+    boolean spentNoManaAndMovedNoCard() {
+        return mana.isZero() && sacrificed.isEmpty() && discarded.isEmpty() && exiled.isEmpty();
+    }
+
     /** What {@code ability} paid, read now; {@link #EMPTY} for no ability. */
     static PaidCosts of(SpellAbility ability) {
         if (ability == null) {

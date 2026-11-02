@@ -169,6 +169,14 @@ public final class GameRecording implements AutoCloseable {
     }
 
     /**
+     * The free activations that changed nothing this turn, which the random
+     * seat does not draw again until the turn ends (FR-040).
+     */
+    public FruitlessActivations fruitlessActivations() {
+        return bracket.fruitlessActivations();
+    }
+
+    /**
      * Runs the phase-boundary collection off the event bus.
      *
      * <p>A separate object rather than {@code @Subscribe} on the recording

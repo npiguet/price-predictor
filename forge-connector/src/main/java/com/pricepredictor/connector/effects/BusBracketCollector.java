@@ -83,6 +83,8 @@ public final class BusBracketCollector extends BusEventReader {
 
     /** The resolution waiting for its consequences, if one is. */
     private final HeldResolutionWindow heldResolution;
+    /** The free activations that changed nothing this turn, for the random seat. */
+    private final FruitlessActivations fruitless;
 
     /** The cost halves held until their casts' outcomes are known. */
     private final ActivationLedger ledger;
@@ -133,7 +135,8 @@ public final class BusBracketCollector extends BusEventReader {
         this.context = context;
         this.snapshots = new SnapshotBuilder(game);
         this.ledger = new ActivationLedger(context);
-        this.heldResolution = new HeldResolutionWindow(context);
+        this.fruitless = new FruitlessActivations(game);
+        this.heldResolution = new HeldResolutionWindow(context, fruitless);
         this.castsUnderWay = new CastsUnderWay(game, ledger::holds);
         this.combatStep = new CombatStepBracket(
                 game, context, snapshots, heldResolution, onCombatRecord);
@@ -212,7 +215,12 @@ public final class BusBracketCollector extends BusEventReader {
         if (cast == null) {
             return;
         }
-        ledger.hold(ability, cast.actor, cast.keys, cast.state.render());
+        PaidCosts paid = ledger.hold(ability, cast.actor, cast.keys, cast.state.render());
+        if (ability.isActivatedAbility() && paid.spentNoManaAndMovedNoCard()) {
+            // Until it resolves, nobody knows whether it changes anything, and
+            // the random seat, which keeps priority, would stack another.
+            fruitless.pending(ability, cast.keys.key());
+        }
     }
 
     /**
@@ -269,8 +277,9 @@ public final class BusBracketCollector extends BusEventReader {
         boolean declined = resolved != null && !fizzled && resolved.wasDeclined();
         boolean writesEffectHalf = resolved != null && !fizzled && !declined;
 
-        String link = ledger.settle(
+        ActivationLedger.Settlement settled = ledger.settle(
                 abilityId, fizzled, declined, resolved == null ? null : resolved.ability);
+        String link = settled == null ? null : settled.linkId();
 
         if (resolved != null) {
             // The last mode's half closes with the resolution, since no next
@@ -280,7 +289,11 @@ public final class BusBracketCollector extends BusEventReader {
         if (writesEffectHalf) {
             // Held rather than written: the deaths this resolution causes
             // have not happened yet.
-            heldResolution.hold(resolved, link);
+            // An activation that paid nothing the game keeps is one the
+            // random seat could repeat at will (research C9).
+            boolean free = settled != null && resolved.ability.isActivatedAbility()
+                    && settled.costs().spentNoManaAndMovedNoCard();
+            heldResolution.hold(resolved, link, free);
         }
         castsUnderWay.dropHeld();
     }
@@ -773,6 +786,11 @@ public final class BusBracketCollector extends BusEventReader {
             return;
         }
         open.modes.noteCondition(condition);
+    }
+
+    /** The free activations that changed nothing this turn (FR-040). */
+    FruitlessActivations fruitlessActivations() {
+        return fruitless;
     }
 
     private static String actorOf(SpellAbility ability) {

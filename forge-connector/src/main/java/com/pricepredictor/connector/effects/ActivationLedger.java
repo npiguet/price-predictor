@@ -64,13 +64,16 @@ final class ActivationLedger {
      * unreadable a moment later.
      *
      * @param state the board at the cast, rendered
+     * @return what the cast paid
      */
-    void hold(SpellAbility ability, String actor, ProvenanceKey.Resolved keys, String state) {
+    PaidCosts hold(SpellAbility ability, String actor, ProvenanceKey.Resolved keys, String state) {
+        PaidCosts paid = PaidCosts.of(ability);
         casts.add(new PendingActivation(
                 ability.getId(), context.nextRecordId(),
-                RecordShardWriter.timestamp(), PaidCosts.of(ability),
+                RecordShardWriter.timestamp(), paid,
                 actor, keys, state,
                 context.gameId() + ".link." + ability.getId(), targetCount(ability)));
+        return paid;
     }
 
     /** Whether nothing is held. */
@@ -116,10 +119,10 @@ final class ActivationLedger {
      * @param declined whether its resolution was a refusal
      * @param resolved the resolved ability, or null when no bracket was held
      *                 for it
-     * @return the link the effect half may claim, or null when there is to be
-     *         no effect half or nothing was held for this ability
+     * @return the link the effect half may claim and what the cast paid, or
+     *         null when nothing was held for this ability
      */
-    String settle(int abilityId, boolean fizzled, boolean declined, SpellAbility resolved) {
+    Settlement settle(int abilityId, boolean fizzled, boolean declined, SpellAbility resolved) {
         Optional<PendingActivation> found = take(abilityId);
         if (found.isEmpty()) {
             return null;
@@ -127,7 +130,14 @@ final class ActivationLedger {
         PendingActivation activation = found.get();
         boolean linked = resolved != null && !fizzled && !declined;
         emit(activation, resolutionOutcome(activation, fizzled, declined, resolved), linked);
-        return linked ? activation.linkId() : null;
+        return new Settlement(linked ? activation.linkId() : null, activation.costs());
+    }
+
+    /**
+     * A settled cost half: the link its effect half may claim, null when
+     * there is to be none, and what the cast paid.
+     */
+    record Settlement(String linkId, PaidCosts costs) {
     }
 
     private static ActivationOutcome resolutionOutcome(
