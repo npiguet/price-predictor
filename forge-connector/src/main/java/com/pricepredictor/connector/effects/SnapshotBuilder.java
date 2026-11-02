@@ -44,7 +44,8 @@ import java.util.Set;
  *
  * <p>The tiers and the global block are decided here; each entity, each
  * player and the refs block are rendered by {@link EntityJson},
- * {@link PlayerJson} and {@link RefsJson}.
+ * {@link PlayerJson} and {@link RefsJson}, and the links between them by
+ * {@link SnapshotLinks}.
  */
 public final class SnapshotBuilder {
 
@@ -178,10 +179,13 @@ public final class SnapshotBuilder {
             present.add(Refs.of(card));
         }
         LibraryCapture libraries = LibraryCapture.of(game, withoutStatic, present);
-        addBeyondTheTiers(entities, present, tiers, withoutStatic, libraries, pending);
+        List<Card> cards = new ArrayList<>(tiers);
+        addBeyondTheTiers(entities, present, tiers, cards, withoutStatic, libraries, pending);
         String players = Json.array(game.getPlayers(), player -> PlayerJson.render(game, player));
         return new Snapshot(
                 globalToJson(tiers), players, "[" + String.join(",", entities) + "]",
+                SnapshotLinks.render(
+                        game, cards, tiers, acting, pending, withoutStatic, floating),
                 RefsJson.render(acting, source), pending == null ? "null" : pending.toJson(),
                 libraries);
     }
@@ -199,34 +203,41 @@ public final class SnapshotBuilder {
      * last existed, under id {@code L<card id>} because the live card keeps
      * its own. The library cards the record's later events name join at the
      * write ({@link Snapshot#withEventCards}).
+     *
+     * @param cards the card entities rendered so far, which each added card
+     *              joins (a last-known copy is no card of the game, and does
+     *              not)
      */
     private void addBeyondTheTiers(
-            List<String> entities, Set<String> present, Set<Card> tiers, Long withoutStatic,
-            LibraryCapture libraries, EffectEvent pending) {
+            List<String> entities, Set<String> present, Set<Card> tiers, List<Card> cards,
+            Long withoutStatic, LibraryCapture libraries, EffectEvent pending) {
         for (var player : game.getPlayers()) {
             Card top = player.getCardsIn(ZoneType.Library).isEmpty()
                     ? null : player.getCardsIn(ZoneType.Library).get(0);
-            addBeyond(entities, present, top, withoutStatic, ROLE_LIBRARY_CARD);
+            addBeyond(entities, present, cards, top, withoutStatic, ROLE_LIBRARY_CARD);
         }
         if (pending != null) {
             for (String subject : pending.subjects()) {
                 LibraryCapture.Slot slot = libraries.byId().get(subject);
                 if (slot != null) {
-                    addBeyond(entities, present, slot.card(), withoutStatic, ROLE_LIBRARY_CARD);
+                    addBeyond(entities, present, cards, slot.card(), withoutStatic,
+                            ROLE_LIBRARY_CARD);
                 }
             }
         }
         for (Card card : tiers) {
             if (card.isInPlay()) {
                 for (Card exiled : card.getExiledCards()) {
-                    addBeyond(entities, present, exiled, withoutStatic, ROLE_EXILED_WITH);
+                    addBeyond(entities, present, cards, exiled, withoutStatic,
+                            ROLE_EXILED_WITH);
                 }
             }
         }
         for (Card card : tiers) {
             if (card.isInPlay() && card.isMutated()) {
                 for (Card component : card.getMergedCards()) {
-                    addBeyond(entities, present, component, withoutStatic, ROLE_MUTATE_COMPONENT);
+                    addBeyond(entities, present, cards, component, withoutStatic,
+                            ROLE_MUTATE_COMPONENT);
                 }
             }
         }
@@ -242,9 +253,10 @@ public final class SnapshotBuilder {
     }
 
     private void addBeyond(
-            List<String> entities, Set<String> present, Card card, Long withoutStatic,
-            String role) {
+            List<String> entities, Set<String> present, List<Card> cards, Card card,
+            Long withoutStatic, String role) {
         if (card != null && present.add(Refs.of(card))) {
+            cards.add(card);
             entities.add(EntityJson.render(game, card, withoutStatic,
                     new EntityJson.Beyond(null, null, null, role)));
         }

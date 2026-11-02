@@ -18,6 +18,7 @@ import com.pricepredictor.connector.json.Json;
  * @param global       the {@code global} block
  * @param players      the {@code players} array
  * @param entities     the {@code entities} array, every inclusion tier
+ * @param links        the {@code links} array ({@link SnapshotLinks})
  * @param refs         the {@code refs} block for the acting line
  * @param pendingEvent the {@code pending_event} a trait is about to handle, or
  *                     {@code null} rendered
@@ -27,12 +28,13 @@ import com.pricepredictor.connector.json.Json;
  *                     the snapshot was not built from a game
  */
 record Snapshot(
-        String global, String players, String entities, String refs, String pendingEvent,
-        LibraryCapture libraries) {
+        String global, String players, String entities, String links, String refs,
+        String pendingEvent, LibraryCapture libraries) {
 
     /** A snapshot assembled from rendered blocks alone, with no library capture. */
-    Snapshot(String global, String players, String entities, String refs, String pendingEvent) {
-        this(global, players, entities, refs, pendingEvent, null);
+    Snapshot(String global, String players, String entities, String links, String refs,
+             String pendingEvent) {
+        this(global, players, entities, links, refs, pendingEvent, null);
     }
 
     /**
@@ -46,7 +48,7 @@ record Snapshot(
 
     /** The same board, with its refs block replaced by a later reading. */
     Snapshot withRefs(String laterRefs) {
-        return new Snapshot(global, players, entities, laterRefs, pendingEvent, libraries);
+        return new Snapshot(global, players, entities, links, laterRefs, pendingEvent, libraries);
     }
 
     /**
@@ -67,7 +69,7 @@ record Snapshot(
         String joined = entities.equals("[]")
                 ? "[" + named + "]"
                 : entities.substring(0, entities.length() - 1) + "," + named + "]";
-        return new Snapshot(global, players, joined, refs, pendingEvent, libraries);
+        return new Snapshot(global, players, joined, links, refs, pendingEvent, libraries);
     }
 
     /** The state as a record writes it, its blocks in the order the schema fixes. */
@@ -76,6 +78,7 @@ record Snapshot(
                 .raw("global", global)
                 .raw("players", players)
                 .raw("entities", entities)
+                .raw("links", links)
                 .raw("refs", refs)
                 .raw("pending_event", pendingEvent)
                 .raw("tiers", TIERS_JSON)

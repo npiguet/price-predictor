@@ -55,7 +55,7 @@ Shapes follow `rules/gen3-fields.json`; the collector writes the field names bel
 | global | `floating_effects`, `delayed_triggers` | `{id, source_lines, affected, remembered, duration, shield_left}`; `duration` ∈ `end_of_turn`, `until_leaves`, `permanent` (below, "Command-zone objects") |
 | global | `dungeons` | `{player, dungeon, room}` |
 | refs | `random` | `{dice: [n, …], coin_flips: {won, lost}}` on a resolution's effect half, live or interventional; `null` on every other refs block |
-| snapshot | `links` | `[{from, to, type, index?}]`; `type` a § 10.3 family name; `index` only for `targets` |
+| snapshot | `links` | `[{from, to, type, index?}]`; `type` a § 10.3 family name; `index` only for `targets` (below, "Links") |
 
 A card's `lines` members:
 
@@ -144,6 +144,54 @@ Appended to `state.entities` after the four tiers, each card once:
 A library card an event names is rendered at the write from the object the library held. A card
 put onto the battlefield is that same object, so its board state (tapped, counters) reads as after
 the move; any other move leaves the library's object as it was.
+
+### Links
+
+`links` sits in `state` after `entities`. Each link is `{from, to, type, index?}`, written once in
+its family's forward direction; the reader takes the reverse type from the other end. `type` is a
+family name of `relation_types.FAMILIES` (`FE/LinkFamily.java`, pinned by `LinkFamilyContractTest`
+and `test_relation_types.py`). `index` is on `targets` only: the target's position across the
+stack object's chain, the root's targets first. Links are listed by family in table order, each
+once.
+
+An end is a ref (`E<id>`, `P<id>`, `L<id>`, `F<timestamp>`, `D<id>`) or a line
+`{entity, key}`: a link an ability made ends at that ability's line. Where Forge keeps no record of
+the ability, or the trait keys to no line, the end is the card. An end the snapshot carries no
+entity for is still named.
+
+| `type` | from | to | Forge source |
+|---|---|---|---|
+| `merged_with` | a mutated permanent's other card; the card a melded permanent melded with | the permanent | `getMergedCards`, `getMeldedWith` |
+| `attached_to` | the attached card | the card or player | `getAttachedTo`, `getPlayerAttachedTo` |
+| `attacks` | the attacker | the player, planeswalker or battle | `Combat.getDefenderByAttacker` |
+| `blocks` | the blocker | each attacker it blocks | `Combat.getAttackersBlockedBy` |
+| `in_band_with` | the lower card id of two attackers of one band | the other | `Combat.getAttackingBands` |
+| `must_block` | the creature | the attacker it must block | `getMustBlockCards` |
+| `goaded_by` | the goaded creature | each player who goaded it | `getGoaded` |
+| `targets` | a stack object's line (the acting ability's too, before it is on the stack) | each target: a card or player; a spell by its card; an ability by its line | each clause's targets |
+| `source_of` | the stack object's host card | its line | the stack object's host |
+| `triggered_by` | a triggered ability's line on the stack | each card or player among its triggering objects | `getTriggeringObjects` |
+| `affects` | a static line; a timestamped floating effect `F<ts>` | each permanent it applies to | the static's `affected`; the floating effect's `affected` |
+| `created_by` | a command-zone effect card or emblem; `F<ts>`; `D<id>` | the line that made it, else the effect's source card | `getEffectSourceAbility`, `getEffectSource`; the clause note; the delayed trigger's own key |
+| `pending_on` | `D<id>` | each card or player it holds | `getTriggerRemembered` |
+| `linked_by_text` | the line that exiled the object (`getExiledSA`), else the card | each exiled, imprinted, until-leaves or lasting remembered card or player | `getExiledCards`, `getExiledWith`, `getImprintedCards`, `getUntilLeavesBattlefield`, `getRemembered` |
+| `bound_to` | the exiled cipher or haunt card | the permanent | `getEncodingCard`, `getEncodedCards`, `getHaunting`, `getHauntedBy` |
+| `controls`, `owns` | the player | each card entity | `getController`, `getOwner` |
+| `control_granted_by` | the card whose control was gained | the card that gained it | `getGainControlTargets` |
+| `copy_of` | the copy | what it copies | `getCopiedPermanent`; the latest clone state's origin |
+| `paired_with` | the lower card id of a pair | the other | `getPairedWith` |
+| `protects` | the battle's protector | the battle | `getProtectingPlayer` |
+| `chose` | the card | each chosen card, the chosen player, the gift's player | `getChosenCards`, `getChosenPlayer`, `getPromisedGift` |
+| `damaged_this_turn` | the damage source | each card or player it damaged this turn | `getDamageHistory` with `Game.getDamageLKI` |
+| `fought_this_turn` | the blocker | each attacker it blocked this turn | `getBlockedThisTurn`, `getBlockedByThisTurn` |
+| `crewed_by` | the Vehicle or Mount | each creature that crewed or saddled it this turn | `getCrewedByThisTurn`, `getSaddledByThisTurn` |
+| `in_dungeon` | the dungeon | its owner | the command zone's dungeon |
+| `last_known_state_of` | `L<id>` | the subject's card | the pending event's last-known copy |
+
+A remembered entry is a link only when it is a card or a player and no ability of the remembering
+card is on the stack or resolving (C8). A `continuous` record's board writes no `affects` from a
+static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of` and
+`has_the_same_name` are never written: the reader builds them from its own layout (T116).
 
 ## Payload additions
 

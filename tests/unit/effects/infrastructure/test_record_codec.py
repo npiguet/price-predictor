@@ -64,6 +64,7 @@ from effects.infrastructure.shard_io import (
     write_shard,
 )
 from tests.unit.effects.builders import (
+    GEN3_UNREAD_STATE_MEMBERS,
     java_golden_records,
     make_record,
     without_unread_members,
@@ -791,6 +792,13 @@ class TestTheGen3EntityShape:
                 before = without_unread_members(collected)
                 assert list(after) == list(before)
                 assert _without_keyword_spellings(after) == _without_keyword_spellings(before)
+
+    def test_a_state_writes_back_every_block_but_the_unread_ones(self):
+        for raw in java_golden_records():
+            written = record_to_dict(record_from_dict(raw))["state"]
+            assert list(written) == [
+                member for member in raw["state"] if member not in GEN3_UNREAD_STATE_MEMBERS]
+            assert GEN3_UNREAD_STATE_MEMBERS <= raw["state"].keys()
 
     def test_a_golden_record_survives_a_write_and_a_read(self):
         for raw in java_golden_records():

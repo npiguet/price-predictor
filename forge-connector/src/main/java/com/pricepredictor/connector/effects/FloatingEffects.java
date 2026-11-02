@@ -75,6 +75,8 @@ final class FloatingEffects {
     private static final class Note {
         final long start;
         final ProvenanceKey line;
+        /** The ref of the card whose line it is, or null. */
+        final String host;
         final String duration;
         /**
          * The clause while it runs, to close the right note; dropped once
@@ -85,9 +87,10 @@ final class FloatingEffects {
         /** The game's timestamp when the clause finished; open until then. */
         long end = Long.MAX_VALUE;
 
-        Note(long start, ProvenanceKey line, String duration, SpellAbility clause) {
+        Note(long start, ProvenanceKey line, String host, String duration, SpellAbility clause) {
             this.start = start;
             this.line = line;
+            this.host = host;
             this.duration = duration;
             this.clause = clause;
         }
@@ -111,7 +114,7 @@ final class FloatingEffects {
     /** A live clause begins resolving: note the timestamp, its line and its duration. */
     synchronized void clauseResolving(Game game, SpellAbility clause) {
         Note note = new Note(game.getTimestamp(), ProvenanceResolver.of(clause),
-                declaredDuration(clause), clause);
+                Refs.ofNullable(clause.getHostCard()), declaredDuration(clause), clause);
         notes.put(new long[] {note.start, noted++}, note);
         open.push(note);
     }
@@ -198,6 +201,32 @@ final class FloatingEffects {
                 objects.add(effectCardJson(game, effect));
             }
         }
+        for (Timestamped row : timestamped(cards)) {
+            objects.add(objectJson(row.id(), keysOf(row.line()),
+                    row.affected(), List.of(), bucket(row.duration()), null));
+        }
+        return "[" + String.join(",", objects) + "]";
+    }
+
+    /**
+     * A timestamped floating effect, as {@code floating_effects} lists it and
+     * the snapshot's links read it.
+     *
+     * @param id       {@code F<timestamp>}
+     * @param host     the ref of the card whose line drew it, or null
+     * @param line     the key of that line, or null
+     * @param affected the entities carrying a row of the timestamp
+     * @param duration the clause's {@code Duration$}, unbucketed
+     */
+    record Timestamped(
+            String id, String host, ProvenanceKey line, List<String> affected, String duration) {
+    }
+
+    /**
+     * One per timestamp a noted clause wrote on a card in {@code cards},
+     * oldest first; a timestamp no note covers is left out.
+     */
+    List<Timestamped> timestamped(Collection<Card> cards) {
         Map<Long, Set<String>> affectedByTimestamp = new TreeMap<>();
         for (Card card : cards) {
             for (long timestamp : timestampsOfResolvedRows(card)) {
@@ -205,15 +234,15 @@ final class FloatingEffects {
                         .add(Refs.of(card));
             }
         }
+        List<Timestamped> rows = new ArrayList<>();
         for (Map.Entry<Long, Set<String>> row : affectedByTimestamp.entrySet()) {
             Note note = noteAt(row.getKey());
-            if (note == null) {
-                continue;
+            if (note != null) {
+                rows.add(new Timestamped("F" + row.getKey(), note.host, note.line,
+                        List.copyOf(row.getValue()), note.duration));
             }
-            objects.add(objectJson("F" + row.getKey(), keysOf(note.line),
-                    List.copyOf(row.getValue()), List.of(), bucket(note.duration), null));
         }
-        return "[" + String.join(",", objects) + "]";
+        return rows;
     }
 
     /** An effect card: an immutable command-zone card that is no emblem and no dungeon. */
@@ -309,9 +338,46 @@ final class FloatingEffects {
      * {@code permanent}: it waits until it fires.
      */
     static String delayedTriggersJson(Game game) {
+        List<String> objects = new ArrayList<>();
+        for (Pending pending : pendingDelayedTriggers(game)) {
+            objects.add(objectJson(pending.id(),
+                    keysOf(ProvenanceResolver.of(pending.trigger())), List.of(),
+                    pending.remembered(), pending.thisTurn() ? "end_of_turn" : "permanent", null));
+        }
+        return "[" + String.join(",", objects) + "]";
+    }
+
+    /**
+     * A pending delayed trigger, as {@code delayed_triggers} lists it and the
+     * snapshot's links read it.
+     *
+     * @param thisTurn whether it lapses at the turn's end
+     */
+    record Pending(Trigger trigger, boolean thisTurn) {
+
+        /** {@code D<trigger id>}. */
+        String id() {
+            return "D" + trigger.getId();
+        }
+
+        /** The refs of the cards and players it holds. */
+        List<String> remembered() {
+            List<String> remembered = new ArrayList<>();
+            for (Object each : trigger.getTriggerRemembered()) {
+                Refs.ofAny(each).ifPresent(remembered::add);
+            }
+            return remembered;
+        }
+    }
+
+    /**
+     * Every pending delayed trigger once, in Forge's own order; none on an
+     * unpatched Forge.
+     */
+    static List<Pending> pendingDelayedTriggers(Game game) {
         Object pending = PatchHooks.PENDING_DELAYED_TRIGGERS.read(game.getTriggerHandler());
         if (pending == null) {
-            return "[]";
+            return List.of();
         }
         Set<Trigger> thisTurn = identitySet();
         thisTurn.addAll(triggersIn(PatchHooks.read(pending, "thisTurn")));
@@ -322,20 +388,13 @@ final class FloatingEffects {
             all.addAll(triggersIn(byPlayer.values()));
         }
         Set<Trigger> listed = identitySet();
-        List<String> objects = new ArrayList<>();
+        List<Pending> triggers = new ArrayList<>();
         for (Trigger trigger : all) {
-            if (!listed.add(trigger)) {
-                continue;
+            if (listed.add(trigger)) {
+                triggers.add(new Pending(trigger, thisTurn.contains(trigger)));
             }
-            List<String> remembered = new ArrayList<>();
-            for (Object each : trigger.getTriggerRemembered()) {
-                Refs.ofAny(each).ifPresent(remembered::add);
-            }
-            objects.add(objectJson("D" + trigger.getId(),
-                    keysOf(ProvenanceResolver.of(trigger)), List.of(), remembered,
-                    thisTurn.contains(trigger) ? "end_of_turn" : "permanent", null));
         }
-        return "[" + String.join(",", objects) + "]";
+        return triggers;
     }
 
     /** {@code dungeons}: each dungeon in a command zone, its player and its current room. */

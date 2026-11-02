@@ -1,6 +1,14 @@
-"""``relation_types``: § 10.3's families as table rows (T099)."""
+"""``relation_types``: § 10.3's families as table rows (T099).
+
+The family names are also the Java collector's ``LinkFamily`` spellings, which
+a snapshot's ``links[].type`` carries; ``LinkFamilyContractTest`` reads this
+side's source the other way (T058).
+"""
 
 from __future__ import annotations
+
+import re
+from pathlib import Path
 
 import pytest
 
@@ -12,6 +20,9 @@ from effects.domain.relation_types import (
     relation_type,
     reverse,
 )
+
+_JAVA = (Path(__file__).resolve().parents[4] / "forge-connector" / "src" / "main" / "java"
+         / "com" / "pricepredictor" / "connector" / "effects" / "LinkFamily.java")
 
 
 def test_every_family_is_two_types_and_targets_four_per_direction():
@@ -53,3 +64,9 @@ def test_the_order_is_frozen():
         "line_of:forward", "line_of:reverse",
         "line_of_the_same_card:forward", "line_of_the_same_card:reverse")
     assert RELATION_TYPES[-2:] == ("last_known_state_of:forward", "last_known_state_of:reverse")
+
+
+def test_java_and_python_spell_the_families_alike_in_table_order():
+    constants = re.findall(r'^\s+[A-Z_]+\("([a-z_]+)", (?:true|false)\)[,;]',
+                           _JAVA.read_text(encoding="utf-8"), flags=re.M)
+    assert tuple(constants) == FAMILIES
