@@ -59,7 +59,7 @@
           "delta": "The board is read after the cleanup step of the same turn instead of at the end step.",
           "expected": "Grizzly Bears is 2/2 again: the 'until end of turn' effect ended in the cleanup step.",
           "operation": {
-            "unclassifiable": "Changes when the board is read."
+            "unclassifiable": "phase or turn: the board is read after the cleanup step instead of at the end step."
           }
         }
       ],
@@ -124,7 +124,7 @@
           "delta": "A casts Crimson Wisps targeting Grizzly Bears, tapping Mountain, instead of Chaoslace.",
           "expected": "A draws Forest. At B's upkeep Grizzly Bears is green again and has no haste: Crimson Wisps' 'until end of turn' color change ended in A's cleanup step.",
           "operation": {
-            "unclassifiable": "A different spell is cast."
+            "unclassifiable": "choice: A casts Crimson Wisps instead of Chaoslace."
           }
         }
       ],
@@ -195,7 +195,7 @@
           "delta": "B does not cast Lightning Bolt; both players pass and the trigger resolves with Master Thief still on the battlefield.",
           "expected": "The trigger resolves and A gains control of Ornithopter for as long as A controls Master Thief; Ornithopter is on A's side of the battlefield.",
           "operation": {
-            "unclassifiable": "Omits a spell cast."
+            "unclassifiable": "choice: B does not cast Lightning Bolt."
           }
         }
       ],
@@ -273,7 +273,7 @@
           "delta": "A casts and resolves Ambush Viper first, then Glorious Charge.",
           "expected": "Grizzly Bears is 3/3 and Ambush Viper is 3/2: it was on the battlefield when Glorious Charge resolved.",
           "operation": {
-            "unclassifiable": "Changes the order of spells cast."
+            "unclassifiable": "timing: Ambush Viper is cast and resolved before Glorious Charge instead of after."
           }
         }
       ],
@@ -340,7 +340,7 @@
           "delta": "B does not cast Holy Day and keeps its Plains untapped; the rest is unchanged.",
           "expected": "Grizzly Bears deals 2 damage to Ambush Viper (toughness 1) and Ambush Viper deals deathtouch damage to Grizzly Bears: both creatures die.",
           "operation": {
-            "unclassifiable": "Omits a spell cast."
+            "unclassifiable": "choice: B does not cast Holy Day."
           }
         }
       ],
@@ -423,7 +423,7 @@
           "delta": "B casts Lightning Bolt in response to Chorus of Might, before it resolves, instead of after.",
           "expected": "Grizzly Bears dies first, so Chorus of Might resolves with X = 1: Hill Giant is 4/4 with trample.",
           "operation": {
-            "unclassifiable": "Changes when a spell is cast."
+            "unclassifiable": "timing: B casts Lightning Bolt in response to Chorus of Might instead of after it resolves."
           }
         }
       ],
@@ -494,7 +494,7 @@
           "delta": "A casts Zombify instead of Rise from the Grave, tapping four Swamps.",
           "expected": "Grizzly Bears enters as a green Bear only; Champion of the Perished's trigger does not fire and Champion of the Perished stays 1/1 with no counter.",
           "operation": {
-            "unclassifiable": "A different spell is cast."
+            "unclassifiable": "choice: A casts Zombify instead of Rise from the Grave."
           }
         }
       ],
@@ -582,7 +582,7 @@
           "delta": "A first casts Runeclaw Bear, tapping two Forests, and B passes so it resolves; A then casts Grizzly Bears, tapping two Forests, and B casts Counterspell on it.",
           "expected": "Runeclaw Bear took Insist's effect when it was cast; Grizzly Bears has no such effect and is countered, moving to A's graveyard.",
           "operation": {
-            "unclassifiable": "Adds a spell cast."
+            "unclassifiable": "choice: A casts Runeclaw Bear and then Grizzly Bears, which B counters."
           }
         }
       ],
@@ -648,7 +648,7 @@
           "delta": "A casts Chaoslace targeting Grizzly Bears, tapping Mountain, instead of Purelace.",
           "expected": "Grizzly Bears becomes red, not white, and gets no bonus: it stays 2/2. Savannah Lions stays 3/2.",
           "operation": {
-            "unclassifiable": "A different spell is cast."
+            "unclassifiable": "choice: A casts Chaoslace on Grizzly Bears instead of Purelace."
           }
         },
         {
@@ -657,7 +657,7 @@
           "delta": "A casts Chaoslace targeting Savannah Lions, tapping Mountain, instead of Purelace on Grizzly Bears.",
           "expected": "Savannah Lions becomes red and loses Crusade's bonus: it is 2/1. Grizzly Bears stays 2/2.",
           "operation": {
-            "unclassifiable": "A different spell with a different target."
+            "unclassifiable": "choice: A casts Chaoslace on Savannah Lions instead of Purelace on Grizzly Bears."
           }
         }
       ],
@@ -732,7 +732,7 @@
           "delta": "A passes priority in main1 and B casts Disenchant targeting Crusade, tapping two Plains; A passes; it resolves; the board is read afterwards in main1.",
           "expected": "Crusade is destroyed and moves to A's graveyard; Savannah Lions loses the bonus and is 2/1.",
           "operation": {
-            "unclassifiable": "Adds a spell cast."
+            "unclassifiable": "choice: B casts Disenchant on Crusade."
           }
         }
       ],
@@ -891,7 +891,7 @@
           "delta": "A casts Hill Giant for its mana cost instead of its blitz cost.",
           "expected": "Hill Giant has no haste and cannot be declared as an attacker; B stays at 20 life. At the end step Hill Giant stays on the battlefield and A draws nothing.",
           "operation": {
-            "unclassifiable": "A different way of casting the spell."
+            "unclassifiable": "choice: A casts Hill Giant for its mana cost instead of its blitz cost."
           }
         }
       ],

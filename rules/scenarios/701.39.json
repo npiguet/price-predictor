@@ -131,9 +131,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls no creature (Grizzly Bears is not on the battlefield).",
           "expected": "Cached Defenses resolves and no counters are put on anything: Savannah Lions stays 2/1 with no counters. Cached Defenses is in A's graveyard.",
-          "operation": {
-            "unclassifiable": "A permanent is removed from the battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

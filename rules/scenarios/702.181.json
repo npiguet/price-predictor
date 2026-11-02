@@ -53,7 +53,7 @@
           "delta": "A declares no attackers.",
           "expected": "The mobilize trigger does not fire and no token is created. B's life stays 20.",
           "operation": {
-            "unclassifiable": "a different attack declaration, a player's decision no fork operation makes"
+            "unclassifiable": "choice: A declares no attackers instead of attacking"
           }
         }
       ],
@@ -123,7 +123,7 @@
           "delta": "A's graveyard is empty instead of holding two creature cards.",
           "expected": "The mobilize trigger fires and resolves with X = 0: no Warrior tokens are created. Avenger of the Fallen deals 2 combat damage: B's life is 18.",
           "operation": {
-            "unclassifiable": "changes a graveyard's contents, which no fork operation sets"
+            "unclassifiable": "more than one fact: two creature cards leave A's graveyard, one card per move_card"
           }
         }
       ],

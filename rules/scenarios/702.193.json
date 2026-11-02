@@ -55,7 +55,7 @@
           "delta": "Hulk entered the battlefield on an earlier turn (not summoning sick).",
           "expected": "The activation is not legal: the cost stays {6}{R}{G} and three Forests cannot pay it. Hulk gets no counters.",
           "operation": {
-            "unclassifiable": "Changes when the permanent entered, a history fact"
+            "unclassifiable": "history: Hulk entered on an earlier turn"
           }
         },
         {
@@ -64,7 +64,7 @@
           "delta": "Hulk's power-up ability was already activated once (Hulk has five +1/+1 counters).",
           "expected": "The activation is not legal: a power-up ability can be activated only once. Hulk keeps its five counters (11/10).",
           "operation": {
-            "unclassifiable": "Changes the activation history"
+            "unclassifiable": "history: the power-up ability was already activated once"
           }
         }
       ],

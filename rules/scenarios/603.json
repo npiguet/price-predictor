@@ -90,7 +90,7 @@
           "delta": "A plays Forest from hand instead of casting Grizzly Bears (a land, not a creature, enters).",
           "expected": "Soul Warden does not trigger and nothing goes on the stack; A's life stays 20.",
           "operation": {
-            "unclassifiable": "a different card played (a land instead of a creature spell)"
+            "unclassifiable": "choice: A plays Forest from hand instead of casting Grizzly Bears"
           }
         }
       ],
@@ -167,7 +167,7 @@
           "delta": "After Silence resolves, A plays Forest from hand instead of casting Grizzly Bears.",
           "expected": "No creature enters, so Soul Warden does not trigger; B's life stays 20.",
           "operation": {
-            "unclassifiable": "a different card played"
+            "unclassifiable": "choice: A plays Forest instead of casting Grizzly Bears"
           }
         }
       ],
@@ -244,7 +244,7 @@
           "delta": "It is B's upkeep (B is the active player), not A's.",
           "expected": "Neither Phyrexian Arena triggers, since each reads 'your upkeep'; A draws nothing and A's life stays 20.",
           "operation": {
-            "unclassifiable": "a different turn and phase"
+            "unclassifiable": "phase or turn: it is B's upkeep and B is the active player"
           }
         }
       ],
@@ -319,7 +319,7 @@
           "delta": "A casts Savannah Lions instead of Raise the Alarm (one creature enters).",
           "expected": "Impact Tremors triggers once; B takes 1 damage (life 19).",
           "operation": {
-            "unclassifiable": "a different spell cast (one creature spell instead of a spell creating two tokens)"
+            "unclassifiable": "choice: A casts Savannah Lions instead of Raise the Alarm"
           }
         },
         {
@@ -328,7 +328,7 @@
           "delta": "A passes priority in main phase 1 with an empty stack, and B casts Raise the Alarm (tapping B's Plains) instead of A. B's two tokens enter under B's control.",
           "expected": "Impact Tremors does not trigger, since the creatures enter under B's control; B's life stays 20.",
           "operation": {
-            "unclassifiable": "a different player casts the spell"
+            "unclassifiable": "choice: B casts Raise the Alarm instead of A, and A passes priority"
           }
         }
       ],
@@ -407,7 +407,7 @@
           "delta": "Panharmonicon is on B's battlefield instead of A's.",
           "expected": "Elvish Visionary's ability triggers once; A draws 1 card.",
           "operation": {
-            "unclassifiable": "the permanent is on the other player's battlefield (a permanent added/removed)"
+            "unclassifiable": "more than one fact: Panharmonicon changes controller (a removal plus an addition)"
           }
         }
       ],
@@ -481,7 +481,7 @@
           "delta": "B does not pay the 2 life, so Temple Garden enters tapped, and B does not tap it afterwards.",
           "expected": "Temple Garden enters tapped; it never becomes tapped, so Lifetap does not trigger; A's life stays 20 and B's life stays 20.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: B declines to pay 2 life for Temple Garden"
           }
         }
       ],
@@ -557,7 +557,7 @@
           "delta": "After A casts Shock, B responds with Healing Salve choosing the prevention mode targeting Jackal Pup, tapping Plains; Healing Salve resolves first, then Shock resolves.",
           "expected": "Healing Salve's shield prevents all 2 damage from Shock, so Jackal Pup is not dealt damage and its ability does not trigger; Jackal Pup stays on the battlefield undamaged and B's life stays 20.",
           "operation": {
-            "unclassifiable": "a spell cast in response"
+            "unclassifiable": "choice: B responds with Healing Salve choosing the prevention mode"
           }
         }
       ],
@@ -634,7 +634,7 @@
           "delta": "When the first Ancient Cornucopia trigger resolves, A chooses not to gain life.",
           "expected": "A gains nothing from the first trigger; Ancient Cornucopia triggers again on Watchwolf (green and white) and A gains 2 life (life 22).",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: A chooses not to gain life when the trigger resolves"
           }
         }
       ],
@@ -712,7 +712,7 @@
           "delta": "With the trigger on the stack, B responds with Stifle targeting Kor Firewalker's trigger, tapping Island.",
           "expected": "Stifle counters the trigger, so A gains no life (life stays 20); Shock then resolves and Grizzly Bears dies.",
           "operation": {
-            "unclassifiable": "a spell cast in response"
+            "unclassifiable": "choice: B responds with Stifle targeting the trigger"
           }
         }
       ],
@@ -782,7 +782,7 @@
           "delta": "A does not cast Act of Treason; A only casts Grizzly Bears, so B still controls Soul Warden.",
           "expected": "Soul Warden's trigger is controlled by B: B's life is 21 and A's life stays 20.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: A does not cast Act of Treason"
           }
         }
       ],
@@ -859,9 +859,7 @@
           "polarity": "fires",
           "delta": "B controls no creatures (Savannah Lions is not on the battlefield).",
           "expected": "Neither mode has a legal target, so no mode can be chosen and the trigger is removed from the stack; nothing happens and Downwind Ambusher stays on the battlefield.",
-          "operation": {
-            "unclassifiable": "a permanent removed from the battlefield"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -991,7 +989,7 @@
           "delta": "With the trigger on the stack, B casts Shock targeting A (tapping Mountain); Shock resolves first, A's life becomes 38.",
           "expected": "The ability triggered, but on resolution A has 38 life, so it is removed from the stack and does nothing; A does not win and A's life is 38.",
           "operation": {
-            "unclassifiable": "a spell cast in response"
+            "unclassifiable": "choice: B casts Shock targeting A in response"
           }
         },
         {
@@ -1070,7 +1068,7 @@
           "delta": "On resolution A chooses not to gain 1 life.",
           "expected": "The trigger still went on the stack and resolved, but A gains nothing; A's life stays 20.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: A chooses not to gain life on resolution"
           }
         }
       ],
@@ -1150,7 +1148,7 @@
           "delta": "With Rancor's trigger on the stack, B activates Tormod's Crypt targeting A (tapping and sacrificing it); the ability resolves first, exiling A's graveyard.",
           "expected": "Rancor is in exile when the trigger resolves, so the trigger cannot find it and does nothing; Rancor stays in exile and A's hand is empty.",
           "operation": {
-            "unclassifiable": "an ability activated in response"
+            "unclassifiable": "choice: B responds by activating Tormod's Crypt"
           }
         }
       ],
@@ -1223,7 +1221,7 @@
           "delta": "When A casts Elvish Visionary, B responds with Counterspell, tapping both Islands, before it resolves.",
           "expected": "Elvish Visionary never enters the battlefield, so neither ability triggers; A's life stays 20, A draws nothing, and Elvish Visionary is in A's graveyard.",
           "operation": {
-            "unclassifiable": "a spell cast in response"
+            "unclassifiable": "choice: B responds to Elvish Visionary with Counterspell"
           }
         }
       ],
@@ -1300,9 +1298,7 @@
           "polarity": "fires",
           "delta": "Humility is not on the battlefield.",
           "expected": "Elvish Visionary's enters ability triggers and resolves; A draws 1 card.",
-          "operation": {
-            "unclassifiable": "a permanent removed from the battlefield"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -1372,9 +1368,7 @@
           "polarity": "does_not_fire",
           "delta": "Living Plane is not on the battlefield.",
           "expected": "The played Forest is only a land, so Soul Warden does not trigger; A's life stays 20.",
-          "operation": {
-            "unclassifiable": "a permanent removed from the battlefield"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -1448,7 +1442,7 @@
           "delta": "B casts Shock (tapping Mountain) targeting Grixis Slavedriver (4/4) instead of Unsummon.",
           "expected": "Grixis Slavedriver stays on the battlefield with 2 damage marked and its ability does not trigger; A gets no Zombie token.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: B casts Shock instead of Unsummon"
           }
         }
       ],
@@ -1525,7 +1519,7 @@
           "delta": "A casts Frost Lynx (tapping Swamp and both Islands) instead of Diregraf Ghoul.",
           "expected": "Torpor Orb stops Frost Lynx's enters trigger from triggering; Grizzly Bears is not tapped.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: A casts Frost Lynx instead of Diregraf Ghoul"
           }
         }
       ],
@@ -1615,7 +1609,7 @@
           "delta": "B casts Unsummon (tapping Island) targeting Grizzly Bears instead of Doom Blade.",
           "expected": "Grizzly Bears returns to A's hand without dying, so the trigger does not trigger; Angelic Destiny stays in A's graveyard.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: B casts Unsummon instead of Doom Blade"
           }
         }
       ],
@@ -1698,7 +1692,7 @@
           "delta": "When A casts Flare, B responds with Counterspell, tapping both Islands.",
           "expected": "Flare is countered and never resolves, so no delayed ability is created: B's life stays 20 and A draws nothing at B's upkeep.",
           "operation": {
-            "unclassifiable": "a spell cast in response"
+            "unclassifiable": "choice: B responds to Flare with Counterspell"
           }
         }
       ],
@@ -1765,7 +1759,7 @@
           "delta": "A activates Sneak Attack during the end step, after the end step has begun.",
           "expected": "The beginning of this turn's end step has already passed, so the delayed ability does not trigger this turn: Grizzly Bears stays on the battlefield for the rest of this turn and through B's turn, and is sacrificed at the beginning of B's end step.",
           "operation": {
-            "unclassifiable": "a different phase at which the ability is activated"
+            "unclassifiable": "timing: A activates Sneak Attack during the end step instead of main phase 2"
           }
         }
       ],
@@ -1832,7 +1826,7 @@
           "delta": "After the ability resolves, A casts Cloudshift targeting Grizzly Bears, tapping Plains; it resolves, exiling Grizzly Bears and returning it to the battlefield.",
           "expected": "The delayed ability triggers at the end step, but the returned Grizzly Bears is a new object, so it is not sacrificed and stays on the battlefield.",
           "operation": {
-            "unclassifiable": "a spell cast after the ability resolves"
+            "unclassifiable": "choice: A casts Cloudshift on Grizzly Bears after the ability resolves"
           }
         },
         {
@@ -1841,7 +1835,7 @@
           "delta": "After the ability resolves, B casts Unsummon targeting Grizzly Bears, tapping Island, returning it to A's hand.",
           "expected": "The delayed ability triggers at the end step but Grizzly Bears is no longer on the battlefield, so it does nothing; Grizzly Bears stays in A's hand.",
           "operation": {
-            "unclassifiable": "a spell cast after the ability resolves"
+            "unclassifiable": "choice: B casts Unsummon on Grizzly Bears after the ability resolves"
           }
         }
       ],
@@ -1910,7 +1904,7 @@
           "delta": "With the trigger on the stack, B casts Stifle targeting it, tapping Island.",
           "expected": "Stifle counters the first trigger; the state still matches and the Crocodile is still on the battlefield, so the trigger triggers a second time, resolves and A sacrifices Emperor Crocodile (two triggers in total).",
           "operation": {
-            "unclassifiable": "a spell cast in response"
+            "unclassifiable": "choice: B casts Stifle targeting the trigger"
           }
         },
         {
@@ -1993,7 +1987,7 @@
           "delta": "Bastion of Remembrance is in A's graveyard instead of on the battlefield.",
           "expected": "The two Grizzly Bears die with no Bastion of Remembrance to trigger; life totals stay 20 and 20.",
           "operation": {
-            "unclassifiable": "a permanent moved from the battlefield to the graveyard"
+            "unclassifiable": "more than one fact: Bastion of Remembrance leaves the battlefield and sits in A's graveyard (a removal plus a move)"
           }
         }
       ],
@@ -2067,7 +2061,7 @@
           "delta": "It is B's upkeep (B is the active player) and Teferi's Imp is phased in on A's battlefield.",
           "expected": "Teferi's Imp does not phase out on B's untap step; its ability does not trigger and A's hand stays Island.",
           "operation": {
-            "unclassifiable": "a different turn and phase"
+            "unclassifiable": "phase or turn: it is B's upkeep and B is the active player"
           }
         }
       ],
@@ -2145,7 +2139,7 @@
           "delta": "Grafted Wargear is not attached to Grizzly Bears (it is unattached on the battlefield).",
           "expected": "Grafted Wargear is destroyed without becoming unattached from anything; no trigger; Grizzly Bears stays on the battlefield.",
           "operation": {
-            "unclassifiable": "an attachment changed (equipment unattached)"
+            "unclassifiable": "not a board edit: the attachment of Grafted Wargear to Grizzly Bears, which no operation sets"
           }
         }
       ],
@@ -2225,7 +2219,7 @@
           "delta": "B's Shock targets Grizzly Bears instead of Coffin Queen.",
           "expected": "Grizzly Bears dies and goes to A's graveyard; A keeps control of Coffin Queen, so nothing is exiled.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: B's Shock targets Grizzly Bears instead of Coffin Queen"
           }
         }
       ],
@@ -2309,7 +2303,7 @@
           "delta": "B does not cast Counterspell.",
           "expected": "Grizzly Bears resolves and enters the battlefield; Multani's Presence does not trigger and A draws nothing.",
           "operation": {
-            "unclassifiable": "a spell not cast"
+            "unclassifiable": "choice: B does not cast Counterspell"
           }
         }
       ],
@@ -2387,7 +2381,7 @@
           "delta": "A chooses not to sacrifice a creature.",
           "expected": "No creature is sacrificed, so the reflexive ability does not trigger; Grizzly Bears stays on the battlefield and Savannah Lions takes no damage.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: A chooses not to sacrifice a creature"
           }
         }
       ],
@@ -2458,7 +2452,7 @@
           "delta": "A sacrifices no artifacts.",
           "expected": "The reflexive ability does not trigger; neither Grizzly Bears is tapped and A draws no cards.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: A sacrifices no artifacts"
           }
         }
       ],

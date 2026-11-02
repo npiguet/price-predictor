@@ -64,7 +64,7 @@
           "delta": "A's library order is Island, Thunderous Wrath, Island (top first), so Thunderous Wrath is the second card drawn.",
           "expected": "Thunderous Wrath is not the first card drawn this turn, so no miracle trigger fires. It stays in A's hand along with an Island. Mountain stays untapped, but {4}{R}{R} cannot be paid, so it cannot be cast. Grizzly Bears is unharmed.",
           "operation": {
-            "unclassifiable": "Changes the order of A's library."
+            "unclassifiable": "more than one fact: reordering the library changes two positions (Island and Thunderous Wrath swap)"
           }
         }
       ],

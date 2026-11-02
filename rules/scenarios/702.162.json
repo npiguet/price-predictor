@@ -56,9 +56,7 @@
           "polarity": "other",
           "delta": "A controls Plains, Island and Plains.",
           "expected": "Both castings are legal: converted for {W}{U} and face up for {1}{W}{U}.",
-          "operation": {
-            "unclassifiable": "adding a permanent"
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [

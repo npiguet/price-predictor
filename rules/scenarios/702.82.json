@@ -58,7 +58,7 @@
           "delta": "A sacrifices both Grizzly Bears as Gorger Wurm enters.",
           "expected": "Gorger Wurm enters with two +1/+1 counters, a 7/7. Both Grizzly Bears are in A's graveyard.",
           "operation": {
-            "unclassifiable": "a different sacrifice choice by A"
+            "unclassifiable": "choice: A sacrifices both Grizzly Bears to devour"
           }
         },
         {
@@ -67,7 +67,7 @@
           "delta": "A sacrifices no creatures as Gorger Wurm enters.",
           "expected": "Gorger Wurm enters with no counters, a 5/5. Both Grizzly Bears stay on the battlefield.",
           "operation": {
-            "unclassifiable": "a different sacrifice choice by A"
+            "unclassifiable": "choice: A sacrifices no creatures to devour"
           }
         }
       ],
@@ -147,9 +147,7 @@
           "polarity": "does_not_fire",
           "delta": "Bonesplitter is not on A's battlefield.",
           "expected": "Grizzly Bears is not an artifact and cannot be devoured. Caprichrome enters with no counters, a 2/2, and Grizzly Bears stays on the battlefield.",
-          "operation": {
-            "unclassifiable": "removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

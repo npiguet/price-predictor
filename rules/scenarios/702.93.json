@@ -129,7 +129,7 @@
           "delta": "Young Wolf is owned and controlled by B.",
           "expected": "Young Wolf is destroyed and goes to B's graveyard. The undying trigger resolves and Young Wolf returns to the battlefield under B's control with a +1/+1 counter (2/2).",
           "operation": {
-            "unclassifiable": "Changes who owns and controls the creature; no fork operation sets owner or controller."
+            "unclassifiable": "more than one fact: Young Wolf's owner changes from A to B while B keeps control, a removal of A-owned Young Wolf plus an addition of a B-owned one; no operation sets ownership alone"
           }
         },
         {

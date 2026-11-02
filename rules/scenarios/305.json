@@ -50,7 +50,7 @@
           "delta": "The step is beginning_of_combat instead of main1.",
           "expected": "Playing Forest is illegal (can_play false): it is not a main phase. Forest stays in A's hand.",
           "operation": {
-            "unclassifiable": "Changes the phase or step, not a property a fork operation sets."
+            "unclassifiable": "phase or turn: the step is beginning_of_combat instead of main1"
           }
         },
         {
@@ -59,7 +59,7 @@
           "delta": "A Shock spell controlled by A targeting B is on the stack.",
           "expected": "Playing Forest is illegal (can_play false): the stack is not empty. Forest stays in A's hand.",
           "operation": {
-            "unclassifiable": "Puts an object on the stack, which no fork operation does."
+            "unclassifiable": "timing: a Shock spell is on the stack"
           }
         }
       ],
@@ -130,7 +130,7 @@
           "delta": "The Forest on A's battlefield was not played this turn; A has played no land this turn.",
           "expected": "Playing Forest is legal (can_play true) and it moves to the battlefield.",
           "operation": {
-            "unclassifiable": "Changes a per-turn count (lands played) or turn state, not a counter on a permanent or player."
+            "unclassifiable": "history: A has played no land this turn, a lands-played count that is not a counter"
           }
         },
         {
@@ -138,9 +138,7 @@
           "polarity": "does_not_fire",
           "delta": "A also controls Exploration on the battlefield.",
           "expected": "Playing the second Forest is legal (can_play true): A may play an additional land this turn. The Forest moves to the battlefield.",
-          "operation": {
-            "unclassifiable": "Adds or removes a permanent, which no fork operation does."
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -212,7 +210,7 @@
           "delta": "Both Forests on the battlefield were played from hand this turn (lands played this turn: 2).",
           "expected": "Playing Forest is illegal (can_play false): 2 allowed is not greater than 2 played. Forest stays in A's hand.",
           "operation": {
-            "unclassifiable": "Changes a per-turn count (lands played) or turn state, not a counter on a permanent or player."
+            "unclassifiable": "history: two lands have been played this turn instead of one"
           }
         }
       ],
@@ -297,7 +295,7 @@
           "delta": "Neither Mountain was played this turn; A has played no land this turn.",
           "expected": "Playing the exiled Forest is legal (can_play true); it moves from exile to the battlefield.",
           "operation": {
-            "unclassifiable": "Changes a per-turn count (lands played) or turn state, not a counter on a permanent or player."
+            "unclassifiable": "history: no land has been played this turn"
           }
         }
       ],
@@ -368,7 +366,7 @@
           "delta": "A is the active player instead of B (main1, empty stack, A holding priority).",
           "expected": "Playing Forest is legal (can_play true) and it moves to the battlefield.",
           "operation": {
-            "unclassifiable": "Changes whose turn it is, which no fork operation does."
+            "unclassifiable": "phase or turn: A is the active player instead of B"
           }
         }
       ],
@@ -452,7 +450,7 @@
           "delta": "Instead of casting Rampant Growth, A plays one Forest from hand first, then attempts to play the second Forest from hand.",
           "expected": "The first land play is legal. The second land play is illegal (can_play false): one land has been played this turn. The second Forest stays in A's hand.",
           "operation": {
-            "unclassifiable": "A different decision or choice by a player, not a property a fork operation sets."
+            "unclassifiable": "choice: A plays a land from hand first instead of casting Rampant Growth"
           }
         }
       ],
@@ -591,9 +589,7 @@
           "polarity": "does_not_fire",
           "delta": "Blood Moon is not on the battlefield.",
           "expected": "Bayou is a Swamp Forest and taps for {G}; Giant Growth is cast and resolves, Grizzly Bears is 5/5 until end of turn.",
-          "operation": {
-            "unclassifiable": "Adds or removes a permanent, which no fork operation does."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "urborg_instead",
@@ -670,7 +666,7 @@
           "delta": "A attempts to play Dryad Arbor as a land instead of casting it.",
           "expected": "Playing Dryad Arbor as a land is legal (can_play true); it moves to the battlefield without using the stack.",
           "operation": {
-            "unclassifiable": "A different decision or choice by a player, not a property a fork operation sets."
+            "unclassifiable": "choice: A plays Dryad Arbor as a land instead of casting it"
           }
         }
       ],

@@ -62,7 +62,7 @@
           "delta": "The board is observed in A's untap step, before the upkeep step begins.",
           "expected": "Sol Ring is still a 1/1 artifact creature: A's upkeep has not begun, so the effect has not ended.",
           "operation": {
-            "unclassifiable": "Changes the phase or step the board is observed in."
+            "unclassifiable": "phase or turn: the board is observed in the untap step instead of the upkeep step"
           }
         },
         {
@@ -71,7 +71,7 @@
           "delta": "Xenic Poltergeist is B's: B activated it targeting Sol Ring during A's previous turn, so the effect lasts until B's next upkeep.",
           "expected": "Sol Ring is still a 1/1 artifact creature when A first receives priority in A's upkeep step: the effect waits for B's upkeep, not A's.",
           "operation": {
-            "unclassifiable": "Changes which player controls and activated the ability, a different history."
+            "unclassifiable": "history: B activated the Poltergeist during A's previous turn, so the effect's duration was set earlier"
           }
         }
       ],
@@ -130,7 +130,7 @@
           "delta": "A taps Forest for {G} instead of Swamp for {B}.",
           "expected": "The {G} is still in A's mana pool at the beginning of combat step because Omnath says A does not lose unspent green mana, so Omnath is a 2/2.",
           "operation": {
-            "unclassifiable": "A different choice by a player (which land is tapped for mana)."
+            "unclassifiable": "choice: A taps Forest for green mana instead of Swamp for black"
           }
         }
       ],
@@ -192,7 +192,7 @@
           "delta": "The board is observed while A holds priority in the end of combat step, before the combat phase ends.",
           "expected": "Battering Ram still has banding in the end of combat step: the effect lasts until the end of the combat phase, not the beginning of that step.",
           "operation": {
-            "unclassifiable": "Changes the phase or step."
+            "unclassifiable": "phase or turn: the board is observed in the end of combat step instead of the postcombat main phase"
           }
         }
       ],
@@ -247,7 +247,7 @@
           "delta": "Juzám Djinn is on B's battlefield instead of A's, so it is A's upkeep but not its controller's.",
           "expected": "No trigger: the stack stays empty and both life totals stay at 20.",
           "operation": {
-            "unclassifiable": "Moves a permanent to the other player's battlefield."
+            "unclassifiable": "more than one fact: Juzam Djinn changes controller (a removal plus an addition)"
           }
         },
         {
@@ -256,7 +256,7 @@
           "delta": "Juzám Djinn is A's but the active player is B, so it is B's upkeep.",
           "expected": "No trigger: the condition 'your upkeep' is not met in B's upkeep, so the stack stays empty and A's life stays 20.",
           "operation": {
-            "unclassifiable": "Changes whose turn it is."
+            "unclassifiable": "phase or turn: it is B's upkeep instead of A's"
           }
         }
       ],
@@ -324,7 +324,7 @@
           "delta": "The phase that begins is A's postcombat main phase (setup.step end_of_combat, combat has just ended with no attackers declared), not the precombat main phase.",
           "expected": "No trigger fired and A's mana pool stays empty.",
           "operation": {
-            "unclassifiable": "Changes the phase or step."
+            "unclassifiable": "phase or turn: the phase that begins is the postcombat main phase"
           }
         }
       ],
@@ -419,7 +419,7 @@
           "delta": "After Time Walk resolves, A passes priority and B casts Nexus of Fate, tapping seven Islands; it resolves.",
           "expected": "B's extra turn was created after A's, so it is taken first. The turns that follow this one are: B (extra turn), A (extra turn), B, A.",
           "operation": {
-            "unclassifiable": "A different spell cast by the other player."
+            "unclassifiable": "choice: B casts Nexus of Fate after Time Walk resolves"
           }
         },
         {
@@ -428,7 +428,7 @@
           "delta": "B casts Nexus of Fate in response to Time Walk, tapping seven Islands. Nexus resolves first, then Time Walk.",
           "expected": "Time Walk's extra turn was created last, so it is taken first. The turns that follow this one are: A (extra turn), B (extra turn), B, A.",
           "operation": {
-            "unclassifiable": "A different spell cast by the other player."
+            "unclassifiable": "timing: B casts Nexus of Fate in response to Time Walk"
           }
         },
         {
@@ -437,7 +437,7 @@
           "delta": "B casts Counterspell on Time Walk, tapping two Islands.",
           "expected": "Time Walk is countered and no extra turn is added. The turns that follow this one are: B, A.",
           "operation": {
-            "unclassifiable": "A different spell cast by the other player."
+            "unclassifiable": "choice: B casts Counterspell on Time Walk"
           }
         }
       ],
@@ -516,7 +516,7 @@
           "delta": "A casts Relentless Assault in the postcombat main phase instead (setup.step main2).",
           "expected": "Relentless Assault resolves. The remaining phases of the turn in order are: additional combat phase, additional postcombat main phase, ending phase.",
           "operation": {
-            "unclassifiable": "Changes the phase or step."
+            "unclassifiable": "phase or turn: A casts the spell in the postcombat main phase"
           }
         },
         {
@@ -525,7 +525,7 @@
           "delta": "B casts Counterspell on Relentless Assault, tapping both Islands.",
           "expected": "Relentless Assault is countered and no phase is added. The remaining phases are: combat phase, postcombat main phase, ending phase.",
           "operation": {
-            "unclassifiable": "A different spell cast by the other player."
+            "unclassifiable": "choice: B casts Counterspell on Relentless Assault"
           }
         }
       ],
@@ -602,7 +602,7 @@
           "delta": "Paradox Haze enchants B instead of A.",
           "expected": "A's upkeep is not B's first upkeep, so no step is added: A has only one upkeep step, Juzám Djinn triggers once, and A's life is 19.",
           "operation": {
-            "unclassifiable": "Attaches the Aura to a different player."
+            "unclassifiable": "not a board edit: Paradox Haze enchants player B instead of player A; no operation sets what an Aura is attached to"
           }
         }
       ],
@@ -675,7 +675,7 @@
           "delta": "Both Grizzly Bears block Obeka (menace allows two blockers).",
           "expected": "Obeka deals no damage to a player (one Grizzly Bears dies, the other is undamaged; Obeka has 4 damage and survives). The trigger does not fire, no extra upkeep step occurs, and both life totals are 20.",
           "operation": {
-            "unclassifiable": "A different blocking decision by a player."
+            "unclassifiable": "choice: both Grizzly Bears block Obeka"
           }
         }
       ],
@@ -748,9 +748,7 @@
           "polarity": "does_not_fire",
           "delta": "Eon Hub is not on the battlefield.",
           "expected": "The upkeep step happens, Juzám Djinn's trigger resolves and A's life is 19.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from the battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -827,7 +825,7 @@
           "delta": "A does not cast Meditate.",
           "expected": "Nothing is skipped and A draws no extra cards. The turns that follow this one are: B, A, B.",
           "operation": {
-            "unclassifiable": "A different spell cast (no spell is cast)."
+            "unclassifiable": "choice: A does not cast Meditate"
           }
         }
       ],

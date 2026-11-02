@@ -60,7 +60,7 @@
           "delta": "A pays {R} by tapping Mountain instead of Forbidden Orchard, so no creation instruction exists.",
           "expected": "Forbidden Orchard's trigger does not fire; no token is created. B's life is 18.",
           "operation": {
-            "unclassifiable": "A different choice of mana source to pay for the spell (a payment decision); no fork operation changes which land a player taps for mana."
+            "unclassifiable": "choice: A pays Shock's {R} by tapping Mountain instead of Forbidden Orchard."
           }
         }
       ],
@@ -133,7 +133,7 @@
           "delta": "Raise the Alarm is in B's hand instead, and B casts it during A's main phase 1 with B's two Plains after A passes priority.",
           "expected": "B creates the two Soldier tokens: B owns and controls both; A controls no token.",
           "operation": {
-            "unclassifiable": "The spell moves to the other player's hand and that player casts it: a hand change plus a different player's decision."
+            "unclassifiable": "choice: B casts Raise the Alarm instead of A (the card also sits in B's hand instead of A's)."
           }
         }
       ],
@@ -204,7 +204,7 @@
           "delta": "A casts Lingering Souls (tapping all three Plains) instead of Raise the Alarm.",
           "expected": "Each of the two tokens is a white Spirit creature 1/1 whose only ability is flying, because that is the one extra characteristic the spell defines; they have no mana cost and no other abilities.",
           "operation": {
-            "unclassifiable": "A different spell is cast (Lingering Souls instead of Raise the Alarm)."
+            "unclassifiable": "choice: A casts Lingering Souls instead of Raise the Alarm."
           }
         }
       ],
@@ -269,7 +269,7 @@
           "delta": "A casts Crow Storm (tapping three Islands) instead, whose effect names the token Storm Crow.",
           "expected": "A creates one 1/2 blue Bird creature token with flying; its name is Storm Crow (not Bird Token) and its subtype is Bird.",
           "operation": {
-            "unclassifiable": "A different spell is cast (Crow Storm instead of Dwarven Reinforcements)."
+            "unclassifiable": "choice: A casts Crow Storm instead of Dwarven Reinforcements."
           }
         }
       ],
@@ -335,7 +335,7 @@
           "delta": "A does not cast Xenograft.",
           "expected": "Each token's creature type is Soldier and each is named Soldier Token.",
           "operation": {
-            "unclassifiable": "A spell is not cast, so a permanent (Xenograft) never enters: a different decision and a permanent removed."
+            "unclassifiable": "choice: A does not cast Xenograft."
           }
         }
       ],
@@ -397,9 +397,7 @@
           "polarity": "does_not_fire",
           "delta": "B's battlefield is empty instead of containing Worms of the Earth.",
           "expected": "A creates one 1/1 green Forest Dryad land creature token, which enters the battlefield under A's control.",
-          "operation": {
-            "unclassifiable": "A permanent (Worms of the Earth) is removed from B's battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -473,7 +471,7 @@
           "delta": "A casts Raise the Alarm (tapping two Plains) instead of Dragon Fodder.",
           "expected": "The two Soldier creature tokens are each 1/1 with no mountainwalk, because Goblin King affects only Goblins.",
           "operation": {
-            "unclassifiable": "A different spell is cast (Raise the Alarm instead of Dragon Fodder)."
+            "unclassifiable": "choice: A casts Raise the Alarm instead of Dragon Fodder."
           }
         }
       ],
@@ -753,7 +751,7 @@
           "delta": "B casts Negate on Strike It Rich, tapping both Islands.",
           "expected": "Strike It Rich is countered; no Treasure token is created; A has no artifact.",
           "operation": {
-            "unclassifiable": "The opponent casts an additional spell (Negate) in response: a different decision and a different spell."
+            "unclassifiable": "choice: B casts Negate in response."
           }
         }
       ],
@@ -825,9 +823,7 @@
           "polarity": "does_not_fire",
           "delta": "A has only two Forests, so after Gilded Goose only one is untapped.",
           "expected": "The Food token stays on the battlefield; its ability cannot be activated; A's life is 20.",
-          "operation": {
-            "unclassifiable": "A land (a Forest) is removed from A's battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -905,7 +901,7 @@
           "delta": "In response, B casts Shock on its own Grizzly Bears, tapping Mountain.",
           "expected": "Grizzly Bears dies; Gild's only target is illegal so it fizzles; no Gold token is created.",
           "operation": {
-            "unclassifiable": "The opponent casts an additional spell (Shock) in response: a different decision and a different spell."
+            "unclassifiable": "choice: B casts Shock in response."
           }
         }
       ],
@@ -986,7 +982,7 @@
           "delta": "A's two tokens are 1/1 white Soldier creature tokens instead of Walker tokens.",
           "expected": "Michonne's attack trigger does not fire, because no Zombie attacks; she does not gain indestructible. B's life is 15 (3 + 1 + 1).",
           "operation": {
-            "unclassifiable": "Both tokens are replaced, two permanents changed at once; one replace_card puts one card in one permanent's place."
+            "unclassifiable": "more than one fact: Both Walker tokens are replaced by Soldier tokens: two replace_card edits."
           }
         }
       ],
@@ -1053,7 +1049,7 @@
           "delta": "A has only two Plains and two Islands (four lands), all spent on Niko Aris.",
           "expected": "The Shard token stays on the battlefield; its ability cannot be activated; A draws no card.",
           "operation": {
-            "unclassifiable": "Two lands are removed from A's battlefield."
+            "unclassifiable": "more than one fact: Two lands are removed from A's battlefield."
           }
         }
       ],
@@ -1131,9 +1127,7 @@
           "polarity": "does_not_fire",
           "delta": "A has only two Plains, so after Thraben Inspector only one is untapped.",
           "expected": "The Clue token stays on the battlefield; its ability cannot be activated; A draws no card.",
-          "operation": {
-            "unclassifiable": "A land (a Plains) is removed from A's battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -1209,7 +1203,7 @@
           "delta": "A's hand holds only Voldaren Epicure, so after casting it A has no card to discard.",
           "expected": "B's life is 19; the Blood token stays on the battlefield; its ability cannot be activated because its cost cannot be paid.",
           "operation": {
-            "unclassifiable": "A card (Mountain) is removed from A's hand: a hand change."
+            "unclassifiable": "not a board edit: the Mountain leaves A's hand for no zone; move_card only moves a card to another hand, library or graveyard position (a fact the delta does not state) or swaps in a different card, and no operation deletes a card from a hand."
           }
         }
       ],
@@ -1286,7 +1280,7 @@
           "delta": "A considers casting Juggernaut ({4}, an artifact creature) instead of Giant Spider.",
           "expected": "Legal: the Powerstone's {C} may be spent on an artifact spell, so all four mana is usable (can_play true).",
           "operation": {
-            "unclassifiable": "The player considers a different spell from hand (Juggernaut instead of Giant Spider): a different candidate decision."
+            "unclassifiable": "choice: A considers casting Juggernaut instead of Giant Spider."
           }
         }
       ],
@@ -1351,7 +1345,7 @@
           "delta": "A has only five Forests, all spent on Tangled Skyline.",
           "expected": "The Incubator token stays a noncreature artifact with five +1/+1 counters; its transform ability cannot be activated.",
           "operation": {
-            "unclassifiable": "Two lands are removed from A's battlefield."
+            "unclassifiable": "more than one fact: Two lands are removed from A's battlefield."
           }
         }
       ],
@@ -1417,7 +1411,7 @@
           "delta": "A does not bargain: the Soldier token stays on the battlefield.",
           "expected": "The enters trigger does not fire; no Role token is created; Centaur Courser stays 3/3.",
           "operation": {
-            "unclassifiable": "A different player decision: the bargain cost is not paid."
+            "unclassifiable": "choice: A does not pay the bargain cost."
           }
         }
       ],
@@ -1492,7 +1486,7 @@
           "delta": "In response, B casts Shock on Grizzly Bears, tapping Mountain.",
           "expected": "Grizzly Bears dies; Monstrous Rage's only target is illegal so it fizzles; no Role token is created.",
           "operation": {
-            "unclassifiable": "The opponent casts an additional spell (Shock) in response: a different decision and a different spell."
+            "unclassifiable": "choice: B casts Shock in response."
           }
         }
       ],
@@ -1568,7 +1562,7 @@
           "delta": "In response, B casts Shock on Grizzly Bears, tapping Mountain.",
           "expected": "Grizzly Bears dies; Royal Treatment's only target is illegal so it fizzles; no Role token is created.",
           "operation": {
-            "unclassifiable": "The opponent casts an additional spell (Shock) in response: a different decision and a different spell."
+            "unclassifiable": "choice: B casts Shock in response."
           }
         }
       ],
@@ -1640,9 +1634,7 @@
           "polarity": "does_not_fire",
           "delta": "A has only two Plains, so no mana remains at the beginning of combat.",
           "expected": "A cannot pay {1}; no Role token is created; Spellbook Vendor is 2/2.",
-          "operation": {
-            "unclassifiable": "A land (a Plains) is removed from A's battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -1711,18 +1703,14 @@
           "polarity": "other",
           "delta": "A also controls Seal of Fire on the battlefield.",
           "expected": "A controls two enchantments (Seal of Fire and the Role), so Grizzly Bears is 4/4.",
-          "operation": {
-            "unclassifiable": "A permanent (Seal of Fire) is added to A's battlefield."
-          }
+          "operation": "add_permanent"
         },
         {
           "label": "no_other_creature",
           "polarity": "does_not_fire",
           "delta": "A controls no creature besides Ellivere (no Grizzly Bears).",
           "expected": "The enters trigger has no legal target; no Role token is created.",
-          "operation": {
-            "unclassifiable": "A permanent (Grizzly Bears) is removed from A's battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -1801,7 +1789,7 @@
           "delta": "B casts Lightning Bolt (3 damage) instead of Shock.",
           "expected": "Grizzly Bears dies, the Wicked Role is put into a graveyard from the battlefield and its trigger makes B lose 1 life (19); the Role token ceases to exist.",
           "operation": {
-            "unclassifiable": "The opponent casts a different spell (Lightning Bolt instead of Shock)."
+            "unclassifiable": "choice: B casts a different spell, Lightning Bolt instead of Shock."
           }
         }
       ],
@@ -1941,9 +1929,7 @@
           "polarity": "does_not_fire",
           "delta": "A has only one Island, spent on Spyglass Siren.",
           "expected": "The Map token stays on the battlefield; its ability cannot be activated.",
-          "operation": {
-            "unclassifiable": "A land (an Island) is removed from A's battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -2021,7 +2007,7 @@
           "delta": "A considers activating the Junk token in A's end step instead of main phase 1.",
           "expected": "Illegal: the ability is activate-only-as-a-sorcery (can_play false).",
           "operation": {
-            "unclassifiable": "The decision is made in a different step (end step instead of main phase 1): a phase change."
+            "unclassifiable": "phase or turn: The ability is considered in the end step instead of main phase 1."
           }
         }
       ],
@@ -2182,9 +2168,7 @@
           "polarity": "does_not_fire",
           "delta": "A has only two Islands, both spent on Crustacean Commando.",
           "expected": "The Mutagen token stays on the battlefield; its ability cannot be activated; Crustacean Commando is 0/3.",
-          "operation": {
-            "unclassifiable": "A land (an Island) is removed from A's battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -2261,7 +2245,7 @@
           "delta": "Shatter targets Shuri's Fabricator instead of a Vibranium token.",
           "expected": "Shuri's Fabricator is destroyed and goes to A's graveyard; both Vibranium tokens stay on the battlefield.",
           "operation": {
-            "unclassifiable": "The spell has a different target (Shuri's Fabricator instead of a Vibranium token)."
+            "unclassifiable": "target: Shatter targets Shuri's Fabricator instead of a Vibranium token."
           }
         }
       ],
@@ -2336,7 +2320,7 @@
           "delta": "A considers casting Dark Ritual ({B}) instead of Giant Growth.",
           "expected": "Illegal: the Heartwood token adds only {R} or {G} and A has no other untapped mana source, so Dark Ritual can't be cast (can_play false).",
           "operation": {
-            "unclassifiable": "The player considers a different spell from hand (Dark Ritual instead of Giant Growth): a different candidate decision."
+            "unclassifiable": "choice: A considers casting Dark Ritual instead of Giant Growth."
           }
         }
       ],
@@ -2391,7 +2375,7 @@
           "delta": "B controls Grizzly Bears and blocks Disa with it.",
           "expected": "No combat damage is dealt to B; the trigger does not fire; no token is created.",
           "operation": {
-            "unclassifiable": "Two facts change: a creature (Grizzly Bears) is added to B's battlefield and B decides to block with it."
+            "unclassifiable": "more than one fact: A creature is added to B's battlefield and B declares it as a blocker."
           }
         }
       ],
@@ -2455,7 +2439,7 @@
           "delta": "A declines to exile Grizzly Bears with Mimic Vat's trigger, so no card is exiled with it.",
           "expected": "The ability copies a nonexistent object and no token is created; Grizzly Bears stays in A's graveyard.",
           "operation": {
-            "unclassifiable": "A different player decision: the optional exile from the trigger is declined."
+            "unclassifiable": "choice: A declines the optional exile."
           }
         }
       ],
@@ -2532,7 +2516,7 @@
           "delta": "A casts Dragon Fodder (tapping two Mountains) instead of Hatchery Sliver.",
           "expected": "Dragon Fodder creates tokens, so Parallel Lives doubles them: A controls four 1/1 Goblin tokens.",
           "operation": {
-            "unclassifiable": "A different spell is cast (Dragon Fodder instead of Hatchery Sliver)."
+            "unclassifiable": "choice: A casts Dragon Fodder instead of Hatchery Sliver."
           }
         }
       ],

@@ -54,7 +54,7 @@
           "delta": "A does not attack with Fire Sages.",
           "expected": "No firebending trigger fires and no mana is added. A cannot pay {1}{R}{R} with two Mountains, so Fire Sages gets no counter and B's life stays 20.",
           "operation": {
-            "unclassifiable": "A different choice by a player: no attack declared"
+            "unclassifiable": "choice: A does not attack"
           }
         },
         {
@@ -63,7 +63,7 @@
           "delta": "A does not spend the firebending mana during combat and tries the activation in the second main phase.",
           "expected": "The firebending trigger fires and A adds {R}, but the mana empties at the end of combat. In the second main phase A cannot pay {1}{R}{R} with two Mountains, so Fire Sages gets no counter. Fire Sages deals 2 combat damage to B (18).",
           "operation": {
-            "unclassifiable": "A different choice by a player: when to use the mana"
+            "unclassifiable": "timing: A tries the activation in the second main phase instead of spending the firebending mana during combat"
           }
         }
       ],
@@ -145,7 +145,7 @@
           "delta": "In response to the firebending trigger, B casts Stifle, tapping Island, targeting the firebending trigger.",
           "expected": "Stifle counters the firebending trigger, so A adds no {R}, and Avatar Aang's trigger does not fire. A draws no card (hand 0, library 2).",
           "operation": {
-            "unclassifiable": "Casts an additional spell"
+            "unclassifiable": "choice: B casts Stifle on the trigger"
           }
         }
       ],

@@ -63,7 +63,7 @@
           "delta": "A casts Overlord of the Floodpits for its mana cost {3}{U}{U}, tapping all five Islands, instead of its impending cost.",
           "expected": "Overlord of the Floodpits enters with no time counters and is a 5/3 Enchantment Creature with flying. Its enters trigger also resolves as in the base case.",
           "operation": {
-            "unclassifiable": "A different casting choice: the card is cast for its mana cost rather than its impending cost; no fork operation changes a player's choice."
+            "unclassifiable": "choice: A casts Overlord of the Floodpits for its mana cost instead of its impending cost."
           }
         }
       ],
@@ -139,7 +139,7 @@
           "delta": "It is B's turn (B is the active player) and B's end step instead of A's.",
           "expected": "The trigger does not fire. Overlord of the Floodpits keeps 2 time counters and is still not a creature.",
           "operation": {
-            "unclassifiable": "Changes the active player, so whose turn it is; no fork operation changes the turn."
+            "unclassifiable": "phase or turn: it is B's turn and end step instead of A's."
           }
         }
       ],

@@ -62,7 +62,7 @@
           "delta": "Grizzly Bears is a card in B's hand instead of on the battlefield.",
           "expected": "Wrath of God destroys nothing; Grizzly Bears stays in B's hand and Centaur Courser stays in the graveyard.",
           "operation": {
-            "unclassifiable": "moves a card to a hand"
+            "unclassifiable": "more than one fact: Grizzly Bears leaves the battlefield and enters B's hand (a removal plus a move)"
           }
         }
       ],
@@ -136,7 +136,7 @@
           "delta": "Grizzly Bears is on A's battlefield instead of in the graveyard.",
           "expected": "Giant Growth has a legal target, Grizzly Bears, and A can cast it.",
           "operation": {
-            "unclassifiable": "moves a card out of the graveyard and adds a permanent"
+            "unclassifiable": "more than one fact: Grizzly Bears leaves the graveyard and enters the battlefield"
           }
         }
       ],
@@ -223,7 +223,7 @@
           "delta": "B responds with Counterspell, tapping both Islands, and it counters Cloudshift.",
           "expected": "Cloudshift is countered; Grizzly Bears never leaves the battlefield and keeps its +1/+1 counter and 1 damage as a 3/3.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: B casts Counterspell on Cloudshift"
           }
         },
         {

@@ -59,7 +59,7 @@
           "delta": "A casts Mons's Goblin Raiders (1/1), tapping Mountain, instead of Grizzly Bears.",
           "expected": "Mons's Goblin Raiders has neither greater power nor greater toughness than Experiment One, so evolve does not trigger. Experiment One stays 1/1.",
           "operation": {
-            "unclassifiable": "A casts a different spell."
+            "unclassifiable": "choice: A casts Mons's Goblin Raiders instead of Grizzly Bears"
           }
         },
         {
@@ -68,7 +68,7 @@
           "delta": "A casts Wall of Wood (0/3), tapping Forest, instead of Grizzly Bears.",
           "expected": "Wall of Wood has greater toughness (3 > 1) but not greater power. Evolve triggers and Experiment One gets a +1/+1 counter, becoming 2/2.",
           "operation": {
-            "unclassifiable": "A casts a different spell."
+            "unclassifiable": "choice: A casts Wall of Wood instead of Grizzly Bears"
           }
         }
       ],
@@ -149,9 +149,7 @@
           "polarity": "does_not_fire",
           "delta": "Tyranid Prime is not on the battlefield, so Experiment One has only its own evolve.",
           "expected": "One evolve trigger resolves. Experiment One gets one +1/+1 counter and is 2/2.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from the battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

@@ -59,7 +59,7 @@
           "delta": "A declares only Grizzly Bears as an attacker; Fearless Liberator does not attack.",
           "expected": "The boast activation is not legal (Fearless Liberator did not attack this turn). No token is created and the Mountains stay untapped.",
           "operation": {
-            "unclassifiable": "a different attack declaration"
+            "unclassifiable": "choice: a different attack declaration: Fearless Liberator does not attack"
           }
         }
       ],
@@ -141,7 +141,7 @@
           "delta": "After the first boast ability resolves, A tries to activate it a second time this turn, tapping the other three Mountains.",
           "expected": "The second activation is not legal (boast was already activated this turn). A still has exactly one Dwarf Berserker token and three untapped Mountains.",
           "operation": {
-            "unclassifiable": "a second activation decision"
+            "unclassifiable": "choice: A attempts a second activation of the ability"
           }
         }
       ],

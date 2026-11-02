@@ -104,7 +104,7 @@
           "delta": "A declares Grizzly Bears as an attacker against B.",
           "expected": "The declare blockers step takes place and B receives priority in it: casting Fog Patch (tapping both Forests) is legal there. B casts nothing, declares no blockers, and takes 2 combat damage in the combat damage step: B's life is 18.",
           "operation": {
-            "unclassifiable": "A declares Grizzly Bears as an attacker instead of declaring none: a player's attack declaration, not a change to the board."
+            "unclassifiable": "choice: A declares an attacker"
           }
         }
       ],
@@ -171,7 +171,7 @@
           "delta": "A attacks with Elite Vanguard (no first strike) instead of Youthful Knight, and B blocks it with Grizzly Bears.",
           "expected": "Only one combat damage step takes place. Elite Vanguard and Grizzly Bears deal 2 damage to each other at the same time; both are destroyed and go to their owners' graveyards.",
           "operation": {
-            "unclassifiable": "A attacks with a different creature (Elite Vanguard instead of Youthful Knight), which B blocks: a different attack declaration plus a block, more than one fact."
+            "unclassifiable": "choice: a different attacker and a block are declared"
           }
         }
       ],
@@ -243,7 +243,7 @@
           "delta": "In main1 A activates Treetop Village ({1}{G}, tapping both Forests); the ability resolves and Treetop Village is a 3/3 green Ape creature with trample until end of turn.",
           "expected": "Legal attackers for A: Grizzly Bears and Treetop Village.",
           "operation": {
-            "unclassifiable": "A activates Treetop Village's animation ability, tapping two Forests: a player's activated ability, more than one fact."
+            "unclassifiable": "choice: A activates Treetop Village"
           }
         }
       ],
@@ -324,7 +324,7 @@
           "delta": "In the declare attackers step B activates Treetop Village ({1}{G}, tapping both Forests); it resolves and Treetop Village is a 3/3 creature until end of turn.",
           "expected": "Legal blockers for B: Grizzly Bears and Treetop Village. Mountain is still not offered.",
           "operation": {
-            "unclassifiable": "B activates Treetop Village's animation ability, tapping two Forests: a player's activated ability, more than one fact."
+            "unclassifiable": "choice: B activates Treetop Village"
           }
         }
       ],
@@ -410,7 +410,7 @@
           "delta": "The attack target queried is Jace Beleren instead of Grizzly Bears.",
           "expected": "Attacking Jace Beleren is legal: a planeswalker can be attacked.",
           "operation": {
-            "unclassifiable": "Only the attack target queried differs (a planeswalker instead of a creature); the board is the same, so no fork operation applies."
+            "unclassifiable": "target: the attack target queried differs"
           }
         },
         {
@@ -419,7 +419,7 @@
           "delta": "In main1 A casts Lightning Bolt targeting Jace Beleren, tapping Mountain; it resolves and Jace Beleren (loyalty 3) goes to B's graveyard.",
           "expected": "Legal attack targets for Hill Giant: player B only. Grizzly Bears is still not an attack target.",
           "operation": {
-            "unclassifiable": "A casts Lightning Bolt at Jace Beleren, tapping Mountain: a spell cast that removes a permanent."
+            "unclassifiable": "choice: A casts Lightning Bolt (a spell cast, with Jace going to the graveyard)"
           }
         }
       ],
@@ -486,7 +486,7 @@
           "delta": "Echoing Assault's trigger targets Grizzly Bears instead of Mutavault.",
           "expected": "The token copy of Grizzly Bears is a 1/1 creature that enters tapped and attacking B. Mutavault deals 2, Grizzly Bears 2 and the token 1: B's life is 15. The token is sacrificed at the next end step.",
           "operation": {
-            "unclassifiable": "Echoing Assault's trigger takes a different target (Grizzly Bears instead of Mutavault): a player's target choice."
+            "unclassifiable": "target: the trigger targets a different creature"
           }
         }
       ],
@@ -573,7 +573,7 @@
           "delta": "B does not cast Lightning Bolt.",
           "expected": "Ninja of the Deep Hours enters tapped and attacking Jace Beleren, unblocked, and deals 2 combat damage to it: Jace Beleren's loyalty is 1. Its draw trigger does not fire (no damage to a player). B's life is 20.",
           "operation": {
-            "unclassifiable": "B does not cast Lightning Bolt: a player's decision not to cast a spell."
+            "unclassifiable": "choice: B chooses not to cast Lightning Bolt"
           }
         }
       ],
@@ -655,7 +655,7 @@
           "delta": "B declares Grizzly Bears as a blocker of the Goblin token.",
           "expected": "The block is legal: the Goblin token entered attacking during the declare attackers step, before blockers were declared, so it is blocked. Grizzly Bears deals 2 damage to the token, which is destroyed; the token deals 1 damage to Grizzly Bears. Ninja of the Deep Hours still enters unblocked and deals 2 combat damage to B: B's life is 18.",
           "operation": {
-            "unclassifiable": "B declares Grizzly Bears as a blocker of the token: a player's block declaration."
+            "unclassifiable": "choice: B declares a block"
           }
         }
       ],
@@ -732,7 +732,7 @@
           "delta": "A attacks with Earth Elemental instead of Grizzly Bears (B blocks it and Shocks it the same way).",
           "expected": "Earth Elemental takes 2 damage from Shock and stays on the battlefield and in combat. It deals 4 combat damage to B's Grizzly Bears, which is destroyed, and takes 2 combat damage from it: Earth Elemental has 4 damage marked and survives.",
           "operation": {
-            "unclassifiable": "A attacks with Earth Elemental instead of Grizzly Bears: a different attack declaration. Replacing Grizzly Bears with Earth Elemental would leave two Earth Elementals, not this board."
+            "unclassifiable": "choice: a different creature attacks and a block and Shock are chosen"
           }
         }
       ],
@@ -823,7 +823,7 @@
           "delta": "In response to Act of Aggression A casts Gods Willing targeting Hill Giant, tapping Plains, choosing protection from red and scrying 1 with an empty library; it resolves first.",
           "expected": "Act of Aggression's only target is illegal when it tries to resolve, so it fizzles and A keeps control. Hill Giant stays in combat, blocked: it deals 3 damage to Grizzly Bears, which is destroyed, and takes 2 damage. Both players are at 20.",
           "operation": {
-            "unclassifiable": "A casts Gods Willing in response, choosing a colour and scrying: a spell cast with a target and choices."
+            "unclassifiable": "choice: A casts Gods Willing in response"
           }
         }
       ],
@@ -903,7 +903,7 @@
           "delta": "B does not activate the regeneration ability.",
           "expected": "In the first-strike step Battle Hurda deals 3 damage to Gorilla Chieftain, which is destroyed and goes to B's graveyard before it deals any damage. Battle Hurda has no damage marked.",
           "operation": {
-            "unclassifiable": "B does not activate the regeneration ability: a player's decision."
+            "unclassifiable": "choice: B does not activate regeneration"
           }
         }
       ],
@@ -987,7 +987,7 @@
           "delta": "Galadriel's Dismissal targets Elite Vanguard, which is not in combat, instead of Hill Giant.",
           "expected": "Elite Vanguard phases out. Hill Giant stays in combat, blocked: it deals 3 damage to Grizzly Bears, which is destroyed, and takes 2 damage. Both players are at 20.",
           "operation": {
-            "unclassifiable": "Galadriel's Dismissal targets Elite Vanguard instead of Hill Giant: a player's target choice."
+            "unclassifiable": "target: the spell targets a different creature"
           }
         }
       ],
@@ -1071,7 +1071,7 @@
           "delta": "B does not cast Disenchant.",
           "expected": "Sylvan Library (2/2) and Grizzly Bears (2/2) deal 2 damage to each other; both are destroyed and go to their owners' graveyards.",
           "operation": {
-            "unclassifiable": "B does not cast Disenchant: a player's decision not to cast a spell."
+            "unclassifiable": "choice: B does not cast Disenchant"
           }
         }
       ],
@@ -1137,7 +1137,7 @@
           "delta": "B casts Off Balance in the beginning of combat step, before attackers are declared, so A cannot declare Hill Giant as an attacker.",
           "expected": "Hill Giant can't attack this turn and is not declared as an attacker. No combat damage is dealt: B's life is 20.",
           "operation": {
-            "unclassifiable": "B casts Off Balance earlier, in the beginning of combat step: a decision's timing, which also changes A's attack declaration."
+            "unclassifiable": "timing: B casts Off Balance in the beginning of combat step, before attackers are declared, instead of after the declaration"
           }
         }
       ],
@@ -1209,7 +1209,7 @@
           "delta": "A casts Off Balance in the declare attackers step, before blockers are declared, so B cannot declare Grizzly Bears as a blocker.",
           "expected": "Grizzly Bears can't block this turn, so B declares no blockers. Hill Giant is unblocked and deals 3 combat damage to B: B's life is 17.",
           "operation": {
-            "unclassifiable": "A casts Off Balance earlier, in the declare attackers step: a decision's timing, which also changes B's block declaration."
+            "unclassifiable": "timing: A casts Off Balance in the declare attackers step, before blockers are declared, instead of after the block"
           }
         }
       ],
@@ -1283,7 +1283,7 @@
           "delta": "B casts Icy Blast in the declare attackers step, before blockers are declared, so tapped Grizzly Bears cannot be declared as a blocker.",
           "expected": "Grizzly Bears is tapped and can't be declared as a blocker. Hill Giant is unblocked and deals 3 combat damage to B: B's life is 17.",
           "operation": {
-            "unclassifiable": "B casts Icy Blast before blockers are declared instead of after: a decision's timing, which also changes B's block declaration."
+            "unclassifiable": "timing: B casts Icy Blast before blockers are declared instead of after Grizzly Bears blocks"
           }
         }
       ],
@@ -1349,7 +1349,7 @@
           "delta": "B casts Icy Blast in the beginning of combat step, before attackers are declared, so tapped Serra Angel cannot be declared as an attacker.",
           "expected": "Serra Angel is tapped and can't be declared as an attacker. No combat damage is dealt: B's life is 20.",
           "operation": {
-            "unclassifiable": "B casts Icy Blast before attackers are declared instead of after: a decision's timing, which also changes A's attack declaration."
+            "unclassifiable": "timing: B casts Icy Blast in the beginning of combat step, before attackers are declared, instead of after Serra Angel attacks"
           }
         }
       ],
@@ -1423,7 +1423,7 @@
           "delta": "B does not cast Lightning Bolt.",
           "expected": "Hill Giant is unblocked and deals 3 combat damage to Jace Beleren: loyalty 0, so it goes to B's graveyard. B's life is 20.",
           "operation": {
-            "unclassifiable": "B does not cast Lightning Bolt: a player's decision not to cast a spell."
+            "unclassifiable": "choice: B chooses not to cast Lightning Bolt"
           }
         },
         {
@@ -1432,7 +1432,7 @@
           "delta": "B blocks Hill Giant with Grizzly Bears.",
           "expected": "Jace Beleren is destroyed. Hill Giant remains an attacking creature and is blocked: it deals 3 damage to Grizzly Bears, which is destroyed, and takes 2 damage. B's life is 20.",
           "operation": {
-            "unclassifiable": "B declares Grizzly Bears as a blocker: a player's block declaration."
+            "unclassifiable": "choice: B declares a block"
           }
         }
       ],
@@ -1502,7 +1502,7 @@
           "delta": "The query is made in the beginning of combat step, before the declare attackers step begins.",
           "expected": "Casting Master Warcraft is legal (can_play true).",
           "operation": {
-            "unclassifiable": "The query is made in an earlier step (beginning of combat): a change of step."
+            "unclassifiable": "phase or turn: the query is made in the beginning of combat step"
           }
         },
         {
@@ -1511,7 +1511,7 @@
           "delta": "A declares no attackers (the query is still made in the declare attackers step).",
           "expected": "Casting Master Warcraft is illegal (can_play false) even though no attacker was declared: the declare attackers step has begun.",
           "operation": {
-            "unclassifiable": "A declares no attackers: a player's attack declaration."
+            "unclassifiable": "choice: A declares no attackers"
           }
         }
       ],
@@ -1591,7 +1591,7 @@
           "delta": "The query is made in the declare attackers step, after Grizzly Bears is declared as an attacker.",
           "expected": "Casting Gorilla War Cry is legal (can_play true).",
           "operation": {
-            "unclassifiable": "The query is made in an earlier step (declare attackers): a change of step."
+            "unclassifiable": "phase or turn: the query is made in the declare attackers step"
           }
         }
       ],
@@ -1672,7 +1672,7 @@
           "delta": "B declares no blockers and the query is made in the declare blockers step.",
           "expected": "Casting Chaotic Strike is legal (can_play true), although no blocker was declared.",
           "operation": {
-            "unclassifiable": "B declares no blockers and the query is made in the declare blockers step: a declaration plus a change of step."
+            "unclassifiable": "phase or turn: the query is made in the declare blockers step after B declares no blockers"
           }
         }
       ],
@@ -1767,7 +1767,7 @@
           "delta": "The query is made in the additional main phase between the two combat phases instead of the second combat phase's beginning of combat step.",
           "expected": "Casting Mandate of Peace is illegal (can_play false): it is not combat.",
           "operation": {
-            "unclassifiable": "The query is made in the additional main phase instead of a combat step: a change of phase."
+            "unclassifiable": "phase or turn: the query is made in the additional main phase"
           }
         }
       ],
@@ -1867,7 +1867,7 @@
           "delta": "The query is made in the beginning of combat step of the additional, first combat phase.",
           "expected": "Casting Master Warcraft is legal (can_play true).",
           "operation": {
-            "unclassifiable": "The query is made in the first combat phase instead of the second: a change of phase."
+            "unclassifiable": "phase or turn: the query is made in the first combat phase"
           }
         }
       ],
@@ -1944,7 +1944,7 @@
           "delta": "The query is made in the declare attackers step, after A declared no attackers, instead of the end of combat step.",
           "expected": "Casting Gorilla War Cry is legal (can_play true).",
           "operation": {
-            "unclassifiable": "The query is made in the declare attackers step instead of the end of combat step: a change of step."
+            "unclassifiable": "phase or turn: the query is made in the declare attackers step"
           }
         }
       ],
@@ -2019,7 +2019,7 @@
           "delta": "A attacks B with Grizzly Bears instead of declaring no attackers, so the declare blockers step happens (B declares no blockers); the query is made in that step.",
           "expected": "Casting Chaotic Strike is legal (can_play true).",
           "operation": {
-            "unclassifiable": "A attacks with Grizzly Bears instead of declaring none and the query moves to the declare blockers step: a declaration plus a change of step."
+            "unclassifiable": "choice: A attacks B with Grizzly Bears instead of declaring no attackers, and the query moves from the end of combat step to the declare blockers step"
           }
         }
       ],
@@ -2092,7 +2092,7 @@
           "delta": "The query is made in main1, before combat.",
           "expected": "Activating Apprentice Sorcerer is legal (can_play true).",
           "operation": {
-            "unclassifiable": "The query is made in main1 instead of the declare attackers step: a change of phase."
+            "unclassifiable": "phase or turn: the query is made in main1"
           }
         }
       ],
@@ -2159,7 +2159,7 @@
           "delta": "The query is made in the beginning of combat step.",
           "expected": "Activating Jade Statue is legal (can_play true).",
           "operation": {
-            "unclassifiable": "The query is made in the beginning of combat step instead of main1: a change of phase."
+            "unclassifiable": "phase or turn: the query is made in the beginning of combat step"
           }
         }
       ],

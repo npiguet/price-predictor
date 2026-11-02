@@ -52,7 +52,7 @@
           "delta": "The exhaust ability was already activated on an earlier turn.",
           "expected": "Activating the exhaust ability is not legal, even with four untapped Forests.",
           "operation": {
-            "unclassifiable": "changes the game's history (the ability was activated on an earlier turn), which no fork operation sets"
+            "unclassifiable": "history: Afterburner Expert's exhaust ability was activated on an earlier turn."
           }
         }
       ],
@@ -130,7 +130,7 @@
           "delta": "Earlier this turn A activated Afterburner Expert's exhaust ability {2}{G}{G} (tapping four Forests), and it resolved.",
           "expected": "Activating Elvish Refueler's exhaust ability is not legal, even with two untapped Forests: an exhaust ability has already been activated this turn, so the static ability no longer applies.",
           "operation": {
-            "unclassifiable": "changes the game's history (another exhaust ability activated earlier this turn), which no fork operation sets"
+            "unclassifiable": "history: Afterburner Expert's exhaust ability was activated earlier this turn."
           }
         }
       ],

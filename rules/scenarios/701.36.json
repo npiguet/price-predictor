@@ -72,7 +72,7 @@
           "delta": "B controls the Soldier token instead of A.",
           "expected": "No token is created. B controls the one Soldier token; A controls Grizzly Bears. Rootborn Defenses resolves and is in A's graveyard.",
           "operation": {
-            "unclassifiable": "The token changes controller; no fork operation sets a permanent's controller."
+            "unclassifiable": "more than one fact: the token leaves A's control and enters B's, a removal plus an addition"
           }
         },
         {
@@ -81,7 +81,7 @@
           "delta": "A also controls a 2/2 green Wolf token, and A chooses the Wolf.",
           "expected": "A controls the Soldier token, the Wolf token and a new 2/2 green Wolf token.",
           "operation": {
-            "unclassifiable": "A token is added to the battlefield and the player's populate choice changes; no fork operation adds a permanent or changes a decision."
+            "unclassifiable": "choice: A must also choose the Wolf when populating, a decision beyond the added token"
           }
         }
       ],
@@ -155,27 +155,21 @@
           "polarity": "fires",
           "delta": "A controls a Treasure token (an artifact, not a creature).",
           "expected": "No token is created; A controls Grizzly Bears and the Treasure token.",
-          "operation": {
-            "unclassifiable": "A token is added to the battlefield; no fork operation adds a permanent."
-          }
+          "operation": "add_permanent"
         },
         {
           "label": "opponent_token",
           "polarity": "fires",
           "delta": "B controls a Soldier creature token.",
           "expected": "No token is created for A: populate copies only a creature token its controller controls.",
-          "operation": {
-            "unclassifiable": "A token is added to the battlefield; no fork operation adds a permanent."
-          }
+          "operation": "add_permanent"
         },
         {
           "label": "creature_token",
           "polarity": "does_not_fire",
           "delta": "A controls a Soldier creature token.",
           "expected": "A creates a new 1/1 white Soldier creature token.",
-          "operation": {
-            "unclassifiable": "A token is added to the battlefield; no fork operation adds a permanent."
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [

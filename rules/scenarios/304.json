@@ -63,7 +63,7 @@
           "delta": "B has first cast Shock targeting A, tapping B's Mountain, and A has priority with Shock on the stack.",
           "expected": "Casting Lightning Bolt is legal: can_play is true while Shock is on the stack.",
           "operation": {
-            "unclassifiable": "a different spell cast first, putting an object on the stack"
+            "unclassifiable": "timing: B has first cast Shock, so it is on the stack when A has priority"
           }
         },
         {
@@ -72,7 +72,7 @@
           "delta": "The candidate is A casting Lava Axe (a sorcery) instead of Lightning Bolt, paying {4}{R} with the five Mountains.",
           "expected": "Casting Lava Axe is not legal: can_play is false, because it is not a main phase of A's turn.",
           "operation": {
-            "unclassifiable": "a different spell candidate"
+            "unclassifiable": "choice: A casts a different spell, Lava Axe instead of Lightning Bolt"
           }
         }
       ],
@@ -150,7 +150,7 @@
           "delta": "After A passes priority B casts Counterspell targeting Shock, tapping both Islands, then both players pass.",
           "expected": "Shock is countered: its text is not followed, B's life total stays 20, and Shock moves from the stack to A's graveyard; Counterspell goes to B's graveyard.",
           "operation": {
-            "unclassifiable": "a different spell cast by the opponent"
+            "unclassifiable": "choice: B casts Counterspell in response"
           }
         }
       ],
@@ -293,7 +293,7 @@
           "delta": "The candidate is A casting the instant Shock with the Mountain instead.",
           "expected": "Casting Shock is not legal: can_play is false, because Silence stops A from casting spells.",
           "operation": {
-            "unclassifiable": "a different candidate action"
+            "unclassifiable": "choice: A attempts a different action, casting Shock instead of activating the ability"
           }
         }
       ],

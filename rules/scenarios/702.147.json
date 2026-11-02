@@ -51,7 +51,7 @@
           "delta": "A declares no attackers.",
           "expected": "Nothing is sacrificed. Rot-Curse Rakshasa stays on the battlefield and B's life stays 20.",
           "operation": {
-            "unclassifiable": "a different attack declaration"
+            "unclassifiable": "choice: a different attack declaration: A declares no attackers"
           }
         }
       ],

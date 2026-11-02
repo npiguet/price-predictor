@@ -125,9 +125,7 @@
           "polarity": "does_not_fire",
           "delta": "Marchesa, the Black Rose is not on the battlefield.",
           "expected": "One dethrone trigger fires: one +1/+1 counter (3/2), 3 damage and B is at 17.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from the battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

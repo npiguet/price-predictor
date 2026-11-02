@@ -65,7 +65,7 @@
           "delta": "In response, B casts Shock targeting Grizzly Bears, tapping Mountain.",
           "expected": "Shock resolves first and Grizzly Bears is destroyed. Dreg Mangler stays exiled because the cost was already paid. The scavenge ability has no legal target and fizzles; no counters are placed.",
           "operation": {
-            "unclassifiable": "B casts a spell in response, a different spell cast."
+            "unclassifiable": "choice: B casts Shock in response"
           }
         }
       ],
@@ -146,7 +146,7 @@
           "delta": "It is A's declare_attackers step instead of main1.",
           "expected": "The activation is illegal: scavenge can be activated only as a sorcery, and it is not a main phase.",
           "operation": {
-            "unclassifiable": "Changes the phase or step."
+            "unclassifiable": "phase or turn: the step is declare_attackers instead of main1"
           }
         },
         {
@@ -154,9 +154,7 @@
           "polarity": "does_not_fire",
           "delta": "Dreg Mangler is in A's hand instead of the graveyard.",
           "expected": "The activation is illegal: scavenge works only while the card is in a graveyard. A can only cast Dreg Mangler.",
-          "operation": {
-            "unclassifiable": "Moves the card from the graveyard to the hand, a zone change of a card."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [

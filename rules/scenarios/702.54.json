@@ -60,7 +60,7 @@
           "delta": "Shock targets Grizzly Bears instead of player B.",
           "expected": "Grizzly Bears dies, B stays at 20, and Gorehorn Minotaurs enters with no counters as a 3/3.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: Shock targets a creature instead of a player"
           }
         },
         {
@@ -69,7 +69,7 @@
           "delta": "Shock targets player A instead of player B.",
           "expected": "A is at 18, B stays at 20, and Gorehorn Minotaurs enters with no counters as a 3/3.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: Shock targets A instead of B"
           }
         }
       ],
@@ -150,7 +150,7 @@
           "delta": "A holds Lightning Bolt instead of Shock and casts it at player B.",
           "expected": "B is at 17. Petrified Wood-Kin enters with three +1/+1 counters and is a 6/6.",
           "operation": {
-            "unclassifiable": "a different card in a hand"
+            "unclassifiable": "choice: A casts a different spell, Lightning Bolt, instead of Shock"
           }
         },
         {
@@ -159,7 +159,7 @@
           "delta": "Shock targets Grizzly Bears instead of player B.",
           "expected": "Grizzly Bears dies, B stays at 20, and Petrified Wood-Kin enters with no counters as a 3/3.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: Shock targets a creature instead of a player"
           }
         }
       ],
@@ -237,9 +237,7 @@
           "polarity": "does_not_fire",
           "delta": "Bloodlord of Vaasgoth is not on the battlefield.",
           "expected": "B is at 18. Bloodrage Vampire enters with one +1/+1 counter and is a 4/2.",
-          "operation": {
-            "unclassifiable": "removes a permanent from the battlefield"
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "opponent_not_damaged",
@@ -247,7 +245,7 @@
           "delta": "Shock targets player A instead of player B.",
           "expected": "A is at 18, B stays at 20. Bloodrage Vampire enters with no counters as a 3/1.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: Shock targets A instead of B"
           }
         }
       ],

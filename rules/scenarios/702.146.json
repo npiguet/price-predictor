@@ -53,7 +53,7 @@
           "delta": "A tries to cast Mourning Patrol front face up from the graveyard for its mana cost {2}{W}.",
           "expected": "The cast is not legal: a card in the graveyard can be cast only through disturb. Mourning Patrol stays in the graveyard and no Plains are tapped.",
           "operation": {
-            "unclassifiable": "a different cast choice"
+            "unclassifiable": "choice: A casts the card front face up for its mana cost instead of through disturb"
           }
         },
         {
@@ -61,9 +61,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls only three Plains.",
           "expected": "The disturb cast is not legal because {3}{W} cannot be paid. Mourning Patrol stays in the graveyard.",
-          "operation": {
-            "unclassifiable": "removing a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -140,7 +138,7 @@
           "delta": "A casts the Mourning Patrol in hand front face up for its mana cost {2}{W} instead.",
           "expected": "The spell resolves and enters the battlefield front face up as Mourning Patrol, a 2/3 white Human Soldier with vigilance.",
           "operation": {
-            "unclassifiable": "a different cast choice"
+            "unclassifiable": "choice: A casts the card in hand front face up instead of the disturb cast"
           }
         }
       ],

@@ -58,7 +58,7 @@
           "delta": "A makes the cast attempt in the first main phase of A's next turn, after the turn in which Demon Bolt was foretold has ended.",
           "expected": "The cast is legal for {R}. Demon Bolt deals 4 damage to Hill Giant, which is destroyed and moves to B's graveyard. Demon Bolt moves to A's graveyard.",
           "operation": {
-            "unclassifiable": "a different phase or turn"
+            "unclassifiable": "phase or turn: the cast happens in A's next turn"
           }
         },
         {
@@ -67,7 +67,7 @@
           "delta": "A makes the cast attempt during B's next turn, with one Mountain still untapped from the foretelling turn.",
           "expected": "The cast is legal for {R}. Demon Bolt deals 4 damage to Hill Giant, which is destroyed. Demon Bolt moves to A's graveyard.",
           "operation": {
-            "unclassifiable": "a different turn"
+            "unclassifiable": "phase or turn: the cast happens during B's next turn"
           }
         }
       ],
@@ -151,7 +151,7 @@
           "delta": "A makes the cast attempt in the first main phase of A's next turn instead of main phase 2 of this turn.",
           "expected": "The cast is legal for {G}. Grizzly Bears resolves and enters the battlefield under A's control.",
           "operation": {
-            "unclassifiable": "a different turn"
+            "unclassifiable": "phase or turn: the cast happens in the first main phase of A's next turn"
           }
         }
       ],
@@ -225,7 +225,7 @@
           "delta": "B is the active player; A tries the foretell action while holding priority in B's first main phase.",
           "expected": "The foretell action is not legal: Demon Bolt stays in A's hand and both Mountains stay untapped.",
           "operation": {
-            "unclassifiable": "a different active player"
+            "unclassifiable": "phase or turn: B is the active player instead of A"
           }
         }
       ],

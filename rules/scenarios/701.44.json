@@ -57,9 +57,7 @@
           "polarity": "does_not_fire",
           "delta": "The library order is Forest, then Grizzly Bears.",
           "expected": "Forest is revealed and goes to A's hand. Merfolk Branchwalker gets no counter and stays 2/1. A's library holds only Grizzly Bears.",
-          "operation": {
-            "unclassifiable": "The library's contents change; no fork operation changes a library."
-          }
+          "operation": "move_card"
         },
         {
           "label": "nonland_kept_on_top",
@@ -67,7 +65,7 @@
           "delta": "A leaves the revealed Grizzly Bears on top of the library instead of putting it into the graveyard.",
           "expected": "Merfolk Branchwalker gets a +1/+1 counter (3/2). Grizzly Bears stays on top of A's library and A's graveyard is empty.",
           "operation": {
-            "unclassifiable": "The player chooses to leave the revealed card on top, a decision."
+            "unclassifiable": "choice: A leaves the revealed card on top"
           }
         }
       ],
@@ -144,9 +142,7 @@
           "polarity": "fires",
           "delta": "A's library holds one card, Forest.",
           "expected": "Forest is revealed and goes to A's hand; Merfolk Branchwalker gets no counter (2/1). Wildgrowth Walker's trigger still fires: Walker is 2/4 and A is at 23.",
-          "operation": {
-            "unclassifiable": "The library's contents change; no fork operation changes a library."
-          }
+          "operation": "move_card"
         },
         {
           "label": "explore_countered",
@@ -154,7 +150,7 @@
           "delta": "B casts Stifle targeting the explore trigger, tapping Island, instead of passing.",
           "expected": "The explore trigger is countered and Merfolk Branchwalker does not explore: it stays 2/1 with no counter. Wildgrowth Walker's trigger does not fire: Walker stays 1/3 and A's life stays 20.",
           "operation": {
-            "unclassifiable": "The opponent casts a spell in response, a different decision and spell."
+            "unclassifiable": "choice: B casts Stifle on the explore trigger"
           }
         }
       ],
@@ -239,7 +235,7 @@
           "delta": "B does not cast Shock.",
           "expected": "Merfolk Branchwalker explores and gets a +1/+1 counter (3/2); Grizzly Bears goes to A's graveyard. Wildgrowth Walker's trigger fires: Walker is 2/4 and A is at 23.",
           "operation": {
-            "unclassifiable": "The opponent does not cast a spell, a different decision."
+            "unclassifiable": "choice: B does not cast Shock"
           }
         },
         {
@@ -247,9 +243,7 @@
           "polarity": "fires",
           "delta": "The library order is Forest, then Grizzly Bears (Branchwalker still killed in response).",
           "expected": "Merfolk Branchwalker is in A's graveyard. The trigger still explores: Forest is revealed and goes to A's hand. Wildgrowth Walker's trigger fires: Walker is 2/4 and A is at 23.",
-          "operation": {
-            "unclassifiable": "The library's contents change; no fork operation changes a library."
-          }
+          "operation": "move_card"
         },
         {
           "label": "trigger_countered",
@@ -257,7 +251,7 @@
           "delta": "B casts Stifle targeting the explore trigger with Island instead of casting Shock.",
           "expected": "The explore trigger is countered. Nothing is revealed, Merfolk Branchwalker stays 2/1 with no counter, Wildgrowth Walker's trigger does not fire (1/3, A at 20), and A's library is unchanged.",
           "operation": {
-            "unclassifiable": "The opponent casts a different spell, a different decision and spell."
+            "unclassifiable": "choice: B casts Stifle instead of Shock"
           }
         }
       ],
@@ -327,7 +321,7 @@
           "delta": "A chooses Merfolk Branchwalker to explore first and Hakbal second.",
           "expected": "Branchwalker explores first: Forest goes to A's hand and Branchwalker gets no counter (2/1). Hakbal explores second: Shock goes to A's graveyard and Hakbal gets a +1/+1 counter (4/4).",
           "operation": {
-            "unclassifiable": "The player chooses a different explore order, a decision."
+            "unclassifiable": "choice: A chooses a different explore order"
           }
         },
         {

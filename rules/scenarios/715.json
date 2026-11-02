@@ -56,9 +56,7 @@
           "polarity": "other",
           "delta": "A has only one Mountain on the battlefield.",
           "expected": "Not legal: Stomp's {1}{R} cost cannot be paid with one land.",
-          "operation": {
-            "unclassifiable": "A land is removed from the battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "normal_cast",
@@ -66,7 +64,7 @@
           "delta": "A attempts to cast Bonecrusher Giant as a creature instead of as an Adventure.",
           "expected": "Not legal: the creature half costs {2}{R} and has sorcery timing, and A has two Mountains and it is B's upkeep.",
           "operation": {
-            "unclassifiable": "The player chooses to cast the card's other face; no fork operation changes how a spell is cast."
+            "unclassifiable": "choice: a different way of casting the card"
           }
         }
       ],
@@ -132,7 +130,7 @@
           "delta": "A casts Bonecrusher Giant as a creature (tapping three Mountains) instead of as an Adventure.",
           "expected": "The spell on the stack has the card's normal characteristics and is a creature spell. Essence Scatter can legally target it and counters it; Bonecrusher Giant goes to A's graveyard.",
           "operation": {
-            "unclassifiable": "The player casts the card's creature face instead of its Adventure; no fork operation changes how a spell is cast."
+            "unclassifiable": "choice: the card is cast as a creature instead of as an Adventure"
           }
         }
       ],
@@ -209,7 +207,7 @@
           "delta": "A does not cast Twincast.",
           "expected": "Only the original Stomp resolves: Grizzly Bears dies, B stays at 20 life, and the Bonecrusher Giant card is exiled.",
           "operation": {
-            "unclassifiable": "The copy spell is not cast; no fork operation removes a spell or an action."
+            "unclassifiable": "choice: A does not cast Twincast"
           }
         },
         {
@@ -218,7 +216,7 @@
           "delta": "A casts Bonecrusher Giant as a creature (tapping three Mountains) and then tries to cast Twincast on it.",
           "expected": "Twincast cannot be cast: a creature spell is not an instant or sorcery spell, so there is no legal target.",
           "operation": {
-            "unclassifiable": "The original is cast as its creature face and the copy spell then has no target; no fork operation changes how a spell is cast."
+            "unclassifiable": "choice: a different spell is cast"
           }
         }
       ],
@@ -303,7 +301,7 @@
           "delta": "In response to Stomp, B casts Cancel (tapping three Islands) targeting it.",
           "expected": "Stomp is countered and the Bonecrusher Giant card goes to A's graveyard, not exile. Grizzly Bears survives. A cannot cast the card from exile because it is not there.",
           "operation": {
-            "unclassifiable": "The opponent casts a counterspell in response; no fork operation adds a spell or an action."
+            "unclassifiable": "choice: B responds by casting Cancel"
           }
         }
       ],
@@ -379,7 +377,7 @@
           "delta": "B's hand holds Bonecrusher Giant and Island.",
           "expected": "B discards both cards: the graveyard holds exactly Bonecrusher Giant and Island, two cards in total, which is all Mind Rot asks for.",
           "operation": {
-            "unclassifiable": "A card is added to a player's hand; no fork operation changes a hand."
+            "unclassifiable": "more than one fact: Island must first exist in B's library before moving to hand; no single operation adds a card to a hand"
           }
         }
       ],
@@ -451,9 +449,7 @@
           "polarity": "other",
           "delta": "The card in A's graveyard is Shock instead of Bonecrusher Giant.",
           "expected": "Shock is not a creature card, so Reanimate has no legal target and cannot be cast; nothing changes.",
-          "operation": {
-            "unclassifiable": "A different card is in the graveyard; replace_card swaps permanents only, and no fork operation changes a graveyard."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [

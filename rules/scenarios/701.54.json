@@ -62,7 +62,7 @@
           "delta": "A chooses Grizzly Bears again.",
           "expected": "The Ring has tempted A twice. Grizzly Bears is still A's Ring-bearer and Runeclaw Bear is not. A drew Forest.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: A chooses Grizzly Bears again as Ring-bearer"
           }
         }
       ],
@@ -145,7 +145,7 @@
           "delta": "A attacks with Runeclaw Bear, which is not the Ring-bearer, and B's creature is Hill Giant.",
           "expected": "Runeclaw Bear has no Ring evasion: Hill Giant can legally block it.",
           "operation": {
-            "unclassifiable": "a different attacker is chosen"
+            "unclassifiable": "choice: A attacks with Runeclaw Bear, and B's block follows"
           }
         }
       ],
@@ -214,7 +214,7 @@
           "delta": "The Ring has tempted A only once.",
           "expected": "No trigger fires. A's hand stays [Forest] and Island stays on top of the library.",
           "operation": {
-            "unclassifiable": "the Ring's temptation count is neither a counter nor a permanent fact a fork can set"
+            "unclassifiable": "not a board edit: the number of times the Ring has tempted A is not set by any operation"
           }
         },
         {
@@ -223,7 +223,7 @@
           "delta": "A attacks with Runeclaw Bear, which is not the Ring-bearer.",
           "expected": "No trigger fires. A's hand stays [Forest] and Island stays on top of the library.",
           "operation": {
-            "unclassifiable": "a different attacker is chosen"
+            "unclassifiable": "choice: A attacks with Runeclaw Bear instead of Grizzly Bears"
           }
         }
       ],
@@ -288,7 +288,7 @@
           "delta": "The Ring has tempted A only twice.",
           "expected": "Grizzly Bears' attack makes A draw Island and discard it. Wall of Wood takes 2 damage and survives combat. Nothing is sacrificed: it stays on the battlefield with 2 damage marked until the cleanup step.",
           "operation": {
-            "unclassifiable": "the Ring's temptation count is not a fork operation"
+            "unclassifiable": "not a board edit: the number of times the Ring has tempted A is not set by any operation"
           }
         }
       ],
@@ -350,7 +350,7 @@
           "delta": "The Ring has tempted A only three times.",
           "expected": "Grizzly Bears' attack makes A draw Island and discard it. Grizzly Bears deals 2 combat damage to B and no trigger fires: B's life is 18.",
           "operation": {
-            "unclassifiable": "the Ring's temptation count is not a fork operation"
+            "unclassifiable": "not a board edit: the number of times the Ring has tempted A is not set by any operation"
           }
         }
       ],
@@ -415,9 +415,7 @@
           "polarity": "other",
           "delta": "A controls Grizzly Bears, which A chooses as Ring-bearer.",
           "expected": "A gets the Ring emblem and Grizzly Bears becomes A's Ring-bearer (legendary). Ringwraiths' trigger fires and Ringwraiths returns to A's hand. A drew Forest.",
-          "operation": {
-            "unclassifiable": "adds a permanent and a player choice"
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -492,7 +490,7 @@
           "delta": "B targets Runeclaw Bear with Act of Treason.",
           "expected": "Grizzly Bears stays A's Ring-bearer and legendary. Runeclaw Bear is controlled by B until end of turn and is not a Ring-bearer.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: B targets Runeclaw Bear instead of Grizzly Bears with Act of Treason"
           }
         }
       ],

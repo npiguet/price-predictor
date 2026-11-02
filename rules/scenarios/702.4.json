@@ -271,7 +271,7 @@
           "delta": "B does not cast Turn to Frog.",
           "expected": "Fencing Ace deals 1 damage in each step. B's life is 18.",
           "operation": {
-            "unclassifiable": "a different spell is cast, not a fact on the board"
+            "unclassifiable": "choice: B does not cast Turn to Frog"
           }
         }
       ],
@@ -337,7 +337,7 @@
           "delta": "A does not cast Boros Charm.",
           "expected": "Youthful Knight deals 2 damage in the first step only; it deals none in the second. B's life is 18.",
           "operation": {
-            "unclassifiable": "a different spell is cast, not a fact on the board"
+            "unclassifiable": "choice: A does not cast Boros Charm"
           }
         }
       ],

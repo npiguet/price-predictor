@@ -73,7 +73,7 @@
           "delta": "B chooses Darksteel Colossus's own replacement effect to apply first.",
           "expected": "Darksteel Colossus is shuffled into B's library instead of going to the graveyard; Rest in Peace no longer applies to it and does nothing. Diabolic Edict is still exiled.",
           "operation": {
-            "unclassifiable": "B chooses a different replacement effect to apply first: a player's choice."
+            "unclassifiable": "choice: B chooses which replacement effect applies first."
           }
         },
         {
@@ -81,9 +81,7 @@
           "polarity": "does_not_fire",
           "delta": "Rest in Peace is not on the battlefield.",
           "expected": "Only Darksteel Colossus's replacement effect applies, with no choice to make; it is shuffled into B's library. Diabolic Edict goes to A's graveyard.",
-          "operation": {
-            "unclassifiable": "Rest in Peace is removed from the battlefield: removing a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -150,7 +148,7 @@
           "delta": "A does not play the Mountain, so no land entered under A's control this turn.",
           "expected": "Searing Blaze deals 1 damage to each, doubled to 2: B is at 18 life and Centaur Courser (3/3) survives with 2 damage marked.",
           "operation": {
-            "unclassifiable": "A does not play the Mountain: a different decision, and a land fewer on the battlefield."
+            "unclassifiable": "choice: A does not play the Mountain."
           }
         }
       ],
@@ -215,9 +213,7 @@
           "polarity": "does_not_fire",
           "delta": "Essence of the Wild is not on the battlefield.",
           "expected": "Rusted Sentinel enters as itself (a 3/4 Golem) and its own effect makes it enter tapped.",
-          "operation": {
-            "unclassifiable": "Essence of the Wild is removed from the battlefield: removing a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -276,18 +272,14 @@
           "polarity": "does_not_fire",
           "delta": "Essence of the Wild is not on the battlefield.",
           "expected": "Doubling Season alone makes four tokens; they enter as four 1/1 white Soldier tokens.",
-          "operation": {
-            "unclassifiable": "Essence of the Wild is removed from the battlefield: removing a permanent."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "no-doubling",
           "polarity": "other",
           "delta": "Doubling Season is not on the battlefield.",
           "expected": "Raise the Alarm creates two tokens, and each enters as a copy of Essence of the Wild: two 6/6 Essence of the Wild tokens.",
-          "operation": {
-            "unclassifiable": "Doubling Season is removed from the battlefield: removing a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -352,7 +344,7 @@
           "delta": "Pariah is attached to Grizzly Bears instead of Daunting Defender.",
           "expected": "Pariah redirects the 3 damage to Grizzly Bears, which is not a Cleric, so nothing is prevented; Grizzly Bears dies. A stays at 20 life.",
           "operation": {
-            "unclassifiable": "Pariah is attached to a different creature: a different choice of what it enchants."
+            "unclassifiable": "not a board edit: which creature Pariah is attached to; no operation sets an attachment."
           }
         }
       ],

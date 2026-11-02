@@ -57,7 +57,7 @@
           "delta": "A does not pay the kicker; A casts Burst Lightning for {R} only.",
           "expected": "Burst Lightning deals 2 damage to Centaur Courser, which stays on the battlefield with 2 damage marked.",
           "operation": {
-            "unclassifiable": "A different decision by a player."
+            "unclassifiable": "choice: A pays no kicker, a different cost choice."
           }
         }
       ],
@@ -118,7 +118,7 @@
           "delta": "A pays the multikicker only once (two Mountains tapped).",
           "expected": "Everflowing Chalice enters with 1 charge counter.",
           "operation": {
-            "unclassifiable": "A different decision by a player."
+            "unclassifiable": "choice: A pays the multikicker once instead of twice."
           }
         },
         {
@@ -127,7 +127,7 @@
           "delta": "A pays no multikicker.",
           "expected": "Everflowing Chalice enters with no charge counters.",
           "operation": {
-            "unclassifiable": "A different decision by a player."
+            "unclassifiable": "choice: A pays no multikicker."
           }
         }
       ],
@@ -189,7 +189,7 @@
           "delta": "A casts Gatekeeper of Malakir for {B}{B} only, without the kicker.",
           "expected": "No trigger fires. Grizzly Bears stays on B's battlefield and Gatekeeper of Malakir is on the battlefield.",
           "operation": {
-            "unclassifiable": "A different decision by a player."
+            "unclassifiable": "choice: A casts without paying the kicker."
           }
         }
       ],
@@ -266,7 +266,7 @@
           "delta": "A pays the {W} kicker instead of the {R} kicker (tapping Plains instead of Mountain), and the trigger targets Phyrexian Walker.",
           "expected": "The 'kicked with its {W} kicker' trigger fires: Phyrexian Walker (an artifact creature) is destroyed and is in B's graveyard. B's life stays 20.",
           "operation": {
-            "unclassifiable": "A different decision by a player."
+            "unclassifiable": "choice: A pays the white kicker instead of the red one, and targets differently."
           }
         },
         {
@@ -275,7 +275,7 @@
           "delta": "A pays no kicker.",
           "expected": "Neither trigger fires: B's life stays 20 and Phyrexian Walker stays on the battlefield.",
           "operation": {
-            "unclassifiable": "A different decision by a player."
+            "unclassifiable": "choice: A pays no kicker."
           }
         }
       ],
@@ -351,7 +351,7 @@
           "delta": "A also pays the kicker {1}{R}, tapping all four lands.",
           "expected": "The cast is illegal (can_play false): a kicked Jilt needs another target creature to deal 2 damage to, and Grizzly Bears is the only creature.",
           "operation": {
-            "unclassifiable": "A different decision by a player."
+            "unclassifiable": "choice: A pays the kicker."
           }
         }
       ],

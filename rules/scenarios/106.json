@@ -81,7 +81,7 @@
           "delta": "B responds to Dark Ritual by casting Counterspell (tapping both Islands) targeting it.",
           "expected": "Dark Ritual is countered and moves to A's graveyard without resolving. A's mana pool stays empty, Black Knight cannot be cast and stays in A's hand.",
           "operation": {
-            "unclassifiable": "a different spell cast: B casts a counterspell in response"
+            "unclassifiable": "choice: B responds with Counterspell"
           }
         }
       ],
@@ -217,7 +217,7 @@
           "delta": "A casts Shock targeting B in main phase 1, right after tapping Mountain, paying with the {R} still in the pool.",
           "expected": "Legal: the {R} is still in the pool, Shock is cast and resolves, and B goes to 18 life.",
           "operation": {
-            "unclassifiable": "a different decision: A casts the spell in the same step instead of passing"
+            "unclassifiable": "timing: A casts Shock right after tapping Mountain instead of in a later step"
           }
         }
       ],
@@ -272,18 +272,14 @@
           "polarity": "fires",
           "delta": "A also controls Sol Ring, a colorless artifact.",
           "expected": "Not legal: Sol Ring is colorless too, so the ability still produces no mana and Llanowar Elves cannot be cast.",
-          "operation": {
-            "unclassifiable": "adds a permanent (a colourless artifact) to A's battlefield"
-          }
+          "operation": "add_permanent"
         },
         {
           "label": "green_permanent",
           "polarity": "does_not_fire",
           "delta": "A also controls Grizzly Bears, a green creature.",
           "expected": "Legal: Meteor Crater adds {G} (the color of Grizzly Bears), A casts Llanowar Elves, and it resolves onto A's battlefield.",
-          "operation": {
-            "unclassifiable": "adds a permanent (a green creature) to A's battlefield"
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -344,7 +340,7 @@
           "delta": "A attempts to cast Raging Goblin (a red creature spell) instead of Shock.",
           "expected": "Legal: the {R} may be spent on a creature spell, Raging Goblin is cast and resolves onto A's battlefield. B stays at 20 life.",
           "operation": {
-            "unclassifiable": "a different spell cast: A tries a creature spell instead"
+            "unclassifiable": "choice: A casts Raging Goblin instead of Shock"
           }
         }
       ],
@@ -410,7 +406,7 @@
           "delta": "A pays {W} with Plains instead of Cavern of Souls.",
           "expected": "No restricted mana was spent, so Counterspell counters Elite Vanguard: both Elite Vanguard and Counterspell move to their owners' graveyards.",
           "operation": {
-            "unclassifiable": "a different payment decision: A pays with another land"
+            "unclassifiable": "choice: A pays with Plains instead of Cavern of Souls"
           }
         }
       ],
@@ -477,7 +473,7 @@
           "delta": "A attempts to cast the second Elite Vanguard instead of Healing Salve.",
           "expected": "Legal: the second {W} is restricted to creature spells and Elite Vanguard is a creature spell, so both Elite Vanguards resolve onto A's battlefield.",
           "operation": {
-            "unclassifiable": "a different spell cast: A tries a creature spell instead"
+            "unclassifiable": "choice: A casts the second Elite Vanguard instead of Healing Salve"
           }
         },
         {
@@ -551,9 +547,7 @@
           "polarity": "does_not_fire",
           "delta": "B controls no lands.",
           "expected": "Not legal: no type of mana is defined, Exotic Orchard produces no mana, and Llanowar Elves cannot be cast.",
-          "operation": {
-            "unclassifiable": "removes a permanent (B's only land)"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -611,7 +605,7 @@
           "delta": "A taps Llanowar Elves for {G} instead of Sol Ring.",
           "expected": "The trigger does not fire because the permanent was tapped for {G}, not {C}; A's pool holds only {G}.",
           "operation": {
-            "unclassifiable": "a different decision: A activates another permanent's mana ability"
+            "unclassifiable": "choice: A taps Llanowar Elves instead of Sol Ring"
           }
         },
         {
@@ -620,7 +614,7 @@
           "delta": "A sacrifices Llanowar Elves to Ashnod's Altar for {C}{C} instead of tapping Sol Ring.",
           "expected": "The trigger does not fire because Ashnod's Altar's ability has no {T} in its cost, so no permanent was tapped for mana; A's pool holds only {C}{C}.",
           "operation": {
-            "unclassifiable": "a different decision: A activates a sacrifice mana ability instead"
+            "unclassifiable": "choice: A sacrifices Llanowar Elves to Ashnod's Altar instead of tapping Sol Ring"
           }
         }
       ],
@@ -692,7 +686,7 @@
           "delta": "A sacrifices Llanowar Elves to Ashnod's Altar for {C}{C} instead of tapping Forest.",
           "expected": "Mana Reflection does not apply because nothing was tapped for mana: A's pool holds exactly {C}{C} (not four), and Grizzly Bears cannot be cast because no {G} is available.",
           "operation": {
-            "unclassifiable": "a different decision: A activates a sacrifice mana ability instead"
+            "unclassifiable": "choice: A sacrifices Llanowar Elves to Ashnod's Altar instead of tapping Forest"
           }
         }
       ],

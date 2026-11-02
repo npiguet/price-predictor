@@ -69,7 +69,7 @@
           "delta": "Arrester's trigger targets Elite Vanguard instead of Grizzly Bears.",
           "expected": "Elite Vanguard is not a legal blocker. Grizzly Bears is a legal blocker.",
           "operation": {
-            "unclassifiable": "The trigger takes a different target; no fork operation changes a target."
+            "unclassifiable": "target: the trigger targets a different creature"
           }
         }
       ],
@@ -162,7 +162,7 @@
           "delta": "B makes no attack and passes the turn; the check is made in A's next upkeep, with B holding priority.",
           "expected": "B can activate Prodigal Pyromancer's {T} ability (can_play true).",
           "operation": {
-            "unclassifiable": "The check moves to the detaining player's next turn; no fork operation changes the turn or step."
+            "unclassifiable": "phase or turn: the check is made on A's next turn instead of B's turn"
           }
         }
       ],
@@ -248,7 +248,7 @@
           "delta": "Arrester's trigger targets Grizzly Bears instead of Prodigal Pyromancer.",
           "expected": "B can activate Prodigal Pyromancer's {T} ability (can_play true).",
           "operation": {
-            "unclassifiable": "The trigger takes a different target; no fork operation changes a target."
+            "unclassifiable": "target: the trigger targets a different creature"
           }
         }
       ],

@@ -64,7 +64,7 @@
           "delta": "A does not reveal Glacial Ray and pays only {U} with the Island.",
           "expected": "Only the Island is tapped. Reach Through Mists resolves: A draws Forest. Grizzly Bears is undamaged on the battlefield and Glacial Ray is in A's hand.",
           "operation": {
-            "unclassifiable": "a different decision by a player, not a fork operation"
+            "unclassifiable": "choice: A does not splice Glacial Ray or pay for it"
           }
         }
       ],
@@ -137,9 +137,7 @@
           "polarity": "does_not_fire",
           "delta": "The creature card in A's graveyard is Grizzly Bears (not legendary) instead of Isao, Enlightened Bushi.",
           "expected": "Splicing Goryo's Vengeance is not legal because it has no legal target. Only Reach Through Mists can be cast, for {U}; A draws Forest and Grizzly Bears stays in the graveyard.",
-          "operation": {
-            "unclassifiable": "changes a graveyard card, not a fork operation"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -217,7 +215,7 @@
           "delta": "A splices only one Glacial Ray and pays {U}{1}{R}, leaving two Mountains untapped.",
           "expected": "Reach Through Mists resolves: A draws Forest and Craw Wurm is dealt 2 damage once and stays on the battlefield with 2 damage marked. Both Glacial Rays are still in A's hand.",
           "operation": {
-            "unclassifiable": "a different decision by a player, not a fork operation"
+            "unclassifiable": "choice: A splices one Glacial Ray instead of both"
           }
         }
       ],
@@ -289,7 +287,7 @@
           "delta": "A casts Lava Spike (red) as the main spell, targeting B, and splices Glacial Ray onto it instead of Reach Through Mists.",
           "expected": "Knights of Thorn is not a legal target for the spliced text because the spell is red. Knights of Thorn stays on the battlefield undamaged; the spliced text can target only B or other permanents.",
           "operation": {
-            "unclassifiable": "a different spell cast, not a fork operation"
+            "unclassifiable": "choice: A casts Lava Spike as the main spell and splices onto it instead"
           }
         }
       ],
@@ -368,7 +366,7 @@
           "delta": "B passes priority instead of casting Unsummon.",
           "expected": "Reach Through Mists resolves: A draws Forest and Grizzly Bears is dealt 2 damage and moves to B's graveyard. Unsummon stays in B's hand.",
           "operation": {
-            "unclassifiable": "a different decision by a player, not a fork operation"
+            "unclassifiable": "choice: B passes priority instead of casting Unsummon"
           }
         }
       ],
@@ -462,7 +460,7 @@
           "delta": "On the second cast A also splices Glacial Ray again, targeting Savannah Lions, and pays {1}{R} with the two remaining Mountains.",
           "expected": "The second cast resolves: A draws a Forest and Savannah Lions is dealt 2 damage and moves to B's graveyard. Glacial Ray is still in A's hand.",
           "operation": {
-            "unclassifiable": "a different decision by a player, not a fork operation"
+            "unclassifiable": "choice: A also splices Glacial Ray on the second cast"
           }
         }
       ],

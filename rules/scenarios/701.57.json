@@ -62,7 +62,7 @@
           "delta": "A chooses to put the discovered card into their hand instead of casting it.",
           "expected": "Centaur Courser is put into A's hand and is not on the battlefield. Forest goes to the bottom of A's library; A's library is Grizzly Bears, Island, Forest.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: A puts the discovered card into hand instead of casting it"
           }
         },
         {
@@ -70,9 +70,7 @@
           "polarity": "does_not_fire",
           "delta": "The second card of A's library is Hill Giant (mana value 4) instead of Centaur Courser.",
           "expected": "Forest and Hill Giant are exiled but Hill Giant is not discovered, so the exiling continues: Grizzly Bears (mana value 2) is exiled and A casts it for free. Forest and Hill Giant go to the bottom of A's library in a random order; A's library is Island followed by Forest and Hill Giant.",
-          "operation": {
-            "unclassifiable": "changes the library"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -156,9 +154,7 @@
           "polarity": "fires",
           "delta": "The second card of A's library is Grizzly Bears instead of Hill Giant.",
           "expected": "Forest and Grizzly Bears are exiled; A casts Grizzly Bears for free and it enters the battlefield. A has discovered: Val triggers, B is at 18 and A is at 22.",
-          "operation": {
-            "unclassifiable": "changes the library"
-          }
+          "operation": "move_card"
         },
         {
           "label": "val_controlled_by_B",
@@ -166,7 +162,7 @@
           "delta": "Val, Marooned Surveyor is on B's battlefield instead of A's.",
           "expected": "A discovers and nothing is found, but Val triggers only when its controller discovers, so it does not trigger: both players stay at 20.",
           "operation": {
-            "unclassifiable": "moves a permanent to another controller"
+            "unclassifiable": "more than one fact: Val, Marooned Surveyor leaves A's battlefield and enters B's (a change of controller)"
           }
         }
       ],
@@ -251,7 +247,7 @@
           "delta": "A chooses to put the discovered card into their hand instead of casting it.",
           "expected": "Serra Angel is put into A's hand. It is still the discovered card, so A still gets 5 tapped Treasure tokens.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: A puts the discovered card into hand instead of casting it"
           }
         },
         {
@@ -259,18 +255,14 @@
           "polarity": "other",
           "delta": "The second card of A's library is Grizzly Bears (mana value 2) instead of Serra Angel.",
           "expected": "Grizzly Bears is the discovered card and is cast; A gets 10 - 2 = 8 tapped Treasure tokens.",
-          "operation": {
-            "unclassifiable": "changes the library"
-          }
+          "operation": "move_card"
         },
         {
           "label": "no_card_found",
           "polarity": "does_not_fire",
           "delta": "The second card of A's library is Plains instead of Serra Angel, so A's library holds only lands.",
           "expected": "Every card is exiled and put back on the bottom in a random order; no card is cast or put into hand and there is no discovered card, so A gets no Treasure tokens.",
-          "operation": {
-            "unclassifiable": "changes the library"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [

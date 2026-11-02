@@ -54,7 +54,7 @@
           "delta": "A's speed is 3 instead of 4.",
           "expected": "Gastal Raider is a 2/1 without menace.",
           "operation": {
-            "unclassifiable": "changes a player's speed, which no fork operation sets"
+            "unclassifiable": "not a board edit: A's speed is 3 instead of 4; player speed is a property no operation sets."
           }
         }
       ],
@@ -116,7 +116,7 @@
           "delta": "Shock targets B's Grizzly Bears instead of player B.",
           "expected": "Grizzly Bears is dealt 2 damage and moves to B's graveyard. B's life stays 20. A's speed stays 3 and Gastal Raider is a 2/1 without menace.",
           "operation": {
-            "unclassifiable": "a different target for the spell, a player's choice no fork operation makes"
+            "unclassifiable": "target: Shock targets B's Grizzly Bears instead of player B."
           }
         }
       ],
@@ -180,7 +180,7 @@
           "delta": "A's speed is 3 instead of 4.",
           "expected": "The activation is not legal: Goblin Surveyor has no such ability. It stays in A's graveyard and A's hand stays empty.",
           "operation": {
-            "unclassifiable": "changes a player's speed, which no fork operation sets"
+            "unclassifiable": "not a board edit: A's speed is 3 instead of 4; player speed is a property no operation sets."
           }
         },
         {
@@ -189,7 +189,7 @@
           "delta": "Goblin Surveyor is on A's battlefield instead of in A's graveyard.",
           "expected": "The activation is not legal. Goblin Surveyor stays on the battlefield and A's hand stays empty.",
           "operation": {
-            "unclassifiable": "moves a card from the graveyard to the battlefield, adding a permanent, which no fork operation does"
+            "unclassifiable": "more than one fact: Goblin Surveyor leaves A's graveyard (out of move_card's reach to the battlefield) and is added as a permanent (add_permanent)."
           }
         }
       ],

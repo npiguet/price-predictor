@@ -74,7 +74,7 @@
           "delta": "In response, B casts Counterspell tapping both Islands, and it resolves first.",
           "expected": "Contract from Below is countered and goes to A's graveyard; Shock stays in A's hand, the ante zone is empty and A's library still has ten cards.",
           "operation": {
-            "unclassifiable": "A different spell cast: B casts Counterspell in response, a player decision no fork operation makes."
+            "unclassifiable": "choice: B responds with Counterspell"
           }
         }
       ],
@@ -155,7 +155,7 @@
           "delta": "Jeweled Bird is owned by B; A controls it through Steal Artifact, which A controls and which is attached to it.",
           "expected": "Jeweled Bird is not anted and stays on the battlefield tapped under A's control. Mountain and Swamp stay in the ante zone and A draws no card.",
           "operation": {
-            "unclassifiable": "Changes the artifact's owner and adds a control-changing Aura attached to it: no operation changes ownership, and adding a permanent is not an operation."
+            "unclassifiable": "more than one fact: Jeweled Bird is owned by B while A controls it, and Steal Artifact is added attached to it"
           }
         }
       ],

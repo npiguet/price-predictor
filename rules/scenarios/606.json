@@ -62,7 +62,7 @@
           "delta": "A already activated Jace Beleren's -1 earlier this turn (it resolved).",
           "expected": "Activating +2 is illegal (can_play false): Jace already activated a loyalty ability this turn.",
           "operation": {
-            "unclassifiable": "an earlier activation this turn is history, not a board fact"
+            "unclassifiable": "history: A already activated a loyalty ability of Jace Beleren this turn"
           }
         },
         {
@@ -71,7 +71,7 @@
           "delta": "B is the active player in main1; A holds priority.",
           "expected": "Activating +2 is illegal (can_play false): it is not A's turn.",
           "operation": {
-            "unclassifiable": "changes whose turn it is"
+            "unclassifiable": "phase or turn: B is the active player"
           }
         },
         {
@@ -80,7 +80,7 @@
           "delta": "A Runeclaw Bear spell controlled by A is on the stack.",
           "expected": "Activating +2 is illegal (can_play false): the stack is not empty.",
           "operation": {
-            "unclassifiable": "adds a spell to the stack"
+            "unclassifiable": "timing: a Runeclaw Bear spell is on the stack"
           }
         },
         {
@@ -89,7 +89,7 @@
           "delta": "The step is beginning_of_combat instead of main1.",
           "expected": "Activating +2 is illegal (can_play false): it is not a main phase.",
           "operation": {
-            "unclassifiable": "changes the phase"
+            "unclassifiable": "phase or turn: the step is beginning_of_combat instead of main1"
           }
         }
       ],
@@ -162,7 +162,7 @@
           "delta": "A activates the -2 targeting B's tapped Grizzly Bears instead.",
           "expected": "Gideon Jura has 4 loyalty counters and the tapped Grizzly Bears moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "a different ability choice and target"
+            "unclassifiable": "choice: A activates the -2 targeting Grizzly Bears instead"
           }
         },
         {
@@ -171,7 +171,7 @@
           "delta": "A activates the 0 ability instead.",
           "expected": "Gideon Jura still has 6 loyalty counters (the cost adds none) and becomes a 6/6 creature until end of turn.",
           "operation": {
-            "unclassifiable": "a different ability choice"
+            "unclassifiable": "choice: A activates the 0 ability instead"
           }
         }
       ],
@@ -239,7 +239,7 @@
           "delta": "A activates the -1 (create a Beast) instead, its cost combined with Carth's +1.",
           "expected": "Garruk has 3 loyalty counters (the combined cost is a net change of zero) and a 3/3 Beast token is created.",
           "operation": {
-            "unclassifiable": "a different ability choice"
+            "unclassifiable": "choice: A activates the -1 instead"
           }
         },
         {
@@ -247,9 +247,7 @@
           "polarity": "does_not_fire",
           "delta": "Carth the Lion is not on the battlefield.",
           "expected": "Garruk has 4 loyalty counters and both Forests untap.",
-          "operation": {
-            "unclassifiable": "removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -381,9 +379,7 @@
           "polarity": "does_not_fire",
           "delta": "Carth the Lion is not on the battlefield.",
           "expected": "Activating -4 is illegal (can_play false): the cost removes 4 counters and Garruk has only 3.",
-          "operation": {
-            "unclassifiable": "removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

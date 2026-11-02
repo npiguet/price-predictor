@@ -67,7 +67,7 @@
           "delta": "A casts and resolves Humble first, then Tifa's Limit Break with the Final Heaven tier.",
           "expected": "After Humble, Grizzly Bears is 0/1. Final Heaven gives +0 power and +2 toughness (twice 0 and twice 1). Grizzly Bears is 0/3.",
           "operation": {
-            "unclassifiable": "The same actions happen in a different order; no fork operation reorders a player's decisions."
+            "unclassifiable": "timing: the two spells resolve in the opposite order"
           }
         }
       ],
@@ -140,7 +140,7 @@
           "delta": "With Tifa's Limit Break on the stack, A casts Giant Growth targeting Hill Giant, tapping the ninth Forest. Giant Growth resolves first.",
           "expected": "Hill Giant is 6/6 when Tifa's Limit Break resolves, so it gets +12/+12. Hill Giant is 18/18 until end of turn.",
           "operation": {
-            "unclassifiable": "An extra spell is cast in response; no fork operation casts a spell."
+            "unclassifiable": "timing: A casts Giant Growth in response, with Tifa's Limit Break on the stack"
           }
         },
         {
@@ -149,7 +149,7 @@
           "delta": "A chooses the Meteor Strikes tier ({2}) instead of Final Heaven, tapping Forests for {G}{2}.",
           "expected": "Hill Giant gets +3/+3 and is 6/6 until end of turn: doubled, not tripled.",
           "operation": {
-            "unclassifiable": "A different mode (tier) of the spell is chosen; no fork operation changes a player's choice."
+            "unclassifiable": "choice: A chooses the Meteor Strikes tier"
           }
         }
       ],
@@ -235,9 +235,7 @@
           "polarity": "does_not_fire",
           "delta": "Dead Weight is not on the battlefield, so Wall of Wood is 0/3.",
           "expected": "Wall of Wood gets +0/+6 and is 0/9 until end of turn: a power of 0 is not negative and triples to +0.",
-          "operation": {
-            "unclassifiable": "A permanent is removed from the battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

@@ -54,9 +54,7 @@
           "polarity": "does_not_fire",
           "delta": "The split card Cut // Ribbons is in A's hand instead of A's graveyard.",
           "expected": "Ribbons can't be cast from any zone other than a graveyard, so casting it from hand is not legal. The card stays in A's hand and B's life stays 20.",
-          "operation": {
-            "unclassifiable": "changes a hand or library or the zone a card starts in"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -147,7 +145,7 @@
           "delta": "A casts the Cut half from the hand copy, targeting Grizzly Bears, tapping the Mountain and a Swamp, instead of casting Ribbons.",
           "expected": "Cut resolves and deals 4 damage to Grizzly Bears, which is destroyed. The hand copy moves to A's graveyard, not to exile. The graveyard copy is untouched and B's life stays 20.",
           "operation": {
-            "unclassifiable": "a different spell or ability is cast"
+            "unclassifiable": "choice: A casts the Cut half from hand instead of Ribbons"
           }
         },
         {
@@ -156,7 +154,7 @@
           "delta": "B responds by casting Counterspell with both Islands, targeting Ribbons.",
           "expected": "Ribbons is countered and does not resolve; B's life stays 20. The graveyard copy is exiled instead of staying in the graveyard: it is in exile and A's graveyard is empty.",
           "operation": {
-            "unclassifiable": "a different spell or ability is cast"
+            "unclassifiable": "choice: B responds by casting Counterspell"
           }
         }
       ],

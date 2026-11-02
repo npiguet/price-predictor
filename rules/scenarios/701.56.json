@@ -61,7 +61,7 @@
           "delta": "A chooses to remove a time counter instead of adding one.",
           "expected": "Calciderm has 0 time counters; vanishing's trigger sacrifices it, and Calciderm is in A's graveyard.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: A removes a time counter instead of adding one"
           }
         },
         {
@@ -70,7 +70,7 @@
           "delta": "A chooses no permanent to time travel.",
           "expected": "Calciderm still has 1 time counter and stays on the battlefield.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: A chooses no permanent to time travel"
           }
         },
         {
@@ -79,7 +79,7 @@
           "delta": "Calciderm is on B's battlefield instead of A's, with the same one time counter; A has no permanent to choose.",
           "expected": "Calciderm still has 1 time counter on B's battlefield; time travel affects only permanents the caster controls.",
           "operation": {
-            "unclassifiable": "moves a permanent to another controller"
+            "unclassifiable": "more than one fact: Calciderm changes controller (a removal plus an addition)"
           }
         }
       ],
@@ -163,7 +163,7 @@
           "delta": "A chooses to add a time counter instead of removing one (and casts nothing).",
           "expected": "Rift Bolt has 2 time counters and stays in exile; B stays at 20.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: A adds a time counter instead of removing one"
           }
         },
         {
@@ -172,7 +172,7 @@
           "delta": "A chooses no card to time travel (and casts nothing).",
           "expected": "Rift Bolt still has 1 time counter in exile; B stays at 20.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: A chooses no card to time travel"
           }
         }
       ],

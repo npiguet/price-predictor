@@ -61,7 +61,7 @@
           "delta": "A does not choose an opponent, so the gift is not promised.",
           "expected": "B creates no Food token. Grizzly Bears gets +2/+2 (4/4) until end of turn and does not gain indestructible. Crumb and Get It moves to A's graveyard.",
           "operation": {
-            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+            "unclassifiable": "choice: A does not choose an opponent for the gift."
           }
         }
       ],
@@ -145,7 +145,7 @@
           "delta": "A does not choose an opponent, so the gift is not promised.",
           "expected": "Neither trigger fires. Sol Ring stays on B's battlefield and B's hand stays Counterspell only.",
           "operation": {
-            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+            "unclassifiable": "choice: A does not choose an opponent for the gift."
           }
         },
         {
@@ -154,7 +154,7 @@
           "delta": "A promises the gift, but B casts Counterspell on Scrapshooter, tapping both Islands.",
           "expected": "Scrapshooter is countered and moves to A's graveyard. It never enters, so neither trigger fires, B draws no card and Sol Ring stays on the battlefield. B's hand is empty because Counterspell was cast.",
           "operation": {
-            "unclassifiable": "An opponent casts a counterspell in response, a different spell cast; no fork operation casts a spell."
+            "unclassifiable": "choice: B responds by casting Counterspell on Scrapshooter."
           }
         }
       ],
@@ -248,7 +248,7 @@
           "delta": "A does not choose an opponent, so the gift is not promised.",
           "expected": "Crumb and Get It resolves without a gift. Jolly Gerbils' trigger does not fire and A draws no card.",
           "operation": {
-            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+            "unclassifiable": "choice: A does not choose an opponent for the gift."
           }
         },
         {
@@ -257,7 +257,7 @@
           "delta": "A promises the gift, but B casts Counterspell on Crumb and Get It, tapping both Islands.",
           "expected": "Crumb and Get It is countered, so no gift is given: B creates no Food token, Jolly Gerbils' trigger does not fire and A draws no card.",
           "operation": {
-            "unclassifiable": "An opponent casts a counterspell in response, a different spell cast; no fork operation casts a spell."
+            "unclassifiable": "choice: B responds by casting Counterspell on Crumb and Get It."
           }
         }
       ],
@@ -346,7 +346,7 @@
           "delta": "A does not choose an opponent, so the gift is not promised.",
           "expected": "No gift triggered ability resolves. Jolly Gerbils' trigger does not fire and A draws no card. Sol Ring stays on the battlefield.",
           "operation": {
-            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+            "unclassifiable": "choice: A does not choose an opponent for the gift."
           }
         }
       ],
@@ -428,7 +428,7 @@
           "delta": "A does not choose an opponent, so the gift is not promised.",
           "expected": "B draws no card (hand empty). A and each permanent A controls (both Plains and Grizzly Bears) gain hexproof until end of turn; no permanent gains indestructible.",
           "operation": {
-            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+            "unclassifiable": "choice: A does not choose an opponent for the gift."
           }
         }
       ],
@@ -504,7 +504,7 @@
           "delta": "A does not choose an opponent, so the gift is not promised.",
           "expected": "B creates no Fish. Grizzly Bears is exiled, then returns to the battlefield under B's control at the beginning of the next end step with a +1/+1 counter (3/3).",
           "operation": {
-            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+            "unclassifiable": "choice: A does not choose an opponent for the gift."
           }
         }
       ],
@@ -588,7 +588,7 @@
           "delta": "A does not choose an opponent, so the gift is not promised.",
           "expected": "B receives no extra turn. After A's turn ends, B takes one turn and then A takes the next. A created four 2/2 blue Bird tokens with flying, which stay on the battlefield phased in, and Perch Protection is exiled.",
           "operation": {
-            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+            "unclassifiable": "choice: A does not choose an opponent for the gift."
           }
         }
       ],
@@ -663,7 +663,7 @@
           "delta": "A does not choose an opponent, so the gift is not promised.",
           "expected": "B creates no Treasure. Grizzly Bears takes 2 damage and moves to B's graveyard. B's life stays 20.",
           "operation": {
-            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+            "unclassifiable": "choice: A does not choose an opponent for the gift."
           }
         }
       ],
@@ -737,7 +737,7 @@
           "delta": "A does not choose an opponent, so the gift is not promised.",
           "expected": "No gift trigger fires and B has no Octopus. Octomancer (3/3) is on A's battlefield.",
           "operation": {
-            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice."
+            "unclassifiable": "choice: A does not choose an opponent for the gift."
           }
         }
       ],
@@ -818,7 +818,7 @@
           "delta": "B casts Counterspell on Parting Gust, tapping both Islands, before it resolves.",
           "expected": "Parting Gust is countered and moves to A's graveyard. B creates no Fish and Grizzly Bears stays on the battlefield.",
           "operation": {
-            "unclassifiable": "An opponent casts a counterspell in response, a different spell cast; no fork operation casts a spell."
+            "unclassifiable": "choice: B responds by casting Counterspell on Parting Gust."
           }
         },
         {
@@ -827,7 +827,7 @@
           "delta": "A responds by casting Shock on Grizzly Bears, tapping the Mountain, before Parting Gust resolves.",
           "expected": "Shock resolves first and Grizzly Bears moves to B's graveyard. Parting Gust fizzles with no legal target and moves to A's graveyard. B creates no Fish.",
           "operation": {
-            "unclassifiable": "The caster casts a second spell in response, a different spell cast; no fork operation casts a spell."
+            "unclassifiable": "choice: A responds by casting Shock on Grizzly Bears before Parting Gust resolves."
           }
         }
       ],
@@ -919,7 +919,7 @@
           "delta": "A does not choose an opponent, so the gift is not promised and no second target is chosen.",
           "expected": "B creates no Fish. A draws three cards. Grizzly Bears stays untapped with no counters; Mind Spiral had only one target.",
           "operation": {
-            "unclassifiable": "A different casting choice: the caster does not promise the gift; no fork operation changes a player's choice. The spell also has one target fewer."
+            "unclassifiable": "choice: A does not choose an opponent for the gift."
           }
         }
       ],

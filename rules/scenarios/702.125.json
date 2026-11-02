@@ -62,18 +62,14 @@
           "polarity": "does_not_fire",
           "delta": "A's hand holds Devout Invocation (a {6}{W} sorcery without undaunted) instead of Sublime Exhalation.",
           "expected": "Devout Invocation's cost is not reduced: it costs {6}{W}, seven mana, and A has only six lands. Casting it is not legal and it stays in A's hand.",
-          "operation": {
-            "unclassifiable": "changes a hand or library or the zone a card starts in"
-          }
+          "operation": "move_card"
         },
         {
           "label": "five_lands",
           "polarity": "other",
           "delta": "A controls five Plains instead of six.",
           "expected": "The reduced cost {5}{W} is six mana and A has only five lands. Casting Sublime Exhalation is not legal and it stays in A's hand.",
-          "operation": {
-            "unclassifiable": "adds, removes, attaches or changes the controller of a permanent, which no fork operation does"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

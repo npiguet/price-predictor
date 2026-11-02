@@ -61,9 +61,7 @@
           "polarity": "does_not_fire",
           "delta": "The top card of A's library is Forest instead of Grizzly Bears.",
           "expected": "Forest moves from the library to the hand to A's graveyard. Echo Inspector gets no counter and is a 2/3 flier. A's hand is empty.",
-          "operation": {
-            "unclassifiable": "The library's contents change; no fork operation changes a library."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -147,7 +145,7 @@
           "delta": "B does not cast Lightning Bolt.",
           "expected": "Ledger Shredder stays on the battlefield. It connives: A draws Grizzly Bears and discards it, and Ledger Shredder gets a +1/+1 counter and is a 2/4 flier. B's life is 16 after the second Shock.",
           "operation": {
-            "unclassifiable": "The opponent does not cast a spell, a different decision."
+            "unclassifiable": "choice: B does not cast Lightning Bolt in response"
           }
         }
       ],
@@ -220,7 +218,7 @@
           "delta": "A chooses Runeclaw Bear to connive first.",
           "expected": "Runeclaw Bear draws and discards Hill Giant and gets a +1/+1 counter, a 3/3. Then Grizzly Bears draws and discards Forest and gets no counter, a 2/2.",
           "operation": {
-            "unclassifiable": "The player chooses a different connive order, a decision."
+            "unclassifiable": "choice: A chooses Runeclaw Bear to connive first"
           }
         },
         {
@@ -229,7 +227,7 @@
           "delta": "X = 1 and Grizzly Bears is the only target.",
           "expected": "Only one permanent connives, so there is no ordering. Grizzly Bears draws and discards Hill Giant and is a 3/3. Forest stays on top of A's library.",
           "operation": {
-            "unclassifiable": "X and the targets change together, a different choice made on casting."
+            "unclassifiable": "choice: X = 1 and a single target chosen"
           }
         }
       ],
@@ -312,7 +310,7 @@
           "delta": "The top two cards of A's library are Forest and Island.",
           "expected": "B's life is 18. Forest and Island are drawn and discarded, A's hand is empty, and Grizzly Bears gets no counter and stays a 2/2.",
           "operation": {
-            "unclassifiable": "The library's contents change; no fork operation changes a library."
+            "unclassifiable": "more than one fact: the top two library cards are both replaced by lands"
           }
         }
       ],
@@ -394,7 +392,7 @@
           "delta": "Before activating the Vault, A casts Shock (tapping the Mountain) targeting B's Runeclaw Bear, which dies.",
           "expected": "X is 1, so Grizzly Bears connives 1: A draws Forest and discards it (the only card in hand), and the connives trigger fires. Glorious Purpose puts a +1/+1 counter on Grizzly Bears (3/3) and a plan counter on itself.",
           "operation": {
-            "unclassifiable": "An extra spell is cast first and kills a creature: a different spell and a removed permanent."
+            "unclassifiable": "choice: A casts Shock at B's Runeclaw Bear before activating the Vault"
           }
         }
       ],
@@ -476,18 +474,14 @@
           "polarity": "other",
           "delta": "B controls no Spirit of the Labyrinth.",
           "expected": "A draws Forest, then discards Grizzly Bears; Forest stays in A's hand. Echo Inspector gets one counter from the discard and one from Glorious Purpose (4/5), and Glorious Purpose gets a plan counter.",
-          "operation": {
-            "unclassifiable": "A permanent is removed from the battlefield; removing a permanent is no fork operation."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "nothing_to_discard",
           "polarity": "fires",
           "delta": "A's hand holds only Echo Inspector, so after it is cast A has no card to discard.",
           "expected": "No card is drawn and none is discarded, so the connive itself adds no counter. Echo Inspector still connived, so Glorious Purpose triggers: Echo Inspector gets one +1/+1 counter (3/4) and Glorious Purpose gets a plan counter.",
-          "operation": {
-            "unclassifiable": "The hand's contents change; no fork operation changes a hand."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [

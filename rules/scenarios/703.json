@@ -57,7 +57,7 @@
           "delta": "A's library holds one Mountain.",
           "expected": "A draws the Mountain and stays in the game through the state-based check. Howling Mine's trigger is put on the stack and resolves; A attempts to draw from an empty library and loses the game in the next state-based check.",
           "operation": {
-            "unclassifiable": "Changes the library contents"
+            "unclassifiable": "not a board edit: a Mountain put into A's empty library from outside the game; move_card only moves a card already in a hand, library or graveyard or replaces one in place, and the base has none to move or replace"
           }
         },
         {
@@ -66,7 +66,7 @@
           "delta": "A's library holds two Mountains.",
           "expected": "A draws a Mountain, Howling Mine's trigger is put on the stack and resolves, and A draws the second Mountain. A has two cards in hand and the game continues.",
           "operation": {
-            "unclassifiable": "Changes the library contents"
+            "unclassifiable": "more than one fact: two cards go into A's library, one card per move_card"
           }
         }
       ],
@@ -126,7 +126,7 @@
           "delta": "Breezekeeper starts phased out, controlled by A when it phased out.",
           "expected": "Breezekeeper phases in and stays phased in; it does not phase out again in the same untap step.",
           "operation": {
-            "unclassifiable": "Changes a phased state, which no fork operation sets"
+            "unclassifiable": "not a board edit: the phased-out status of a permanent, which no operation sets"
           }
         },
         {
@@ -135,7 +135,7 @@
           "delta": "The Breezekeeper is controlled by B instead of A.",
           "expected": "B's Breezekeeper stays phased in.",
           "operation": {
-            "unclassifiable": "Moves a permanent to the other player's control"
+            "unclassifiable": "more than one fact: Breezekeeper leaves A's battlefield and joins B's: a removal plus an addition"
           }
         }
       ],
@@ -205,7 +205,7 @@
           "delta": "B casts Grizzly Bears, tapping both Forests, in main2 and it resolves.",
           "expected": "It stays day. Avabruck Caretaker stays a 4/4.",
           "operation": {
-            "unclassifiable": "Casts a spell on the previous turn"
+            "unclassifiable": "choice: B casts Grizzly Bears"
           }
         }
       ],
@@ -280,7 +280,7 @@
           "delta": "B casts only one Dwarven Trader.",
           "expected": "It stays night. A's creature stays Hollowhenge Huntmaster (6/6).",
           "operation": {
-            "unclassifiable": "Casts a spell on the previous turn"
+            "unclassifiable": "choice: B casts only one spell"
           }
         }
       ],
@@ -353,7 +353,7 @@
           "delta": "The tapped Grizzly Bears is controlled by B, not A.",
           "expected": "B's Grizzly Bears stays tapped.",
           "operation": {
-            "unclassifiable": "Moves a permanent to the other player's control"
+            "unclassifiable": "more than one fact: the permanent changes controller: a removal plus an addition"
           }
         },
         {
@@ -429,7 +429,7 @@
           "delta": "Necropotence is controlled by A instead of B.",
           "expected": "A's draw step is skipped: A has no cards in hand and two in library.",
           "operation": {
-            "unclassifiable": "Moves a permanent to the other player's control"
+            "unclassifiable": "more than one fact: Necropotence changes controller: a removal plus an addition"
           }
         }
       ],
@@ -502,7 +502,7 @@
           "delta": "The History of Benalia is controlled by B.",
           "expected": "B's History of Benalia keeps one lore counter and no chapter ability triggers.",
           "operation": {
-            "unclassifiable": "Moves a permanent to the other player's control"
+            "unclassifiable": "more than one fact: the Saga changes controller: a removal plus an addition"
           }
         }
       ],
@@ -573,7 +573,7 @@
           "delta": "Ferris Wheel is controlled by B.",
           "expected": "A rolls no die; no visit ability triggers and Grizzly Bears stays phased in.",
           "operation": {
-            "unclassifiable": "Moves a permanent to the other player's control"
+            "unclassifiable": "more than one fact: Ferris Wheel changes controller: a removal plus an addition"
           }
         }
       ],
@@ -713,9 +713,7 @@
           "polarity": "does_not_fire",
           "delta": "A's hand has only seven cards (six Mountains and Grizzly Bears).",
           "expected": "A discards nothing and keeps all seven cards.",
-          "operation": {
-            "unclassifiable": "Changes the hand contents"
-          }
+          "operation": "move_card"
         },
         {
           "label": "no_maximum",
@@ -723,7 +721,7 @@
           "delta": "Reliquary Tower is controlled by A instead of B.",
           "expected": "A discards nothing and keeps all eight cards.",
           "operation": {
-            "unclassifiable": "Moves a permanent to the other player's control"
+            "unclassifiable": "more than one fact: Reliquary Tower changes controller: a removal plus an addition"
           }
         }
       ],
@@ -803,7 +801,7 @@
           "delta": "A's spell is Dragonscale Boon (tapping four Forests) instead of Giant Growth.",
           "expected": "Before cleanup Grizzly Bears is 4/4 with 3 damage. In the cleanup step the damage is removed but the two +1/+1 counters stay: it is a 4/4 with no damage.",
           "operation": {
-            "unclassifiable": "Casts a different spell"
+            "unclassifiable": "choice: A casts Dragonscale Boon instead of Giant Growth"
           }
         }
       ],
@@ -871,7 +869,7 @@
           "delta": "A casts Giant Growth in the precombat main phase, in the same phase the mana was added.",
           "expected": "Casting Giant Growth is playable; it resolves and Grizzly Bears is 5/5 until end of turn.",
           "operation": {
-            "unclassifiable": "Casts the spell in a different phase"
+            "unclassifiable": "timing: A casts Giant Growth in the same phase the mana was added"
           }
         },
         {
@@ -880,7 +878,7 @@
           "delta": "Omnath, Locus of Mana is controlled by A instead of B.",
           "expected": "The G stays in A's mana pool into the beginning of combat step: casting Giant Growth is playable; it resolves and Grizzly Bears is 5/5 until end of turn.",
           "operation": {
-            "unclassifiable": "Moves a permanent to the other player's control"
+            "unclassifiable": "more than one fact: Omnath changes controller: a removal plus an addition"
           }
         }
       ],

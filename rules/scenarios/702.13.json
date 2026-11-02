@@ -54,7 +54,7 @@
           "delta": "B declares Hill Giant (red) as the blocker instead of Grizzly Bears.",
           "expected": "Declaring Hill Giant as a blocker of Bladetusk Boar is legal.",
           "operation": {
-            "unclassifiable": "A different blocker is declared: a different decision by a player."
+            "unclassifiable": "choice: B declares Hill Giant as the blocker instead of Grizzly Bears: a different block."
           }
         },
         {
@@ -63,7 +63,7 @@
           "delta": "B declares Phyrexian Walker (a colorless artifact creature) as the blocker instead of Grizzly Bears.",
           "expected": "Declaring Phyrexian Walker as a blocker of Bladetusk Boar is legal.",
           "operation": {
-            "unclassifiable": "A different blocker is declared: a different decision by a player."
+            "unclassifiable": "choice: B declares Phyrexian Walker as the blocker instead of Grizzly Bears: a different block."
           }
         }
       ],

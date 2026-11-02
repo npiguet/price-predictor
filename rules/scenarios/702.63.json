@@ -59,7 +59,7 @@
           "delta": "A casts Calciderm (Vanishing 4), tapping Plains, Plains, Swamp, Swamp, instead of Waning Wurm.",
           "expected": "Calciderm enters with four time counters.",
           "operation": {
-            "unclassifiable": "a different spell is cast; no fork operation changes the cast"
+            "unclassifiable": "choice: a different spell (Calciderm) is cast"
           }
         },
         {
@@ -68,7 +68,7 @@
           "delta": "A casts Walking Corpse, tapping Swamp and Swamp, instead of Waning Wurm.",
           "expected": "Walking Corpse enters with no time counters.",
           "operation": {
-            "unclassifiable": "a different spell is cast; no fork operation changes the cast"
+            "unclassifiable": "choice: a different spell (Walking Corpse) is cast"
           }
         }
       ],
@@ -147,7 +147,7 @@
           "delta": "It is B's upkeep (B is the active player) instead of A's.",
           "expected": "The vanishing trigger does not fire. Waning Wurm stays on the battlefield with one time counter.",
           "operation": {
-            "unclassifiable": "changes the phase or turn"
+            "unclassifiable": "phase or turn: it is B's upkeep instead of A's"
           }
         }
       ],

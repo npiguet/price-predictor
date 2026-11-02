@@ -87,7 +87,7 @@
           "delta": "A does not pay the casualty cost and sacrifices nothing.",
           "expected": "No casualty trigger fires and no copy is created. Grizzly Bears stays on the battlefield. Cut Your Losses makes B mill 10: B's library holds 10 cards.",
           "operation": {
-            "unclassifiable": "a different payment choice"
+            "unclassifiable": "choice: casualty cost not paid"
           }
         },
         {

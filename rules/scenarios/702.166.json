@@ -61,9 +61,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls no Short Sword; its battlefield is two Islands only.",
           "expected": "Casting Ice Out is not legal: no artifact, enchantment or token can be sacrificed, so it cannot be bargained and costs {1}{U}{U}, which two Islands cannot pay.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from the base battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "only_a_creature",
@@ -141,7 +139,7 @@
           "delta": "A casts Torch the Tower without sacrificing Short Sword.",
           "expected": "Short Sword stays on the battlefield. Torch the Tower deals 2 damage to Hill Giant, which stays on the battlefield with 2 damage marked. A does not scry.",
           "operation": {
-            "unclassifiable": "A different casting choice: the caster does not sacrifice a permanent for bargain; no fork operation changes a player's choice."
+            "unclassifiable": "choice: the bargain cost is not paid"
           }
         }
       ],
@@ -208,7 +206,7 @@
           "delta": "A casts Brave the Wilds without sacrificing Short Sword; no target is chosen.",
           "expected": "Brave the Wilds is cast with no target and resolves rather than fizzling. No land becomes a creature. A's library Forest moves to A's hand and Short Sword stays on the battlefield.",
           "operation": {
-            "unclassifiable": "A different casting choice: the caster does not bargain and so chooses no target; no fork operation changes a player's choice."
+            "unclassifiable": "choice: the bargain cost is not paid"
           }
         }
       ],

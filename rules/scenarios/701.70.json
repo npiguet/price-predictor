@@ -64,7 +64,7 @@
           "delta": "A discards the drawn Forest instead of Grizzly Bears.",
           "expected": "Forest is in A's graveyard and Grizzly Bears stays in A's hand. No token is created; Esgaroth Garrison's power is 1.",
           "operation": {
-            "unclassifiable": "a different decision or choice by a player, not a fact on the board"
+            "unclassifiable": "choice: A discards Forest instead of Grizzly Bears"
           }
         }
       ],

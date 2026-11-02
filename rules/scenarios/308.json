@@ -56,7 +56,7 @@
           "delta": "The active player is B (step main1; B has passed priority so A holds it) instead of A.",
           "expected": "Tarfire is legal to cast (can_play true). Aquitect's Will is not legal (can_play false).",
           "operation": {
-            "unclassifiable": "Changes whose turn it is, which no fork operation does."
+            "unclassifiable": "phase or turn: B is the active player instead of A"
           }
         }
       ],
@@ -130,7 +130,7 @@
           "delta": "A casts Tarfire targeting B, tapping one Mountain, instead of Cloak and Dagger.",
           "expected": "Tarfire resolves and deals 2 damage to B (18). It does not enter the battlefield and is put into A's graveyard.",
           "operation": {
-            "unclassifiable": "A casts a different spell, a different decision."
+            "unclassifiable": "choice: A casts Tarfire instead of Cloak and Dagger"
           }
         }
       ],

@@ -142,7 +142,7 @@
           "delta": "B does not cast Unsummon.",
           "expected": "Boggart Mob stays on the battlefield and the leaves-the-battlefield trigger does not fire. Goblin Piker stays in exile.",
           "operation": {
-            "unclassifiable": "a different action: a spell is not cast"
+            "unclassifiable": "choice: B does not cast Unsummon"
           }
         }
       ],

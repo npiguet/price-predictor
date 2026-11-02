@@ -56,9 +56,7 @@
           "polarity": "fires",
           "delta": "The top card of A's library is Lightning Bolt instead of Serra Angel.",
           "expected": "Lightning Bolt enters A's battlefield face down as a 2/2 colorless creature with no name, no subtypes, no mana cost and ward {2}; it is a creature, not an instant.",
-          "operation": {
-            "unclassifiable": "changes the library"
-          }
+          "operation": "move_card"
         },
         {
           "label": "empty_library",
@@ -66,7 +64,7 @@
           "delta": "A's library is empty.",
           "expected": "Ransom Note is sacrificed and its ability resolves, but there is no card to cloak: A controls no face-down creature.",
           "operation": {
-            "unclassifiable": "changes the library"
+            "unclassifiable": "more than one fact: all three library cards are removed"
           }
         }
       ],
@@ -135,7 +133,7 @@
           "delta": "B controls two additional Mountains and pays {2} with them.",
           "expected": "Ward triggers but B pays {2}, so Shock resolves and deals 2 damage to the 2/2 face-down creature; it dies and is put into A's graveyard face up as Serra Angel.",
           "operation": {
-            "unclassifiable": "adds permanents so the player can pay"
+            "unclassifiable": "more than one fact: B controls two additional Mountains and then pays {2}, a choice"
           }
         }
       ],
@@ -405,7 +403,7 @@
           "delta": "A's library is only Serra Angel.",
           "expected": "Only Serra Angel can be cloaked: one face-down 2/2 creature with ward {2} enters, and A's library is empty.",
           "operation": {
-            "unclassifiable": "changes the library"
+            "unclassifiable": "more than one fact: five library cards are removed"
           }
         },
         {
@@ -414,7 +412,7 @@
           "delta": "A's library is empty.",
           "expected": "Nothing is cloaked: A controls no face-down creature.",
           "operation": {
-            "unclassifiable": "changes the library"
+            "unclassifiable": "more than one fact: six library cards are removed"
           }
         }
       ],
@@ -496,7 +494,7 @@
           "delta": "Grafdigger's Cage is in B's hand instead of on B's battlefield.",
           "expected": "Nothing prohibits the entry: Serra Angel enters A's battlefield face down as a 2/2 colorless creature with ward {2}. A's library is Forest, Forest.",
           "operation": {
-            "unclassifiable": "moves a permanent to a hand"
+            "unclassifiable": "more than one fact: Grafdigger's Cage leaves the battlefield and a card is also put into B's hand"
           }
         }
       ],

@@ -57,7 +57,7 @@
           "delta": "Lava Dart is in A's graveyard on top of Grizzly Bears and A casts it with flashback, sacrificing Mountain.",
           "expected": "B takes 1 damage. Lava Dart is exiled and A's graveyard holds Mountain on top of Grizzly Bears.",
           "operation": {
-            "unclassifiable": "a different spell cast and a changed graveyard"
+            "unclassifiable": "choice: A casts Lava Dart with flashback, sacrificing Mountain"
           }
         }
       ],
@@ -138,7 +138,7 @@
           "delta": "Lava Dart is in A's graveyard on top of Grizzly Bears and A casts it with flashback, sacrificing Mountain.",
           "expected": "Lava Dart is countered and exiled instead of going to the graveyard; Mountain goes on top of A's graveyard, above Grizzly Bears; Counterspell goes to B's graveyard; B takes no damage.",
           "operation": {
-            "unclassifiable": "a different spell cast and a changed graveyard"
+            "unclassifiable": "choice: A casts Lava Dart with flashback, sacrificing Mountain"
           }
         }
       ],
@@ -293,7 +293,7 @@
           "delta": "B controls Library of Leng and chooses to put the discarded Forest on top of their library.",
           "expected": "Forest goes on top of B's library; B's graveyard holds only Grizzly Bears.",
           "operation": {
-            "unclassifiable": "adds a permanent and a different choice by a player"
+            "unclassifiable": "choice: B chooses to put the discarded Forest on top of the library through Library of Leng, which B also controls (an added permanent plus a choice)"
           }
         }
       ],
@@ -381,9 +381,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls Leyline of the Void.",
           "expected": "Grizzly Bears is sacrificed and exiled instead of going to B's graveyard; B's graveyard holds only Giant Growth.",
-          "operation": {
-            "unclassifiable": "adds a permanent"
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [

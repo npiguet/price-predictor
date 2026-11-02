@@ -57,9 +57,7 @@
           "polarity": "does_not_fire",
           "delta": "A's graveyard holds four cards.",
           "expected": "The cast is not legal: four exiled cards and two lands cover only six of the seven mana.",
-          "operation": {
-            "unclassifiable": "changes a graveyard"
-          }
+          "operation": "move_card"
         },
         {
           "label": "no_black_source",
@@ -67,7 +65,7 @@
           "delta": "A's two lands are Mountains instead of Swamps.",
           "expected": "The cast is not legal: delve cannot pay the colored {B}.",
           "operation": {
-            "unclassifiable": "two permanents are replaced; one fork operation replaces one"
+            "unclassifiable": "more than one fact: both Swamps are replaced by Mountains, one replace_card each (with one Swamp left, {B} could still be paid)"
           }
         }
       ],
@@ -148,9 +146,7 @@
           "polarity": "does_not_fire",
           "delta": "Goblin Electromancer is not on the battlefield.",
           "expected": "The cast is not legal: the total cost stays {7}{U} and five exiled cards plus two Islands cover only seven of the eight mana.",
-          "operation": {
-            "unclassifiable": "adds or removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

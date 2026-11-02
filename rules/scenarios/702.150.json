@@ -60,7 +60,7 @@
           "delta": "A pays {B} for the {B/P} symbol with a sixth Swamp instead of paying 2 life.",
           "expected": "A's life stays 20. Vraska enters the battlefield with 6 loyalty counters.",
           "operation": {
-            "unclassifiable": "a different payment choice"
+            "unclassifiable": "choice: a different payment, mana instead of life for the Phyrexian symbol"
           }
         }
       ],

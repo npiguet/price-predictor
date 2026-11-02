@@ -68,7 +68,7 @@
           "delta": "The step is beginning_of_combat instead of main1.",
           "expected": "Casting Invasion of Mercadia is not legal (can_play false).",
           "operation": {
-            "unclassifiable": "changes the step"
+            "unclassifiable": "phase or turn: the step is beginning_of_combat instead of main1"
           }
         },
         {
@@ -77,7 +77,7 @@
           "delta": "B is the active player and the step is main1 of B's turn; A has priority.",
           "expected": "Casting Invasion of Mercadia is not legal (can_play false).",
           "operation": {
-            "unclassifiable": "changes the turn"
+            "unclassifiable": "phase or turn: B is the active player instead of A"
           }
         },
         {
@@ -86,7 +86,7 @@
           "delta": "Before the legality is recorded, A casts Lightning Bolt targeting B, tapping one Mountain, and holds priority with Lightning Bolt on the stack.",
           "expected": "Casting Invasion of Mercadia is not legal (can_play false) even though two Mountains remain untapped.",
           "operation": {
-            "unclassifiable": "a different spell cast puts an object on the stack"
+            "unclassifiable": "timing: Lightning Bolt is on the stack when the legality is recorded"
           }
         }
       ],
@@ -164,7 +164,7 @@
           "delta": "B casts Counterspell targeting Invasion of Mercadia, tapping both Islands, before Invasion of Mercadia resolves.",
           "expected": "Invasion of Mercadia is countered and moves to A's graveyard; it never reaches the battlefield. Counterspell moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "a different spell cast by another player"
+            "unclassifiable": "choice: B casts Counterspell on the resolving spell"
           }
         }
       ],
@@ -234,18 +234,14 @@
           "polarity": "fires",
           "delta": "A casts Invasion of Gobakhan (printed defense 3) instead of Invasion of Mercadia.",
           "expected": "Invasion of Gobakhan enters with 3 defense counters on it.",
-          "operation": {
-            "unclassifiable": "a different spell cast from hand (a different card in hand), not a permanent replaced on the battlefield"
-          }
+          "operation": "move_card"
         },
         {
           "label": "doubling_season",
           "polarity": "other",
           "delta": "A also controls Doubling Season, which was on the battlefield before the cast.",
           "expected": "Invasion of Mercadia enters with 8 defense counters, the 4 counters it would enter with doubled by Doubling Season.",
-          "operation": {
-            "unclassifiable": "adds a permanent"
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -320,7 +316,7 @@
           "delta": "Invasion of Mercadia is on B's battlefield (B controls it and A is its protector) instead of A's.",
           "expected": "Grizzly Bears can legally attack only B; Invasion of Mercadia is not a legal attack target because A, its protector, is the attacking player.",
           "operation": {
-            "unclassifiable": "changes the battle's controller (and so its protector), which no fork operation sets"
+            "unclassifiable": "more than one fact: the battle leaves A's battlefield and enters B's (a removal plus an addition)"
           }
         }
       ],
@@ -388,7 +384,7 @@
           "delta": "B declares B's Grizzly Bears as a blocker of the attacking Grizzly Bears.",
           "expected": "The attacking Grizzly Bears deals its 2 damage to the blocking Grizzly Bears, not to the battle; Invasion of Mercadia keeps 4 defense counters. Both Grizzly Bears die.",
           "operation": {
-            "unclassifiable": "a different blocking decision"
+            "unclassifiable": "choice: B declares a blocker"
           }
         }
       ],
@@ -468,7 +464,7 @@
           "delta": "B casts Counterspell targeting Lightning Bolt, tapping both Islands.",
           "expected": "Lightning Bolt is countered and deals no damage; Invasion of Mercadia keeps 4 defense counters.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: B casts Counterspell on Lightning Bolt"
           }
         }
       ],
@@ -549,7 +545,7 @@
           "delta": "A does not cast Stifle; both players pass, the defeat trigger resolves, and A casts Invasion of Mercadia transformed without paying its mana cost.",
           "expected": "Invasion of Mercadia is not put into the graveyard in the state-based checks while its defeat trigger is pending; the trigger exiles it and Kyren Flamewright (3/3) enters A's battlefield. A's graveyard holds only Lightning Bolt.",
           "operation": {
-            "unclassifiable": "a different player decision"
+            "unclassifiable": "choice: A does not cast Stifle and lets the trigger resolve"
           }
         }
       ],
@@ -694,9 +690,7 @@
           "polarity": "does_not_fire",
           "delta": "B's Grizzly Bears is not on the battlefield, so the only untapped non-attacking creature is A's, controlled by the battle's controller rather than its protector.",
           "expected": "The creature attacking Invasion of Mercadia has no legal blocker; A's untapped Grizzly Bears cannot block it.",
-          "operation": {
-            "unclassifiable": "removing a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -756,7 +750,7 @@
           "delta": "Falkenrath Perforator attacks B directly instead of Invasion of Mercadia.",
           "expected": "The trigger deals 1 damage to the defending player, B: B is at 19 life and A stays at 20.",
           "operation": {
-            "unclassifiable": "a different attack target choice"
+            "unclassifiable": "choice: the attack declaration targets B instead of the battle"
           }
         }
       ],
@@ -835,7 +829,7 @@
           "delta": "Confiscate targets A's Mountain instead of Invasion of Mercadia.",
           "expected": "A still controls Invasion of Mercadia and B is still its protector. Grizzly Bears can legally attack only A.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: Confiscate targets A's Mountain instead of the battle"
           }
         }
       ],

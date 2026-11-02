@@ -61,7 +61,7 @@
           "delta": "In response, B casts Counterspell targeting Staggershock, tapping both Islands.",
           "expected": "Staggershock is countered and goes to A's graveyard, not exile. B's life stays 20.",
           "operation": {
-            "unclassifiable": "a different spell cast by B in response"
+            "unclassifiable": "choice: B casts Counterspell in response"
           }
         }
       ],
@@ -133,7 +133,7 @@
           "delta": "A chooses not to cast Staggershock.",
           "expected": "Staggershock stays in exile and is never cast. B's life stays 18.",
           "operation": {
-            "unclassifiable": "a different choice by A"
+            "unclassifiable": "choice: A chooses not to cast Staggershock"
           }
         }
       ],
@@ -208,7 +208,7 @@
           "delta": "Staggershock starts in A's hand instead of A's library, and A casts it from hand targeting player B, tapping three Mountains, instead of casting Bloodbraid Elf.",
           "expected": "Staggershock resolves: B's life becomes 18. It is exiled instead of going to A's graveyard, and A's graveyard is empty.",
           "operation": {
-            "unclassifiable": "changes the zone the spell starts in and the spell cast"
+            "unclassifiable": "more than one fact: the card moves from library to hand and A casts a different spell"
           }
         }
       ],

@@ -69,7 +69,7 @@
           "delta": "A keeps both cards on top, in their current order.",
           "expected": "A's graveyard holds only Citywatch Sphinx. A's library is Forest, Mountain, Island from the top.",
           "operation": {
-            "unclassifiable": "The player's surveil choice changes; no fork operation changes a player's decision."
+            "unclassifiable": "choice: A keeps both cards on top"
           }
         },
         {
@@ -78,7 +78,7 @@
           "delta": "A puts both Forest and Mountain into the graveyard.",
           "expected": "A's graveyard holds Citywatch Sphinx, Forest and Mountain. A's library is Island.",
           "operation": {
-            "unclassifiable": "The player's surveil choice changes; no fork operation changes a player's decision."
+            "unclassifiable": "choice: A puts both cards into the graveyard"
           }
         }
       ],
@@ -169,9 +169,7 @@
           "polarity": "fires",
           "delta": "A also controls Ornithopter.",
           "expected": "A surveils 1, keeping the Forest on top, and draws three Forests. Whispering Snitch triggers and its trigger resolves after Cerebral Download: B takes 1 damage (19) and A gains 1 life (21).",
-          "operation": {
-            "unclassifiable": "A permanent is added to the battlefield; no fork operation adds a permanent."
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -254,7 +252,7 @@
           "delta": "A's library holds Forest and Forest, and A puts both into the graveyard.",
           "expected": "Both Forests move to A's graveyard after Citywatch Sphinx, then Whispering Snitch triggers: B 19, A 21.",
           "operation": {
-            "unclassifiable": "The library gains two cards and the player's surveil choice is set; no fork operation changes a library or a decision."
+            "unclassifiable": "more than one fact: two cards must be added to A's library"
           }
         },
         {
@@ -262,9 +260,7 @@
           "polarity": "does_not_fire",
           "delta": "B's hand holds Swords to Plowshares instead of Terror, and B casts it targeting Citywatch Sphinx, tapping Plains.",
           "expected": "Citywatch Sphinx is exiled and does not die, so no surveil occurs and Whispering Snitch does not trigger. A gains 5 life (25) from Swords to Plowshares and B stays at 20.",
-          "operation": {
-            "unclassifiable": "B holds and casts a different spell, with another land; no fork operation changes a hand or the spell cast."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [

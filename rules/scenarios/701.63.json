@@ -62,7 +62,7 @@
           "delta": "A chooses not to put counters on Krumar Initiate.",
           "expected": "A creates a 2/2 white Spirit creature token. Krumar Initiate has no counters and is a 2/2. A's life is 18.",
           "operation": {
-            "unclassifiable": "a different decision or choice by a player, not a fact on the board"
+            "unclassifiable": "choice: A chooses not to put counters on Krumar Initiate"
           }
         },
         {
@@ -71,7 +71,7 @@
           "delta": "In response to the ability, B casts Shock targeting Krumar Initiate, tapping Mountain, and Shock resolves first.",
           "expected": "Krumar Initiate dies from 2 damage and moves to A's graveyard. When the ability resolves, counters cannot be put on it, so A creates a 2/2 white Spirit creature token. A's life is 18.",
           "operation": {
-            "unclassifiable": "a different spell is cast, not a fact on the board"
+            "unclassifiable": "choice: B casts Shock in response to the ability"
           }
         }
       ],
@@ -144,7 +144,7 @@
           "delta": "A activates Krumar Initiate with X=0 ({B}, {T}, pay 0 life) instead of X=1, tapping one Swamp.",
           "expected": "Nothing happens when the ability resolves: Krumar Initiate has no counters and is a 2/2, no token is created, and A's life is 20.",
           "operation": {
-            "unclassifiable": "a different decision or choice by a player, not a fact on the board"
+            "unclassifiable": "choice: A activates with X=0 instead of X=1"
           }
         }
       ],

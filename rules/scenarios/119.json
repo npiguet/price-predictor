@@ -65,7 +65,7 @@
           "delta": "A attacks with Glistener Elf (1/1 infect) instead of Grizzly Bears.",
           "expected": "Glistener Elf deals 1 combat damage to B; B's life total stays 20 and B gets 1 poison counter.",
           "operation": {
-            "unclassifiable": "a different creature is declared as the attacker (a player's choice, and a different card with other characteristics)"
+            "unclassifiable": "choice: A attacks with Glistener Elf instead of Grizzly Bears"
           }
         },
         {
@@ -74,7 +74,7 @@
           "delta": "B declares B's Grizzly Bears as a blocker of A's attacking Grizzly Bears.",
           "expected": "The damage goes to the blocking creature, not to B; B's life total stays 20; both Grizzly Bears have lethal damage and move to their owners' graveyards.",
           "operation": {
-            "unclassifiable": "a different blocking decision by the defending player"
+            "unclassifiable": "choice: B declares a block with Grizzly Bears"
           }
         }
       ],
@@ -135,7 +135,7 @@
           "delta": "A casts Exsanguinate with X=0, tapping two Swamps.",
           "expected": "Exsanguinate resolves: B loses 0 life and A gains 0 life; both life totals stay 20.",
           "operation": {
-            "unclassifiable": "a different X is chosen when casting the spell"
+            "unclassifiable": "choice: A casts Exsanguinate with X=0 instead of X=3"
           }
         }
       ],
@@ -285,7 +285,7 @@
           "delta": "A tries to cast Hatred with X=4 instead of X=3.",
           "expected": "Casting is not legal: the 4 life payment exceeds A's 3 life. Hatred stays in hand, the Swamps stay untapped and A's life total stays 3.",
           "operation": {
-            "unclassifiable": "a different X is chosen when casting the spell"
+            "unclassifiable": "choice: A casts Hatred with X=4 instead of X=3"
           }
         }
       ],
@@ -364,7 +364,7 @@
           "delta": "A tries to cast Hatred with X=1 instead of X=0.",
           "expected": "Casting is not legal: A can't pay 1 life while Platinum Emperion keeps A's life total from changing. Hatred stays in hand.",
           "operation": {
-            "unclassifiable": "a different X is chosen when casting the spell"
+            "unclassifiable": "choice: A casts Hatred with X=1 instead of X=0"
           }
         }
       ],
@@ -597,9 +597,7 @@
           "polarity": "other",
           "delta": "Leyline of Punishment is not on the battlefield (A's life total is 5 as in the base).",
           "expected": "The exchange happens: A's life total becomes 13 and Tree of Redemption's toughness becomes 5.",
-          "operation": {
-            "unclassifiable": "removing a permanent from the battlefield"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -669,9 +667,7 @@
           "polarity": "does_not_fire",
           "delta": "Platinum Emperion is not on the battlefield.",
           "expected": "Casting is legal. Paying lowers A's life total to 18 and Mutagenic Growth goes on the stack.",
-          "operation": {
-            "unclassifiable": "removing a permanent from the battlefield"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -742,9 +738,7 @@
           "polarity": "does_not_fire",
           "delta": "Platinum Emperion is not on the battlefield.",
           "expected": "The exchange happens: B's life total becomes 13 and Tree of Perdition's toughness becomes 20.",
-          "operation": {
-            "unclassifiable": "removing a permanent from the battlefield"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -817,7 +811,7 @@
           "delta": "A casts Exsanguinate with X=0, tapping two Swamps.",
           "expected": "Exsanguinate makes B lose 0 and A gain 0 life. Sanguine Bond does not trigger; both life totals stay 20.",
           "operation": {
-            "unclassifiable": "a different X is chosen when casting the spell"
+            "unclassifiable": "choice: A casts Exsanguinate with X=0 instead of X=2"
           }
         },
         {
@@ -826,7 +820,7 @@
           "delta": "Sanguine Bond is controlled by B instead of A.",
           "expected": "A gains 2 and B loses 2 (A 22, B 18). Sanguine Bond does not trigger because B did not gain life; life totals stay at 22 and 18.",
           "operation": {
-            "unclassifiable": "a permanent is controlled by the other player; no fork operation changes control"
+            "unclassifiable": "more than one fact: Sanguine Bond changing controller is a removal from A plus an addition under B"
           }
         }
       ],
@@ -898,7 +892,7 @@
           "delta": "A casts Exsanguinate with X=0, tapping two Swamps.",
           "expected": "B loses 0 life and no life gain event occurs, so the replacement does not apply: A's life total stays 20 (not 21).",
           "operation": {
-            "unclassifiable": "a different X is chosen when casting the spell"
+            "unclassifiable": "choice: A casts Exsanguinate with X=0 instead of X=2"
           }
         },
         {
@@ -907,7 +901,7 @@
           "delta": "Angel of Vitality is controlled by B instead of A.",
           "expected": "A gains exactly 2 life (20 to 22) and B loses 2 (20 to 18); the replacement does not apply to A.",
           "operation": {
-            "unclassifiable": "a permanent is controlled by the other player; no fork operation changes control"
+            "unclassifiable": "more than one fact: Angel of Vitality changing controller is a removal from A plus an addition under B"
           }
         }
       ],

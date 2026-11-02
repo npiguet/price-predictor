@@ -51,7 +51,7 @@
           "delta": "The die result is 5.",
           "expected": "5 is lit on neither Kiddie Coaster, so neither is visited and nothing triggers. Grizzly Bears stays a 2/2.",
           "operation": {
-            "unclassifiable": "The die result changes, a random outcome no fork operation sets."
+            "unclassifiable": "not a board edit: the die result is random and no operation sets it"
           }
         },
         {
@@ -60,7 +60,7 @@
           "delta": "The die result is 3.",
           "expected": "3 is lit on both Kiddie Coasters, so both are visited and both visit abilities trigger and resolve: Grizzly Bears gets +1/+0 twice and is a 4/2.",
           "operation": {
-            "unclassifiable": "The die result changes, a random outcome no fork operation sets."
+            "unclassifiable": "not a board edit: the die result is random and no operation sets it"
           }
         }
       ],

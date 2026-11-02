@@ -66,7 +66,7 @@
           "delta": "B passes without casting Sheltering Light.",
           "expected": "Shock deals 2 damage to Grizzly Bears, which dies in the state-based check and moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "B does not cast the response spell the base casts; a different decision, which no fork operation makes."
+            "unclassifiable": "choice: B passes instead of casting Sheltering Light: a different response."
           }
         },
         {
@@ -75,7 +75,7 @@
           "delta": "Sheltering Light targets Hill Giant instead of Grizzly Bears.",
           "expected": "Grizzly Bears takes 2 damage and dies; Hill Giant gains indestructible and stays untouched.",
           "operation": {
-            "unclassifiable": "B's response spell targets a different creature; no fork operation changes a targeting choice."
+            "unclassifiable": "target: Sheltering Light targets Hill Giant instead of Grizzly Bears."
           }
         }
       ],
@@ -145,7 +145,7 @@
           "delta": "B passes without casting Sheltering Light.",
           "expected": "Doom Blade resolves and Grizzly Bears is destroyed and moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "B does not cast the response spell the base casts; a different decision, which no fork operation makes."
+            "unclassifiable": "choice: B passes instead of casting Sheltering Light: a different response."
           }
         }
       ],
@@ -226,7 +226,7 @@
           "delta": "Shock targets Myr Servitor (1/1) instead of Darksteel Myr.",
           "expected": "Shock deals 2 damage to Myr Servitor, which dies and moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "A's spell targets a different creature already on the battlefield; no fork operation changes a targeting choice."
+            "unclassifiable": "target: Shock targets Myr Servitor instead of Darksteel Myr."
           }
         },
         {
@@ -235,7 +235,7 @@
           "delta": "A casts Doom Blade, tapping both Swamps, instead of Shock.",
           "expected": "Doom Blade resolves and Darksteel Myr stays on the battlefield.",
           "operation": {
-            "unclassifiable": "A casts a different spell from hand; a different spell cast, which no fork operation makes."
+            "unclassifiable": "choice: A casts Doom Blade instead of Shock: a different spell cast."
           }
         }
       ],

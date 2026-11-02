@@ -132,9 +132,7 @@
           "polarity": "other",
           "delta": "Cavalry Master is not on A's battlefield, so Benalish Cavalry has only its own flanking.",
           "expected": "One flanking trigger: Grizzly Bears becomes 1/1. It deals 1 damage to Benalish Cavalry and dies to its 2 damage. Benalish Cavalry survives with 1 damage.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from the battlefield."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "flanking_blocker",

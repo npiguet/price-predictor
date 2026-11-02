@@ -56,7 +56,7 @@
           "delta": "The step is declare_attackers instead of main1.",
           "expected": "Plotting is not legal: it is not a main phase.",
           "operation": {
-            "unclassifiable": "Changes the step of the turn; no fork operation changes the phase or step."
+            "unclassifiable": "phase or turn: the step is declare_attackers instead of main1."
           }
         },
         {
@@ -65,7 +65,7 @@
           "delta": "B has cast Shock targeting A, tapping B's Mountain; Shock is on the stack and A has priority.",
           "expected": "Plotting is not legal: the stack is not empty.",
           "operation": {
-            "unclassifiable": "Adds a spell an opponent casts to the stack; a different spell cast is no fork operation."
+            "unclassifiable": "timing: B's Shock is on the stack, so the stack is not empty."
           }
         },
         {
@@ -74,7 +74,7 @@
           "delta": "B is the active player instead of A.",
           "expected": "Plotting is not legal: it is not A's turn.",
           "operation": {
-            "unclassifiable": "Changes the active player, so whose turn it is; no fork operation changes the turn."
+            "unclassifiable": "phase or turn: B is the active player instead of A."
           }
         },
         {
@@ -82,9 +82,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls one Mountain instead of two.",
           "expected": "Plotting is not legal: {1}{R} cannot be paid.",
-          "operation": {
-            "unclassifiable": "Changes how many lands the player controls, adding or removing permanents; no fork operation adds or removes a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -160,7 +158,7 @@
           "delta": "A casts Highway Robbery for {1}{R} instead of plotting it, and B responds with Counterspell, tapping both Islands.",
           "expected": "Highway Robbery is on the stack, is countered and goes to A's graveyard. It is not exiled and not plotted.",
           "operation": {
-            "unclassifiable": "A different action by the player (casting instead of plotting) and an opponent's response; no fork operation changes a choice or casts a spell."
+            "unclassifiable": "choice: A casts Highway Robbery for {1}{R} instead of plotting it, and B responds with Counterspell."
           }
         },
         {
@@ -168,9 +166,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls one Mountain instead of two.",
           "expected": "Plotting does not happen: {1}{R} cannot be paid. Highway Robbery stays in A's hand.",
-          "operation": {
-            "unclassifiable": "Changes how many lands the player controls, adding or removing permanents; no fork operation adds or removes a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -232,9 +228,7 @@
           "polarity": "does_not_fire",
           "delta": "Hill Giant (mana value 4) is in A's hand instead of Grizzly Bears.",
           "expected": "The enters trigger resolves but A has no legal card to exile. Hill Giant stays in A's hand and nothing is plotted.",
-          "operation": {
-            "unclassifiable": "Changes a card in the player's hand; no fork operation changes a hand."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -292,7 +286,7 @@
           "delta": "Grizzly Bears became plotted earlier this turn.",
           "expected": "Casting it is not legal: it did not become plotted on an earlier turn.",
           "operation": {
-            "unclassifiable": "Changes the turn on which the card became plotted, a piece of game history; no fork operation sets history."
+            "unclassifiable": "history: Grizzly Bears became plotted earlier this turn instead of on an earlier turn."
           }
         },
         {
@@ -301,7 +295,7 @@
           "delta": "B has cast Shock targeting A, tapping B's Mountain; Shock is on the stack and A has priority.",
           "expected": "Casting it is not legal: the stack is not empty.",
           "operation": {
-            "unclassifiable": "Adds a spell an opponent casts to the stack; a different spell cast is no fork operation."
+            "unclassifiable": "timing: B's Shock is on the stack, so the stack is not empty."
           }
         },
         {
@@ -310,7 +304,7 @@
           "delta": "B is the active player instead of A.",
           "expected": "Casting it is not legal: it is not A's turn.",
           "operation": {
-            "unclassifiable": "Changes the active player, so whose turn it is; no fork operation changes the turn."
+            "unclassifiable": "phase or turn: B is the active player instead of A."
           }
         }
       ],
@@ -382,18 +376,14 @@
           "polarity": "does_not_fire",
           "delta": "The top card of A's library is Forest instead of Grizzly Bears.",
           "expected": "Plotting is not legal: Fblthp lets A plot only nonland cards. The library is unchanged.",
-          "operation": {
-            "unclassifiable": "Changes the top card of the library; no fork operation changes a library."
-          }
+          "operation": "move_card"
         },
         {
           "label": "no_fblthp",
           "polarity": "does_not_fire",
           "delta": "A controls no Fblthp, Lost on the Range.",
           "expected": "Plotting is not legal: the top card of the library has no plot ability. The library is unchanged.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from the base battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

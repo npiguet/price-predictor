@@ -63,9 +63,7 @@
           "polarity": "does_not_fire",
           "delta": "Control Magic is not on the battlefield; Highland Game is on B's battlefield, controlled by B.",
           "expected": "Highland Game dies and is put into B's graveyard. The dies trigger fires and is controlled by B. B gains 2 life (B at 22, A at 20).",
-          "operation": {
-            "unclassifiable": "Removes a permanent (the control-changing Aura) and with it changes the creature's controller; no fork operation removes a permanent or sets a controller."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -125,9 +123,7 @@
           "polarity": "does_not_fire",
           "delta": "Control Magic is not on the battlefield; Benalish Marshal is on B's battlefield, controlled by B.",
           "expected": "A's Grizzly Bears is 2/2 and B's Grizzly Bears is 3/3. Benalish Marshal stays 3/3.",
-          "operation": {
-            "unclassifiable": "Removes a permanent (the control-changing Aura) and with it changes the static's source controller; no fork operation removes a permanent or sets a controller."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -193,7 +189,7 @@
           "delta": "A activates Excavation instead of passing, tapping one of A's Islands and sacrificing A's other Island; B does not activate it.",
           "expected": "The ability resolves and A draws Grizzly Bears. B's library and hand are unchanged. One of A's Islands is in A's graveyard.",
           "operation": {
-            "unclassifiable": "A different player decision: the source's controller activates the ability instead of the other player; no fork operation changes who acts."
+            "unclassifiable": "choice: A activates Excavation instead of B"
           }
         }
       ],

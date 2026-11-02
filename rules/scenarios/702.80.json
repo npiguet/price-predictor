@@ -60,7 +60,7 @@
           "delta": "B declares no blockers.",
           "expected": "Cinderbones deals 1 damage to player B, whose life becomes 19. No -1/-1 counters are placed anywhere; Grizzly Bears is unchanged.",
           "operation": {
-            "unclassifiable": "a different block decision by B"
+            "unclassifiable": "choice: B declares no blockers"
           }
         }
       ],
@@ -133,9 +133,7 @@
           "polarity": "does_not_fire",
           "delta": "Corrosive Mentor is not on A's battlefield.",
           "expected": "Footlight Fiend had no wither as it left the battlefield. Its 1 damage is marked on Grizzly Bears: a 2/2 with 1 damage marked and no counters.",
-          "operation": {
-            "unclassifiable": "removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -211,7 +209,7 @@
           "delta": "A casts Lightning Bolt (tapping one Mountain) targeting Craw Wurm instead of Puncture Blast.",
           "expected": "Lightning Bolt deals 3 damage to Craw Wurm, which has 3 damage marked, no counters, and stays a 6/4.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: A casts Lightning Bolt instead of Puncture Blast"
           }
         },
         {
@@ -220,7 +218,7 @@
           "delta": "Puncture Blast targets player B instead of Craw Wurm.",
           "expected": "B loses 3 life and has 17 life. B has no poison counters. Craw Wurm is unchanged.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: Puncture Blast targets player B instead of Craw Wurm"
           }
         }
       ],

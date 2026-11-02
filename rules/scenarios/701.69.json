@@ -132,7 +132,7 @@
           "delta": "A does not activate Pyramids; the first two decisions are dropped.",
           "expected": "Dryad Arbor is dealt 2 damage and moves to A's graveyard in the state-based check.",
           "operation": {
-            "unclassifiable": "a different decision or choice by a player, not a fact on the board"
+            "unclassifiable": "choice: A does not activate Pyramids"
           }
         }
       ],

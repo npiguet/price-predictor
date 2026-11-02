@@ -63,7 +63,7 @@
           "delta": "B casts Shock (2 damage), tapping Mountain, instead of Lightning Bolt.",
           "expected": "The damage is not lethal. Grizzly Bears (3/3) has 2 damage marked and Hyena Umbra stays attached.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: B casts Shock instead of Lightning Bolt"
           }
         },
         {
@@ -72,7 +72,7 @@
           "delta": "B casts Last Gasp (-3/-3), tapping Mountain and Swamp, instead of Lightning Bolt.",
           "expected": "Grizzly Bears has toughness 0 and is put into A's graveyard by state-based actions; this is not destruction, so umbra armor does not apply. Hyena Umbra, no longer attached, is put into A's graveyard.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: B casts Last Gasp instead of Lightning Bolt"
           }
         }
       ],

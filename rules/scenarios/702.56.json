@@ -60,7 +60,7 @@
           "delta": "The replicate cost is paid once; four Mountains are tapped.",
           "expected": "One copy is created. Pyromatics and the copy deal 2 damage in total; Centaur Courser survives with 2 damage.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: the replicate cost is paid once instead of twice"
           }
         },
         {
@@ -69,7 +69,7 @@
           "delta": "The replicate cost is not paid; two Mountains are tapped.",
           "expected": "No replicate trigger fires and no copy is created. Pyromatics deals 1 damage; Centaur Courser survives with 1 damage.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: the replicate cost is not paid"
           }
         }
       ],
@@ -145,7 +145,7 @@
           "delta": "Djinn Illuminatus's replicate cost is not paid; four Mountains are tapped.",
           "expected": "Only the native replicate instance's trigger fires and creates one copy; the granted instance creates none. 2 damage total; Centaur Courser survives with 2 damage.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: the granted replicate cost is not paid"
           }
         }
       ],

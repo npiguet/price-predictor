@@ -128,9 +128,7 @@
           "polarity": "does_not_fire",
           "delta": "Aven Squire is not on A's battlefield.",
           "expected": "Exalted triggers once. Grizzly Bears is a 3/3 until end of turn and deals 3 damage to B, whose life becomes 17.",
-          "operation": {
-            "unclassifiable": "removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -200,7 +198,7 @@
           "delta": "A attacks player B with Grizzly Bears and Akrasan Squire instead of Grizzly Bears only.",
           "expected": "Neither creature attacks alone, so exalted does not trigger. Grizzly Bears (2/2) and Akrasan Squire (1/1) deal 3 damage in total; B's life becomes 17 and neither creature gets a bonus.",
           "operation": {
-            "unclassifiable": "a different attack declaration by A"
+            "unclassifiable": "choice: A attacks with two creatures instead of one"
           }
         }
       ],

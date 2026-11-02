@@ -71,9 +71,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls only one Ornithopter.",
           "expected": "A has no enduring story. Balin's trigger resolves: A discards two Mountains and draws two Mountains; B stays at 20.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from the battlefield"
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "third_is_plain",
@@ -171,7 +169,7 @@
           "delta": "B casts Shatter on one Ornithopter in response to Balin, while Balin is on the stack, instead of after Balin resolves.",
           "expected": "Shatter destroys one Ornithopter before Balin enters; A never has an enduring story. Balin's trigger for Dwarven Trader resolves: A discards one Mountain and draws one Mountain; B stays at 20.",
           "operation": {
-            "unclassifiable": "Casts an additional spell"
+            "unclassifiable": "timing: B casts Shatter while Balin is on the stack instead of after it resolves"
           }
         }
       ],
@@ -245,9 +243,7 @@
           "polarity": "does_not_fire",
           "delta": "No Ornithopter on A's battlefield.",
           "expected": "A has no enduring story. Balin's enters trigger triggers once: one instance is put on the stack.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from the battlefield"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

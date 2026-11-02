@@ -71,7 +71,7 @@
           "delta": "B casts Counterspell on Mind Sculpt, tapping both Islands.",
           "expected": "Mind Sculpt is countered and goes to A's graveyard. B's library keeps all ten cards and B's graveyard stays empty.",
           "operation": {
-            "unclassifiable": "An extra spell is cast in response; no fork operation casts a spell."
+            "unclassifiable": "choice: B casts Counterspell on Mind Sculpt"
           }
         }
       ],
@@ -147,7 +147,7 @@
           "delta": "B's library is empty.",
           "expected": "No card is milled. B's graveyard stays empty.",
           "operation": {
-            "unclassifiable": "The library's contents differ; no fork operation changes a library."
+            "unclassifiable": "more than one fact: B's three library cards must all leave the library"
           }
         },
         {
@@ -156,7 +156,7 @@
           "delta": "B's library holds ten cards (Forest, Island, Swamp, then seven Mountains).",
           "expected": "B mills exactly seven cards: Forest, Island, Swamp and four Mountains move to B's graveyard and three Mountains remain in B's library.",
           "operation": {
-            "unclassifiable": "The library's contents differ; no fork operation changes a library."
+            "unclassifiable": "more than one fact: seven cards must be added to B's library"
           }
         }
       ],
@@ -223,9 +223,7 @@
           "polarity": "does_not_fire",
           "delta": "A's library holds three Islands.",
           "expected": "A cannot activate the ability, because a cost of milling four cards cannot be paid with three cards in the library. Nothing is milled and Rot Farm Skeleton stays in the graveyard.",
-          "operation": {
-            "unclassifiable": "The library's contents differ; no fork operation changes a library."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -297,18 +295,14 @@
           "polarity": "fires",
           "delta": "The top card of A's library is Counterspell instead of Cudgel Troll.",
           "expected": "Counterspell is milled into A's graveyard. A's mana pool holds {U}{U}.",
-          "operation": {
-            "unclassifiable": "The library's contents differ; no fork operation changes a library."
-          }
+          "operation": "move_card"
         },
         {
           "label": "land_card",
           "polarity": "does_not_fire",
           "delta": "The top card of A's library is Forest instead of Cudgel Troll.",
           "expected": "Forest is milled into A's graveyard. The land has no colored mana symbols, so A's mana pool stays empty.",
-          "operation": {
-            "unclassifiable": "The library's contents differ; no fork operation changes a library."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -371,9 +365,7 @@
           "polarity": "does_not_fire",
           "delta": "B controls no Bruvac the Grandiloquent.",
           "expected": "Only Cudgel Troll is milled. A's mana pool holds {G}{G} and Counterspell stays in A's library.",
-          "operation": {
-            "unclassifiable": "A permanent is removed from the battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

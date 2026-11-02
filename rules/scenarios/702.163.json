@@ -63,7 +63,7 @@
           "delta": "B casts Counterspell on Vulshok Splitter, tapping two Islands.",
           "expected": "Vulshok Splitter is countered and moves to A's graveyard. It never enters, so no trigger fires and no token is created.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: B casts Counterspell on the spell"
           }
         },
         {
@@ -72,7 +72,7 @@
           "delta": "B casts Shatter on Vulshok Splitter in response to the For Mirrodin! trigger, tapping two Mountains.",
           "expected": "Vulshok Splitter is destroyed and moves to A's graveyard. The trigger still resolves and creates a 2/2 red Rebel token, which is not equipped, since the Equipment is no longer on the battlefield.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: B casts Shatter in response to the trigger"
           }
         }
       ],

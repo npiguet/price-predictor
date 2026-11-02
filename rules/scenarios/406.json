@@ -67,7 +67,7 @@
           "delta": "In response, B casts Counterspell tapping both Islands, and it resolves first.",
           "expected": "Swords to Plowshares is countered and goes to A's graveyard; Grizzly Bears stays on the battlefield, the exile zone is empty and B's life stays 20.",
           "operation": {
-            "unclassifiable": "A different spell cast: B casts Counterspell in response, a player decision no fork operation makes."
+            "unclassifiable": "choice: B responds with Counterspell"
           }
         }
       ],
@@ -143,7 +143,7 @@
           "delta": "Grizzly Bears and Shock are in B's hand instead of B's graveyard.",
           "expected": "The trigger resolves and exiles nothing; Grizzly Bears and Shock stay in B's hand and the exile zone is empty.",
           "operation": {
-            "unclassifiable": "Moves two cards from B's graveyard to B's hand, a change of zone contents no fork operation makes."
+            "unclassifiable": "more than one fact: two cards each move from graveyard to hand"
           }
         }
       ],
@@ -235,7 +235,7 @@
           "delta": "A casts the exiled card face down using morph for {3}, tapping three Swamps, instead of face up for {1}{U}.",
           "expected": "The card is not turned face up: the spell on the stack is a face-down 2/2 colorless creature spell with no name and mana value 0, and it resolves as a face-down 2/2 creature under A's control. Fathom Seer's turned-face-up trigger does not fire.",
           "operation": {
-            "unclassifiable": "A different player choice: the exiled card is cast face down with morph instead of face up."
+            "unclassifiable": "choice: A casts the exiled card face down using morph instead of face up"
           }
         }
       ],
@@ -311,7 +311,7 @@
           "delta": "A exiles Shock face down instead of Grizzly Bears, and tries to cast it targeting B with the Mountain.",
           "expected": "Casting the face-down Shock is not legal (can_play false): the resulting spell is not a creature spell. Shock stays face down in exile and B's life stays 20.",
           "operation": {
-            "unclassifiable": "A different player choice of which looked-at card to exile, and a different spell cast from exile."
+            "unclassifiable": "choice: A exiles Shock instead of Grizzly Bears from the cards Vivien's ability looks at, and casts it targeting B"
           }
         }
       ],
@@ -390,7 +390,7 @@
           "delta": "When J1's enters trigger is on the stack targeting Grizzly Bears, B casts Unsummon on Grizzly Bears, tapping the Island; Unsummon resolves first.",
           "expected": "Grizzly Bears is in B's hand and J1's trigger fizzles, exiling nothing. After Disenchant destroys J1 its leaves trigger returns nothing: Centaur Courser stays in exile, Grizzly Bears stays in B's hand, and the battlefield gains no card.",
           "operation": {
-            "unclassifiable": "A different spell cast: B casts Unsummon in response to the enters trigger, a player decision no fork operation makes."
+            "unclassifiable": "choice: B casts Unsummon in response to the enters trigger"
           }
         }
       ],

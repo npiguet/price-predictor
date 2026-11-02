@@ -58,7 +58,7 @@
           "delta": "Sandbar Crocodile starts phased out (it phased out under A's control in A's previous untap step).",
           "expected": "Sandbar Crocodile phases in and is treated as existing again: A controls a 6/5 creature and it does not phase out again this untap step.",
           "operation": {
-            "unclassifiable": "Phased-out status is not one of the fork operations."
+            "unclassifiable": "not a board edit: phased-out status of a permanent, which no operation sets."
           }
         },
         {
@@ -67,7 +67,7 @@
           "delta": "Sandbar Crocodile is controlled by B instead of A (phased in).",
           "expected": "Sandbar Crocodile stays phased in during A's untap step; only its controller's untap step makes it phase.",
           "operation": {
-            "unclassifiable": "Changes the controller, which no operation does."
+            "unclassifiable": "more than one fact: the creature changes controller (a removal plus an addition)."
           }
         },
         {
@@ -152,7 +152,7 @@
           "delta": "Sandbar Crocodile is phased in (it phased in during this turn's untap step).",
           "expected": "Both Grizzly Bears and Sandbar Crocodile are destroyed and move to their owners' graveyards.",
           "operation": {
-            "unclassifiable": "Phased-out status is not one of the fork operations."
+            "unclassifiable": "not a board edit: phased-out status of a permanent, which no operation sets."
           }
         }
       ],
@@ -219,7 +219,7 @@
           "delta": "A does not cast Reality Ripple.",
           "expected": "Hill Giant deals 3 damage to Grizzly Bears, which dies; Hill Giant takes 2 damage and survives. B's life stays 20.",
           "operation": {
-            "unclassifiable": "A different decision by a player."
+            "unclassifiable": "choice: A does not cast Reality Ripple."
           }
         },
         {
@@ -228,7 +228,7 @@
           "delta": "Reality Ripple targets A's own Grizzly Bears instead of Hill Giant.",
           "expected": "Grizzly Bears phases out and is removed from combat. No combat damage is dealt: Hill Giant survives undamaged, B's life stays 20.",
           "operation": {
-            "unclassifiable": "A different target for the spell."
+            "unclassifiable": "target: Reality Ripple targets a different creature."
           }
         }
       ],
@@ -316,7 +316,7 @@
           "delta": "A casts Cloudshift (tapping Plains) targeting Elvish Visionary instead of Reality Ripple.",
           "expected": "Elvish Visionary is exiled and returns as a new object, its enters-the-battlefield trigger fires and A draws a card; the +1/+1 counter is gone (1/1).",
           "operation": {
-            "unclassifiable": "A different spell cast."
+            "unclassifiable": "choice: A casts Cloudshift instead of Reality Ripple."
           }
         }
       ],
@@ -395,7 +395,7 @@
           "delta": "Grizzly Bears is phased in when Mass Diminish resolves.",
           "expected": "Grizzly Bears has base power and toughness 1/1 until A's next turn, including in B's main phase 1.",
           "operation": {
-            "unclassifiable": "Phased-out status is not one of the fork operations."
+            "unclassifiable": "not a board edit: phased-out status of a permanent, which no operation sets."
           }
         }
       ],
@@ -464,7 +464,7 @@
           "delta": "B does not cast Reality Ripple.",
           "expected": "Sower of Temptation stays phased in and A keeps control of Hill Giant.",
           "operation": {
-            "unclassifiable": "A different decision by a player."
+            "unclassifiable": "choice: B does not cast Reality Ripple."
           }
         }
       ],
@@ -526,7 +526,7 @@
           "delta": "Bonesplitter is not attached to Sandbar Crocodile.",
           "expected": "Sandbar Crocodile phases out; Bonesplitter stays phased in.",
           "operation": {
-            "unclassifiable": "Changes an attachment, which no operation does."
+            "unclassifiable": "more than one fact: the Equipment is on the battlefield unattached, needing its removal and its re-addition."
           }
         },
         {
@@ -535,7 +535,7 @@
           "delta": "Sandbar Crocodile and Bonesplitter start phased out (Bonesplitter phased out indirectly with it).",
           "expected": "Sandbar Crocodile phases in and Bonesplitter phases in with it, still attached; Sandbar Crocodile is 8/5.",
           "operation": {
-            "unclassifiable": "Phased-out status is not one of the fork operations."
+            "unclassifiable": "not a board edit: phased-out status of permanents, which no operation sets."
           }
         }
       ],
@@ -594,7 +594,7 @@
           "delta": "Grizzly Bears is in A's graveyard instead of on the battlefield.",
           "expected": "Bonesplitter phases in unattached and stays on the battlefield.",
           "operation": {
-            "unclassifiable": "Moves a permanent to the graveyard."
+            "unclassifiable": "more than one fact: the creature leaves the battlefield for the graveyard (a removal plus a move)."
           }
         }
       ],
@@ -664,7 +664,7 @@
           "delta": "Instead of casting Reality Ripple, A activates Equip {0} targeting Hill Giant.",
           "expected": "Grafted Wargear becomes unattached from Grizzly Bears, its trigger fires, and Grizzly Bears is sacrificed (moves to A's graveyard). Hill Giant is 6/5.",
           "operation": {
-            "unclassifiable": "A different ability activated."
+            "unclassifiable": "choice: A activates Equip instead of casting Reality Ripple."
           }
         }
       ],
@@ -725,9 +725,7 @@
           "polarity": "does_not_fire",
           "delta": "Stasis is not on the battlefield.",
           "expected": "A's untap step happens and Sandbar Crocodile phases out.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from the battlefield."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "phased_out_start",
@@ -735,7 +733,7 @@
           "delta": "Sandbar Crocodile starts phased out.",
           "expected": "Sandbar Crocodile does not phase in and stays phased out.",
           "operation": {
-            "unclassifiable": "Phased-out status is not one of the fork operations."
+            "unclassifiable": "not a board edit: phased-out status of a permanent, which no operation sets."
           }
         }
       ],
@@ -795,9 +793,7 @@
           "polarity": "other",
           "delta": "Teferi's Curse is not on the battlefield.",
           "expected": "Same result as with two instances: Sandbar Crocodile is phased out after the first untap step and phased in after the next.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from the battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

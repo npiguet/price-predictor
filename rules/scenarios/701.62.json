@@ -62,7 +62,7 @@
           "delta": "A's library holds only Grizzly Bears.",
           "expected": "Grizzly Bears enters the battlefield face down as a 2/2 creature. Nothing is put into the graveyard and the library is empty.",
           "operation": {
-            "unclassifiable": "changes the contents of a library, which no fork operation does"
+            "unclassifiable": "not a board edit: two cards leave A's library and go to no zone"
           }
         },
         {
@@ -71,7 +71,7 @@
           "delta": "A's library is empty.",
           "expected": "No card is manifested and none is put into the graveyard; the spell resolves and A has no new creature.",
           "operation": {
-            "unclassifiable": "changes the contents of a library, which no fork operation does"
+            "unclassifiable": "not a board edit: three cards leave A's library and go to no zone"
           }
         }
       ],
@@ -166,7 +166,7 @@
           "delta": "A's library holds only Grizzly Bears.",
           "expected": "Paranormal Analyst's trigger still fires, although no card was put into the graveyard. Grizzly Bears is a face-down 2/2 under A's control, nothing moves to A's hand and the library is empty.",
           "operation": {
-            "unclassifiable": "changes the contents of a library, which no fork operation does"
+            "unclassifiable": "not a board edit: two cards leave A's library and go to no zone"
           }
         },
         {
@@ -175,7 +175,7 @@
           "delta": "A does not cast Break Down the Door; A passes priority and B casts B's own Break Down the Door choosing manifest dread, manifesting Grizzly Bears and putting Forest into B's graveyard.",
           "expected": "Paranormal Analyst's trigger does not fire, because only A manifesting dread triggers it. B has a face-down 2/2 and Forest in B's graveyard; A's hand and graveyard are unchanged.",
           "operation": {
-            "unclassifiable": "a different decision or choice by a player, not a fact on the board"
+            "unclassifiable": "choice: A casts nothing and B casts Break Down the Door instead"
           }
         }
       ],

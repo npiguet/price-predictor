@@ -146,7 +146,7 @@
           "delta": "A attempts it in B's first upkeep step, after Paradox Haze's trigger resolved and before that step ends.",
           "expected": "Casting Reset is not legal (can_play false): B's first upkeep step has not ended.",
           "operation": {
-            "unclassifiable": "Changes which upkeep step of the turn is observed."
+            "unclassifiable": "phase or turn: the attempt happens in B's first upkeep step rather than after it has ended"
           }
         }
       ],

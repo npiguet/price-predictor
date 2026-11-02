@@ -63,7 +63,7 @@
           "delta": "B responds by casting Stifle on the [-4] ability.",
           "expected": "The ability is countered and does not resolve. Neither player has an emblem. A's Grizzly Bears stays 2/2 and B's Grizzly Bears stays 2/2. Gideon is in A's graveyard (0 loyalty, the cost was already paid) and Stifle is in B's graveyard.",
           "operation": {
-            "unclassifiable": "a different decision: the opponent casts a spell in response"
+            "unclassifiable": "choice: B responds with Stifle"
           }
         }
       ],
@@ -135,7 +135,7 @@
           "delta": "A plays a land from hand instead of casting a spell.",
           "expected": "The emblem's ability does not trigger because no spell was cast. B stays at 20 life, Grizzly Bears is undamaged, and Shock stays in A's hand.",
           "operation": {
-            "unclassifiable": "a different decision: the player plays a land instead of casting a spell"
+            "unclassifiable": "choice: A plays a land instead of casting a spell"
           }
         }
       ],
@@ -199,7 +199,7 @@
           "delta": "The creature read is B's Grizzly Bears instead of A's.",
           "expected": "B's Grizzly Bears is 2/2; the emblem's ability affects only creatures its controller (A) controls.",
           "operation": {
-            "unclassifiable": "changes which creature the outcome is read on, not a fact of the game"
+            "unclassifiable": "not a board edit: the board is the same; only which player's creature is observed differs"
           }
         }
       ],

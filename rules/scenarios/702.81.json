@@ -55,9 +55,7 @@
           "polarity": "does_not_fire",
           "delta": "A's hand holds Grizzly Bears instead of Mountain.",
           "expected": "A has no land card to discard, so casting Flame Jab from the graveyard is not legal (can_play false).",
-          "operation": {
-            "unclassifiable": "changes the contents of A's hand"
-          }
+          "operation": "move_card"
         },
         {
           "label": "mana_unavailable",

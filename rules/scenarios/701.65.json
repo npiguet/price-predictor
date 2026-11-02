@@ -63,7 +63,7 @@
           "delta": "The target is B's Hill Giant, on B's battlefield, instead of A's.",
           "expected": "Hill Giant is exiled. A's attempt to cast it from exile is not legal, because only its owner B may cast it for {2}; it stays in exile. B could cast it for {2} on B's own turn.",
           "operation": {
-            "unclassifiable": "adds, removes or moves a permanent, which no fork operation does"
+            "unclassifiable": "more than one fact: Hill Giant is on B's battlefield instead of A's, a removal plus an addition, and the target differs"
           }
         }
       ],
@@ -134,7 +134,7 @@
           "delta": "Glider Staff's enters trigger is put on the stack with no target chosen.",
           "expected": "Nothing is airbent: Grizzly Bears stays on B's battlefield. Avatar Aang's trigger does not fire and A draws no card.",
           "operation": {
-            "unclassifiable": "a different target or target choice, not a fact on the board"
+            "unclassifiable": "target: the enters trigger has no target chosen"
           }
         }
       ],

@@ -59,7 +59,7 @@
           "delta": "A casts Clutch of Currents for its mana cost {U}, tapping one Island, with Grizzly Bears as its only target.",
           "expected": "Clutch of Currents resolves. Grizzly Bears returns to B's hand. All five Islands are plain lands with no counters and none is a creature.",
           "operation": {
-            "unclassifiable": "a different spell is cast, a decision by a player"
+            "unclassifiable": "choice: A casts for the mana cost instead of the awaken cost"
           }
         }
       ],
@@ -132,7 +132,7 @@
           "delta": "A pays the awaken cost {4}{U} with all four mana artifacts instead of the mana cost {U}.",
           "expected": "Casting for the awaken cost is illegal: the awaken ability then requires a target land A controls and A controls none.",
           "operation": {
-            "unclassifiable": "a different cost paid, a decision by a player"
+            "unclassifiable": "choice: A pays the awaken cost instead of the mana cost"
           }
         }
       ],

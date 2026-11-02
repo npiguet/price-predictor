@@ -52,7 +52,7 @@
           "delta": "A's Attraction deck is empty.",
           "expected": "The trigger resolves and nothing happens: no Attraction is on the battlefield. Deadbeat Attendant stays on the battlefield.",
           "operation": {
-            "unclassifiable": "The Attraction deck in the command zone is emptied; no fork operation changes a command-zone deck."
+            "unclassifiable": "not a board edit: the Attraction deck in the command zone is not editable"
           }
         }
       ],
@@ -128,7 +128,7 @@
           "delta": "Concession Stand is controlled by B instead of A.",
           "expected": "A controls no Attraction, so no die is rolled as main1 begins. Complaints Clerk does not trigger and no token is created.",
           "operation": {
-            "unclassifiable": "The Attraction's controller changes to the opponent; no fork operation changes control."
+            "unclassifiable": "more than one fact: a permanent changing controller is a removal plus an addition"
           }
         }
       ],
@@ -201,7 +201,7 @@
           "delta": "The die shows 6.",
           "expected": "6 is also lit: the visit ability triggers and A creates a Food token.",
           "operation": {
-            "unclassifiable": "The die roll's result differs; a random result is no fork operation."
+            "unclassifiable": "not a board edit: the result of a die roll is not set by any operation"
           }
         },
         {
@@ -210,7 +210,7 @@
           "delta": "The die shows 3.",
           "expected": "3 is not lit: the visit ability does not trigger and A creates no Food token.",
           "operation": {
-            "unclassifiable": "The die roll's result differs; a random result is no fork operation."
+            "unclassifiable": "not a board edit: the result of a die roll is not set by any operation"
           }
         }
       ],
@@ -282,7 +282,7 @@
           "delta": "A casts Banishing Light (tapping Mountain and both Plains) instead of Shatter; its enters trigger targets Concession Stand and resolves.",
           "expected": "Exile is excepted: Concession Stand is exiled, not put into the command zone. The replacement does not apply.",
           "operation": {
-            "unclassifiable": "A different spell is cast (an exile effect instead of a destroy effect); no fork operation changes what is cast."
+            "unclassifiable": "choice: a different spell is cast"
           }
         }
       ],

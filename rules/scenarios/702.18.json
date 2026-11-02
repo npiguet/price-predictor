@@ -56,7 +56,7 @@
           "delta": "A attempts to target B's Grizzly Bears instead of Humble Budoka.",
           "expected": "Grizzly Bears is a legal target for Lightning Bolt; the cast is legal.",
           "operation": {
-            "unclassifiable": "A different target is chosen: a different decision."
+            "unclassifiable": "target: A targets B's Grizzly Bears instead of Humble Budoka."
           }
         },
         {
@@ -65,7 +65,7 @@
           "delta": "A attempts to target A's own Humble Budoka instead of B's.",
           "expected": "A's Humble Budoka (shroud) is not a legal target for A's Lightning Bolt; the cast is illegal.",
           "operation": {
-            "unclassifiable": "A different target is chosen: a different decision."
+            "unclassifiable": "target: A targets its own Humble Budoka instead of B's."
           }
         }
       ],

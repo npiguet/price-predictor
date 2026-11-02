@@ -54,7 +54,7 @@
           "delta": "B declares no blockers.",
           "expected": "Bushido does not trigger and Jade Avenger stays a 2/2. Grizzly Bears is unblocked and deals 2 damage to B, whose life total is 18.",
           "operation": {
-            "unclassifiable": "a different decision by a player, not a fork operation"
+            "unclassifiable": "choice: B declares no blockers."
           }
         }
       ],
@@ -124,7 +124,7 @@
           "delta": "B declares no blockers.",
           "expected": "Bushido does not trigger and Jade Avenger stays a 2/2. Jade Avenger is unblocked and deals 2 damage to B, whose life total is 18.",
           "operation": {
-            "unclassifiable": "a different decision by a player, not a fork operation"
+            "unclassifiable": "choice: B declares no blockers."
           }
         }
       ],
@@ -201,7 +201,7 @@
           "delta": "A does not activate Sensei Golden-Tail.",
           "expected": "Devoted Retainer has one instance of bushido 1 and one trigger resolves, making it a 2/2 until end of turn. The two creatures deal 2 damage to each other and both move to their owners' graveyards.",
           "operation": {
-            "unclassifiable": "a different decision by a player, not a fork operation"
+            "unclassifiable": "choice: A does not activate Sensei Golden-Tail."
           }
         },
         {
@@ -210,7 +210,7 @@
           "delta": "B declares no blockers.",
           "expected": "Neither bushido trigger fires and Devoted Retainer stays a 1/1. It is unblocked and deals 1 damage to B, whose life total is 19.",
           "operation": {
-            "unclassifiable": "a different decision by a player, not a fork operation"
+            "unclassifiable": "choice: B declares no blockers."
           }
         }
       ],

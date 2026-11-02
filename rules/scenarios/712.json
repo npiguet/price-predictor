@@ -144,7 +144,7 @@
           "delta": "Meddling Mage's chosen name is Graf Rats instead of Chittering Host.",
           "expected": "Casting Graf Rats is not legal (can_play false); Graf Rats stays in A's hand.",
           "operation": {
-            "unclassifiable": "a different name chosen by a player"
+            "unclassifiable": "not a board edit: the card name chosen as Meddling Mage entered"
           }
         }
       ],
@@ -270,9 +270,7 @@
           "polarity": "does_not_fire",
           "delta": "A's graveyard holds Brightclimb Pathway instead of Legion's Landing.",
           "expected": "Both the Forest and Brightclimb Pathway return to the battlefield tapped: the front face of Brightclimb Pathway is a land card.",
-          "operation": {
-            "unclassifiable": "a different card in a graveyard: replace_card only swaps a permanent"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -344,7 +342,7 @@
           "delta": "A casts Midnight Scavengers (mana value 5) instead, tapping all five Swamps.",
           "expected": "Midnight Scavengers on the stack has mana value 5; Spell Snare has no legal target and cannot be cast. Midnight Scavengers resolves and enters the battlefield.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: A casts a different spell"
           }
         }
       ],
@@ -421,7 +419,7 @@
           "delta": "A casts Brine Comber from the graveyard transformed for its disturb cost {W}{U} instead, tapping a Plains and the Island and targeting Grizzly Bears.",
           "expected": "The spell on the stack is Brinebound Gift with mana value 3 (Brine Comber's {1}{W}{U}), not the paid cost 2. Spell Snare has no legal target and cannot be cast. Brinebound Gift resolves and enters attached to Grizzly Bears, and its enters trigger creates a 1/1 white Spirit token with flying.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: A casts Brine Comber from the graveyard transformed"
           }
         }
       ],
@@ -497,7 +495,7 @@
           "delta": "Brine Comber is in A's hand instead of the graveyard, and A casts it normally for {1}{W}{U}, tapping both Plains and the Island.",
           "expected": "The spell on the stack is Brine Comber, a white and blue Spirit creature spell. Essence Scatter has a legal target; Spell Pierce has none.",
           "operation": {
-            "unclassifiable": "a card in a different zone and cast by a different route"
+            "unclassifiable": "choice: A casts Brine Comber from hand instead of from the graveyard"
           }
         }
       ],
@@ -572,7 +570,7 @@
           "delta": "A does not cast Moonmist; Hanweir Watchkeep stays front face up and B casts Fatal Push at it.",
           "expected": "Hanweir Watchkeep is a red 1/5 Human Warrior Werewolf with defender and has only its front face's characteristics. Its mana value is 3, so Fatal Push does not destroy it and it stays on the battlefield.",
           "operation": {
-            "unclassifiable": "a spell not cast: a different decision by a player"
+            "unclassifiable": "choice: A does not cast Moonmist; B casts Fatal Push"
           }
         }
       ],
@@ -647,7 +645,7 @@
           "delta": "B targets the original Bane of Hanweir instead of the Clone.",
           "expected": "The original has mana value 3 from its front face's {2}{R}. Fatal Push resolves and does not destroy it; both it and the Clone stay on the battlefield.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: B targets the original permanent"
           }
         }
       ],
@@ -713,7 +711,7 @@
           "delta": "A casts Valki as its front face for {1}{B}, tapping two Swamps.",
           "expected": "Valki, God of Lies is a legendary 2/1 black God creature with mana value 2. It is not a planeswalker and has no loyalty counters. Its enters trigger resolves with B's hand empty, exiling nothing.",
           "operation": {
-            "unclassifiable": "a different face cast, a different spell"
+            "unclassifiable": "choice: A casts Valki as its front face"
           }
         }
       ],
@@ -781,7 +779,7 @@
           "delta": "Before B acts, A casts Clone, tapping the four Islands, and has it enter as a copy of Chittering Host; B then targets the Clone with Fatal Push.",
           "expected": "The Clone is a copy of the melded permanent and has mana value 0. Fatal Push destroys it and it moves to A's graveyard; the original Chittering Host stays on the battlefield.",
           "operation": {
-            "unclassifiable": "adding a permanent and a different target"
+            "unclassifiable": "choice: A casts Clone as a copy of Chittering Host and B targets it"
           }
         }
       ],
@@ -847,7 +845,7 @@
           "delta": "A controls a Clone that entered as a copy of Hanweir Watchkeep instead of the Watchkeep itself.",
           "expected": "The Clone is a red 1/5 Human Warrior Werewolf with defender, but it is not a double-faced card, so the transform instruction does nothing and it stays a copy of Hanweir Watchkeep.",
           "operation": {
-            "unclassifiable": "the permanent is replaced by a copy of the original: a copy effect, which no card swap sets up"
+            "unclassifiable": "not a board edit: a copy effect (Clone entered as a copy)"
           }
         }
       ],
@@ -921,7 +919,7 @@
           "delta": "A controls five Swamps and two Mountains instead of two Swamps.",
           "expected": "Casting either face is legal. Cast as the front face, Valki goes on the stack as a creature spell with mana value 2; cast as the back face, Tibalt goes on the stack as a planeswalker spell with mana value 7.",
           "operation": {
-            "unclassifiable": "adding lands: several permanents"
+            "unclassifiable": "more than one fact: five lands are added"
           }
         }
       ],
@@ -982,9 +980,7 @@
           "polarity": "does_not_fire",
           "delta": "A's graveyard holds Hanweir Watchkeep, a double-faced card whose front face has no ability allowing it to be cast transformed, instead of Beloved Beggar.",
           "expected": "Casting Hanweir Watchkeep from the graveyard is not legal (can_play false); it stays in A's graveyard.",
-          "operation": {
-            "unclassifiable": "a different card in the graveyard"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -1058,7 +1054,7 @@
           "delta": "Beloved Beggar is in A's hand instead of the graveyard, and A casts it normally for {1}{W}, tapping two Plains.",
           "expected": "Beloved Beggar, a white 0/4 Human Peasant, is on the battlefield with its front face up.",
           "operation": {
-            "unclassifiable": "a different zone and route of casting"
+            "unclassifiable": "choice: A casts Beloved Beggar from hand"
           }
         }
       ],
@@ -1125,7 +1121,7 @@
           "delta": "A does not cast Zombify.",
           "expected": "At the beginning of the end step Biolume Egg returns to the battlefield transformed, back face up as Biolume Serpent, a blue 4/4 Serpent. No enters trigger fires and A does not scry.",
           "operation": {
-            "unclassifiable": "a spell not cast: a different decision by a player"
+            "unclassifiable": "choice: A does not cast Zombify"
           }
         }
       ],
@@ -1194,7 +1190,7 @@
           "delta": "A turns the manifested card face up before casting Moonmist instead of after it.",
           "expected": "Delver of Secrets is face up as a Human when Moonmist resolves, so it transforms and is Insectile Aberration, a blue 3/2 Human Insect with flying.",
           "operation": {
-            "unclassifiable": "a different order of two player actions"
+            "unclassifiable": "timing: the manifested card is turned face up before Moonmist is cast"
           }
         }
       ],
@@ -1330,7 +1326,7 @@
           "delta": "A casts Cloudshift targeting Hanweir Watchkeep, tapping the Plains, instead of Moonmist.",
           "expected": "Hanweir Watchkeep is exiled and returns as a new object, front face up, without the +3/+3: it is a 1/5 with defender.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: A casts Cloudshift instead of Moonmist"
           }
         }
       ],
@@ -1390,7 +1386,7 @@
           "delta": "B cast only one spell during B's previous turn.",
           "expected": "It stays night. Leeching Lurker stays on the battlefield as a black 4/4 Leech Horror with lifelink; nothing is attached to B.",
           "operation": {
-            "unclassifiable": "a different count of spells cast earlier in the turn"
+            "unclassifiable": "history: spells B cast during its previous turn"
           }
         }
       ],
@@ -1467,7 +1463,7 @@
           "delta": "B targets Hill Giant instead of Chittering Host.",
           "expected": "Hill Giant is in A's graveyard. Blood Artist triggers once and Quest for Ancient Secrets triggers once, getting 1 quest counter; Chittering Host stays on the battlefield.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: B targets Hill Giant"
           }
         }
       ],
@@ -1533,7 +1529,7 @@
           "delta": "A targets Hill Giant instead of Chittering Host.",
           "expected": "At the beginning of the next end step Hill Giant returns to the battlefield with one +1/+1 counter, a 4/4; Chittering Host stays on the battlefield.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: A targets Hill Giant"
           }
         }
       ],
@@ -1597,9 +1593,7 @@
           "polarity": "does_not_fire",
           "delta": "B controls no Leyline of the Void.",
           "expected": "Graf Rats and Midnight Scavengers are both put into A's graveyard.",
-          "operation": {
-            "unclassifiable": "removing a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -1667,7 +1661,7 @@
           "delta": "A chooses Wheel of Sun and Moon's replacement effect for Graf Rats instead.",
           "expected": "Both Graf Rats and Midnight Scavengers are revealed and put on the bottom of A's library; neither is exiled or in the graveyard.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: A chooses the other replacement effect"
           }
         },
         {
@@ -1676,7 +1670,7 @@
           "delta": "A controls Graf Rats and Midnight Scavengers as two separate permanents instead of the melded Chittering Host.",
           "expected": "Each card gets its own choice: Graf Rats is exiled and Midnight Scavengers is revealed and put on the bottom of A's library.",
           "operation": {
-            "unclassifiable": "changing the permanents on the battlefield"
+            "unclassifiable": "more than one fact: the melded permanent is replaced by two separate permanents"
           }
         }
       ],
@@ -1744,7 +1738,7 @@
           "delta": "B controls Graf Rats and Midnight Scavengers as two separate permanents instead of the melded Chittering Host.",
           "expected": "Both creatures are destroyed and put into B's graveyard. Two creatures were destroyed, so A gains 2 life and is at 22.",
           "operation": {
-            "unclassifiable": "changing the permanents on the battlefield"
+            "unclassifiable": "more than one fact: the melded permanent is replaced by two separate permanents"
           }
         }
       ],
@@ -1805,7 +1799,7 @@
           "delta": "The trigger targets Hanweir Watchkeep instead of Invasion of Alara.",
           "expected": "Hanweir Watchkeep transforms into Bane of Hanweir, a colorless 5/5 Werewolf artifact creature. A creates two 1/1 colorless Gnome artifact creature tokens. Invasion of Alara is unchanged.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: the trigger targets Hanweir Watchkeep"
           }
         }
       ],
@@ -1870,7 +1864,7 @@
           "delta": "A's land is Brightclimb Pathway played as its back face, Grimclimb Pathway, instead of Agadeem's Awakening.",
           "expected": "Grizzly Bears and the Pathway both return to the battlefield; the Pathway returns front face up as Brightclimb Pathway.",
           "operation": {
-            "unclassifiable": "a different land played, a different face"
+            "unclassifiable": "not a board edit: the back face up state of the replacement permanent"
           }
         }
       ],

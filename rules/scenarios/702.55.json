@@ -132,7 +132,7 @@
           "delta": "B instead responds by casting Counterspell on Cry of Contrition, tapping two Islands.",
           "expected": "Cry of Contrition is countered and stays in A's graveyard. No haunt trigger fires, and B discards nothing.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: B responds with Counterspell"
           }
         }
       ],
@@ -216,7 +216,7 @@
           "delta": "Vindicate targets Runeclaw Bear instead.",
           "expected": "Runeclaw Bear is destroyed. Blind Hunter does not trigger because the haunted permanent did not die; life totals stay 20 and 20.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: Vindicate targets a different permanent"
           }
         }
       ],
@@ -301,7 +301,7 @@
           "delta": "Shock targets Runeclaw Bear instead.",
           "expected": "Runeclaw Bear dies. The haunted creature is unaffected and Blind Hunter does not trigger; life totals stay 20 and 20.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: Shock targets a different creature"
           }
         }
       ],

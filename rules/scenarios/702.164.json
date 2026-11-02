@@ -54,7 +54,7 @@
           "delta": "B declares Grizzly Bears as a blocker of Nettling Host.",
           "expected": "Nettling Host deals its damage to Grizzly Bears, which dies; Host takes 2 damage and survives. B is at 20 with 0 poison counters.",
           "operation": {
-            "unclassifiable": "adds a blocker declaration"
+            "unclassifiable": "choice: B declares a blocker"
           }
         },
         {
@@ -63,7 +63,7 @@
           "delta": "B casts Holy Day after attackers are declared, tapping Plains.",
           "expected": "All combat damage is prevented. B is at 20 with 0 poison counters.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: B casts Holy Day after attackers are declared"
           }
         }
       ],

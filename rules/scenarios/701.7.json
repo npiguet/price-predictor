@@ -61,7 +61,7 @@
           "delta": "Instead of passing, B responds by casting Counterspell targeting Raise the Alarm, tapping both Islands.",
           "expected": "Raise the Alarm is countered and moves to A's graveyard. No tokens are created.",
           "operation": {
-            "unclassifiable": "a different spell is cast"
+            "unclassifiable": "choice: B casts Counterspell instead of passing"
           }
         }
       ],
@@ -131,9 +131,7 @@
           "polarity": "does_not_fire",
           "delta": "March of the Machines is not on the battlefield.",
           "expected": "The Treasure token enters as a noncreature artifact with no +1/+1 counter and stays on the battlefield.",
-          "operation": {
-            "unclassifiable": "adds or removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -207,7 +205,7 @@
           "delta": "A casts Raise the Alarm instead of Strike It Rich, tapping both Plains.",
           "expected": "The two tokens are creature tokens as created, so Divine Visitation replaces them: two 4/4 white Angel creature tokens with flying and vigilance enter instead of the Soldiers.",
           "operation": {
-            "unclassifiable": "a different spell is cast"
+            "unclassifiable": "choice: A casts Raise the Alarm instead of Strike It Rich"
           }
         }
       ],

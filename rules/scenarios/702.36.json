@@ -58,7 +58,7 @@
           "delta": "B declares Walking Corpse blocking Severed Legion instead (Grizzly Bears does not block).",
           "expected": "The block is legal: Walking Corpse is a black creature.",
           "operation": {
-            "unclassifiable": "A different blocking declaration by B."
+            "unclassifiable": "choice: B declares a different blocker."
           }
         },
         {
@@ -67,7 +67,7 @@
           "delta": "B declares Phyrexian Walker blocking Severed Legion instead (Grizzly Bears does not block).",
           "expected": "The block is legal: Phyrexian Walker is an artifact creature.",
           "operation": {
-            "unclassifiable": "A different blocking declaration by B."
+            "unclassifiable": "choice: B declares a different blocker."
           }
         },
         {
@@ -76,7 +76,7 @@
           "delta": "B declares Grizzly Bears blocking Hill Giant instead.",
           "expected": "The block is legal: Hill Giant has no fear.",
           "operation": {
-            "unclassifiable": "A different blocking declaration by B."
+            "unclassifiable": "choice: B declares a different block."
           }
         }
       ],
@@ -154,7 +154,7 @@
           "delta": "B declares Walking Corpse blocking Severed Legion instead (Grizzly Bears does not block).",
           "expected": "The block is legal: Walking Corpse is a black creature.",
           "operation": {
-            "unclassifiable": "A different blocking declaration by B."
+            "unclassifiable": "choice: B declares a different blocker."
           }
         }
       ],

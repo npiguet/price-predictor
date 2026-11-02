@@ -64,7 +64,7 @@
           "delta": "A casts and resolves Humble first, then Unleash Fury.",
           "expected": "After Humble, Grizzly Bears is 0/1. Unleash Fury doubles a power of 0, giving +0/+0. Grizzly Bears is 0/1.",
           "operation": {
-            "unclassifiable": "The same actions happen in a different order; no fork operation reorders a player's decisions."
+            "unclassifiable": "timing: the two spells resolve in the opposite order"
           }
         }
       ],
@@ -135,7 +135,7 @@
           "delta": "Unleash Fury targets B's Wall of Wood (0/3) instead of Grizzly Bears.",
           "expected": "Wall of Wood gets +0/+0 and stays 0/3.",
           "operation": {
-            "unclassifiable": "A different target is chosen; no fork operation changes a target."
+            "unclassifiable": "target: Unleash Fury targets B's Wall of Wood"
           }
         },
         {
@@ -144,7 +144,7 @@
           "delta": "With Unleash Fury on the stack, A casts Giant Growth targeting Grizzly Bears, tapping Forest. Giant Growth resolves first.",
           "expected": "Grizzly Bears is 5/5 when Unleash Fury resolves, so it gets +5/+0. Grizzly Bears is 10/5 until end of turn.",
           "operation": {
-            "unclassifiable": "An extra spell is cast in response; no fork operation casts a spell."
+            "unclassifiable": "timing: A casts Giant Growth in response, with Unleash Fury on the stack"
           }
         },
         {
@@ -153,7 +153,7 @@
           "delta": "A casts Giant Growth targeting Grizzly Bears, tapping Forest, only after Unleash Fury has resolved.",
           "expected": "Unleash Fury resolves on a 2/2 and gives +2/+0 (4/2). Giant Growth then gives +3/+3. Grizzly Bears is 7/5 until end of turn.",
           "operation": {
-            "unclassifiable": "An extra spell is cast after the doubling resolves; no fork operation casts a spell."
+            "unclassifiable": "timing: A casts Giant Growth after Unleash Fury resolves"
           }
         }
       ],
@@ -235,7 +235,7 @@
           "delta": "A casts Unleash Fury targeting Hill Giant, tapping both Mountains, instead of Tifa's Limit Break.",
           "expected": "Hill Giant gets +3/+0 and is 6/3 until end of turn. Toughness is unchanged.",
           "operation": {
-            "unclassifiable": "A different spell is cast; no fork operation changes which spell a player casts."
+            "unclassifiable": "choice: A casts Unleash Fury instead of Tifa's Limit Break"
           }
         },
         {
@@ -244,7 +244,7 @@
           "delta": "A casts Tifa's Limit Break choosing the Somersault tier ({0}) instead of Meteor Strikes, paying only {G} with Forest.",
           "expected": "Hill Giant gets +2/+2 and is 5/5 until end of turn: nothing is doubled.",
           "operation": {
-            "unclassifiable": "A different mode (tier) of the spell is chosen; no fork operation changes a player's choice."
+            "unclassifiable": "choice: A chooses the Somersault tier"
           }
         }
       ],
@@ -328,9 +328,7 @@
           "polarity": "does_not_fire",
           "delta": "Dead Weight is not on the battlefield, so Wall of Wood is 0/3.",
           "expected": "Wall of Wood gets +0/+0 and stays 0/3.",
-          "operation": {
-            "unclassifiable": "A permanent is removed from the battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "mixed_signs",
@@ -338,7 +336,7 @@
           "delta": "A casts Tifa's Limit Break choosing the Meteor Strikes tier ({2}) instead of Unleash Fury, paying {G}{2} with Forest and both Mountains.",
           "expected": "Power -2 doubles to -2/-0 and toughness 1 doubles to +0/+1. Wall of Wood is -4/2 until end of turn.",
           "operation": {
-            "unclassifiable": "A different spell is cast; no fork operation changes which spell a player casts."
+            "unclassifiable": "choice: A casts Tifa's Limit Break with the Meteor Strikes tier instead of Unleash Fury"
           }
         }
       ],
@@ -404,7 +402,7 @@
           "delta": "Beacon of Immortality targets B instead of A.",
           "expected": "B's life total goes from 9 to 18. A's life stays 15. Beacon of Immortality is shuffled into A's library.",
           "operation": {
-            "unclassifiable": "A different target is chosen; no fork operation changes a target."
+            "unclassifiable": "target: Beacon of Immortality targets B"
           }
         },
         {
@@ -412,9 +410,7 @@
           "polarity": "does_not_fire",
           "delta": "Everlasting Torment is on the battlefield under B's control (players can't gain life).",
           "expected": "A's life total stays 15. Beacon of Immortality is still shuffled into A's library.",
-          "operation": {
-            "unclassifiable": "A permanent is added to the battlefield; no fork operation adds a permanent."
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -488,7 +484,7 @@
           "delta": "A chooses the mode that doubles the counters A has instead of targeting a permanent.",
           "expected": "A's energy counters go from 2 to 4. Grizzly Bears' counters are unchanged (4/4).",
           "operation": {
-            "unclassifiable": "A different mode of the ability is chosen; no fork operation changes a player's choice."
+            "unclassifiable": "choice: A chooses the mode that doubles the player's counters"
           }
         }
       ],
@@ -567,7 +563,7 @@
           "delta": "A activates Doubling Cube first, with an empty pool, and only then taps Mountain for {R}.",
           "expected": "Doubling Cube adds nothing. A has only {R}, so only the first Shock is cast. B takes 2 damage and is at 18. The second Shock stays in A's hand.",
           "operation": {
-            "unclassifiable": "The same actions happen in a different order; no fork operation reorders a player's decisions."
+            "unclassifiable": "timing: A activates Doubling Cube before tapping Mountain"
           }
         }
       ],
@@ -645,7 +641,7 @@
           "delta": "A does not attack; A casts Shock targeting B, tapping Mountain, and Shock resolves.",
           "expected": "Shock is not a creature, so its damage is not doubled. B takes 2 damage and is at 18.",
           "operation": {
-            "unclassifiable": "The player casts a spell instead of attacking; no fork operation changes a player's decisions."
+            "unclassifiable": "choice: A casts Shock instead of attacking"
           }
         }
       ],
@@ -717,9 +713,7 @@
           "polarity": "does_not_fire",
           "delta": "Furnace of Rath is not on the battlefield.",
           "expected": "Shock deals 2 damage. Hill Giant stays on the battlefield with 2 damage marked.",
-          "operation": {
-            "unclassifiable": "A permanent is removed from the battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "player_target",
@@ -727,7 +721,7 @@
           "delta": "Shock targets B instead of Hill Giant.",
           "expected": "Shock deals 4 damage to B, who is at 16. Hill Giant is untouched.",
           "operation": {
-            "unclassifiable": "A different target is chosen; no fork operation changes a target."
+            "unclassifiable": "target: Shock targets B"
           }
         }
       ],

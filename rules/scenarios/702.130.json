@@ -53,7 +53,7 @@
           "delta": "B declares no blockers.",
           "expected": "The afflict trigger does not fire. Khenra Eternal deals 2 combat damage to B, whose life goes from 20 to 18. Grizzly Bears stays on the battlefield undamaged.",
           "operation": {
-            "unclassifiable": "a different decision or choice by a player"
+            "unclassifiable": "choice: B declares no blockers"
           }
         }
       ],
@@ -126,7 +126,7 @@
           "delta": "Dagger of the Worthy is on A's battlefield but not attached to Khenra Eternal.",
           "expected": "Only the printed afflict triggers: B's life goes from 20 to 19. Khenra Eternal (2/2) and Grizzly Bears destroy each other; B's life stays 19.",
           "operation": {
-            "unclassifiable": "adds, removes, attaches or changes the controller of a permanent, which no fork operation does"
+            "unclassifiable": "not a board edit: the Dagger's attachment state, which no operation sets without removing it"
           }
         },
         {
@@ -135,7 +135,7 @@
           "delta": "B declares no blockers.",
           "expected": "Neither afflict trigger fires. Khenra Eternal deals 4 combat damage to B, whose life goes from 20 to 16.",
           "operation": {
-            "unclassifiable": "a different decision or choice by a player"
+            "unclassifiable": "choice: B declares no blockers"
           }
         }
       ],

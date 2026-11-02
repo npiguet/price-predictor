@@ -64,7 +64,7 @@
           "delta": "A declines to sacrifice a creature as the trigger resolves.",
           "expected": "Grizzly Bears stays on the battlefield and Vulturous Aven stays too. A draws no cards and loses no life, and stays at 20.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: A declines to sacrifice"
           }
         },
         {
@@ -73,7 +73,7 @@
           "delta": "A sacrifices Vulturous Aven itself instead of Grizzly Bears.",
           "expected": "Vulturous Aven goes to A's graveyard, Grizzly Bears stays on the battlefield, and the Aven's trigger still counts as exploiting a creature: A draws two cards and is at 18.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: A sacrifices a different creature"
           }
         }
       ],
@@ -155,7 +155,7 @@
           "delta": "With the exploit trigger on the stack, A sacrifices Grizzly Bears to Bloodthrone Vampire's ability instead.",
           "expected": "Grizzly Bears goes to A's graveyard and Bloodthrone Vampire is 3/3 until end of turn. The exploit trigger resolves with no sacrifice and the exploits-a-creature trigger does not fire: A draws no cards and stays at 20.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: A sacrifices Grizzly Bears to another ability"
           }
         }
       ],

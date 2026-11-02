@@ -51,7 +51,7 @@
           "delta": "The coin lands tails instead of heads.",
           "expected": "A loses the flip. Frenetic Efreet is sacrificed and moves to A's graveyard; it does not phase out.",
           "operation": {
-            "unclassifiable": "The delta changes a random result (the coin lands tails instead of heads), which is no fork operation: none of pt, keyword, colour_type, counters, tap, life or replace_card sets a coin or die result."
+            "unclassifiable": "not a board edit: a coin or die result is a game outcome no operation sets"
           }
         }
       ],
@@ -132,7 +132,7 @@
           "delta": "The coin lands tails instead of heads.",
           "expected": "Molten Sentry enters as a 2/5 creature with defender. Toothy and Zndrsplt's win-a-flip trigger does not fire; it stays a 2/2 with no counters.",
           "operation": {
-            "unclassifiable": "The delta changes a random result (the coin lands tails instead of heads), which is no fork operation: none of pt, keyword, colour_type, counters, tap, life or replace_card sets a coin or die result."
+            "unclassifiable": "not a board edit: a coin or die result is a game outcome no operation sets"
           }
         },
         {
@@ -141,7 +141,7 @@
           "delta": "A does not cast Molten Sentry. Instead A activates Frenetic Efreet's {0} ability, calls heads, and the coin lands heads.",
           "expected": "A wins the flip. Toothy and Zndrsplt's trigger fires and it gets a +1/+1 counter (3/3). Frenetic Efreet phases out. Molten Sentry stays in A's hand.",
           "operation": {
-            "unclassifiable": "The delta is a different decision by A: A activates a different permanent's ability and calls a flip instead of casting a spell, which also leaves a card in hand; a different spell or ability is no fork operation."
+            "unclassifiable": "choice: A activates Frenetic Efreet and calls a flip instead of casting Molten Sentry"
           }
         }
       ],
@@ -217,9 +217,7 @@
           "polarity": "other",
           "delta": "Edgar, King of Figaro is not on the battlefield.",
           "expected": "The coin lands tails and A loses the flip. The first Frenetic Efreet is sacrificed and moves to A's graveyard.",
-          "operation": {
-            "unclassifiable": "The delta removes a permanent (Edgar, King of Figaro is not on the battlefield); removing a permanent is no fork operation."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "second flip of the turn",
@@ -227,7 +225,7 @@
           "delta": "After the first Efreet's ability resolves, A activates the second Frenetic Efreet's {0} ability, calls heads, and the coin would land tails.",
           "expected": "The first Frenetic Efreet phases out (forced win). Edgar no longer applies, so the second flip is lost: the second Frenetic Efreet is sacrificed and moves to A's graveyard.",
           "operation": {
-            "unclassifiable": "The delta adds a further activation by A of a second permanent's ability after the first resolves; a different decision is no fork operation."
+            "unclassifiable": "choice: A activates the second Frenetic Efreet after the first resolves"
           }
         }
       ],

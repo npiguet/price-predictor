@@ -86,7 +86,7 @@
           "delta": "A already has Lost Mine of Phandelver in the command zone with the venture marker on Cave Entrance.",
           "expected": "No second dungeon is brought into the game: A's command zone holds only that one Lost Mine. The marker moves from Cave Entrance to Goblin Lair, whose room ability creates a 1/1 red Goblin creature token under A's control.",
           "operation": {
-            "unclassifiable": "Adds a dungeon and venture marker to the command zone, which no fork operation does."
+            "unclassifiable": "not a board edit: a dungeon and venture marker in the command zone, which no operation edits"
           }
         }
       ],
@@ -155,7 +155,7 @@
           "delta": "The card in A's command zone is A's commander Isamaru, Hound of Konda instead of Lost Mine of Phandelver.",
           "expected": "Casting Isamaru, Hound of Konda from the command zone is legal (can_play true).",
           "operation": {
-            "unclassifiable": "Puts a different card in the command zone, which is not a permanent replacement."
+            "unclassifiable": "not a board edit: a different card in the command zone, which no operation edits"
           }
         }
       ],
@@ -240,7 +240,7 @@
           "delta": "A moves the marker to Mine Tunnels instead of Goblin Lair.",
           "expected": "The marker moves into Mine Tunnels and its room ability triggers, controlled by A: A creates a Treasure token. No Goblin token is created.",
           "operation": {
-            "unclassifiable": "A different decision or choice by a player, not a property a fork operation sets."
+            "unclassifiable": "choice: A moves the marker to Mine Tunnels instead of Goblin Lair"
           }
         },
         {
@@ -249,7 +249,7 @@
           "delta": "B casts Stifle targeting Cloister Gargoyle's enter trigger, tapping Island, instead of passing.",
           "expected": "Stifle resolves and counters the enter trigger. A does not venture, the marker stays on Cave Entrance, no room ability triggers and no token is created.",
           "operation": {
-            "unclassifiable": "Puts an object on the stack, which no fork operation does."
+            "unclassifiable": "choice: B casts Stifle on the enter trigger instead of passing"
           }
         }
       ],
@@ -344,7 +344,7 @@
           "delta": "The venture marker starts on Goblin Lair instead of Storeroom.",
           "expected": "Kick in the Door moves the marker to Dark Pool. Rod's venture moves it along the arrow from Dark Pool to Temple of Dumathoin; no dungeon is removed or brought in by it. Temple's room ability resolves first (A draws a card), then Dark Pool's (B 19, A 21). With the stack empty, Lost Mine of Phandelver is removed in the state-based check and no Tomb of Annihilation enters; no player loses life to Trapped Entry.",
           "operation": {
-            "unclassifiable": "Changes the venture marker's room, a dungeon state no fork operation sets."
+            "unclassifiable": "not a board edit: the venture marker's room, a dungeon state no operation sets"
           }
         }
       ],
@@ -430,7 +430,7 @@
           "delta": "The venture marker starts on Goblin Lair instead of Storeroom.",
           "expected": "The marker moves to Dark Pool: B loses 1 life (19) and A gains 1 life (21). Lost Mine of Phandelver stays in the command zone and Cloister Gargoyle stays a 0/4 without flying.",
           "operation": {
-            "unclassifiable": "Changes the venture marker's room, a dungeon state no fork operation sets."
+            "unclassifiable": "not a board edit: the venture marker's room, a dungeon state no operation sets"
           }
         },
         {
@@ -439,7 +439,7 @@
           "delta": "B casts Lightning Bolt targeting A in response to Temple of Dumathoin's room ability.",
           "expected": "Lightning Bolt resolves first (A 17) and the state-based check that follows leaves Lost Mine of Phandelver in the command zone, because its room ability is still on the stack; Cloister Gargoyle is still a 0/4. After that ability resolves and A draws a card, the dungeon is removed from the game and Cloister Gargoyle becomes a 3/4 with flying.",
           "operation": {
-            "unclassifiable": "Puts an object on the stack, which no fork operation does."
+            "unclassifiable": "choice: B casts Lightning Bolt in response to the room ability"
           }
         }
       ],
@@ -516,7 +516,7 @@
           "delta": "The venture marker starts on Goblin Lair instead of Storeroom.",
           "expected": "The marker moves to Dark Pool (B 19, A 21) and no dungeon is removed. Cloister Gargoyle stays a 0/4 without flying.",
           "operation": {
-            "unclassifiable": "Changes the venture marker's room, a dungeon state no fork operation sets."
+            "unclassifiable": "not a board edit: the venture marker's room, a dungeon state no operation sets"
           }
         }
       ],

@@ -62,7 +62,7 @@
           "delta": "A leaves Hill Giant on top of B's library.",
           "expected": "B's library from the top is Hill Giant, Grizzly Bears, Forest.",
           "operation": {
-            "unclassifiable": "The player's fateseal choice changes; no fork operation changes a player's decision."
+            "unclassifiable": "choice: A leaves the card on top instead of bottoming it"
           }
         },
         {
@@ -71,7 +71,7 @@
           "delta": "A chooses not to fateseal when the trigger resolves.",
           "expected": "B's library from the top is Hill Giant, Grizzly Bears, Forest and A looks at no card.",
           "operation": {
-            "unclassifiable": "The player declines an optional trigger; no fork operation changes a player's decision."
+            "unclassifiable": "choice: A declines the optional fateseal"
           }
         }
       ],

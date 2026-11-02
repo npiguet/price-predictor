@@ -333,9 +333,7 @@
           "polarity": "other",
           "delta": "The creature card in A's graveyard is Lord of Shatterskull Pass instead of Student of Warfare.",
           "expected": "Lord of Shatterskull Pass is not a legal target for that mode: in the graveyard its power is 3 (uppermost box).",
-          "operation": {
-            "unclassifiable": "changing a graveyard card"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [

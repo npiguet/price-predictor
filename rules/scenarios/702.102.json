@@ -60,7 +60,7 @@
           "delta": "Give // Take is in A's graveyard instead of A's hand, and A has cast Snapcaster Mage (tapping two Islands) targeting it, so it has flashback until end of turn.",
           "expected": "Casting only Give for its flashback cost {2}{G}, or only Take for {2}{U}, is legal; casting both halves as a fused split spell is not legal.",
           "operation": {
-            "unclassifiable": "Moves the card to another zone and adds a different spell cast."
+            "unclassifiable": "more than one fact: the card moves from hand to graveyard and A casts Snapcaster Mage targeting it"
           }
         }
       ],
@@ -151,7 +151,7 @@
           "delta": "A casts only the Give half (cost {2}{G}, tapping Forest, Forest, Forest, targeting Grizzly Bears) instead of both halves.",
           "expected": "The spell on the stack is green only, so Pyroblast resolves and does nothing. Give resolves: Grizzly Bears gets three +1/+1 counters and is 5/5.",
           "operation": {
-            "unclassifiable": "A casts only one half, a different cast."
+            "unclassifiable": "choice: A casts only the Give half"
           }
         }
       ],
@@ -219,9 +219,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls only five lands (Forest, Forest, Forest, Island, Island).",
           "expected": "The fused cast is not legal because the total cost is six mana. Casting only Give ({2}{G}) is legal and casting only Take ({2}{U}) is legal.",
-          "operation": {
-            "unclassifiable": "Removes a permanent (a land) from the battlefield."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "no-blue-source",
@@ -229,7 +227,7 @@
           "delta": "A's six lands are Forests only (no Island).",
           "expected": "The fused cast is not legal because its total cost includes {U}, while casting only Give ({2}{G}) is legal.",
           "operation": {
-            "unclassifiable": "Replaces several lands, more than one fact."
+            "unclassifiable": "more than one fact: three Islands are replaced by Forests, one replacement each"
           }
         }
       ],
@@ -315,7 +313,7 @@
           "delta": "A casts only the Give half, tapping three lands.",
           "expected": "Grizzly Bears has three +1/+1 counters and is 5/5. A draws no cards.",
           "operation": {
-            "unclassifiable": "A casts only one half, a different cast."
+            "unclassifiable": "choice: A casts only the Give half"
           }
         }
       ],

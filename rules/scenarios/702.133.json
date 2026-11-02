@@ -55,9 +55,7 @@
           "polarity": "does_not_fire",
           "delta": "A's hand is empty.",
           "expected": "Casting Radical Idea from A's graveyard is not legal: there is no card to discard.",
-          "operation": {
-            "unclassifiable": "changes a hand or library or the zone a card starts in"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -145,7 +143,7 @@
           "delta": "In response, B casts Counterspell targeting Radical Idea, tapping two Islands.",
           "expected": "Counterspell resolves and Radical Idea is countered: A draws nothing, and Radical Idea is in A's exile zone, not the graveyard. Forest is in A's graveyard.",
           "operation": {
-            "unclassifiable": "a different spell or ability is cast"
+            "unclassifiable": "choice: B responds by casting Counterspell on Radical Idea"
           }
         },
         {
@@ -153,9 +151,7 @@
           "polarity": "does_not_fire",
           "delta": "Radical Idea starts in A's hand instead of the graveyard and is cast from there with no discard.",
           "expected": "Radical Idea resolves and A draws a card. Radical Idea is in A's graveyard, not in exile. Forest stays in A's hand.",
-          "operation": {
-            "unclassifiable": "changes a hand or library or the zone a card starts in"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [

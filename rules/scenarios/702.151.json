@@ -58,7 +58,7 @@
           "delta": "A targets B's Hill Giant instead of Grizzly Bears.",
           "expected": "The target is not legal (it must be another creature A controls). The ability is not activated and Lizard Blades stays unattached.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: Hill Giant targeted instead of Grizzly Bears"
           }
         },
         {
@@ -67,7 +67,7 @@
           "delta": "A tries to activate the reconfigure ability in the beginning of combat step instead of main phase 1.",
           "expected": "The activation is not legal (sorcery timing only). Lizard Blades stays unattached and the Mountains stay untapped.",
           "operation": {
-            "unclassifiable": "a different phase"
+            "unclassifiable": "phase or turn: activation attempted in the beginning of combat step instead of main phase 1"
           }
         }
       ],
@@ -143,7 +143,7 @@
           "delta": "Lizard Blades is not attached to any creature.",
           "expected": "The unattach ability cannot be activated (it is attached to nothing). Lizard Blades stays a 1/1 creature and the Mountains stay untapped.",
           "operation": {
-            "unclassifiable": "changes an attachment"
+            "unclassifiable": "not a board edit: the attachment of Lizard Blades to Grizzly Bears; no operation sets or clears an attachment"
           }
         }
       ],
@@ -215,7 +215,7 @@
           "delta": "Lizard Blades is not attached to Grizzly Bears.",
           "expected": "Lizard Blades is an Artifact Creature Equipment Lizard 1/1 with double strike and can attack alongside Grizzly Bears (2/2 without double strike).",
           "operation": {
-            "unclassifiable": "changes an attachment"
+            "unclassifiable": "not a board edit: the attachment of Lizard Blades to Grizzly Bears; no operation sets or clears an attachment"
           }
         }
       ],

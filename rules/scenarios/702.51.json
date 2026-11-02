@@ -150,7 +150,7 @@
           "delta": "The two creatures are Raging Goblin (red) instead of Grizzly Bears (green).",
           "expected": "Casting Siege Wurm is not legal (can_play false): red creatures cannot pay {G}, and no green mana is available.",
           "operation": {
-            "unclassifiable": "replaces two permanents (both creatures change); one replace_card changes one permanent"
+            "unclassifiable": "more than one fact: two creatures are each replaced by a red card (replace_card edits one permanent)"
           }
         }
       ],
@@ -233,9 +233,7 @@
           "polarity": "does_not_fire",
           "delta": "Heartless Summoning is not on the battlefield.",
           "expected": "Casting Siege Wurm is not legal (can_play false): the total cost is {5}{G}{G}, and three creatures cannot pay the generic {5}.",
-          "operation": {
-            "unclassifiable": "removes a permanent from the battlefield"
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "one_bear_tapped",

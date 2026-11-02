@@ -62,7 +62,7 @@
           "delta": "A pays the squad cost {2} once, tapping six Plains.",
           "expected": "The squad trigger fires and creates one token copy: A controls Zephyrim and one Zephyrim token.",
           "operation": {
-            "unclassifiable": "a different payment choice"
+            "unclassifiable": "choice: squad cost paid once instead of twice"
           }
         },
         {
@@ -71,7 +71,7 @@
           "delta": "A does not pay the squad cost, tapping four Plains.",
           "expected": "The squad trigger does not fire. A controls only Zephyrim, no token.",
           "operation": {
-            "unclassifiable": "a different payment choice"
+            "unclassifiable": "choice: squad cost not paid"
           }
         }
       ],

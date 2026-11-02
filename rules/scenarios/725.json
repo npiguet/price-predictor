@@ -77,7 +77,7 @@
           "delta": "B is the monarch instead of A.",
           "expected": "It is not the beginning of B's end step, so the monarch trigger does not fire: A draws nothing and B draws nothing.",
           "operation": {
-            "unclassifiable": "Moves the monarch designation, which no fork operation sets."
+            "unclassifiable": "not a board edit: the monarch designation is held by B instead of A; no operation sets it"
           }
         },
         {
@@ -86,7 +86,7 @@
           "delta": "No player is the monarch.",
           "expected": "There is no monarch trigger and no player draws.",
           "operation": {
-            "unclassifiable": "Removes the monarch designation, which no fork operation sets."
+            "unclassifiable": "not a board edit: no player holds the monarch designation"
           }
         }
       ],
@@ -170,7 +170,7 @@
           "delta": "A declares Hill Giant as a blocker for Grizzly Bears.",
           "expected": "Combat damage is dealt to Grizzly Bears, which moves to B's graveyard, and not to A (20). A remains the monarch. At B's end step nobody draws.",
           "operation": {
-            "unclassifiable": "A different block declaration, a player's choice."
+            "unclassifiable": "choice: A declares Hill Giant as a blocker"
           }
         }
       ],
@@ -264,7 +264,7 @@
           "delta": "B responds to Thorn of the Black Rose with Counterspell, tapping both Islands.",
           "expected": "Thorn of the Black Rose is countered and moves to A's graveyard. No enters trigger exists, so B remains the monarch and A does not. At A's end step nobody draws.",
           "operation": {
-            "unclassifiable": "A different spell cast in response, a player's choice."
+            "unclassifiable": "choice: B responds with Counterspell"
           }
         },
         {
@@ -273,7 +273,7 @@
           "delta": "No player is the monarch before Thorn of the Black Rose enters.",
           "expected": "A becomes the monarch; nobody loses the designation. At the beginning of A's end step A draws a card.",
           "operation": {
-            "unclassifiable": "Removes the monarch designation, which no fork operation sets."
+            "unclassifiable": "not a board edit: no player holds the monarch designation"
           }
         }
       ],
@@ -350,7 +350,7 @@
           "delta": "A is the monarch before casting Fealty to the Realm.",
           "expected": "As soon as Fealty to the Realm is attached, A controls Grizzly Bears, while the trigger is still on the stack. After the trigger resolves A is still the monarch and still controls Grizzly Bears.",
           "operation": {
-            "unclassifiable": "Adds the monarch designation, which no fork operation sets."
+            "unclassifiable": "not a board edit: A already holds the monarch designation"
           }
         }
       ],

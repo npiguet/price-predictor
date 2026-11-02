@@ -51,7 +51,7 @@
           "delta": "A chooses not to have Rakdos Cackler enter with a +1/+1 counter.",
           "expected": "Rakdos Cackler enters with no counters and is 1/1.",
           "operation": {
-            "unclassifiable": "A different choice by A."
+            "unclassifiable": "choice: A chooses not to have the creature enter with a counter"
           }
         }
       ],

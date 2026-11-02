@@ -53,7 +53,7 @@
           "delta": "A casts Mardu Scout for its mana cost {R}{R} instead.",
           "expected": "Mardu Scout is summoning sick and cannot attack. B stays at 20.",
           "operation": {
-            "unclassifiable": "a different spell is cast, a decision by a player"
+            "unclassifiable": "choice: A casts for the mana cost instead of dashing"
           }
         }
       ],
@@ -114,7 +114,7 @@
           "delta": "A casts Mardu Scout for its mana cost {R}{R}, and does not attack with it.",
           "expected": "No delayed trigger exists. Mardu Scout is still on the battlefield at the end step.",
           "operation": {
-            "unclassifiable": "a different spell is cast, a decision by a player"
+            "unclassifiable": "choice: A casts for the mana cost instead of dashing"
           }
         },
         {
@@ -123,7 +123,7 @@
           "delta": "B blocks Mardu Scout with Grizzly Bears, so Mardu Scout dies in combat damage before the end step.",
           "expected": "Mardu Scout deals 3 damage to Grizzly Bears (dies) and takes 2, so it goes to A's graveyard. At the end step it is not returned: it is in the graveyard, not in A's hand.",
           "operation": {
-            "unclassifiable": "a different decision by a player in combat (a block)"
+            "unclassifiable": "choice: B blocks Mardu Scout with Grizzly Bears"
           }
         }
       ],
@@ -190,9 +190,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls only the Mountain.",
           "expected": "Casting for the dash cost is not legal because {1}{R} needs two mana. Casting for the mana cost is not legal.",
-          "operation": {
-            "unclassifiable": "adds or removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

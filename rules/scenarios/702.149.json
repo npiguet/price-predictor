@@ -59,7 +59,7 @@
           "delta": "A declares Gryff Rider and Grizzly Bears (power 2) as attackers instead of Hill Giant.",
           "expected": "Grizzly Bears' power is not greater than Gryff Rider's, so training does not trigger. Gryff Rider has no counters. B takes 4 damage (life 16).",
           "operation": {
-            "unclassifiable": "a different attack declaration: which creature attacks beside the training creature"
+            "unclassifiable": "choice: a different attack declaration, which creature attacks beside the training creature"
           }
         },
         {
@@ -68,7 +68,7 @@
           "delta": "A declares Gryff Rider alone as an attacker.",
           "expected": "No other creature attacks, so training does not trigger. B takes 2 damage (life 18).",
           "operation": {
-            "unclassifiable": "a different attack declaration"
+            "unclassifiable": "choice: a different attack declaration, Gryff Rider attacks alone"
           }
         }
       ],
@@ -145,7 +145,7 @@
           "delta": "Warrior's Resolve is on B's battlefield instead of A's, so Gryff Rider has only its own training.",
           "expected": "One training trigger fires and Gryff Rider gets one +1/+1 counter (3/2). B takes 6 damage (life 14).",
           "operation": {
-            "unclassifiable": "moving a permanent to the other player"
+            "unclassifiable": "more than one fact: Warrior's Resolve is removed from A's battlefield and added to B's"
           }
         }
       ],
@@ -225,7 +225,7 @@
           "delta": "A declares Savior of Ollenbock and Fugitive Wizard (power 1) as attackers instead of Grizzly Bears.",
           "expected": "Fugitive Wizard's power is not greater than Savior of Ollenbock's power 1, so no training trigger and no 'trains' trigger. Hill Giant stays on the battlefield. B takes 2 damage (life 18).",
           "operation": {
-            "unclassifiable": "a different attack declaration: which creature attacks beside the training creature"
+            "unclassifiable": "choice: a different attack declaration, which creature attacks beside the training creature"
           }
         }
       ],

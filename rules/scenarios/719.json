@@ -57,9 +57,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls six Forests instead of seven.",
           "expected": "The condition does not hold: the To-solve trigger does not fire and the Case stays unsolved.",
-          "operation": {
-            "unclassifiable": "A land is removed from the battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "opponents_end_step",
@@ -67,7 +65,7 @@
           "delta": "It is B's turn (B is the active player) and the step is B's end step; A controls seven Forests.",
           "expected": "The trigger is for its controller's end step only: it does not fire and the Case stays unsolved.",
           "operation": {
-            "unclassifiable": "The turn changes to the opponent's; no fork operation changes the phase or the turn."
+            "unclassifiable": "phase or turn: it is B's turn and B's end step"
           }
         }
       ],
@@ -134,7 +132,7 @@
           "delta": "Before the end step A casts Unsummon (tapping Island) targeting the Case, then casts the Case again (tapping Swamp) and it resolves; its enters trigger has no target.",
           "expected": "The new Case is not solved and is a noncreature enchantment; the condition is false at the end step, so it stays unsolved.",
           "operation": {
-            "unclassifiable": "The player casts two additional spells (a bounce spell, then the Case again); no fork operation adds a spell or an action."
+            "unclassifiable": "choice: A casts Unsummon and recasts the Case"
           }
         }
       ],
@@ -195,7 +193,7 @@
           "delta": "A checks the original Case's Solved ability instead of the copy's.",
           "expected": "The original is solved: activating its Solved ability is legal.",
           "operation": {
-            "unclassifiable": "The player considers a different permanent's ability; no fork operation changes a decision."
+            "unclassifiable": "choice: a different permanent's ability is activated"
           }
         }
       ],
@@ -258,7 +256,7 @@
           "delta": "The Case is not solved.",
           "expected": "Grizzly Bears is a 2/2.",
           "operation": {
-            "unclassifiable": "Solved is a designation, not a counter or a characteristic; no fork operation sets a designation."
+            "unclassifiable": "not a board edit: a Case's solved status is not set by any operation"
           }
         }
       ],
@@ -331,7 +329,7 @@
           "delta": "The Case is not solved.",
           "expected": "The Case does not trigger and A draws no card. Lightning Bolt deals 3 damage to B (17 life).",
           "operation": {
-            "unclassifiable": "Solved is a designation, not a counter or a characteristic; no fork operation sets a designation."
+            "unclassifiable": "not a board edit: a Case's solved status is not set by any operation"
           }
         }
       ],
@@ -397,7 +395,7 @@
           "delta": "The Case is not solved.",
           "expected": "Activating the ability is not legal.",
           "operation": {
-            "unclassifiable": "Solved is a designation, not a counter or a characteristic; no fork operation sets a designation."
+            "unclassifiable": "not a board edit: a Case's solved status is not set by any operation"
           }
         }
       ],

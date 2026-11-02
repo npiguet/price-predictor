@@ -62,7 +62,7 @@
           "delta": "A does not pay {2}{B} when the recover trigger resolves.",
           "expected": "The recover trigger fires, no cost is paid, and Grim Harvest moves from A's graveyard to exile.",
           "operation": {
-            "unclassifiable": "a different decision or choice by a player"
+            "unclassifiable": "choice: A does not pay the recover cost"
           }
         },
         {
@@ -71,7 +71,7 @@
           "delta": "Shock targets B's Grizzly Bears instead of A's.",
           "expected": "B's Grizzly Bears is put into B's graveyard. The recover trigger does not fire and Grim Harvest stays in A's graveyard.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: Shock targets B's creature instead of A's"
           }
         }
       ],

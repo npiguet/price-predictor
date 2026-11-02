@@ -60,7 +60,7 @@
           "delta": "At the ward trigger's resolution A pays {2}, tapping the other two Mountains, instead of declining.",
           "expected": "The ward trigger resolves and does not counter Shock. Shock resolves and deals 2 damage to Tomakul Honor Guard (3/1), which is destroyed and moves to B's graveyard. All three of A's Mountains are tapped.",
           "operation": {
-            "unclassifiable": "A different choice by a player."
+            "unclassifiable": "choice: A pays {2} for ward instead of declining: a cost paid."
           }
         },
         {
@@ -69,7 +69,7 @@
           "delta": "Tomakul Honor Guard is on A's battlefield instead of B's, and A casts Shock targeting their own creature.",
           "expected": "Ward does not trigger, because the spell is not controlled by an opponent of the permanent's controller. Shock resolves and deals 2 damage to Tomakul Honor Guard, which is destroyed and moves to A's graveyard. No payment is asked; two of A's Mountains stay untapped.",
           "operation": {
-            "unclassifiable": "The permanent is under a different player's control: moving a permanent between players."
+            "unclassifiable": "more than one fact: Tomakul Honor Guard changes controller: a removal plus an addition."
           }
         }
       ],
@@ -149,7 +149,7 @@
           "delta": "At the ward trigger's resolution A pays {2}, tapping both Islands, instead of declining.",
           "expected": "The ward trigger resolves and does not counter the ability. The ability resolves and deals 1 damage to Tomakul Honor Guard (3/1), which is destroyed and moves to B's graveyard. Both Islands are tapped.",
           "operation": {
-            "unclassifiable": "A different choice by a player."
+            "unclassifiable": "choice: A pays {2} for ward instead of declining: a cost paid."
           }
         }
       ],
@@ -230,7 +230,7 @@
           "delta": "B casts Giant Growth on Raubahn in response to the ward trigger.",
           "expected": "Raubahn is 5/5 when the ward trigger resolves, so the ward cost is 5 life. A has only 4 life and cannot pay, so Lightning Bolt is countered and put into A's graveyard. A stays at 4 life. Raubahn stays on the battlefield as a 5/5 with no damage.",
           "operation": {
-            "unclassifiable": "A different spell is cast or activated, or none: a different decision by a player."
+            "unclassifiable": "choice: B casts Giant Growth in response: a different response."
           }
         }
       ],

@@ -177,9 +177,7 @@
           "polarity": "does_not_fire",
           "delta": "B casts Coral Merfolk (a blue 2/1 with the same cost {1}{U} and no devoid) instead of Mist Intruder.",
           "expected": "Pyroblast counters Coral Merfolk because it is blue; Coral Merfolk goes to B's graveyard.",
-          "operation": {
-            "unclassifiable": "a different spell is cast, a decision by a player"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [

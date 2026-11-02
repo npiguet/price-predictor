@@ -71,7 +71,7 @@
           "delta": "After Song of the Dryads resolves, A casts Naturalize targeting Song of the Dryads (tapping two Forests) and it resolves.",
           "expected": "Song of the Dryads goes to A's graveyard; Grizzly Bears is a green 2/2 Creature - Bear again and no longer a land.",
           "operation": {
-            "unclassifiable": "Removing the Aura is a different spell cast and a permanent leaving, not an attribute change."
+            "unclassifiable": "choice: A casts Naturalize on the Aura after it resolves, a second spell cast."
           }
         },
         {
@@ -157,7 +157,7 @@
           "delta": "A casts Song of the Dryads (tapping both Forests and one Island) targeting Darksteel Citadel instead of Ensoul Artifact.",
           "expected": "Darksteel Citadel is a colorless Land - Forest only: it is no longer an artifact and not a creature.",
           "operation": {
-            "unclassifiable": "A different spell is cast."
+            "unclassifiable": "choice: A casts Song of the Dryads instead of Ensoul Artifact, a different spell."
           }
         },
         {
@@ -166,7 +166,7 @@
           "delta": "After Ensoul Artifact resolves, A casts Naturalize targeting Ensoul Artifact (tapping two Forests) and it resolves.",
           "expected": "Ensoul Artifact goes to A's graveyard; Darksteel Citadel is an Artifact Land again, not a creature, with no power or toughness.",
           "operation": {
-            "unclassifiable": "A second spell is cast and a permanent is removed."
+            "unclassifiable": "choice: A casts Naturalize on the Aura after it resolves, a second spell cast."
           }
         }
       ],
@@ -352,7 +352,7 @@
           "delta": "A does not cast Song of the Dryads and goes straight to considering Goblin Grenade.",
           "expected": "Changeling Outcast is a creature and every creature type, so it is a Goblin: Goblin Grenade can be cast by sacrificing it, and can_play is true.",
           "operation": {
-            "unclassifiable": "A player does not cast a spell; a different decision."
+            "unclassifiable": "choice: A does not cast Song of the Dryads, a different decision."
           }
         }
       ],
@@ -422,7 +422,7 @@
           "delta": "A casts Mirri, Cat Warrior (tapping two Forests and the Plains) instead of the second Isamaru, Hound of Konda.",
           "expected": "No legend rule applies since the names differ: the Forest Isamaru, Song of the Dryads and Mirri all stay on the battlefield.",
           "operation": {
-            "unclassifiable": "A different spell is cast."
+            "unclassifiable": "choice: A casts Mirri, Cat Warrior instead of the second Isamaru, a different spell."
           }
         }
       ],
@@ -486,7 +486,7 @@
           "delta": "The first Isamaru, Hound of Konda is on B's battlefield instead of A's.",
           "expected": "The legend rule looks at one controller at a time: both Isamarus stay on the battlefield, one under each player.",
           "operation": {
-            "unclassifiable": "Changes which player controls a permanent."
+            "unclassifiable": "more than one fact: the first Isamaru leaves A's battlefield and appears under B's, a removal plus an addition."
           }
         }
       ],
@@ -563,18 +563,14 @@
           "polarity": "does_not_fire",
           "delta": "A controls Jace Beleren (a legendary planeswalker) in addition to Grizzly Bears.",
           "expected": "A controls a legendary planeswalker: Urza's Ruinous Blast can be cast and can_play is true.",
-          "operation": {
-            "unclassifiable": "Adds a permanent."
-          }
+          "operation": "add_permanent"
         },
         {
           "label": "opponent-legend",
           "polarity": "fires",
           "delta": "B controls Isamaru, Hound of Konda; A's creature is still Grizzly Bears.",
           "expected": "Only the caster's own legendary permanents count: casting is not permitted and can_play is false.",
-          "operation": {
-            "unclassifiable": "Adds a permanent."
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -650,7 +646,7 @@
           "delta": "The older Concordant Crossroads is on B's battlefield instead of A's.",
           "expected": "The rule ignores controller: B's Concordant Crossroads moves to B's graveyard and A's new one stays.",
           "operation": {
-            "unclassifiable": "Changes which player controls a permanent."
+            "unclassifiable": "more than one fact: the older Concordant Crossroads leaves A's battlefield and appears under B's, a removal plus an addition."
           }
         },
         {
@@ -659,7 +655,7 @@
           "delta": "A casts Glorious Anthem (tapping the Forest and two Plains) instead of the second Concordant Crossroads.",
           "expected": "Glorious Anthem is not a world permanent: both it and the original Concordant Crossroads stay on the battlefield.",
           "operation": {
-            "unclassifiable": "A different spell is cast."
+            "unclassifiable": "choice: A casts Glorious Anthem instead of the second Concordant Crossroads, a different spell."
           }
         }
       ],

@@ -58,7 +58,7 @@
           "delta": "A attacks without exerting Ahn-Crop Crasher (no trigger).",
           "expected": "Combat damage leaves B at 17. After A's next untap step Ahn-Crop Crasher is untapped.",
           "operation": {
-            "unclassifiable": "The player chooses not to pay the exert attack cost, a decision."
+            "unclassifiable": "choice: A attacks without exerting"
           }
         }
       ],
@@ -125,7 +125,7 @@
           "delta": "A attacks without exerting Ahn-Crop Crasher (no trigger).",
           "expected": "After A's next untap step Ahn-Crop Crasher is untapped.",
           "operation": {
-            "unclassifiable": "The player chooses not to pay the exert attack cost, a decision."
+            "unclassifiable": "choice: A attacks without exerting"
           }
         }
       ],
@@ -188,7 +188,7 @@
           "delta": "A attacks without exerting Ahn-Crop Crasher.",
           "expected": "The trigger does not fire. Grizzly Bears blocks: Ahn-Crop Crasher (3/2) deals 3 damage to Grizzly Bears and Grizzly Bears deals 2 to it. Both creatures die. B is at 20.",
           "operation": {
-            "unclassifiable": "The player chooses not to pay the exert attack cost, a decision."
+            "unclassifiable": "choice: A attacks without exerting"
           }
         }
       ],

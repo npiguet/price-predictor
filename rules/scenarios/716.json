@@ -53,7 +53,7 @@
           "delta": "It is B's upkeep (B is the active player) and A has priority.",
           "expected": "Not legal: a level bar can be activated only as a sorcery.",
           "operation": {
-            "unclassifiable": "The turn and step change (the opponent's upkeep instead of the player's main phase); no fork operation changes the phase or the turn."
+            "unclassifiable": "phase or turn: it is B's upkeep, B's turn"
           }
         },
         {
@@ -62,7 +62,7 @@
           "delta": "Druid Class is already level 2.",
           "expected": "Not legal: the Level 2 bar requires the Class to be level 1.",
           "operation": {
-            "unclassifiable": "The Class's level is a designation, not a counter (716.4); no fork operation sets a designation."
+            "unclassifiable": "not a board edit: a Class's level is not set by any operation"
           }
         },
         {
@@ -71,7 +71,7 @@
           "delta": "A attempts the Level 3 ability ({4}{G}, tapping all five Forests) while Druid Class is level 1.",
           "expected": "Not legal: the Level 3 bar requires the Class to be level 2.",
           "operation": {
-            "unclassifiable": "The player activates a different ability; no fork operation changes a decision."
+            "unclassifiable": "choice: a different level ability is activated"
           }
         }
       ],
@@ -141,7 +141,7 @@
           "delta": "Druid Class is level 1.",
           "expected": "Not legal: the Level 2 ability is not yet active and A has no land plays left.",
           "operation": {
-            "unclassifiable": "The Class's level is a designation, not a counter (716.4); no fork operation sets a designation."
+            "unclassifiable": "not a board edit: a Class's level is not set by any operation"
           }
         }
       ],
@@ -215,7 +215,7 @@
           "delta": "A activates the Level 2 ability of the original Druid Class instead of the copy's.",
           "expected": "Not legal: the original is level 2 and the Level 2 bar requires level 1.",
           "operation": {
-            "unclassifiable": "The player activates a different permanent's ability; no fork operation changes a decision."
+            "unclassifiable": "choice: a different permanent's ability is activated"
           }
         }
       ],
@@ -284,7 +284,7 @@
           "delta": "Druid Class is level 2.",
           "expected": "The landfall trigger fires the same way; A gains 1 life (21).",
           "operation": {
-            "unclassifiable": "The Class's level is a designation, not a counter (716.4); no fork operation sets a designation."
+            "unclassifiable": "not a board edit: a Class's level is not set by any operation"
           }
         },
         {
@@ -293,7 +293,7 @@
           "delta": "Druid Class is controlled by B instead of A.",
           "expected": "The Forest enters under A's control, not under the Class controller's, so the landfall trigger does not fire. A and B stay at 20 life.",
           "operation": {
-            "unclassifiable": "The Class's controller changes to the opponent; no fork operation changes control."
+            "unclassifiable": "more than one fact: a permanent changing controller is a removal plus an addition"
           }
         }
       ],
@@ -364,7 +364,7 @@
           "delta": "Druid Class is level 3.",
           "expected": "Student of Warfare still gets exactly 2 level counters and becomes a 3/3 with first strike, not a higher level: Druid Class's class level plays no part. Druid Class gets no level counters and stays at class level 3.",
           "operation": {
-            "unclassifiable": "The Class's level is a designation, not a counter (716.4); no fork operation sets a designation."
+            "unclassifiable": "not a board edit: a Class's level is not set by any operation"
           }
         }
       ],

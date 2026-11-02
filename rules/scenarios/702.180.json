@@ -62,7 +62,7 @@
           "delta": "A taps no creature when paying the harmonize cost.",
           "expected": "The cast is not legal: the total cost stays {5}{U} and A has only four Islands. Unending Whisper stays in A's graveyard.",
           "operation": {
-            "unclassifiable": "a different choice while paying the cost (no creature tapped), which no fork operation makes"
+            "unclassifiable": "choice: A taps no creature when paying the harmonize cost."
           }
         },
         {
@@ -157,7 +157,7 @@
           "delta": "A instead casts the hand copy for its mana cost {U}, tapping one Island, without harmonize.",
           "expected": "The spell resolves and A draws Island. It moves from the stack to A's graveyard, which now holds two Unending Whisper. The graveyard copy is unchanged.",
           "operation": {
-            "unclassifiable": "a different card cast from a different zone, a player's decision no fork operation makes"
+            "unclassifiable": "choice: A casts the hand copy for {U} instead of the graveyard copy with harmonize."
           }
         }
       ],
@@ -249,7 +249,7 @@
           "delta": "A casts the hand copy for {U} (tapping one Island, no creature tapped) instead of the graveyard copy, and B counters it.",
           "expected": "The spell is countered and A draws nothing. It moves from the stack to A's graveyard, which now holds two Unending Whisper. B's Counterspell moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "a different card cast from a different zone, a player's decision no fork operation makes"
+            "unclassifiable": "choice: A casts the hand copy for {U} instead of the graveyard copy with harmonize."
           }
         }
       ],

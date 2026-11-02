@@ -58,7 +58,7 @@
           "delta": "A does not cast Savannah Lions; Grapeshot is the first spell cast this turn.",
           "expected": "The storm trigger creates no copy. Only the original Grapeshot resolves, B's life is 19.",
           "operation": {
-            "unclassifiable": "a different decision by a player, not a fork operation"
+            "unclassifiable": "history: no spell was cast earlier this turn."
           }
         },
         {
@@ -67,7 +67,7 @@
           "delta": "A's hand holds a second Savannah Lions, cast with the second Plains before Grapeshot.",
           "expected": "Two copies are created. B takes 3 damage in total, life 17.",
           "operation": {
-            "unclassifiable": "changes a hand or library card, not a fork operation"
+            "unclassifiable": "history: two spells were cast earlier this turn."
           }
         }
       ],
@@ -140,9 +140,7 @@
           "polarity": "does_not_fire",
           "delta": "A does not control Prismari, the Inspiration.",
           "expected": "One storm trigger fires and creates one copy. B's life is 18.",
-          "operation": {
-            "unclassifiable": "removes a permanent, not a fork operation"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

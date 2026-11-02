@@ -64,7 +64,7 @@
           "delta": "A targets the untapped Forest instead of Grizzly Bears.",
           "expected": "The cast is legal. Wild Growth resolves and enters attached to that Forest.",
           "operation": {
-            "unclassifiable": "A different target chosen for the Aura spell (a land instead of the creature); no fork operation changes a targeting choice."
+            "unclassifiable": "target: A targets the Forest instead of Grizzly Bears"
           }
         }
       ],
@@ -132,9 +132,7 @@
           "polarity": "does_not_fire",
           "delta": "B controls Grizzly Bears.",
           "expected": "Guard Duty has Grizzly Bears as its only legal target; the cast is legal and Guard Duty resolves attached to Grizzly Bears.",
-          "operation": {
-            "unclassifiable": "A creature is added to B's battlefield; no fork operation adds a permanent."
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -208,7 +206,7 @@
           "delta": "A targets Grizzly Bears instead of player B.",
           "expected": "The cast is illegal: Grizzly Bears is not a legal target for an Aura that enchants a player.",
           "operation": {
-            "unclassifiable": "A different target chosen for the Aura spell (a creature instead of a player); no fork operation changes a targeting choice."
+            "unclassifiable": "target: A targets Grizzly Bears instead of player B"
           }
         }
       ],

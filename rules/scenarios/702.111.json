@@ -55,7 +55,7 @@
           "delta": "B declares both Grizzly Bears as blockers of Boggart Brute instead of one.",
           "expected": "The block declaration is legal: Boggart Brute is blocked by both Grizzly Bears.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: B declares two blockers instead of one"
           }
         },
         {

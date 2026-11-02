@@ -70,7 +70,7 @@
           "delta": "A casts Mizzium Mortars for {1}{R} (tapping two Mountains) targeting Hill Giant instead of paying the overload cost.",
           "expected": "Mizzium Mortars deals 4 damage to Hill Giant only, which is destroyed. Grizzly Bears has no damage; Runeclaw Bear is unharmed.",
           "operation": {
-            "unclassifiable": "A different way of casting the spell (no overload), a different decision."
+            "unclassifiable": "choice: A casts Mizzium Mortars without overload, targeting Hill Giant"
           }
         }
       ],
@@ -140,7 +140,7 @@
           "delta": "A tries to cast Mizzium Mortars for {1}{R} targeting Gladecover Scout instead of paying the overload cost.",
           "expected": "The cast is illegal: Gladecover Scout has hexproof and is the only creature A does not control, so Mizzium Mortars has no legal target and cannot be cast.",
           "operation": {
-            "unclassifiable": "A different spell cast by A (the normal cast with a target)."
+            "unclassifiable": "choice: A casts Mizzium Mortars without overload, targeting Gladecover Scout"
           }
         }
       ],

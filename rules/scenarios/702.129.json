@@ -63,7 +63,7 @@
           "delta": "B responds by casting Stifle with its Island, targeting the eternalize ability.",
           "expected": "The eternalize ability is countered. Proven Combatant stays in exile because exiling was a cost, and no token is created. Stifle is in B's graveyard.",
           "operation": {
-            "unclassifiable": "a different spell or ability is cast"
+            "unclassifiable": "choice: B responds by casting Stifle on the ability"
           }
         }
       ],
@@ -137,7 +137,7 @@
           "delta": "It is A's end step instead of the first main phase.",
           "expected": "Activation is not legal outside a main phase. Proven Combatant stays in A's graveyard and the Islands stay untapped.",
           "operation": {
-            "unclassifiable": "changes the phase"
+            "unclassifiable": "phase or turn: it is A's end step instead of the first main phase"
           }
         }
       ],

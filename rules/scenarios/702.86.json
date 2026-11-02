@@ -55,7 +55,7 @@
           "delta": "Ulamog's Crusher came under A's control this turn (summoning sick) and cannot attack.",
           "expected": "Ulamog's Crusher does not attack, so annihilator does not trigger. B keeps Forest, Mountain and Grizzly Bears, and B's life stays 20.",
           "operation": {
-            "unclassifiable": "changes whether the creature has been under control since the turn began"
+            "unclassifiable": "history: the creature came under A's control this turn, which no operation sets"
           }
         },
         {
@@ -64,7 +64,7 @@
           "delta": "B controls only Grizzly Bears (no Forest or Mountain).",
           "expected": "B sacrifices its only permanent, Grizzly Bears, and has no permanents left. Ulamog's Crusher deals 8 damage, so B's life becomes 12.",
           "operation": {
-            "unclassifiable": "removes permanents"
+            "unclassifiable": "more than one fact: two permanents (Forest and Mountain) are removed, one removal each"
           }
         }
       ],
@@ -142,9 +142,7 @@
           "polarity": "does_not_fire",
           "delta": "Eldrazi Conscription is not on the battlefield.",
           "expected": "One annihilator 2 trigger: B sacrifices both Forests and keeps both Mountains and Grizzly Bears. Ulamog's Crusher (8/8) deals 8 damage, so B's life becomes 12.",
-          "operation": {
-            "unclassifiable": "removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

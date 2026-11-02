@@ -124,7 +124,7 @@
           "delta": "Graf Rats is the token (a copy of Graf Rats) and Midnight Scavengers is the card.",
           "expected": "Both are exiled. The Graf Rats token ceases to exist, Midnight Scavengers stays in exile, and no Chittering Host enters the battlefield.",
           "operation": {
-            "unclassifiable": "Which of the two permanents is the token changes on both permanents: two facts."
+            "unclassifiable": "more than one fact: which permanent is the token changes on both, and no operation sets token status"
           }
         },
         {
@@ -133,7 +133,7 @@
           "delta": "The Midnight Scavengers is Clone, a card that entered as a copy of Midnight Scavengers, instead of a token.",
           "expected": "Graf Rats and the Clone are exiled. The Clone is not a meld card, so nothing is melded: Graf Rats and Clone both stay in exile as cards, and no Chittering Host enters the battlefield.",
           "operation": {
-            "unclassifiable": "The partner becomes a nontoken Clone that entered as a copy; a copy effect chosen on entry is no fork operation."
+            "unclassifiable": "not a board edit: a nontoken Clone that entered as a copy; a copy effect and a copiable-values change are not set by any operation"
           }
         },
         {
@@ -223,7 +223,7 @@
           "delta": "Hanweir Garrison is a card in A's graveyard instead of on the battlefield.",
           "expected": "The ability resolves but A controls no creature named Hanweir Garrison, so nothing is exiled. Hanweir Battlements stays on the battlefield, tapped.",
           "operation": {
-            "unclassifiable": "A permanent moves from the battlefield to the graveyard; removing a permanent is no fork operation."
+            "unclassifiable": "more than one fact: the token leaves the battlefield and a card appears in the graveyard, a removal plus a move"
           }
         }
       ],

@@ -53,18 +53,14 @@
           "polarity": "does_not_fire",
           "delta": "A controls a Zombie Army token with two +1/+1 counters.",
           "expected": "No new token is created. The existing Zombie Army gets a +1/+1 counter and is 3/3 with three counters. A controls exactly one Army.",
-          "operation": {
-            "unclassifiable": "An Army token with counters is added to the battlefield; adding a permanent is no fork operation."
-          }
+          "operation": "add_permanent"
         },
         {
           "label": "has_orc_army",
           "polarity": "other",
           "delta": "A controls an Orc Army token with one +1/+1 counter.",
           "expected": "No new token is created. The Orc Army gets a +1/+1 counter and becomes a Zombie in addition to its other types: it is a 2/2 Orc Zombie Army with two counters.",
-          "operation": {
-            "unclassifiable": "An Army token with counters is added to the battlefield; adding a permanent is no fork operation."
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -142,9 +138,7 @@
           "polarity": "other",
           "delta": "Solemnity is not on the battlefield.",
           "expected": "A creates a 0/0 Orc Army token and puts two +1/+1 counters on it (2/2). The when-you-do trigger fires and deals 2 damage to Craw Wurm, which has 2 damage marked and survives. The token stays on the battlefield.",
-          "operation": {
-            "unclassifiable": "A permanent is removed from the battlefield; removing a permanent is no fork operation."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "foray_countered",
@@ -152,7 +146,7 @@
           "delta": "B casts Counterspell on Foray of Orcs, tapping both Islands.",
           "expected": "Foray of Orcs is countered and goes to A's graveyard. A does not amass, no token is created and no trigger fires. Craw Wurm has no damage marked.",
           "operation": {
-            "unclassifiable": "The opponent casts a counterspell, a different decision and spell."
+            "unclassifiable": "choice: B casts Counterspell on Foray of Orcs"
           }
         }
       ],
@@ -243,9 +237,7 @@
           "polarity": "other",
           "delta": "Solemnity is not on the battlefield.",
           "expected": "The Orc Army token gets two +1/+1 counters and is 5/5. The trigger deals 5 damage to Craw Wurm, which dies and goes to B's graveyard.",
-          "operation": {
-            "unclassifiable": "A permanent is removed from the battlefield; removing a permanent is no fork operation."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "foray_countered",
@@ -253,7 +245,7 @@
           "delta": "B casts Counterspell on Foray of Orcs, tapping both Islands.",
           "expected": "Foray of Orcs is countered and goes to A's graveyard. A does not amass: the Orc Army token stays 3/3 and Craw Wurm has no damage marked.",
           "operation": {
-            "unclassifiable": "The opponent casts a counterspell, a different decision and spell."
+            "unclassifiable": "choice: B casts Counterspell on Foray of Orcs"
           }
         }
       ],

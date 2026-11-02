@@ -60,9 +60,7 @@
           "polarity": "does_not_fire",
           "delta": "The library holds Centaur Courser (mana value 3) instead of Grizzly Bears.",
           "expected": "Dimir Infiltrator is in A's graveyard. No card has mana value 2, so nothing moves to A's hand. The library is shuffled.",
-          "operation": {
-            "unclassifiable": "changes the library contents"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -141,7 +139,7 @@
           "delta": "The step is beginning_of_combat instead of main1.",
           "expected": "Activating transmute is not legal: it is not a main phase.",
           "operation": {
-            "unclassifiable": "changes the phase"
+            "unclassifiable": "phase or turn: the step is beginning of combat instead of main phase 1"
           }
         },
         {
@@ -150,7 +148,7 @@
           "delta": "B's Shock targeting A is on the stack.",
           "expected": "Activating transmute is not legal: the stack is not empty.",
           "operation": {
-            "unclassifiable": "adds a spell to the stack"
+            "unclassifiable": "timing: B's Shock is on the stack"
           }
         },
         {
@@ -159,7 +157,7 @@
           "delta": "Dimir Infiltrator is on A's battlefield instead of in A's hand.",
           "expected": "Activating transmute is not legal: the card is not in a hand.",
           "operation": {
-            "unclassifiable": "moves the card to another zone"
+            "unclassifiable": "more than one fact: the card leaves A's hand and is added to the battlefield (move_card has no battlefield zone)"
           }
         }
       ],

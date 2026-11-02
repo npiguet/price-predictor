@@ -71,7 +71,7 @@
           "delta": "It is B's turn (B's main phase 1) and A activates the ability at instant speed after B passes priority.",
           "expected": "Grizzly Bears has 1 damage marked. Arcee is Arcee, Acrobatic Coupe with one +1/+1 counter; it is a Vehicle and not a creature during B's turn.",
           "operation": {
-            "unclassifiable": "The turn changes to B's, with the ability activated at instant speed; no fork operation changes the turn."
+            "unclassifiable": "phase or turn: it is B's turn instead of A's"
           }
         },
         {
@@ -80,7 +80,7 @@
           "delta": "In response to the ability, B casts Unsummon (tapping Island) on Grizzly Bears, returning it to B's hand.",
           "expected": "The ability's only target is gone, so it is removed from the stack without resolving: no damage is dealt and Arcee stays Arcee, Sharpshooter with one +1/+1 counter. Grizzly Bears is in B's hand.",
           "operation": {
-            "unclassifiable": "An additional spell is cast in response; no fork operation casts a spell."
+            "unclassifiable": "choice: B casts Unsummon in response, a different spell cast"
           }
         }
       ],
@@ -256,7 +256,7 @@
           "delta": "Instead of activating Arcee, A turns Daru Lancer face up by paying {2}{W}{W} with all four lands.",
           "expected": "Daru Lancer is face up. Aven Farseer's trigger fires: Aven Farseer has one +1/+1 counter and is 2/2. Arcee is still Arcee, Sharpshooter.",
           "operation": {
-            "unclassifiable": "The player takes a different action (a morph turned face up instead of an ability activated); no fork operation changes a player's action."
+            "unclassifiable": "choice: the player turns Daru Lancer face up instead of activating Arcee"
           }
         }
       ],
@@ -337,7 +337,7 @@
           "delta": "A activates the ability once only (one counter removed); the second activation does not happen.",
           "expected": "Hill Giant has 1 damage marked. Arcee converts once, to Arcee, Acrobatic Coupe, with one +1/+1 counter.",
           "operation": {
-            "unclassifiable": "The player activates the ability once instead of twice; no fork operation changes a player's decision."
+            "unclassifiable": "choice: the player activates the ability once instead of twice"
           }
         }
       ],
@@ -419,9 +419,7 @@
           "polarity": "does_not_fire",
           "delta": "Bound by Moonsilver is not on the battlefield.",
           "expected": "Grizzly Bears has 1 damage marked. Arcee converts to Arcee, Acrobatic Coupe.",
-          "operation": {
-            "unclassifiable": "A permanent is removed from the battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

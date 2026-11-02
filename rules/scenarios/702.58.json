@@ -60,7 +60,7 @@
           "delta": "A casts Simic Initiate (Graft 1), tapping Forest, instead of Vigean Graftmage.",
           "expected": "Simic Initiate enters with one +1/+1 counter and is a 1/1.",
           "operation": {
-            "unclassifiable": "a different spell is cast; no fork operation changes the cast"
+            "unclassifiable": "choice: A casts a different creature spell"
           }
         },
         {
@@ -69,7 +69,7 @@
           "delta": "A casts Grizzly Bears, tapping Forest and Island, instead of Vigean Graftmage.",
           "expected": "Grizzly Bears enters with no counters and is a 2/2.",
           "operation": {
-            "unclassifiable": "a different spell is cast; no fork operation changes the cast"
+            "unclassifiable": "choice: A casts a different creature spell"
           }
         }
       ],
@@ -150,7 +150,7 @@
           "delta": "A chooses not to move a counter when the graft trigger resolves.",
           "expected": "The graft trigger fires and resolves with no effect. Vigean Graftmage keeps two +1/+1 counters (2/2) and Grizzly Bears has none (2/2).",
           "operation": {
-            "unclassifiable": "a different decision or choice by a player"
+            "unclassifiable": "choice: A declines to move a counter"
           }
         },
         {
@@ -159,7 +159,7 @@
           "delta": "A casts Sol Ring, tapping Forest, instead of Grizzly Bears.",
           "expected": "Sol Ring enters. The graft trigger does not fire. Vigean Graftmage keeps two +1/+1 counters (2/2).",
           "operation": {
-            "unclassifiable": "a different spell is cast; no fork operation changes the cast"
+            "unclassifiable": "choice: A casts a different spell"
           }
         }
       ],

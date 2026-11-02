@@ -62,7 +62,7 @@
           "delta": "A casts Grizzly Bears (1G), tapping both Forests, instead of Burnout Bashtronaut.",
           "expected": "Grizzly Bears enters the battlefield. A still has no speed. B still has no speed.",
           "operation": {
-            "unclassifiable": "a different spell cast, a player's decision no fork operation makes"
+            "unclassifiable": "choice: A casts Grizzly Bears instead of Burnout Bashtronaut."
           }
         },
         {
@@ -71,7 +71,7 @@
           "delta": "A already has speed 3 before casting Burnout Bashtronaut.",
           "expected": "Burnout Bashtronaut enters the battlefield. A's speed stays 3.",
           "operation": {
-            "unclassifiable": "changes a player's speed, which no fork operation sets"
+            "unclassifiable": "not a board edit: A has speed 3 instead of no speed; player speed is a property no operation sets."
           }
         }
       ],
@@ -146,7 +146,7 @@
           "delta": "Shock targets B's Grizzly Bears instead of player B.",
           "expected": "Grizzly Bears moves to B's graveyard. B's life stays 20. The speed trigger does not fire and A's speed stays 1.",
           "operation": {
-            "unclassifiable": "a different target for the spell, a player's choice no fork operation makes"
+            "unclassifiable": "target: Shock targets B's Grizzly Bears instead of player B."
           }
         },
         {
@@ -155,7 +155,7 @@
           "delta": "A's speed is 4 instead of 1.",
           "expected": "B loses 2 life (life 18). The speed trigger does not fire and A's speed stays 4.",
           "operation": {
-            "unclassifiable": "changes a player's speed, which no fork operation sets"
+            "unclassifiable": "not a board edit: A's speed is 4 instead of 1; player speed is a property no operation sets."
           }
         },
         {
@@ -164,7 +164,7 @@
           "delta": "It is B's turn (B is the active player, main1) instead of A's turn; A casts Shock at instant speed.",
           "expected": "B loses 2 life (life 18). The speed trigger does not fire and A's speed stays 1.",
           "operation": {
-            "unclassifiable": "changes whose turn it is, which no fork operation sets"
+            "unclassifiable": "phase or turn: B is the active player instead of A."
           }
         }
       ],
@@ -230,7 +230,7 @@
           "delta": "The second Shock is cast on A's next turn instead of the same turn (A's Mountains untap, A's speed stays 2 in between).",
           "expected": "B loses 2 life twice (life 16). The speed trigger fires on each of the two turns: A's speed becomes 2 after the first Shock and 3 after the second.",
           "operation": {
-            "unclassifiable": "moves the second spell to a later turn, a turn change no fork operation makes"
+            "unclassifiable": "timing: the second Shock is cast on A's next turn instead of the same turn."
           }
         }
       ],
@@ -295,7 +295,7 @@
           "delta": "A has speed 2 instead of no speed.",
           "expected": "Grizzly Bears returns to B's hand. B's speed stays 2. A's speed stays 2.",
           "operation": {
-            "unclassifiable": "changes a player's speed, which no fork operation sets"
+            "unclassifiable": "not a board edit: A has speed 2 instead of no speed; player speed is a property no operation sets."
           }
         }
       ],

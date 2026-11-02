@@ -60,7 +60,7 @@
           "delta": "B blocks Child of Night with Grizzly Bears.",
           "expected": "Child of Night and Grizzly Bears deal 2 damage to each other and both are destroyed. A gains 2 life and is at 22. B stays at 20.",
           "operation": {
-            "unclassifiable": "A different blocker is declared: a different decision by a player."
+            "unclassifiable": "choice: B blocks with Grizzly Bears instead of not blocking: a different block declared."
           }
         },
         {
@@ -69,7 +69,7 @@
           "delta": "B casts Holy Day (tapping Plains) in the declare blockers step, without blocking.",
           "expected": "Holy Day resolves and all combat damage is prevented. B stays at 20 and A stays at 20.",
           "operation": {
-            "unclassifiable": "A different spell is cast or activated, or none: a different decision by a player."
+            "unclassifiable": "choice: B casts Holy Day in the declare blockers step: a different spell cast."
           }
         }
       ],
@@ -143,9 +143,7 @@
           "polarity": "does_not_fire",
           "delta": "Lifelink (the Aura) is not on the battlefield.",
           "expected": "Grizzly Bears goes to A's graveyard. The trigger makes Grizzly Bears deal 2 damage to B (life 18), and A gains no life (life 20).",
-          "operation": {
-            "unclassifiable": "Adding or removing a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -207,7 +205,7 @@
           "delta": "Soulfire Grand Master is on B's battlefield instead of A's.",
           "expected": "Shock deals 2 damage to Grizzly Bears, which is destroyed. A gains no life and stays at 20.",
           "operation": {
-            "unclassifiable": "The permanent is under a different player's control: moving a permanent between players."
+            "unclassifiable": "more than one fact: Soulfire Grand Master changes controller: a removal plus an addition."
           }
         }
       ],
@@ -277,7 +275,7 @@
           "delta": "A attacks with one Child of Night and Grizzly Bears instead of both Child of Night.",
           "expected": "B is at 16. A gains 2 life once (life 22). Ajani's Pridemate triggers once and gets one +1/+1 counter (3/3).",
           "operation": {
-            "unclassifiable": "A different attack declaration: a different decision by a player."
+            "unclassifiable": "choice: A attacks with a different set of creatures: a different attack declared."
           }
         }
       ],

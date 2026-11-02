@@ -60,7 +60,7 @@
           "delta": "Grizzly Bears does not attack; Blade Instructor attacks alone.",
           "expected": "The mentor trigger has no legal target (the only attacker is Blade Instructor itself) and no counter is put on anything; Grizzly Bears has no counter.",
           "operation": {
-            "unclassifiable": "a different decision or choice by a player"
+            "unclassifiable": "choice: a different attack declaration: Grizzly Bears does not attack"
           }
         }
       ],
@@ -133,9 +133,7 @@
           "polarity": "does_not_fire",
           "delta": "Nyxborn Unicorn is not on the battlefield.",
           "expected": "Blade Instructor (3/1) has one mentor trigger and Fugitive Wizard ends with one +1/+1 counter as a 2/2.",
-          "operation": {
-            "unclassifiable": "adds, removes, attaches or changes the controller of a permanent, which no fork operation does"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -216,7 +214,7 @@
           "delta": "In response to the mentor trigger, B casts Shock targeting Fugitive Wizard, tapping the Mountain.",
           "expected": "Shock resolves first and Fugitive Wizard dies. The mentor trigger has no legal target when it resolves and fizzles, so no mentor ability resolves and the mentored trigger does not fire; no counter is placed.",
           "operation": {
-            "unclassifiable": "a different spell or ability is cast"
+            "unclassifiable": "choice: B responds to the mentor trigger by casting Shock on Fugitive Wizard"
           }
         }
       ],

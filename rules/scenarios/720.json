@@ -67,9 +67,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls a single Swamp instead of two.",
           "expected": "Casting the card as the Omen Petty Revenge is not legal: A cannot pay {1}{B} with one land. can_play is false.",
-          "operation": {
-            "unclassifiable": "removes a land from the battlefield"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -127,9 +125,7 @@
           "polarity": "does_not_fire",
           "delta": "A's card in hand is Riling Dawnbreaker instead of Dirgur Island Dragon.",
           "expected": "Casting Riling Dawnbreaker as the Omen Signaling Roar is not legal on B's turn: can_play is false, because the Omen is a sorcery and A is not the active player. The cost {1}{W} would be payable.",
-          "operation": {
-            "unclassifiable": "changes the card in hand"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -200,7 +196,7 @@
           "delta": "A casts Riling Dawnbreaker normally as a creature spell, tapping all five Plains.",
           "expected": "Essence Scatter has Riling Dawnbreaker as a legal target (has_legal_target true, can_play true). Negate has no legal target (has_legal_target false, can_play false).",
           "operation": {
-            "unclassifiable": "a different spell is cast"
+            "unclassifiable": "choice: the card is cast as a creature instead of as an Omen"
           }
         }
       ],
@@ -276,7 +272,7 @@
           "delta": "A casts Riling Dawnbreaker normally as a creature spell, tapping all five Plains, instead of as the Omen.",
           "expected": "The copy is a Riling Dawnbreaker creature spell and resolves as a 3/4 flying, vigilance Riling Dawnbreaker token under A's control; the original then resolves and Riling Dawnbreaker enters the battlefield as a card. No Soldier token is created. A's library has one card (Plains); A's graveyard holds only See Double.",
           "operation": {
-            "unclassifiable": "a different spell is cast"
+            "unclassifiable": "choice: the card is cast as a creature instead of as an Omen"
           }
         }
       ],
@@ -352,7 +348,7 @@
           "delta": "In response, B casts Cancel targeting Petty Revenge, tapping three Islands.",
           "expected": "Petty Revenge is countered and Disruptive Stormbrood moves from the stack to A's graveyard. A's library still has only Forest. Grizzly Bears stays on the battlefield undamaged.",
           "operation": {
-            "unclassifiable": "adds a response by a player"
+            "unclassifiable": "choice: B responds by casting Cancel"
           }
         },
         {
@@ -361,7 +357,7 @@
           "delta": "In response, B casts Giant Growth on Grizzly Bears (5/5), tapping Forest, making it an illegal target.",
           "expected": "Petty Revenge fizzles because its only target is illegal, and Disruptive Stormbrood moves from the stack to A's graveyard. A's library still has only Forest. Grizzly Bears stays on the battlefield as a 5/5 until end of turn.",
           "operation": {
-            "unclassifiable": "adds a response by a player"
+            "unclassifiable": "choice: B responds by casting Giant Growth"
           }
         }
       ],
@@ -440,18 +436,14 @@
           "polarity": "fires",
           "delta": "B's hand is only Riling Dawnbreaker.",
           "expected": "No card in B's hand is a legal choice. Nothing is discarded; Riling Dawnbreaker stays in B's hand and B's graveyard is empty.",
-          "operation": {
-            "unclassifiable": "changes a hand"
-          }
+          "operation": "move_card"
         },
         {
           "label": "no_omen_card",
           "polarity": "does_not_fire",
           "delta": "B's hand is only Lava Axe.",
           "expected": "A chooses Lava Axe and B discards it. B's hand is empty.",
-          "operation": {
-            "unclassifiable": "changes a hand"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -517,9 +509,7 @@
           "polarity": "does_not_fire",
           "delta": "A's graveyard holds Lava Axe instead of Riling Dawnbreaker.",
           "expected": "Exhume resolves and nothing enters the battlefield. A's graveyard holds Lava Axe and Exhume.",
-          "operation": {
-            "unclassifiable": "changes a graveyard"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -588,7 +578,7 @@
           "delta": "B's hand is only Riling Dawnbreaker.",
           "expected": "B discards Riling Dawnbreaker, one card, and no second card is discarded because there is none. B's hand is empty and B's graveyard holds one card.",
           "operation": {
-            "unclassifiable": "changes a hand"
+            "unclassifiable": "more than one fact: two cards (Forest and Plains) leave B's hand"
           }
         }
       ],

@@ -156,7 +156,7 @@
           "delta": "B does not cast Lightning Bolt; both players pass with Prey Upon on the stack.",
           "expected": "Both targets are legal on resolution. Centaur Courser deals 3 damage to Grizzly Bears, which is destroyed. Grizzly Bears deals 2 damage to Centaur Courser, which stays on the battlefield with 2 damage marked.",
           "operation": {
-            "unclassifiable": "The opponent casts no spell in response; no fork operation changes a player's decisions."
+            "unclassifiable": "choice: B does not respond; a different response"
           }
         },
         {
@@ -165,7 +165,7 @@
           "delta": "B casts Shock instead of Lightning Bolt targeting Centaur Courser.",
           "expected": "Shock deals 2 damage to Centaur Courser, which survives with 2 damage and stays a legal target. Prey Upon resolves normally: Centaur Courser deals 3 damage to Grizzly Bears, which is destroyed, and Grizzly Bears deals 2 more damage to Centaur Courser (4 total), which is destroyed. Both creatures are in their owners' graveyards.",
           "operation": {
-            "unclassifiable": "A different spell is cast; no fork operation changes which spell a player casts."
+            "unclassifiable": "choice: B casts Shock in response instead of Lightning Bolt"
           }
         },
         {
@@ -174,7 +174,7 @@
           "delta": "B casts Lightning Bolt targeting B's own Grizzly Bears instead of Centaur Courser.",
           "expected": "Grizzly Bears is destroyed and moves to B's graveyard before Prey Upon resolves. Prey Upon resolves with one illegal target: Centaur Courser fights nothing, takes no damage and stays on the battlefield undamaged.",
           "operation": {
-            "unclassifiable": "A different target is chosen; no fork operation changes a target."
+            "unclassifiable": "target: B's Lightning Bolt targets B's own Grizzly Bears instead of Centaur Courser"
           }
         }
       ],
@@ -260,7 +260,7 @@
           "delta": "A does not cast Prey Upon; A attacks with Centaur Courser and B blocks with Grizzly Bears.",
           "expected": "The combat damage that would be dealt between Centaur Courser and Grizzly Bears is prevented. Both creatures stay on the battlefield with no damage marked.",
           "operation": {
-            "unclassifiable": "The player attacks instead of casting the fight spell; no fork operation changes a player's decisions."
+            "unclassifiable": "choice: A attacks and B blocks instead of A casting Prey Upon"
           }
         }
       ],
@@ -341,7 +341,7 @@
           "delta": "A targets Grizzly Bears instead of Nightfall Predator.",
           "expected": "Nightfall Predator deals 5 damage to Grizzly Bears, which is destroyed and moves to B's graveyard. Grizzly Bears deals 2 damage to Nightfall Predator, which stays on the battlefield with 2 damage marked.",
           "operation": {
-            "unclassifiable": "A different target is chosen; no fork operation changes a target."
+            "unclassifiable": "target: the fight ability targets a different creature"
           }
         }
       ],

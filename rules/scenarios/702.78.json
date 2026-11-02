@@ -63,7 +63,7 @@
           "delta": "A does not pay the conspire cost; both Goblin Pikers stay untapped.",
           "expected": "No copy is made. Burn Trail deals 3 damage to B, who is at 17.",
           "operation": {
-            "unclassifiable": "a different choice by A (conspire cost not paid)"
+            "unclassifiable": "choice: A does not pay the conspire cost"
           }
         },
         {
@@ -72,7 +72,7 @@
           "delta": "A controls two Grizzly Bears instead of two Goblin Pikers.",
           "expected": "Grizzly Bears (green) do not share a color with Burn Trail (red), so the conspire cost cannot be paid. No copy is made and B is at 17.",
           "operation": {
-            "unclassifiable": "replaces two permanents, more than one fact"
+            "unclassifiable": "more than one fact: two Goblin Pikers are each replaced by Grizzly Bears"
           }
         }
       ],
@@ -163,7 +163,7 @@
           "delta": "A pays only one conspire instance, tapping two Goblin Pikers.",
           "expected": "Only the paid instance triggers. One copy is made, two Burn Trail resolutions deal 6 damage: B is at 14. Two Goblin Pikers stay untapped.",
           "operation": {
-            "unclassifiable": "a different payment choice by A"
+            "unclassifiable": "choice: A pays only one conspire instance"
           }
         },
         {
@@ -172,7 +172,7 @@
           "delta": "A pays neither conspire instance.",
           "expected": "No copies are made. Burn Trail deals 3 damage: B is at 17.",
           "operation": {
-            "unclassifiable": "a different payment choice by A"
+            "unclassifiable": "choice: A pays neither conspire instance"
           }
         }
       ],

@@ -65,7 +65,7 @@
           "delta": "B does not activate Cudgel Troll's regenerate ability.",
           "expected": "Cudgel Troll is destroyed and moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "a different decision by a player (B does not activate the ability)"
+            "unclassifiable": "choice: B does not activate the regenerate ability"
           }
         },
         {
@@ -74,7 +74,7 @@
           "delta": "After the first Doom Blade resolves, A casts the second Doom Blade on Cudgel Troll, tapping the other two Swamps, and B does not activate the ability again.",
           "expected": "The first Doom Blade is regenerated. The shield was used up by the first destruction, so the second Doom Blade destroys Cudgel Troll and it moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "adds a second spell cast and changes player decisions"
+            "unclassifiable": "choice: A casts the second Doom Blade after the first resolves; a different timing and sequence of spells"
           }
         }
       ],
@@ -151,7 +151,7 @@
           "delta": "B does not activate the regenerate ability.",
           "expected": "Halberdier deals 3 first-strike damage to Cudgel Troll, which is destroyed and moves to B's graveyard before dealing damage. Halberdier survives undamaged. B's life stays 20.",
           "operation": {
-            "unclassifiable": "a different decision by a player (B does not activate the ability)"
+            "unclassifiable": "choice: B does not activate the regenerate ability"
           }
         }
       ],
@@ -229,7 +229,7 @@
           "delta": "B's creature is Cudgel Troll, whose regeneration is a shield from an activated ability, and B activates it once (tapping Forest) in response to the first Doom Blade.",
           "expected": "The first Doom Blade is regenerated; the second finds no shield and destroys Cudgel Troll, which moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "changes the card and B's activation decision (more than one fact)"
+            "unclassifiable": "more than one fact: B's creature is Cudgel Troll instead of Mossbridge Troll (replace_card), and B activates its regenerate ability once in response to the first Doom Blade (a choice)"
           }
         }
       ],
@@ -310,7 +310,7 @@
           "delta": "A casts Doom Blade instead of Terror.",
           "expected": "The shield applies: Cudgel Troll stays on the battlefield, tapped, with damage removed.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: A casts Doom Blade instead of Terror"
           }
         }
       ],

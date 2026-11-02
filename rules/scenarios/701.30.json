@@ -70,7 +70,7 @@
           "delta": "A leaves Hill Giant on top.",
           "expected": "A's library from the top is Hill Giant, Plains, Forest. B's library from the top is Island, Mountain, Swamp.",
           "operation": {
-            "unclassifiable": "The player's clash choice changes; no fork operation changes a player's decision."
+            "unclassifiable": "choice: A keeps its revealed card on top instead of bottoming it"
           }
         },
         {
@@ -79,7 +79,7 @@
           "delta": "B also puts Island on the bottom.",
           "expected": "A's library from the top is Plains, Forest, Hill Giant. B's library from the top is Mountain, Swamp, Island.",
           "operation": {
-            "unclassifiable": "The opponent's clash choice changes; no fork operation changes a player's decision."
+            "unclassifiable": "choice: B bottoms its revealed card"
           }
         }
       ],
@@ -168,18 +168,14 @@
           "polarity": "does_not_fire",
           "delta": "B's top card is Hill Giant too (mana value 4).",
           "expected": "Both reveal mana value 4: nobody wins. Grizzly Bears gets only +2/+2 until end of turn: a 4/4 without trample.",
-          "operation": {
-            "unclassifiable": "The top card of B's library changes; no fork operation changes a library."
-          }
+          "operation": "move_card"
         },
         {
           "label": "lower",
           "polarity": "does_not_fire",
           "delta": "B's top card is Craw Wurm (mana value 6).",
           "expected": "A reveals mana value 4 and B reveals mana value 6: A does not win. Grizzly Bears is a 4/4 without trample until end of turn.",
-          "operation": {
-            "unclassifiable": "The top card of B's library changes; no fork operation changes a library."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [

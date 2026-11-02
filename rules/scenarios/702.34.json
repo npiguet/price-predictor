@@ -56,9 +56,7 @@
           "polarity": "does_not_fire",
           "delta": "Firebolt is in A's hand instead of the graveyard and A casts it for its mana cost {R}.",
           "expected": "Firebolt deals 2 damage to Grizzly Bears, which is destroyed. Firebolt is put into A's graveyard.",
-          "operation": {
-            "unclassifiable": "Moves a card between zones and changes how it is cast."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -139,9 +137,7 @@
           "polarity": "does_not_fire",
           "delta": "Firebolt is in A's hand instead of the graveyard and A casts it for its mana cost {R}.",
           "expected": "Firebolt is countered and is put into A's graveyard. Grizzly Bears is undamaged.",
-          "operation": {
-            "unclassifiable": "Moves a card between zones and changes how it is cast."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -217,9 +213,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls only four Mountains.",
           "expected": "Casting Firebolt from the graveyard is illegal (can_play false): {4}{R} cannot be paid.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from the battlefield."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "in_exile",
@@ -227,7 +221,7 @@
           "delta": "Firebolt is in A's exile zone instead of the graveyard.",
           "expected": "Casting Firebolt is illegal (can_play false): flashback functions only in the graveyard.",
           "operation": {
-            "unclassifiable": "Moves a card between zones."
+            "unclassifiable": "not a board edit: the card sits in the exile zone, which move_card does not cover."
           }
         },
         {
@@ -235,9 +229,7 @@
           "polarity": "does_not_fire",
           "delta": "A's graveyard holds Shock instead of Firebolt.",
           "expected": "Casting Shock from the graveyard is illegal (can_play false): it has no flashback.",
-          "operation": {
-            "unclassifiable": "Changes a card in the graveyard, which is not a permanent."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [

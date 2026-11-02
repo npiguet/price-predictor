@@ -61,7 +61,7 @@
           "delta": "A activates Prodigal Sorcerer ({T}: 1 damage) targeting Lymph Sliver instead of casting Shock.",
           "expected": "Absorb 1 prevents the whole 1 damage. Lymph Sliver has 0 damage marked.",
           "operation": {
-            "unclassifiable": "a different source: an ability is activated instead of a spell cast"
+            "unclassifiable": "choice: a different damage source is activated instead of casting Shock"
           }
         },
         {
@@ -70,7 +70,7 @@
           "delta": "Shock targets B's Grizzly Bears (which has no absorb) instead of Lymph Sliver.",
           "expected": "No damage is prevented. Grizzly Bears is dealt 2 damage and moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: Shock targets Grizzly Bears instead of Lymph Sliver"
           }
         }
       ],
@@ -145,7 +145,7 @@
           "delta": "B blocks Lymph Sliver with Rumbling Baloth alone instead of the two Grizzly Bears, and A assigns all 3 damage to it.",
           "expected": "Rumbling Baloth deals 4 damage and absorb prevents only 1 of it, so Lymph Sliver has 3 damage marked and is destroyed. Rumbling Baloth has 3 damage marked and survives.",
           "operation": {
-            "unclassifiable": "a different block declaration"
+            "unclassifiable": "choice: a different block is declared (Rumbling Baloth alone)"
           }
         }
       ],
@@ -209,7 +209,7 @@
           "delta": "B attacks with Rumbling Baloth (4/4, no double strike) instead of Mirran Crusader.",
           "expected": "Rumbling Baloth deals 4 damage at one time and absorb prevents only 1 of it, so Lymph Sliver has 3 damage marked and is destroyed. Rumbling Baloth has 3 damage marked and survives.",
           "operation": {
-            "unclassifiable": "a different attack declaration: another creature already on the battlefield attacks"
+            "unclassifiable": "choice: a different attacker is declared (Rumbling Baloth)"
           }
         }
       ],
@@ -269,9 +269,7 @@
           "polarity": "does_not_fire",
           "delta": "B controls only one Lymph Sliver.",
           "expected": "The target has one instance of absorb 1, which prevents 1 damage. The Lymph Sliver has 1 damage marked.",
-          "operation": {
-            "unclassifiable": "adds or removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

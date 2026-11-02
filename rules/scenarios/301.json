@@ -58,7 +58,7 @@
           "delta": "It is A's second main phase (step main2).",
           "expected": "Casting Bonesplitter is legal: can_play is true.",
           "operation": {
-            "unclassifiable": "changes the phase"
+            "unclassifiable": "phase or turn: the step is main2 instead of main1"
           }
         },
         {
@@ -67,7 +67,7 @@
           "delta": "It is A's beginning of combat step (step beginning_of_combat) and A has priority.",
           "expected": "Casting Bonesplitter is not legal: can_play is false.",
           "operation": {
-            "unclassifiable": "changes the phase"
+            "unclassifiable": "phase or turn: the step is beginning of combat instead of main1"
           }
         },
         {
@@ -76,7 +76,7 @@
           "delta": "A has already cast Shock targeting B, tapping one Mountain. Shock is on the stack and A has priority.",
           "expected": "Casting Bonesplitter is not legal: can_play is false while Shock is on the stack.",
           "operation": {
-            "unclassifiable": "adds a spell on the stack (a different spell cast)"
+            "unclassifiable": "timing: Shock is on the stack from a spell A cast"
           }
         },
         {
@@ -85,7 +85,7 @@
           "delta": "It is B's turn (active B), B's first main phase, the stack is empty and A has priority.",
           "expected": "Casting Bonesplitter is not legal: can_play is false on B's turn.",
           "operation": {
-            "unclassifiable": "changes the turn"
+            "unclassifiable": "phase or turn: it is B's turn instead of A's"
           }
         }
       ],
@@ -163,7 +163,7 @@
           "delta": "B responds with Counterspell targeting Bonesplitter, tapping both Islands; Counterspell resolves first.",
           "expected": "Counterspell resolves and counters Bonesplitter. Bonesplitter moves to A's graveyard and never reaches the battlefield. Counterspell moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "a different spell cast by B in response"
+            "unclassifiable": "choice: B casts Counterspell, a different spell, in response"
           }
         }
       ],
@@ -231,7 +231,7 @@
           "delta": "Before that, A activates Mutavault's animate ability {1}, tapping one Mountain, and it resolves; Mutavault is a 2/2 creature until end of turn. Then A activates equip {1} with the other Mountain, targeting Mutavault.",
           "expected": "Mutavault is a legal target. Equip resolves and Bonesplitter is attached to Mutavault, which is a 4/2 land creature.",
           "operation": {
-            "unclassifiable": "an extra activation by a player before the equip, a different decision"
+            "unclassifiable": "choice: A activates the animate ability and then equip, targeting Mutavault"
           }
         }
       ],
@@ -306,7 +306,7 @@
           "delta": "After Bonesplitter resolves, A also activates equip {1} with the other Plains, targeting Grizzly Bears, and it resolves.",
           "expected": "Bonesplitter was unattached on entering. After the equip ability resolves it is attached to Grizzly Bears, which is a 4/2.",
           "operation": {
-            "unclassifiable": "an additional activation by the player"
+            "unclassifiable": "choice: A also activates equip, targeting Grizzly Bears"
           }
         },
         {
@@ -315,7 +315,7 @@
           "delta": "A does not cast Bonesplitter. A activates Stonehewer Giant ({1}{W}, tap, tapping both Plains), searching the library for Bonesplitter, putting it onto the battlefield and attaching it to Grizzly Bears.",
           "expected": "Bonesplitter enters the battlefield unattached; the ability then attaches it to Grizzly Bears, which is a 4/2. The library is shuffled.",
           "operation": {
-            "unclassifiable": "a different spell or ability and decision"
+            "unclassifiable": "choice: A activates Stonehewer Giant instead of casting Bonesplitter"
           }
         }
       ],
@@ -377,7 +377,7 @@
           "delta": "The trigger targets Grizzly Bears instead of Angelic Curator.",
           "expected": "Bonesplitter becomes attached to Grizzly Bears, which is a 4/2.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: Sigarda's Aid's trigger targets Grizzly Bears instead of Angelic Curator"
           }
         }
       ],
@@ -456,7 +456,7 @@
           "delta": "Song of the Dryads targets Hill Giant instead.",
           "expected": "Hill Giant becomes a colorless Forest land. Bonesplitter stays attached to Grizzly Bears, which is a 4/2.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: Song of the Dryads targets Hill Giant instead of Grizzly Bears"
           }
         }
       ],
@@ -532,7 +532,7 @@
           "delta": "Ensoul Artifact targets Sol Ring instead.",
           "expected": "Sol Ring is a 5/5 artifact creature. Bonesplitter stays attached to Grizzly Bears, which is a 4/2.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: Ensoul Artifact targets Sol Ring instead of Bonesplitter"
           }
         }
       ],
@@ -607,7 +607,7 @@
           "delta": "Shock targets Centaur Courser instead of Grizzly Bears.",
           "expected": "Centaur Courser (3/3) has 2 damage marked and survives. Bonesplitter stays attached to Grizzly Bears, which is a 4/2.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: Shock targets Centaur Courser instead of Grizzly Bears"
           }
         }
       ],
@@ -679,7 +679,7 @@
           "delta": "It is A's turn (active A) and A attempts to activate equip, tapping A's Mountain and targeting A's Hill Giant.",
           "expected": "The activation is legal. Equip resolves and Bonesplitter moves to A's Hill Giant (5/3). Grizzly Bears, still controlled by B, is a 2/2.",
           "operation": {
-            "unclassifiable": "a different player makes the decision and the turn changes"
+            "unclassifiable": "phase or turn: it is A's turn instead of B's, and A rather than B attempts to activate equip"
           }
         }
       ],
@@ -749,9 +749,7 @@
           "polarity": "does_not_fire",
           "delta": "Grizzly Bears is in A's graveyard instead of Angelic Curator, and is the creature target.",
           "expected": "Grizzly Bears returns to the battlefield and Bonesplitter returns attached to it. Grizzly Bears is a 4/2.",
-          "operation": {
-            "unclassifiable": "changes the contents of a graveyard and the target"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -808,7 +806,7 @@
           "delta": "The fortify ability targets one of the Mountains instead.",
           "expected": "The activation is legal. Fortify resolves and Darksteel Garrison is attached to that Mountain, which has indestructible.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: the fortify ability targets a Mountain instead of Grizzly Bears"
           }
         }
       ],
@@ -883,7 +881,7 @@
           "delta": "Ensoul Artifact targets Sol Ring instead.",
           "expected": "Sol Ring is a 5/5 artifact creature. Darksteel Garrison stays attached to Mountain, which has indestructible.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: Ensoul Artifact targets Sol Ring instead of Darksteel Garrison"
           }
         }
       ],
@@ -948,7 +946,7 @@
           "delta": "A first activates crew 1, tapping Grizzly Bears, and the ability resolves.",
           "expected": "Smuggler's Copter is an artifact creature with power 3 and toughness 3 until end of turn.",
           "operation": {
-            "unclassifiable": "an activation by the player (crew) tapping another creature"
+            "unclassifiable": "choice: A activates crew 1 first"
           }
         }
       ],

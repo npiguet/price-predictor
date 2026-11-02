@@ -52,9 +52,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls two Swamps instead of three.",
           "expected": "Casting Basilica Stalker is not legal either face down ({3}) or face up ({5}{B}).",
-          "operation": {
-            "unclassifiable": "Changes how many lands the player controls, adding or removing permanents; no fork operation adds or removes a permanent."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "six_lands",
@@ -62,7 +60,7 @@
           "delta": "A controls six Swamps instead of three.",
           "expected": "Casting Basilica Stalker is legal both face down for {3} and face up for {5}{B}.",
           "operation": {
-            "unclassifiable": "Changes how many lands the player controls, adding or removing permanents; no fork operation adds or removes a permanent."
+            "unclassifiable": "more than one fact: three more Swamps are added, one operation adds one card"
           }
         }
       ],
@@ -135,7 +133,7 @@
           "delta": "A casts Basilica Stalker face up for {5}{B}, tapping all six Swamps.",
           "expected": "The permanent is Basilica Stalker, a 3/4 Vampire Detective with flying, with no ward.",
           "operation": {
-            "unclassifiable": "A different casting choice: the card is cast face up for its mana cost; no fork operation changes a player's choice."
+            "unclassifiable": "choice: cast face up instead of face down"
           }
         }
       ],
@@ -193,7 +191,7 @@
           "delta": "A controls one Swamp instead of three.",
           "expected": "Turning it face up is not legal: {1}{B} cannot be paid. Hunted Bonebrute stays a face-down 2/2 with ward {2}.",
           "operation": {
-            "unclassifiable": "Changes how many lands the player controls, adding or removing permanents; no fork operation adds or removes a permanent."
+            "unclassifiable": "more than one fact: two Swamps are removed, one operation removes one permanent"
           }
         },
         {
@@ -202,7 +200,7 @@
           "delta": "Hunted Bonebrute is in A's hand instead of face down on the battlefield, and A casts it face up for {2}{B}.",
           "expected": "Hunted Bonebrute resolves as a 6/2 and its enters trigger fires: B creates two 1/1 white Dog tokens.",
           "operation": {
-            "unclassifiable": "Moves the card from the battlefield to the hand and has it cast face up: more than one fact, and a different spell cast."
+            "unclassifiable": "more than one fact: the card leaves the battlefield for A's hand, and is cast face up"
           }
         }
       ],
@@ -271,7 +269,7 @@
           "delta": "A chooses X = 1, paying {1}{3}{W} with five of the Plains, and targets Hill Giant only.",
           "expected": "Hill Giant is exiled; Grizzly Bears stays on B's battlefield.",
           "operation": {
-            "unclassifiable": "A different choice of X and of targets by the player; no fork operation changes a choice."
+            "unclassifiable": "choice: X and the targets chosen differently"
           }
         },
         {
@@ -280,7 +278,7 @@
           "delta": "A chooses X = 0, paying {3}{W}, and the trigger has no targets.",
           "expected": "Nothing is exiled; Grizzly Bears and Hill Giant stay on B's battlefield.",
           "operation": {
-            "unclassifiable": "A different choice of X, and no targets, by the player; no fork operation changes a choice."
+            "unclassifiable": "choice: X and the targets chosen differently"
           }
         }
       ],

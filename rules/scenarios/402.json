@@ -53,18 +53,14 @@
           "polarity": "does_not_fire",
           "delta": "A's hand holds seven cards (Giant Growth removed).",
           "expected": "A discards nothing and keeps seven cards; the graveyard stays empty.",
-          "operation": {
-            "unclassifiable": "changes a hand"
-          }
+          "operation": "move_card"
         },
         {
           "label": "reliquary_tower",
           "polarity": "does_not_fire",
           "delta": "A controls Reliquary Tower, so A has no maximum hand size, with eight cards in hand.",
           "expected": "A discards nothing and keeps eight cards in hand.",
-          "operation": {
-            "unclassifiable": "adds a permanent and changes a hand"
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [

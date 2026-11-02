@@ -64,7 +64,7 @@
           "delta": "A chooses not to pay although both Islands are untapped.",
           "expected": "Illusionary Wall moves to A's graveyard (sacrificed). Both Islands stay untapped.",
           "operation": {
-            "unclassifiable": "A different decision by a player."
+            "unclassifiable": "choice: A chooses not to pay the cumulative upkeep."
           }
         },
         {
@@ -155,9 +155,7 @@
           "polarity": "other",
           "delta": "Mana Chains is not on the battlefield, so Illusionary Wall has only its own instance.",
           "expected": "Only one trigger: Illusionary Wall gets 1 age counter, A pays {U}, and Illusionary Wall stays on the battlefield with 1 age counter.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from the battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

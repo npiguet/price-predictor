@@ -53,7 +53,7 @@
           "delta": "B considers declaring its Dauthi Marauder as the blocker instead.",
           "expected": "Declaring B's Dauthi Marauder as a blocker is legal.",
           "operation": {
-            "unclassifiable": "A different decision by a player."
+            "unclassifiable": "choice: B declares a different creature as blocker."
           }
         }
       ],
@@ -127,7 +127,7 @@
           "delta": "B considers declaring Hill Giant as the blocker instead.",
           "expected": "Declaring Hill Giant as a blocker of Grizzly Bears is legal.",
           "operation": {
-            "unclassifiable": "A different decision by a player."
+            "unclassifiable": "choice: B declares a different creature as blocker."
           }
         },
         {
@@ -136,7 +136,7 @@
           "delta": "A attacks with Dauthi Marauder instead of Grizzly Bears.",
           "expected": "Declaring Dauthi Marauder as a blocker of A's Dauthi Marauder is legal.",
           "operation": {
-            "unclassifiable": "A different decision by a player."
+            "unclassifiable": "choice: A attacks with a different creature."
           }
         }
       ],
@@ -211,7 +211,7 @@
           "delta": "B considers declaring its Dauthi Marauder (one instance of shadow) as the blocker.",
           "expected": "Declaring B's Dauthi Marauder as a blocker is legal; the blocker needs shadow, not two instances.",
           "operation": {
-            "unclassifiable": "A different decision by a player."
+            "unclassifiable": "choice: B declares a different creature as blocker."
           }
         },
         {
@@ -220,7 +220,7 @@
           "delta": "A does not activate Dauthi Embrace; Dauthi Marauder has one instance of shadow.",
           "expected": "Declaring Grizzly Bears as a blocker is illegal, as with two instances.",
           "operation": {
-            "unclassifiable": "A different decision by a player."
+            "unclassifiable": "choice: A does not activate Dauthi Embrace."
           }
         }
       ],

@@ -65,7 +65,7 @@
           "delta": "A plays Mountain from hand as the land drop instead of Forest from the library.",
           "expected": "The top card of the library does not change, so Forest stays revealed throughout; no card is withheld from reveal.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: A plays Mountain from hand instead of Forest from the library"
           }
         }
       ],
@@ -135,7 +135,7 @@
           "delta": "A casts the Grizzly Bears in hand instead of the one on top of the library.",
           "expected": "The top card of the library is still Grizzly Bears and A may look at it throughout the casting; no new top card appears.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: A casts the Grizzly Bears in hand instead of the one on top of the library"
           }
         }
       ],
@@ -206,7 +206,7 @@
           "delta": "B's library holds five cards: Forest, Island, Swamp, Mountain, Plains from the top.",
           "expected": "Sol Ring goes fourth from the top: Forest, Island, Swamp, Sol Ring, Mountain, Plains.",
           "operation": {
-            "unclassifiable": "changes a library"
+            "unclassifiable": "more than one fact: three more cards are in B's library"
           }
         }
       ],

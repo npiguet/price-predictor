@@ -62,18 +62,14 @@
           "polarity": "does_not_fire",
           "delta": "A controls five Grizzly Bears instead of six.",
           "expected": "Activating Heirloom Epic is not legal (can_play false): the adjusted cost is still {6} and only five of its mana can be replaced by tapping creatures; nothing is tapped and A draws no card.",
-          "operation": {
-            "unclassifiable": "Removes one of A's creatures from the battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "no_field",
           "polarity": "other",
           "delta": "Suppression Field is not on the battlefield (A still controls six Grizzly Bears).",
           "expected": "Activating Heirloom Epic is legal at an adjusted cost of {4}; A taps four Grizzly Bears (the other two stay untapped) and Heirloom Epic, and draws 1 card.",
-          "operation": {
-            "unclassifiable": "Removes B's cost-increasing permanent from the battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -135,7 +131,7 @@
           "delta": "A passes priority instead; B, now holding priority with Lightning Bolt on the stack, tries to activate A's Prodigal Pyromancer targeting A.",
           "expected": "B's activation is not legal (can_play false for B): Prodigal Pyromancer stays untapped, no ability is put on the stack, and A's life is unchanged.",
           "operation": {
-            "unclassifiable": "Different decisions by both players (A passes, B attempts the activation); no fork operation changes a player's decision."
+            "unclassifiable": "choice: A passes priority and B tries to activate A's Prodigal Pyromancer"
           }
         }
       ],
@@ -199,7 +195,7 @@
           "delta": "In response B casts Stifle (tapping Island) targeting the ability; both players pass and Stifle resolves.",
           "expected": "The ability is countered and does nothing: B stays at 20, Prodigal Pyromancer stays on the battlefield tapped, and Stifle is in B's graveyard.",
           "operation": {
-            "unclassifiable": "B casts an additional spell in response; no fork operation adds a cast spell."
+            "unclassifiable": "choice: B casts Stifle in response to the ability"
           }
         },
         {
@@ -208,7 +204,7 @@
           "delta": "In response B casts Shock (tapping Mountain) targeting Prodigal Pyromancer; both players pass and Shock resolves first.",
           "expected": "Shock resolves first and Prodigal Pyromancer moves to A's graveyard, yet the ability still on the stack then resolves and deals 1 damage to B (B at 19).",
           "operation": {
-            "unclassifiable": "B casts an additional spell in response that removes the source; no fork operation adds a cast spell."
+            "unclassifiable": "choice: B casts Shock in response to the ability"
           }
         }
       ],
@@ -290,7 +286,7 @@
           "delta": "A activates Kaza first and lets the ability resolve, then casts Divination.",
           "expected": "Divination costs {1}{U}: only two Islands are tapped and two stay untapped; Divination resolves and A draws 2 cards.",
           "operation": {
-            "unclassifiable": "A changes the order of its decisions (activate, then cast); no fork operation changes a player's decisions."
+            "unclassifiable": "timing: A activates Kaza before casting Divination, a different order"
           }
         }
       ],
@@ -345,7 +341,7 @@
           "delta": "Pithing Needle's chosen name is 'Grizzly Bears' instead.",
           "expected": "A's activation is legal (can_play true): Prodigal Pyromancer taps and its ability resolves, dealing 1 damage to B (B at 19).",
           "operation": {
-            "unclassifiable": "A different name chosen for Pithing Needle as it entered; no fork operation sets a permanent's choice."
+            "unclassifiable": "not a board edit: the name chosen for Pithing Needle as it entered, a property no operation sets"
           }
         }
       ],
@@ -414,7 +410,7 @@
           "delta": "Prodigal Pyromancer has been under A's control since the start of A's turn (not summoning sick).",
           "expected": "The activation is legal; Prodigal Pyromancer taps and its ability resolves, dealing 1 damage to B (B at 19).",
           "operation": {
-            "unclassifiable": "Changes how long the creature has been under A's control (summoning sickness); no fork operation sets control history."
+            "unclassifiable": "history: the creature has been under A's control since the start of the turn"
           }
         },
         {
@@ -429,9 +425,7 @@
           "polarity": "other",
           "delta": "The summoning-sick creature is Basking Rootwalla and A activates its {1}{G} ability, tapping both Forests.",
           "expected": "The activation is legal because the cost has no {T}; Basking Rootwalla gets +2/+2 until end of turn and is 3/3.",
-          "operation": {
-            "unclassifiable": "More than one fact: a different creature and a different ability activated, paid with A's Forests; replace_card alone does not change which ability A activates."
-          }
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -512,7 +506,7 @@
           "delta": "A does not respond to Act of Treason, so Basking Rootwalla has not been activated this turn.",
           "expected": "B's activation is legal; B taps both Forests, the ability resolves and Basking Rootwalla is 3/3 until end of turn under B's control.",
           "operation": {
-            "unclassifiable": "A makes a different decision (does not activate in response), changing the ability's activation history; no fork operation sets either."
+            "unclassifiable": "history: Basking Rootwalla has not been activated this turn, so it carries no +2/+2 and A's Forests are untapped"
           }
         }
       ],
@@ -599,7 +593,7 @@
           "delta": "A activates U1, the untap ability granted by the first Touch of Vitae, a second time instead of U2.",
           "expected": "The activation is not legal (can_play false): U1 is limited to one activation; nothing goes on the stack and Prodigal Pyromancer stays tapped.",
           "operation": {
-            "unclassifiable": "A activates a different ability (U1 instead of U2); no fork operation changes a player's decision."
+            "unclassifiable": "choice: A activates U1 a second time instead of U2"
           }
         }
       ],
@@ -672,7 +666,7 @@
           "delta": "Before equipping, A casts Lightning Bolt targeting B (tapping a Mountain) and, still holding priority with it on the stack, tries to activate equip.",
           "expected": "The equip activation is not legal (can_play false): Bonesplitter stays unattached while Lightning Bolt is on the stack.",
           "operation": {
-            "unclassifiable": "A casts an additional spell before equipping; no fork operation adds a cast spell."
+            "unclassifiable": "timing: Lightning Bolt is on the stack when A tries to equip"
           }
         },
         {
@@ -681,7 +675,7 @@
           "delta": "The step is beginning_of_combat instead of main1 and the stack is empty.",
           "expected": "The equip activation is not legal (can_play false): Bonesplitter stays unattached and Grizzly Bears is 2/2.",
           "operation": {
-            "unclassifiable": "Changes the step; no fork operation sets the phase or step."
+            "unclassifiable": "phase or turn: the step is beginning_of_combat instead of main1"
           }
         }
       ],
@@ -763,7 +757,7 @@
           "delta": "B first casts Lightning Bolt targeting A's Grizzly Bears (tapping Mountain), and A activates Charmed Pendant with the Bolt on the stack.",
           "expected": "The activation is still legal (can_play true): Charmed Pendant taps, the top Grizzly Bears is milled and A adds {G}; Lightning Bolt remains on the stack.",
           "operation": {
-            "unclassifiable": "B casts an additional spell; no fork operation adds a cast spell."
+            "unclassifiable": "timing: Lightning Bolt is on the stack when A activates Charmed Pendant"
           }
         },
         {
@@ -772,7 +766,7 @@
           "delta": "A instead casts Giant Growth targeting its Grizzly Bears and tries to pay the {G} by activating Charmed Pendant while paying the cost.",
           "expected": "A's activation of Charmed Pendant while paying Giant Growth's cost is not legal: no mana is added, the Giant Growth cast cannot be completed and is reversed, Giant Growth stays in A's hand, Charmed Pendant stays untapped and nothing is milled.",
           "operation": {
-            "unclassifiable": "A casts a different spell and activates during its payment; no fork operation changes a player's decisions."
+            "unclassifiable": "choice: A casts Giant Growth and activates Charmed Pendant during its payment"
           }
         }
       ],

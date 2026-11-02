@@ -75,7 +75,7 @@
           "delta": "B blocks Grizzly Bears with Runeclaw Bear.",
           "expected": "Grizzly Bears deals combat damage to Runeclaw Bear, not to a player, so the trigger does not fire. Both creatures are destroyed. B's life stays 20. Last Thoughts stays in exile; A drew only one card.",
           "operation": {
-            "unclassifiable": "A different blocking decision by B."
+            "unclassifiable": "choice: B blocks Grizzly Bears with Runeclaw Bear"
           }
         },
         {
@@ -84,7 +84,7 @@
           "delta": "B casts Counterspell on Last Thoughts, tapping both Islands.",
           "expected": "Last Thoughts is countered and goes to A's graveyard; A draws no card and nothing is encoded. Grizzly Bears deals 2 combat damage to B (life 18) and no trigger fires.",
           "operation": {
-            "unclassifiable": "B casts a spell, a different spell cast."
+            "unclassifiable": "choice: B casts Counterspell on Last Thoughts"
           }
         }
       ],
@@ -166,7 +166,7 @@
           "delta": "Before combat, A casts Cloudshift targeting Raging Goblin, tapping Plains, and it resolves; the returned Raging Goblin then attacks.",
           "expected": "Raging Goblin returns as a new object, no longer encoded. It deals 1 combat damage to B (life 19) but no trigger fires; A draws no card.",
           "operation": {
-            "unclassifiable": "A casts a different spell (Cloudshift)."
+            "unclassifiable": "choice: A casts Cloudshift before combat"
           }
         }
       ],
@@ -256,7 +256,7 @@
           "delta": "B targets Mons's Goblin Raiders with Act of Treason and attacks with it instead.",
           "expected": "Mons's Goblin Raiders deals 1 combat damage to A (life 19). It has no encoded card, so no trigger fires; B draws no card.",
           "operation": {
-            "unclassifiable": "B targets a different creature with a different spell."
+            "unclassifiable": "target: Act of Treason targets Mons's Goblin Raiders instead"
           }
         }
       ],

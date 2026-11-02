@@ -63,7 +63,7 @@
           "delta": "B controls Grizzly Bears and blocks the token with it.",
           "expected": "The token is created with haste and attacks even though a blocker exists; Grizzly Bears takes 4 damage and dies, the token takes 2 damage and survives, B stays at 20 life, and the token is sacrificed at the beginning of the end step.",
           "operation": {
-            "unclassifiable": "adds a permanent"
+            "unclassifiable": "choice: B declares a block with Grizzly Bears, a decision on top of adding the Bears"
           }
         },
         {
@@ -71,9 +71,7 @@
           "polarity": "does_not_fire",
           "delta": "B controls Propaganda, and A has no untapped mana left to pay its cost.",
           "expected": "The token is created with haste, but it does not attack because A cannot pay Propaganda's {2}: B stays at 20 life. The token is still sacrificed at the beginning of the end step.",
-          "operation": {
-            "unclassifiable": "adds a permanent"
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -146,7 +144,7 @@
           "delta": "The step is beginning_of_combat instead of main1.",
           "expected": "Encore cannot be activated: it is not a main phase.",
           "operation": {
-            "unclassifiable": "changes the phase"
+            "unclassifiable": "phase or turn: the step is beginning_of_combat instead of main1"
           }
         },
         {
@@ -155,7 +153,7 @@
           "delta": "B is the active player in main1; A receives priority with an empty stack after B passes.",
           "expected": "Encore cannot be activated: it is not A's turn.",
           "operation": {
-            "unclassifiable": "changes the turn"
+            "unclassifiable": "phase or turn: B is the active player instead of A"
           }
         },
         {
@@ -164,7 +162,7 @@
           "delta": "A receives priority with B's Shock targeting A on the stack (B cast it with a Mountain B controls after A passed in main1).",
           "expected": "Encore cannot be activated: the stack is not empty.",
           "operation": {
-            "unclassifiable": "adds a spell to the stack"
+            "unclassifiable": "timing: B's Shock is on the stack when A receives priority"
           }
         },
         {
@@ -172,18 +170,14 @@
           "polarity": "does_not_fire",
           "delta": "Fathom Fleet Swordjack is in A's hand instead of A's graveyard.",
           "expected": "Encore cannot be activated: it functions only while the card is in a graveyard (casting the card for {3}{R} remains possible).",
-          "operation": {
-            "unclassifiable": "moves the card to another zone and changes how it is cast"
-          }
+          "operation": "move_card"
         },
         {
           "label": "short-on-mana",
           "polarity": "does_not_fire",
           "delta": "A controls five Mountains instead of six.",
           "expected": "Encore cannot be activated: the cost {5}{R} cannot be paid.",
-          "operation": {
-            "unclassifiable": "removes a land permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

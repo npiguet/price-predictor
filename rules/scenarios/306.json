@@ -55,7 +55,7 @@
           "delta": "The step is beginning_of_combat instead of main1.",
           "expected": "Casting Jace Beleren is illegal (can_play false): it is not a main phase and Jace has no flash. Jace stays in A's hand.",
           "operation": {
-            "unclassifiable": "Changes the phase or step, not a property a fork operation sets."
+            "unclassifiable": "phase or turn: the step is beginning_of_combat instead of main1"
           }
         },
         {
@@ -64,7 +64,7 @@
           "delta": "A Shock spell controlled by B targeting A is on the stack.",
           "expected": "Casting Jace Beleren is illegal (can_play false): the stack is not empty. Jace stays in A's hand.",
           "operation": {
-            "unclassifiable": "Puts an object on the stack, which no fork operation does."
+            "unclassifiable": "timing: a Shock spell is on the stack"
           }
         },
         {
@@ -73,7 +73,7 @@
           "delta": "B is the active player in main1 with an empty stack.",
           "expected": "Casting Jace Beleren is illegal (can_play false): it is not A's turn. Jace stays in A's hand.",
           "operation": {
-            "unclassifiable": "Changes whose turn it is, which no fork operation does."
+            "unclassifiable": "phase or turn: B is the active player instead of A"
           }
         }
       ],
@@ -152,7 +152,7 @@
           "delta": "B, with priority after A casts Jace Beleren, casts Counterspell targeting it, tapping both Islands; both players pass.",
           "expected": "Counterspell resolves; Jace Beleren is countered and moves to A's graveyard without entering the battlefield; Counterspell moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "B casts a spell in response, a different spell cast and decision."
+            "unclassifiable": "choice: B casts Counterspell in response"
           }
         }
       ],
@@ -231,9 +231,7 @@
           "polarity": "does_not_fire",
           "delta": "The card in A's hand is Jace, the Mind Sculptor (2UU, loyalty 3) instead, cast tapping all four Islands.",
           "expected": "Both planeswalkers stay on the battlefield, each with 3 loyalty counters; nothing goes to the graveyard.",
-          "operation": {
-            "unclassifiable": "A different card in hand cast as a different spell, not a property a fork operation sets."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -301,9 +299,7 @@
           "polarity": "other",
           "delta": "A also controls Doubling Season on the battlefield (its mana is not needed).",
           "expected": "Jace Beleren enters with 6 loyalty counters: the entering replacement puts 3 counters and Doubling Season doubles that.",
-          "operation": {
-            "unclassifiable": "Adds or removes a permanent, which no fork operation does."
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -361,7 +357,7 @@
           "delta": "A activates the -1 ability instead (put a +1/+1 counter on each creature you control; A controls none).",
           "expected": "Ajani has 3 loyalty counters, so its loyalty is 3; nothing else changes.",
           "operation": {
-            "unclassifiable": "A different decision or choice by a player, not a property a fork operation sets."
+            "unclassifiable": "choice: A activates the -1 ability instead of the +1"
           }
         },
         {
@@ -370,7 +366,7 @@
           "delta": "A attempts to activate the -6 ability instead.",
           "expected": "Activation is illegal (can_play false): Ajani has only 4 loyalty, fewer than 6 counters to remove; its loyalty stays 4.",
           "operation": {
-            "unclassifiable": "A different decision or choice by a player, not a property a fork operation sets."
+            "unclassifiable": "choice: A attempts the -6 ability instead of the +1"
           }
         }
       ],
@@ -430,7 +426,7 @@
           "delta": "Ajani Goldmane already activated a loyalty ability earlier this turn (its +1, which resolved; the 4 loyalty counters shown already reflect it).",
           "expected": "Activating +1 is illegal (can_play false): Ajani already activated a loyalty ability this turn.",
           "operation": {
-            "unclassifiable": "Changes a per-turn history (a loyalty ability already activated this turn), not a counter, characteristic or permanent a fork operation sets."
+            "unclassifiable": "history: Ajani already activated a loyalty ability earlier this turn"
           }
         },
         {
@@ -439,7 +435,7 @@
           "delta": "The step is beginning_of_combat instead of main1.",
           "expected": "Activation is illegal (can_play false): it is not a main phase.",
           "operation": {
-            "unclassifiable": "Changes the phase or step, not a property a fork operation sets."
+            "unclassifiable": "phase or turn: the step is beginning_of_combat instead of main1"
           }
         },
         {
@@ -448,7 +444,7 @@
           "delta": "A Shock spell controlled by B targeting A is on the stack.",
           "expected": "Activation is illegal (can_play false): the stack is not empty.",
           "operation": {
-            "unclassifiable": "Puts an object on the stack, which no fork operation does."
+            "unclassifiable": "timing: a Shock spell is on the stack"
           }
         }
       ],
@@ -529,7 +525,7 @@
           "delta": "A declares Grizzly Bears as an attacker against Ajani Goldmane, A's own planeswalker.",
           "expected": "The attack is illegal: a player cannot attack a planeswalker they control.",
           "operation": {
-            "unclassifiable": "A attacks a different planeswalker, a different target and decision."
+            "unclassifiable": "choice: A declares the attack against a different planeswalker, its own"
           }
         }
       ],
@@ -598,7 +594,7 @@
           "delta": "In response, B casts Healing Salve choosing the prevention mode targeting Jace Beleren, tapping Plains.",
           "expected": "Healing Salve resolves first and Shock's 2 damage is prevented: no loyalty counters are removed and Jace Beleren keeps 3 loyalty counters.",
           "operation": {
-            "unclassifiable": "B casts Healing Salve in response, a different spell cast and decision."
+            "unclassifiable": "choice: B casts Healing Salve in response"
           }
         }
       ],
@@ -676,7 +672,7 @@
           "delta": "A casts Shock (2 damage) instead of Lightning Bolt.",
           "expected": "Shock removes 2 loyalty counters; Jace Beleren has 1 loyalty and stays on the battlefield.",
           "operation": {
-            "unclassifiable": "A different spell cast (a different card in hand), not a property a fork operation sets."
+            "unclassifiable": "choice: A casts Shock instead of Lightning Bolt"
           }
         }
       ],

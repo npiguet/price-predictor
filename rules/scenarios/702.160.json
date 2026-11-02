@@ -55,7 +55,7 @@
           "delta": "A casts Boulderbranch Golem for its normal mana cost {7}, tapping all seven Forests.",
           "expected": "Boulderbranch Golem is a colorless 6/5 with mana value 7. Its enters trigger gains A 6 life: A is at 26.",
           "operation": {
-            "unclassifiable": "a different cast choice"
+            "unclassifiable": "choice: cast for the normal cost instead of the prototype cost"
           }
         }
       ],
@@ -112,9 +112,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls three Forests, not four.",
           "expected": "Neither casting is legal: the prototyped cost {3}{G} needs four mana.",
-          "operation": {
-            "unclassifiable": "removing a permanent"
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "seven_forests",
@@ -122,7 +120,7 @@
           "delta": "A controls seven Forests.",
           "expected": "Both castings are legal: prototyped for {3}{G} and for the full {7}.",
           "operation": {
-            "unclassifiable": "adding permanents"
+            "unclassifiable": "more than one fact: three more Forests are added, one operation adds one card"
           }
         }
       ],

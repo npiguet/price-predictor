@@ -50,9 +50,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls no Short Sword; there is no other artifact on A's battlefield or in A's graveyard.",
           "expected": "The craft ability cannot be activated because its material cannot be exiled. Braided Net stays on the battlefield untransformed and both Islands stay untapped.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from the base battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -122,7 +120,7 @@
           "delta": "The step is beginning_of_combat instead of main1.",
           "expected": "Activating craft is not legal: it is not a main phase.",
           "operation": {
-            "unclassifiable": "Changes the step of the turn; no fork operation changes the phase or step."
+            "unclassifiable": "phase or turn: beginning_of_combat instead of main1"
           }
         },
         {
@@ -131,7 +129,7 @@
           "delta": "B has cast Shock targeting A, tapping B's Mountain; Shock is on the stack and A has priority.",
           "expected": "Activating craft is not legal: the stack is not empty.",
           "operation": {
-            "unclassifiable": "Adds a spell an opponent casts to the stack; a different spell cast is no fork operation."
+            "unclassifiable": "timing: B's Shock is on the stack"
           }
         },
         {
@@ -140,7 +138,7 @@
           "delta": "B is the active player instead of A.",
           "expected": "Activating craft is not legal: it is not A's turn.",
           "operation": {
-            "unclassifiable": "Changes the active player, so whose turn it is; no fork operation changes the turn."
+            "unclassifiable": "phase or turn: B is the active player instead of A"
           }
         }
       ],
@@ -210,7 +208,7 @@
           "delta": "Short Sword is in A's graveyard instead of on A's battlefield.",
           "expected": "Activating craft is legal: the artifact card in A's graveyard is a legal material.",
           "operation": {
-            "unclassifiable": "Moves the material card from the battlefield to the graveyard; no fork operation changes a card's zone."
+            "unclassifiable": "more than one fact: Short Sword leaves the battlefield and a card enters A's graveyard"
           }
         },
         {
@@ -219,7 +217,7 @@
           "delta": "Short Sword is in A's hand instead of on A's battlefield.",
           "expected": "Activating craft is not legal: a card in hand is neither a permanent nor a card in a graveyard.",
           "operation": {
-            "unclassifiable": "Moves the material card from the battlefield to the hand; no fork operation changes a card's zone."
+            "unclassifiable": "more than one fact: Short Sword leaves the battlefield and a card enters A's hand"
           }
         },
         {
@@ -228,7 +226,7 @@
           "delta": "Short Sword is on B's battlefield instead of A's.",
           "expected": "Activating craft is not legal: the material must be a permanent A controls or a card in A's graveyard.",
           "operation": {
-            "unclassifiable": "Changes which player controls the material permanent; no fork operation changes control."
+            "unclassifiable": "more than one fact: Short Sword leaves A's battlefield and enters B's"
           }
         }
       ],
@@ -296,7 +294,7 @@
           "delta": "A's exile zone already contains a Hill Giant, exiled earlier by an unrelated effect.",
           "expected": "Wretched Bonemass enters the battlefield as a 2/2: the Hill Giant already in exile was not exiled to pay the craft cost and is not counted.",
           "operation": {
-            "unclassifiable": "Adds a card to the exile zone; no fork operation puts a card in a zone."
+            "unclassifiable": "not a board edit: a card in the exile zone; no operation edits exile"
           }
         }
       ],

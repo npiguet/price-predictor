@@ -76,7 +76,7 @@
           "delta": "A pays for Graven Lore with the five non-snow Islands, so X is 0 and A scries 0.",
           "expected": "No scry event occurs and Flamespeaker Adept's trigger does not fire: it stays 2/3 without first strike. A still draws three cards.",
           "operation": {
-            "unclassifiable": "a different payment, hence a different X chosen by the player"
+            "unclassifiable": "choice: A pays with the non-snow Islands, choosing X = 0"
           }
         }
       ],
@@ -150,7 +150,7 @@
           "delta": "Flamespeaker Adept is controlled by B instead of A.",
           "expected": "A scries but the trigger watches its controller's scries only: Flamespeaker Adept's trigger does not fire and it stays 2/3 without first strike.",
           "operation": {
-            "unclassifiable": "changes which player controls a permanent (not one of the seven operations)"
+            "unclassifiable": "more than one fact: a controller change is a removal plus an addition"
           }
         }
       ],

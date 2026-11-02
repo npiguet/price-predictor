@@ -64,7 +64,7 @@
           "delta": "In response to the job select trigger, B casts Shatter targeting Warrior's Sword, tapping both Mountains.",
           "expected": "Warrior's Sword is destroyed and moves to A's graveyard. The trigger still resolves: a 1/1 colorless Hero token is created and has nothing attached.",
           "operation": {
-            "unclassifiable": "the opponent casts an additional spell, a player's decision no fork operation makes"
+            "unclassifiable": "choice: B casts Shatter in response to the trigger"
           }
         },
         {
@@ -73,7 +73,7 @@
           "delta": "B casts Counterspell targeting Warrior's Sword while it is on the stack, tapping both Islands.",
           "expected": "Warrior's Sword is countered and moves to A's graveyard. It never enters the battlefield, so no job select trigger happens and no Hero token is created.",
           "operation": {
-            "unclassifiable": "the opponent casts an additional spell, a player's decision no fork operation makes"
+            "unclassifiable": "choice: B casts Counterspell on the spell"
           }
         }
       ],

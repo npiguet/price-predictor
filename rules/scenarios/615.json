@@ -72,7 +72,7 @@
           "delta": "Instead of attacking, A casts Shock targeting B, tapping Mountain, after Fog resolves.",
           "expected": "Fog resolved. Shock's 2 damage to B is not combat damage and is not prevented; B is at 18 life.",
           "operation": {
-            "unclassifiable": "A casts a different spell (Shock) instead of attacking: a different decision, not a board fact."
+            "unclassifiable": "choice: A casts Shock instead of attacking."
           }
         }
       ],
@@ -148,7 +148,7 @@
           "delta": "A casts Fog in its own end step (it resolves there) instead of during B's combat.",
           "expected": "Fog resolves in A's end step and its 'this turn' duration ends with that turn. On B's turn Grizzly Bears deals 2 combat damage to A; A is at 18 life.",
           "operation": {
-            "unclassifiable": "Fog is cast in a different turn and step: a change of timing, not a board fact."
+            "unclassifiable": "timing: Fog is cast in A's end step instead of during B's combat."
           }
         }
       ],
@@ -224,7 +224,7 @@
           "delta": "A does not respond. Shock resolves, and only afterwards A casts Mending Hands targeting A.",
           "expected": "Shock deals 2 damage to A before the shield exists; A is at 18 life. Mending Hands then resolves and the damage already dealt is not undone; A stays at 18.",
           "operation": {
-            "unclassifiable": "Mending Hands is cast after Shock resolves instead of in response: a different decision and timing."
+            "unclassifiable": "timing: Mending Hands is cast after Shock resolves instead of before."
           }
         }
       ],
@@ -297,7 +297,7 @@
           "delta": "Shock targets Vigor instead of Grizzly Bears.",
           "expected": "Vigor only applies to another creature, so Vigor has 2 damage marked, no counters, and stays on the battlefield (6/6). Grizzly Bears is unchanged.",
           "operation": {
-            "unclassifiable": "Shock has a different target."
+            "unclassifiable": "target: Shock targets Vigor instead of Grizzly Bears."
           }
         }
       ],
@@ -373,7 +373,7 @@
           "delta": "Mending Hands targets Typhoid Rats instead of Grizzly Bears.",
           "expected": "Grizzly Bears's 2 damage to Typhoid Rats is prevented and Typhoid Rats survives. Typhoid Rats deals 1 deathtouch damage to Grizzly Bears, which dies.",
           "operation": {
-            "unclassifiable": "Mending Hands has a different target."
+            "unclassifiable": "target: Mending Hands targets Typhoid Rats instead of Grizzly Bears."
           }
         },
         {
@@ -382,7 +382,7 @@
           "delta": "B does not cast Mending Hands.",
           "expected": "Typhoid Rats deals 1 deathtouch damage to Grizzly Bears and Grizzly Bears deals 2 damage to Typhoid Rats; both die.",
           "operation": {
-            "unclassifiable": "B does not cast Mending Hands: a different decision."
+            "unclassifiable": "choice: B does not cast Mending Hands."
           }
         }
       ],
@@ -467,7 +467,7 @@
           "delta": "B casts Lava Axe (tapping all five Mountains) targeting A instead of Lightning Bolt; A responds with Mending Hands as before.",
           "expected": "Mending Hands prevents 4 of Lava Axe's 5 damage; the shield is then at 0 and the remaining 1 damage is dealt. A is at 19 life.",
           "operation": {
-            "unclassifiable": "B casts a different spell (Lava Axe instead of Lightning Bolt)."
+            "unclassifiable": "choice: B casts Lava Axe instead of Lightning Bolt."
           }
         },
         {
@@ -476,7 +476,7 @@
           "delta": "B casts Shock targeting A instead of Lightning Bolt, and after it resolves casts a second Shock targeting A (tapping a second Mountain).",
           "expected": "The shield prevents the first Shock's 2 damage (2 left) and the second Shock's 2 damage (0 left); the number of events does not matter. A stays at 20 life.",
           "operation": {
-            "unclassifiable": "B casts different spells (two Shocks instead of Lightning Bolt)."
+            "unclassifiable": "choice: B casts two Shocks instead of Lightning Bolt."
           }
         }
       ],
@@ -551,7 +551,7 @@
           "delta": "B chooses Hill Giant as the source instead of Raging Redcap.",
           "expected": "Hill Giant's 3 combat damage to B is prevented. Raging Redcap's 1 first-strike and 1 regular combat damage are dealt. B is at 18 life.",
           "operation": {
-            "unclassifiable": "B chooses a different source for the Circle's ability."
+            "unclassifiable": "choice: B chooses Hill Giant as the source."
           }
         },
         {
@@ -560,7 +560,7 @@
           "delta": "B does not activate Circle of Protection: Red.",
           "expected": "Raging Redcap deals 1 first-strike and 1 regular combat damage and Hill Giant deals 3 combat damage to B. B is at 15 life.",
           "operation": {
-            "unclassifiable": "B does not activate Circle of Protection: Red: a different decision."
+            "unclassifiable": "choice: B does not activate Circle of Protection: Red."
           }
         }
       ],
@@ -637,7 +637,7 @@
           "delta": "After the ability resolves, A activates Wild Mongrel discarding the Mountain from hand, choosing red; the ability resolves.",
           "expected": "Wild Mongrel is a 3/3 red creature when damage is dealt, no longer matching the shield. Its 3 damage is dealt to B (17 life) and the shield is not used up.",
           "operation": {
-            "unclassifiable": "A activates Wild Mongrel's ability, discarding a card: the hand, the Mongrel's power/toughness and its colour all change (green removed and red added), more than one fact and a player's decision."
+            "unclassifiable": "choice: A activates Wild Mongrel, discarding a card and choosing red."
           }
         }
       ],
@@ -712,7 +712,7 @@
           "delta": "Shock targets Grizzly Bears instead of Daunting Defender.",
           "expected": "Grizzly Bears is not a Cleric, so nothing is prevented; it takes 2 damage and dies.",
           "operation": {
-            "unclassifiable": "Shock has a different target."
+            "unclassifiable": "target: Shock targets Grizzly Bears instead of Daunting Defender."
           }
         },
         {
@@ -721,7 +721,7 @@
           "delta": "B casts a second Shock targeting Daunting Defender, tapping the other Mountain, after the first resolves.",
           "expected": "Each Shock has 1 of its 2 damage prevented separately. Daunting Defender has 2 damage marked in total (3/3) and survives.",
           "operation": {
-            "unclassifiable": "B casts a second spell: a different decision."
+            "unclassifiable": "choice: B casts a second Shock."
           }
         }
       ],
@@ -802,7 +802,7 @@
           "delta": "The Apothecary's ability targets Walking Corpse instead of Grizzly Bears.",
           "expected": "Only Walking Corpse gets a shield: it takes 1 damage and survives. Grizzly Bears and Runeclaw Bear die, and so does Wojek Apothecary.",
           "operation": {
-            "unclassifiable": "The Apothecary's ability has a different target."
+            "unclassifiable": "target: the Apothecary's ability targets Walking Corpse instead of Grizzly Bears."
           }
         },
         {
@@ -811,7 +811,7 @@
           "delta": "After the ability resolves and before Pyroclasm, A casts the Runeclaw Bear from hand, tapping both Forests.",
           "expected": "The Runeclaw Bear that entered later has no shield and dies to Pyroclasm. Grizzly Bears and the Runeclaw Bear already on the battlefield survive with 1 damage; Walking Corpse and Wojek Apothecary die.",
           "operation": {
-            "unclassifiable": "A casts a creature spell from hand, adding a permanent."
+            "unclassifiable": "timing: A casts the Runeclaw Bear between the ability resolving and Pyroclasm."
           }
         }
       ],
@@ -897,7 +897,7 @@
           "delta": "B casts Lightning Bolt first (tapping one Mountain) instead of Flames of the Blood Hand, and then the second Lightning Bolt (tapping another Mountain).",
           "expected": "The first Lightning Bolt's 3 damage is prevented and reduces the shield to 1. The second Lightning Bolt has 1 damage prevented and 2 dealt; A is at 18 life.",
           "operation": {
-            "unclassifiable": "B casts different spells in a different order."
+            "unclassifiable": "choice: B casts Lightning Bolt first instead of Flames of the Blood Hand."
           }
         }
       ],
@@ -980,7 +980,7 @@
           "delta": "Lightning Bolt targets Grizzly Bears instead of A.",
           "expected": "The prevention covers only damage to A, so Grizzly Bears takes 3 damage and dies. No damage is prevented, the trigger does not fire, and Selfless Squire stays 1/1.",
           "operation": {
-            "unclassifiable": "Lightning Bolt has a different target."
+            "unclassifiable": "target: Lightning Bolt targets Grizzly Bears instead of A."
           }
         }
       ],

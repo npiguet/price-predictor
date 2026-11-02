@@ -48,7 +48,7 @@
           "delta": "It is B's turn (B is the active player) instead of A's.",
           "expected": "During B's turn Goldbug, Scrappy Scout is only a legendary artifact Vehicle, not a creature, since it is not crewed. It is not a creature and cannot block.",
           "operation": {
-            "unclassifiable": "a different active player"
+            "unclassifiable": "phase or turn: B is the active player instead of A"
           }
         }
       ],

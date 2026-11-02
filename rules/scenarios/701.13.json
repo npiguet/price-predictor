@@ -60,7 +60,7 @@
           "delta": "With Swords to Plowshares on the stack, B casts Unsummon targeting Hill Giant, tapping Island, and Unsummon resolves first.",
           "expected": "Hill Giant returns to B's hand. Swords to Plowshares fizzles: nothing is exiled and B's life stays 20.",
           "operation": {
-            "unclassifiable": "An extra spell is cast in response; no fork operation casts a spell."
+            "unclassifiable": "choice: B casts Unsummon in response with Swords to Plowshares on the stack"
           }
         }
       ],
@@ -150,7 +150,7 @@
           "delta": "A names Typhoid Rats instead of Grizzly Bears.",
           "expected": "No card with that name is in B's hand, graveyard or library, so nothing is exiled. All of B's Grizzly Bears stay where they are.",
           "operation": {
-            "unclassifiable": "A different card name is chosen; no fork operation changes a player's choice."
+            "unclassifiable": "choice: A names a different card for Memoricide"
           }
         }
       ],
@@ -230,7 +230,7 @@
           "delta": "B casts Cancel instead of Dissipate.",
           "expected": "Lightning Bolt is countered and moves from the stack to A's graveyard, not to exile. B's life stays 20.",
           "operation": {
-            "unclassifiable": "A different spell is cast; no fork operation changes which spell a player casts."
+            "unclassifiable": "choice: B casts Cancel instead of Dissipate"
           }
         }
       ],

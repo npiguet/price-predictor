@@ -64,7 +64,7 @@
           "delta": "A does not pay the buyback cost and taps one Mountain only.",
           "expected": "Fugitive Wizard dies. Searing Touch moves to A's graveyard.",
           "operation": {
-            "unclassifiable": "A different decision by a player."
+            "unclassifiable": "choice: A does not pay the buyback cost."
           }
         },
         {
@@ -73,7 +73,7 @@
           "delta": "B responds with Counterspell, tapping both Islands.",
           "expected": "Searing Touch is countered and moves to A's graveyard, not to A's hand. Fugitive Wizard survives undamaged.",
           "operation": {
-            "unclassifiable": "A different spell cast."
+            "unclassifiable": "choice: B responds with Counterspell."
           }
         },
         {
@@ -82,7 +82,7 @@
           "delta": "B responds with Unsummon on Fugitive Wizard, tapping one Island.",
           "expected": "Fugitive Wizard returns to B's hand. Searing Touch has no legal target, fizzles and moves to A's graveyard, not to A's hand.",
           "operation": {
-            "unclassifiable": "A different spell cast."
+            "unclassifiable": "choice: B responds with Unsummon."
           }
         }
       ],

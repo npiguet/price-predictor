@@ -135,7 +135,7 @@
           "delta": "A casts Painter's Servant (tapping two Islands) and chooses blue, instead of casting Prismatic Lace.",
           "expected": "Grizzly Bears is green and blue; its green is kept because the new color is added in addition.",
           "operation": {
-            "unclassifiable": "a different spell cast: A casts a creature with a colour-adding static instead of the colour-setting instant, which also adds a permanent"
+            "unclassifiable": "choice: A casts Painter's Servant instead of Prismatic Lace"
           }
         },
         {
@@ -144,7 +144,7 @@
           "delta": "A casts Moonlace targeting Grizzly Bears, tapping one Island, instead of casting Prismatic Lace.",
           "expected": "Grizzly Bears becomes colorless and loses green.",
           "operation": {
-            "unclassifiable": "a different spell cast: A casts a make-colourless instant instead"
+            "unclassifiable": "choice: A casts Moonlace instead of Prismatic Lace"
           }
         },
         {
@@ -153,7 +153,7 @@
           "delta": "Prismatic Lace targets Ornithopter and A chooses blue.",
           "expected": "Ornithopter, a colorless artifact creature, becomes blue.",
           "operation": {
-            "unclassifiable": "a different target for the same spell"
+            "unclassifiable": "target: Prismatic Lace targets Ornithopter instead of Grizzly Bears"
           }
         }
       ],

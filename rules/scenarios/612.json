@@ -60,7 +60,7 @@
           "delta": "The chosen color word to replace is white instead of black, replaced with red.",
           "expected": "White Knight is still named White Knight, with first strike and protection from black; nothing about it changed.",
           "operation": {
-            "unclassifiable": "A different choice by the casting player (which colour word to replace); no fork operation changes a choice."
+            "unclassifiable": "choice: the colour word to replace is white instead of black."
           }
         }
       ],
@@ -128,7 +128,7 @@
           "delta": "B chooses to replace the creature type Elf with Goblin instead of Soldier with Goblin.",
           "expected": "Raise the Alarm resolves and creates two 1/1 white Soldier creature tokens named Soldier Token under A's control; there are no Goblin tokens.",
           "operation": {
-            "unclassifiable": "A different choice by the casting player (which creature type to replace); no fork operation changes a choice."
+            "unclassifiable": "choice: the creature type to replace is Elf instead of Soldier."
           }
         }
       ],
@@ -192,7 +192,7 @@
           "delta": "Mind Bend targets Bull Hippo instead of Merfolk of the Pearl Trident.",
           "expected": "Bull Hippo is 3/3 and has swampwalk; it no longer has islandwalk.",
           "operation": {
-            "unclassifiable": "A different target for the text-changing spell; no fork operation changes a target."
+            "unclassifiable": "target: Mind Bend targets Bull Hippo instead of Merfolk of the Pearl Trident."
           }
         }
       ],
@@ -264,7 +264,7 @@
           "delta": "B chooses to replace the creature type Elf with Goblin instead of Soldier with Goblin.",
           "expected": "Token 1 and token 2 are both still 1/1 white Soldier creatures named Soldier Token; neither is a Goblin.",
           "operation": {
-            "unclassifiable": "A different choice by the casting player (which creature type to replace); no fork operation changes a choice."
+            "unclassifiable": "choice: the creature type to replace is Elf instead of Soldier."
           }
         }
       ],
@@ -338,7 +338,7 @@
           "delta": "After the trigger resolves, B casts Disenchant targeting Exchange of Words, tapping both Plains, and it resolves.",
           "expected": "Exchange of Words is in A's graveyard; Serra Angel is a 4/4 with flying and vigilance again and Grizzly Bears is a 2/2 with no abilities.",
           "operation": {
-            "unclassifiable": "An additional spell is cast and a permanent leaves the battlefield; no fork operation casts a spell or removes a permanent."
+            "unclassifiable": "choice: B casts Disenchant on Exchange of Words after the trigger resolves."
           }
         }
       ],
@@ -403,7 +403,7 @@
           "delta": "The graveyard order is reversed, so Shock is the top card and Serra Angel is under it.",
           "expected": "Volrath's Shapeshifter keeps its own characteristics: named Volrath's Shapeshifter, mana cost {1}{U}{U}, a blue 0/1 Phyrexian Shapeshifter creature with only '{2}: Discard a card.'",
           "operation": {
-            "unclassifiable": "The order of cards in a graveyard changes; fork operations act on permanents and players, not on a graveyard's order."
+            "unclassifiable": "more than one fact: Shock and Serra Angel swap places in A's graveyard, which takes two move_card edits (Shock put in the top position and Serra Angel in the one under it)."
           }
         }
       ],
@@ -472,7 +472,7 @@
           "delta": "Spy Kit is on A's battlefield but not attached to any creature.",
           "expected": "Only B's Grizzly Bears returns to B's hand; A's Hill Giant and B's Hill Giant stay on the battlefield.",
           "operation": {
-            "unclassifiable": "An Equipment's attachment changes; no fork operation attaches or unattaches a permanent."
+            "unclassifiable": "not a board edit: Spy Kit is unattached, and no operation sets an attachment."
           }
         },
         {
@@ -481,7 +481,7 @@
           "delta": "Echoing Truth targets B's Hill Giant instead of B's Grizzly Bears.",
           "expected": "B's Hill Giant returns to B's hand and A's equipped Hill Giant returns to A's hand, since it keeps its own name; B's Grizzly Bears stays on the battlefield.",
           "operation": {
-            "unclassifiable": "A different target for the spell; no fork operation changes a target."
+            "unclassifiable": "target: Echoing Truth targets B's Hill Giant instead of B's Grizzly Bears."
           }
         }
       ],
@@ -552,7 +552,7 @@
           "delta": "A does not cast Honest Work; Bears 1 keeps the name Grizzly Bears.",
           "expected": "Both Bears 1 and Bears 2 return to B's hand.",
           "operation": {
-            "unclassifiable": "A spell is not cast, so an Aura is absent from the battlefield; no fork operation removes a permanent or a cast."
+            "unclassifiable": "choice: A does not cast Honest Work."
           }
         },
         {
@@ -561,7 +561,7 @@
           "delta": "Echoing Truth targets Bears 1 (named Humble Merchant) instead of Bears 2.",
           "expected": "Only Bears 1 returns to B's hand; Honest Work goes to A's graveyard as a state-based action; Bears 2 stays on the battlefield.",
           "operation": {
-            "unclassifiable": "A different target for the spell; no fork operation changes a target."
+            "unclassifiable": "target: Echoing Truth targets Bears 1 instead of Bears 2."
           }
         }
       ],
@@ -628,7 +628,7 @@
           "delta": "A does not splice Glacial Ray and pays only {1}{R} (two Mountains).",
           "expected": "B is at 20 life; A has {R}{R}{R} in mana pool; Desperate Ritual is in A's graveyard and Glacial Ray is still in A's hand.",
           "operation": {
-            "unclassifiable": "A different casting decision (no splice, a different cost paid); no fork operation changes how a spell is cast."
+            "unclassifiable": "choice: A does not splice Glacial Ray onto Desperate Ritual."
           }
         }
       ],

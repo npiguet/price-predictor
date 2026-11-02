@@ -204,7 +204,7 @@
           "delta": "A casts Love Song of Night and Day (read ahead) instead, choosing 2.",
           "expected": "Love Song of Night and Day enters with the chosen 2 lore counters, not 1 (714.3b decides this). Chapter II triggers and creates a 1/1 white Bird token with flying; chapter I does not trigger.",
           "operation": {
-            "unclassifiable": "A different spell is cast (a read ahead Saga instead of one without it), and its controller chooses a number; no fork operation changes what is cast."
+            "unclassifiable": "choice: a different spell is cast and a number is chosen"
           }
         },
         {
@@ -213,7 +213,7 @@
           "delta": "A casts Savannah Lions instead.",
           "expected": "Savannah Lions enters as a 2/1 with no counters of any kind; the lore counter replacement applies to Sagas only.",
           "operation": {
-            "unclassifiable": "A different spell is cast (a creature instead of a Saga); no fork operation changes what is cast."
+            "unclassifiable": "choice: a different spell is cast"
           }
         }
       ],
@@ -297,7 +297,7 @@
           "delta": "A chooses 1 instead of 2.",
           "expected": "Love Song enters with 1 lore counter, which is what a Saga without read ahead has. Chapter I triggers and resolves: A and B each draw two cards (hand sizes 2 and 2). No Bird token is created. Love Song stays with 1 lore counter.",
           "operation": {
-            "unclassifiable": "A different choice by the player (the read ahead number chosen); no fork operation changes a choice."
+            "unclassifiable": "choice: a different number is chosen"
           }
         },
         {
@@ -306,7 +306,7 @@
           "delta": "A chooses 3 instead of 2.",
           "expected": "Love Song enters with 3 lore counters. Chapters I and II are skipped: no cards are drawn and no Bird is created. Chapter III triggers, A targets Savannah Lions, which gets a +1/+1 counter and becomes 3/2. Love Song is then sacrificed to A's graveyard.",
           "operation": {
-            "unclassifiable": "A different choice by the player (the read ahead number chosen); no fork operation changes a choice."
+            "unclassifiable": "choice: a different number is chosen"
           }
         }
       ],
@@ -381,7 +381,7 @@
           "delta": "Love Song of Night and Day is controlled by B instead of A.",
           "expected": "No lore counter is added at the start of A's precombat main phase: Love Song stays at 1 lore counter and no chapter ability triggers. No Bird token is created.",
           "operation": {
-            "unclassifiable": "The Saga's controller changes from the active player to the opponent; no fork operation changes control."
+            "unclassifiable": "more than one fact: a permanent changing controller is a removal plus an addition"
           }
         }
       ],
@@ -471,7 +471,7 @@
           "delta": "With chapter III on the stack, B casts Shock targeting A's face (tapping Mountain) and both players pass until Shock resolves.",
           "expected": "Shock resolves (A at 18 life) while chapter III is still on the stack, and History of Benalia, with 3 lore counters, is still on the battlefield because it is the source of a chapter ability that has not left the stack. Only after chapter III resolves is History of Benalia sacrificed.",
           "operation": {
-            "unclassifiable": "The opponent casts an additional spell while the chapter ability is on the stack; no fork operation adds a spell or an action."
+            "unclassifiable": "choice: B responds by casting Shock at A while chapter III is on the stack"
           }
         }
       ],

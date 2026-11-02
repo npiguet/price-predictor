@@ -76,7 +76,7 @@
           "delta": "A casts the Battering Craghorn in hand face up for {2}{R}{R}, tapping all four Mountains, instead of face down.",
           "expected": "The entering Battering Craghorn has the same name as the face-up Battering Craghorn A controls; Guardian Project's trigger does not fire and A draws no card.",
           "operation": {
-            "unclassifiable": "A casts the card face up instead of face down: a different way of casting a spell, which no fork operation changes."
+            "unclassifiable": "choice: A casts the card face up instead of face down, a different way of casting."
           }
         }
       ],
@@ -151,7 +151,7 @@
           "delta": "Battering Craghorn is face down on the battlefield instead of face up.",
           "expected": "The face-down creature is a Demon with no name, so only three Demons with different names are counted; Liliana's Contract's upkeep trigger does not fire and the game continues at 20 life each.",
           "operation": {
-            "unclassifiable": "Turns a face-up permanent face down; face-down status is not among the seven fork operations, and replace_card puts a face-up card in place."
+            "unclassifiable": "not a board edit: face-down status of a permanent, a property no operation sets."
           }
         },
         {
@@ -235,7 +235,7 @@
           "delta": "Shock targets the second Drudge Skeletons instead of the first.",
           "expected": "The regeneration shield stays on the first Drudge Skeletons, which is untapped and undamaged. The second Drudge Skeletons, despite sharing the name, has no shield, is dealt lethal damage and moves to A's graveyard.",
           "operation": {
-            "unclassifiable": "Shock targets a different creature: a different target, which no fork operation sets."
+            "unclassifiable": "target: Shock targets the second Drudge Skeletons instead of the first."
           }
         }
       ],
@@ -321,7 +321,7 @@
           "delta": "The Ooze token was created by the second Gutter Grime (3 slime counters) instead of the first.",
           "expected": "The Ooze token is 3/3, counting only the second Gutter Grime's 3 slime counters. Shock deals 2 damage to it and it stays on the battlefield with 2 damage marked.",
           "operation": {
-            "unclassifiable": "The token was created by a different Gutter Grime: the remembered source its ability reads is a binding no fork operation sets."
+            "unclassifiable": "not a board edit: which Gutter Grime created the token, a remembered-source binding no operation sets."
           }
         }
       ],
@@ -391,7 +391,7 @@
           "delta": "Murder targets Drudge Skeletons instead of Quicksilver Elemental.",
           "expected": "The regeneration shield is on Quicksilver Elemental, not on Drudge Skeletons, so Drudge Skeletons is destroyed and moves to A's graveyard. Quicksilver Elemental stays on the battlefield untouched.",
           "operation": {
-            "unclassifiable": "Murder targets a different creature: a different target, which no fork operation sets."
+            "unclassifiable": "target: Murder targets Drudge Skeletons instead of Quicksilver Elemental."
           }
         }
       ],

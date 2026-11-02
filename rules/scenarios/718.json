@@ -57,9 +57,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls two Mountains instead of three.",
           "expected": "Neither is legal: {2}{R} and {7} both exceed the available mana.",
-          "operation": {
-            "unclassifiable": "A land is removed from the battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "three_plains",
@@ -67,7 +65,7 @@
           "delta": "A controls three Plains instead of three Mountains.",
           "expected": "Neither is legal: {2}{R} cannot be paid without red mana, and {7} exceeds the available mana.",
           "operation": {
-            "unclassifiable": "Three lands are replaced, more than one fact; replace_card replaces one permanent."
+            "unclassifiable": "more than one fact: three Mountains are each replaced by a Plains"
           }
         }
       ],
@@ -143,7 +141,7 @@
           "delta": "A casts Blitz Automaton normally, paying {7} with all seven Mountains.",
           "expected": "Blitz Automaton on the battlefield is a colorless 6/4 artifact creature with mana value 7 and haste.",
           "operation": {
-            "unclassifiable": "The player casts the card normally instead of prototyped; no fork operation changes how a spell is cast."
+            "unclassifiable": "choice: the card is cast normally instead of prototyped"
           }
         }
       ],
@@ -214,7 +212,7 @@
           "delta": "A casts Blitz Automaton normally, paying {7} with all seven Mountains.",
           "expected": "Blitz Automaton is a colorless spell: Hydroblast resolves and does nothing. Blitz Automaton then resolves and a 6/4 enters the battlefield.",
           "operation": {
-            "unclassifiable": "The player casts the card normally instead of prototyped; no fork operation changes how a spell is cast."
+            "unclassifiable": "choice: the card is cast normally instead of prototyped"
           }
         }
       ],
@@ -294,7 +292,7 @@
           "delta": "A casts Blitz Automaton normally, paying {7} with the seven Mountains.",
           "expected": "A controls two permanents: the original and a token copy. Both are colorless 6/4 artifact creatures with mana value 7.",
           "operation": {
-            "unclassifiable": "The player casts the card normally instead of prototyped; no fork operation changes how a spell is cast."
+            "unclassifiable": "choice: the card is cast normally instead of prototyped"
           }
         }
       ],
@@ -377,7 +375,7 @@
           "delta": "A casts Blitz Automaton normally, paying {7} with all seven Mountains.",
           "expected": "The Clone is a colorless 6/4 artifact creature Construct with mana value 7 and haste, like the original.",
           "operation": {
-            "unclassifiable": "The player casts the original normally instead of prototyped; no fork operation changes how a spell is cast."
+            "unclassifiable": "choice: the card is cast normally instead of prototyped"
           }
         }
       ],
@@ -437,9 +435,7 @@
           "polarity": "does_not_fire",
           "delta": "The creature card in A's graveyard is Grizzly Bears (mana value 2) instead of Blitz Automaton.",
           "expected": "Grizzly Bears is a legal target: Unearth can be cast and returns it to the battlefield.",
-          "operation": {
-            "unclassifiable": "A different card is in the graveyard; replace_card swaps permanents only, and no fork operation changes a graveyard."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -518,7 +514,7 @@
           "delta": "A casts Combat Thresher normally, paying {7} with all seven Plains.",
           "expected": "Combat Thresher is a colorless 3/3 artifact creature Construct with double strike. A drew one card: types, keyword and trigger match the prototyped case.",
           "operation": {
-            "unclassifiable": "The player casts the card normally instead of prototyped; no fork operation changes how a spell is cast."
+            "unclassifiable": "choice: the card is cast normally instead of prototyped"
           }
         }
       ],

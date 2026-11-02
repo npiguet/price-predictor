@@ -62,7 +62,7 @@
           "delta": "A casts Unsummon (tapping the Island) instead of Shock.",
           "expected": "Ministrant of Obligation returns to B's hand and is never put into a graveyard; its afterlife trigger does not fire and B has no Spirit tokens.",
           "operation": {
-            "unclassifiable": "a different spell or ability is cast"
+            "unclassifiable": "choice: A casts Unsummon instead of Shock"
           }
         }
       ],
@@ -142,7 +142,7 @@
           "delta": "A does not cast Afterlife Insurance; A casts only Shock.",
           "expected": "Orzhov Enforcer dies and its single afterlife trigger resolves: A gets one Spirit token.",
           "operation": {
-            "unclassifiable": "a different spell or ability is cast"
+            "unclassifiable": "choice: A does not cast Afterlife Insurance"
           }
         }
       ],

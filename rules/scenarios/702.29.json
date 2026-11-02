@@ -58,7 +58,7 @@
           "delta": "Lonely Sandbar is on A's battlefield (untapped) instead of in A's hand.",
           "expected": "Activating the cycling ability is illegal (can_play false): Lonely Sandbar stays on the battlefield, nothing is discarded, nothing is drawn, Island stays untapped.",
           "operation": {
-            "unclassifiable": "Moves a card between zones."
+            "unclassifiable": "more than one fact: the card is on the battlefield instead of in the hand (a move plus an addition)."
           }
         },
         {
@@ -204,7 +204,7 @@
           "delta": "Instead of cycling, A casts Tormenting Voice (paying {1}{R} with the two Mountains) and discards Gempalm Avenger as its additional cost.",
           "expected": "Gempalm Avenger is in A's graveyard but no trigger fires: it was discarded, not cycled. Glory Seeker stays a 2/2 with no first strike. A draws Plains and Mountain.",
           "operation": {
-            "unclassifiable": "A different spell cast."
+            "unclassifiable": "choice: A casts Tormenting Voice and discards the card instead of cycling it."
           }
         }
       ],
@@ -285,7 +285,7 @@
           "delta": "Instead of cycling, A casts Tormenting Voice (paying {1}{R} with the two Mountains) and discards Lonely Sandbar as its additional cost; A pays Drake Haven's {1} with an Island.",
           "expected": "Drake Haven triggers exactly once for the one card discarded: A creates exactly one 2/2 blue Drake token with flying, and Tormenting Voice draws A two cards (Island, Island).",
           "operation": {
-            "unclassifiable": "A different spell cast."
+            "unclassifiable": "choice: A casts Tormenting Voice and discards the card instead of cycling it."
           }
         }
       ],
@@ -361,9 +361,7 @@
           "polarity": "does_not_fire",
           "delta": "A's library is [Island, Swamp] with no Plains.",
           "expected": "Eternal Dragon is in A's graveyard. The search finds nothing: A's hand is empty and the library is shuffled.",
-          "operation": {
-            "unclassifiable": "Changes the library."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -438,9 +436,7 @@
           "polarity": "does_not_fire",
           "delta": "Stabilizer is not on the battlefield.",
           "expected": "The activation is legal (can_play true); Eternal Dragon is discarded as a cost.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from the battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -521,7 +517,7 @@
           "delta": "Instead of typecycling, A casts Tormenting Voice (paying {1}{R}) and discards Eternal Dragon as its additional cost.",
           "expected": "Lightning Rift does not trigger: Eternal Dragon was discarded, not cycled. B's life stays 20. A draws Plains and Mountain.",
           "operation": {
-            "unclassifiable": "A different spell cast."
+            "unclassifiable": "choice: A casts Tormenting Voice and discards the card instead of typecycling it."
           }
         }
       ],

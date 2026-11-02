@@ -66,7 +66,7 @@
           "delta": "B blocks Assassin Initiate with Grizzly Bears.",
           "expected": "Assassin Initiate deals its damage to Grizzly Bears, so no player is dealt combat damage this turn (B stays at 20). Casting Eagle Vision for its freerunning cost is not legal; its full cost {4}{U} cannot be paid with two Islands either.",
           "operation": {
-            "unclassifiable": "A different blocking decision by the defending player; no fork operation changes a decision."
+            "unclassifiable": "choice: B blocks Assassin Initiate with Grizzly Bears."
           }
         },
         {
@@ -75,7 +75,7 @@
           "delta": "A attacks with Grizzly Bears instead of Assassin Initiate.",
           "expected": "Grizzly Bears deals 2 combat damage to B (life 18), but it is not an Assassin. Casting Eagle Vision for its freerunning cost is not legal.",
           "operation": {
-            "unclassifiable": "A different attack decision by the active player; no fork operation changes a decision."
+            "unclassifiable": "choice: A attacks with Grizzly Bears instead of Assassin Initiate."
           }
         },
         {
@@ -84,7 +84,7 @@
           "delta": "A does not attack.",
           "expected": "No combat damage is dealt this turn. Casting Eagle Vision for its freerunning cost is not legal.",
           "operation": {
-            "unclassifiable": "A different attack decision by the active player; no fork operation changes a decision."
+            "unclassifiable": "choice: A declares no attack."
           }
         }
       ],

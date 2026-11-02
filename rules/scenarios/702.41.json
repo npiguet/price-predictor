@@ -53,9 +53,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls one Ornithopter instead of two.",
           "expected": "Frogmite costs {3}; A has only two untapped lands, so it cannot be cast.",
-          "operation": {
-            "unclassifiable": "removes a permanent, not a fork operation"
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "opponent_artifacts",
@@ -63,7 +61,7 @@
           "delta": "A controls no Ornithopters and B controls two.",
           "expected": "Frogmite costs {4}, since only artifacts A controls count; it cannot be cast with two Mountains.",
           "operation": {
-            "unclassifiable": "both artifacts change controller to the opponent: two control changes, not a fork operation"
+            "unclassifiable": "more than one fact: A's two Ornithopters are removed and two are added under B."
           }
         }
       ],

@@ -46,7 +46,7 @@
           "delta": "The Case is not solved.",
           "expected": "Grizzly Bears is a 2/2.",
           "operation": {
-            "unclassifiable": "Removes the solved designation from the Case; no fork operation sets or clears a designation."
+            "unclassifiable": "not a board edit: the solved designation of the Case"
           }
         }
       ],
@@ -108,7 +108,7 @@
           "delta": "The Case is not solved.",
           "expected": "The Case's ability does not trigger. A's hand is still Shock and Mountain, the graveyard is empty and the library is unchanged.",
           "operation": {
-            "unclassifiable": "Removes the solved designation from the Case; no fork operation sets or clears a designation."
+            "unclassifiable": "not a board edit: the solved designation of the Case"
           }
         }
       ],
@@ -168,7 +168,7 @@
           "delta": "The Case is not solved.",
           "expected": "Activating the ability is not legal.",
           "operation": {
-            "unclassifiable": "Removes the solved designation from the Case; no fork operation sets or clears a designation."
+            "unclassifiable": "not a board edit: the solved designation of the Case"
           }
         }
       ],

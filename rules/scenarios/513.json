@@ -63,7 +63,7 @@
           "delta": "The step is main2 instead of end: A casts Dress Down in the postcombat main phase.",
           "expected": "Dress Down's trigger fires as this turn's end step begins and it is sacrificed to A's graveyard then; it is not on the battlefield during B's turn.",
           "operation": {
-            "unclassifiable": "a change of step, no fork operation makes"
+            "unclassifiable": "phase or turn: the step is main2 instead of end, and the card is cast then"
           }
         }
       ],
@@ -127,7 +127,7 @@
           "delta": "The step is main2 instead of end: A casts Otherworldly Journey in the postcombat main phase.",
           "expected": "The delayed trigger fires as this turn's end step begins: Grizzly Bears returns under A's control with a +1/+1 counter (3/3) at that moment and stays on the battlefield during B's turn.",
           "operation": {
-            "unclassifiable": "a change of step, no fork operation makes"
+            "unclassifiable": "phase or turn: the step is main2 instead of end, and the card is cast then"
           }
         }
       ],

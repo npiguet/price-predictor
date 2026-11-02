@@ -74,7 +74,7 @@
           "delta": "A's graveyard holds only two Grizzly Bears instead of three.",
           "expected": "Foraging is impossible: A's two Grizzly Bears stay in the graveyard, nothing is exiled, A draws no card and A's hand is empty. Treetop Sentries is on the battlefield.",
           "operation": {
-            "unclassifiable": "changes the contents of a graveyard, which no fork operation does"
+            "unclassifiable": "not a board edit: one Grizzly Bears leaves A's graveyard and goes to no zone, which move_card does not do"
           }
         },
         {
@@ -83,7 +83,7 @@
           "delta": "The three Grizzly Bears are in B's graveyard instead of A's; A's graveyard is empty.",
           "expected": "Foraging is impossible: the three Grizzly Bears stay in B's graveyard, nothing is exiled, A draws no card and A's hand is empty. Treetop Sentries is on the battlefield.",
           "operation": {
-            "unclassifiable": "changes the contents of a graveyard, which no fork operation does"
+            "unclassifiable": "more than one fact: three cards move from A's graveyard to B's graveyard"
           }
         }
       ],
@@ -164,9 +164,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls no Food token.",
           "expected": "Foraging is impossible: A's two Grizzly Bears stay in the graveyard, nothing is exiled, A draws no card and A's hand is empty. Treetop Sentries is on the battlefield.",
-          "operation": {
-            "unclassifiable": "adds, removes or moves a permanent, which no fork operation does"
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "opponent_food",
@@ -174,7 +172,7 @@
           "delta": "The Food token is controlled by B instead of A.",
           "expected": "Foraging is impossible: B's Food token stays on the battlefield, A's two Grizzly Bears stay in the graveyard, nothing is exiled, A draws no card and A's hand is empty. Treetop Sentries is on the battlefield.",
           "operation": {
-            "unclassifiable": "adds, removes or moves a permanent, which no fork operation does"
+            "unclassifiable": "more than one fact: the Food changes controller, a removal plus an addition"
           }
         }
       ],
@@ -243,7 +241,7 @@
           "delta": "A's graveyard holds only two Grizzly Bears instead of three.",
           "expected": "The activation is not legal: the forage cost cannot be paid with two graveyard cards and no Food. The Forager's plain '{T}: Add {G}.' ability remains legal.",
           "operation": {
-            "unclassifiable": "changes the contents of a graveyard, which no fork operation does"
+            "unclassifiable": "not a board edit: one Grizzly Bears leaves A's graveyard and goes to no zone, which move_card does not do"
           }
         }
       ],

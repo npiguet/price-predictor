@@ -65,7 +65,7 @@
           "delta": "A casts Doom Blade targeting Cudgel Troll instead of Diabolic Edict.",
           "expected": "The destruction is replaced by the regeneration shield: Cudgel Troll stays on the battlefield, tapped, with damage removed.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: A casts Doom Blade targeting Cudgel Troll instead of Diabolic Edict"
           }
         },
         {
@@ -73,9 +73,7 @@
           "polarity": "does_not_fire",
           "delta": "B controls no creature (only Forest).",
           "expected": "B has nothing to sacrifice. Nothing is sacrificed, and A's Grizzly Bears stays on the battlefield.",
-          "operation": {
-            "unclassifiable": "removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

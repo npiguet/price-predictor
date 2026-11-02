@@ -56,7 +56,7 @@
           "delta": "A chooses the Thunder tier (cost {0}) instead of Thundara and pays only {R} with one Mountain.",
           "expected": "Hill Giant is dealt 2 damage and stays on the battlefield with 2 damage marked. Three Mountains stay untapped.",
           "operation": {
-            "unclassifiable": "a different mode chosen, a player's decision no fork operation makes"
+            "unclassifiable": "choice: A chooses the Thunder tier and pays a different cost"
           }
         }
       ],
@@ -116,9 +116,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls three Mountains instead of four.",
           "expected": "The cast with the Thundara tier is not legal: the total cost {3}{R} exceeds A's available mana. Thunder Magic stays in A's hand.",
-          "operation": {
-            "unclassifiable": "removes a permanent (one Mountain), which no fork operation does"
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "four_mountains_thundaga",
@@ -126,7 +124,7 @@
           "delta": "A chooses the Thundaga tier instead of Thundara.",
           "expected": "The cast with the Thundaga tier is not legal: the total cost is {5}{R}{R} and A has only four Mountains.",
           "operation": {
-            "unclassifiable": "a different mode chosen, a player's decision no fork operation makes"
+            "unclassifiable": "choice: A chooses the Thundaga tier"
           }
         }
       ],

@@ -131,9 +131,7 @@
           "polarity": "does_not_fire",
           "delta": "Basilisk Collar is not on the battlefield.",
           "expected": "Prodigal Sorcerer deals 1 damage to Hill Giant, which stays on the battlefield with 1 damage marked. A's life stays 20.",
-          "operation": {
-            "unclassifiable": "removes a permanent (Basilisk Collar) from the battlefield"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -207,9 +205,7 @@
           "polarity": "does_not_fire",
           "delta": "Basilisk Collar is not on the battlefield, so A must assign 3 damage (lethal) to Hill Giant and assigns the other 3 damage to player B.",
           "expected": "Hill Giant is destroyed by 3 damage. B takes 3 damage (life 17). A's life stays 20. Colossal Dreadmaw survives with 3 damage marked.",
-          "operation": {
-            "unclassifiable": "removes a permanent (the Equipment) and changes the attacker's damage assignment, more than one fact"
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "two_blockers",
@@ -217,7 +213,7 @@
           "delta": "Grizzly Bears also blocks Colossal Dreadmaw, and A assigns 1 damage to Hill Giant, 1 damage to Grizzly Bears and 4 damage to player B.",
           "expected": "Hill Giant and Grizzly Bears are both destroyed. B takes 4 damage (life 16). Colossal Dreadmaw takes 5 damage and survives. A gains 6 life (life 26).",
           "operation": {
-            "unclassifiable": "a different block declaration and damage assignment by the players; the board is unchanged"
+            "unclassifiable": "choice: Grizzly Bears also blocks and A assigns damage differently"
           }
         }
       ],
@@ -281,9 +277,7 @@
           "polarity": "does_not_fire",
           "delta": "Basilisk Collar is not on the battlefield.",
           "expected": "Mogg Fanatic is in A's graveyard. The ability deals 1 damage to Hill Giant, which stays on the battlefield with 1 damage marked. A's life stays 20.",
-          "operation": {
-            "unclassifiable": "removes a permanent (Basilisk Collar) from the battlefield"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

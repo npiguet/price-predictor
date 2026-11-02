@@ -78,7 +78,7 @@
           "delta": "B's hand holds only Fire // Ice.",
           "expected": "B discards Fire // Ice and B's hand is empty; one card moved to B's graveyard.",
           "operation": {
-            "unclassifiable": "changing a hand"
+            "unclassifiable": "more than one fact: two cards (Forest, Island) leave B's hand and no operation sends a hand card to no zone"
           }
         }
       ],
@@ -143,7 +143,7 @@
           "delta": "A chooses the Assault half ({R}) targeting Grizzly Bears instead, still with only the four Forests.",
           "expected": "Casting Assault is illegal: {R} cannot be paid with Forests.",
           "operation": {
-            "unclassifiable": "a different decision by a player, which no fork operation makes"
+            "unclassifiable": "choice: A casts the other half of the split card"
           }
         }
       ],
@@ -215,7 +215,7 @@
           "delta": "A casts the Fire half ({1}{R}) instead, dealing 2 damage to Grizzly Bears; B has Red Elemental Blast available.",
           "expected": "Fire is a red spell only: Red Elemental Blast cannot be cast (no blue spell or blue permanent to target); Fire resolves and Grizzly Bears dies.",
           "operation": {
-            "unclassifiable": "a different decision by a player, which no fork operation makes"
+            "unclassifiable": "choice: A casts the Fire half instead of the whole card"
           }
         }
       ],
@@ -291,7 +291,7 @@
           "delta": "A casts the copy as the Ice half, targeting Grizzly Bears.",
           "expected": "The copy is cast as Ice: Grizzly Bears becomes tapped and A draws Island. Mizzix's Mastery is exiled.",
           "operation": {
-            "unclassifiable": "a different decision by a player, which no fork operation makes"
+            "unclassifiable": "choice: A casts the copy as the Ice half"
           }
         }
       ],
@@ -358,9 +358,7 @@
           "polarity": "does_not_fire",
           "delta": "A's library holds Shock instead of Turn // Burn.",
           "expected": "A finds Shock and puts it into hand.",
-          "operation": {
-            "unclassifiable": "changing a library"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -429,7 +427,7 @@
           "delta": "A casts the Turn half ({2}{U}) targeting Grizzly Bears, tapping three lands.",
           "expected": "Turn is a spell with mana value 3: Spell Snare cannot be cast. Turn resolves and Grizzly Bears loses all abilities and becomes a red 0/1 Weird until end of turn.",
           "operation": {
-            "unclassifiable": "a different decision by a player, which no fork operation makes"
+            "unclassifiable": "choice: A casts the Turn half"
           }
         }
       ],
@@ -489,9 +487,7 @@
           "polarity": "does_not_fire",
           "delta": "A's graveyard holds Shock instead of Commit // Memory.",
           "expected": "The graveyard holds instant, creature and land types: three card types, so Dragon's Rage Channeler is a 1/1 without flying.",
-          "operation": {
-            "unclassifiable": "changing a graveyard"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -558,7 +554,7 @@
           "delta": "A chooses the name Fire.",
           "expected": "Fire // Ice has the name Fire, so it is exiled from B's hand; Grizzly Bears stays in B's hand.",
           "operation": {
-            "unclassifiable": "a different decision by a player, which no fork operation makes"
+            "unclassifiable": "choice: A chooses a different card name"
           }
         },
         {
@@ -567,7 +563,7 @@
           "delta": "A chooses the name Grizzly Bears.",
           "expected": "Only Grizzly Bears is exiled; Fire // Ice stays in B's hand.",
           "operation": {
-            "unclassifiable": "a different decision by a player, which no fork operation makes"
+            "unclassifiable": "choice: A chooses a different card name"
           }
         }
       ],
@@ -639,7 +635,7 @@
           "delta": "A casts only the Burn half ({1}{R}) targeting B instead of fusing.",
           "expected": "Burn is a red spell only: Red Elemental Blast cannot be cast. Burn resolves and B is at 18 life.",
           "operation": {
-            "unclassifiable": "a different decision by a player, which no fork operation makes"
+            "unclassifiable": "choice: A casts only the Burn half instead of fusing"
           }
         }
       ],
@@ -707,7 +703,7 @@
           "delta": "Only the left half (Bottomless Pool) is unlocked, not Locker Room.",
           "expected": "The Room has the name Bottomless Pool and no Locker Room rules text: no trigger fires, A draws no card. B is at 18 life.",
           "operation": {
-            "unclassifiable": "unlocked designations are not an operation"
+            "unclassifiable": "not a board edit: which door of the Room is unlocked"
           }
         }
       ],
@@ -778,7 +774,7 @@
           "delta": "A's hand holds Fire // Ice instead of the Room, and A casts the Ice half ({1}{U}) targeting B's Island, tapping both Islands.",
           "expected": "Ice is an instant spell only: Annul cannot be cast. Ice resolves, B's Island becomes tapped and A draws Island.",
           "operation": {
-            "unclassifiable": "changing a hand and a different cast"
+            "unclassifiable": "choice: A casts the Ice half of a different card"
           }
         }
       ],
@@ -847,7 +843,7 @@
           "delta": "A casts Promising Stairs ({2}{U}) instead.",
           "expected": "The Room enters with the right half unlocked and the left half locked: Central Elevator's unlock trigger does not fire, and A's hand stays empty.",
           "operation": {
-            "unclassifiable": "a different decision by a player, which no fork operation makes"
+            "unclassifiable": "choice: A casts the other half of the Room"
           }
         }
       ],
@@ -927,7 +923,7 @@
           "delta": "The Room starts in A's hand instead of A's graveyard, and A casts its Central Elevator half ({3}{U}) with the same four lands instead of casting Replenish.",
           "expected": "The Room enters with the left half unlocked and the unlock trigger fires: A takes Bottomless Pool // Locker Room from the library.",
           "operation": {
-            "unclassifiable": "changing a hand and a different decision"
+            "unclassifiable": "choice: A casts the Room's Central Elevator half instead of Replenish"
           }
         }
       ],
@@ -989,7 +985,7 @@
           "delta": "A has first cast Shock targeting B, tapping Mountain, and Shock is still on the stack.",
           "expected": "The special action is illegal while the stack is not empty.",
           "operation": {
-            "unclassifiable": "a different spell cast first"
+            "unclassifiable": "timing: Shock is still on the stack"
           }
         },
         {
@@ -998,7 +994,7 @@
           "delta": "B is the active player and it is B's main phase with an empty stack.",
           "expected": "The special action is illegal: it is not A's turn.",
           "operation": {
-            "unclassifiable": "changing the turn"
+            "unclassifiable": "phase or turn: it is B's turn"
           }
         },
         {
@@ -1007,7 +1003,7 @@
           "delta": "The step is beginning_of_combat on A's turn with an empty stack.",
           "expected": "The special action is illegal: it is not a main phase.",
           "operation": {
-            "unclassifiable": "changing the phase"
+            "unclassifiable": "phase or turn: the step is beginning_of_combat"
           }
         }
       ],
@@ -1072,7 +1068,7 @@
           "delta": "Both halves of the Room are already unlocked.",
           "expected": "Locker Room's trigger fires on the combat damage and A draws Island; Ghostly Keybearer's trigger unlocks nothing and the Room keeps both designations. B is at 17 life.",
           "operation": {
-            "unclassifiable": "designations are not an operation"
+            "unclassifiable": "not a board edit: the unlocked-door designations of the Room"
           }
         }
       ],
@@ -1131,7 +1127,7 @@
           "delta": "A chooses to lock the left half (Bottomless Pool) instead.",
           "expected": "The Room loses the left half unlocked designation: only Locker Room is unlocked, so the Room has the name and text of Locker Room only.",
           "operation": {
-            "unclassifiable": "a different decision by a player, which no fork operation makes"
+            "unclassifiable": "choice: A chooses to lock the left half"
           }
         },
         {
@@ -1140,7 +1136,7 @@
           "delta": "The Room starts with neither half unlocked.",
           "expected": "No door is unlocked, so none can be locked: the Room keeps neither designation.",
           "operation": {
-            "unclassifiable": "designations are not an operation"
+            "unclassifiable": "not a board edit: the unlocked-door designations of the Room"
           }
         }
       ],
@@ -1203,7 +1199,7 @@
           "delta": "Which door starts locked is swapped: only Bottomless Pool is unlocked, so A pays {4}{U} (five Islands) to unlock Locker Room.",
           "expected": "The right half is unlocked; Bottomless Pool's trigger is tied to its own door and does not fire. Grizzly Bears stays on the battlefield.",
           "operation": {
-            "unclassifiable": "designations are not an operation"
+            "unclassifiable": "not a board edit: which door of the Room starts unlocked"
           }
         }
       ],
@@ -1272,7 +1268,7 @@
           "delta": "The Room starts with neither half unlocked.",
           "expected": "The Room gains one designation only, so it is not fully unlocked: Erratic Apparition stays a 1/3.",
           "operation": {
-            "unclassifiable": "designations are not an operation"
+            "unclassifiable": "not a board edit: the unlocked-door designations of the Room"
           }
         }
       ],

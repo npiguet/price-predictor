@@ -76,7 +76,7 @@
           "delta": "Goblin Piker has no damage marked.",
           "expected": "Goblin King dies in the first check. Goblin Piker (2/1, no damage) stays on the battlefield; the repeated check finds nothing to do.",
           "operation": {
-            "unclassifiable": "damage marked on a creature is not a fork-settable fact"
+            "unclassifiable": "history: damage marked on Goblin Piker is not set by any operation"
           }
         }
       ],
@@ -204,7 +204,7 @@
           "delta": "A's hand holds Mind Rot instead of Wheel of Fortune; A casts Mind Rot targeting A, tapping Swamp and two other lands.",
           "expected": "Mind Rot makes A discard the two Plains, leaving A's hand empty. Maro is 0/0 at the next check and moves to A's graveyard.",
           "operation": {
-            "unclassifiable": "different spell cast and different hand"
+            "unclassifiable": "choice: a different spell (Mind Rot) cast with a different hand"
           }
         }
       ],
@@ -337,7 +337,7 @@
           "delta": "A's library holds two cards.",
           "expected": "A draws both cards, the library is empty, and the game continues because no draw was attempted from it.",
           "operation": {
-            "unclassifiable": "changes a library"
+            "unclassifiable": "not a board edit: adds a second card to A's library from no zone; move_card only moves or replaces a card"
           }
         }
       ],
@@ -462,9 +462,7 @@
           "polarity": "does_not_fire",
           "delta": "B's Grizzly Bears is a card, not a token.",
           "expected": "Grizzly Bears is destroyed and stays in B's graveyard.",
-          "operation": {
-            "unclassifiable": "token status is not a colour, type, subtype or card swap the fork applies"
-          }
+          "operation": "replace_card"
         }
       ],
       "cards": [
@@ -528,7 +526,7 @@
           "delta": "A's hand holds a second Lightning Bolt instead of Twincast; A casts it targeting B, tapping the other Mountain.",
           "expected": "B takes 6 damage in total. A's graveyard holds two Lightning Bolt cards, because the second one is a card and not a copy.",
           "operation": {
-            "unclassifiable": "different spell cast"
+            "unclassifiable": "choice: a different spell (a second Lightning Bolt instead of Twincast) cast"
           }
         }
       ],
@@ -664,7 +662,7 @@
           "delta": "In response to Shock, B pays B from Swamp to regenerate Drudge Skeletons.",
           "expected": "Drudge Skeletons is destroyed in the check but regeneration replaces it: it becomes tapped, has no damage and stays on the battlefield.",
           "operation": {
-            "unclassifiable": "a different choice by a player: activating regeneration in response"
+            "unclassifiable": "choice: B activates regeneration in response to Shock"
           }
         },
         {
@@ -882,7 +880,7 @@
           "delta": "The Isamaru already on the battlefield is controlled by B.",
           "expected": "Both Isamaru stay on the battlefield, one under each player's control, and the graveyards are empty.",
           "operation": {
-            "unclassifiable": "changes which player controls a permanent"
+            "unclassifiable": "more than one fact: a permanent changing controller is a removal plus an addition"
           }
         }
       ],
@@ -951,7 +949,7 @@
           "delta": "A's hand holds Glorious Anthem instead of the second Concordant Crossroads; A casts it tapping Forest and two Plains.",
           "expected": "Both permanents stay on the battlefield, because Glorious Anthem is not a world permanent.",
           "operation": {
-            "unclassifiable": "different spell cast"
+            "unclassifiable": "choice: a different spell (Glorious Anthem) cast"
           }
         }
       ],
@@ -1027,7 +1025,7 @@
           "delta": "B chooses red.",
           "expected": "Grizzly Bears has protection from red; Pacifism stays attached and Grizzly Bears still cannot attack or block.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: B chooses red instead of white"
           }
         }
       ],
@@ -1178,7 +1176,7 @@
           "delta": "A's hand holds Pacifism instead of Song of the Dryads; A casts it targeting Grizzly Bears, tapping two Plains.",
           "expected": "Grizzly Bears is still a creature, so Bonesplitter stays attached and Grizzly Bears is a 4/2 that cannot attack or block.",
           "operation": {
-            "unclassifiable": "different spell cast"
+            "unclassifiable": "choice: a different spell (Pacifism) cast"
           }
         }
       ],
@@ -1256,7 +1254,7 @@
           "delta": "A passes priority without casting March of the Machines.",
           "expected": "Bonesplitter stays attached and Grizzly Bears is a 4/2.",
           "operation": {
-            "unclassifiable": "a different decision by a player: not casting a spell"
+            "unclassifiable": "choice: A does not cast March of the Machines"
           }
         }
       ],
@@ -1505,7 +1503,7 @@
           "delta": "Royal Treatment targets Centaur Courser.",
           "expected": "Each creature has one Royal Role: Grizzly Bears is a 3/3 and Centaur Courser is a 4/4; no Role leaves the battlefield.",
           "operation": {
-            "unclassifiable": "different target"
+            "unclassifiable": "target: Royal Treatment targets Centaur Courser instead of Grizzly Bears"
           }
         }
       ],
@@ -1564,7 +1562,7 @@
           "delta": "A already has speed 3.",
           "expected": "A's speed stays 3.",
           "operation": {
-            "unclassifiable": "sets a player's speed, which no operation changes"
+            "unclassifiable": "not a board edit: a player's speed is set by no operation"
           }
         },
         {
@@ -1573,7 +1571,7 @@
           "delta": "A's hand holds Goblin Piker instead of Burnout Bashtronaut; A casts it tapping two Mountains.",
           "expected": "A has no speed.",
           "operation": {
-            "unclassifiable": "different spell cast and different hand"
+            "unclassifiable": "choice: a different spell (Goblin Piker) cast"
           }
         }
       ],
@@ -1639,9 +1637,7 @@
           "polarity": "does_not_fire",
           "delta": "Lich's Mirror is not on the battlefield.",
           "expected": "A has -1 life and attempted a draw from an empty library; A loses the game.",
-          "operation": {
-            "unclassifiable": "removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -1776,7 +1772,7 @@
           "delta": "A's venture marker starts on Goblin Lair.",
           "expected": "The marker moves to Dark Pool: B loses 1 life (19) and A gains 1 life (21). Lost Mine of Phandelver stays in the command zone.",
           "operation": {
-            "unclassifiable": "sets a dungeon venture marker, which no operation changes"
+            "unclassifiable": "not a board edit: a dungeon venture marker in the command zone is set by no operation"
           }
         }
       ],
@@ -1843,7 +1839,7 @@
           "delta": "A does not cast Stifle; both players pass, the defeat trigger resolves and A casts the Siege transformed.",
           "expected": "Invasion of Zendikar stays on the battlefield with defense 0 while its trigger is on the stack, then is exiled and cast transformed; Awakened Skyclave enters A's battlefield and A's graveyard holds only Lightning Bolt.",
           "operation": {
-            "unclassifiable": "a different decision by a player: not casting Stifle"
+            "unclassifiable": "choice: A does not cast Stifle"
           }
         }
       ],
@@ -1931,7 +1927,7 @@
           "delta": "Confiscate targets A's Mountain instead of Invasion of Zendikar.",
           "expected": "A still controls Invasion of Zendikar and B remains its protector. Grizzly Bears can legally attack A but not Invasion of Zendikar.",
           "operation": {
-            "unclassifiable": "different target"
+            "unclassifiable": "target: Confiscate targets A's Mountain instead of Invasion of Zendikar"
           }
         }
       ],

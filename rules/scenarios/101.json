@@ -53,7 +53,7 @@
           "delta": "Aggressive Mining is controlled by B instead of A, so its \"You can't play lands\" applies to B only.",
           "expected": "Both land plays are legal: the first Forest uses A's normal land play, the second uses Exploration's additional land play. Both Forests move from A's hand to the battlefield.",
           "operation": {
-            "unclassifiable": "Changes which player controls the restricting permanent; no fork operation changes control."
+            "unclassifiable": "more than one fact: control of Aggressive Mining changes, a removal from A plus an addition for B"
           }
         }
       ],
@@ -130,7 +130,7 @@
           "delta": "Pacifism enchants Grizzly Bears instead of Bloodrock Cyclops.",
           "expected": "Bloodrock Cyclops is a legal attacker and must attack, so declaring no attackers is illegal. Declaring Bloodrock Cyclops alone is the legal declaration.",
           "operation": {
-            "unclassifiable": "Moves an Aura to a different creature; no fork operation changes what an Aura is attached to."
+            "unclassifiable": "not a board edit: Pacifism is attached to a different creature, and no operation re-attaches an Aura"
           }
         }
       ],
@@ -205,7 +205,7 @@
           "delta": "The decisions swap order: A casts Jump first (tapping Island) and Humble second (tapping Plains and Island).",
           "expected": "Grizzly Bears is 0/1 and has no abilities, flying included: the later loss of all abilities removes the earlier grant.",
           "operation": {
-            "unclassifiable": "Changes the order of the player's spell casts, a decision, not a board property."
+            "unclassifiable": "timing: the two spells are cast in the opposite order"
           }
         }
       ],
@@ -269,7 +269,7 @@
           "delta": "B's hand is Mountain and Forest.",
           "expected": "Mind Rot resolves. B discards both cards; Mountain and Forest move to B's graveyard.",
           "operation": {
-            "unclassifiable": "Adds a card to a player's hand; no fork operation changes a hand."
+            "unclassifiable": "not a board edit: B's hand gains a second card (Forest); move_card moves or replaces a card, it does not add one from nowhere"
           }
         },
         {
@@ -277,9 +277,7 @@
           "polarity": "fires",
           "delta": "B's hand is empty.",
           "expected": "Mind Rot resolves. Both discards are impossible and ignored; nothing changes and no zone move occurs.",
-          "operation": {
-            "unclassifiable": "Removes the card from a player's hand; no fork operation changes a hand."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -340,9 +338,7 @@
           "polarity": "does_not_fire",
           "delta": "B controls no creature.",
           "expected": "Only Blood Artist is sacrificed. Blood Artist triggers once: B loses 1 life (19) and A gains 1 life (21).",
-          "operation": {
-            "unclassifiable": "Removes a permanent (the opponent's only creature) from the battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

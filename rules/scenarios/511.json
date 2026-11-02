@@ -52,7 +52,7 @@
           "delta": "B declares no blockers.",
           "expected": "Cinder Wall's block trigger never fires, so no 'end of combat' ability triggers: Cinder Wall stays on the battlefield, B's life is 18 and Grizzly Bears survives.",
           "operation": {
-            "unclassifiable": "a different decision by a player (which creatures block or attack), not a change to a fact on the board"
+            "unclassifiable": "choice: B declares no blockers"
           }
         }
       ],
@@ -114,7 +114,7 @@
           "delta": "In the beginning of combat step A also casts Giant Growth (tapping Forest) targeting Grizzly Bears, and it resolves.",
           "expected": "Jade Statue behaves as in the base variant (creature in the end of combat step, noncreature in the postcombat main phase), but Grizzly Bears is still 5/5 in both the end of combat step and the postcombat main phase, because Giant Growth lasts until end of turn.",
           "operation": {
-            "unclassifiable": "a different spell cast or timing of a cast, not a fact on the board"
+            "unclassifiable": "choice: In the beginning of combat step A also casts Giant Growth (tapping Forest) targeting Grizzly Bears, and it resolves"
           }
         }
       ],
@@ -180,7 +180,7 @@
           "delta": "Both players pass in the end of combat step and B tries to cast Condemn in the postcombat main phase instead.",
           "expected": "The end of combat step has ended, so Grizzly Bears has been removed from combat and is no longer attacking: Condemn has no legal target and casting it is not legal (can_play false). Grizzly Bears stays on the battlefield and A's life stays 20.",
           "operation": {
-            "unclassifiable": "a change of phase, no fork operation makes"
+            "unclassifiable": "phase or turn: the card is cast in the postcombat main phase instead of the end of combat step"
           }
         }
       ],

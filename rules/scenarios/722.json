@@ -56,7 +56,7 @@
           "delta": "Encouraging Aviator is on A's battlefield and prepared, with a copy of Jump in A's exile, instead of in A's hand.",
           "expected": "Casting the Jump copy from exile is legal (can_play true, has_legal_target true, legal targets are Encouraging Aviator and Hill Giant, cost {U}). Encouraging Aviator is not castable because it is on the battlefield.",
           "operation": {
-            "unclassifiable": "Moves the card from hand to the battlefield and adds the prepared designation with an exiled copy: a zone change and a designation, which no fork operation sets."
+            "unclassifiable": "more than one fact: the card moves from hand to battlefield, is prepared, and a Jump copy is in exile"
           }
         }
       ],
@@ -116,7 +116,7 @@
           "delta": "The ability targets Grizzly Bears instead of Encouraging Aviator.",
           "expected": "The ability resolves (Grizzly Bears is a legal target) and does nothing. Grizzly Bears is not prepared and A's exile stays empty.",
           "operation": {
-            "unclassifiable": "A different target for the ability, a player's choice."
+            "unclassifiable": "target: the ability targets Grizzly Bears instead"
           }
         },
         {
@@ -125,7 +125,7 @@
           "delta": "Encouraging Aviator is already prepared, with one copy of Jump in A's exile, before the ability resolves.",
           "expected": "The ability resolves and does nothing. Encouraging Aviator stays prepared and A's exile still holds exactly one Jump copy.",
           "operation": {
-            "unclassifiable": "Adds the prepared designation and an exiled copy: a designation and a new object, which no fork operation sets."
+            "unclassifiable": "not a board edit: the prepared designation and the copy in exile are not editable"
           }
         }
       ],
@@ -199,7 +199,7 @@
           "delta": "The trigger's unprepare mode targets Grizzly Bears instead of Encouraging Aviator.",
           "expected": "The trigger resolves and does nothing to Grizzly Bears. Encouraging Aviator is still prepared and the Jump copy is still in A's exile.",
           "operation": {
-            "unclassifiable": "A different target for the trigger's mode, a player's choice."
+            "unclassifiable": "target: the unprepare mode targets Grizzly Bears instead"
           }
         },
         {
@@ -208,7 +208,7 @@
           "delta": "The trigger's mode is 'target creature becomes prepared' instead of unprepared, targeting Encouraging Aviator.",
           "expected": "The trigger resolves and does nothing, because Encouraging Aviator is already prepared. It stays prepared and exactly one Jump copy is in A's exile.",
           "operation": {
-            "unclassifiable": "A different mode chosen for the trigger, a player's choice."
+            "unclassifiable": "choice: a different mode is chosen"
           }
         }
       ],
@@ -275,7 +275,7 @@
           "delta": "A declares no attackers.",
           "expected": "The trigger does not fire. Encouraging Aviator is not prepared, A's exile is empty, and there is no Jump copy to cast. Hill Giant does not gain flying.",
           "operation": {
-            "unclassifiable": "A different attack declaration, a player's choice."
+            "unclassifiable": "choice: A declares no attackers"
           }
         },
         {
@@ -284,7 +284,7 @@
           "delta": "A does not cast the Jump copy.",
           "expected": "Encouraging Aviator stays prepared and the Jump copy remains in A's exile at the end of combat. Hill Giant does not gain flying.",
           "operation": {
-            "unclassifiable": "A spell not cast, a player's choice."
+            "unclassifiable": "choice: A does not cast the Jump copy"
           }
         }
       ],

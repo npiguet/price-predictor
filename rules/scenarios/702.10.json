@@ -117,9 +117,7 @@
           "polarity": "does_not_fire",
           "delta": "Fervor is not on the battlefield.",
           "expected": "Activating Prodigal Sorcerer's ability is illegal: the creature is summoning sick and its cost includes {T}.",
-          "operation": {
-            "unclassifiable": "The haste-granting enchantment is removed from the battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "opponent_controls_fervor",
@@ -127,7 +125,7 @@
           "delta": "Fervor is on B's side of the battlefield instead of A's.",
           "expected": "Activating Prodigal Sorcerer's ability is illegal: Fervor gives haste only to creatures B controls.",
           "operation": {
-            "unclassifiable": "The haste-granting enchantment changes controller; no fork operation changes a permanent's controller."
+            "unclassifiable": "more than one fact: Fervor changes controller: a removal from A plus an addition under B."
           }
         }
       ],

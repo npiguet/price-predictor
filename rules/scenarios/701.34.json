@@ -63,7 +63,7 @@
           "delta": "A chooses no permanent and no player.",
           "expected": "Grizzly Bears still has one +1/+1 counter (a 3/3). B still has one poison counter.",
           "operation": {
-            "unclassifiable": "The player's proliferate choice changes; no fork operation changes a player's decision."
+            "unclassifiable": "choice: A chooses no permanent and no player to proliferate"
           }
         },
         {

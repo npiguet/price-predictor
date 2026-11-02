@@ -60,7 +60,7 @@
           "delta": "B responds with Counterspell (tapping both Islands) and counters Blastoderm.",
           "expected": "Blastoderm is countered and goes to A's graveyard; it never enters the battlefield, so no fade counters are put on anything.",
           "operation": {
-            "unclassifiable": "A different spell cast."
+            "unclassifiable": "choice: B responds with Counterspell."
           }
         }
       ],
@@ -145,7 +145,7 @@
           "delta": "It is B's upkeep: B is the active player.",
           "expected": "The fading trigger does not fire: Blastoderm keeps its 2 fade counters and stays on the battlefield.",
           "operation": {
-            "unclassifiable": "Changes the turn."
+            "unclassifiable": "phase or turn: it is B's upkeep instead of A's."
           }
         }
       ],

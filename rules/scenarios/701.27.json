@@ -148,7 +148,7 @@
           "delta": "Instead of casting Moonmist, A turns Daru Lancer face up by paying its morph cost {2}{W}{W} with all four lands.",
           "expected": "Daru Lancer is face up (3/4 first strike). Aven Farseer's trigger fires and resolves: Aven Farseer has one +1/+1 counter and is 2/2. Delver of Secrets stays on its front face.",
           "operation": {
-            "unclassifiable": "The player takes a different action (a morph turned face up instead of a spell cast); no fork operation changes a player's action."
+            "unclassifiable": "choice: the player turns Daru Lancer face up instead of casting Moonmist"
           }
         }
       ],
@@ -309,7 +309,7 @@
           "delta": "It is B's turn (B's main phase 1), and A activates Arcee's ability at instant speed after B passes priority.",
           "expected": "Grizzly Bears has 1 damage marked. Arcee is Arcee, Acrobatic Coupe, a Vehicle that is not a creature on B's turn. Cult's trigger does not fire and A has no Wolf token.",
           "operation": {
-            "unclassifiable": "The turn changes to B's, with the ability activated at instant speed; no fork operation changes the turn."
+            "unclassifiable": "phase or turn: it is B's turn instead of A's"
           }
         }
       ],
@@ -387,7 +387,7 @@
           "delta": "With the trigger on the stack, A casts Moonmist in response (tapping both Forests) and it resolves first; then the trigger resolves, A revealing Lightning Bolt.",
           "expected": "Moonmist transforms Delver of Secrets to Insectile Aberration. The trigger resolves, Lightning Bolt is revealed, and the transform instruction is ignored: Insectile Aberration stays face up and does not turn back into Delver of Secrets.",
           "operation": {
-            "unclassifiable": "An additional spell is cast in response; no fork operation casts a spell."
+            "unclassifiable": "choice: A casts Moonmist in response to the trigger, a different spell cast"
           }
         }
       ],

@@ -61,7 +61,7 @@
           "delta": "B responds with Counterspell, tapping two Islands.",
           "expected": "Liliana of the Veil is countered and moves to A's graveyard; she never enters the battlefield, so no loyalty counters are placed.",
           "operation": {
-            "unclassifiable": "B casts a different spell (Counterspell)."
+            "unclassifiable": "choice: B casts Counterspell, a different spell, in response"
           }
         }
       ],
@@ -155,7 +155,7 @@
           "delta": "Earlier this turn A activated Liliana's +1 and it resolved.",
           "expected": "Activating Liliana's +1 again is not legal, because one of her loyalty abilities was already activated this turn.",
           "operation": {
-            "unclassifiable": "A prior loyalty activation earlier in the turn; game history, not board state."
+            "unclassifiable": "history: A activated a loyalty ability earlier this turn"
           }
         },
         {
@@ -164,7 +164,7 @@
           "delta": "Earlier this turn A activated Jace Beleren's +2 and it resolved.",
           "expected": "Activating Liliana's +1 is legal, since only the activating permanent's own earlier activations count.",
           "operation": {
-            "unclassifiable": "A prior activation of a different permanent; game history."
+            "unclassifiable": "history: A activated the other planeswalker earlier this turn"
           }
         },
         {
@@ -173,7 +173,7 @@
           "delta": "B is the active player and it is B's main phase; A has priority.",
           "expected": "Activating Liliana's +1 is not legal, because it is not A's turn.",
           "operation": {
-            "unclassifiable": "Changes the turn and active player."
+            "unclassifiable": "phase or turn: it is B's turn instead of A's"
           }
         },
         {
@@ -182,7 +182,7 @@
           "delta": "The step is beginning of combat instead of main phase.",
           "expected": "Activating Liliana's +1 is not legal, because it is not a main phase.",
           "operation": {
-            "unclassifiable": "Changes the step/phase."
+            "unclassifiable": "phase or turn: the step is beginning of combat instead of main phase"
           }
         },
         {
@@ -191,7 +191,7 @@
           "delta": "A has cast Shock targeting B, tapping Mountain, and it is still on the stack.",
           "expected": "Activating Liliana's +1 is not legal, because the stack is not empty.",
           "operation": {
-            "unclassifiable": "A different spell is cast and remains on the stack."
+            "unclassifiable": "timing: Shock is on the stack from a spell cast earlier"
           }
         }
       ],

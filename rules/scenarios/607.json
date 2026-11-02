@@ -78,7 +78,7 @@
           "delta": "B's Disenchant targets the second Oblivion Ring instead of the first.",
           "expected": "Hill Giant returns to the battlefield under B's control. Grizzly Bears stays in exile. The first Oblivion Ring stays on the battlefield.",
           "operation": {
-            "unclassifiable": "B's Disenchant has a different target, a player's choice; no fork operation retargets a spell or ability."
+            "unclassifiable": "target: B's Disenchant targets the second Oblivion Ring instead of the first."
           }
         },
         {
@@ -87,7 +87,7 @@
           "delta": "B responds to the first ring's enters trigger by casting Stifle targeting it, tapping Island; the trigger is countered.",
           "expected": "Grizzly Bears stays on the battlefield; the second ring exiles Hill Giant. When the first ring leaves, its return trigger resolves and returns nothing: Hill Giant stays in exile and the second Oblivion Ring stays on the battlefield.",
           "operation": {
-            "unclassifiable": "B casts an extra spell (Stifle) countering the enters trigger; no fork operation casts a spell."
+            "unclassifiable": "choice: B casts Stifle in response to the first ring's enters trigger, a different spell cast."
           }
         }
       ],
@@ -167,7 +167,7 @@
           "delta": "A casts Swords to Plowshares targeting Grizzly Bears, tapping Plains, instead of casting Shock.",
           "expected": "Grizzly Bears is exiled by Swords to Plowshares and B gains 2 life. Activating Void Maw's +2/+2 ability is illegal (can_play false): no card is exiled with Void Maw to pay the cost, and Void Maw stays 4/5.",
           "operation": {
-            "unclassifiable": "A casts a different spell (Swords to Plowshares instead of Shock); no fork operation changes the spell cast."
+            "unclassifiable": "choice: A casts Swords to Plowshares instead of Shock, a different spell cast."
           }
         }
       ],
@@ -251,7 +251,7 @@
           "delta": "Shock targets Runeclaw Bear instead of Grizzly Bears.",
           "expected": "Runeclaw Bear dies and goes to A's graveyard. Diabolic Servitude's trigger does not fire; it stays on the battlefield and Grizzly Bears stays on the battlefield.",
           "operation": {
-            "unclassifiable": "Shock has a different target, a player's choice; no fork operation retargets a spell or ability."
+            "unclassifiable": "target: Shock targets Runeclaw Bear instead of Grizzly Bears."
           }
         }
       ],
@@ -334,7 +334,7 @@
           "delta": "As Voice of All enters, A chooses blue instead of red.",
           "expected": "Voice of All has protection from blue only. Voice of All is a legal target of Shock (B's legal targets include Voice of All, A and B); Shock would deal 2 damage and destroy the 2/2.",
           "operation": {
-            "unclassifiable": "A different colour is chosen as the permanent enters, a player's choice; no fork operation sets a chosen value."
+            "unclassifiable": "choice: A chooses blue instead of red as Voice of All enters."
           }
         }
       ],
@@ -403,7 +403,7 @@
           "delta": "In B's end step A pays the Amulet's {1} by tapping Island instead of Mountain, so blue mana is noted.",
           "expected": "The Amulet adds {U}. Casting Scorching Shot is illegal (can_play false): A's mana sources give only one {R}. Grizzly Bears stays on the battlefield.",
           "operation": {
-            "unclassifiable": "A pays the activation with a different land, a payment choice; no fork operation changes how a cost is paid."
+            "unclassifiable": "choice: A pays the Amulet's cost with Island instead of Mountain, a different mana payment."
           }
         }
       ],
@@ -474,7 +474,7 @@
           "delta": "As Phyrexian Processor enters, A pays 2 life instead of 4.",
           "expected": "A is at 18 life. The ability creates a 2/2 black Phyrexian Minion creature token.",
           "operation": {
-            "unclassifiable": "A different amount of life is paid as the permanent enters, a payment choice; no fork operation sets a paid cost."
+            "unclassifiable": "choice: A pays 2 life instead of 4 as the permanent enters."
           }
         },
         {
@@ -483,7 +483,7 @@
           "delta": "As Phyrexian Processor enters, A pays 0 life instead of 4.",
           "expected": "A is at 20 life. The ability creates a 0/0 Phyrexian Minion token, which is put into the graveyard and ceases to exist in the next state-based check; no creature remains on the battlefield.",
           "operation": {
-            "unclassifiable": "A different amount of life is paid as the permanent enters, a payment choice; no fork operation sets a paid cost."
+            "unclassifiable": "choice: A pays 0 life instead of 4 as the permanent enters."
           }
         }
       ],
@@ -550,9 +550,7 @@
           "polarity": "does_not_fire",
           "delta": "A's library is Forest on top, then Grizzly Bears, instead of Grizzly Bears on top, then Forest.",
           "expected": "Forest is revealed as the first card drawn this turn. The trigger does not fire; A draws no further card, and A's hand is Forest.",
-          "operation": {
-            "unclassifiable": "A's library is in a different order; no fork operation changes a library."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -617,7 +615,7 @@
           "delta": "A pays kicker {2}{B} only, tapping three Islands and three Swamps, instead of kicker {W}.",
           "expected": "Only the {2}{B}-kicker trigger fires: Grizzly Bears is destroyed and goes to B's graveyard. A stays at 20 life.",
           "operation": {
-            "unclassifiable": "A pays a different kicker, a casting choice; no fork operation sets which additional cost was paid."
+            "unclassifiable": "choice: A pays a different kicker cost."
           }
         },
         {
@@ -626,7 +624,7 @@
           "delta": "A pays no kicker, tapping three Islands only.",
           "expected": "Neither enters trigger fires: A stays at 20 life and Grizzly Bears stays on the battlefield.",
           "operation": {
-            "unclassifiable": "A pays no kicker, a casting choice; no fork operation sets which additional cost was paid."
+            "unclassifiable": "choice: A pays no kicker."
           }
         }
       ],
@@ -701,7 +699,7 @@
           "delta": "A pays multikicker {2} once, tapping two Plains, instead of twice.",
           "expected": "Everflowing Chalice enters with 1 charge counter and its mana ability adds {C}.",
           "operation": {
-            "unclassifiable": "A pays multikicker a different number of times, a casting choice; no fork operation sets a paid cost."
+            "unclassifiable": "choice: A pays multikicker once instead of twice."
           }
         },
         {
@@ -710,7 +708,7 @@
           "delta": "A pays no multikicker.",
           "expected": "Everflowing Chalice enters with no charge counters and its mana ability adds no mana.",
           "operation": {
-            "unclassifiable": "A pays no multikicker, a casting choice; no fork operation sets a paid cost."
+            "unclassifiable": "choice: A pays no multikicker."
           }
         }
       ],
@@ -780,7 +778,7 @@
           "delta": "A's exile zone also holds Runeclaw Bear, exiled earlier by another effect.",
           "expected": "Grizzly Bears returns to the battlefield under A's control. Runeclaw Bear stays in exile. A is at 24 life.",
           "operation": {
-            "unclassifiable": "An extra card is in A's exile zone; no fork operation adds a card to exile."
+            "unclassifiable": "not a board edit: a second card in A's exile zone; exile is not among move_card's zones and no operation adds a card to it."
           }
         },
         {
@@ -788,9 +786,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls no Grizzly Bears, so there is no other creature to exile for champion.",
           "expected": "The champion trigger resolves with nothing exiled and Changeling Hero is sacrificed to A's graveyard. B does not cast Swords to Plowshares (no target), and no card returns to the battlefield.",
-          "operation": {
-            "unclassifiable": "A creature is removed from the battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -870,7 +866,7 @@
           "delta": "As Phenomenon Investigators enters, A chooses Doubt instead of Believe.",
           "expected": "No Believe trigger fires and A creates no token. Runeclaw Bear is in A's graveyard.",
           "operation": {
-            "unclassifiable": "A different anchor word is chosen as the permanent enters, a player's choice; no fork operation sets a chosen word."
+            "unclassifiable": "choice: A chooses Doubt instead of Believe as the permanent enters."
           }
         }
       ],
@@ -949,7 +945,7 @@
           "delta": "B's exile zone also holds Runeclaw Bear, exiled earlier by another effect.",
           "expected": "Grizzly Bears returns to A's hand and Hill Giant returns to B's hand, as in the base. Runeclaw Bear stays in exile.",
           "operation": {
-            "unclassifiable": "An extra card is in B's exile zone; no fork operation adds a card to exile."
+            "unclassifiable": "not a board edit: a second card in B's exile zone; exile is not among move_card's zones and no operation adds a card to it."
           }
         }
       ],
@@ -1028,7 +1024,7 @@
           "delta": "A does not activate Strionic Resonator, so only Grizzly Bears is exiled.",
           "expected": "Grizzly Bears returns to the battlefield under B's control. Hill Giant was never exiled and stays on the battlefield.",
           "operation": {
-            "unclassifiable": "A does not activate Strionic Resonator, a different decision; no fork operation changes a player's activations."
+            "unclassifiable": "choice: A does not activate Strionic Resonator."
           }
         }
       ],
@@ -1104,7 +1100,7 @@
           "delta": "The color chosen as Paradise Plume entered was blue, not red.",
           "expected": "Paradise Plume's mana ability adds {U}. Shock is not blue, so Paradise Plume's trigger does not fire and A stays at 20. Shock deals 2 damage to B (18).",
           "operation": {
-            "unclassifiable": "A different colour was chosen as the permanent entered, a player's choice; no fork operation sets a chosen value."
+            "unclassifiable": "choice: The colour chosen as Paradise Plume entered was blue instead of red; no operation sets a chosen colour."
           }
         }
       ],
@@ -1191,7 +1187,7 @@
           "delta": "A does not activate the Elemental's acquired exile ability, so Grizzly Bears is not exiled.",
           "expected": "The Elemental's acquired return ability resolves and puts no creature onto the battlefield: Runeclaw Bear, exiled by Sisters's own ability, stays in exile and Grizzly Bears stays on the battlefield under B's control.",
           "operation": {
-            "unclassifiable": "A does not activate the acquired exile ability, a different decision; no fork operation changes a player's activations."
+            "unclassifiable": "choice: A does not activate the Elemental's acquired exile ability."
           }
         }
       ],
@@ -1276,7 +1272,7 @@
           "delta": "B considers targeting the real Voice of All instead of the Unstable Shapeshifter copy.",
           "expected": "The real Voice of All has protection from red, the color chosen as it entered. It is not a legal target of Shock.",
           "operation": {
-            "unclassifiable": "B considers a different target, a player's choice; no fork operation retargets a spell or ability."
+            "unclassifiable": "target: B targets the real Voice of All instead of the copy."
           }
         }
       ],

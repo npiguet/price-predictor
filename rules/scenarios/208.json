@@ -62,9 +62,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls a third Swamp.",
           "expected": "Nightmare is a 3/3. Shock deals 2 damage and Nightmare stays on the battlefield with 2 damage marked.",
-          "operation": {
-            "unclassifiable": "Adds a permanent (a third Swamp)."
-          }
+          "operation": "add_permanent"
         },
         {
           "label": "swamp_controlled_by_b",
@@ -72,7 +70,7 @@
           "delta": "B controls one of the two Swamps instead of A.",
           "expected": "Nightmare is a 1/1 (one Swamp under A's control). Shock deals 2 damage and Nightmare moves to A's graveyard in the state-based check.",
           "operation": {
-            "unclassifiable": "Changes which player controls a Swamp; control is not a fork operation."
+            "unclassifiable": "more than one fact: a Swamp leaves A's battlefield and appears under B's, a removal plus an addition."
           }
         }
       ],
@@ -145,7 +143,7 @@
           "delta": "A chooses 1/5 as it enters.",
           "expected": "Aquamorph Entity enters as a 1/5. Shock deals 2 damage and it stays on the battlefield with 2 damage marked.",
           "operation": {
-            "unclassifiable": "A different choice by a player on entry."
+            "unclassifiable": "choice: A chooses 1/5 as the permanent enters, a different choice."
           }
         },
         {
@@ -154,7 +152,7 @@
           "delta": "B responds to Aquamorph Entity with Counterspell, tapping two Islands.",
           "expected": "Aquamorph Entity is countered and moves to A's graveyard without entering, so no P/T choice is made; in the graveyard its power and toughness are each 0. Shock is not cast at it, since it is no longer on the battlefield.",
           "operation": {
-            "unclassifiable": "B casts a different spell (Counterspell) in response."
+            "unclassifiable": "choice: B responds with Counterspell, a different spell cast."
           }
         }
       ],
@@ -210,7 +208,7 @@
           "delta": "A has crewed the Copter with Grizzly Bears and the crew ability has resolved.",
           "expected": "Smuggler's Copter is an artifact creature with power 3 and toughness 3 until end of turn.",
           "operation": {
-            "unclassifiable": "A crew activation by a player, tapping a creature and resolving an ability."
+            "unclassifiable": "choice: A crews the Copter, an activated ability and its resolution."
           }
         },
         {
@@ -219,7 +217,7 @@
           "delta": "Smuggler's Copter is in A's graveyard instead of on the battlefield.",
           "expected": "Smuggler's Copter in the graveyard has its printed power 3 and toughness 3.",
           "operation": {
-            "unclassifiable": "Moves the card to a different zone."
+            "unclassifiable": "more than one fact: the Copter leaves the battlefield and is in A's graveyard, a removal plus a move."
           }
         }
       ],
@@ -279,7 +277,7 @@
           "delta": "A taps Grizzly Bears to crew instead of Veteran Motorist.",
           "expected": "No crew trigger occurs. Smuggler's Copter becomes an artifact creature and is a 3/3 until end of turn.",
           "operation": {
-            "unclassifiable": "A different decision by a player (which creature crews)."
+            "unclassifiable": "choice: A taps Grizzly Bears to crew instead of Veteran Motorist, a different choice."
           }
         }
       ],
@@ -356,7 +354,7 @@
           "delta": "After blockers, A casts Giant Growth targeting Curie, tapping Forest.",
           "expected": "Curie is 4/6 and deals 4 damage; B is at 16. A still draws only 1 card, because the +3/+3 does not change base power.",
           "operation": {
-            "unclassifiable": "A different spell is cast during combat."
+            "unclassifiable": "choice: A casts Giant Growth after blockers, a different spell."
           }
         },
         {
@@ -365,7 +363,7 @@
           "delta": "Earlier this turn A activated Curie's copy ability, exiling a Juggernaut A controlled, so Curie is a copy of Juggernaut with Curie's draw trigger.",
           "expected": "Curie, a 5/3 Juggernaut, deals 5 damage; B is at 15. A draws 5 cards, the copied base power.",
           "operation": {
-            "unclassifiable": "A prior copy activation exiled a permanent and changed what Curie is; more than one fact."
+            "unclassifiable": "history: earlier this turn A activated Curie's copy ability, exiling a Juggernaut."
           }
         }
       ],

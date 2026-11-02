@@ -63,7 +63,7 @@
           "delta": "B's Grizzly Bears is in B's graveyard instead of on the battlefield.",
           "expected": "Day of Judgment resolves and destroys nothing; Grizzly Bears stays in B's graveyard.",
           "operation": {
-            "unclassifiable": "Moves a card to another zone."
+            "unclassifiable": "more than one fact: Grizzly Bears leaves the battlefield and is placed in a graveyard: a removal plus a move."
           }
         },
         {
@@ -72,7 +72,7 @@
           "delta": "B's Grizzly Bears is in B's hand instead of on the battlefield.",
           "expected": "Day of Judgment resolves and destroys nothing; Grizzly Bears stays in B's hand.",
           "operation": {
-            "unclassifiable": "Moves a card to another zone."
+            "unclassifiable": "more than one fact: Grizzly Bears leaves the battlefield and is placed in a hand: a removal plus a move."
           }
         }
       ],
@@ -135,7 +135,7 @@
           "delta": "B's hand is Grizzly Bears and Hill Giant.",
           "expected": "Mind Rot resolves; B discards Grizzly Bears and Hill Giant, and both are in B's graveyard.",
           "operation": {
-            "unclassifiable": "Changes the contents of a hand."
+            "unclassifiable": "not a board edit: B's hand gains a second card (Hill Giant); move_card moves or replaces a card, it does not add one from nowhere."
           }
         },
         {
@@ -143,9 +143,7 @@
           "polarity": "does_not_fire",
           "delta": "B's hand is empty.",
           "expected": "Mind Rot resolves and B discards nothing; nothing else happens.",
-          "operation": {
-            "unclassifiable": "Changes the contents of a hand."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -206,9 +204,7 @@
           "polarity": "does_not_fire",
           "delta": "Vedalken Orrery is not on the battlefield.",
           "expected": "can_play is false for Divination.",
-          "operation": {
-            "unclassifiable": "Removes a permanent."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "land",
@@ -216,7 +212,7 @@
           "delta": "The card asked about is Island, played from hand, instead of casting Divination.",
           "expected": "can_play is false for playing Island at A's beginning of combat, with Vedalken Orrery on the battlefield.",
           "operation": {
-            "unclassifiable": "Asks about a different card and action."
+            "unclassifiable": "choice: A plays Island from hand instead of casting Divination."
           }
         }
       ],
@@ -286,9 +282,7 @@
           "polarity": "does_not_fire",
           "delta": "Vedalken Orrery is not on the battlefield.",
           "expected": "Casting Firebolt from B's graveyard at B's upkeep is illegal. B's life stays 20.",
-          "operation": {
-            "unclassifiable": "Removes a permanent."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "no-trance",
@@ -296,7 +290,7 @@
           "delta": "A does not cast Shaman's Trance first.",
           "expected": "Casting Firebolt from B's graveyard is illegal. B's life stays 20.",
           "operation": {
-            "unclassifiable": "Omits a spell cast."
+            "unclassifiable": "choice: A does not cast Shaman's Trance first."
           }
         }
       ],
@@ -355,9 +349,7 @@
           "polarity": "does_not_fire",
           "delta": "Chromatic Orrery is not on the battlefield.",
           "expected": "can_play is false for Coral Merfolk.",
-          "operation": {
-            "unclassifiable": "Removes a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -420,7 +412,7 @@
           "delta": "A pays {R/G} with the Mountain instead of an Island, and the two generic with Islands.",
           "expected": "Firespout deals 3 damage to each creature without flying; Grizzly Bears is destroyed and moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "A different payment choice by the player."
+            "unclassifiable": "choice: A pays with the Mountain instead of an Island, a different mana payment."
           }
         }
       ],
@@ -482,7 +474,7 @@
           "delta": "A chooses Raging Goblin as the red source instead.",
           "expected": "The 1 damage from Prodigal Pyromancer is dealt; A's life is 19. The shield for Raging Goblin is not used.",
           "operation": {
-            "unclassifiable": "A different choice by the player."
+            "unclassifiable": "choice: A chooses Raging Goblin as the damage source for the shield."
           }
         }
       ],
@@ -559,7 +551,7 @@
           "delta": "A chooses Prodigal Pyromancer as the red source instead of the Raging Goblin spell.",
           "expected": "Raging Goblin deals 1 combat damage to A; A's life is 19.",
           "operation": {
-            "unclassifiable": "A different choice by the player."
+            "unclassifiable": "choice: A chooses Prodigal Pyromancer as the damage source for the shield."
           }
         }
       ],
@@ -636,7 +628,7 @@
           "delta": "B does not activate Alchor's Tomb.",
           "expected": "Prodigal Pyromancer is still red; its 1 damage is prevented and A's life stays 20. The shield is used up.",
           "operation": {
-            "unclassifiable": "Omits an activation, so a different decision."
+            "unclassifiable": "choice: B does not activate Alchor's Tomb."
           }
         }
       ],
@@ -699,7 +691,7 @@
           "delta": "A casts Hornet Sting (green) targeting B, tapping Forest, instead of Lightning Bolt.",
           "expected": "Hornet Sting deals 1 damage to B; B's life is 19.",
           "operation": {
-            "unclassifiable": "A different spell is cast."
+            "unclassifiable": "choice: A casts Hornet Sting instead of Lightning Bolt, a different spell cast."
           }
         }
       ],

@@ -65,7 +65,7 @@
           "delta": "B's blocker is Grizzly Bears instead of Wind Drake.",
           "expected": "Illegal: Grizzly Bears is not among the legal blockers of Wind Drake.",
           "operation": {
-            "unclassifiable": "B declares a different blocker already on the battlefield; a different block declaration, which no fork operation makes."
+            "unclassifiable": "choice: B blocks with Grizzly Bears instead of Wind Drake"
           }
         },
         {
@@ -74,7 +74,7 @@
           "delta": "B's blocker is Giant Spider (reach) instead of Wind Drake.",
           "expected": "Legal: Giant Spider is among the legal blockers of Wind Drake.",
           "operation": {
-            "unclassifiable": "B declares a different blocker already on the battlefield; a different block declaration, which no fork operation makes."
+            "unclassifiable": "choice: B blocks with Giant Spider instead of Wind Drake"
           }
         },
         {
@@ -83,7 +83,7 @@
           "delta": "B's Wind Drake blocks Hill Giant instead of A's Wind Drake.",
           "expected": "Legal: B's Wind Drake is among the legal blockers of Hill Giant.",
           "operation": {
-            "unclassifiable": "B's creature blocks a different attacker; a different block declaration, which no fork operation makes."
+            "unclassifiable": "choice: B's Wind Drake blocks Hill Giant instead of A's Wind Drake"
           }
         }
       ],

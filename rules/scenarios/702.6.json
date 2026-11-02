@@ -59,7 +59,7 @@
           "delta": "The step is beginning_of_combat instead of main1.",
           "expected": "The activation is not legal: equip can be activated only at sorcery timing.",
           "operation": {
-            "unclassifiable": "The step changes from main1 to beginning_of_combat; no fork operation changes the phase or step."
+            "unclassifiable": "phase or turn: the step is beginning_of_combat instead of main1"
           }
         },
         {
@@ -68,7 +68,7 @@
           "delta": "The target is B's Hill Giant instead of Grizzly Bears.",
           "expected": "The activation is not legal: Hill Giant is not a creature A controls.",
           "operation": {
-            "unclassifiable": "A different target chosen for the equip ability (the opponent's creature); no fork operation changes a targeting choice."
+            "unclassifiable": "target: the equip targets B's Hill Giant instead of Grizzly Bears"
           }
         }
       ],
@@ -149,7 +149,7 @@
           "delta": "With the ability on the stack, B casts Shock targeting Grizzly Bears (tapping Mountain) before the ability resolves.",
           "expected": "Shock resolves first and Grizzly Bears moves to A's graveyard. The equip ability fizzles and Bonesplitter stays on the battlefield unattached.",
           "operation": {
-            "unclassifiable": "B casts a spell in response that the base does not cast; a different decision and spell, which no fork operation makes."
+            "unclassifiable": "choice: B casts Shock in response to the equip ability"
           }
         }
       ],
@@ -223,7 +223,7 @@
           "delta": "The target is Youthful Knight (a Human Knight) instead of Grizzly Bears.",
           "expected": "The activation is legal. On resolution Steelclaw Lance attaches to Youthful Knight, which is 4/3 with first strike.",
           "operation": {
-            "unclassifiable": "A different target chosen for the equip ability (a creature with the quality, already on the battlefield); no fork operation changes a targeting choice."
+            "unclassifiable": "target: the equip targets Youthful Knight instead of Grizzly Bears"
           }
         }
       ],
@@ -303,7 +303,7 @@
           "delta": "A does not cast Turn to Frog.",
           "expected": "Youthful Knight stays a Human Knight with first strike; Steelclaw Lance stays attached and it is 4/3.",
           "operation": {
-            "unclassifiable": "A does not cast the spell the base casts; a different decision, which no fork operation makes."
+            "unclassifiable": "choice: A does not cast Turn to Frog"
           }
         }
       ],
@@ -363,9 +363,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls two Swamps instead of three.",
           "expected": "The activation is not legal: Equip {3} cannot be paid, and Equip Knight has no legal target.",
-          "operation": {
-            "unclassifiable": "A land is removed from A's battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -428,7 +426,7 @@
           "delta": "The target is Grizzly Bears instead of Jace Beleren.",
           "expected": "The activation is illegal: Grizzly Bears is not a planeswalker, and Equip {3} cannot be paid with one Plains.",
           "operation": {
-            "unclassifiable": "A different target chosen for the equip ability (a creature instead of the planeswalker); no fork operation changes a targeting choice."
+            "unclassifiable": "target: the equip targets Grizzly Bears instead of Jace Beleren"
           }
         }
       ],

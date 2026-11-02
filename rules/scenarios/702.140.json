@@ -64,7 +64,7 @@
           "delta": "Grizzly Bears is on B's battlefield instead of A's; A controls no creature.",
           "expected": "Cloudpiercer is not castable: Grizzly Bears has a different owner than the spell, so mutate has no legal target.",
           "operation": {
-            "unclassifiable": "moves a permanent to the other player"
+            "unclassifiable": "more than one fact: Grizzly Bears leaves A's battlefield and appears on B's, a controller change that is a removal plus an addition"
           }
         }
       ],
@@ -147,7 +147,7 @@
           "delta": "B passes instead of casting Shock; Grizzly Bears stays on the battlefield.",
           "expected": "The target is still legal, so Cloudpiercer does not become a plain creature spell: it merges with Grizzly Bears into one mutated permanent, a red 5/4 Dinosaur with reach, and no separate Cloudpiercer enters the battlefield; the mutates trigger fires.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: B passes instead of casting Shock in response"
           }
         }
       ],
@@ -229,7 +229,7 @@
           "delta": "A chooses to put Cloudpiercer under Grizzly Bears instead of on top.",
           "expected": "Cloudpiercer merges with Grizzly Bears into one mutated permanent, now a green 2/2 Bear with reach (Grizzly Bears on top). A controls one creature.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: A puts Cloudpiercer under Grizzly Bears instead of on top"
           }
         },
         {
@@ -238,7 +238,7 @@
           "delta": "B casts Shock on Grizzly Bears in response to Cloudpiercer, before it resolves.",
           "expected": "Nothing merges: Grizzly Bears dies, and Cloudpiercer enters the battlefield as a separate 5/4 Dinosaur with reach.",
           "operation": {
-            "unclassifiable": "a different spell cast by the opponent"
+            "unclassifiable": "choice: B responds to Cloudpiercer by casting Shock on Grizzly Bears"
           }
         }
       ],
@@ -318,7 +318,7 @@
           "delta": "A casts Cubwarden for its mana cost {3}{W} instead of its mutate cost, with no target.",
           "expected": "Cubwarden enters the battlefield as its own 3/5 creature next to Grizzly Bears; the mutates trigger does not fire and no tokens are created.",
           "operation": {
-            "unclassifiable": "a different way to cast the spell"
+            "unclassifiable": "choice: A casts Cubwarden for its mana cost instead of mutating"
           }
         },
         {
@@ -327,7 +327,7 @@
           "delta": "B casts Shock on Grizzly Bears in response to the mutating Cubwarden.",
           "expected": "Grizzly Bears dies, Cubwarden enters as its own 3/5 creature, nothing mutates, the mutates trigger does not fire and no tokens are created.",
           "operation": {
-            "unclassifiable": "a different spell cast by the opponent"
+            "unclassifiable": "choice: B responds to the mutating Cubwarden by casting Shock on Grizzly Bears"
           }
         }
       ],
@@ -404,7 +404,7 @@
           "delta": "A chooses to put Cloudpiercer under Serra Angel.",
           "expected": "One permanent: a white 4/4 Angel (types and power/toughness from Serra Angel, the top card) with flying, vigilance and reach (abilities of both cards).",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: A puts Cloudpiercer under Serra Angel"
           }
         },
         {
@@ -413,7 +413,7 @@
           "delta": "A casts Cloudpiercer for its mana cost {4}{R} using all 5 Mountains, without mutating.",
           "expected": "Two permanents: Serra Angel stays a 4/4 with flying and vigilance and no reach; Cloudpiercer is a 5/4 with reach and no flying or vigilance.",
           "operation": {
-            "unclassifiable": "a different way to cast the spell"
+            "unclassifiable": "choice: A casts Cloudpiercer for its mana cost without mutating"
           }
         }
       ],
@@ -483,9 +483,7 @@
           "polarity": "does_not_fire",
           "delta": "Cloudpiercer is in A's hand instead of on top of A's library, and A casts it from hand for its mutate cost.",
           "expected": "Thundermane Dragon's effect does not apply to the spell, so the mutated permanent (red 5/4 Dinosaur with reach) has no haste.",
-          "operation": {
-            "unclassifiable": "moves the card to another zone and changes how it is cast"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [

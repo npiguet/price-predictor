@@ -60,7 +60,7 @@
           "delta": "On resolution of the fabricate trigger A chooses not to put counters on it.",
           "expected": "Weaponcraft Enthusiast has no counters and stays 0/1. A creates two 1/1 colorless Servo artifact creature tokens.",
           "operation": {
-            "unclassifiable": "a different decision or choice by a player"
+            "unclassifiable": "choice: A chooses not to put counters on it"
           }
         },
         {
@@ -69,7 +69,7 @@
           "delta": "B responds by casting Counterspell with both Islands, targeting Weaponcraft Enthusiast.",
           "expected": "Weaponcraft Enthusiast is countered and moves to A's graveyard. It never enters the battlefield, so the fabricate trigger does not fire and no counters or tokens appear.",
           "operation": {
-            "unclassifiable": "a different spell or ability is cast"
+            "unclassifiable": "choice: B responds by casting Counterspell"
           }
         }
       ],
@@ -146,7 +146,7 @@
           "delta": "Cayth, Famed Mechanist is controlled by B instead of A.",
           "expected": "Weaponcraft Enthusiast has only its own fabricate 2, so one trigger fires. It has two +1/+1 counters and is 2/3, and no Servo is created.",
           "operation": {
-            "unclassifiable": "adds, removes, attaches or changes the controller of a permanent, which no fork operation does"
+            "unclassifiable": "more than one fact: Cayth changing controller is a removal plus an addition"
           }
         }
       ],

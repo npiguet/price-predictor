@@ -61,7 +61,7 @@
           "delta": "B blocks Wolverine Pack with only one Grizzly Bears.",
           "expected": "The rampage trigger resolves with no blockers beyond the first, so Wolverine Pack gets +0/+0 and stays 2/4. It deals 2 damage to the blocking Grizzly Bears, which is destroyed. Wolverine Pack takes 2 damage and survives.",
           "operation": {
-            "unclassifiable": "removing a blocker is a different blocking decision by player B, not a fork operation"
+            "unclassifiable": "choice: B blocks with one Grizzly Bears instead of two."
           }
         },
         {
@@ -70,7 +70,7 @@
           "delta": "B blocks Wolverine Pack with all three Grizzly Bears.",
           "expected": "The rampage trigger resolves and Wolverine Pack gets +4/+4 until end of turn (two blockers beyond the first), becoming 6/8. It deals 2 damage to each of the three Grizzly Bears, so all three are destroyed. Wolverine Pack takes 6 damage and survives.",
           "operation": {
-            "unclassifiable": "adding a blocker is a different blocking decision by player B, not a fork operation"
+            "unclassifiable": "choice: B blocks with three Grizzly Bears instead of two."
           }
         }
       ],
@@ -148,7 +148,7 @@
           "delta": "A casts Lightning Bolt in response to the rampage trigger instead of after it resolves.",
           "expected": "Lightning Bolt destroys one Grizzly Bears first, so only one creature blocks Wolverine Pack when the rampage trigger resolves. Wolverine Pack gets +0/+0 and stays 2/4. In combat damage it deals 2 damage to the remaining Grizzly Bears (destroyed) and takes 2 damage.",
           "operation": {
-            "unclassifiable": "a different timing of a cast spell is a different decision by player A"
+            "unclassifiable": "timing: Lightning Bolt is cast in response to the rampage trigger instead of after it resolves."
           }
         }
       ],

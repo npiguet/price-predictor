@@ -53,7 +53,7 @@
           "delta": "A declines to dredge and draws normally.",
           "expected": "Forest moves from the library to A's hand. Life from the Loam stays in A's graveyard and no card is milled.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: A declines to dredge and draws instead"
           }
         }
       ],
@@ -125,7 +125,7 @@
           "delta": "A's library is Forest, Island (2 cards).",
           "expected": "Dredging is not available: the library holds fewer than 3 cards. A draws Forest normally and Life from the Loam stays in the graveyard.",
           "operation": {
-            "unclassifiable": "changes the library contents"
+            "unclassifiable": "not a board edit: a card is removed from the library with no destination zone, and no operation deletes a library card"
           }
         }
       ],

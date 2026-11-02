@@ -68,7 +68,7 @@
           "delta": "Grizzly Bears is owned by A and sits in A's graveyard.",
           "expected": "After Reanimate resolves, Grizzly Bears is on the battlefield controlled by A, who is also its owner. A is at 18 life. After Shock, Grizzly Bears moves to A's graveyard.",
           "operation": {
-            "unclassifiable": "Changes the owner of a card in a graveyard; no fork operation sets ownership, and none acts on a graveyard card."
+            "unclassifiable": "not a board edit: Grizzly Bears' owner is A instead of B; move_card keeps a card's owner, so the card moved into A's graveyard would still go to B's graveyard after Shock, and no operation sets ownership."
           }
         }
       ],
@@ -157,7 +157,7 @@
           "delta": "Polymorph targets A's Hill Giant instead.",
           "expected": "A's Hill Giant is destroyed. A's Grizzly Bears enters the battlefield under A's control. B's Hill Giant and B's library are untouched.",
           "operation": {
-            "unclassifiable": "A different target for the spell; no fork operation changes a player's choice of target."
+            "unclassifiable": "target: Polymorph targets A's Hill Giant instead of B's."
           }
         }
       ],
@@ -230,7 +230,7 @@
           "delta": "A does not cast Aethersnatch and passes priority.",
           "expected": "The Grizzly Bears spell resolves and Grizzly Bears enters the battlefield under B's control. Aethersnatch stays in A's hand.",
           "operation": {
-            "unclassifiable": "A different player decision: the control-gaining spell is not cast; no fork operation changes whether a spell is cast."
+            "unclassifiable": "choice: A does not cast Aethersnatch and passes priority."
           }
         }
       ],
@@ -302,7 +302,7 @@
           "delta": "Glorious Anthem is in A's graveyard instead of on the battlefield.",
           "expected": "A's Grizzly Bears is 2/2, its printed characteristics. B's Grizzly Bears is 2/2.",
           "operation": {
-            "unclassifiable": "Removes a permanent (the static's source moves to the graveyard); no fork operation removes a permanent."
+            "unclassifiable": "more than one fact: Glorious Anthem leaves the battlefield and is placed in A's graveyard: a removal plus a move."
           }
         }
       ],
@@ -373,9 +373,7 @@
           "polarity": "does_not_fire",
           "delta": "The spell in A's hand is Rampant Growth instead of Nature's Lore.",
           "expected": "Rampant Growth resolves; the Forest from A's library enters the battlefield tapped, face up and phased in.",
-          "operation": {
-            "unclassifiable": "A different card in hand and so a different spell cast; no fork operation changes a hand."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -452,7 +450,7 @@
           "delta": "A's Jushi Apprentice is unflipped (1/2).",
           "expected": "A's creature becomes a copy of Nezumi Shortfang with its front-face characteristics: 1/1, nonlegendary. After cleanup it is Jushi Apprentice again, 1/2, unflipped.",
           "operation": {
-            "unclassifiable": "Changes a permanent's flipped status; none of the seven operations sets a face status, and replace_card would put a different card rather than the same card unflipped."
+            "unclassifiable": "not a board edit: A's Jushi Apprentice is unflipped instead of flipped; no operation sets a permanent's flipped status, and replace_card puts a different card, not the same card unflipped."
           }
         },
         {
@@ -461,7 +459,7 @@
           "delta": "A chooses B's Grizzly Bears to copy instead of Nezumi Shortfang.",
           "expected": "A's creature becomes a copy of Grizzly Bears, 2/2, whose characteristics do not depend on flipped status. After cleanup it is Tomoya the Revealer again, 2/3, still flipped.",
           "operation": {
-            "unclassifiable": "A different choice made while the spell resolves (which creature to copy); no fork operation changes a player's choice."
+            "unclassifiable": "choice: A chooses a different creature to copy as the spell resolves."
           }
         }
       ],

@@ -46,7 +46,7 @@
           "delta": "Tolarian Drake is phased out at the start of the untap step, having phased out while A controlled it.",
           "expected": "Tolarian Drake phases in in A's untap step: it is on the battlefield again as a 2/4 flyer.",
           "operation": {
-            "unclassifiable": "Changes which permanents are phased out, a different board history."
+            "unclassifiable": "not a board edit: phased-out status of a permanent is set by no operation"
           }
         },
         {
@@ -55,7 +55,7 @@
           "delta": "The active player is B, so it is B's untap step (Tolarian Drake is phased in and A's).",
           "expected": "Tolarian Drake does not phase: it stays phased in and A controls a 2/4 flyer.",
           "operation": {
-            "unclassifiable": "Changes whose turn it is."
+            "unclassifiable": "phase or turn: it is B's untap step instead of A's"
           }
         }
       ],
@@ -125,7 +125,7 @@
           "delta": "B had cast Grizzly Bears during its previous turn (it is on B's battlefield, not in hand).",
           "expected": "It stays day: Fearful Villager remains a 2/3 on its front face.",
           "operation": {
-            "unclassifiable": "Changes the previous turn's history and a permanent or hand."
+            "unclassifiable": "history: the number of spells B cast during its previous turn"
           }
         }
       ],
@@ -197,7 +197,7 @@
           "delta": "B cast only one Grizzly Bears during its previous turn (the other is in B's hand, not on the battlefield).",
           "expected": "It stays night: the permanent remains the 4/3 Fearsome Werewolf.",
           "operation": {
-            "unclassifiable": "Changes the previous turn's history and a permanent or hand."
+            "unclassifiable": "history: the number of spells B cast during its previous turn"
           }
         }
       ],
@@ -280,7 +280,7 @@
           "delta": "Claustrophobia is attached to Grizzly Bears instead of Runeclaw Bear.",
           "expected": "Runeclaw Bear untaps; Grizzly Bears (enchanted) stays tapped.",
           "operation": {
-            "unclassifiable": "Attaches the Aura to a different permanent."
+            "unclassifiable": "not a board edit: an Aura attached to a different permanent; no operation sets attachment"
           }
         },
         {
@@ -289,7 +289,7 @@
           "delta": "The active player is B, so it is B's untap step.",
           "expected": "B's Island untaps; A's Grizzly Bears and Runeclaw Bear stay tapped.",
           "operation": {
-            "unclassifiable": "Changes whose turn it is."
+            "unclassifiable": "phase or turn: it is B's untap step instead of A's"
           }
         }
       ],
@@ -361,7 +361,7 @@
           "delta": "The attempt happens in the upkeep step (setup.step upkeep), where A receives priority.",
           "expected": "Casting Lightning Bolt is legal (can_play true) with Grizzly Bears as a legal target.",
           "operation": {
-            "unclassifiable": "Changes the phase or step."
+            "unclassifiable": "phase or turn: the attempt happens in the upkeep step instead of the untap step"
           }
         }
       ],

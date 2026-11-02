@@ -59,7 +59,7 @@
           "delta": "A casts Grizzly Bears (tapping Forest and Mountain) instead of Shock.",
           "expected": "Prowess does not trigger: Monastery Swiftspear stays 1/2. Grizzly Bears enters the battlefield.",
           "operation": {
-            "unclassifiable": "a different spell is cast, a decision by a player"
+            "unclassifiable": "choice: A casts a creature spell instead of Shock"
           }
         },
         {
@@ -68,7 +68,7 @@
           "delta": "A casts nothing; B casts Shock targeting A, tapping Mountain.",
           "expected": "Prowess does not trigger on B's spell: Monastery Swiftspear stays 1/2. A takes 2 damage and is at 18.",
           "operation": {
-            "unclassifiable": "a different spell is cast, a decision by a player"
+            "unclassifiable": "choice: A casts nothing and B casts Shock instead"
           }
         }
       ],
@@ -142,9 +142,7 @@
           "polarity": "does_not_fire",
           "delta": "Triton Wavebreaker is not on the battlefield.",
           "expected": "One prowess trigger resolves: Monastery Swiftspear is 2/3 until end of turn. B is at 18.",
-          "operation": {
-            "unclassifiable": "adds or removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

@@ -51,7 +51,7 @@
           "delta": "The step is A's end step, where a sorcery cannot be cast.",
           "expected": "Suspending is not legal: Rift Bolt could not begin to be cast, so it stays in A's hand.",
           "operation": {
-            "unclassifiable": "changes the phase or turn"
+            "unclassifiable": "phase or turn: the step is A's end step"
           }
         },
         {
@@ -133,7 +133,7 @@
           "delta": "Rift Bolt has two time counters.",
           "expected": "The upkeep trigger fires and one time counter is removed. Rift Bolt stays in exile with one time counter and B's life is 20.",
           "operation": {
-            "unclassifiable": "sets time counters on a card in exile, which is not a permanent"
+            "unclassifiable": "not a board edit: the number of time counters on a card in exile, and exile is not an operation zone"
           }
         },
         {
@@ -142,7 +142,7 @@
           "delta": "It is B's upkeep (B is the active player) instead of A's.",
           "expected": "The suspend trigger does not fire. Rift Bolt stays in exile with one time counter and B's life is 20.",
           "operation": {
-            "unclassifiable": "changes the phase or turn"
+            "unclassifiable": "phase or turn: it is B's upkeep instead of A's"
           }
         }
       ],
@@ -209,9 +209,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls Steel Golem, so A cannot cast creature spells.",
           "expected": "Durkwood Baloth cannot be cast and stays in exile with no time counters. It never enters and cannot attack.",
-          "operation": {
-            "unclassifiable": "adds or removes a permanent"
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -268,9 +266,7 @@
           "polarity": "does_not_fire",
           "delta": "Steel Golem is not on the battlefield.",
           "expected": "Suspending is legal. Durkwood Baloth moves from A's hand to exile with five time counters.",
-          "operation": {
-            "unclassifiable": "adds or removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -345,18 +341,14 @@
           "polarity": "does_not_fire",
           "delta": "Thalia, Guardian of Thraben is not on the battlefield.",
           "expected": "Rift Bolt is cast for no mana, resolves, and B's life is 17.",
-          "operation": {
-            "unclassifiable": "adds or removes a permanent"
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "increase_paid",
           "polarity": "other",
           "delta": "A controls an untapped Mountain.",
           "expected": "Rift Bolt is cast by paying {1}, tapping Mountain. It resolves and B's life is 17.",
-          "operation": {
-            "unclassifiable": "adds a permanent"
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [

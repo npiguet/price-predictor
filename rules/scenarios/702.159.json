@@ -46,7 +46,7 @@
           "delta": "The d6 shows 6.",
           "expected": "6 is lit up: the visit ability triggers and A creates a Food token.",
           "operation": {
-            "unclassifiable": "a different die result"
+            "unclassifiable": "not a board edit: the die roll result"
           }
         },
         {
@@ -55,7 +55,7 @@
           "delta": "The d6 shows 4.",
           "expected": "4 is not a lit-up number. The visit ability does not trigger. A creates no Food token.",
           "operation": {
-            "unclassifiable": "a different die result"
+            "unclassifiable": "not a board edit: the die roll result"
           }
         }
       ],

@@ -63,7 +63,7 @@
           "delta": "A casts Mulldrifter for its mana cost {4}{U}, tapping all five Islands.",
           "expected": "A draws two cards and Mulldrifter, a 2/2 flier, stays on the battlefield. No sacrifice trigger fires.",
           "operation": {
-            "unclassifiable": "a different cost choice: the spell is cast for its mana cost"
+            "unclassifiable": "choice: A hard-casts Mulldrifter instead of evoking it"
           }
         }
       ],
@@ -132,18 +132,14 @@
           "polarity": "does_not_fire",
           "delta": "A controls two Islands instead of three.",
           "expected": "Casting Mulldrifter is not legal (can_play false); neither the evoke cost nor the mana cost can be paid.",
-          "operation": {
-            "unclassifiable": "adds or removes a permanent"
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "no_evoke",
           "polarity": "does_not_fire",
           "delta": "A's hand holds Air Elemental ({3}{U}{U}, no evoke) instead of Mulldrifter.",
           "expected": "Casting Air Elemental is not legal (can_play false); with no evoke cost, only its mana cost {3}{U}{U} is available and three Islands cannot pay it.",
-          "operation": {
-            "unclassifiable": "changes a hand"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [

@@ -53,7 +53,7 @@
           "delta": "Grizzly Bears has two charge counters instead of +1/+1 counters.",
           "expected": "Grizzly Bears is a 2/2; charge counters change no characteristic.",
           "operation": {
-            "unclassifiable": "More than one fact: removes +1/+1 counters and adds charge counters."
+            "unclassifiable": "more than one fact: removes the +1/+1 counters and adds charge counters, two counter kinds."
           }
         },
         {
@@ -62,7 +62,7 @@
           "delta": "Grizzly Bears has one -1/-1 counter instead of two +1/+1 counters.",
           "expected": "Grizzly Bears is a 1/1.",
           "operation": {
-            "unclassifiable": "More than one fact: removes +1/+1 counters and adds a -1/-1 counter."
+            "unclassifiable": "more than one fact: removes the +1/+1 counters and adds a -1/-1 counter, two counter kinds."
           }
         }
       ],
@@ -117,7 +117,7 @@
           "delta": "Grizzly Bears has one charge counter instead of a flying counter.",
           "expected": "Grizzly Bears has no flying and is a 2/2.",
           "operation": {
-            "unclassifiable": "More than one fact: removes the flying counter and adds a charge counter."
+            "unclassifiable": "more than one fact: removes the flying counter and adds a charge counter."
           }
         },
         {
@@ -126,7 +126,7 @@
           "delta": "Grizzly Bears has one deathtouch counter instead of a flying counter.",
           "expected": "Grizzly Bears has deathtouch and does not have flying.",
           "operation": {
-            "unclassifiable": "More than one fact: removes the flying counter and adds a deathtouch counter."
+            "unclassifiable": "more than one fact: removes the flying counter and adds a deathtouch counter."
           }
         }
       ],
@@ -198,7 +198,7 @@
           "delta": "A casts Disfigure targeting Grizzly Bears, tapping Swamp, instead of Shock.",
           "expected": "Grizzly Bears becomes 0/0 and moves to B's graveyard in the state-based check; its shield counter did not apply.",
           "operation": {
-            "unclassifiable": "A different spell is cast."
+            "unclassifiable": "choice: A casts Disfigure instead of Shock, a different spell."
           }
         }
       ],
@@ -285,7 +285,7 @@
           "delta": "A casts Disfigure targeting Grizzly Bears, tapping one Swamp, instead of Doom Blade.",
           "expected": "Grizzly Bears becomes 0/0 and moves to B's graveyard in the state-based check; its shield counter is not used because nothing destroyed it.",
           "operation": {
-            "unclassifiable": "A different spell is cast."
+            "unclassifiable": "choice: A casts Disfigure instead of Doom Blade, a different spell."
           }
         }
       ],
@@ -516,7 +516,7 @@
           "delta": "A attacks with Grizzly Bears instead of Plague Stinger.",
           "expected": "Grizzly Bears deals 2 damage to B: B's life is 18, B still has 9 poison counters and stays in the game.",
           "operation": {
-            "unclassifiable": "A different attacker is declared."
+            "unclassifiable": "choice: A attacks with Grizzly Bears instead of Plague Stinger, a different attack declared."
           }
         }
       ],
@@ -592,7 +592,7 @@
           "delta": "A does not cast Stifle; both players pass, the defeat trigger resolves, and A chooses not to cast Invasion of Zendikar transformed.",
           "expected": "While the defeat trigger is on the stack, Invasion of Zendikar stays on the battlefield with 0 defense and is not put into the graveyard. The trigger resolves and exiles it; it stays in A's exile and A's graveyard is empty.",
           "operation": {
-            "unclassifiable": "A different decision: Stifle is not cast."
+            "unclassifiable": "choice: A does not cast Stifle, a different decision."
           }
         },
         {
@@ -685,7 +685,7 @@
           "delta": "A casts Unsummon targeting Grizzly Bears, tapping Island, instead of Shock.",
           "expected": "Grizzly Bears returns to B's hand; it does not go to the graveyard, so nothing is exiled.",
           "operation": {
-            "unclassifiable": "A different spell is cast."
+            "unclassifiable": "choice: A casts Unsummon instead of Shock, a different spell."
           }
         }
       ],
@@ -826,7 +826,7 @@
           "delta": "Sting is not attached to Grizzly Bears.",
           "expected": "Grizzly Bears is a 2/2; the hone counters give nothing to a creature that is not equipped.",
           "operation": {
-            "unclassifiable": "Changes an attachment."
+            "unclassifiable": "not a board edit: Sting stays on the battlefield but unattached; no operation detaches a permanent without removing it."
           }
         }
       ],
@@ -891,7 +891,7 @@
           "delta": "A casts Reality Ripple targeting Grizzly Bears, tapping two Islands, instead of Cloudshift.",
           "expected": "Grizzly Bears phases out without changing zones and keeps its two +1/+1 counters.",
           "operation": {
-            "unclassifiable": "A different spell is cast."
+            "unclassifiable": "choice: A casts Reality Ripple instead of Cloudshift, a different spell."
           }
         }
       ],
@@ -1090,7 +1090,7 @@
           "delta": "In response to Fate Transfer, A casts Unsummon targeting Runeclaw Bear, tapping the third Island; both players pass and Unsummon resolves first.",
           "expected": "Runeclaw Bear returns to A's hand; no counter moves, and Grizzly Bears keeps its two +1/+1 counters (a 4/4).",
           "operation": {
-            "unclassifiable": "A different decision: another spell is cast in response."
+            "unclassifiable": "choice: A casts Unsummon in response, a different response."
           }
         }
       ],
@@ -1168,7 +1168,7 @@
           "delta": "Vorinclex, Monstrous Raider is on B's battlefield instead of A's.",
           "expected": "A is an opponent of Vorinclex's controller, so the counters are halved: Hangarback Walker enters with 1 +1/+1 counter and is a 1/1.",
           "operation": {
-            "unclassifiable": "Moves a permanent to another controller."
+            "unclassifiable": "more than one fact: Vorinclex leaves A's battlefield and appears under B's, a removal plus an addition."
           }
         },
         {
@@ -1176,9 +1176,7 @@
           "polarity": "does_not_fire",
           "delta": "Neither player controls Vorinclex, Monstrous Raider.",
           "expected": "Hangarback Walker enters with 2 +1/+1 counters and is a 2/2.",
-          "operation": {
-            "unclassifiable": "Removes a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -1336,7 +1334,7 @@
           "delta": "Iron Apprentice has one +1/+1 counter and one charge counter.",
           "expected": "Grizzly Bears receives one +1/+1 counter and one charge counter and is a 3/3.",
           "operation": {
-            "unclassifiable": "More than one fact: lowers the +1/+1 counter count and adds a charge counter."
+            "unclassifiable": "more than one fact: lowers the +1/+1 counter count and adds a charge counter, two counter kinds."
           }
         },
         {
@@ -1345,7 +1343,7 @@
           "delta": "A casts Unsummon targeting Iron Apprentice, tapping Island, instead of Shock.",
           "expected": "Iron Apprentice returns to A's hand; it did not die, so its trigger does not fire and Grizzly Bears stays a 2/2.",
           "operation": {
-            "unclassifiable": "A different spell is cast."
+            "unclassifiable": "choice: A casts Unsummon instead of Shock, a different spell."
           }
         }
       ],

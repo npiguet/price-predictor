@@ -64,7 +64,7 @@
           "delta": "The top three cards of A's library are Mountains instead of Grizzly Bears, Mountain and Shock.",
           "expected": "The trigger fires and A mills three Mountains. A loses no life (20) and keeps all 3 rad counters.",
           "operation": {
-            "unclassifiable": "Changes the top cards of A's library; no operation changes library contents."
+            "unclassifiable": "more than one fact: two of the top three library cards are replaced"
           }
         },
         {
@@ -73,7 +73,7 @@
           "delta": "The top three cards of A's library are Grizzly Bears, Shock and Hill Giant.",
           "expected": "A mills all three nonland cards, loses 3 life (17) and has no rad counters left.",
           "operation": {
-            "unclassifiable": "Changes the top cards of A's library; no operation changes library contents."
+            "unclassifiable": "more than one fact: two of the top three library cards are replaced"
           }
         },
         {

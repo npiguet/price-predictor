@@ -69,9 +69,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls only one Soul Warden.",
           "expected": "One Soul Warden trigger resolves; A ends at 21 life.",
-          "operation": {
-            "unclassifiable": "removes a permanent (one of the two trigger-bearing creatures) from the battlefield; no fork operation removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -134,7 +132,7 @@
           "delta": "The second activation offered is Chandra Nalaar's +1 targeting B instead.",
           "expected": "Chandra Nalaar's +1 is playable (no loyalty ability of Chandra Nalaar was activated this turn); it resolves, Chandra Nalaar has 7 loyalty and B has 19 life.",
           "operation": {
-            "unclassifiable": "a different decision: the second loyalty activation offered is another permanent's ability, not a change to the board"
+            "unclassifiable": "choice: the second loyalty activation is another permanent's ability with a different target, a different decision"
           }
         }
       ],
@@ -215,9 +213,7 @@
           "polarity": "does_not_fire",
           "delta": "The second card in A's hand is Grizzly Bears (green) instead of Transguild Courier.",
           "expected": "Force of Will is not castable: A has no blue card to exile and no mana for its mana cost.",
-          "operation": {
-            "unclassifiable": "changes a card in a player's hand; fork operations act only on permanents and players"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -274,9 +270,7 @@
           "polarity": "does_not_fire",
           "delta": "Bloodghast is in A's hand instead of A's graveyard.",
           "expected": "Bloodghast's landfall ability does not function in the hand: no trigger fires and Bloodghast stays in A's hand.",
-          "operation": {
-            "unclassifiable": "moves the trigger's source card to a different zone (hand instead of graveyard)"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -331,9 +325,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls only one Mountain.",
           "expected": "Fireblast is not castable: the alternative cost (sacrifice two Mountains) cannot be paid and neither can the {4}{R}{R} mana cost.",
-          "operation": {
-            "unclassifiable": "removes a permanent (one of the lands the alternative cost sacrifices) from the battlefield"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -453,7 +445,7 @@
           "delta": "B has declared no blockers and A has priority in the declare blockers step instead (setup step declare_blockers).",
           "expected": "Fog Patch is castable; it resolves and Grizzly Bears becomes blocked.",
           "operation": {
-            "unclassifiable": "changes the step the candidate is offered in, not a fact about a permanent or player"
+            "unclassifiable": "phase or turn: the step is declare blockers instead of declare attackers"
           }
         }
       ],
@@ -526,7 +518,7 @@
           "delta": "Misthollow Griffin is in A's graveyard instead of exile.",
           "expected": "Misthollow Griffin is not castable from the graveyard.",
           "operation": {
-            "unclassifiable": "moves the card to a different non-battlefield zone (graveyard instead of exile)"
+            "unclassifiable": "not a board edit: the card is in the graveyard instead of exile, and exile is not a zone any operation edits"
           }
         }
       ],
@@ -593,7 +585,7 @@
           "delta": "A casts Doom Blade targeting Grizzly Bears (tapping Swamp and Forest) instead of Abrupt Decay.",
           "expected": "Counterspell counters Doom Blade, which moves to A's graveyard; Grizzly Bears stays on the battlefield.",
           "operation": {
-            "unclassifiable": "a different spell cast by the player"
+            "unclassifiable": "choice: A casts a different spell"
           }
         }
       ],
@@ -669,7 +661,7 @@
           "delta": "A casts Grizzly Bears, tapping Forest and Forest, instead of Diregraf Ghoul.",
           "expected": "Grizzly Bears enters the battlefield untapped.",
           "operation": {
-            "unclassifiable": "a different spell cast by the player"
+            "unclassifiable": "choice: A casts a different spell"
           }
         }
       ],
@@ -744,7 +736,7 @@
           "delta": "Dragonscale Boon targets Grizzly Bears instead.",
           "expected": "Two +1/+1 counters are put on Grizzly Bears, which is 4/4.",
           "operation": {
-            "unclassifiable": "a different target chosen for the spell"
+            "unclassifiable": "target: Dragonscale Boon targets a different creature"
           }
         }
       ],
@@ -802,7 +794,7 @@
           "delta": "Barkhide Mauler is on the battlefield instead of A's hand.",
           "expected": "Cycling is not playable: its cost (discard this card) cannot be paid from the battlefield.",
           "operation": {
-            "unclassifiable": "moves the card to a different zone (battlefield instead of hand)"
+            "unclassifiable": "more than one fact: the card leaves the hand and enters the battlefield"
           }
         },
         {
@@ -810,9 +802,7 @@
           "polarity": "does_not_fire",
           "delta": "Barkhide Mauler is in A's graveyard instead of A's hand.",
           "expected": "Cycling is not playable from the graveyard: the card cannot be discarded from there.",
-          "operation": {
-            "unclassifiable": "moves the card to a different zone (graveyard instead of hand)"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -889,7 +879,7 @@
           "delta": "A casts Tormenting Voice (tapping both Mountains) discarding Gempalm Incinerator instead of cycling it.",
           "expected": "Gempalm Incinerator is discarded, not cycled: no trigger fires and Grizzly Bears stays on the battlefield undamaged.",
           "operation": {
-            "unclassifiable": "a different decision: the card is discarded by another spell instead of cycled"
+            "unclassifiable": "choice: A casts Tormenting Voice discarding the card instead of cycling it"
           }
         }
       ],
@@ -960,7 +950,7 @@
           "delta": "Reassembling Skeleton is on the battlefield instead of A's graveyard.",
           "expected": "The ability is not playable: it functions only in the graveyard.",
           "operation": {
-            "unclassifiable": "moves the card to a different zone (battlefield instead of graveyard)"
+            "unclassifiable": "more than one fact: the card leaves the graveyard and enters the battlefield"
           }
         },
         {
@@ -968,9 +958,7 @@
           "polarity": "does_not_fire",
           "delta": "Reassembling Skeleton is in A's hand instead of A's graveyard.",
           "expected": "The ability is not playable from the hand.",
-          "operation": {
-            "unclassifiable": "moves the card to a different zone (hand instead of graveyard)"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -1047,7 +1035,7 @@
           "delta": "A activates Gideon's 0 (create a 2/2 Knight Ally token) instead.",
           "expected": "No emblem is created; Grizzly Bears stays 2/2, A has a 2/2 Knight Ally token, and Gideon stays on the battlefield with 4 loyalty.",
           "operation": {
-            "unclassifiable": "a different decision: another loyalty ability of the planeswalker is activated"
+            "unclassifiable": "choice: A activates a different Gideon ability"
           }
         }
       ],
@@ -1112,7 +1100,7 @@
           "delta": "B does not cast Lightning Bolt.",
           "expected": "The ability resolves with the Yeti on the battlefield: Hill Giant is dealt 3 damage and the Yeti is dealt 3 damage in return; both die.",
           "operation": {
-            "unclassifiable": "a different decision: the opponent casts no spell in response"
+            "unclassifiable": "choice: B does not respond with Lightning Bolt"
           }
         }
       ],
@@ -1180,7 +1168,7 @@
           "delta": "B casts Stifle (tapping one Island) targeting the ability instead of Counterspell.",
           "expected": "Stifle counters the ability; it doesn't resolve and B stays at 20 life.",
           "operation": {
-            "unclassifiable": "a different spell cast by the opponent"
+            "unclassifiable": "choice: B casts a different spell targeting the ability"
           }
         }
       ],
@@ -1242,7 +1230,7 @@
           "delta": "A does not cast Turn to Frog.",
           "expected": "Wind Drake is a 2/2 Drake with flying (its printed instance and Jump's instance).",
           "operation": {
-            "unclassifiable": "a different decision: the second spell is not cast"
+            "unclassifiable": "choice: A does not cast Turn to Frog"
           }
         }
       ],
@@ -1315,7 +1303,7 @@
           "delta": "A casts Jump first and then Turn to Frog.",
           "expected": "Grizzly Bears is a 1/1 blue Frog with no flying: the later effect (Turn to Frog) prevails.",
           "operation": {
-            "unclassifiable": "a different decision: the two spells are cast in the opposite order"
+            "unclassifiable": "timing: the two spells are cast in the opposite order"
           }
         }
       ],
@@ -1371,7 +1359,7 @@
           "delta": "B controls Archetype of Imagination instead of A.",
           "expected": "Wind Drake has flying.",
           "operation": {
-            "unclassifiable": "changes which player controls a permanent; no fork operation changes control"
+            "unclassifiable": "more than one fact: Archetype of Imagination leaves A's control and enters B's"
           }
         }
       ],
@@ -1441,9 +1429,7 @@
           "polarity": "does_not_fire",
           "delta": "Archetype of Imagination is in A's graveyard instead of on the battlefield.",
           "expected": "Grizzly Bears gains flying until end of turn.",
-          "operation": {
-            "unclassifiable": "removes a permanent from the battlefield (it is in the graveyard instead)"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -1515,7 +1501,7 @@
           "delta": "A casts Jump targeting Grizzly Bears, tapping Island, instead of Chaoslace.",
           "expected": "Grizzly Bears gains flying, now has an ability, and is 2/2.",
           "operation": {
-            "unclassifiable": "a different spell cast by the player"
+            "unclassifiable": "choice: A casts a different spell"
           }
         }
       ],

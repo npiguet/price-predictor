@@ -58,7 +58,7 @@
           "delta": "A has already played the battlefield Mountain as its land for this turn.",
           "expected": "Playing the Mountain from hand is not legal: A has already used the one land play of the turn.",
           "operation": {
-            "unclassifiable": "changes the turn's history: a land was already played this turn"
+            "unclassifiable": "history: A has already played a land (the battlefield Mountain) this turn"
           }
         },
         {
@@ -67,7 +67,7 @@
           "delta": "A has first cast Shock targeting B, tapping the battlefield Mountain, and still holds priority with Shock on the stack.",
           "expected": "Playing the Mountain is not legal while Shock is on the stack.",
           "operation": {
-            "unclassifiable": "a different spell cast, putting it on the stack"
+            "unclassifiable": "timing: A's Shock targeting B is on the stack, which is empty in the base"
           }
         },
         {
@@ -76,7 +76,7 @@
           "delta": "The step is beginning_of_combat instead of main1.",
           "expected": "Playing the Mountain is not legal outside a main phase.",
           "operation": {
-            "unclassifiable": "changes the step"
+            "unclassifiable": "phase or turn: the step is beginning_of_combat instead of main1"
           }
         },
         {
@@ -85,7 +85,7 @@
           "delta": "B is the active player and the step is main1; the stack is empty and A holds priority.",
           "expected": "Playing the Mountain is not legal: it is not A's turn.",
           "operation": {
-            "unclassifiable": "changes the active player's turn"
+            "unclassifiable": "phase or turn: B is the active player instead of A"
           }
         }
       ],
@@ -168,7 +168,7 @@
           "delta": "A does not turn the creature face up and passes priority with Shock on the stack.",
           "expected": "Shock deals 2 damage to the face-down 2/2 creature, which moves to A's graveyard.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: A does not turn the creature face up"
           }
         },
         {
@@ -176,9 +176,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls only four Mountains, so the morph cost {4}{R} cannot be paid.",
           "expected": "Turning the creature face up is not legal; the creature stays face down and dies to Shock.",
-          "operation": {
-            "unclassifiable": "removes a permanent (one Mountain)"
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "opponent-tries",
@@ -186,7 +184,7 @@
           "delta": "B (not the controller) tries to turn A's face-down creature face up instead.",
           "expected": "Turning the creature face up is not legal for B; only its controller may take the action. The creature stays face down, and Shock's 2 damage moves the 2/2 to A's graveyard.",
           "operation": {
-            "unclassifiable": "a different player attempts the action"
+            "unclassifiable": "choice: B attempts the action instead of A"
           }
         }
       ],
@@ -268,7 +266,7 @@
           "delta": "A does not pay {R}.",
           "expected": "Convulsing Licid stays attached to Grizzly Bears, and blocking Hill Giant with Grizzly Bears is not legal.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: A does not pay {R}"
           }
         },
         {
@@ -359,7 +357,7 @@
           "delta": "A does not pay {2}.",
           "expected": "Rampant Growth resolves but A can't search: no land leaves A's library, and A controls no extra land.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: A does not pay {2}"
           }
         },
         {
@@ -368,7 +366,7 @@
           "delta": "B pays {2} (tapping two Plains) to ignore the effect for B, and A does not.",
           "expected": "A still can't search: Rampant Growth resolves and nothing leaves A's library. The ignore applies only to the player who paid.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: B pays {2} and A does not"
           }
         }
       ],
@@ -436,7 +434,7 @@
           "delta": "B has cast Shock targeting A, and A has priority with Shock on the stack.",
           "expected": "Discarding is legal with a spell on the stack: Circling Vultures moves to A's graveyard, and Shock stays on the stack unchanged.",
           "operation": {
-            "unclassifiable": "a different spell cast, putting it on the stack"
+            "unclassifiable": "timing: B's Shock targeting A is on the stack, which is empty in the base"
           }
         },
         {
@@ -445,7 +443,7 @@
           "delta": "The step is cleanup, in which no player receives priority.",
           "expected": "Discarding is not legal; Circling Vultures stays in A's hand.",
           "operation": {
-            "unclassifiable": "changes the step"
+            "unclassifiable": "phase or turn: the step is cleanup instead of upkeep"
           }
         }
       ],
@@ -522,7 +520,7 @@
           "delta": "The step is upkeep instead of main1.",
           "expected": "Suspending is not legal: a sorcery can't be cast in the upkeep. Rift Bolt stays in hand.",
           "operation": {
-            "unclassifiable": "changes the step"
+            "unclassifiable": "phase or turn: the step is upkeep instead of main1"
           }
         },
         {
@@ -531,7 +529,7 @@
           "delta": "B has cast Shock targeting A, tapping Mountain, and A has priority with Shock on the stack.",
           "expected": "Suspending is not legal while the stack is not empty; Rift Bolt stays in hand.",
           "operation": {
-            "unclassifiable": "a different spell cast, putting it on the stack"
+            "unclassifiable": "timing: B's Shock targeting A is on the stack, which is empty in the base"
           }
         },
         {
@@ -540,7 +538,7 @@
           "delta": "B is the active player and the step is main1.",
           "expected": "Suspending is not legal on B's turn; Rift Bolt stays in hand.",
           "operation": {
-            "unclassifiable": "changes the active player's turn"
+            "unclassifiable": "phase or turn: B is the active player instead of A"
           }
         }
       ],
@@ -615,7 +613,7 @@
           "delta": "The step is beginning_of_combat instead of main1.",
           "expected": "The action is not legal outside a main phase; Lurrus stays outside the game.",
           "operation": {
-            "unclassifiable": "changes the step"
+            "unclassifiable": "phase or turn: the step is beginning_of_combat instead of main1"
           }
         },
         {
@@ -624,7 +622,7 @@
           "delta": "B has cast Shock targeting A and A has priority with Shock on the stack.",
           "expected": "The action is not legal with a spell on the stack; Lurrus stays outside the game.",
           "operation": {
-            "unclassifiable": "a different spell cast, putting it on the stack"
+            "unclassifiable": "timing: B's Shock targeting A is on the stack, which is empty in the base"
           }
         },
         {
@@ -633,7 +631,7 @@
           "delta": "B is the active player and the step is main1.",
           "expected": "The action is not legal on B's turn; Lurrus stays outside the game.",
           "operation": {
-            "unclassifiable": "changes the active player's turn"
+            "unclassifiable": "phase or turn: B is the active player instead of A"
           }
         },
         {
@@ -641,9 +639,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls only two Plains.",
           "expected": "The action is not legal: {3} can't be paid; Lurrus stays outside the game.",
-          "operation": {
-            "unclassifiable": "removes a permanent (one Plains)"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -719,7 +715,7 @@
           "delta": "A has first cast Shock targeting B, tapping Mountain, and still holds priority with Shock on the stack.",
           "expected": "Foretelling is legal with Shock on the stack; Behold the Multiverse moves to exile face down and Shock is unchanged on the stack.",
           "operation": {
-            "unclassifiable": "a different spell cast, putting it on the stack"
+            "unclassifiable": "timing: A's Shock targeting B is on the stack, which is empty in the base"
           }
         },
         {
@@ -728,7 +724,7 @@
           "delta": "B is the active player and the step is main1; A holds priority with an empty stack.",
           "expected": "Foretelling is not legal on B's turn; Behold the Multiverse stays in hand.",
           "operation": {
-            "unclassifiable": "changes the active player's turn"
+            "unclassifiable": "phase or turn: B is the active player instead of A"
           }
         },
         {
@@ -737,7 +733,7 @@
           "delta": "A controls only one land, an Island.",
           "expected": "Foretelling is not legal: {2} can't be paid; Behold the Multiverse stays in hand.",
           "operation": {
-            "unclassifiable": "removes permanents (two lands)"
+            "unclassifiable": "more than one fact: leaving one land needs removing both an Island and the Mountain"
           }
         }
       ],
@@ -814,7 +810,7 @@
           "delta": "B has cast Shock targeting A, tapping Mountain, and A has priority with Shock on the stack.",
           "expected": "Plotting is not legal while the stack is not empty; Slickshot Show-Off stays in hand.",
           "operation": {
-            "unclassifiable": "a different spell cast, putting it on the stack"
+            "unclassifiable": "timing: B's Shock targeting A is on the stack, which is empty in the base"
           }
         },
         {
@@ -823,7 +819,7 @@
           "delta": "B is the active player and the step is main1.",
           "expected": "Plotting is not legal on B's turn; Slickshot Show-Off stays in hand.",
           "operation": {
-            "unclassifiable": "changes the active player's turn"
+            "unclassifiable": "phase or turn: B is the active player instead of A"
           }
         }
       ],
@@ -901,7 +897,7 @@
           "delta": "The step is beginning_of_combat instead of main1.",
           "expected": "Unlocking is not legal outside a main phase; the Locker Room door stays locked.",
           "operation": {
-            "unclassifiable": "changes the step"
+            "unclassifiable": "phase or turn: the step is beginning_of_combat instead of main1"
           }
         },
         {
@@ -910,7 +906,7 @@
           "delta": "B has cast Shock targeting A and A has priority with Shock on the stack.",
           "expected": "Unlocking is not legal while the stack is not empty; the door stays locked.",
           "operation": {
-            "unclassifiable": "a different spell cast, putting it on the stack"
+            "unclassifiable": "timing: B's Shock targeting A is on the stack, which is empty in the base"
           }
         },
         {
@@ -919,7 +915,7 @@
           "delta": "B is the active player and the step is main1.",
           "expected": "Unlocking is not legal on B's turn; the door stays locked.",
           "operation": {
-            "unclassifiable": "changes the active player's turn"
+            "unclassifiable": "phase or turn: B is the active player instead of A"
           }
         }
       ],
@@ -995,7 +991,7 @@
           "delta": "After playing the Mountain, A passes priority instead of casting Shock.",
           "expected": "B receives priority with an empty stack; when B also passes, the game moves to beginning_of_combat. A did not keep priority once A passed.",
           "operation": {
-            "unclassifiable": "a different choice by a player: passing priority instead of casting a spell"
+            "unclassifiable": "choice: A passes priority instead of casting Shock"
           }
         }
       ],

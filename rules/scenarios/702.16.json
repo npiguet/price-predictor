@@ -57,7 +57,7 @@
           "delta": "A attempts to cast Lightning Bolt targeting Black Knight, tapping Mountain, instead.",
           "expected": "Black Knight is a legal target for Lightning Bolt (red); the cast is legal.",
           "operation": {
-            "unclassifiable": "A different spell is cast or activated, or none: a different decision by a player."
+            "unclassifiable": "choice: A casts Lightning Bolt instead of the white spell: a different spell cast."
           }
         }
       ],
@@ -134,7 +134,7 @@
           "delta": "A attempts to activate Prodigal Sorcerer's ability targeting Black Knight instead.",
           "expected": "Black Knight is a legal target for Prodigal Sorcerer's ability (blue source); the activation is legal.",
           "operation": {
-            "unclassifiable": "A different spell is cast or activated, or none: a different decision by a player."
+            "unclassifiable": "choice: A activates Prodigal Sorcerer's ability instead of Master Decoy's: a different ability activated."
           }
         }
       ],
@@ -215,7 +215,7 @@
           "delta": "B chooses red instead of white.",
           "expected": "Grizzly Bears gains protection from red until end of turn. Pacifism stays attached to Grizzly Bears.",
           "operation": {
-            "unclassifiable": "A different choice by a player."
+            "unclassifiable": "choice: B chooses red instead of white: a different choice."
           }
         }
       ],
@@ -280,7 +280,7 @@
           "delta": "A chooses green instead of artifacts.",
           "expected": "Bonesplitter stays attached to Grizzly Bears. Grizzly Bears is 4/2.",
           "operation": {
-            "unclassifiable": "A different choice by a player."
+            "unclassifiable": "choice: A chooses green instead of artifacts: a different choice."
           }
         }
       ],
@@ -427,7 +427,7 @@
           "delta": "A attacks with Grizzly Bears instead of Hill Giant.",
           "expected": "Grizzly Bears deals 2 damage to Burrenton Forge-Tender, which is destroyed. Burrenton Forge-Tender deals 1 damage to Grizzly Bears, which survives.",
           "operation": {
-            "unclassifiable": "A different attack declaration: a different decision by a player."
+            "unclassifiable": "choice: A attacks with Grizzly Bears instead of Hill Giant: a different attack declared."
           }
         }
       ],
@@ -497,7 +497,7 @@
           "delta": "B declares Grizzly Bears (green) as the blocker instead of Savannah Lions.",
           "expected": "Declaring Grizzly Bears as a blocker of Black Knight is legal.",
           "operation": {
-            "unclassifiable": "A different blocker is declared: a different decision by a player."
+            "unclassifiable": "choice: B declares Grizzly Bears as the blocker instead of Savannah Lions: a different block."
           }
         }
       ],
@@ -568,7 +568,7 @@
           "delta": "A attempts to target Hill Giant instead of Progenitus.",
           "expected": "Hill Giant is a legal target for Lightning Bolt; the cast is legal.",
           "operation": {
-            "unclassifiable": "A different target is chosen: a different decision."
+            "unclassifiable": "target: A targets Hill Giant instead of Progenitus."
           }
         }
       ],
@@ -644,7 +644,7 @@
           "delta": "B declares Grizzly Bears as a blocker of Hill Giant instead of Progenitus.",
           "expected": "Declaring Grizzly Bears as a blocker of Hill Giant is legal.",
           "operation": {
-            "unclassifiable": "A different blocker is declared: a different decision by a player."
+            "unclassifiable": "choice: B declares Grizzly Bears as a blocker of Hill Giant instead of Progenitus: a different block."
           }
         }
       ],
@@ -785,7 +785,7 @@
           "delta": "True-Name Nemesis has protection from player B instead.",
           "expected": "True-Name Nemesis is a legal target for A's Lightning Bolt; the cast is legal.",
           "operation": {
-            "unclassifiable": "A different protection quality is given: removing one protection and adding another is more than one fact."
+            "unclassifiable": "not a board edit: protection from a chosen player, a property no operation sets (the keyword operation adds a keyword, not a player protection)."
           }
         }
       ],
@@ -856,7 +856,7 @@
           "delta": "True-Name Nemesis has protection from player B instead.",
           "expected": "Declaring A's Grizzly Bears as a blocker of True-Name Nemesis is legal.",
           "operation": {
-            "unclassifiable": "A different protection quality is given: removing one protection and adding another is more than one fact."
+            "unclassifiable": "not a board edit: protection from a chosen player, a property no operation sets (the keyword operation adds a keyword, not a player protection)."
           }
         }
       ],
@@ -927,7 +927,7 @@
           "delta": "True-Name Nemesis has protection from player B instead.",
           "expected": "True-Name Nemesis is dealt 2 damage and is destroyed.",
           "operation": {
-            "unclassifiable": "A different protection quality is given: removing one protection and adding another is more than one fact."
+            "unclassifiable": "not a board edit: protection from a chosen player, a property no operation sets (the keyword operation adds a keyword, not a player protection)."
           }
         }
       ],
@@ -999,7 +999,7 @@
           "delta": "After Pledge of Loyalty resolves, A activates Sword of Light and Shadow's equip ability targeting Grizzly Bears, tapping the other two Plains; it resolves.",
           "expected": "Sword of Light and Shadow becomes attached to Grizzly Bears (4/4, protection from white and from black). Pledge of Loyalty is put into A's graveyard in the state-based check.",
           "operation": {
-            "unclassifiable": "A different spell is cast or activated, or none: a different decision by a player."
+            "unclassifiable": "choice: A activates Sword of Light and Shadow's equip ability: a different ability activated."
           }
         }
       ],
@@ -1069,7 +1069,7 @@
           "delta": "A chooses green instead of white.",
           "expected": "Holy Strength, Benevolent Blessing and Pacifism all stay attached to Grizzly Bears.",
           "operation": {
-            "unclassifiable": "A different choice by a player."
+            "unclassifiable": "choice: A chooses green instead of white: a different choice."
           }
         }
       ],

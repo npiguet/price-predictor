@@ -60,7 +60,7 @@
           "delta": "A chooses only the second mode (2 damage to each non-outlaw creature) instead of the first.",
           "expected": "Grizzly Bears is dealt 2 damage and moves to B's graveyard. Assassin Initiate is not dealt damage and stays on the battlefield. Three Mountains are tapped.",
           "operation": {
-            "unclassifiable": "A different mode choice by the caster; no fork operation changes a choice."
+            "unclassifiable": "choice: A chooses only the second mode (non-outlaw creatures) instead of the first."
           }
         },
         {
@@ -69,7 +69,7 @@
           "delta": "A chooses both modes and pays {R}{R} plus {1} plus {1} by tapping four Mountains.",
           "expected": "Assassin Initiate and Grizzly Bears are each dealt 2 damage and move to their owners' graveyards. All four Mountains are tapped.",
           "operation": {
-            "unclassifiable": "A different mode choice by the caster; no fork operation changes a choice."
+            "unclassifiable": "choice: A chooses both modes and pays the additional {1} for each."
           }
         }
       ],
@@ -128,7 +128,7 @@
           "delta": "A considers choosing both modes instead of one.",
           "expected": "Casting Caught in the Crossfire with both modes is not legal: the total cost is {R}{R}{1}{1}, which three Mountains cannot pay.",
           "operation": {
-            "unclassifiable": "A different mode choice by the caster; no fork operation changes a choice."
+            "unclassifiable": "choice: A chooses both modes instead of one."
           }
         },
         {
@@ -137,7 +137,7 @@
           "delta": "A considers choosing no mode instead of one.",
           "expected": "Casting Caught in the Crossfire with no mode chosen is not legal: a spree spell requires at least one mode.",
           "operation": {
-            "unclassifiable": "A different mode choice by the caster; no fork operation changes a choice."
+            "unclassifiable": "choice: A chooses no mode instead of one."
           }
         }
       ],

@@ -55,18 +55,14 @@
           "polarity": "does_not_fire",
           "delta": "A's graveyard holds Grizzly Bears and Mountain instead of Grizzly Bears and Shock (total mana value 2).",
           "expected": "The activation is not legal: the cards in A's graveyard have total mana value 2, below 3, so A cannot choose to collect evidence. Cryptex stays untapped with no counter and the graveyard is unchanged.",
-          "operation": {
-            "unclassifiable": "changes the contents of a graveyard, which no fork operation does"
-          }
+          "operation": "move_card"
         },
         {
           "label": "total_exceeds",
           "polarity": "fires",
           "delta": "A's graveyard holds Grizzly Bears and Hill Giant (total mana value 6) instead of Grizzly Bears and Shock.",
           "expected": "The activation is legal: the exiled cards have total mana value 6, which is 3 or greater, so exceeding N is allowed. Grizzly Bears and Hill Giant move to exile, Cryptex taps and gets one unlock counter.",
-          "operation": {
-            "unclassifiable": "changes the contents of a graveyard, which no fork operation does"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -150,7 +146,7 @@
           "delta": "A does not collect evidence when casting Analyze the Pollen.",
           "expected": "Evidence was not collected, so only a basic land card can be found. Grizzly Bears is not an eligible choice; A takes Forest into hand. Grizzly Bears stays in the library and Serra Angel and Hill Giant stay in the graveyard.",
           "operation": {
-            "unclassifiable": "a different decision or choice by a player, not a fact on the board"
+            "unclassifiable": "choice: A does not collect evidence"
           }
         },
         {
@@ -158,9 +154,7 @@
           "polarity": "other",
           "delta": "A's graveyard holds Serra Angel and Savannah Lions (total mana value 6) instead of Serra Angel and Hill Giant.",
           "expected": "Collecting evidence 8 is not possible, so A casts the spell without evidence. Only a basic land card can be found: Forest moves to A's hand, Grizzly Bears stays in the library, and no card leaves the graveyard.",
-          "operation": {
-            "unclassifiable": "changes the contents of a graveyard, which no fork operation does"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [

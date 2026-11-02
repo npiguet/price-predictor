@@ -81,7 +81,7 @@
           "delta": "B casts Counterspell on Undying Flames, paying {U}{U} with both Islands, instead of passing priority.",
           "expected": "Undying Flames is countered and moves to A's graveyard. No card is exiled from A's library, B's life total stays 20 and no epic delayed trigger is created, so nothing is put on the stack at A's next upkeep.",
           "operation": {
-            "unclassifiable": "a different decision by a player, not a fork operation"
+            "unclassifiable": "choice: B casts Counterspell instead of passing priority"
           }
         }
       ],
@@ -166,7 +166,7 @@
           "delta": "B casts Counterspell on Undying Flames, paying {U}{U} with both Islands, instead of passing priority.",
           "expected": "Undying Flames is countered. Casting Shock targeting B is legal for A with the seventh Mountain.",
           "operation": {
-            "unclassifiable": "a different decision by a player, not a fork operation"
+            "unclassifiable": "choice: B casts Counterspell instead of passing priority"
           }
         }
       ],

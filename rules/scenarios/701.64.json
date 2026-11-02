@@ -64,7 +64,7 @@
           "delta": "A does not activate the harness ability.",
           "expected": "At the beginning of A's end step The Mind Stone's trigger does not fire. Grizzly Bears stays on the battlefield as a 3/3 with its counter.",
           "operation": {
-            "unclassifiable": "a different decision or choice by a player, not a fact on the board"
+            "unclassifiable": "choice: A does not activate the harness ability"
           }
         }
       ],
@@ -132,7 +132,7 @@
           "delta": "In main phase 1 A casts Into the Roil (tapping both Islands) on The Mind Stone, then recasts The Mind Stone (tapping both Plains).",
           "expected": "The Mind Stone returns to hand and re-enters as a new object that is not harnessed. At the beginning of A's end step its trigger does not fire and Grizzly Bears stays a 3/3 with its counter.",
           "operation": {
-            "unclassifiable": "a different spell is cast, not a fact on the board"
+            "unclassifiable": "choice: A casts Into the Roil and recasts The Mind Stone"
           }
         }
       ],

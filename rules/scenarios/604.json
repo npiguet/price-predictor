@@ -50,7 +50,7 @@
           "delta": "Glorious Anthem is in A's graveyard instead of on the battlefield.",
           "expected": "Grizzly Bears is 2/2.",
           "operation": {
-            "unclassifiable": "moves a permanent between zones"
+            "unclassifiable": "more than one fact: Glorious Anthem leaves the battlefield and sits in A's graveyard (a removal plus a move)"
           }
         }
       ],
@@ -119,7 +119,7 @@
           "delta": "A does not activate the equip ability; both players just pass priority.",
           "expected": "Bonesplitter stays attached to Grizzly Bears, which is 4/2; Runeclaw Bear is 2/2.",
           "operation": {
-            "unclassifiable": "a different player decision (no equip activation)"
+            "unclassifiable": "choice: A does not activate the equip ability"
           }
         }
       ],
@@ -188,7 +188,7 @@
           "delta": "A casts Terror (paying Swamp and Forest) targeting Grizzly Bears instead of Abrupt Decay.",
           "expected": "Counterspell counters Terror, which moves to A's graveyard; Grizzly Bears stays on the battlefield.",
           "operation": {
-            "unclassifiable": "a different spell is cast"
+            "unclassifiable": "choice: A casts Terror instead of Abrupt Decay"
           }
         }
       ],
@@ -326,7 +326,7 @@
           "delta": "The step is main2 instead of main1; earlier this turn Grizzly Bears attacked B, went unblocked and dealt its combat damage, so the combat damage step has passed (Grizzly Bears is tapped, B is at 18 life).",
           "expected": "Casting Berserk is illegal (can_play false); Berserk stays in A's hand and Grizzly Bears is 2/2.",
           "operation": {
-            "unclassifiable": "changes the phase and what happened earlier in the turn"
+            "unclassifiable": "phase or turn: the step is main2 instead of main1"
           }
         }
       ],
@@ -404,7 +404,7 @@
           "delta": "B does not cast Disenchant; Glorious Anthem stays on the battlefield.",
           "expected": "Shock resolves and deals 2 damage to Grizzly Bears (3/3), which stays on the battlefield with 2 damage marked.",
           "operation": {
-            "unclassifiable": "a different player decision (no Disenchant cast)"
+            "unclassifiable": "choice: B does not cast Disenchant"
           }
         }
       ],

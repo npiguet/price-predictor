@@ -72,7 +72,7 @@
           "delta": "The Lightning Bolt is cast in B's end step of the first turn instead of its upkeep.",
           "expected": "A still makes B's decisions in B's end step, the last step of the controlled turn: the Lightning Bolt cast is A's choice and kills Grizzly Bears. B makes its own decisions in B's second turn.",
           "operation": {
-            "unclassifiable": "The spell is cast in a different step, a player's choice of timing."
+            "unclassifiable": "timing: the Lightning Bolt is cast in B's end step instead of upkeep"
           }
         },
         {
@@ -81,7 +81,7 @@
           "delta": "The Lightning Bolt is cast in B's second turn after the activation (upkeep) instead of the first; B takes no action in its first turn.",
           "expected": "The control effect ended at the beginning of B's second turn: B itself makes B's decisions, and the cast of Lightning Bolt in that turn is B's own choice. Lightning Bolt kills Grizzly Bears all the same; Mindslaver is in A's graveyard.",
           "operation": {
-            "unclassifiable": "The spell is cast in a different turn, a player's choice of timing."
+            "unclassifiable": "phase or turn: the Bolt is cast in B's second turn instead of the first"
           }
         }
       ],
@@ -165,7 +165,7 @@
           "delta": "B activates its own Mindslaver only after A's ability has resolved and A has passed priority with an empty stack, instead of in response.",
           "expected": "B's effect is created last and overwrites A's: B makes its own decisions in B's next turn and A makes none of them. Lightning Bolt kills Grizzly Bears; both Mindslavers are in their owners' graveyards.",
           "operation": {
-            "unclassifiable": "An ability activated at a different time, a player's choice."
+            "unclassifiable": "timing: B activates its Mindslaver after A's ability resolves instead of in response"
           }
         },
         {
@@ -174,7 +174,7 @@
           "delta": "B does not activate its Mindslaver.",
           "expected": "Only A's effect exists, so nothing is overwritten: A makes B's decisions in B's next turn. Lightning Bolt kills Grizzly Bears; B's Mindslaver is still on the battlefield.",
           "operation": {
-            "unclassifiable": "An ability not activated, a player's choice."
+            "unclassifiable": "choice: B does not activate its Mindslaver"
           }
         }
       ],
@@ -262,7 +262,7 @@
           "delta": "B does not cast Meditate; B's Meditate stays in hand and B's next turn is not skipped.",
           "expected": "The effect applies to B's very next turn: A makes B's decisions in B's upkeep and casts Lightning Bolt, and Grizzly Bears dies. The effect is used up: in the following B turn B makes its own decisions.",
           "operation": {
-            "unclassifiable": "A spell not cast, a player's choice."
+            "unclassifiable": "choice: B does not cast Meditate"
           }
         }
       ],
@@ -352,7 +352,7 @@
           "delta": "A tries to cast A's own Divination from A's hand, paying with A's Islands, instead of B's.",
           "expected": "Not legal (can_play false): A is not the active player, and controlling B does not change that, so A cannot cast a sorcery in B's turn.",
           "operation": {
-            "unclassifiable": "A different spell cast, from a different player's hand: a player's choice."
+            "unclassifiable": "choice: A casts its own Divination instead of B's"
           }
         }
       ],

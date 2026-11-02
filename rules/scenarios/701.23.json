@@ -63,9 +63,7 @@
           "polarity": "does_not_fire",
           "delta": "B's hand holds one Grizzly Bears.",
           "expected": "A chooses Grizzly Bears. A finds the same name in all three zones: the Grizzly Bears from B's hand, graveyard and library all move to exile, three cards in total.",
-          "operation": {
-            "unclassifiable": "A card is added to B's hand, and the chosen name changes with it; no fork operation changes a hand."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -134,7 +132,7 @@
           "delta": "A's library is empty.",
           "expected": "Demonic Tutor resolves and finds no card because the library holds none. A's hand stays empty.",
           "operation": {
-            "unclassifiable": "The library's contents change; no fork operation changes a library."
+            "unclassifiable": "more than one fact: A's three library cards must all leave the library"
           }
         },
         {
@@ -143,7 +141,7 @@
           "delta": "A's library holds only one Forest.",
           "expected": "A has no choice and must find the Forest: it moves to A's hand and the library is empty.",
           "operation": {
-            "unclassifiable": "The library's contents change; no fork operation changes a library."
+            "unclassifiable": "more than one fact: two of A's three library cards must leave the library"
           }
         }
       ],
@@ -223,9 +221,7 @@
           "polarity": "does_not_fire",
           "delta": "A's hand holds Mystical Tutor instead of Vampiric Tutor and A casts it, tapping Island.",
           "expected": "The instruction reveals the card: Lightning Bolt is revealed to B. It ends on top of A's library after a shuffle of the other two cards. A's life stays 20.",
-          "operation": {
-            "unclassifiable": "A different spell is in hand and cast, paid with another land; no fork operation changes a hand or the spell cast."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -326,7 +322,7 @@
           "delta": "The searcher is A: Vampiric Tutor is in A's hand instead of B's, and A casts it, tapping A's Swamp, and chooses an Island.",
           "expected": "Aven Mindcensor does not limit A's own search and Archivist of Oghma does not trigger on A's search: A's life is 18 and A draws nothing.",
           "operation": {
-            "unclassifiable": "The searching player and the spell's controller change; no fork operation changes who casts a spell."
+            "unclassifiable": "more than one fact: Vampiric Tutor leaves B's hand and enters A's hand"
           }
         },
         {
@@ -334,9 +330,7 @@
           "polarity": "other",
           "delta": "Aven Mindcensor is not on the battlefield.",
           "expected": "B searches the whole library. Archivist of Oghma still triggers: A gains 1 life (21) and draws Island.",
-          "operation": {
-            "unclassifiable": "A permanent is removed from the battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

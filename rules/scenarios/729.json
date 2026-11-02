@@ -63,7 +63,7 @@
           "delta": "B's library has 20 Mountains instead of 3.",
           "expected": "A loses the subgame and B wins. A loses 10 life (10) and B's life stays 15.",
           "operation": {
-            "unclassifiable": "Adds 17 cards to B's library; no operation changes library contents."
+            "unclassifiable": "not a board edit: B's library holds 20 cards instead of 3; no operation adds cards to a library"
           }
         }
       ],
@@ -154,7 +154,7 @@
           "delta": "Grizzly Bears is in A's library (replacing one Plains) instead of on the battlefield.",
           "expected": "Grizzly Bears is part of the subgame's library, so it may be drawn there. When the subgame ends it is back in A's main-game library, not on the battlefield, and B loses 10 life (10).",
           "operation": {
-            "unclassifiable": "Moves a permanent from the battlefield into the library; no operation changes zone contents."
+            "unclassifiable": "more than one fact: Grizzly Bears leaves the battlefield and a library card is replaced by it, a removal plus a move"
           }
         }
       ],
@@ -235,7 +235,7 @@
           "delta": "Concession Stand is on A's main-game battlefield, opened earlier, instead of in A's main-game Attraction deck.",
           "expected": "A's subgame Attraction deck is empty, so opening an Attraction puts nothing onto the battlefield. After the subgame Concession Stand is still on A's main-game battlefield and A's Attraction deck is empty. B loses 10 life (10).",
           "operation": {
-            "unclassifiable": "Moves an Attraction from the Attraction deck to the battlefield; no operation adds a permanent or changes a deck."
+            "unclassifiable": "not a board edit: Concession Stand is on the battlefield instead of in the Attraction deck, a zone no operation edits"
           }
         }
       ],
@@ -325,7 +325,7 @@
           "delta": "B's library has 7 Mountains instead of 3.",
           "expected": "B draws all seven cards and is not eliminated at the first upkeep. B loses later by drawing from an empty library, and still loses 10 life (10) once the subgame ends.",
           "operation": {
-            "unclassifiable": "Adds four cards to B's library; no operation changes library contents."
+            "unclassifiable": "not a board edit: B's library holds 7 cards instead of 3; no operation adds cards to a library"
           }
         }
       ],
@@ -402,7 +402,7 @@
           "delta": "A chooses Grizzly Bears from outside the game instead of Tocasia's Onulet.",
           "expected": "Grizzly Bears leaves the main-game battlefield and no trigger goes on the stack. B loses 10 life (10), A's life stays 20, and Grizzly Bears is in A's main-game library.",
           "operation": {
-            "unclassifiable": "A different choice of card from outside the game, a player's decision; no operation changes a choice."
+            "unclassifiable": "choice: A chooses Grizzly Bears instead of Tocasia's Onulet"
           }
         }
       ],
@@ -490,7 +490,7 @@
           "delta": "A does not cast Contaminated Drink and gets no rad counter in the subgame.",
           "expected": "A has exactly 3 rad counters in the main game afterwards and B loses 10 life (10).",
           "operation": {
-            "unclassifiable": "A does not cast a spell, a different decision; no operation changes what a player casts."
+            "unclassifiable": "choice: A does not cast Contaminated Drink"
           }
         }
       ],
@@ -580,7 +580,7 @@
           "delta": "B's library has 20 Mountains instead of 3.",
           "expected": "Whatever happens in the subgame, once it ends both main-game libraries again hold 20 cards, no subgame object remains, and Shahrazad finishes resolving.",
           "operation": {
-            "unclassifiable": "Adds 17 cards to B's library; no operation changes library contents."
+            "unclassifiable": "not a board edit: B's library holds 20 cards instead of 3; no operation adds cards to a library"
           }
         },
         {
@@ -589,7 +589,7 @@
           "delta": "B has Hill Giant in its main-game graveyard.",
           "expected": "Hill Giant is outside the subgame and is not put into B's library: it stays in B's graveyard and B's library holds 3 cards. B loses 10 life (10).",
           "operation": {
-            "unclassifiable": "Adds a card to B's graveyard; no operation changes graveyard contents."
+            "unclassifiable": "not a board edit: a card appears in B's graveyard from outside; no operation adds a card to a graveyard"
           }
         }
       ],
@@ -685,7 +685,7 @@
           "delta": "A's library has 3 Plains instead of 20.",
           "expected": "Both players lose the nested subgame, so it is a draw. A and B each lose 10 first-subgame life (10 and 10). The main game's life totals stay 20 and 20.",
           "operation": {
-            "unclassifiable": "Removes 17 cards from A's library; no operation changes library contents."
+            "unclassifiable": "not a board edit: A's library holds 3 cards instead of 20; no operation removes cards from a library"
           }
         },
         {
@@ -694,7 +694,7 @@
           "delta": "B casts Counterspell on Shahrazad, tapping its two Islands.",
           "expected": "Shahrazad is countered and no nested subgame starts. Both first-subgame life totals stay 20 and both libraries keep their cards.",
           "operation": {
-            "unclassifiable": "B casts a spell, a different decision; no operation changes what a player casts."
+            "unclassifiable": "choice: B casts Counterspell on Shahrazad"
           }
         }
       ],

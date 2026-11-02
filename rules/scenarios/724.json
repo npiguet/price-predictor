@@ -79,7 +79,7 @@
           "delta": "A passes priority instead of casting Time Stop.",
           "expected": "The game proceeds to combat damage: Hill Giant deals 3 damage to Grizzly Bears, which moves to A's graveyard, and Grizzly Bears deals 2 damage to Hill Giant, which stays with 2 damage marked. The turn continues through the end of combat step and the second main phase.",
           "operation": {
-            "unclassifiable": "A spell not cast, a player's choice."
+            "unclassifiable": "choice: A passes priority instead of casting Time Stop"
           }
         }
       ],
@@ -169,7 +169,7 @@
           "delta": "A passes priority instead of casting Time Stop.",
           "expected": "Lightning Bolt resolves and deals 3 damage to Grizzly Bears, which moves to A's graveyard in the state-based check. Lightning Bolt moves to B's graveyard. Time Stop stays in A's hand.",
           "operation": {
-            "unclassifiable": "A spell not cast, a player's choice."
+            "unclassifiable": "choice: A passes priority instead of responding with Time Stop"
           }
         }
       ],
@@ -280,7 +280,7 @@
           "delta": "A casts Divination (2U) instead of Day's Undoing; no turn is ended.",
           "expected": "A draws two cards, both Underworld Dreams triggers go on the stack and resolve, so A's life is 18. Divination moves to A's graveyard, nothing is exiled and Stonebinder's Familiar stays a 1/1. The turn continues.",
           "operation": {
-            "unclassifiable": "A different spell cast, a player's choice."
+            "unclassifiable": "choice: A casts Divination instead of Day's Undoing"
           }
         },
         {
@@ -289,7 +289,7 @@
           "delta": "A casts Time Stop (4UU), tapping six Islands, instead of Day's Undoing.",
           "expected": "No card is drawn, so no Underworld Dreams trigger exists to cease: A's life stays 20. The turn ends, and Stonebinder's Familiar's trigger from Time Stop's exile is kept and resolves in the cleanup step (2/2).",
           "operation": {
-            "unclassifiable": "A different spell cast, a player's choice."
+            "unclassifiable": "choice: A casts Time Stop instead of Day's Undoing"
           }
         }
       ],
@@ -391,9 +391,7 @@
           "polarity": "other",
           "delta": "Blood Artist is not on the battlefield.",
           "expected": "Mortivore still dies in the state-based check. No trigger exists, the stack stays empty in the cleanup step and the turn ends at once. Life totals stay 20 and 20.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from the battlefield."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "time_stop",
@@ -401,7 +399,7 @@
           "delta": "A casts Time Stop (4UU), tapping six Islands, instead of Day's Undoing.",
           "expected": "The graveyard is not shuffled away, so Mortivore stays a 1/1 and the state-based check finds nothing: no creature dies, Blood Artist does not trigger and the turn ends. Life totals stay 20 and 20.",
           "operation": {
-            "unclassifiable": "A different spell cast, a player's choice."
+            "unclassifiable": "choice: A casts Time Stop instead of Day's Undoing"
           }
         }
       ],
@@ -472,7 +470,7 @@
           "delta": "A passes priority through the turn instead of casting Time Stop.",
           "expected": "The end step happens and Dogged Pursuit triggers and resolves: B loses 1 life (19) and A gains 1 life (21).",
           "operation": {
-            "unclassifiable": "A spell not cast, a player's choice."
+            "unclassifiable": "choice: A does not cast Time Stop"
           }
         }
       ],
@@ -539,7 +537,7 @@
           "delta": "Stonebinder's Familiar is on B's battlefield instead of A's.",
           "expected": "Time Stop is exiled during A's turn, which is not the Familiar controller's turn, so Stonebinder's Familiar does not trigger. No trigger is put on the stack in the cleanup step, no player gets priority there, Familiar stays a 1/1 and the turn ends.",
           "operation": {
-            "unclassifiable": "Changes the controller of a permanent, which no fork operation sets."
+            "unclassifiable": "more than one fact: Stonebinder's Familiar leaves A's battlefield and enters B's, a removal plus an addition"
           }
         }
       ],
@@ -608,7 +606,7 @@
           "delta": "A passes priority instead of casting Mandate of Peace.",
           "expected": "Combat damage is dealt: Hill Giant deals 3 damage to Grizzly Bears, which moves to A's graveyard, and Grizzly Bears deals 2 damage to Hill Giant, which stays with 2 damage marked. The end of combat step happens before the second main phase.",
           "operation": {
-            "unclassifiable": "A spell not cast, a player's choice."
+            "unclassifiable": "choice: A passes priority instead of casting Mandate of Peace"
           }
         }
       ],
@@ -698,7 +696,7 @@
           "delta": "A passes priority instead of casting Mandate of Peace.",
           "expected": "Lightning Bolt resolves, deals 3 damage to Grizzly Bears, which moves to A's graveyard, and Lightning Bolt moves to B's graveyard. Mandate of Peace stays in A's hand.",
           "operation": {
-            "unclassifiable": "A spell not cast, a player's choice."
+            "unclassifiable": "choice: A passes priority instead of responding with Mandate of Peace"
           }
         }
       ],
@@ -780,7 +778,7 @@
           "delta": "A passes priority instead of casting Mandate of Peace.",
           "expected": "Combat damage kills Grizzly Bears (3 damage). At the end of combat step Heat Stroke triggers and destroys Hill Giant, which blocked this turn: both creatures end in their owners' graveyards.",
           "operation": {
-            "unclassifiable": "A spell not cast, a player's choice."
+            "unclassifiable": "choice: A passes priority instead of casting Mandate of Peace"
           }
         }
       ],
@@ -851,7 +849,7 @@
           "delta": "Stonebinder's Familiar is on B's battlefield instead of A's.",
           "expected": "Mandate of Peace is exiled during A's turn, which is not the Familiar controller's turn, so Stonebinder's Familiar does not trigger and stays a 1/1. The combat phase ends and no trigger goes on the stack in A's second main phase.",
           "operation": {
-            "unclassifiable": "Changes the controller of a permanent, which no fork operation sets."
+            "unclassifiable": "more than one fact: Stonebinder's Familiar leaves A's battlefield and enters B's, a removal plus an addition"
           }
         }
       ],
@@ -921,7 +919,7 @@
           "delta": "A passes priority instead of casting Mandate of Peace.",
           "expected": "Jade Statue, a 3/6 creature, deals 3 combat damage to B (17). It stops being a creature only when the end of combat step ends.",
           "operation": {
-            "unclassifiable": "A spell not cast, a player's choice."
+            "unclassifiable": "choice: A passes priority instead of casting Mandate of Peace"
           }
         }
       ],

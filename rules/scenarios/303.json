@@ -66,7 +66,7 @@
           "delta": "The step is beginning_of_combat instead of main1.",
           "expected": "Casting Glorious Anthem is not legal: can_play is false and the card stays in A's hand.",
           "operation": {
-            "unclassifiable": "changes the step"
+            "unclassifiable": "phase or turn: the step is beginning of combat instead of main1"
           }
         },
         {
@@ -75,7 +75,7 @@
           "delta": "B is the active player in main1 instead of A, and A holds priority after B passes.",
           "expected": "Casting Glorious Anthem is not legal: can_play is false, because it is not A's turn.",
           "operation": {
-            "unclassifiable": "changes the active player and turn"
+            "unclassifiable": "phase or turn: B is the active player instead of A"
           }
         },
         {
@@ -84,7 +84,7 @@
           "delta": "A first casts Shock targeting B with the Mountain, and A holds priority with Shock still on the stack.",
           "expected": "Casting Glorious Anthem is not legal: can_play is false while Shock is on the stack, and no mana from the Plains is spent.",
           "operation": {
-            "unclassifiable": "a different spell cast first, putting an object on the stack"
+            "unclassifiable": "timing: Shock is on the stack from a spell A cast"
           }
         }
       ],
@@ -165,7 +165,7 @@
           "delta": "After A passes priority B casts Counterspell targeting Glorious Anthem, tapping both Islands, then both players pass.",
           "expected": "Glorious Anthem is countered and goes from the stack to A's graveyard without entering the battlefield; Counterspell goes to B's graveyard; Grizzly Bears stays a 2/2.",
           "operation": {
-            "unclassifiable": "a different spell cast by the opponent"
+            "unclassifiable": "choice: B casts Counterspell, a different spell, in response"
           }
         }
       ],
@@ -242,7 +242,7 @@
           "delta": "Holding priority after casting Pacifism, A casts Shock targeting Grizzly Bears, tapping the Mountain, then both players pass until both spells have resolved.",
           "expected": "Shock resolves first and Grizzly Bears moves to B's graveyard; Pacifism has no legal target, does not enter the battlefield and goes from the stack to A's graveyard.",
           "operation": {
-            "unclassifiable": "a different spell cast that removes the target"
+            "unclassifiable": "timing: A casts Shock while Pacifism is on the stack"
           }
         }
       ],
@@ -313,9 +313,7 @@
           "polarity": "does_not_fire",
           "delta": "B controls no creature, so Grizzly Bears is absent from the battlefield.",
           "expected": "Casting Pacifism is not legal: has_legal_target is false, there are no legal targets and can_play is false.",
-          "operation": {
-            "unclassifiable": "removes a permanent"
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "protection",
@@ -475,7 +473,7 @@
           "delta": "B chooses the color red instead of white.",
           "expected": "Grizzly Bears gains protection from red until end of turn and Pacifism stays on the battlefield attached to it.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: B chooses red instead of white"
           }
         }
       ],
@@ -543,9 +541,7 @@
           "polarity": "does_not_fire",
           "delta": "Mycosynth Lattice is absent from A's battlefield.",
           "expected": "Pacifism is not an artifact, does not become a creature and stays attached to Grizzly Bears; the Islands stay on the battlefield.",
-          "operation": {
-            "unclassifiable": "removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -607,7 +603,7 @@
           "delta": "The candidate is B, the controller of the enchanted creature, activating the same ability and paying {R} with B's Mountain.",
           "expected": "The activation is not legal: can_play is false for B, because B does not control Crown of Flames.",
           "operation": {
-            "unclassifiable": "a different player is the candidate"
+            "unclassifiable": "choice: B instead of A attempts to activate Crown of Flames' ability"
           }
         }
       ],
@@ -687,7 +683,7 @@
           "delta": "The candidate is A, who controls Archery Training but not Grizzly Bears, attempting the same activation.",
           "expected": "The activation is not legal: can_play is false for A, because the granted ability belongs to Grizzly Bears and A does not control it.",
           "operation": {
-            "unclassifiable": "a different player is the candidate"
+            "unclassifiable": "choice: A instead of B attempts to activate the ability Archery Training grants Grizzly Bears"
           }
         }
       ],
@@ -767,7 +763,7 @@
           "delta": "The candidate is A, the new controller of the enchanted creature, activating the same ability and paying {R} with A's fourth Mountain.",
           "expected": "The activation is not legal: can_play is false for A, because control of Crown of Flames did not change.",
           "operation": {
-            "unclassifiable": "a different player is the candidate"
+            "unclassifiable": "choice: A instead of B attempts to activate Crown of Flames' ability"
           }
         }
       ],
@@ -843,9 +839,7 @@
           "polarity": "does_not_fire",
           "delta": "B controls a Grizzly Bears, and A chooses it as the object Pacifism enters attached to.",
           "expected": "Pacifism moves from A's graveyard to the battlefield attached to Grizzly Bears; Replenish goes to A's graveyard.",
-          "operation": {
-            "unclassifiable": "adds a permanent and a different choice by a player"
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -916,9 +910,7 @@
           "polarity": "does_not_fire",
           "delta": "The Aura card in A's graveyard is Pacifism instead of Wild Growth.",
           "expected": "Pacifism moves from A's graveyard to the battlefield attached to Grizzly Bears; Retether goes to A's graveyard.",
-          "operation": {
-            "unclassifiable": "changes a card in a graveyard, not a permanent"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -984,9 +976,7 @@
           "polarity": "does_not_fire",
           "delta": "The Aura card in A's hand is Holy Strength instead of Wild Growth.",
           "expected": "Holy Strength moves from A's hand to the battlefield attached to Academy Researchers, which is a 3/4.",
-          "operation": {
-            "unclassifiable": "changes a card in a hand"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -1133,7 +1123,7 @@
           "delta": "B casts B's own Monstrous Rage targeting Grizzly Bears, tapping B's Mountain, instead of A casting the second one; the second Role token is B's.",
           "expected": "Each Role is controlled by a different player, so both Monster Role tokens stay attached to Grizzly Bears, which is an 8/4 with trample until end of turn.",
           "operation": {
-            "unclassifiable": "a different spell cast by a different player"
+            "unclassifiable": "choice: B casts the second Monstrous Rage instead of A"
           }
         }
       ],

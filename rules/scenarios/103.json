@@ -57,7 +57,7 @@
           "delta": "Leyline of Sanctity is the top card of A's library and the opening hand is seven Plains.",
           "expected": "Leyline of Sanctity stays in A's library; nothing is put onto the battlefield before turn 1 and A does not have hexproof.",
           "operation": {
-            "unclassifiable": "Changes the opening hand and the library contents; no fork operation changes a hand or library."
+            "unclassifiable": "more than one fact: Leyline moves from hand to library top and a Plains moves the other way"
           }
         }
       ],
@@ -123,7 +123,7 @@
           "delta": "It is B's first turn (turn 2) and B is the active player.",
           "expected": "B draws Plains: B's hand is Mountain and Plains, B's library is Island.",
           "operation": {
-            "unclassifiable": "Changes the turn number and the active player; no fork operation changes the turn."
+            "unclassifiable": "phase or turn: it is B's turn 2 instead of A's turn 1"
           }
         },
         {
@@ -132,7 +132,7 @@
           "delta": "It is A's second turn (turn 3) instead of turn 1.",
           "expected": "A draws Plains: A's hand is Mountain and Plains, A's library is Island.",
           "operation": {
-            "unclassifiable": "Changes the turn number; no fork operation changes the turn."
+            "unclassifiable": "phase or turn: it is turn 3 instead of turn 1"
           }
         }
       ],

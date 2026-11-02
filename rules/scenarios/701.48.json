@@ -61,7 +61,7 @@
           "delta": "A's hand holds only Cram Session, so after it is cast A has no other card to discard.",
           "expected": "A's life is 24. A has no card to discard, so nothing is discarded and nothing is drawn. A's hand is empty and Mountain stays on top of A's library. No Lesson is fetched because A has none outside the game.",
           "operation": {
-            "unclassifiable": "The hand's contents change; no fork operation changes a hand."
+            "unclassifiable": "not a board edit: Grizzly Bears leaves A's hand with no stated destination zone"
           }
         },
         {
@@ -70,7 +70,7 @@
           "delta": "A chooses not to discard Grizzly Bears when Learn resolves.",
           "expected": "A's life is 24. No card is discarded and none is drawn. Grizzly Bears stays in A's hand and Mountain stays on top of A's library. No Lesson is fetched because A has none outside the game.",
           "operation": {
-            "unclassifiable": "The player declines to discard, a decision."
+            "unclassifiable": "choice: A declines to discard"
           }
         }
       ],
@@ -146,7 +146,7 @@
           "delta": "A's sideboard is empty.",
           "expected": "A's life is 24. No card moves to A's hand and nothing is discarded or drawn; A's hand is empty and Mountain stays on top of A's library.",
           "operation": {
-            "unclassifiable": "The sideboard's contents change; no fork operation changes cards outside the game."
+            "unclassifiable": "not a board edit: the sideboard is not a zone any operation edits"
           }
         }
       ],

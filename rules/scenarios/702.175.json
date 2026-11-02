@@ -62,7 +62,7 @@
           "delta": "A does not pay the offspring cost and taps only two Mountains for {1}{R}.",
           "expected": "No offspring trigger fires. A controls only Steampath Charger (2/1) and no token.",
           "operation": {
-            "unclassifiable": "A different casting choice: the offspring cost is not paid; no fork operation changes a player's choice."
+            "unclassifiable": "choice: A does not pay the offspring cost."
           }
         },
         {
@@ -71,7 +71,7 @@
           "delta": "A pays the offspring cost, but B casts Counterspell on Steampath Charger, tapping both Islands.",
           "expected": "Steampath Charger is countered and moves to A's graveyard. It never enters, so no offspring trigger fires and there is no token.",
           "operation": {
-            "unclassifiable": "An opponent casts a counterspell in response, a different spell cast; no fork operation casts a spell."
+            "unclassifiable": "choice: B responds by casting Counterspell on Steampath Charger."
           }
         }
       ],
@@ -146,7 +146,7 @@
           "delta": "A pays only the printed offspring {2}, not the one granted by Zinnia, Valley's Voice, tapping four Mountains for {1}{R}{2}.",
           "expected": "Only the paid instance triggers: A controls Steampath Charger (2/1) and one Steampath Charger token (1/1). Zinnia, Valley's Voice is 2/3. Two Mountains stay untapped.",
           "operation": {
-            "unclassifiable": "A different casting choice: one offspring instance is left unpaid; no fork operation changes a player's choice."
+            "unclassifiable": "choice: A pays only the printed offspring {2}, not the instance Zinnia grants."
           }
         }
       ],

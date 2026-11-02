@@ -61,7 +61,7 @@
           "delta": "In response, B casts Doom Blade targeting Salt Road Patrol, tapping both Swamps.",
           "expected": "Doom Blade destroys Salt Road Patrol, which goes to A's graveyard. The outlast ability resolves and puts no counter anywhere.",
           "operation": {
-            "unclassifiable": "a different spell is cast, a decision by a player"
+            "unclassifiable": "timing: B casts Doom Blade in response, so a spell is on the stack above the ability"
           }
         }
       ],
@@ -138,7 +138,7 @@
           "delta": "The step is beginning_of_combat instead of main1.",
           "expected": "Activating outlast is not legal because it is not a main phase.",
           "operation": {
-            "unclassifiable": "changes the phase"
+            "unclassifiable": "phase or turn: the step is beginning_of_combat instead of main1"
           }
         },
         {
@@ -147,7 +147,7 @@
           "delta": "B has cast Shock targeting A (tapping Mountain) and it is on the stack, with A holding priority.",
           "expected": "Activating outlast is not legal because the stack is not empty.",
           "operation": {
-            "unclassifiable": "a different spell is cast, a decision by a player"
+            "unclassifiable": "timing: a Shock cast by B is on the stack with A holding priority"
           }
         },
         {
@@ -156,7 +156,7 @@
           "delta": "Salt Road Patrol came under A's control this turn (summoning_sick true).",
           "expected": "Activating outlast is not legal because the {T} cost cannot be paid.",
           "operation": {
-            "unclassifiable": "no fork operation sets summoning sickness"
+            "unclassifiable": "history: the creature came under A's control this turn"
           }
         },
         {
@@ -171,9 +171,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls only one Plains.",
           "expected": "Activating outlast is not legal because {1}{W} cannot be paid.",
-          "operation": {
-            "unclassifiable": "adds or removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

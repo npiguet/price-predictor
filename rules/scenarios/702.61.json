@@ -63,7 +63,7 @@
           "delta": "A casts Shock (no split second) targeting B's Grizzly Bears, tapping one Mountain, instead of Sudden Shock.",
           "expected": "B's Shock can be cast in response: can_play is true.",
           "operation": {
-            "unclassifiable": "a different spell is cast; no fork operation changes the cast"
+            "unclassifiable": "choice: A casts a different spell, Shock, instead of Sudden Shock"
           }
         },
         {
@@ -72,7 +72,7 @@
           "delta": "B tries to activate Prodigal Sorcerer ({T}: 1 damage to any target) instead of casting Shock.",
           "expected": "The activation is not allowed: can_play is false.",
           "operation": {
-            "unclassifiable": "a different action: activating an ability instead of casting a spell"
+            "unclassifiable": "choice: B tries to activate an ability instead of casting Shock"
           }
         }
       ],
@@ -159,7 +159,7 @@
           "delta": "B instead turns the face-down creature face up (a special action), paying its morph cost {1}{R}{R} with the three Mountains.",
           "expected": "Turning Battering Craghorn face up is allowed and it becomes a 3/1 first striker.",
           "operation": {
-            "unclassifiable": "a different action: a special action instead of a mana ability"
+            "unclassifiable": "choice: B turns the creature face up instead of tapping for mana"
           }
         },
         {
@@ -168,7 +168,7 @@
           "delta": "B instead tries to activate Prodigal Sorcerer ({T}: 1 damage to any target).",
           "expected": "The activation is not allowed: can_play is false.",
           "operation": {
-            "unclassifiable": "a different action: a non-mana ability instead of a mana ability"
+            "unclassifiable": "choice: B tries to activate an ability instead"
           }
         }
       ],
@@ -234,7 +234,7 @@
           "delta": "A casts Grizzly Bears, tapping Forest and Mountain, instead of Sudden Shock.",
           "expected": "Young Pyromancer's trigger does not fire and no token is created.",
           "operation": {
-            "unclassifiable": "a different spell is cast; no fork operation changes the cast"
+            "unclassifiable": "choice: A casts a creature spell instead of Sudden Shock"
           }
         }
       ],

@@ -70,7 +70,7 @@
           "delta": "After A passes with Shock on the stack, B responds by casting Shock targeting A, tapping B's Mountain; B passes, then A passes.",
           "expected": "After both players pass once, only B's Shock (the top object) resolves: A's life is 18, B's Shock is in B's graveyard. A's Shock is still on the stack and Grizzly Bears has no damage; A's Shock resolves only after a second round of passes.",
           "operation": {
-            "unclassifiable": "B casts an extra spell"
+            "unclassifiable": "choice: B responds with a Shock, a different spell cast."
           }
         }
       ],
@@ -133,7 +133,7 @@
           "delta": "B responds by casting Shock targeting A, tapping Mountain, before the trigger resolves.",
           "expected": "A's life is 38 when the trigger would resolve; the condition is false, the trigger is removed from the stack and does nothing; nobody wins and the game continues.",
           "operation": {
-            "unclassifiable": "B casts Shock in response"
+            "unclassifiable": "choice: B responds with Shock before the trigger resolves."
           }
         },
         {
@@ -205,7 +205,7 @@
           "delta": "B responds by casting Unsummon on Grizzly Bears, tapping Island; Unsummon resolves first.",
           "expected": "Grizzly Bears is in B's hand, so Sorin's Thirst has no legal target: it does not resolve, moves to A's graveyard, and A gains no life (A stays at 20).",
           "operation": {
-            "unclassifiable": "a spell is cast in response"
+            "unclassifiable": "choice: B responds with Unsummon, a different spell cast."
           }
         }
       ],
@@ -289,7 +289,7 @@
           "delta": "B responds by casting Unsummon on Llanowar Elves, tapping one Island; Unsummon resolves first.",
           "expected": "Llanowar Elves is in B's hand. Arc Trail still resolves for its remaining legal target: Grizzly Bears takes 2 damage and moves to B's graveyard; the Elves are unaffected; Arc Trail moves to A's graveyard.",
           "operation": {
-            "unclassifiable": "spells are cast in response"
+            "unclassifiable": "choice: B responds with Unsummon on Llanowar Elves, a different spell cast."
           }
         },
         {
@@ -298,7 +298,7 @@
           "delta": "B responds with both Unsummons, one on each creature, tapping both Islands; both resolve first.",
           "expected": "Both creatures are in B's hand. Arc Trail has no legal target: it does not resolve and moves to A's graveyard; no damage is dealt.",
           "operation": {
-            "unclassifiable": "spells are cast in response"
+            "unclassifiable": "choice: B responds with both Unsummons, different spells cast."
           }
         }
       ],
@@ -386,7 +386,7 @@
           "delta": "B responds by casting Unsummon on Merfolk of the Pearl Trident, tapping Island.",
           "expected": "Merfolk is in B's hand; Pyroblast's target is illegal, so it fizzles (does not resolve) and moves to A's graveyard.",
           "operation": {
-            "unclassifiable": "a spell is cast in response"
+            "unclassifiable": "choice: B responds with Unsummon, a different spell cast."
           }
         }
       ],
@@ -467,7 +467,7 @@
           "delta": "A casts Doom Blade (no regeneration clause) instead of Terror.",
           "expected": "Doom Blade destroys River Boa but the regeneration shield replaces it: River Boa stays on the battlefield, tapped, with no damage and the shield used up.",
           "operation": {
-            "unclassifiable": "a different spell is cast"
+            "unclassifiable": "choice: A casts Doom Blade instead of Terror, a different spell cast."
           }
         }
       ],
@@ -550,7 +550,7 @@
           "delta": "A has two Mountains and two Shocks instead of the Plains and Day of Judgment; A casts one Shock on Blood Artist, then after it resolves a second Shock on Grizzly Bears.",
           "expected": "Blood Artist dies first and triggers once (B at 19, A at 21); when Grizzly Bears dies afterwards, Blood Artist is gone and does not trigger. One trigger fired in total.",
           "operation": {
-            "unclassifiable": "hand and spells cast change"
+            "unclassifiable": "more than one fact: A's lands and hand differ (two Mountains instead of the Plains, two Shocks instead of Day of Judgment), and A casts two Shocks one at a time instead of Day of Judgment."
           }
         }
       ],
@@ -633,9 +633,7 @@
           "polarity": "does_not_fire",
           "delta": "A's library is Serra Angel, then Mountain; no nonland card with lesser mana value exists.",
           "expected": "No spell is cast: Serra Angel and Mountain are put on the bottom of A's library; Grizzly Bears has no damage; Bloodbraid Elf resolves and enters A's battlefield.",
-          "operation": {
-            "unclassifiable": "the library changes"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -706,7 +704,7 @@
           "delta": "B responds by casting Giant Growth on Grizzly Bears, tapping Forest; Giant Growth resolves first.",
           "expected": "Grizzly Bears is a 5/5 when exiled, so its last known power is 5: Grizzly Bears is exiled and B gains 5 life (B at 25).",
           "operation": {
-            "unclassifiable": "a spell is cast in response"
+            "unclassifiable": "choice: B responds with Giant Growth, a different spell cast."
           }
         },
         {
@@ -715,7 +713,7 @@
           "delta": "B responds by casting Unsummon on Grizzly Bears, tapping Island.",
           "expected": "Grizzly Bears is in B's hand; Swords to Plowshares fizzles, B gains no life (B at 20).",
           "operation": {
-            "unclassifiable": "a spell is cast in response"
+            "unclassifiable": "choice: B responds with Unsummon, a different spell cast."
           }
         }
       ],
@@ -786,7 +784,7 @@
           "delta": "A does not attack with Grizzly Bears; combat is skipped.",
           "expected": "A did not attack this turn: Heart-Piercer enters, its raid trigger does not fire, and B stays at 20; Grizzly Bears is still on the battlefield.",
           "operation": {
-            "unclassifiable": "the attack decision differs"
+            "unclassifiable": "choice: A does not attack with Grizzly Bears, a different attack declared."
           }
         }
       ],
@@ -981,7 +979,7 @@
           "delta": "B does not cast Doom Blade.",
           "expected": "Heliod stays a 5/6 creature and deals 5 damage to Wall of Tears, which moves to B's graveyard; at end of combat Heliod is returned to A's hand.",
           "operation": {
-            "unclassifiable": "a spell is not cast"
+            "unclassifiable": "choice: B does not cast Doom Blade."
           }
         }
       ],
@@ -1045,7 +1043,7 @@
           "delta": "Firebolt starts in A's graveyard instead of A's hand, and A casts it with flashback ({4}{R}), tapping all five Mountains.",
           "expected": "B takes 2 damage (B at 18) and Firebolt is exiled instead of going to A's graveyard.",
           "operation": {
-            "unclassifiable": "the zone and the cast differ"
+            "unclassifiable": "more than one fact: Firebolt starts in the graveyard instead of the hand, and is cast with flashback, a different way of casting."
           }
         },
         {
@@ -1054,7 +1052,7 @@
           "delta": "The object is not a spell: A has an untapped Prodigal Sorcerer (instead of Firebolt) and activates it targeting B.",
           "expected": "B takes 1 damage (B at 19); the ability is removed from the stack and ceases to exist; Prodigal Sorcerer stays on the battlefield, tapped, and nothing goes to a graveyard.",
           "operation": {
-            "unclassifiable": "the zone and the cast differ"
+            "unclassifiable": "more than one fact: A controls an untapped Prodigal Sorcerer instead of holding Firebolt, and activates its ability instead of casting a spell."
           }
         }
       ],
@@ -1203,7 +1201,7 @@
           "delta": "B responds with Counterspell, tapping both Islands.",
           "expected": "Grizzly Bears never resolves: it is countered and moves to A's graveyard; nothing enters A's battlefield.",
           "operation": {
-            "unclassifiable": "a spell is cast in response"
+            "unclassifiable": "choice: B responds with Counterspell, a different spell cast."
           }
         }
       ],
@@ -1282,7 +1280,7 @@
           "delta": "B responds by casting Unsummon on Grizzly Bears, tapping Island.",
           "expected": "Grizzly Bears is in B's hand; Pacifism has an illegal target, does not resolve and is put into A's graveyard; it never enters the battlefield.",
           "operation": {
-            "unclassifiable": "a spell is cast in response"
+            "unclassifiable": "choice: B responds with Unsummon, a different spell cast."
           }
         }
       ],
@@ -1365,7 +1363,7 @@
           "delta": "B responds by casting Unsummon on A's Grizzly Bears, tapping Island.",
           "expected": "Grizzly Bears is in A's hand. The bestowed spell does not fizzle: it becomes a creature spell and resolves, so Hopeful Eidolon enters A's battlefield as a 1/1 lifelink creature (not in the graveyard).",
           "operation": {
-            "unclassifiable": "a spell is cast in response"
+            "unclassifiable": "choice: B responds with Unsummon, a different spell cast."
           }
         }
       ],
@@ -1434,7 +1432,7 @@
           "delta": "B responds by casting Unsummon on A's Grizzly Bears, tapping Island.",
           "expected": "Grizzly Bears is in A's hand. The mutating spell resolves as a creature spell: Gemrazer enters A's battlefield as an ordinary 4/4 with reach and trample; nothing merged.",
           "operation": {
-            "unclassifiable": "a spell is cast in response"
+            "unclassifiable": "choice: B responds with Unsummon, a different spell cast."
           }
         }
       ],
@@ -1501,7 +1499,7 @@
           "delta": "A chooses to have Clone enter as a copy of Grizzly Bears.",
           "expected": "A copy of Grizzly Bears is not a land: Clone enters A's battlefield as a 2/2 Grizzly Bears copy.",
           "operation": {
-            "unclassifiable": "a choice by the player differs"
+            "unclassifiable": "choice: A chooses to have Clone enter as a copy of Grizzly Bears."
           }
         }
       ],
@@ -1580,7 +1578,7 @@
           "delta": "A does not activate Lithoform Engine.",
           "expected": "A controls one Grizzly Bears (the card) and no token.",
           "operation": {
-            "unclassifiable": "an ability activation is removed"
+            "unclassifiable": "choice: A does not activate Lithoform Engine."
           }
         }
       ],
@@ -1640,7 +1638,7 @@
           "delta": "A casts Mardu Scout for its normal mana cost ({R}{R}) instead of dashing it.",
           "expected": "No delayed trigger is created: Mardu Scout stays on A's battlefield at the end step.",
           "operation": {
-            "unclassifiable": "a different way of casting"
+            "unclassifiable": "choice: A casts Mardu Scout for its normal cost instead of dashing it."
           }
         }
       ],

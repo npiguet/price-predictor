@@ -58,7 +58,7 @@
           "delta": "In response, B casts Shock targeting Grizzly Bears, tapping Mountain.",
           "expected": "Shock resolves first and Grizzly Bears dies. The reinforce ability fizzles. Mosquito Guard is still in A's graveyard because it was discarded as a cost.",
           "operation": {
-            "unclassifiable": "a different spell cast by B in response"
+            "unclassifiable": "choice: B responds by casting Shock on Grizzly Bears"
           }
         }
       ],
@@ -130,7 +130,7 @@
           "delta": "Mosquito Guard is on A's battlefield instead of in hand.",
           "expected": "The activation is not legal (can_play false), because reinforce works only from hand.",
           "operation": {
-            "unclassifiable": "moves a card between zones"
+            "unclassifiable": "more than one fact: Mosquito Guard is added to the battlefield and leaves the hand"
           }
         },
         {
@@ -138,9 +138,7 @@
           "polarity": "does_not_fire",
           "delta": "Mosquito Guard is in A's graveyard instead of in hand.",
           "expected": "The activation is not legal (can_play false).",
-          "operation": {
-            "unclassifiable": "moves a card between zones"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -222,9 +220,7 @@
           "polarity": "does_not_fire",
           "delta": "The top card of the library is Goblin Piker instead of Mosquito Guard.",
           "expected": "Goblin Piker has no activated ability, so all five milled creature cards stay in A's graveyard and A's hand is empty.",
-          "operation": {
-            "unclassifiable": "changes the top card of a library"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [

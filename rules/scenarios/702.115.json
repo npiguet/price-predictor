@@ -72,7 +72,7 @@
           "delta": "B declares its Grizzly Bears as a blocker of Culling Drone instead of declaring no blockers.",
           "expected": "Culling Drone deals its 2 damage to Grizzly Bears, not to a player; B's life stays 20 and the ingest trigger does not fire. B's library is unchanged and nothing is exiled. Culling Drone and Grizzly Bears each take lethal damage and both go to their owners' graveyards in the state-based check.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: B declares a blocker instead of none"
           }
         },
         {
@@ -81,7 +81,7 @@
           "delta": "B's library is empty.",
           "expected": "Culling Drone deals 2 combat damage to B (life 18) and the ingest trigger fires and resolves, but no card is exiled because B has none to exile; B has not lost the game.",
           "operation": {
-            "unclassifiable": "changes a library"
+            "unclassifiable": "more than one fact: B's three library cards each have to leave the library"
           }
         }
       ],

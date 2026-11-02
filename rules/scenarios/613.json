@@ -83,7 +83,7 @@
           "delta": "A casts Turn to Frog first and Giant Growth second, so the setting effect has the earlier timestamp.",
           "expected": "Grizzly Bears is a blue Frog and is 5/5, the same result as the base.",
           "operation": {
-            "unclassifiable": "Swaps the order in which two spells are cast, which no fork operation changes."
+            "unclassifiable": "timing: A casts Turn to Frog before Giant Growth, the opposite order."
           }
         },
         {
@@ -92,7 +92,7 @@
           "delta": "A does not cast Turn to Frog.",
           "expected": "Grizzly Bears is a green 6/6 Bear: base 2/2, +1/+1 from the counter and +3/+3 from Giant Growth.",
           "operation": {
-            "unclassifiable": "A spell is not cast, so its effect is absent; no fork operation removes a resolved spell's effect."
+            "unclassifiable": "choice: A does not cast Turn to Frog."
           }
         }
       ],
@@ -163,7 +163,7 @@
           "delta": "A does not cast Diminish.",
           "expected": "Nightmare is 5/5: 4/4 from its characteristic-defining ability (four Swamps) plus the +1/+1 counter.",
           "operation": {
-            "unclassifiable": "A spell is not cast, so its effect is absent."
+            "unclassifiable": "choice: A does not cast Diminish."
           }
         }
       ],
@@ -228,7 +228,7 @@
           "delta": "A does not activate the switch ability.",
           "expected": "Crag Puca is 5/4 with first strike.",
           "operation": {
-            "unclassifiable": "A player does not activate an ability, a different decision."
+            "unclassifiable": "choice: A does not activate Crag Puca's switch ability."
           }
         },
         {
@@ -237,7 +237,7 @@
           "delta": "A casts Sure Strike first and activates the switch ability second.",
           "expected": "Crag Puca is 4/5, the same result as the base.",
           "operation": {
-            "unclassifiable": "Swaps the order of a spell cast and an activation."
+            "unclassifiable": "timing: A casts Sure Strike before activating Crag Puca's switch ability, the opposite order."
           }
         }
       ],
@@ -301,7 +301,7 @@
           "delta": "Honor of the Pure is on B's battlefield instead of A's.",
           "expected": "A controls Savannah Lions, which is 2/1: B's Honor of the Pure no longer applies to a creature B does not control.",
           "operation": {
-            "unclassifiable": "A permanent is controlled by the other player; no fork operation changes a permanent's controller."
+            "unclassifiable": "more than one fact: Honor of the Pure changes controller from A to B, a remove_permanent plus an add_permanent."
           }
         }
       ],
@@ -383,7 +383,7 @@
           "delta": "A casts Control Magic on Savannah Lions (tapping the four Islands) instead of Act of Treason.",
           "expected": "A controls Savannah Lions, which is still tapped and has no haste: only the layer 2 part exists.",
           "operation": {
-            "unclassifiable": "A different spell is cast."
+            "unclassifiable": "choice: A casts Control Magic instead of Act of Treason."
           }
         }
       ],
@@ -531,7 +531,7 @@
           "delta": "A does not cast Mind Bend.",
           "expected": "Savannah Lions is 3/2 and Walking Corpse is 2/2.",
           "operation": {
-            "unclassifiable": "A spell is not cast."
+            "unclassifiable": "choice: A does not cast Mind Bend."
           }
         },
         {
@@ -540,7 +540,7 @@
           "delta": "A replaces white with blue instead of black.",
           "expected": "Honor of the Pure reads 'Blue creatures you control get +1/+1': neither creature is blue, so Savannah Lions is 2/1 and Walking Corpse is 2/2.",
           "operation": {
-            "unclassifiable": "A player makes a different choice for the spell's text change."
+            "unclassifiable": "choice: A has Mind Bend replace white with blue instead of black."
           }
         }
       ],
@@ -604,7 +604,7 @@
           "delta": "A does not cast Turn to Frog.",
           "expected": "Elvish Warrior is a green Elf Warrior and is 3/4: base 2/3 plus +1/+1 from Elvish Archdruid.",
           "operation": {
-            "unclassifiable": "A spell is not cast."
+            "unclassifiable": "choice: A does not cast Turn to Frog."
           }
         }
       ],
@@ -681,7 +681,7 @@
           "delta": "A does not cast Cerulean Wisps.",
           "expected": "Savannah Lions is white and 3/2 with Honor of the Pure.",
           "operation": {
-            "unclassifiable": "A spell is not cast."
+            "unclassifiable": "choice: A does not cast Cerulean Wisps."
           }
         },
         {
@@ -690,7 +690,7 @@
           "delta": "The board is read after the cleanup step of the same turn instead of in main1.",
           "expected": "Cerulean Wisps' effect has ended: Savannah Lions is white again and is 3/2, with the +1/+1 from Honor of the Pure applied again.",
           "operation": {
-            "unclassifiable": "The board is read in a later step of the turn, a phase change."
+            "unclassifiable": "phase or turn: the board is read after the cleanup step instead of in main1."
           }
         }
       ],
@@ -764,7 +764,7 @@
           "delta": "A does not cast Turn to Frog.",
           "expected": "Goblin King is 2/2. Mons's Goblin Raiders is 2/2 and has mountainwalk.",
           "operation": {
-            "unclassifiable": "A spell is not cast."
+            "unclassifiable": "choice: A does not cast Turn to Frog."
           }
         }
       ],
@@ -838,7 +838,7 @@
           "delta": "Levitation is already on the battlefield in the setup (A has two Islands untapped and casts only Turn to Frog).",
           "expected": "Grizzly Bears is a blue 1/1 Frog without flying: Turn to Frog resolved after Levitation entered, so its ability removal has the later timestamp and wins.",
           "operation": {
-            "unclassifiable": "A permanent is on the battlefield from the setup and one cast is dropped, more than one fact and no fork operation for either."
+            "unclassifiable": "timing: Levitation entered the battlefield before Turn to Frog resolves rather than after; adding it is an add_permanent, but A must also leave the Levitation in hand uncast."
           }
         },
         {
@@ -847,7 +847,7 @@
           "delta": "A casts only Levitation.",
           "expected": "Grizzly Bears is a green 2/2 Bear with flying.",
           "operation": {
-            "unclassifiable": "A spell is not cast."
+            "unclassifiable": "choice: A casts only Levitation, not Turn to Frog."
           }
         }
       ],
@@ -920,7 +920,7 @@
           "delta": "A does not cast Rune of Flight.",
           "expected": "Wind Drake is 12/12 and does not have flying: Colossus Hammer removes it.",
           "operation": {
-            "unclassifiable": "A spell is not cast."
+            "unclassifiable": "choice: A does not cast Rune of Flight."
           }
         }
       ],
@@ -994,9 +994,7 @@
           "polarity": "does_not_fire",
           "delta": "Rune of Flight is not on the battlefield.",
           "expected": "Wind Drake is 12/12 and does not have flying. Grizzly Bears is 2/2.",
-          "operation": {
-            "unclassifiable": "A permanent is removed from the battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -1067,7 +1065,7 @@
           "delta": "Bladed Pinions is already attached to Grizzly Bears in the setup, Colossus Hammer is unattached, and A activates Colossus Hammer's equip ability ({8}) targeting Grizzly Bears.",
           "expected": "Grizzly Bears is 12/12 and has first strike but no flying: Colossus Hammer was attached last, so its 'loses flying' has the later timestamp.",
           "operation": {
-            "unclassifiable": "Changes which Equipment is attached in the setup and adds an equip activation, more than one fact."
+            "unclassifiable": "timing: Colossus Hammer is attached to Grizzly Bears after Bladed Pinions instead of before, by an equip activation; no operation sets what an Equipment is attached to."
           }
         }
       ],
@@ -1143,7 +1141,7 @@
           "delta": "A does not cast Where We're Going . . .",
           "expected": "Grizzly Bears is a blue 1/1 Frog with one flying counter and does not have flying: the counter is older than the ability removal.",
           "operation": {
-            "unclassifiable": "A spell is not cast."
+            "unclassifiable": "choice: A does not cast Where We're Going . . ."
           }
         },
         {
@@ -1224,7 +1222,7 @@
           "delta": "Bayek of Siwa is already face up in the setup, and A only casts Turn to Frog.",
           "expected": "Juggernaut is a blue 1/1 Frog with no abilities and no double strike: Turn to Frog's ability removal has the later timestamp.",
           "operation": {
-            "unclassifiable": "A permanent's face state in the setup changes; no fork operation turns a permanent face up."
+            "unclassifiable": "not a board edit: Bayek of Siwa is face up before Turn to Frog resolves; no operation sets a permanent's face-up or face-down status."
           }
         }
       ],
@@ -1296,7 +1294,7 @@
           "delta": "Dormant Grove is already transformed into Gnarled Grovestrider in the setup, and A only casts Turn to Frog.",
           "expected": "Savannah Lions is a blue 1/1 Frog without vigilance: Turn to Frog's ability removal has the later timestamp.",
           "operation": {
-            "unclassifiable": "A permanent is transformed in the setup; no fork operation transforms a permanent."
+            "unclassifiable": "not a board edit: Dormant Grove is already transformed into Gnarled Grovestrider; no operation transforms a permanent."
           }
         }
       ],
@@ -1358,9 +1356,7 @@
           "polarity": "does_not_fire",
           "delta": "Darkest Hour is not on the battlefield.",
           "expected": "Culling Drone is a colorless 2/2.",
-          "operation": {
-            "unclassifiable": "A permanent is removed from the battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -1424,7 +1420,7 @@
           "delta": "Blood Moon is already on the battlefield in the setup and Urborg, Tomb of Yawgmoth is in A's hand; A plays Urborg as a land drop.",
           "expected": "The result is the same: Urborg is a Mountain without its ability and Forest is only a Forest.",
           "operation": {
-            "unclassifiable": "Moves permanents between hand and battlefield and changes the play order, more than one fact."
+            "unclassifiable": "more than one fact: Blood Moon is on the battlefield instead of in A's hand, and Urborg, Tomb of Yawgmoth is in A's hand instead of on the battlefield."
           }
         },
         {
@@ -1433,7 +1429,7 @@
           "delta": "A casts Prismatic Omen (tapping Forest and a Mountain) instead of Blood Moon.",
           "expected": "Urborg keeps its ability: Forest, the Mountains and Urborg are all Swamps and every other basic land type too, since neither effect changes the other.",
           "operation": {
-            "unclassifiable": "A different spell is cast."
+            "unclassifiable": "choice: A casts Prismatic Omen instead of Blood Moon."
           }
         }
       ],
@@ -1507,9 +1503,7 @@
           "polarity": "does_not_fire",
           "delta": "B's Grizzly Bears is not on the battlefield.",
           "expected": "Clone has nothing to copy and enters as a 0/0, so it moves to A's graveyard in the state-based check.",
-          "operation": {
-            "unclassifiable": "A permanent is removed from the battlefield."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "growth_on_clone",
@@ -1517,7 +1511,7 @@
           "delta": "After Clone resolves, A also casts Giant Growth targeting Clone, tapping Forest, and it resolves.",
           "expected": "A's Clone is a 5/5 Grizzly Bears: the layer 1 copy values come first and the +3/+3 from layer 7c is added to them.",
           "operation": {
-            "unclassifiable": "An additional spell is cast."
+            "unclassifiable": "choice: A also casts Giant Growth on Clone after Clone resolves."
           }
         }
       ],
@@ -1579,7 +1573,7 @@
           "delta": "A turns the permanent face up by paying its morph cost {2}{W}{W} with the four Plains.",
           "expected": "The permanent is Exalted Angel, a white 4/5 Angel with flying and the life gain trigger.",
           "operation": {
-            "unclassifiable": "A player takes a special action turning the permanent face up; no fork operation changes face state."
+            "unclassifiable": "choice: A turns the face-down Exalted Angel face up by paying its morph cost, a special action."
           }
         }
       ],
@@ -1645,7 +1639,7 @@
           "delta": "A's Exalted Angel is face up in the setup.",
           "expected": "A's permanent is a red 3/3 Giant named Hill Giant with no flying and no abilities until end of turn.",
           "operation": {
-            "unclassifiable": "A permanent's face state in the setup changes; no fork operation changes face state."
+            "unclassifiable": "not a board edit: A's Exalted Angel is face up instead of face down; no operation sets a permanent's face-up or face-down status."
           }
         }
       ],
@@ -1714,7 +1708,7 @@
           "delta": "B's Exalted Angel is face up in the setup.",
           "expected": "A's Clone is Exalted Angel, a white 4/5 Angel with flying and the life gain trigger.",
           "operation": {
-            "unclassifiable": "A permanent's face state in the setup changes; no fork operation changes face state."
+            "unclassifiable": "not a board edit: B's Exalted Angel is face up instead of face down; no operation sets a permanent's face-up or face-down status."
           }
         }
       ],
@@ -1780,7 +1774,7 @@
           "delta": "Serra's Emissary entered with its chosen card type set to Artifact.",
           "expected": "The attacking Forest is not an artifact, so B's protection does not apply: B is dealt 2 damage and is at 18 life.",
           "operation": {
-            "unclassifiable": "A player made a different choice when the permanent entered."
+            "unclassifiable": "choice: Serra's Emissary's chosen card type is Artifact instead of Creature, a choice made as it entered."
           }
         }
       ],
@@ -1852,7 +1846,7 @@
           "delta": "In the beginning of combat step, before the declare attackers step, A casts Turn to Frog targeting Juggernaut, tapping both Islands, and both players pass so it resolves.",
           "expected": "Declaring no attackers is legal: Juggernaut is a 1/1 Frog that lost its ability, so nothing requires it to attack.",
           "operation": {
-            "unclassifiable": "An additional spell is cast."
+            "unclassifiable": "choice: A casts Turn to Frog on Juggernaut in the beginning of combat step."
           }
         }
       ],

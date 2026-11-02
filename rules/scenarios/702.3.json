@@ -57,9 +57,7 @@
           "polarity": "does_not_fire",
           "delta": "Guard Duty is not on the battlefield.",
           "expected": "Hill Giant is a legal attacker; attacking player B is legal.",
-          "operation": {
-            "unclassifiable": "the Aura granting defender is removed from the battlefield, a permanent removal rather than a keyword fact"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

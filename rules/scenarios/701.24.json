@@ -77,7 +77,7 @@
           "delta": "Worldly Tutor is in A's hand instead of B's and A casts it, tapping A's Forest, choosing A's Grizzly Bears.",
           "expected": "Grizzly Bears is the top card of A's library. A shuffled A's own library, which does not trigger Cosi's Trickster: it stays 1/1 with no counter.",
           "operation": {
-            "unclassifiable": "The spell moves to the other player's hand and that player casts it; no fork operation changes who casts a spell."
+            "unclassifiable": "more than one fact: Worldly Tutor leaves B's hand and enters A's hand"
           }
         }
       ],
@@ -169,7 +169,7 @@
           "delta": "A does not activate Relic of Progenitus.",
           "expected": "Guile moves from the graveyard to A's library, which is shuffled and now holds four cards. Cosi's Trickster triggers and becomes 2/2.",
           "operation": {
-            "unclassifiable": "A player chooses not to activate an ability; no fork operation changes a player's decision."
+            "unclassifiable": "choice: A does not activate Relic of Progenitus"
           }
         },
         {
@@ -178,7 +178,7 @@
           "delta": "Cosi's Trickster is under A's control instead of B's.",
           "expected": "Guile is exiled by the Relic and A's library is shuffled, which does not trigger A's own Cosi's Trickster: it stays 1/1.",
           "operation": {
-            "unclassifiable": "A permanent changes controller; no fork operation sets a permanent's controller."
+            "unclassifiable": "more than one fact: a controller change is a removal plus an addition"
           }
         }
       ],
@@ -266,7 +266,7 @@
           "delta": "The trigger also targets B's Grizzly Bears.",
           "expected": "Grizzly Bears moves from B's graveyard to B's library, which is shuffled with four cards. Cosi's Trickster becomes 2/2.",
           "operation": {
-            "unclassifiable": "The trigger takes a different target; no fork operation changes a target."
+            "unclassifiable": "target: the trigger targets an additional card"
           }
         },
         {
@@ -275,7 +275,7 @@
           "delta": "Cosi's Trickster is under B's control instead of A's.",
           "expected": "B's library is shuffled, which does not trigger B's own Cosi's Trickster: it stays 1/1.",
           "operation": {
-            "unclassifiable": "A permanent changes controller; no fork operation sets a permanent's controller."
+            "unclassifiable": "more than one fact: a controller change is a removal plus an addition"
           }
         }
       ],
@@ -356,9 +356,7 @@
           "polarity": "fires",
           "delta": "B's library holds only the Forest.",
           "expected": "The Forest moves to B's hand and the now empty library is shuffled. Cosi's Trickster triggers and becomes 2/2.",
-          "operation": {
-            "unclassifiable": "The library's contents change; no fork operation changes a library."
-          }
+          "operation": "move_card"
         },
         {
           "label": "own-trickster",
@@ -366,7 +364,7 @@
           "delta": "Cosi's Trickster is under B's control instead of A's.",
           "expected": "B's library of one card is shuffled, which does not trigger B's own Cosi's Trickster: it stays 1/1.",
           "operation": {
-            "unclassifiable": "A permanent changes controller; no fork operation sets a permanent's controller."
+            "unclassifiable": "more than one fact: a controller change is a removal plus an addition"
           }
         }
       ],
@@ -476,7 +474,7 @@
           "delta": "Cosi's Trickster is under A's control instead of B's (A sacrifices both Colossi; B keeps nothing to protect, sacrificing both Grizzly Bears).",
           "expected": "Both Colossi are shuffled into A's library, which does not trigger A's own Cosi's Trickster: it stays 1/1.",
           "operation": {
-            "unclassifiable": "A permanent changes controller and the players' sacrifice choices change with it; no fork operation sets a controller or a choice."
+            "unclassifiable": "more than one fact: a controller change is a removal plus an addition"
           }
         }
       ],

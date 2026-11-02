@@ -53,7 +53,7 @@
           "delta": "Hill Giant entered the battlefield this turn (summoning sick, no haste).",
           "expected": "Hill Giant is not eligible to be tapped for enlist. No enlist trigger fires. Barkweave Crusher stays 2/5, deals 2 combat damage: B is at 18. Hill Giant stays untapped.",
           "operation": {
-            "unclassifiable": "changes when the creature entered"
+            "unclassifiable": "history: Hill Giant entered the battlefield this turn"
           }
         },
         {

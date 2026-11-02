@@ -58,7 +58,7 @@
           "delta": "B casts Counterspell on Thraben Inspector, tapping both Islands.",
           "expected": "Thraben Inspector is countered and moves to A's graveyard without entering the battlefield. No enters trigger fires and A controls no Clue token.",
           "operation": {
-            "unclassifiable": "An extra spell is cast in response; no fork operation casts a spell."
+            "unclassifiable": "choice: B casts Counterspell on Thraben Inspector"
           }
         }
       ],

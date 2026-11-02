@@ -65,9 +65,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls one Forest instead of two.",
           "expected": "The activation is not legal: {1}{G} cannot be paid. Grizzly Bears stays in the graveyard and Varolz has no counters.",
-          "operation": {
-            "unclassifiable": "adds, removes or moves a permanent, which no fork operation does"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -143,7 +141,7 @@
           "delta": "A does not cast Shock, so A's life stays 5.",
           "expected": "The echo cost is {5} when the trigger resolves; A controls only four Mountains and cannot pay it, so Volcano Hellion is sacrificed and moves to A's graveyard.",
           "operation": {
-            "unclassifiable": "a different decision or choice by a player, not a fact on the board"
+            "unclassifiable": "choice: A does not cast Shock in response"
           }
         }
       ],

@@ -59,7 +59,7 @@
           "delta": "A activates Prodigal Pyromancer targeting Grizzly Bears instead of casting Shock.",
           "expected": "The stack holds an ability with no card; Prodigal Pyromancer stays on the battlefield tapped and Shock stays in A's hand.",
           "operation": {
-            "unclassifiable": "a different spell or ability activated"
+            "unclassifiable": "choice: A activates a different ability instead of casting Shock"
           }
         }
       ],
@@ -125,7 +125,7 @@
           "delta": "B does not cast Giant Growth while Shock is on the stack.",
           "expected": "Shock resolves and Grizzly Bears dies in the state-based check before B receives priority, so Giant Growth has no target and cannot be cast.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: B passes instead of casting Giant Growth"
           }
         }
       ],
@@ -191,7 +191,7 @@
           "delta": "B is the active player instead of A.",
           "expected": "B's trigger goes on the stack first and A's on top of it. A's trigger resolves first: B loses 1 life and A gains 1 (A at 2). B is at 0 life and loses the game before B's trigger resolves.",
           "operation": {
-            "unclassifiable": "changing the turn"
+            "unclassifiable": "phase or turn: B is the active player instead of A"
           }
         },
         {
@@ -199,9 +199,7 @@
           "polarity": "does_not_fire",
           "delta": "Blood Artist is absent from B's battlefield, so only A's trigger is put on the stack.",
           "expected": "Only A's trigger is on the stack, targeting B; it resolves: B loses 1 life (0) and A gains 1 (2), and B loses the game in the next state-based check.",
-          "operation": {
-            "unclassifiable": "removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -267,7 +265,7 @@
           "delta": "A activates Prodigal Pyromancer targeting B instead of casting Grizzly Bears.",
           "expected": "The ability on the stack has no card characteristics and is not a creature spell, so Essence Scatter has no legal target and B cannot cast it.",
           "operation": {
-            "unclassifiable": "a different ability activated"
+            "unclassifiable": "choice: A activates an ability instead of casting Grizzly Bears"
           }
         }
       ],
@@ -334,9 +332,7 @@
           "polarity": "does_not_fire",
           "delta": "Control Magic is absent, so A controls Blood Artist, and A targets B with the trigger.",
           "expected": "The trigger is controlled by A: B loses 1 life (19) and A gains 1 (21). Blood Artist goes to A's graveyard.",
-          "operation": {
-            "unclassifiable": "removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -401,7 +397,7 @@
           "delta": "B casts Giant Growth targeting Grizzly Bears instead of passing.",
           "expected": "Not all players passed in succession, so Shock does not resolve yet; Giant Growth goes on top of the stack and resolves first after both players pass, then Shock resolves and Grizzly Bears survives as a 5/5 with 2 damage.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: B casts Giant Growth instead of passing"
           }
         },
         {
@@ -410,7 +406,7 @@
           "delta": "A casts nothing, so the stack is empty when both players pass in succession.",
           "expected": "The main phase ends and the beginning of combat step begins.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: A casts nothing, so no spell is on the stack"
           }
         }
       ],
@@ -494,7 +490,7 @@
           "delta": "B responds with Counterspell, tapping both Islands, and it counters Eerie Interlude.",
           "expected": "Eerie Interlude does not resolve, so no delayed trigger is created; Grizzly Bears stays on the battlefield and nothing is put on the stack at the end step.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: B responds with Counterspell"
           }
         }
       ],
@@ -573,7 +569,7 @@
           "delta": "B responds with Counterspell, tapping both Islands, and it counters Glorious Anthem.",
           "expected": "Glorious Anthem never enters the battlefield and Grizzly Bears stays 2/2.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: B responds with Counterspell"
           }
         }
       ],
@@ -642,7 +638,7 @@
           "delta": "A activates the first ability of Adarkar Wastes to add {C}.",
           "expected": "{C} is added and A stays at 20 life; nothing is put on the stack.",
           "operation": {
-            "unclassifiable": "a different ability activated"
+            "unclassifiable": "choice: A activates a different ability of the land"
           }
         },
         {
@@ -651,7 +647,7 @@
           "delta": "A activates Prodigal Pyromancer targeting Grizzly Bears instead of a land.",
           "expected": "The ability goes on the stack and B may respond; no damage is dealt until it resolves.",
           "operation": {
-            "unclassifiable": "a different ability activated"
+            "unclassifiable": "choice: A activates a creature's ability instead of a land's mana ability"
           }
         }
       ],
@@ -787,9 +783,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls Necropotence, which skips A's draw step.",
           "expected": "A draws nothing; Forest stays on top of A's library and the hand stays empty.",
-          "operation": {
-            "unclassifiable": "adds a permanent"
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -873,7 +867,7 @@
           "delta": "B casts Giant Growth on Grizzly Bears while Shock is still on the stack.",
           "expected": "Giant Growth resolves first and Grizzly Bears survives Shock as a 5/5 with 2 damage.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: B casts Giant Growth while Shock is on the stack"
           }
         }
       ],

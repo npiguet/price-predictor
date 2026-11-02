@@ -73,7 +73,7 @@
           "delta": "A does not cast Hydrosurge, so Chameleon Colossus is a 4/4 when the ability is activated.",
           "expected": "X is 4 and Chameleon Colossus becomes an 8/8 until end of turn.",
           "operation": {
-            "unclassifiable": "A does not cast a spell; a different spell cast."
+            "unclassifiable": "choice: A does not cast Hydrosurge"
           }
         }
       ],
@@ -136,7 +136,7 @@
           "delta": "Before attacking, A also casts Giant Growth on Grizzly Bears, tapping Forest; it resolves.",
           "expected": "Power is -3 + 3 = 0 and toughness 5, so Grizzly Bears is a 0/5, assigns no combat damage and B's life total stays 20 (not 17).",
           "operation": {
-            "unclassifiable": "An additional spell is cast."
+            "unclassifiable": "choice: A also casts Giant Growth"
           }
         },
         {
@@ -145,7 +145,7 @@
           "delta": "A does not cast Hydrosurge, so Grizzly Bears is a 2/2 when it attacks.",
           "expected": "Grizzly Bears deals 2 combat damage to B and B's life total is 18.",
           "operation": {
-            "unclassifiable": "A does not cast Hydrosurge; a different spell cast."
+            "unclassifiable": "choice: A does not cast Hydrosurge"
           }
         }
       ],
@@ -211,7 +211,7 @@
           "delta": "A does not cast Giant Growth; the ability resolves with nothing in response.",
           "expected": "The ability resolves with X = 4 and Chameleon Colossus is an 8/8 until end of turn; Giant Growth stays in A's hand.",
           "operation": {
-            "unclassifiable": "A does not cast a spell in response; a different decision."
+            "unclassifiable": "choice: A does not cast Giant Growth in response"
           }
         }
       ],
@@ -273,7 +273,7 @@
           "delta": "A casts Blaze with X = 3, tapping all four Mountains.",
           "expected": "Zaxara's trigger fires and the Hydra token has 3 +1/+1 counters (a 3/3); Blaze deals 3 damage and B's life total is 17.",
           "operation": {
-            "unclassifiable": "A different X is chosen when casting."
+            "unclassifiable": "choice: A casts Blaze with X = 3"
           }
         },
         {
@@ -282,7 +282,7 @@
           "delta": "A casts Blaze with X = 0, tapping one Mountain.",
           "expected": "Zaxara's trigger fires and the Hydra token gets 0 +1/+1 counters, so the 0/0 token moves to the graveyard in the state-based check; Blaze deals 0 damage and B's life total stays 20.",
           "operation": {
-            "unclassifiable": "A different X is chosen when casting."
+            "unclassifiable": "choice: A casts Blaze with X = 0"
           }
         }
       ],
@@ -350,9 +350,7 @@
           "polarity": "other",
           "delta": "The creature card in A's graveyard is Grizzly Bears instead of Jadelight Spelunker.",
           "expected": "Grizzly Bears has mana value 2, so A loses 2 life (life total 18) and Grizzly Bears enters the battlefield.",
-          "operation": {
-            "unclassifiable": "Changes a card in the graveyard, not a permanent."
-          }
+          "operation": "move_card"
         },
         {
           "label": "on_the_stack",
@@ -360,7 +358,7 @@
           "delta": "Jadelight Spelunker's mana value is checked while it is a spell on the stack instead of a card in the graveyard: A casts it from hand with X = 1 (tapping both Forests) instead of casting Reanimate, and B responds with Spell Snare, tapping Island.",
           "expected": "As a spell on the stack Jadelight Spelunker has mana value 2 (X = 1 counts), so Spell Snare is legal and counters it; the countered Jadelight Spelunker moves to A's graveyard and A's life total stays 20.",
           "operation": {
-            "unclassifiable": "A different spell is cast and the sequence of plays changes."
+            "unclassifiable": "choice: A casts Jadelight Spelunker from hand with X = 1 instead of Reanimate, and B responds with Spell Snare"
           }
         }
       ],
@@ -421,9 +419,7 @@
           "polarity": "other",
           "delta": "The creature card in A's graveyard is Grizzly Bears instead of Jadelight Spelunker.",
           "expected": "Not legal: the cost is {1}{G} and A has only one untapped land.",
-          "operation": {
-            "unclassifiable": "Changes a card in the graveyard, not a permanent."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -489,7 +485,7 @@
           "delta": "A activates the gained ability with X = 0.",
           "expected": "Gigantoplasm's base power and toughness become 0/0 and it moves to A's graveyard in the state-based check.",
           "operation": {
-            "unclassifiable": "A different X is chosen."
+            "unclassifiable": "choice: A activates with X = 0"
           }
         }
       ],
@@ -555,7 +551,7 @@
           "delta": "A announces X = 1 for the activation, tapping one Mountain and removing one counter.",
           "expected": "The ability's X is 1: Grizzly Bears has 1 damage marked and stays on the battlefield, and Chamber Sentry keeps 2 counters (a 2/2, tapped).",
           "operation": {
-            "unclassifiable": "A different X is announced, changing costs paid."
+            "unclassifiable": "choice: A announces X = 1"
           }
         },
         {
@@ -564,7 +560,7 @@
           "delta": "A tries to announce X = 4 for the activation.",
           "expected": "Not legal: the cost requires removing four +1/+1 counters and Chamber Sentry has only three; the cast-time X of 3 does not supply the value.",
           "operation": {
-            "unclassifiable": "A different announced X."
+            "unclassifiable": "choice: A tries to announce X = 4"
           }
         }
       ],
@@ -629,7 +625,7 @@
           "delta": "A does not cast the Big Bertha in hand; A casts Reanimate (tapping Swamp) targeting the Big Bertha in A's graveyard instead.",
           "expected": "The permanent was never a spell, so its X is 0: Big Bertha enters with no counters as a 1/1 with vigilance and A loses 1 life (life total 19).",
           "operation": {
-            "unclassifiable": "A casts a different spell."
+            "unclassifiable": "choice: A casts Reanimate instead of the Big Bertha in hand"
           }
         }
       ],
@@ -702,7 +698,7 @@
           "delta": "A does not cast the Jadelight Spelunker in hand; A casts Reanimate (tapping Swamp) targeting the one in A's graveyard instead.",
           "expected": "The permanent was never a spell, so its X is 0: the enters trigger explores 0 times, no card is revealed, Jadelight Spelunker is a 1/1 and A loses 1 life (life total 19).",
           "operation": {
-            "unclassifiable": "A casts a different spell."
+            "unclassifiable": "choice: A casts Reanimate instead of the Jadelight Spelunker in hand"
           }
         }
       ],
@@ -768,7 +764,7 @@
           "delta": "A casts Storm King's Thunder with X = 1, tapping four Mountains.",
           "expected": "The delayed trigger copies Shock once; two Shocks deal 4 damage and B's life total is 16.",
           "operation": {
-            "unclassifiable": "A different X is chosen."
+            "unclassifiable": "choice: A casts Storm King's Thunder with X = 1"
           }
         },
         {
@@ -777,7 +773,7 @@
           "delta": "A casts Storm King's Thunder with X = 0, tapping three Mountains.",
           "expected": "The delayed trigger fires on Shock and copies it 0 times; one Shock deals 2 damage and B's life total is 18.",
           "operation": {
-            "unclassifiable": "A different X is chosen."
+            "unclassifiable": "choice: A casts Storm King's Thunder with X = 0"
           }
         }
       ],
@@ -832,7 +828,7 @@
           "delta": "The two lands are plain Forests instead of Snow-Covered Forests.",
           "expected": "Not legal: the mana comes from nonsnow sources and cannot pay {S}{S}.",
           "operation": {
-            "unclassifiable": "Two permanents change; more than one fact."
+            "unclassifiable": "more than one fact: two lands are each replaced by a plain Forest"
           }
         },
         {
@@ -908,7 +904,7 @@
           "delta": "Llanowar Elves came under A's control this turn (summoning_sick true).",
           "expected": "Not legal: the creature has not been under A's control since the turn began, so {T} cannot be paid.",
           "operation": {
-            "unclassifiable": "Control timing of the permanent (summoning sickness) is not a fork operation."
+            "unclassifiable": "history: Llanowar Elves came under A's control this turn"
           }
         },
         {
@@ -1057,7 +1053,7 @@
           "delta": "Farmstead Gleaner came under A's control this turn (summoning_sick true) and is tapped.",
           "expected": "Not legal: the creature has not been under A's control since the turn began, so {Q} cannot be paid.",
           "operation": {
-            "unclassifiable": "Control timing of the permanent is not a fork operation."
+            "unclassifiable": "history: Farmstead Gleaner came under A's control this turn"
           }
         }
       ],
@@ -1135,7 +1131,7 @@
           "delta": "A activates the [-1] ability instead, targeting A.",
           "expected": "One loyalty counter is removed as the cost (loyalty 2); A draws a card and B does not.",
           "operation": {
-            "unclassifiable": "A different ability is activated."
+            "unclassifiable": "choice: A activates the [-1] ability instead"
           }
         },
         {
@@ -1144,7 +1140,7 @@
           "delta": "A tries to activate the [-10] ability instead, targeting B.",
           "expected": "Not legal: ten loyalty counters cannot be removed from a planeswalker with 3 loyalty; loyalty stays 3 and nobody mills.",
           "operation": {
-            "unclassifiable": "A different ability is activated."
+            "unclassifiable": "choice: A tries the [-10] ability instead"
           }
         }
       ],
@@ -1487,7 +1483,7 @@
           "delta": "Ranger Class is level 3.",
           "expected": "Level 3 still has the level 2 ability: the trigger fires and Grizzly Bears gets a +1/+1 counter (a 3/3).",
           "operation": {
-            "unclassifiable": "A Class level is not a counter; no fork operation sets it."
+            "unclassifiable": "not a board edit: a Class level is not a counter and no operation sets it"
           }
         },
         {
@@ -1496,7 +1492,7 @@
           "delta": "Ranger Class is level 1.",
           "expected": "The trigger does not fire and Grizzly Bears stays a 2/2.",
           "operation": {
-            "unclassifiable": "A Class level is not a counter; no fork operation sets it."
+            "unclassifiable": "not a board edit: a Class level is not a counter and no operation sets it"
           }
         }
       ],
@@ -1552,7 +1548,7 @@
           "delta": "It is the beginning of combat step instead of the precombat main phase.",
           "expected": "Not legal: a class level bar can be activated only as a sorcery; Ranger Class stays level 1.",
           "operation": {
-            "unclassifiable": "Changes the phase."
+            "unclassifiable": "phase or turn: it is the beginning of combat step instead of main phase 1"
           }
         },
         {
@@ -1561,7 +1557,7 @@
           "delta": "A tries to activate the {3}{G}: Level 3 bar instead, tapping all four Forests.",
           "expected": "Not legal: it can be activated only if the Class is level 2; Ranger Class stays level 1.",
           "operation": {
-            "unclassifiable": "A different ability is activated."
+            "unclassifiable": "choice: A tries the Level 3 bar instead of Level 2"
           }
         }
       ],
@@ -1634,7 +1630,7 @@
           "delta": "A casts Blaze paying its mana cost, announcing X = 3 and tapping all four Mountains.",
           "expected": "X is 3: Blaze deals 3 damage and B's life total is 17.",
           "operation": {
-            "unclassifiable": "A different way of casting the spell, with a different announced X."
+            "unclassifiable": "choice: A casts Blaze paying its mana cost with X = 3"
           }
         }
       ],
@@ -1839,9 +1835,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls five Islands instead of six.",
           "expected": "Not legal: five blue mana cannot pay three {2/W} without white mana; Spectral Procession stays in A's hand.",
-          "operation": {
-            "unclassifiable": "Removes a permanent."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "one_plains",

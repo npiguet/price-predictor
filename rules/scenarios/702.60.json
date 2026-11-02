@@ -65,7 +65,7 @@
           "delta": "The library is Mountain, Mountain, Mountain, Mountain, Surging Flame, Mountain, Mountain, Mountain, so Surging Flame is the fifth card.",
           "expected": "The ripple trigger fires and reveals four Mountains. Nothing is cast, the four Mountains go to the bottom of the library, and B's life is 18.",
           "operation": {
-            "unclassifiable": "changes a library"
+            "unclassifiable": "more than one fact: the library order changes at two positions to move Surging Flame from fourth to fifth"
           }
         },
         {
@@ -73,9 +73,7 @@
           "polarity": "does_not_fire",
           "delta": "The fourth card of the library is Surging Might instead of Surging Flame.",
           "expected": "The ripple trigger fires and reveals Mountain, Mountain, Mountain, Surging Might. Nothing is cast because the name differs, the four cards go to the bottom of the library, and B's life is 18.",
-          "operation": {
-            "unclassifiable": "changes a library"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -155,9 +153,7 @@
           "polarity": "does_not_fire",
           "delta": "Thrumming Stone is not on the battlefield.",
           "expected": "One ripple trigger fires. Four Mountains are revealed and put on the bottom of the library. B's life is 18.",
-          "operation": {
-            "unclassifiable": "adds or removes a permanent"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

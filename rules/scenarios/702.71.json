@@ -53,9 +53,7 @@
           "polarity": "does_not_fire",
           "delta": "The library holds Craw Wurm (mana value 6) instead of Hill Giant.",
           "expected": "Fleshwrither is in A's graveyard but no creature card has mana value 4, so nothing enters the battlefield. A's library is shuffled and still holds Craw Wurm and Grizzly Bears.",
-          "operation": {
-            "unclassifiable": "changes a library"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -128,7 +126,7 @@
           "delta": "The step is declare_attackers instead of main1.",
           "expected": "The activation is not legal (can_play false), because transfigure may be activated only as a sorcery.",
           "operation": {
-            "unclassifiable": "changes the phase or turn"
+            "unclassifiable": "phase or turn: the step is declare_attackers instead of main1"
           }
         }
       ],

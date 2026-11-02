@@ -98,7 +98,7 @@
           "delta": "A casts Unsummon targeting Grizzly Bears, tapping Island, instead of Shock.",
           "expected": "Grizzly Bears returns to B's hand (its owner), not A's hand. Control Magic goes to A's graveyard.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: A casts Unsummon instead of Shock"
           }
         },
         {
@@ -107,7 +107,7 @@
           "delta": "The Grizzly Bears is owned by A, and A cast Control Magic on it anyway.",
           "expected": "Grizzly Bears dies and goes to A's graveyard, which is both its owner's and its controller's graveyard, so no redirection takes place.",
           "operation": {
-            "unclassifiable": "changing a card's owner is no fork operation"
+            "unclassifiable": "not a board edit: the card's owner is A instead of B; no operation sets ownership"
           }
         }
       ],
@@ -256,9 +256,7 @@
           "polarity": "does_not_fire",
           "delta": "A does not control Rest in Peace.",
           "expected": "Grizzly Bears has 2 damage marked, dies and moves to B's graveyard. Shock goes to A's graveyard.",
-          "operation": {
-            "unclassifiable": "removes a permanent"
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "bounce",
@@ -266,7 +264,7 @@
           "delta": "A casts Unsummon targeting Grizzly Bears, tapping Island, instead of Shock.",
           "expected": "Grizzly Bears returns to B's hand; no replacement applies to it because it does not go to a graveyard. Unsummon itself is exiled by the replacement effect.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: A casts Unsummon instead of Shock"
           }
         }
       ],
@@ -356,7 +354,7 @@
           "delta": "B casts Counterspell on Cloudshift, tapping both Islands.",
           "expected": "Cloudshift is countered. Grizzly Bears never changes zones: it stays a 3/3 with its +1/+1 counter and Pacifism stays attached to it.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: B casts Counterspell on Cloudshift"
           }
         }
       ],
@@ -446,7 +444,7 @@
           "delta": "B responds to Aethersnatch by casting Counterspell on it, tapping both of B's Islands.",
           "expected": "Aethersnatch is countered and goes to A's graveyard. B keeps control of the Grizzly Bears spell and it enters the battlefield under B's control.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: B casts Counterspell on Aethersnatch"
           }
         }
       ],
@@ -533,7 +531,7 @@
           "delta": "A casts Goblin Piker (mana value 2) instead of Fire Elemental, paying its normal cost with two Mountains.",
           "expected": "Goblin Piker is not given blitz and cannot be cast for a blitz cost. It enters without haste, cannot attack this turn, is not sacrificed at the end step, and A draws no card.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: A casts Goblin Piker instead of Fire Elemental"
           }
         }
       ],
@@ -603,7 +601,7 @@
           "delta": "A chooses Goblin Piker, not the Raging Goblin spell, as the source of Circle of Protection: Red.",
           "expected": "The damage from Goblin Piker is prevented; Raging Goblin deals 1. A ends at 19 life.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: A chooses Goblin Piker as the source for Circle of Protection: Red"
           }
         },
         {
@@ -612,7 +610,7 @@
           "delta": "A does not activate Circle of Protection: Red.",
           "expected": "Both creatures deal damage: A ends at 17 life.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: A does not activate Circle of Protection: Red"
           }
         }
       ],
@@ -677,7 +675,7 @@
           "delta": "A casts Gatekeeper of Malakir without paying the kicker, tapping two Swamps.",
           "expected": "Gatekeeper of Malakir enters the battlefield and its trigger does not fire. Grizzly Bears stays on the battlefield.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: A casts Gatekeeper of Malakir without paying the kicker"
           }
         }
       ],
@@ -743,9 +741,7 @@
           "polarity": "does_not_fire",
           "delta": "A also controls Rest in Peace on the battlefield.",
           "expected": "Rancor is exiled instead of going to the graveyard, so its put-into-graveyard trigger does not fire and Rancor stays in exile. Disenchant is exiled too.",
-          "operation": {
-            "unclassifiable": "adds a permanent"
-          }
+          "operation": "add_permanent"
         },
         {
           "label": "left_graveyard",
@@ -753,7 +749,7 @@
           "delta": "In response to Rancor's trigger, A activates Tormod's Crypt (tap, sacrifice) targeting B.",
           "expected": "Rancor's trigger fires, but Rancor is exiled from B's graveyard before it resolves; the trigger cannot find the new object in exile, so Rancor stays in exile and B's hand does not gain it.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: A activates Tormod's Crypt in response to the trigger"
           }
         }
       ],
@@ -837,7 +833,7 @@
           "delta": "A casts Path to Exile (tapping Plains) on Grizzly Bears instead of Terror.",
           "expected": "Grizzly Bears is exiled, not destroyed, so the dies trigger does not fire. Angelic Destiny goes to B's graveyard as a state-based action and stays there.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: A casts Path to Exile instead of Terror"
           }
         }
       ],
@@ -926,7 +922,7 @@
           "delta": "B casts Counterspell on the flashback Lightning Bolt, tapping both Islands.",
           "expected": "Lightning Bolt is countered and exiled (not in A's graveyard); B stays at 20.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: B casts Counterspell on the flashback Lightning Bolt"
           }
         },
         {
@@ -935,7 +931,7 @@
           "delta": "A does not cast Lightning Bolt.",
           "expected": "Lightning Bolt stays in A's graveyard. When the turn ends the flashback permission ends and Lightning Bolt can no longer be cast from the graveyard.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: A does not cast Lightning Bolt"
           }
         }
       ],
@@ -1025,7 +1021,7 @@
           "delta": "B casts Counterspell on the Lightning Bolt spell, tapping both of B's Islands.",
           "expected": "Lightning Bolt is countered and exiled instead of being put into A's graveyard; B stays at 20. Counterspell is in B's graveyard.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: B casts Counterspell on the Lightning Bolt spell"
           }
         },
         {
@@ -1034,7 +1030,7 @@
           "delta": "A declines to cast Lightning Bolt when the trigger resolves.",
           "expected": "Lightning Bolt stays in A's graveyard; B stays at 20.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: A declines to cast Lightning Bolt"
           }
         }
       ],
@@ -1114,7 +1110,7 @@
           "delta": "A sacrifices Centaur Courser instead of Grizzly Bears.",
           "expected": "Fling deals 3 damage to B (B at 17). Centaur Courser is in A's graveyard.",
           "operation": {
-            "unclassifiable": "a different choice by a player"
+            "unclassifiable": "choice: A sacrifices Centaur Courser instead of Grizzly Bears"
           }
         },
         {
@@ -1123,7 +1119,7 @@
           "delta": "B casts Counterspell on Fling, tapping both Islands.",
           "expected": "Fling is countered and deals no damage (B at 20). Grizzly Bears was already sacrificed as a cost and is in A's graveyard.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: B casts Counterspell on Fling"
           }
         }
       ],
@@ -1191,7 +1187,7 @@
           "delta": "A targets Grizzly Bears instead of Centaur Courser.",
           "expected": "Grizzly Bears enters the battlefield under A's control and A loses 2 life (A at 18).",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: Reanimate targets Grizzly Bears instead of Centaur Courser"
           }
         },
         {
@@ -1200,7 +1196,7 @@
           "delta": "In response, B activates Tormod's Crypt targeting B, sacrificing it to exile every card in B's graveyard.",
           "expected": "Reanimate's target is gone from the graveyard, so Reanimate fizzles: nothing enters the battlefield and A stays at 20 life. Centaur Courser and Grizzly Bears are in exile.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: B activates Tormod's Crypt in response"
           }
         }
       ],
@@ -1266,7 +1262,7 @@
           "delta": "A casts Fiery Temper for its madness cost {R}, tapping Mountain, targeting B, instead of declining.",
           "expected": "Fiery Temper is cast, so it is not found by the later effect: it deals 3 damage to B (B at 17), goes to A's graveyard after resolving, and Containment Construct's trigger does not exile it.",
           "operation": {
-            "unclassifiable": "a different decision by a player"
+            "unclassifiable": "choice: A casts Fiery Temper for its madness cost instead of declining"
           }
         }
       ],
@@ -1344,7 +1340,7 @@
           "delta": "B's graveyard is empty.",
           "expected": "The ability resolves and nothing moves. A's graveyard holds Shock and the sacrificed Tormod's Crypt.",
           "operation": {
-            "unclassifiable": "changes a graveyard's contents"
+            "unclassifiable": "more than one fact: three cards leave B's graveyard, and no operation moves a card to no zone"
           }
         }
       ],

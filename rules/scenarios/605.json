@@ -69,7 +69,7 @@
           "delta": "During the payment A tries to activate Prodigal Sorcerer's damage ability targeting B instead of Llanowar Elves's mana ability.",
           "expected": "Activating Prodigal Sorcerer's ability while casting a spell is illegal; Prodigal Sorcerer stays untapped and B takes no damage.",
           "operation": {
-            "unclassifiable": "a different activation attempted by the player"
+            "unclassifiable": "choice: A activates Prodigal Sorcerer's ability during the payment instead of Llanowar Elves's"
           }
         }
       ],
@@ -141,7 +141,7 @@
           "delta": "A activates Prodigal Sorcerer's ability targeting B instead (and B responds with Stifle, tapping Island).",
           "expected": "Prodigal Sorcerer's ability goes on the stack and Stifle counters it; B takes no damage and Stifle moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "a different ability is activated"
+            "unclassifiable": "choice: A activates Prodigal Sorcerer's ability and B responds with Stifle"
           }
         }
       ],
@@ -201,9 +201,7 @@
           "polarity": "does_not_fire",
           "delta": "Mana Flare is absent from the battlefield.",
           "expected": "Casting Grizzly Bears is illegal (can_play false): one Forest produces only {G}.",
-          "operation": {
-            "unclassifiable": "removes a permanent"
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "manabarbs",

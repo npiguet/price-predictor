@@ -61,7 +61,7 @@
           "delta": "A taps Grizzly Bears (power 2) as the cost instead of Hill Giant.",
           "expected": "Grizzly Bears becomes tapped. Galvanizing Sawship gets 2 charge counters and, being below station 3, remains a noncreature artifact. Hill Giant stays untapped.",
           "operation": {
-            "unclassifiable": "A different cost choice: which creature to tap"
+            "unclassifiable": "choice: A taps a different creature as the cost"
           }
         },
         {
@@ -70,7 +70,7 @@
           "delta": "A taps Wall of Wood (power 0) as the cost instead of Hill Giant.",
           "expected": "Wall of Wood becomes tapped. The ability resolves and puts 0 charge counters on Galvanizing Sawship, which stays a noncreature artifact with no counters.",
           "operation": {
-            "unclassifiable": "A different cost choice: which creature to tap"
+            "unclassifiable": "choice: A taps a different creature as the cost"
           }
         }
       ],
@@ -147,7 +147,7 @@
           "delta": "The step is A's end step instead of main1.",
           "expected": "The activation is not legal: station can be activated only as a sorcery, and it is not a main phase.",
           "operation": {
-            "unclassifiable": "Changes the step of the turn"
+            "unclassifiable": "phase or turn: the step is the end step instead of main1"
           }
         },
         {
@@ -156,7 +156,7 @@
           "delta": "Hill Giant is on B's battlefield instead of A's.",
           "expected": "The activation is not legal: A controls no other untapped creature to tap.",
           "operation": {
-            "unclassifiable": "Moves a permanent to the other player's battlefield"
+            "unclassifiable": "more than one fact: Hill Giant leaves A's battlefield and joins B's: a removal plus an addition"
           }
         }
       ],
@@ -226,7 +226,7 @@
           "delta": "Tapestry Warden is on B's battlefield instead of A's.",
           "expected": "Wall of Wood becomes tapped. Galvanizing Sawship gets 0 charge counters (Wall of Wood's power) and stays a noncreature artifact.",
           "operation": {
-            "unclassifiable": "Moves a permanent to the other player's battlefield"
+            "unclassifiable": "more than one fact: Tapestry Warden leaves A's battlefield and joins B's: a removal plus an addition"
           }
         }
       ],

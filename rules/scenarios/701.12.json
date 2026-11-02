@@ -72,7 +72,7 @@
           "delta": "With Switcheroo on the stack, B casts Shock targeting Grizzly Bears, tapping Mountain, and Shock resolves first.",
           "expected": "Grizzly Bears is destroyed and moves to A's graveyard. Switcheroo resolves with only one target left and no exchange occurs: Hill Giant stays under B's control.",
           "operation": {
-            "unclassifiable": "An extra spell is cast in response; no fork operation casts a spell."
+            "unclassifiable": "choice: B casts an extra spell (Shock) in response; a different spell cast"
           }
         }
       ],
@@ -162,7 +162,7 @@
           "delta": "Switcheroo targets Grizzly Bears and Typhoid Rats, both controlled by A.",
           "expected": "Switcheroo resolves and does nothing. A still controls Grizzly Bears and Typhoid Rats; B still controls Hill Giant.",
           "operation": {
-            "unclassifiable": "A different target is chosen; no fork operation changes a target."
+            "unclassifiable": "target: Switcheroo targets a different creature"
           }
         }
       ],
@@ -232,9 +232,7 @@
           "polarity": "does_not_fire",
           "delta": "Everlasting Torment is on the battlefield under B's control (players can't gain life).",
           "expected": "No part of the exchange occurs: A stays at 5 and B stays at 20. Magus of the Mirror is in A's graveyard.",
-          "operation": {
-            "unclassifiable": "A permanent is added to the battlefield; no fork operation adds a permanent."
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -314,9 +312,7 @@
           "polarity": "other",
           "delta": "A's graveyard is empty.",
           "expected": "The exchange still happens: Grizzly Bears and Shock move from A's hand to A's graveyard, and A's hand is empty. Harness Infinity is exiled.",
-          "operation": {
-            "unclassifiable": "The graveyard's contents differ; no fork operation changes a graveyard."
-          }
+          "operation": "move_card"
         },
         {
           "label": "empty_hand",
@@ -324,7 +320,7 @@
           "delta": "A's hand holds only Harness Infinity, which is cast, so A's hand is empty when it resolves.",
           "expected": "The exchange still happens: Hill Giant moves from A's graveyard to A's hand, and A's graveyard is empty. Harness Infinity is exiled.",
           "operation": {
-            "unclassifiable": "The hand's contents differ; no fork operation changes a hand."
+            "unclassifiable": "more than one fact: Grizzly Bears and Shock must both leave A's hand"
           }
         }
       ],
@@ -399,7 +395,7 @@
           "delta": "Arcanum Wings is owned by B instead of A.",
           "expected": "No exchange occurs. Arcanum Wings stays attached to Grizzly Bears, which is 2/2 with flying, and Holy Strength stays in A's hand.",
           "operation": {
-            "unclassifiable": "A permanent's owner differs; no fork operation changes ownership."
+            "unclassifiable": "not a board edit: ownership of Arcanum Wings (owner versus controller) is not set by any operation"
           }
         }
       ],
@@ -479,9 +475,7 @@
           "polarity": "does_not_fire",
           "delta": "A's hand holds Giant Growth instead of Holy Strength.",
           "expected": "No exchange occurs. Arcanum Wings stays attached to Grizzly Bears, which is 2/2 with flying.",
-          "operation": {
-            "unclassifiable": "The hand's contents differ; no fork operation changes a hand."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -556,9 +550,7 @@
           "polarity": "does_not_fire",
           "delta": "Everlasting Torment is on the battlefield under B's control (players can't gain life).",
           "expected": "No part of the exchange occurs: B stays at 7 and Tree of Perdition stays 0/13.",
-          "operation": {
-            "unclassifiable": "A permanent is added to the battlefield; no fork operation adds a permanent."
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -649,7 +641,7 @@
           "delta": "With the trigger on the stack, B casts Shock targeting Typhoid Rats, tapping Mountain, and Shock resolves first.",
           "expected": "Typhoid Rats is destroyed. The exchange cannot be completed, so Grizzly Bears keeps its empty text and has no deathtouch.",
           "operation": {
-            "unclassifiable": "An extra spell is cast in response; no fork operation casts a spell."
+            "unclassifiable": "choice: B casts Shock in response with the trigger on the stack"
           }
         }
       ],

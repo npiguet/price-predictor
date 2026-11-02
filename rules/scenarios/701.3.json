@@ -133,7 +133,7 @@
           "delta": "The equip ability targets Hill Giant instead of Grizzly Bears.",
           "expected": "Grafted Wargear moves to Hill Giant (6/5). Its becomes-unattached trigger fires and Grizzly Bears is sacrificed, moving to A's graveyard.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: the equip ability targets Hill Giant"
           }
         }
       ],
@@ -210,7 +210,7 @@
           "delta": "The two actions swap order: A first activates equip (Swiftfoot Boots moves to Hill Giant), then casts Darksteel Mutation targeting Hill Giant.",
           "expected": "Darksteel Mutation's timestamp is later than Swiftfoot Boots', so it removes the granted keywords: Hill Giant is a 0/1 indestructible Insect artifact creature with no haste and no hexproof.",
           "operation": {
-            "unclassifiable": "a different order of actions by the player"
+            "unclassifiable": "timing: the equip and the Aura happen in the opposite order"
           }
         }
       ],
@@ -276,7 +276,7 @@
           "delta": "Instead of equipping, A casts Doom Blade targeting Grizzly Bears, tapping both Swamps.",
           "expected": "Grizzly Bears is destroyed and moves to A's graveyard. Grafted Wargear stays on the battlefield, unattached, and its becomes-unattached trigger fires; there is nothing left to sacrifice. Hill Giant stays 3/3.",
           "operation": {
-            "unclassifiable": "a different spell and decision; destroys a permanent"
+            "unclassifiable": "choice: A casts Doom Blade instead of equipping"
           }
         },
         {
@@ -285,7 +285,7 @@
           "delta": "Grafted Wargear starts unattached, and A equips it to Hill Giant.",
           "expected": "Grafted Wargear attaches to Hill Giant (6/5). No becomes-unattached trigger fires and Grizzly Bears stays on the battlefield.",
           "operation": {
-            "unclassifiable": "changes attachment, which is not a fork operation"
+            "unclassifiable": "not a board edit: whether the Equipment starts attached is attachment, which no operation sets"
           }
         }
       ],

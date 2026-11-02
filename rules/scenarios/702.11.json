@@ -65,7 +65,7 @@
           "delta": "A checks whether Prodigal Sorcerer's {T} ability can target Gladecover Scout instead of casting Shock.",
           "expected": "Gladecover Scout is not a legal target for the ability either.",
           "operation": {
-            "unclassifiable": "A different ability is checked (the creature's tap ability instead of the instant); a different decision, which no fork operation makes."
+            "unclassifiable": "choice: A checks the ability instead of casting Shock: a different ability activated."
           }
         },
         {
@@ -74,7 +74,7 @@
           "delta": "The target checked is Grizzly Bears, which has no hexproof.",
           "expected": "Grizzly Bears is a legal target for Shock.",
           "operation": {
-            "unclassifiable": "A different target is checked (a creature without hexproof, already on the battlefield); no fork operation changes a targeting choice."
+            "unclassifiable": "target: the checked target is Grizzly Bears instead of Gladecover Scout."
           }
         },
         {
@@ -83,7 +83,7 @@
           "delta": "Gladecover Scout is controlled by A instead of B, and A targets it with Shock.",
           "expected": "Gladecover Scout is a legal target for Shock, because hexproof protects it only from its controller's opponents.",
           "operation": {
-            "unclassifiable": "The hexproof creature changes controller and A targets it; a control change plus a different target, which no fork operation makes."
+            "unclassifiable": "more than one fact: Gladecover Scout changes controller from B to A: a removal plus an addition."
           }
         }
       ],
@@ -164,7 +164,7 @@
           "delta": "B passes without casting Snakeskin Veil.",
           "expected": "Doom Blade resolves, and Grizzly Bears is destroyed and moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "B does not cast the response spell the base casts; a different decision, which no fork operation makes."
+            "unclassifiable": "choice: B passes instead of casting Snakeskin Veil in response: a different response."
           }
         }
       ],
@@ -240,9 +240,7 @@
           "polarity": "does_not_fire",
           "delta": "Witchbane Orb is not on the battlefield.",
           "expected": "Player B is a legal target for Shock.",
-          "operation": {
-            "unclassifiable": "The artifact granting the player hexproof is removed from the battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "creature_target",
@@ -250,7 +248,7 @@
           "delta": "Shock is checked against Grizzly Bears instead of player B.",
           "expected": "Grizzly Bears is a legal target for Shock; the player's hexproof does not protect B's permanents.",
           "operation": {
-            "unclassifiable": "A different target is checked (a creature instead of the player); no fork operation changes a targeting choice."
+            "unclassifiable": "target: Shock is checked against Grizzly Bears instead of player B."
           }
         }
       ],
@@ -325,7 +323,7 @@
           "delta": "A checks Shock (red), paid with Mountain, instead of Doom Blade.",
           "expected": "Garruk's Harbinger is a legal target for Shock.",
           "operation": {
-            "unclassifiable": "A different spell is checked (a red instant instead of the black one); a different spell, which no fork operation makes."
+            "unclassifiable": "choice: A casts Shock instead of Doom Blade: a different spell cast."
           }
         },
         {
@@ -334,7 +332,7 @@
           "delta": "Garruk's Harbinger is controlled by A instead of B, and A checks Doom Blade.",
           "expected": "Garruk's Harbinger is a legal target for Doom Blade, because the ability protects it only from its controller's opponents.",
           "operation": {
-            "unclassifiable": "The hexproof-from creature changes controller; no fork operation changes a permanent's controller."
+            "unclassifiable": "more than one fact: Garruk's Harbinger changes controller from B to A: a removal plus an addition."
           }
         }
       ],
@@ -412,7 +410,7 @@
           "delta": "A does not activate Shadowspear's ability.",
           "expected": "Garruk's Harbinger is not a legal target for Doom Blade.",
           "operation": {
-            "unclassifiable": "A does not activate the ability the base activates; a different decision, which no fork operation makes."
+            "unclassifiable": "choice: A does not activate Shadowspear's ability: a different ability activated."
           }
         }
       ],
@@ -486,9 +484,7 @@
           "polarity": "does_not_fire",
           "delta": "Glaring Spotlight is not on the battlefield.",
           "expected": "Garruk's Harbinger is not a legal target for Doom Blade.",
-          "operation": {
-            "unclassifiable": "The artifact letting A ignore hexproof is removed from the battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "opponent_spotlight",
@@ -496,7 +492,7 @@
           "delta": "Glaring Spotlight is controlled by B instead of A.",
           "expected": "Garruk's Harbinger is not a legal target for Doom Blade, because the permission applies only to the spotlight controller's spells and abilities.",
           "operation": {
-            "unclassifiable": "The artifact letting its controller ignore hexproof changes controller; no fork operation changes a permanent's controller."
+            "unclassifiable": "more than one fact: Glaring Spotlight changes controller: a removal plus an addition."
           }
         }
       ],
@@ -573,7 +569,7 @@
           "delta": "A checks Pacifism (white Aura spell), paid with Plains and Mountain, instead of Last Gasp.",
           "expected": "Raddic, Tal Zealot is not a legal target for Pacifism.",
           "operation": {
-            "unclassifiable": "A different spell is checked (a white Aura instead of the black instant); a different spell, which no fork operation makes."
+            "unclassifiable": "choice: A checks Pacifism instead of Last Gasp: a different spell cast."
           }
         },
         {
@@ -582,7 +578,7 @@
           "delta": "A checks Shock (red), paid with Mountain, instead of Last Gasp.",
           "expected": "Raddic, Tal Zealot is a legal target for Shock.",
           "operation": {
-            "unclassifiable": "A different spell is checked (a red instant instead of the black one); a different spell, which no fork operation makes."
+            "unclassifiable": "choice: A checks Shock instead of Last Gasp: a different spell cast."
           }
         }
       ],
@@ -660,7 +656,7 @@
           "delta": "A checks Aether Spellbomb's return-to-hand ability (a colorless source), paid with Island and sacrificing the Spellbomb, instead of Shock.",
           "expected": "Breaker of Creation is a legal target for the ability of the colorless Aether Spellbomb.",
           "operation": {
-            "unclassifiable": "A different ability is checked (a colourless artifact's ability instead of the red instant); a different decision, which no fork operation makes."
+            "unclassifiable": "choice: A checks Aether Spellbomb's ability instead of Shock: a different ability activated."
           }
         }
       ],

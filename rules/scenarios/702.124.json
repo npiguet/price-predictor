@@ -59,9 +59,7 @@
           "polarity": "does_not_fire",
           "delta": "A's library holds three Forests and no Toothy, Imaginary Friend.",
           "expected": "The trigger resolves and A finds nothing. A's hand stays empty, and the library is shuffled.",
-          "operation": {
-            "unclassifiable": "changes a hand or library or the zone a card starts in"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [

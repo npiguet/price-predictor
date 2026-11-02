@@ -70,7 +70,7 @@
           "delta": "B blocks Triton Shorethief with Grizzly Bears.",
           "expected": "No player was dealt combat damage this turn. Casting Latchkey Faerie is not legal (can_play false).",
           "operation": {
-            "unclassifiable": "a different block decision by B"
+            "unclassifiable": "choice: B declares a block on Triton Shorethief"
           }
         },
         {
@@ -79,7 +79,7 @@
           "delta": "A attacks with Goblin Piker instead of Triton Shorethief and B declares no blockers.",
           "expected": "B was dealt combat damage (life 18), but Goblin Piker is neither a Faerie nor a Rogue. Casting Latchkey Faerie is not legal (can_play false).",
           "operation": {
-            "unclassifiable": "a different attack declaration by A"
+            "unclassifiable": "choice: A attacks with Goblin Piker instead of Triton Shorethief"
           }
         }
       ],

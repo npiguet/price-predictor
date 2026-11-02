@@ -57,9 +57,7 @@
           "polarity": "fires",
           "delta": "B also controls Platinum Angel, which says B's opponents can't win the game.",
           "expected": "B still leaves the game by conceding and A still wins immediately; Platinum Angel's effect does not stop it.",
-          "operation": {
-            "unclassifiable": "adds a permanent (a can't-win static) to B's battlefield"
-          }
+          "operation": "add_permanent"
         },
         {
           "label": "no_concession",
@@ -67,7 +65,7 @@
           "delta": "B does not concede; both players keep passing priority with an empty stack and B stays at 20 life.",
           "expected": "No player has left the game, nobody wins, and the game continues.",
           "operation": {
-            "unclassifiable": "a different decision by B: B does not concede"
+            "unclassifiable": "choice: B does not concede"
           }
         }
       ],
@@ -281,7 +279,7 @@
           "delta": "A's library holds two cards (Mountain on top of Swamp) instead of one.",
           "expected": "A draws both cards and the library is empty, but A attempted no draw from an empty library, so A stays in the game.",
           "operation": {
-            "unclassifiable": "changes A's library (adds a card), which no fork operation does"
+            "unclassifiable": "not a board edit: the library gains a second card (Swamp); move_card moves or replaces a card, it does not add one from nowhere"
           }
         }
       ],
@@ -426,7 +424,7 @@
           "delta": "A casts Phage the Untouchable from hand, tapping seven Swamps, instead of casting Zombify.",
           "expected": "Phage was cast from A's hand, so its enters trigger does not fire; A stays in the game with Phage on the battlefield.",
           "operation": {
-            "unclassifiable": "a different spell cast: A casts the creature from hand instead of reanimating it"
+            "unclassifiable": "choice: A casts Phage from hand instead of casting Zombify"
           }
         }
       ],
@@ -562,7 +560,7 @@
           "delta": "Before casting Lightning Bolt, A casts Grizzly Bears (tapping both Forests) and it resolves; B then targets Grizzly Bears with the Reckoner trigger.",
           "expected": "Grizzly Bears is not a Dragon, so no further trigger happens; the trigger resolves and destroys Grizzly Bears, then Lightning Bolt deals 3 damage to B's Reckoner, which survives as a 4/4; the game goes on.",
           "operation": {
-            "unclassifiable": "a different spell cast and a different target: A casts another creature first and B's trigger targets it"
+            "unclassifiable": "choice: A casts Grizzly Bears first, and B's trigger targets it"
           }
         }
       ],
@@ -696,7 +694,7 @@
           "delta": "Grizzly Bears was exiled by another effect instead of by Karn Liberated's second ability.",
           "expected": "The game restarts as in the base, but neither exiled card returns to the battlefield; both go to A's library with the rest of A's cards.",
           "operation": {
-            "unclassifiable": "changes which effect exiled a card in exile, a card history no fork operation sets"
+            "unclassifiable": "not a board edit: which effect exiled a card in exile is not set by any operation"
           }
         },
         {

@@ -51,7 +51,7 @@
           "delta": "Prodigal Sorcerer is on B's battlefield instead and A considers activating it.",
           "expected": "A does not control Prodigal Sorcerer, so A cannot activate its ability (can_play false).",
           "operation": {
-            "unclassifiable": "control change of a permanent is not a fork operation"
+            "unclassifiable": "more than one fact: a change of controller is a removal plus an addition"
           }
         }
       ],
@@ -122,9 +122,7 @@
           "polarity": "does_not_fire",
           "delta": "Lonely Sandbar is in B's hand instead of A's.",
           "expected": "A neither controls nor owns Lonely Sandbar, so A cannot activate its cycling (can_play false).",
-          "operation": {
-            "unclassifiable": "moves a card between hands"
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [

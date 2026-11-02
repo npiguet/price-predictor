@@ -70,7 +70,7 @@
           "delta": "B casts Counterspell targeting Ancestral Recall in response, tapping both Islands.",
           "expected": "Counterspell resolves and Ancestral Recall is countered and put into A's graveyard; no card moves from A's library to A's hand and the library still holds four cards.",
           "operation": {
-            "unclassifiable": "B casts a spell in response (a different decision by a player)."
+            "unclassifiable": "choice: B casts Counterspell in response"
           }
         }
       ],
@@ -150,9 +150,7 @@
           "polarity": "does_not_fire",
           "delta": "Possessed Portal is on B's battlefield, so a player who would draw skips that draw.",
           "expected": "A's turn-based draw is skipped: A's hand stays empty and A's library keeps all three cards.",
-          "operation": {
-            "unclassifiable": "Adds a permanent to the battlefield."
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -225,7 +223,7 @@
           "delta": "B's library holds one card.",
           "expected": "B draws the one card and Underworld Dreams triggers once; the second draw finds no card, so it draws nothing and does not trigger Underworld Dreams. B loses the game in the state-based check before the trigger resolves.",
           "operation": {
-            "unclassifiable": "Changes a library."
+            "unclassifiable": "more than one fact: B's library shrinks from five cards to one, four cards moved"
           }
         },
         {
@@ -234,7 +232,7 @@
           "delta": "Underworld Dreams is controlled by B instead of A.",
           "expected": "B draws two cards but Underworld Dreams only triggers on an opponent's draws: no trigger fires and B stays at 20 life.",
           "operation": {
-            "unclassifiable": "Changes the controller of a permanent."
+            "unclassifiable": "more than one fact: Underworld Dreams changes controller, a removal plus an addition"
           }
         }
       ],
@@ -324,7 +322,7 @@
           "delta": "B casts Opt instead of Divination, so the instruction draws one card.",
           "expected": "Alms Collector's replacement does not apply to a draw of fewer than two cards: B draws one card, so B's hand is Divination plus one drawn card, and A draws nothing, so A's library keeps all four cards.",
           "operation": {
-            "unclassifiable": "A different spell is cast."
+            "unclassifiable": "choice: B casts Opt instead of Divination"
           }
         }
       ],
@@ -407,7 +405,7 @@
           "delta": "It is A's second turn and A already drew a card in the draw step, so A has drawn one card this turn.",
           "expected": "Divination resolves but A draws no card: every further draw this turn is blocked. A's library keeps its four cards.",
           "operation": {
-            "unclassifiable": "Changes the turn and a draw already made."
+            "unclassifiable": "history: A has already drawn a card this turn"
           }
         },
         {
@@ -416,7 +414,7 @@
           "delta": "Spirit of the Labyrinth is in A's graveyard instead of on the battlefield.",
           "expected": "Divination resolves and A draws Forest and Mountain; A's hand has two cards and A's library is Plains, Swamp.",
           "operation": {
-            "unclassifiable": "Moves a permanent between zones."
+            "unclassifiable": "more than one fact: Spirit of the Labyrinth is in the graveyard instead of on the battlefield, a removal plus a move"
           }
         }
       ],
@@ -498,7 +496,7 @@
           "delta": "B is the active player and A casts Vision Skeins on B's turn.",
           "expected": "B, now the active player, draws its two cards first and A draws its two cards second, although A cast the spell.",
           "operation": {
-            "unclassifiable": "Changes the active player and turn."
+            "unclassifiable": "phase or turn: B is the active player"
           }
         },
         {
@@ -507,7 +505,7 @@
           "delta": "B casts Counterspell targeting Vision Skeins, tapping both Islands.",
           "expected": "Vision Skeins is countered; neither player draws and both libraries keep four cards.",
           "operation": {
-            "unclassifiable": "B casts a spell in response."
+            "unclassifiable": "choice: B casts Counterspell in response"
           }
         }
       ],
@@ -584,7 +582,7 @@
           "delta": "Omen Machine, which says players can't draw cards, is on B's battlefield instead of in B's hand.",
           "expected": "A can't choose to have a player draw a card: the choice is not available, nothing happens and A stays in the game.",
           "operation": {
-            "unclassifiable": "Moves a card between zones."
+            "unclassifiable": "more than one fact: Omen Machine is on the battlefield instead of in hand, a hand removal plus an addition"
           }
         }
       ],
@@ -658,7 +656,7 @@
           "delta": "Omen Machine, which says players can't draw cards, is on B's battlefield instead of in B's hand.",
           "expected": "A can't choose to have B draw a card: the choice is not available, nothing happens and B stays in the game.",
           "operation": {
-            "unclassifiable": "Moves a card between zones."
+            "unclassifiable": "more than one fact: Omen Machine is on the battlefield instead of in hand, a hand removal plus an addition"
           }
         }
       ],
@@ -731,7 +729,7 @@
           "delta": "A's library holds two cards, Forest and Mountain.",
           "expected": "A draws both cards, the library is now empty but no draw failed, and A stays in the game at 20 life.",
           "operation": {
-            "unclassifiable": "Changes a library."
+            "unclassifiable": "not a board edit: adds a Mountain to A's library from no zone"
           }
         },
         {
@@ -739,9 +737,7 @@
           "polarity": "fires",
           "delta": "A's library is empty.",
           "expected": "Both draws are attempted from an empty library and A loses the game at the next state-based check.",
-          "operation": {
-            "unclassifiable": "Changes a library."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -824,7 +820,7 @@
           "delta": "B's library is empty.",
           "expected": "Impulse looks at no cards and moves none; B has not attempted a draw, so B stays in the game at 20 life and Underworld Dreams does not trigger.",
           "operation": {
-            "unclassifiable": "Changes a library."
+            "unclassifiable": "more than one fact: B's library shrinks from five cards to none, five cards moved"
           }
         },
         {
@@ -833,7 +829,7 @@
           "delta": "B casts Divination instead of Impulse.",
           "expected": "B draws two cards; Underworld Dreams triggers twice and B takes 2 damage, ending at 18 life.",
           "operation": {
-            "unclassifiable": "A different spell is cast."
+            "unclassifiable": "choice: B casts Divination instead of Impulse"
           }
         }
       ],
@@ -907,7 +903,7 @@
           "delta": "A does not activate Words of Worship and casts only Opt with one Island.",
           "expected": "Opt's draw is attempted from the empty library; A stays at 20 life and loses the game at the next state-based check.",
           "operation": {
-            "unclassifiable": "A different decision: an ability is not activated."
+            "unclassifiable": "choice: A does not activate Words of Worship"
           }
         }
       ],
@@ -989,7 +985,7 @@
           "delta": "A does not activate Words of Worship.",
           "expected": "No draw is replaced: A draws Forest and Mountain and stays at 20 life; A's library is Plains.",
           "operation": {
-            "unclassifiable": "A different decision: an ability is not activated."
+            "unclassifiable": "choice: A does not activate Words of Worship"
           }
         }
       ],
@@ -1066,9 +1062,7 @@
           "polarity": "does_not_fire",
           "delta": "Thought Reflection is not on the battlefield.",
           "expected": "A draws Grizzly Bears and reveals it; Jace loses 2 loyalty counters for its mana value of 2 and has 2 loyalty.",
-          "operation": {
-            "unclassifiable": "Removes a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -1153,7 +1147,7 @@
           "delta": "A casts Shock targeting Swans of Bryn Argoll instead of Lightning Bolt.",
           "expected": "The 2 damage is prevented and A draws 2 cards one at a time (Forest, Mountain); Underworld Dreams triggers twice and A is at 18 life.",
           "operation": {
-            "unclassifiable": "A different spell is cast."
+            "unclassifiable": "choice: A casts Shock instead of Lightning Bolt"
           }
         },
         {
@@ -1162,7 +1156,7 @@
           "delta": "A casts Lightning Bolt targeting Grizzly Bears instead of Swans of Bryn Argoll.",
           "expected": "Grizzly Bears takes 3 damage and dies; no damage is prevented, A draws no cards and Underworld Dreams does not trigger.",
           "operation": {
-            "unclassifiable": "A different target."
+            "unclassifiable": "target: Lightning Bolt targets a different creature"
           }
         }
       ],
@@ -1248,7 +1242,7 @@
           "delta": "A assigns all 6 damage to Swans of Bryn Argoll and none to B.",
           "expected": "All 6 damage to Swans is prevented, B stays at 20, and A draws 6 cards one at a time, emptying the library; Underworld Dreams triggers six times and A is at 14.",
           "operation": {
-            "unclassifiable": "A different damage assignment by a player."
+            "unclassifiable": "choice: A assigns combat damage differently"
           }
         },
         {
@@ -1257,7 +1251,7 @@
           "delta": "B does not block.",
           "expected": "Colossal Dreadmaw deals 6 damage to B, who is at 14. No damage is prevented, A draws no cards and Underworld Dreams does not trigger.",
           "operation": {
-            "unclassifiable": "A different blocking decision."
+            "unclassifiable": "choice: B does not block"
           }
         }
       ],
@@ -1344,7 +1338,7 @@
           "delta": "A also holds a Forest in hand.",
           "expected": "A discards Forest to pay the discard cost; Magmatic Insight becomes cast and the Mountain A drew is then a normal card in hand. Magmatic Insight resolves and A draws Forest and Plains: A's hand is Mountain, Forest, Plains and the discarded Forest is in the graveyard.",
           "operation": {
-            "unclassifiable": "Changes a hand."
+            "unclassifiable": "not a board edit: adds a Forest to A's hand from no zone"
           }
         }
       ],

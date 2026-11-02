@@ -54,7 +54,7 @@
           "delta": "It is A's second main phase (step main2).",
           "expected": "Casting Grizzly Bears is legal: can_play is true.",
           "operation": {
-            "unclassifiable": "changes the phase"
+            "unclassifiable": "phase or turn: the step is main2 instead of main1"
           }
         },
         {
@@ -63,7 +63,7 @@
           "delta": "It is A's beginning of combat step (step beginning_of_combat) and A has priority.",
           "expected": "Casting Grizzly Bears is not legal: can_play is false.",
           "operation": {
-            "unclassifiable": "changes the phase"
+            "unclassifiable": "phase or turn: the step is beginning of combat instead of main1"
           }
         },
         {
@@ -72,7 +72,7 @@
           "delta": "A has already cast Shock targeting B, tapping the Mountain. Shock is on the stack and A has priority.",
           "expected": "Casting Grizzly Bears is not legal: can_play is false while Shock is on the stack.",
           "operation": {
-            "unclassifiable": "adds a spell on the stack (a different spell cast)"
+            "unclassifiable": "timing: Shock is on the stack from a spell A cast"
           }
         },
         {
@@ -81,7 +81,7 @@
           "delta": "It is B's turn (active B), B's first main phase, the stack is empty and A has priority.",
           "expected": "Casting Grizzly Bears is not legal: can_play is false on B's turn.",
           "operation": {
-            "unclassifiable": "changes the turn"
+            "unclassifiable": "phase or turn: it is B's turn instead of A's"
           }
         }
       ],
@@ -161,7 +161,7 @@
           "delta": "B responds with Counterspell targeting Grizzly Bears, tapping both Islands; Counterspell resolves first.",
           "expected": "Counterspell counters Grizzly Bears. Grizzly Bears moves to A's graveyard and never reaches the battlefield. Counterspell moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "a different spell cast by B in response"
+            "unclassifiable": "choice: B casts Counterspell, a different spell, in response"
           }
         }
       ],
@@ -230,7 +230,7 @@
           "delta": "Bonesplitter is attached to Grizzly Bears.",
           "expected": "Grizzly Bears has power 4 and deals 4 combat damage to B, whose life is 16.",
           "operation": {
-            "unclassifiable": "attaches an Equipment already on the battlefield; no fork operation changes an attachment"
+            "unclassifiable": "not a board edit: attaching an Equipment to a creature; no operation attaches"
           }
         },
         {
@@ -239,7 +239,7 @@
           "delta": "A attacks with Ornithopter (0/2) instead of Grizzly Bears.",
           "expected": "Ornithopter has power 0 and deals no combat damage. B's life stays 20.",
           "operation": {
-            "unclassifiable": "a different attacker declared by the player (Ornithopter is already on the battlefield)"
+            "unclassifiable": "choice: A attacks with Ornithopter instead of Grizzly Bears"
           }
         }
       ],
@@ -300,7 +300,7 @@
           "delta": "Shock targets Centaur Courser instead.",
           "expected": "Centaur Courser (3/3) has 2 damage marked, less than its toughness, and stays on the battlefield.",
           "operation": {
-            "unclassifiable": "a different target (Centaur Courser is already on the battlefield)"
+            "unclassifiable": "target: Shock targets Centaur Courser instead of Grizzly Bears"
           }
         }
       ],
@@ -364,7 +364,7 @@
           "delta": "Glorious Anthem is controlled by B instead of A.",
           "expected": "Grizzly Bears is a 2/2, its printed values.",
           "operation": {
-            "unclassifiable": "changes who controls the static source"
+            "unclassifiable": "more than one fact: the Anthem changes controller: a removal plus an addition"
           }
         },
         {
@@ -434,7 +434,7 @@
           "delta": "A does not activate Mutavault before combat.",
           "expected": "Mutavault is not a creature, so it is not a legal attacker. There are no legal attackers.",
           "operation": {
-            "unclassifiable": "a different decision (the animate ability is not activated)"
+            "unclassifiable": "choice: A does not activate Mutavault's animate ability"
           }
         }
       ],
@@ -502,7 +502,7 @@
           "delta": "B does not activate Mutavault.",
           "expected": "Mutavault is not a creature, so it is not a legal blocker. There are no legal blockers.",
           "operation": {
-            "unclassifiable": "a different decision (the animate ability is not activated)"
+            "unclassifiable": "choice: B does not activate Mutavault's animate ability"
           }
         }
       ],
@@ -573,7 +573,7 @@
           "delta": "Grizzly Bears has been on A's battlefield since before the turn began; A casts nothing.",
           "expected": "Grizzly Bears is a legal attacker.",
           "operation": {
-            "unclassifiable": "changes whether a spell is cast, a different decision"
+            "unclassifiable": "history: Grizzly Bears has been under A's control since before the turn began"
           }
         },
         {
@@ -582,7 +582,7 @@
           "delta": "A casts Raging Goblin (haste), tapping the Mountain, instead of Grizzly Bears, and attempts to attack with it.",
           "expected": "Raging Goblin is a legal attacker despite being cast this turn.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: A casts a different creature, Raging Goblin, and attacks with it"
           }
         }
       ],
@@ -642,7 +642,7 @@
           "delta": "Llanowar Elves has been on A's battlefield since before the turn began; A casts nothing.",
           "expected": "The tap ability can be activated and adds {G}.",
           "operation": {
-            "unclassifiable": "changes whether a spell is cast, a different decision"
+            "unclassifiable": "history: Llanowar Elves has been under A's control since before the turn began"
           }
         },
         {
@@ -651,7 +651,7 @@
           "delta": "A plays Dryad Arbor as a land instead of casting Llanowar Elves, then attempts to tap it for {G}.",
           "expected": "Dryad Arbor is a land creature that came under A's control this turn, so it cannot be tapped for mana: the activation is not legal.",
           "operation": {
-            "unclassifiable": "a different decision (a land is played instead of a spell cast)"
+            "unclassifiable": "choice: A plays Dryad Arbor as a land instead of casting Llanowar Elves"
           }
         }
       ],
@@ -713,7 +713,7 @@
           "delta": "A casts the second Shock on A's next turn instead, after the cleanup step of this turn.",
           "expected": "The 2 damage marked on Hill Giant is removed in the cleanup step. After the second Shock Hill Giant has 2 damage marked again and stays on the battlefield.",
           "operation": {
-            "unclassifiable": "changes the turn (the second Shock is cast after the cleanup step)"
+            "unclassifiable": "phase or turn: the second Shock is cast on A's next turn"
           }
         }
       ],
@@ -771,7 +771,7 @@
           "delta": "A attacks with Glistener Elf (1/1 infect) instead.",
           "expected": "Glistener Elf deals 1 damage to Grizzly Bears as one -1/-1 counter. Grizzly Bears has no damage marked and is a 1/1. Glistener Elf takes 2 damage and dies.",
           "operation": {
-            "unclassifiable": "a different attacker declared by the player (Glistener Elf is already on the battlefield)"
+            "unclassifiable": "choice: A attacks with Glistener Elf instead of Llanowar Elves"
           }
         }
       ],
@@ -833,7 +833,7 @@
           "delta": "B does not activate regeneration.",
           "expected": "Drudge Skeletons is destroyed in the state-based check and moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "a different decision (regeneration is not activated)"
+            "unclassifiable": "choice: B does not activate regeneration"
           }
         }
       ],

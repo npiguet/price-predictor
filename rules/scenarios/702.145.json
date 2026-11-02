@@ -66,7 +66,7 @@
           "delta": "A does not cast Into the Night and passes priority.",
           "expected": "It stays day during this turn. Hound Tamer stays front face up as a 3/3 Human Werewolf with trample and daybound.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: A does not cast Into the Night"
           }
         }
       ],
@@ -126,7 +126,7 @@
           "delta": "It is day instead of night.",
           "expected": "Hound Tamer enters front face up as a 3/3 Human Werewolf with trample. It is still day.",
           "operation": {
-            "unclassifiable": "changes the global day or night state"
+            "unclassifiable": "not a board edit: whether it is day or night is a game state no operation sets"
           }
         }
       ],
@@ -187,7 +187,7 @@
           "delta": "In main phase 1 A casts Shock targeting B, tapping the Mountain, and it resolves.",
           "expected": "B takes 2 damage (life 18). As B's turn begins it stays day. Hound Tamer stays front face up as a 3/3.",
           "operation": {
-            "unclassifiable": "a different spell cast"
+            "unclassifiable": "choice: A casts Shock"
           }
         }
       ],
@@ -247,7 +247,7 @@
           "delta": "It is already night instead of neither day nor night.",
           "expected": "It does not become day: it stays night and Hound Tamer enters transformed as Untamed Pup, a 4/4 Werewolf with trample.",
           "operation": {
-            "unclassifiable": "changes the global day or night state"
+            "unclassifiable": "not a board edit: whether it is day or night is a game state no operation sets"
           }
         }
       ],
@@ -312,7 +312,7 @@
           "delta": "A casts only one Shock; the second Shock stays in hand.",
           "expected": "B takes 2 damage (life 18). As B's turn begins it stays night. The permanent stays Untamed Pup, a 4/4 Werewolf with trample.",
           "operation": {
-            "unclassifiable": "a different number of spells cast"
+            "unclassifiable": "choice: A casts only one Shock"
           }
         }
       ],

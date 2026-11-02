@@ -51,9 +51,7 @@
           "polarity": "does_not_fire",
           "delta": "The card in A's hand is Llanowar Elves (a creature that is not a land) instead of Dryad Arbor.",
           "expected": "Casting Llanowar Elves without paying its mana cost is legal: can_play is true.",
-          "operation": {
-            "unclassifiable": "changes the card in a player's hand, not a permanent"
-          }
+          "operation": "move_card"
         },
         {
           "label": "play_as_land",
@@ -61,7 +59,7 @@
           "delta": "A plays Dryad Arbor as a land instead of attempting to cast it.",
           "expected": "Playing Dryad Arbor as a land is legal. It does not use the stack and enters the battlefield under A's control as a 1/1 green land creature.",
           "operation": {
-            "unclassifiable": "a different decision by the player (playing as a land instead of casting)"
+            "unclassifiable": "choice: A plays the card as a land instead of attempting to cast it"
           }
         }
       ],

@@ -54,7 +54,7 @@
           "delta": "A attacks with Mons's Goblin Raiders only; Wings of the Guard does not attack.",
           "expected": "The melee trigger does not fire. Wings of the Guard stays 1/1. B takes 1 combat damage and is at 19.",
           "operation": {
-            "unclassifiable": "a different decision or choice by a player"
+            "unclassifiable": "choice: A attacks with only one creature"
           }
         }
       ],
@@ -130,7 +130,7 @@
           "delta": "The Fang of the Pack trigger targets Mons's Goblin Raiders instead of Wings of the Guard.",
           "expected": "Wings of the Guard has one instance of melee, so one melee trigger fires and it is 2/2 until end of turn. B takes 2 combat damage and is at 18.",
           "operation": {
-            "unclassifiable": "a different target"
+            "unclassifiable": "target: the Fang of the Pack trigger targets a different creature"
           }
         }
       ],

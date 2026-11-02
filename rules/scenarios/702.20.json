@@ -53,7 +53,7 @@
           "delta": "A attacks with Grizzly Bears instead of Alpine Watchdog.",
           "expected": "Grizzly Bears is attacking and tapped. Its combat damage puts B at 18.",
           "operation": {
-            "unclassifiable": "A different attack declaration: a different decision by a player."
+            "unclassifiable": "choice: A attacks with Grizzly Bears instead of Alpine Watchdog: a different attack declared."
           }
         }
       ],

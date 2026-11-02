@@ -54,7 +54,7 @@
           "delta": "B declares Giant Spider (reach) as the blocker instead of Grizzly Bears.",
           "expected": "Declaring Giant Spider as a blocker of A's Wind Drake is legal.",
           "operation": {
-            "unclassifiable": "A different blocker is declared: a different decision by a player."
+            "unclassifiable": "choice: B declares Giant Spider as the blocker instead of Grizzly Bears: a different block."
           }
         },
         {
@@ -63,7 +63,7 @@
           "delta": "B declares its own Wind Drake (flying) as the blocker instead of Grizzly Bears.",
           "expected": "Declaring B's Wind Drake as a blocker of A's Wind Drake is legal.",
           "operation": {
-            "unclassifiable": "A different blocker is declared: a different decision by a player."
+            "unclassifiable": "choice: B declares its Wind Drake as the blocker instead of Grizzly Bears: a different block."
           }
         }
       ],

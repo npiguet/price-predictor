@@ -65,7 +65,7 @@
           "delta": "B's Shock targeting A, paid with B's Mountain, is already on the stack (set up on the stack) and A has priority in response.",
           "expected": "Grizzly Bears is not castable (can_play false) while the stack is non-empty.",
           "operation": {
-            "unclassifiable": "Puts B's Shock on the stack: a new stack object, which no fork operation adds."
+            "unclassifiable": "timing: B's Shock targeting A is on the stack, which is empty in the base"
           }
         },
         {
@@ -74,7 +74,7 @@
           "delta": "The step is beginning_of_combat instead of main1 (empty stack, A has priority).",
           "expected": "Grizzly Bears is not castable (can_play false) outside a main phase.",
           "operation": {
-            "unclassifiable": "Changes the step; no fork operation changes the phase or step."
+            "unclassifiable": "phase or turn: the step is beginning_of_combat instead of main1"
           }
         }
       ],
@@ -150,7 +150,7 @@
           "delta": "A passes priority; B casts Shock targeting A, tapping Mountain; A receives priority with B's Shock on the stack.",
           "expected": "Shock is still castable by A (can_play true) with a spell on the stack; A's Shock resolves first and B's life is 18, then B's Shock resolves and A's life is 18.",
           "operation": {
-            "unclassifiable": "A different sequence of decisions: A passes and B casts a spell, putting it on the stack."
+            "unclassifiable": "choice: A passes and B casts Shock, putting it on the stack"
           }
         },
         {
@@ -159,7 +159,7 @@
           "delta": "The step is untap instead of beginning_of_combat.",
           "expected": "Shock is not castable (can_play false) because no player receives priority in the untap step.",
           "operation": {
-            "unclassifiable": "Changes the step; no fork operation changes the phase or step."
+            "unclassifiable": "phase or turn: the step is untap instead of beginning_of_combat"
           }
         }
       ],
@@ -231,7 +231,7 @@
           "delta": "B's Shock targeting Mogg Fanatic, paid with B's Mountain, is already on the stack (set up on the stack) and A has priority.",
           "expected": "The ability is still activatable with a spell on the stack; A sacrifices Mogg Fanatic in response targeting B, the ability resolves first (B's life is 19) and B's Shock then fizzles.",
           "operation": {
-            "unclassifiable": "Puts B's Shock on the stack: a new stack object, which no fork operation adds."
+            "unclassifiable": "timing: B's Shock targeting Mogg Fanatic is on the stack, which is empty in the base"
           }
         },
         {
@@ -240,7 +240,7 @@
           "delta": "The step is untap instead of beginning_of_combat.",
           "expected": "The ability is not activatable (can_play false) because no player receives priority in the untap step.",
           "operation": {
-            "unclassifiable": "Changes the step; no fork operation changes the phase or step."
+            "unclassifiable": "phase or turn: the step is untap instead of beginning_of_combat"
           }
         }
       ],
@@ -319,9 +319,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls only two Forests, not three.",
           "expected": "A has no mana ability to activate; the payment cannot be made and Force Spike counters Grizzly Bears, which goes to A's graveyard.",
-          "operation": {
-            "unclassifiable": "Removes a land from A's battlefield; no fork operation removes a permanent."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -386,7 +384,7 @@
           "delta": "A casts Grizzly Bears (tapping Forest and Mountain) instead of Shock.",
           "expected": "Guttersnipe's trigger does not fire; the stack holds only Grizzly Bears and B's life stays 20.",
           "operation": {
-            "unclassifiable": "A casts a different spell: a different decision by a player."
+            "unclassifiable": "choice: A casts a different spell"
           }
         }
       ],
@@ -460,7 +458,7 @@
           "delta": "A casts Shock targeting B (tapping Mountain) instead of Grizzly Bears.",
           "expected": "No creature enters, so Soul Warden's trigger does not fire; A's life stays 20 and B's life is 18.",
           "operation": {
-            "unclassifiable": "A casts a different spell: a different decision by a player."
+            "unclassifiable": "choice: A casts a different spell"
           }
         }
       ],
@@ -536,7 +534,7 @@
           "delta": "The step is untap instead of upkeep.",
           "expected": "No player receives priority in the untap step; nothing is on the stack and A's life stays 20.",
           "operation": {
-            "unclassifiable": "Changes the step; no fork operation changes the phase or step."
+            "unclassifiable": "phase or turn: the step is untap instead of upkeep"
           }
         },
         {
@@ -545,7 +543,7 @@
           "delta": "The step is draw instead of upkeep.",
           "expected": "A draws Grizzly Bears as a turn-based action before receiving priority; Grizzly Bears is in A's hand when A first has priority, the upkeep trigger does not fire and A's life stays 20.",
           "operation": {
-            "unclassifiable": "Changes the step; no fork operation changes the phase or step."
+            "unclassifiable": "phase or turn: the step is draw instead of upkeep"
           }
         }
       ],
@@ -619,7 +617,7 @@
           "delta": "A passes priority with an empty stack, then B casts Shock targeting A, tapping Mountain; both pass and it resolves.",
           "expected": "A's life is 18; A, the active player, receives priority after B's Shock resolves, before B does.",
           "operation": {
-            "unclassifiable": "A different sequence of decisions: A passes and B casts the spell."
+            "unclassifiable": "choice: A passes and B casts the spell"
           }
         },
         {
@@ -628,7 +626,7 @@
           "delta": "A taps Mountain for mana instead of casting Shock; nothing is put on the stack.",
           "expected": "No spell or ability resolves; A, who activated the mana ability, still holds priority and B's life stays 20.",
           "operation": {
-            "unclassifiable": "A different decision: A activates a mana ability instead of casting a spell."
+            "unclassifiable": "choice: A activates a mana ability instead of casting a spell"
           }
         }
       ],
@@ -698,7 +696,7 @@
           "delta": "A passes priority after casting the first Shock instead of casting the second; A casts the second Shock when A next receives priority, after B's Giant Growth.",
           "expected": "Stack bottom to top: Shock, Giant Growth, Shock. The second Shock resolves first and Grizzly Bears (2/2) moves to B's graveyard; Giant Growth and the first Shock fizzle.",
           "operation": {
-            "unclassifiable": "A different decision: A passes priority instead of casting the second spell at once."
+            "unclassifiable": "choice: A passes priority instead of casting the second spell at once"
           }
         }
       ],
@@ -767,7 +765,7 @@
           "delta": "After A passes, B casts Giant Growth targeting Grizzly Bears, tapping Forest, instead of passing; A then passes and B passes.",
           "expected": "B's action interrupted the succession, so Shock stayed on the stack; Giant Growth resolves first (Grizzly Bears 5/5), then after another full round of passes Shock resolves and Grizzly Bears survives with 2 damage marked.",
           "operation": {
-            "unclassifiable": "A different decision: B casts a spell in response instead of passing."
+            "unclassifiable": "choice: B casts a spell in response instead of passing"
           }
         },
         {
@@ -776,7 +774,7 @@
           "delta": "A casts no spell; A passes and B passes.",
           "expected": "The stack is empty, so no object resolves and the main phase ends: the game moves to beginning_of_combat; Grizzly Bears is untouched.",
           "operation": {
-            "unclassifiable": "A different decision: A casts no spell."
+            "unclassifiable": "choice: A casts no spell"
           }
         }
       ],
@@ -912,7 +910,7 @@
           "delta": "B casts nothing in response.",
           "expected": "Shock resolves with no spell above it and Grizzly Bears (2/2) moves to B's graveyard.",
           "operation": {
-            "unclassifiable": "A different decision: B casts nothing in response."
+            "unclassifiable": "choice: B casts nothing in response"
           }
         },
         {
@@ -921,7 +919,7 @@
           "delta": "After B's Giant Growth, A casts the second Shock targeting Grizzly Bears, tapping the second Mountain.",
           "expected": "The second Shock, cast last, resolves first: Grizzly Bears (2/2) dies; Giant Growth and the first Shock fizzle because their target is gone.",
           "operation": {
-            "unclassifiable": "A different decision: A casts another spell in response."
+            "unclassifiable": "choice: A casts another spell in response"
           }
         }
       ],

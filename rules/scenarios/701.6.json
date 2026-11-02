@@ -62,7 +62,7 @@
           "delta": "B holds Counterspell and does not cast it; both players pass and Grizzly Bears resolves.",
           "expected": "Grizzly Bears resolves and is on A's battlefield. Counterspell is still in B's hand. A's graveyard is empty.",
           "operation": {
-            "unclassifiable": "B casting or not casting a response is a different player decision; no fork operation changes it"
+            "unclassifiable": "choice: B does not cast Counterspell"
           }
         }
       ],
@@ -141,7 +141,7 @@
           "delta": "B does not cast Stifle; both players pass.",
           "expected": "The ability resolves and deals 1 damage to B, whose life is 19. Prodigal Sorcerer is tapped on A's battlefield. Stifle is still in B's hand.",
           "operation": {
-            "unclassifiable": "B casting or not casting a response is a different player decision; no fork operation changes it"
+            "unclassifiable": "choice: B does not cast Stifle"
           }
         }
       ],
@@ -221,7 +221,7 @@
           "delta": "B does not cast Counterspell and passes.",
           "expected": "Shock resolves and deals 2 damage to B, whose life is 18. The first Mountain is tapped as in the base variant.",
           "operation": {
-            "unclassifiable": "B casting or not casting a response is a different player decision; no fork operation changes it"
+            "unclassifiable": "choice: B does not cast Counterspell"
           }
         }
       ],
@@ -292,7 +292,7 @@
           "delta": "B does not cast Counterspell and passes.",
           "expected": "Fireblast resolves and deals 4 damage to B, whose life is 16. Both Mountains are in A's graveyard as in the base variant.",
           "operation": {
-            "unclassifiable": "B casting or not casting a response is a different player decision; no fork operation changes it"
+            "unclassifiable": "choice: B does not cast Counterspell"
           }
         }
       ],
@@ -361,7 +361,7 @@
           "delta": "B does not cast Stifle and passes.",
           "expected": "The ability resolves and deals 1 damage to B, whose life is 19. Mogg Fanatic is in A's graveyard.",
           "operation": {
-            "unclassifiable": "B casting or not casting a response is a different player decision; no fork operation changes it"
+            "unclassifiable": "choice: B does not cast Stifle"
           }
         }
       ],

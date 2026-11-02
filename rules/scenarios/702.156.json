@@ -60,7 +60,7 @@
           "delta": "A casts Aberrant with X = 4, tapping six Forests.",
           "expected": "Aberrant enters with four +1/+1 counters and is a 4/4. The ravenous trigger does not fire (X is less than 5): A draws no card, hand is empty, library 2 cards.",
           "operation": {
-            "unclassifiable": "a different value of X"
+            "unclassifiable": "choice: X chosen as 4 instead of 5"
           }
         }
       ],

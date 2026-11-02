@@ -277,9 +277,7 @@
           "polarity": "does_not_fire",
           "delta": "A's hand holds Divination ({2}{U}) instead of Ancestral Vision.",
           "expected": "Divination is castable: can_play is true, with a cost of {2}{U}.",
-          "operation": {
-            "unclassifiable": "Changes the card in A's hand."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -350,9 +348,7 @@
           "polarity": "fires",
           "delta": "Omniscience is not on the battlefield.",
           "expected": "Ancestral Vision cannot be cast: can_play is false. The cost is unpayable and stays unpayable under Sphere of Resistance's increase, even with an untapped Island.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from A's battlefield."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "no_mana_for_increase",
@@ -430,18 +426,14 @@
           "polarity": "does_not_fire",
           "delta": "Only two Mountains are on the battlefield.",
           "expected": "The reduced cost {2}{R} needs three mana and A has two, so Hill Giant cannot be cast (can_play is false).",
-          "operation": {
-            "unclassifiable": "Removes a land from A's battlefield."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "no_medallion",
           "polarity": "does_not_fire",
           "delta": "Ruby Medallion is not on the battlefield.",
           "expected": "Hill Giant costs {3}{R}, which three Mountains cannot pay, so it cannot be cast (can_play is false).",
-          "operation": {
-            "unclassifiable": "Removes a permanent from A's battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -496,9 +488,7 @@
           "polarity": "does_not_fire",
           "delta": "A's hand holds Goblin Piker ({1}{R}) instead of Ember Hauler.",
           "expected": "The {1} reduction removes the generic part, so Goblin Piker costs {R}. The cast is legal (can_play is true), the Mountain is tapped and Goblin Piker resolves onto the battlefield.",
-          "operation": {
-            "unclassifiable": "Changes the card in A's hand."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -555,18 +545,14 @@
           "polarity": "does_not_fire",
           "delta": "Goblin Influx Array is not on the battlefield.",
           "expected": "Mirror Entity costs {2}{W}, which two Plains cannot pay, so it cannot be cast (can_play is false).",
-          "operation": {
-            "unclassifiable": "Removes a permanent from A's battlefield."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "red_in_cost",
           "polarity": "other",
           "delta": "A's hand holds Goblin Piker ({1}{R}) instead of Mirror Entity.",
           "expected": "The {R} reduction removes the {R} component. Goblin Piker costs {1}, paid by tapping one Plains, and it resolves.",
-          "operation": {
-            "unclassifiable": "Changes the card in A's hand."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -712,9 +698,7 @@
           "polarity": "does_not_fire",
           "delta": "B's counterspell is Spell Snare (counter target spell with mana value 2) instead of Mental Misstep.",
           "expected": "Spell Snare cannot legally target Burst Lightning, whose mana value is 1 although A paid 5 mana. Burst Lightning resolves kicked and deals 4 damage to B, leaving B at 16.",
-          "operation": {
-            "unclassifiable": "Changes the counterspell in B's hand: a different spell cast."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -774,7 +758,7 @@
           "delta": "A applies only Fireblast's own alternative cost, sacrificing two Mountains, instead of Omniscience's permission.",
           "expected": "Both Mountains are sacrificed and go to A's graveyard. Fireblast deals 4 damage to B, leaving B at 16.",
           "operation": {
-            "unclassifiable": "A different choice of cost by A."
+            "unclassifiable": "choice: A pays Fireblast's own alternative cost (sacrificing two Mountains) instead of using Omniscience's permission"
           }
         },
         {
@@ -783,7 +767,7 @@
           "delta": "A proposes both alternative costs at once, sacrificing two Mountains and casting without paying the mana cost.",
           "expected": "The attempt is not legal as proposed: only one alternative cost can apply, so the two cannot be combined. Fireblast can be cast with either one alone.",
           "operation": {
-            "unclassifiable": "A different proposal by A: both alternative costs at once."
+            "unclassifiable": "choice: A proposes both alternative costs at once"
           }
         }
       ],
@@ -851,9 +835,7 @@
           "polarity": "does_not_fire",
           "delta": "B's counterspell is Mental Misstep (counter target spell with mana value 1) instead of Spell Snare.",
           "expected": "Mental Misstep cannot legally target Ancient Grudge, whose mana value is still 2. Ancient Grudge resolves and destroys Ruby Medallion, which goes to B's graveyard; Ancient Grudge is exiled (flashback).",
-          "operation": {
-            "unclassifiable": "Changes the counterspell in B's hand: a different spell cast."
-          }
+          "operation": "move_card"
         }
       ],
       "cards": [
@@ -929,9 +911,7 @@
           "polarity": "does_not_fire",
           "delta": "Sphere of Resistance is not on the battlefield.",
           "expected": "No increase applies. A sacrifices both Mountains, pays no mana (Island stays untapped), and Fireblast resolves, leaving B at 16.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from the battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -992,9 +972,7 @@
           "polarity": "does_not_fire",
           "delta": "A also controls Grizzly Bears.",
           "expected": "The Bombardment activation is legal, paid by sacrificing Grizzly Bears. When it resolves B takes 1 damage and is at 19; the Seer's scry also resolves.",
-          "operation": {
-            "unclassifiable": "Adds a creature to A's battlefield; no fork operation adds a permanent."
-          }
+          "operation": "add_permanent"
         }
       ],
       "cards": [
@@ -1061,18 +1039,14 @@
           "polarity": "other",
           "delta": "Rest in Peace is not on the battlefield.",
           "expected": "Grizzly Bears is put into A's graveyard as the cost. The ability resolves and B is at 19.",
-          "operation": {
-            "unclassifiable": "Removes a permanent from the battlefield."
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "nothing_to_sacrifice",
           "polarity": "does_not_fire",
           "delta": "Grizzly Bears is not on the battlefield.",
           "expected": "A controls no creature, so the activation is not legal (can_play is false) and B stays at 20.",
-          "operation": {
-            "unclassifiable": "Removes A's creature from the battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -1151,7 +1125,7 @@
           "delta": "Instead of making no response, A activates Seal of Cleansing in response to the trigger, sacrificing it, targeting Standstill.",
           "expected": "Standstill is destroyed before the trigger resolves. When the trigger resolves, Standstill cannot be sacrificed, so nobody draws. Shock deals 2 to A, leaving A at 18; A's library still has four Islands.",
           "operation": {
-            "unclassifiable": "A different decision: A activates an ability in response instead of passing."
+            "unclassifiable": "choice: A activates Seal of Cleansing in response to the trigger instead of passing"
           }
         }
       ],
@@ -1219,7 +1193,7 @@
           "delta": "A pays {1} by tapping the second Mountain instead of declining.",
           "expected": "Force Spike does nothing: Shock is not countered and resolves, dealing 2 to B, who is at 18.",
           "operation": {
-            "unclassifiable": "A different decision: A pays the unless cost instead of declining."
+            "unclassifiable": "choice: A pays the unless cost instead of declining"
           }
         }
       ],
@@ -1289,9 +1263,7 @@
           "polarity": "fires",
           "delta": "A's library holds Lightning Bolt instead of Forest, so the search finds no basic land.",
           "expected": "No card is found, the library is shuffled, and A still skips the draw step because A chose to search. A's hand is empty and Shock and Lightning Bolt stay in the library.",
-          "operation": {
-            "unclassifiable": "Changes the contents of A's library."
-          }
+          "operation": "move_card"
         },
         {
           "label": "declines_search",
@@ -1299,7 +1271,7 @@
           "delta": "A chooses not to search.",
           "expected": "The draw step is not skipped: A draws the top card, Shock. A's hand is Shock and Forest stays in the library.",
           "operation": {
-            "unclassifiable": "A different decision: A chooses not to search."
+            "unclassifiable": "choice: A chooses not to search"
           }
         }
       ],
@@ -1370,9 +1342,7 @@
           "polarity": "does_not_fire",
           "delta": "Vizier of the Menagerie is not on the battlefield.",
           "expected": "{W} cannot pay {R}, so Raging Goblin cannot be cast (can_play is false).",
-          "operation": {
-            "unclassifiable": "Removes a permanent from A's battlefield."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

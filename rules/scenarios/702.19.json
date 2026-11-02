@@ -58,7 +58,7 @@
           "delta": "The roles are reversed: B controls Colossal Dreadmaw and blocks with it, and A attacks with Grizzly Bears (no summoning sickness).",
           "expected": "Colossal Dreadmaw deals all 6 damage to Grizzly Bears, which is destroyed. A's life stays 20. Colossal Dreadmaw takes 2 damage and survives. No damage goes to either player.",
           "operation": {
-            "unclassifiable": "swaps which side controls the creatures and who attacks and blocks"
+            "unclassifiable": "more than one fact: The roles are reversed: Colossal Dreadmaw changes controller and attacker and blocker swap."
           }
         }
       ],
@@ -142,7 +142,7 @@
           "delta": "Grizzly Bears already has 1 damage marked, so lethal damage is 1.",
           "expected": "Grizzly Bears receives 1 damage and is destroyed. B takes 5 damage (life 15).",
           "operation": {
-            "unclassifiable": "marks damage on a creature, which none of the seven operations sets"
+            "unclassifiable": "history: damage already marked on Grizzly Bears."
           }
         },
         {
@@ -151,7 +151,7 @@
           "delta": "B blocks with two Grizzly Bears instead of one.",
           "expected": "Each Grizzly Bears receives 2 damage and is destroyed. B takes the 2 excess damage (life 18).",
           "operation": {
-            "unclassifiable": "adds a permanent and changes the block declaration"
+            "unclassifiable": "choice: B blocks with two Grizzly Bears instead of one, a different block declared, which also needs a second Grizzly Bears that B does not control in the base."
           }
         }
       ],
@@ -235,7 +235,7 @@
           "delta": "B blocks Thrasta with Grizzly Bears; A assigns 2 damage to Grizzly Bears, 3 to Jace Beleren and 2 to player B.",
           "expected": "Grizzly Bears is destroyed. Jace Beleren is dealt 3 damage and goes to B's graveyard. B takes 2 damage (life 18).",
           "operation": {
-            "unclassifiable": "a different block decision and damage assignment"
+            "unclassifiable": "choice: B blocks Thrasta with Grizzly Bears: a different block declared."
           }
         }
       ],
@@ -386,7 +386,7 @@
           "delta": "B blocks Thrasta with Grizzly Bears; A assigns 2 damage to Grizzly Bears and 5 to player B.",
           "expected": "Grizzly Bears is destroyed. B takes 5 damage (life 15). Jace Beleren is in B's graveyard.",
           "operation": {
-            "unclassifiable": "a different block decision and damage assignment"
+            "unclassifiable": "choice: B blocks Thrasta with Grizzly Bears: a different block declared."
           }
         },
         {
@@ -474,7 +474,7 @@
           "delta": "B does not cast Lightning Bolt, and Jace Beleren stays on the battlefield.",
           "expected": "Craw Wurm deals 6 damage to Jace Beleren, which loses all loyalty and goes to B's graveyard. B's life stays 20: the excess over the loyalty is not dealt to B.",
           "operation": {
-            "unclassifiable": "a different spell cast by B"
+            "unclassifiable": "choice: B does not cast Lightning Bolt: a different response."
           }
         },
         {
@@ -483,7 +483,7 @@
           "delta": "A attacks player B instead of Jace Beleren, and B does not cast Lightning Bolt.",
           "expected": "Craw Wurm deals 6 damage to B (life 14). Jace Beleren stays at 3 loyalty.",
           "operation": {
-            "unclassifiable": "a different attack target and no spell cast"
+            "unclassifiable": "choice: A attacks player B instead of Jace Beleren: a different attack declared."
           }
         }
       ],

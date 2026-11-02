@@ -59,7 +59,7 @@
           "delta": "A does not pay the entwine cost, chooses only the creature mode, and pays {2}{R} with three Mountains.",
           "expected": "Only the creature mode happens. Grizzly Bears dies; B's life stays 20.",
           "operation": {
-            "unclassifiable": "a different decision by a player, not a fork operation"
+            "unclassifiable": "choice: A does not pay the entwine cost and chooses one mode."
           }
         }
       ],
@@ -121,9 +121,7 @@
           "polarity": "does_not_fire",
           "delta": "A controls four Mountains instead of five.",
           "expected": "Casting with both modes is not legal because the five mana cannot be paid; casting with a single mode for {2}{R} is legal.",
-          "operation": {
-            "unclassifiable": "removes a permanent, not a fork operation"
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [
@@ -187,7 +185,7 @@
           "delta": "A does not pay the entwine cost and chooses only the tokens mode, paying {3}{R} with four Mountains.",
           "expected": "A has three 1/1 red Goblin tokens without haste.",
           "operation": {
-            "unclassifiable": "a different decision by a player, not a fork operation"
+            "unclassifiable": "choice: A does not pay the entwine cost and chooses one mode."
           }
         }
       ],

@@ -58,9 +58,7 @@
           "polarity": "other",
           "delta": "The top card of A's library is Shock instead of Serra Angel.",
           "expected": "Soul Summons resolves. Shock moves from A's library to the battlefield face down under A's control as a 2/2 colorless face-down creature with no name, no subtypes, no abilities and no mana cost. A's library holds only Forest.",
-          "operation": {
-            "unclassifiable": "The library's contents change; no fork operation changes a library."
-          }
+          "operation": "move_card"
         },
         {
           "label": "empty_library",
@@ -68,7 +66,7 @@
           "delta": "A's library is empty.",
           "expected": "Soul Summons resolves and nothing is manifested. A controls no new permanent. Soul Summons is in A's graveyard.",
           "operation": {
-            "unclassifiable": "The library's contents change; no fork operation changes a library."
+            "unclassifiable": "more than one fact: both library cards would have to leave, and no destination zone is stated"
           }
         }
       ],
@@ -327,7 +325,7 @@
           "delta": "A's library holds only Forest.",
           "expected": "Ethereal Ambush resolves. Forest is manifested as a 2/2 colorless face-down creature with no name, no subtypes, no abilities and no mana cost. The second manifest finds no card, so A controls exactly one face-down permanent and A's library is empty.",
           "operation": {
-            "unclassifiable": "The library's contents change; no fork operation changes a library."
+            "unclassifiable": "more than one fact: two library cards would have to leave, and no destination zone is stated"
           }
         }
       ],
@@ -406,18 +404,14 @@
           "polarity": "fires",
           "delta": "The top card of A's library is Shock instead of Serra Angel.",
           "expected": "Soul Summons resolves. The face-down object would be a creature, so Grafdigger's Cage still prevents it from entering. Shock stays on top of A's library and A controls no new permanent.",
-          "operation": {
-            "unclassifiable": "The library's contents change; no fork operation changes a library."
-          }
+          "operation": "move_card"
         },
         {
           "label": "no_cage",
           "polarity": "does_not_fire",
           "delta": "Grafdigger's Cage is not on the battlefield.",
           "expected": "Soul Summons resolves. Serra Angel enters the battlefield face down as a 2/2 colorless face-down creature with no name, no subtypes, no abilities and no mana cost. A's library holds only Forest.",
-          "operation": {
-            "unclassifiable": "A permanent is removed from the battlefield; removing a permanent is no fork operation."
-          }
+          "operation": "remove_permanent"
         }
       ],
       "cards": [

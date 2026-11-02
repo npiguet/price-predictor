@@ -64,7 +64,7 @@
           "delta": "Two Fugitive Wizards (1/1 each) are on A's battlefield instead of Grizzly Bears; both are tapped to saddle.",
           "expected": "Both Fugitive Wizards are tapped, their total power 2 meeting the cost. Quilled Charger becomes saddled, its attack trigger fires and it deals 5 damage. B is at 15.",
           "operation": {
-            "unclassifiable": "Replaces one permanent with two, adding a permanent; no fork operation adds a permanent."
+            "unclassifiable": "more than one fact: two Fugitive Wizards in Grizzly Bears' place is replace_card for one plus add_permanent for the other."
           }
         }
       ],
@@ -126,7 +126,7 @@
           "delta": "The step is beginning_of_combat instead of main1.",
           "expected": "Activating saddle is not legal: it is not a main phase.",
           "operation": {
-            "unclassifiable": "Changes the step of the turn; no fork operation changes the phase or step."
+            "unclassifiable": "phase or turn: the step is beginning_of_combat instead of main1."
           }
         },
         {
@@ -135,7 +135,7 @@
           "delta": "B has cast Shock targeting A, tapping B's Mountain; Shock is on the stack and A has priority.",
           "expected": "Activating saddle is not legal: the stack is not empty.",
           "operation": {
-            "unclassifiable": "Adds a spell an opponent casts to the stack; a different spell cast is no fork operation."
+            "unclassifiable": "timing: B's Shock is on the stack, so the stack is not empty."
           }
         },
         {
@@ -144,7 +144,7 @@
           "delta": "B is the active player instead of A.",
           "expected": "Activating saddle is not legal: it is not A's turn.",
           "operation": {
-            "unclassifiable": "Changes the active player, so whose turn it is; no fork operation changes the turn."
+            "unclassifiable": "phase or turn: B is the active player instead of A."
           }
         }
       ],
@@ -217,7 +217,7 @@
           "delta": "Quilled Charger became saddled during A's previous turn, not this turn (so Grizzly Bears, tapped for that saddle, untapped in this turn's untap step).",
           "expected": "Quilled Charger is no longer saddled, its attack trigger does not fire and it deals 4 damage. B is at 16. Grizzly Bears is untapped.",
           "operation": {
-            "unclassifiable": "Changes the turn on which the Mount became saddled, and with it the saddled designation and the creature's tapped state: game history and more than one fact."
+            "unclassifiable": "history: Quilled Charger became saddled during A's previous turn instead of this turn."
           }
         }
       ],

@@ -53,7 +53,7 @@
           "delta": "B blocks Frenzy Sliver with Grizzly Bears.",
           "expected": "The frenzy trigger does not fire. Frenzy Sliver stays 1/1, deals 1 damage to Grizzly Bears and dies to its 2 damage. B's life stays 20.",
           "operation": {
-            "unclassifiable": "a different decision or choice by a player"
+            "unclassifiable": "choice: B declares a block"
           }
         }
       ],
@@ -126,9 +126,7 @@
           "polarity": "other",
           "delta": "A controls only one Frenzy Sliver (the attacker).",
           "expected": "The attacking Frenzy Sliver has one frenzy 1 instance. It triggers once. It is 2/1 until end of turn and deals 2 damage to B (life 18).",
-          "operation": {
-            "unclassifiable": "adds or removes a permanent"
-          }
+          "operation": "remove_permanent"
         },
         {
           "label": "blocked",
@@ -136,7 +134,7 @@
           "delta": "B blocks the attacking Frenzy Sliver with Grizzly Bears.",
           "expected": "Neither frenzy instance triggers. The attacker stays 1/1, deals 1 damage to Grizzly Bears and dies. B's life stays 20.",
           "operation": {
-            "unclassifiable": "a different decision or choice by a player"
+            "unclassifiable": "choice: B declares a block"
           }
         }
       ],
