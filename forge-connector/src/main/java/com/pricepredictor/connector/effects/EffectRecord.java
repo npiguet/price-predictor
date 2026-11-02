@@ -165,7 +165,10 @@ public final class EffectRecord {
         return this;
     }
 
-    /** Only the {@code attackers} and {@code blockers} subkinds set this. */
+    /**
+     * Only the {@code blockers} subkind sets this: a gen-2 {@code attackers}
+     * record carried it too, and no what-if attackers record exists (FR-037).
+     */
     public EffectRecord whatIf(Boolean value) {
         this.whatIf = value;
         return this;
@@ -304,7 +307,7 @@ public final class EffectRecord {
                 .value("fork", fork)
                 .value("synthetic", false)
                 // Right after synthetic on every record, and what_if right
-                // after it on the two subkinds alone: the order is part of the
+                // after it where set (blockers alone): the order is part of the
                 // contract (record-schema-delta.md), and the reader names a
                 // shard's generation by the first field's presence.
                 .value("random_seat", randomSeat);

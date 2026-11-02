@@ -64,6 +64,8 @@ from effects.infrastructure.shard_io import (
     write_shard,
 )
 from tests.unit.effects.builders import (
+    GEN3_UNREAD_ATTACKERS_MEMBERS,
+    GEN3_UNREAD_BLOCKERS_MEMBERS,
     GEN3_UNREAD_CANDIDATE_MEMBERS,
     GEN3_UNREAD_STATE_MEMBERS,
     GEN3_UNREAD_VERDICT_MEMBERS,
@@ -815,6 +817,26 @@ class TestTheGen3EntityShape:
                     m for m in collected if m not in GEN3_UNREAD_CANDIDATE_MEMBERS]
                 assert list(after["verdict"]) == [
                     m for m in collected["verdict"] if m not in GEN3_UNREAD_VERDICT_MEMBERS]
+
+    @pytest.mark.parametrize(("subkind", "unread"), [
+        ("attackers", GEN3_UNREAD_ATTACKERS_MEMBERS),
+        ("blockers", GEN3_UNREAD_BLOCKERS_MEMBERS),
+    ])
+    def test_a_legality_payload_writes_back_every_member_but_the_unread_ones(
+            self, subkind, unread):
+        legality = [raw for raw in java_golden_records()
+                    if raw["kind"] == "playability" and raw["subkind"] == subkind]
+        assert legality
+        for raw in legality:
+            written = record_to_dict(record_from_dict(raw))["payload"]
+            assert list(written) == [m for m in raw["payload"] if m not in unread]
+        assert unread == {m for raw in legality for m in raw["payload"]} & unread
+
+    def test_an_attackers_record_carries_no_what_if(self):
+        attackers = [raw for raw in java_golden_records()
+                     if raw["kind"] == "playability" and raw["subkind"] == "attackers"]
+        assert attackers
+        assert not any("what_if" in raw for raw in attackers)
 
     def test_a_golden_record_survives_a_write_and_a_read(self):
         for raw in java_golden_records():

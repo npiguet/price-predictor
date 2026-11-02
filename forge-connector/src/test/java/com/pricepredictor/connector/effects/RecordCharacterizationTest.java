@@ -1,13 +1,18 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Multimap;
 import forge.card.MagicColor;
+import forge.game.GameEntity;
 import forge.game.ability.AbilityFactory;
 import forge.game.ability.AbilityKey;
 import forge.game.ability.ApiType;
 import forge.game.ability.SpellAbilityEffect;
 import forge.game.card.Card;
 import forge.game.combat.Combat;
+import forge.game.event.GameEventAttackersDeclared;
 import forge.game.event.GameEventCardDamaged;
+import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventPlayerDamaged;
 import forge.game.event.GameEventPlayerLivesChanged;
 import forge.game.mana.Mana;
@@ -259,11 +264,14 @@ class RecordCharacterizationTest {
     // ── playability ─────────────────────────────────────────────────────
 
     /**
-     * The three subkinds: a {@code decision} with no {@code what_if}, and the
-     * {@code attackers} and {@code blockers} legality records, which carry it.
-     * The decision is the one candidate written as a priority stop writes
+     * The three subkinds: a {@code decision} with no {@code what_if}, the
+     * {@code attackers} records anchored one per attacker, with no
+     * {@code what_if} either, and the {@code blockers} record, which carries
+     * it. The decision is the one candidate written as a priority stop writes
      * each it samples in; {@link PriorityCandidatesTest} covers the stop.
-     * The defending player is the random seat, so the blockers record is the
+     * The bears are declared and tapped by the attack, so their attackers
+     * record carries {@code tapped_by_attack}, and the elves' does not. The
+     * defending player is the random seat, so the blockers record is the
      * one stamped {@code random_seat}.
      */
     @Test
@@ -293,6 +301,11 @@ class RecordCharacterizationTest {
                     HookShapes.CombatLegality.class, collectors.playability().legalityHandler());
             listener.onAttackersDeclarable(
                     you, opponent, List.of(bears, elves), List.of(bears));
+            AttackDeclaration declaration = collectors.playability().declaration();
+            declaration.onTapped(new GameEventCardTapped(bears, true));
+            Multimap<GameEntity, Card> declared = ArrayListMultimap.create();
+            declared.put(opponent, bears);
+            declaration.onAttackersDeclared(new GameEventAttackersDeclared(you, declared));
             listener.onBlockersDeclarable(
                     opponent, bears, List.of(angel, giant), List.of(angel), 1);
         });

@@ -202,13 +202,16 @@ static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of
 | decision candidate | `failed_checks` | `[{check, responsible_static}]`, after `responsible_static` in the candidate, one entry per failed check in the order listed here; `responsible_static` a key list, one key where a static decided the check (`static_prohibition`), else empty; `check` ∈ `split_second`, `casting_speed`, `whose_turn`, `phase`, `combat`, `activation_limit`, `script_condition`, `zone`, `static_prohibition`, `cost`, `script_restriction` |
 | decision candidate | `legal_targets` | union over every targeting clause, uncapped |
 | decision candidate | `responsible_static` | the key of the static forbidding the play (its `static_prohibition` entry's), else empty |
-| `attackers` | `anchor_attacker`, `legal_defenders`, `must_attack`, `tapped_by_attack?` | one record per attacker |
-| `blockers` | `must_block` per listed creature | bool |
+| `attackers` | `anchor_attacker`, `legal_defenders`, `must_attack`, `tapped_by_attack?` | one record per creature the attacking player controls, these four first and `legal_attackers`, `forbidden` after them; `anchor_attacker` a card ref; `legal_defenders` the refs (`P`/`E`) of the declaration's defenders (players, planeswalkers, battles) the anchor may attack, in Forge's defender order, `[]` for a creature that may attack none; `must_attack` whether an attack requirement applies to the anchor (`AttackRequirement.hasRequirement`), whether or not it can attack; `tapped_by_attack` on a declared anchor only: whether a `GameEventCardTapped` for it arrived between the engine's first question and `GameEventAttackersDeclared`. `legal_attackers` and `forbidden` keep their gen-2 shape and are the declaration's, the same on each of its records: a creature is legal when it may attack at least one defender, and a forbidden one's `responsible_static` is the first static, in defender order, keeping it from a defender |
+| `blockers` | `must_block` | after `forbidden`: the refs of the listed creatures, legal or forbidden, in candidate order, that a requirement makes block the anchor; a listed creature not in it is false. Requirements: the creature's `getMustBlockCards`, the anchor's `MustBeBlockedBy` (while no creature of that kind blocks it) and `MustBeBlockedByAll`, a lure ("All creatures able to block CARDNAME do so."), and a `MustBlock` static naming the creature (names every attacker); a requirement whose block costs something is none (509.1c); recorded whether or not the creature can obey it |
 | probe `combat` | damage events' `source` | entity ref |
 
 ## Behaviour changes readers rely on
 
 - A combat record's snapshot precedes every damage event of its step.
+- An attackers record's snapshot is the board before the declaration, and the record is written when
+  the declaration is made, at the next declaration, or at the game's end; only the first gives
+  `tapped_by_attack`.
 - A resolution's effect half holds every death of the state-based loop after it. A trigger record
   never holds one.
 - A prevention event with amount 0 is not written.

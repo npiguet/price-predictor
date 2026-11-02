@@ -121,6 +121,9 @@ public final class GameRecording implements AutoCloseable {
     public void open() {
         game.subscribeToEvents(bracket);
         patched.install();
+        // The declaration's taps and its end, which hold its attackers
+        // records; it is asked nothing on a checkout without the combat hook.
+        game.subscribeToEvents(patched.playability().declaration());
         // Continuous effects are read off the layer tables at a phase
         // boundary, which is the cheapest moment the board is stable.
         game.subscribeToEvents(new PhaseBridge());

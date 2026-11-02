@@ -102,13 +102,16 @@ class PlayabilityChannelTest {
                 .anyMatch(l -> l.contains("\"kind\":\"playability\""));
     }
 
-    // ── gen-2: declarations and the deciding player ─────────────────────
+    // ── declarations and the deciding player ────────────────────────────
     //
     // The engine reports legality from the turn-based declaration itself and
     // names the deciding player, so every record is a real declaration
-    // (what_if=false) whatever the step, and FR-030a's actor is the player
-    // the engine names; FR-030 stamps random_seat off that actor. These
-    // build a two-player game so the deciding player is a real seat.
+    // whatever the step -- an attackers record carries no what_if at all
+    // (FR-037), a blockers record what_if=false -- and FR-030a's actor is the
+    // player the engine names; FR-030 stamps random_seat off that actor.
+    // These build a two-player game so the deciding player is a real seat.
+    // An attackers declaration nothing ended is written when the collectors
+    // close; AttackersRecordTest covers the declaration's end.
 
     private static List<String> recordsOf(List<String> lines) {
         return lines.stream().filter(l -> l.contains("\"kind\":\"playability\"")).toList();
@@ -116,8 +119,8 @@ class PlayabilityChannelTest {
 
     /**
      * An attackers record is a real declaration made by the player the
-     * engine names, and a candidate the rules keep out is listed as
-     * forbidden rather than left out.
+     * engine names, one per candidate, and a candidate the rules keep out is
+     * listed as forbidden rather than left out.
      */
     @Test
     void anAttackDeclarationIsRealAndNamesTheDeciderTheEngineReports() throws Throwable {
@@ -134,17 +137,22 @@ class PlayabilityChannelTest {
         });
 
         List<String> records = recordsOf(lines);
-        assertEquals(1, records.size(), records.toString());
-        String real = records.get(0);
-        assertTrue(real.contains("\"subkind\":\"attackers\""), real);
-        assertTrue(real.contains("\"what_if\":false"), real);
-        assertTrue(real.contains("\"actor_player\":\"" + Refs.of(active) + "\""),
-                "the deciding player is the one the engine names: " + real);
-        assertTrue(real.contains("\"random_seat\":false"), real);
-        assertTrue(real.contains("\"legal_attackers\":[\"" + Refs.of(ready) + "\"]"),
-                real);
-        assertTrue(real.contains("\"forbidden\":[{\"entity\":\""
-                + Refs.of(tapped) + "\""), real);
+        assertEquals(2, records.size(), "one per candidate: " + records);
+        for (String real : records) {
+            assertTrue(real.contains("\"subkind\":\"attackers\""), real);
+            assertFalse(real.contains("what_if"), real);
+            assertTrue(real.contains("\"actor_player\":\"" + Refs.of(active) + "\""),
+                    "the deciding player is the one the engine names: " + real);
+            assertTrue(real.contains("\"random_seat\":false"), real);
+            assertTrue(real.contains("\"legal_attackers\":[\"" + Refs.of(ready) + "\"]"),
+                    real);
+            assertTrue(real.contains("\"forbidden\":[{\"entity\":\""
+                    + Refs.of(tapped) + "\""), real);
+        }
+        assertTrue(records.get(0).contains("\"anchor_attacker\":\"" + Refs.of(ready) + "\""
+                + ",\"legal_defenders\":[\"" + Refs.of(other) + "\"]"), records.get(0));
+        assertTrue(records.get(1).contains("\"anchor_attacker\":\"" + Refs.of(tapped) + "\""
+                + ",\"legal_defenders\":[]"), records.get(1));
     }
 
     /**
@@ -166,7 +174,7 @@ class PlayabilityChannelTest {
 
         List<String> records = recordsOf(lines);
         assertEquals(1, records.size(), records.toString());
-        assertTrue(records.get(0).contains("\"what_if\":false"), records.get(0));
+        assertFalse(records.get(0).contains("what_if"), records.get(0));
         assertTrue(records.get(0).contains(
                 "\"actor_player\":\"" + Refs.of(other) + "\""), records.get(0));
     }
@@ -206,7 +214,8 @@ class PlayabilityChannelTest {
 
     /**
      * Every declaration on a board that moved is written, and the same
-     * declaration on an unchanged board is written once (FR-028).
+     * declaration on an unchanged board is written once (FR-028). A defender
+     * asked about a second time is a new declaration.
      */
     @Test
     void everyDeclarationOnAMovedBoardIsWrittenAndARepeatIsNot() throws Throwable {

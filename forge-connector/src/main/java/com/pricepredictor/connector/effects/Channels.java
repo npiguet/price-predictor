@@ -14,9 +14,9 @@ import java.util.Random;
  * channel by hand, say — would be a second sampling stream that only looks
  * like the first.
  *
- * <p>Closing writes what the mana channel holds and ends the game for the
- * rewrite tally. It installs no hook, so it takes none down; that is
- * {@link PatchedCollectors}' part.
+ * <p>Closing writes what the attackers declaration and the mana channel hold
+ * and ends the game for the rewrite tally. It installs no hook, so it takes
+ * none down; that is {@link PatchedCollectors}' part.
  */
 record Channels(
         RewriteChannel rewrites,
@@ -57,6 +57,8 @@ record Channels(
     @Override
     public void close() {
         try {
+            // A declaration of attackers the game ended before it was made.
+            playability.close();
             // This is the last moment the game can be said to have ended, and
             // the mana reservoir is only decided then.
             mana.flush();

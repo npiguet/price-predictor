@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.json.Json;
 import forge.game.GameEntity;
 import forge.game.card.Card;
+import forge.game.combat.Combat;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
@@ -26,6 +27,10 @@ import java.util.function.Function;
  * which would otherwise swamp the corpus. The {@code attackers} and
  * {@code blockers} subkinds are always logged: they fire once per combat, not
  * once per candidate.
+ *
+ * <p>An {@code attackers} record is anchored to one attacker
+ * ({@link AttackDeclaration}) and written once the declaration is made; a
+ * {@code blockers} record is anchored to one attacker by the engine itself.
  */
 public final class PlayabilityChannel {
 
@@ -35,6 +40,8 @@ public final class PlayabilityChannel {
     /** The game's shared sampling stream; see {@link PatchedCollectors}. */
     private final Random sampler;
     private final double playabilityRate;
+    /** The declaration of attackers being asked about, held until it is made. */
+    private final AttackDeclaration declaration;
 
     PlayabilityChannel(
             LiveGame live, CollectorContext context, RecordDedup dedup, Random sampler,
@@ -44,6 +51,22 @@ public final class PlayabilityChannel {
         this.dedup = dedup;
         this.sampler = sampler;
         this.playabilityRate = playabilityRate;
+        this.declaration = new AttackDeclaration(live,
+                this::emitAttackers,
+                PlayabilityChannel::cantAttackStatic);
+    }
+
+    /**
+     * The declaration of attackers, which reads the declaration's taps and
+     * its end off the live game's bus; {@code GameRecording} subscribes it.
+     */
+    AttackDeclaration declaration() {
+        return declaration;
+    }
+
+    /** The game is over: an attackers declaration still held is written. */
+    void close() {
+        declaration.close();
     }
 
     // ── the decision subkind ────────────────────────────────────────────
@@ -95,11 +118,14 @@ public final class PlayabilityChannel {
      * <p>Asked by the engine's turn-based actions just before a player
      * declares, once per defender and once per attacker coming at the
      * defending player, so every record is a real declaration whoever
-     * controls the seat — the AI, the random seat or a human — and is stamped
-     * {@code what_if=false}. The engine names the deciding player, every
-     * creature that player controls is a candidate, and the legal set comes
-     * from the rules alone, against a combat holding the attackers and no
-     * blocks yet.
+     * controls the seat — the AI, the random seat or a human. The engine
+     * names the deciding player, every creature that player controls is a
+     * candidate, and the legal set comes from the rules alone, against a
+     * combat holding the attackers and no blocks yet. The per-defender
+     * answers are pivoted to one record per attacker
+     * ({@link AttackDeclaration}), which carries no {@code what_if}: no
+     * what-if attackers record exists (FR-037). A blockers record is stamped
+     * {@code what_if=false}.
      *
      * <p>Deduplicated on payload and snapshot (FR-028): a board on which
      * nothing moved between two declarations answers the same question the
@@ -115,14 +141,14 @@ public final class PlayabilityChannel {
             // No CardTraitBase here: the defender or attacker is the
             // GameEntity itself, so identity comes straight off it rather
             // than through a host card. A wrong-typed or null entity is left
-            // to recordAttackers/recordBlockers, which tolerate both.
+            // to the declaration and recordBlockers, which tolerate both.
             Player decider = args.get(0, Player.class);
             GameEntity declaredAgainst = args.get(1, GameEntity.class);
             if (declaredAgainst != null && !live.owns(declaredAgainst)) {
                 return;
             }
             switch (callback) {
-                case ON_ATTACKERS_DECLARABLE -> recordAttackers(
+                case ON_ATTACKERS_DECLARABLE -> declaration.declarable(
                         decider, declaredAgainst, asCards(args.get(2)), asCards(args.get(3)));
                 case ON_BLOCKERS_DECLARABLE -> {
                     Integer min = args.get(4, Integer.class);
@@ -136,31 +162,9 @@ public final class PlayabilityChannel {
     }
 
     /**
-     * One {@code attackers} record: who may attack this defender, and what
-     * keeps the rest out.
-     *
-     * @param decider the attacking player the engine names, written as
-     *                {@code actor_player}
-     */
-    private void recordAttackers(
-            Player decider, GameEntity defender, List<Card> candidates,
-            List<Card> legal) {
-        if (candidates == null || candidates.isEmpty()) {
-            return;
-        }
-        LegalSet attackers = LegalSet.of(candidates, legal,
-                card -> defender == null ? null : cantAttackStatic(card, defender));
-        String payload = Json.object()
-                .raw("legal_attackers", attackers.legal())
-                .raw("forbidden", attackers.forbidden())
-                .render();
-        emitLegality(PlayabilitySubkind.ATTACKERS, decider, payload);
-    }
-
-    /**
      * One {@code blockers} record: who may block this attacker, how many it
-     * takes, and what keeps the rest out. The sibling of
-     * {@link #recordAttackers} in every respect.
+     * takes, what keeps the rest out, and which of them a requirement makes
+     * block it ({@code must_block}, {@link MustBlock}).
      *
      * @param decider the defending player the engine names (FR-030a) —
      *                gen-1 wrote the attacking player here, and a gen-2 shard
@@ -174,13 +178,22 @@ public final class PlayabilityChannel {
         }
         LegalSet blockers = LegalSet.of(candidates, legal,
                 card -> cantBlockByStatic(attacker, card));
+        Combat combat = live.game().getPhaseHandler().getCombat();
+        List<String> mustBlock = new ArrayList<>();
+        for (Card card : candidates) {
+            if (MustBlock.required(card, attacker, combat)) {
+                mustBlock.add(Refs.of(card));
+            }
+        }
         String payload = Json.object()
                 .value("anchor_attacker", Refs.of(attacker))
                 .raw("legal_blockers", blockers.legal())
                 .raw("forbidden", blockers.forbidden())
+                .raw("must_block", Json.stringArray(mustBlock))
                 .value("min_blockers", minBlockers)
                 .render();
-        emitLegality(PlayabilitySubkind.BLOCKERS, decider, payload);
+        emitLegality(context.newPlayability(PlayabilitySubkind.BLOCKERS).whatIf(false),
+                decider, live.snapshots().ofBoard().render(), payload);
     }
 
     /**
@@ -209,14 +222,17 @@ public final class PlayabilityChannel {
         }
     }
 
-    private void emitLegality(PlayabilitySubkind subkind, Player decider, String payload) {
-        String state = live.snapshots().ofBoard().render();
+    /** One attackers record, with no {@code what_if}: only the turn-based declaration writes one. */
+    private void emitAttackers(Player decider, String state, String payload) {
+        emitLegality(context.newPlayability(PlayabilitySubkind.ATTACKERS), decider, state, payload);
+    }
+
+    private void emitLegality(EffectRecord record, Player decider, String state, String payload) {
         // Keyed on the snapshot as well as the payload (FR-028): the same
         // answer on a board that moved is a second observation, which a
         // payload-only key would drop as a repeat of the first.
-        context.emitDistinct(context.newPlayability(subkind)
+        context.emitDistinct(record
                 .actor(live.playerIdOrActive(decider))
-                .whatIf(false)
                 .state(state)
                 .payload(payload), dedup);
     }
@@ -229,7 +245,7 @@ public final class PlayabilityChannel {
      * printed on it, is stopped by the rules themselves and no static ability
      * is to blame.
      */
-    private static String forbiddenJson(Card card, StaticAbility responsible) {
+    static String forbiddenJson(Card card, StaticAbility responsible) {
         ProvenanceKey key = responsible == null ? null : ProvenanceResolver.of(responsible);
         return Json.object()
                 .value("entity", Refs.of(card))

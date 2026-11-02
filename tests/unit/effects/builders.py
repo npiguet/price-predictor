@@ -100,6 +100,14 @@ GEN3_UNREAD_STATE_MEMBERS = frozenset({"links"})
 #: timing bit; T074 parses them.
 GEN3_UNREAD_CANDIDATE_MEMBERS = frozenset({"failed_checks"})
 GEN3_UNREAD_VERDICT_MEMBERS = frozenset({"timing"})
+#: The legality-payload members the collector writes (T065, T066) that the codec
+#: does not read yet: an attackers record's anchor, legal defenders, attack
+#: requirement and, on a declared anchor only, its tap; a blockers record's
+#: creatures that must block. T074 parses them.
+GEN3_UNREAD_ATTACKERS_MEMBERS = frozenset({
+    "anchor_attacker", "legal_defenders", "must_attack", "tapped_by_attack",
+})
+GEN3_UNREAD_BLOCKERS_MEMBERS = frozenset({"must_block"})
 
 
 def without_unread_members(entity: dict) -> dict:

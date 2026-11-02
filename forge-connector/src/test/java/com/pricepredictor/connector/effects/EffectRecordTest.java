@@ -158,9 +158,10 @@ class EffectRecordTest {
 
     /**
      * {@code random_seat} follows {@code synthetic} on every record, and
-     * {@code what_if} follows it on the two legality subkinds alone
-     * (record-schema-delta.md): the order is the contract, and the first
-     * field's presence is how a reader names a gen-2 shard.
+     * {@code what_if} follows it where set, which only a blockers record
+     * does since no what-if attackers record exists (record-schema-delta.md):
+     * the order is the contract, and the first field's presence is how a
+     * reader names a gen-2 shard.
      */
     @Test
     void randomSeatFollowsSyntheticOnEveryRecordAndWhatIfOnlyWhereSet() {
@@ -169,7 +170,8 @@ class EffectRecordTest {
                 plain);
         assertFalse(plain.contains("what_if"), plain);
 
-        String legality = playability(PlayabilitySubkind.ATTACKERS).randomSeat(true).whatIf(false).actor("P1").toJson();
+        String legality = playability(PlayabilitySubkind.BLOCKERS)
+                .randomSeat(true).whatIf(false).actor("P1").toJson();
         assertTrue(legality.contains(
                 "\"synthetic\":false,\"random_seat\":true,\"what_if\":false,\"actor_player\":\"P1\""),
                 legality);
