@@ -255,6 +255,56 @@ class DecisionSampleTest {
         assertEquals(DecisionSample.ZONE, read.sample());
     }
 
+    /**
+     * A land on the battlefield after the turn's land drop fails the limit
+     * beside zone; zone decides, so it stays a zone candidate.
+     */
+    @Test
+    void aLandOnTheBattlefieldPastTheLimitIsStillAZoneCandidate() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Card forest = a.playLand(TestBoard.inHand(game, a, "Forest"), null);
+
+        DecisionCandidate read = onlyRead(game, a, forest);
+
+        assertEquals(List.of(PlayabilityCheck.LAND_PLAY_LIMIT, PlayabilityCheck.ZONE),
+                checks(read));
+        assertEquals(DecisionSample.ZONE, read.sample());
+    }
+
+    /** Another player's permanent's ability fails the activator check: a zone candidate. */
+    @Test
+    void anotherPlayersAbilityIsAZoneCandidate() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Player b = game.getPlayers().get(1);
+        Card sorcerer = TestBoard.inPlay(game, b, "Prodigal Sorcerer");
+
+        DecisionCandidate ping = read(game, a, sorcerer, sa -> !sa.isSpell());
+
+        assertTrue(checks(ping).contains(PlayabilityCheck.SCRIPT_RESTRICTION),
+                checks(ping).toString());
+        assertEquals(DecisionSample.ZONE, ping.sample());
+        assertEquals(DecisionSample.PLAIN,
+                read(game, b, sorcerer, sa -> !sa.isSpell()).sample(), "its controller's");
+    }
+
+    /** A static prohibition stays special beside a failed zone. */
+    @Test
+    void aStaticProhibitionBesideAFailedZoneIsSpecial() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Player b = game.getPlayers().get(1);
+        TestBoard.inPlay(game, a, "Grand Abolisher");
+        Card bears = TestBoard.inPlay(game, b, "Grizzly Bears");
+
+        DecisionCandidate read = onlyRead(game, b, bears);
+
+        assertTrue(checks(read).containsAll(List.of(
+                PlayabilityCheck.ZONE, PlayabilityCheck.STATIC_PROHIBITION)), checks(read).toString());
+        assertEquals(DecisionSample.SPECIAL, read.sample());
+    }
+
     /** Crucible of Worlds permits a land from the graveyard: a may-play static, special. */
     @Test
     void aLandAStaticLetsBePlayedFromTheGraveyardIsSpecial() {
@@ -401,8 +451,10 @@ class DecisionSampleTest {
 
     private static final Set<String> BULK = Set.of("zone", "cost", "casting_speed");
 
+    /** Special by its checks, on a board where every card a player could activate is its own. */
     private static boolean special(Set<String> checks) {
-        return !BULK.containsAll(checks);
+        return checks.contains("static_prohibition")
+                || (!checks.contains("zone") && !BULK.containsAll(checks));
     }
 
     /** With both bulk rates at zero, a stop writes its special candidates only. */

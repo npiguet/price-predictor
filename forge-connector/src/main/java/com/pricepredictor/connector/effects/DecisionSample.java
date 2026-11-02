@@ -24,14 +24,17 @@ import java.util.Set;
  */
 public enum DecisionSample {
     /**
-     * A candidate the rules treat unusually: a failed check other than
-     * {@code zone}, {@code cost} and {@code casting_speed}; or, its zone
-     * allowed, played from outside its usual zone, through an alternative
-     * cost or a may-play static, or with flash only through a static.
-     * Written whenever stage 1 keeps it.
+     * A candidate the rules treat unusually: a static prohibition; a failed
+     * check other than {@code cost} and {@code casting_speed} on a card in a
+     * zone it may be played from; or, its zone allowed, played from outside
+     * its usual zone, through an alternative cost or a may-play static, or
+     * with flash only through a static. Written whenever stage 1 keeps it.
      */
     SPECIAL,
-    /** Not special, and fails {@code zone}: the card cannot be played from where it is. */
+    /**
+     * Not special: the card cannot be played from where it is (fails
+     * {@code zone}), or is another player's and fails the activator check.
+     */
     ZONE,
     /** Not special, and passes {@code zone}: the card's usual way of being played. */
     PLAIN;
@@ -51,25 +54,42 @@ public enum DecisionSample {
      * inside {@link PlayabilityVerdict#asActivator}, as the verdict is.
      */
     static DecisionSample of(SpellAbility candidate, Player activator, PlayabilityVerdict verdict) {
+        boolean zone = verdict.failed(PlayabilityCheck.ZONE);
+        Card host = candidate.getHostCard();
+        boolean notItsPlayers = host != null && host.getController() != activator;
         for (PlayabilityVerdict.FailedCheck failed : verdict.failedChecks()) {
-            if (!bulk(failed.check(), candidate)) {
+            if (!bulk(failed.check(), candidate, zone, notItsPlayers)) {
                 return SPECIAL;
             }
         }
-        if (verdict.failed(PlayabilityCheck.ZONE)) {
+        if (zone || (notItsPlayers && verdict.failed(PlayabilityCheck.SCRIPT_RESTRICTION))) {
             return ZONE;
         }
         return playedUnusually(candidate, activator) ? SPECIAL : PLAIN;
     }
 
     /**
-     * Whether a failed check leaves the candidate in bulk. A land play's
-     * {@code whose_turn} is its timing (rule 305.3), where a spell's or an
-     * ability's is a restriction its own text adds.
+     * Whether a failed check leaves the candidate in bulk.
+     *
+     * <ul>
+     *   <li>{@code zone}, {@code cost} and {@code casting_speed} always do.</li>
+     *   <li>A land play's {@code whose_turn} is its timing (rule 305.3), where
+     *       a spell's or an ability's is a restriction its own text adds.</li>
+     *   <li>Beside a failed {@code zone}, every check but a static prohibition
+     *       does: a card that cannot be played from where it is says nothing
+     *       of the others, such as the land-play limit of a land on the
+     *       battlefield.</li>
+     *   <li>On a card another player controls, {@code script_restriction} does:
+     *       it is the activator check, which no ability of another player's
+     *       permanent passes unless its text lets any player activate it.</li>
+     * </ul>
      */
-    private static boolean bulk(PlayabilityCheck check, SpellAbility candidate) {
+    private static boolean bulk(
+            PlayabilityCheck check, SpellAbility candidate, boolean zone, boolean notItsPlayers) {
         return BULK.contains(check)
-                || (check == PlayabilityCheck.WHOSE_TURN && candidate.isLandAbility());
+                || (check == PlayabilityCheck.WHOSE_TURN && candidate.isLandAbility())
+                || (zone && check != PlayabilityCheck.STATIC_PROHIBITION)
+                || (notItsPlayers && check == PlayabilityCheck.SCRIPT_RESTRICTION);
     }
 
     /**
