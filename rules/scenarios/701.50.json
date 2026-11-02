@@ -409,7 +409,13 @@
         "Forest",
         "Island"
       ],
-      "forge_notes": "ConniveEffect has no zero-count check: it runs the Connives trigger even when ConniveNum is 0, so Forge would fire Glorious Purpose in the x_zero variant. The expected text follows 701.50e."
+      "forge_notes": "ConniveEffect has no zero-count check: it runs the Connives trigger even when ConniveNum is 0, so Forge would fire Glorious Purpose in the x_zero variant. The expected text follows 701.50e.",
+      "departure": {
+        "status": "confirmed",
+        "resolution": "unpatched",
+        "forge_behaviour": "ConniveEffect.resolve has no zero-count check: with ConniveNum 0 it draws and discards nothing and still runs the Connives trigger, so Glorious Purpose fires in the x_zero variant (a +1/+1 counter on Grizzly Bears, a plan counter on Glorious Purpose).",
+        "note": "Read in forge-game ConniveEffect.resolve."
+      }
     },
     {
       "id": "701.50f-1",

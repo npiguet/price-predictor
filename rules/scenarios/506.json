@@ -1443,7 +1443,7 @@
         "Mountain",
         "Lightning Bolt"
       ],
-      "forge_notes": "Forge may drop the attacker from the attackers list when its defender leaves; the rule says it stays an attacking creature.",
+      "forge_notes": "When the attacked planeswalker or battle leaves, Forge's Combat.removeFromCombat keeps its attackers in combat attacking a placeholder defender, so they can be blocked and an unblocked one deals its damage to nothing: Forge follows the rule.",
       "detector": {
         "none": "The outcome is an attacker that keeps attacking but attacks nothing after the planeswalker or battle it attacked leaves combat, and deals no combat damage if unblocked. The combat payload lists attackers without the entity each attacks, and no event marks an attacker as attacking nothing; the outcome is an absence of damage events."
       }

@@ -148,7 +148,7 @@
         "Lightning Bolt",
         "Mountain"
       ],
-      "forge_notes": "Check that Forge leaves the attacker in combat with no defender when the attacked planeswalker leaves the battlefield, and does not redirect its damage to the player."
+      "forge_notes": "When the attacked planeswalker leaves, Forge keeps the attacker in combat attacking a placeholder defender and assigns its damage there, not to the player: Forge follows the rule."
     },
     {
       "id": "510.1c-1",

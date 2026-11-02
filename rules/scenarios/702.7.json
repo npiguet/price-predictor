@@ -256,7 +256,7 @@
         "Mountain",
         "Plains"
       ],
-      "forge_notes": "Forge may re-select the second-step damage dealers from the creatures that currently lack first strike, which would let Youthful Knight strike twice in the first_strike_removed variant."
+      "forge_notes": "Forge's second damage step skips every combatant recorded as having dealt first-strike damage unless it has double strike (Combat.dealDamageThisPhase), whatever its first strike is by then: Forge follows the rule."
     }
   ]
 }

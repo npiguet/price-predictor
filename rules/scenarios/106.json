@@ -703,7 +703,7 @@
         "Ashnod's Altar",
         "Grizzly Bears"
       ],
-      "forge_notes": "Forge's Mana Reflection script (Event$ ProduceMana, ValidCard$ Permanent) does not check for a tap cost, so Forge may double Ashnod's Altar's mana; the expected outcome follows the rule text.",
+      "forge_notes": "Forge's ProduceMana replacement applies only to a mana ability with a tap cost unless the script says otherwise (ValidSA defaults to Activated.hasTapCost+ManaAbility), so Mana Reflection leaves Ashnod's Altar's mana alone: Forge follows the rule.",
       "detector": {
         "family": "rewrite_event",
         "record_kind": "rewrite",

@@ -4,7 +4,8 @@ Implementation notes drawn from the catalogue, written for whoever implements ge
 coverage. The conclusions and recommendations are in the gen-3 design record,
 `experiments/2026-10-30-effect-model-gen3-design.md`, in its Result. This
 file holds the detail behind them: which rules need which new record fields, why rules were skipped,
-what the scenario writers suspect about Forge, and what kinds of errors the verifier fixed.
+what the scenario writers suspected about Forge and what its code shows, and what kinds of errors
+the verifier fixed.
 
 Counts in sections 3 and 4 are approximate. They come from reading the 762 `forge_notes` and the
 566 `review` entries and grouping them by hand, so they can be off by about a tenth. Every other
@@ -54,7 +55,7 @@ to Forge later can make a skipped rule reachable.
 
 ## 3. What the scenario writers flagged about Forge
 
-762 of the 1,763 scenarios carry `forge_notes`. They are of eight kinds:
+762 of the 1,764 scenarios carry `forge_notes`. They are of eight kinds:
 
 | kind of note | about | examples |
 |---|---:|---|
@@ -67,19 +68,48 @@ to Forge later can make a skipped rule reachable.
 | card naming and faces: split, Room, flip, meld and back faces appear under another name | 45 | 709.4-1, 202.2e-1, 701.61a-2 |
 | an outcome that no record field shows | 25 | 309.2a-1, 310.5-1, 701.23e-1 |
 
-**Suspected Forge deviations to test first.** Each is a writer's reading of Forge's scripts or source,
-and none has been confirmed by running Forge:
+**Forge departures.** The writers suspected ten departures from their reading of Forge's scripts or
+source. Reading the engine code that decides each one confirms four, recorded on the scenario as a
+`departure`, and rules out the other six, whose `forge_notes` say what Forge does. The gen-2
+records showed a fifth, the game's end cutting a state-based check short, recorded as scenario 704.3-2. No
+scenario has been played in Forge, so each verdict is a reading of the code.
 
-1. 400.7c-1: `ChooseSource` may not follow a spell to the battlefield.
-2. 407.4-2: a ChangeZone to the ante zone has no owner check, so a stolen card is anted into the wrong player's zone.
-3. 701.60d-1: `setSuspected` returns true for an already-suspected card, so Frantic Scapegoat's suspicion ends wrongly.
-4. 701.50e-1: `ConniveEffect` has no zero-count check, so connive 0 fires the "connives" trigger.
-5. 106.12b-1: Mana Reflection may double Ashnod's Altar's mana although the Altar has no tap cost.
-6. 702.55b-1: the haunt trigger (`Creature.HauntedBy`) may not fire when the haunted card is a non-creature.
-7. 701.17d-1: Charmed Pendant may read only one milled card when milling is doubled.
-8. 506.4c-1, 702.19e-1, 510.1b-1: an attacker may be removed from combat, or its damage redirected, when the planeswalker it attacks leaves.
-9. 702.7c-2: the creatures that deal damage in the second step may be re-selected, so a creature whose first strike is removed between the steps strikes twice.
-10. 104.2a-1: `Player.hasWon()` returns false while `cantWin()` holds, so Forge may not report the game as won in the Platinum Angel scenario.
+| scenario | what Forge does | verdict |
+|---|---|---|
+| 407.4-2 | a ChangeZone to the ante zone puts the card in its owner's ante zone with no owner check, so a stolen Jeweled Bird is anted and its controller draws | confirmed, unpatched; ante never occurs in a collected game |
+| 701.60d-1 | `Card.setSuspected(true)` reports success for a card already suspected, so Frantic Scapegoat's "if you do" holds and its own suspicion ends | confirmed, unpatched |
+| 701.50e-1 | `ConniveEffect` runs the "connives" trigger when it connives 0 | confirmed, unpatched |
+| 702.55b-1 | the haunt keyword's dies trigger matches `Creature.HauntedBy`, so it does not fire for a haunted object that is no longer a creature | confirmed, unpatched |
+| 704.3-2 | `checkStateEffects` ends the game before performing the rest of the check, so the creatures a Pestilence activation kills alongside the last opponent stay on the battlefield | confirmed, accepted: the game is over either way, and the expected outcomes are Forge's |
+| 400.7c-1 | `ChooseSource` offers spells on the stack, and a resolving permanent spell keeps its card object, so the prevention follows it to the battlefield | not a departure |
+| 106.12b-1 | a `ProduceMana` replacement defaults to mana abilities with a tap cost, so Ashnod's Altar's mana is not doubled | not a departure |
+| 701.17d-1 | the mill cost records every card milled after Bruvac's replacement, and Charmed Pendant reads each | not a departure |
+| 506.4c-1, 702.19e-1, 510.1b-1 | an attacker whose planeswalker leaves stays in combat attacking a placeholder; unblocked it deals no damage, and with trample over planeswalkers it assigns past the placeholder to the player | not a departure |
+| 702.7c-2 | the second damage step skips every creature that dealt first-strike damage unless it has double strike | not a departure |
+| 104.2a-1 | the game's outcome reads the players' outcomes, not `Player.hasWon()`, so the remaining player wins over Platinum Angel | not a departure |
+
+**Records whose board and outcome disagree.** `effects rule-counts` lists 669 gen-2 records whose
+board puts them on one side of a rule while what the record shows is the other side. They come from
+six checks of the `sba_zone_move` family: toughness 0 (169 records), lethal damage (147), deathtouch
+damage (14), the legend rule (109), Auras (253) and battles at 0 defense (5). Each such record is
+either a Forge departure, a gap in the detector, or a gap in the collector. Samples of 10 to 30
+records per check found no Forge departure. Every case is one of the following:
+
+| check | cause | kind of gap |
+|---|---|---|
+| toughness 0 | the record's `pt_change` reports a change the snapshot already holds: Daxos, Blessed by the Sun's devotion fell when another creature died before its dies trigger resolved; a conditional or characteristic-defining P/T recomputed (Court Homunculus, Saproling Burst's tokens); a spell entering from the stack with a static that applies there (Roc Hatchling) | collector: `StatDiffer` diffs against the characteristics it remembered, not the snapshot |
+| toughness 0, lethal damage | one `pt_change` for several P/T changes of one resolution, or none for a base P/T set (Glistening Deluge, Tribute to Urborg, Hostile Takeover, Epic Confrontation) | collector |
+| toughness 0, lethal damage, deathtouch | counters the record places are not added to toughness (+1/+1 before a fight or a -X/-X sweep, -1/-1 from Puncture Bolt or a proliferate); wither or infect damage counted as marked damage (Puncture Blast; Tatterkite, which can't have counters); a creature returning from the graveyard read off its graveyard copy | detector |
+| lethal damage | a death replaced: umbra armor destroys the Aura instead, regeneration, or a replacement sends the creature to its owner's hand or library (Necromancer's Magemark, Gravebane Zombie, Pulmonic Sliver) | detector |
+| lethal damage | a modal spell's death is filed in its last mode's effect half, not the half that dealt the damage (Savage Alliance) | detector: the halves of one `link_id` are read apart |
+| lethal damage | a toughness that counts the resolved spell itself once it is in the graveyard (Tarmogoyf) | detector |
+| deathtouch | the anthem a creature's toughness depends on dies in the same check, so the repeated check (704.3) kills it (Celestial Crusader, Sliver lords) | detector |
+| legend rule | the legend rule does not apply (Council of Reeds, Sakashima of a Thousand Faces); a dies trigger whose source is read by last known information while the twin is already gone; a lone legend entering and dying by another rule (a planeswalker entering with 0 loyalty, a sacrifice on entering) | detector |
+| Auras | umbra armor; a Role replaced by a newer one (704.5y); an Aura sacrificed, destroyed, exiled or returned to hand by the record's own effect but attributed `unresolved` (annihilator, Quiet Disrepair, Storm Herald, Mark of Eviction); an Aura moving itself to a new host (Shifting Shadow, Nettlevine Blight); "enchant creature you control" after its host changes control | detector |
+| battles | every Siege's defeat trigger triggers when its last defense counter is removed, so 704.5v leaves it on the battlefield, and Forge does (`hasSourceOnStack`) | detector: `defense_zero` reads the pending-trigger case as the rule firing |
+
+None of these changes a scenario: each scenario's expected outcome follows the rule and Forge agrees
+with it. The detector and collector gaps are left to the detector families and the collector.
 
 ## 4. What the verifier fixed
 

@@ -182,6 +182,12 @@
         "needs": [
           "owner"
         ]
+      },
+      "departure": {
+        "status": "confirmed",
+        "resolution": "unpatched",
+        "forge_behaviour": "A ChangeZone to the ante zone moves the card to its owner's ante zone whatever its controller (GameAction.moveTo's default branch, c.getOwner().getZone(Ante)), with no owner check: the stolen Jeweled Bird is anted into B's ante zone, RememberChanged holds it, so Mountain goes from the ante to A's graveyard and A draws Plains.",
+        "note": "Read in forge-game GameAction.moveTo and ChangeZoneEffect. Ante is never reached in collection: no collected game is played for ante."
       }
     }
   ]

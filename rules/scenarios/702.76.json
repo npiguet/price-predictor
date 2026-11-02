@@ -94,12 +94,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A cast candidate using an alternative cost gated on what happened this turn (prowl) passes Forge's other-restrictions check, so the alternative cost is offered.",
-        "near_miss": "The candidate fails the other-restrictions check because the condition is unmet.",
+        "outcome": "A spell's prowl alternative cost is a legal candidate: a creature its controller controls sharing a creature type with it dealt combat damage to a player this turn, so Forge's other-restrictions check, which names no part of its own for prowl, passes (no script_restriction failure).",
+        "near_miss": "A prowl candidate fails its script_restriction check because no such creature dealt combat damage to a player this turn.",
         "params": {
           "bit": "failed_check",
           "check": "script_restriction",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Prowl"
         },
         "needs": [
           "failed_checks"

@@ -239,6 +239,12 @@
           "keyword": "Haunt"
         },
         "needs": []
+      },
+      "departure": {
+        "status": "confirmed",
+        "resolution": "unpatched",
+        "forge_behaviour": "The haunt keyword's dies trigger is built with ValidCard$ Creature.HauntedBy (CardFactoryUtil), matched against the dying card's last known information, so it does not fire when the haunted object is no longer a creature as it dies.",
+        "note": "Read in forge-game CardFactoryUtil (haunt keyword)."
       }
     },
     {

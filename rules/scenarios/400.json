@@ -623,7 +623,7 @@
         "Goblin Piker",
         "Raging Goblin"
       ],
-      "forge_notes": "Forge's ChooseSource may not offer a spell on the stack as a choice, and the replacement matches the chosen card strictly, so it may not follow the spell to the battlefield. This is the scenario where Forge is most likely to deviate from the rule."
+      "forge_notes": "Forge's ChooseSource offers the spells on the stack among its choices, and a permanent spell resolving keeps its Card object on the battlefield, so the chosen source's strict match (ChosenCardStrict, same card and timestamp) still holds for Raging Goblin's combat damage: Forge follows the rule."
     },
     {
       "id": "400.7d-1",

@@ -31,7 +31,7 @@ survives, the spell resolves or fizzles, the trigger fires or does not.
 | `gen3-fields.json` | the canonical gen-3 inputs, outputs, extensions, planned items and fixes, with every heads-pass name merged into one of them or dropped with a reason | by hand |
 | `GEN3-FIELDS.md` | each canonical field's slot, shape and source, and the rules it serves | `gen3-fields` |
 | `STATUS.md` | per-unit checklist and totals | `status` |
-| `FINDINGS.md` | implementation notes: the rules that need new record fields, by family; why rules were skipped; the writers' Forge notes by kind and the suspected Forge departures to test first; the verifier's error types; limits of the scenarios as written | by hand, from the sidecars |
+| `FINDINGS.md` | implementation notes: the rules that need new record fields, by family; why rules were skipped; the writers' Forge notes by kind, the Forge departures and how its code settles them, and the causes of the records whose board and outcome disagree; the verifier's error types; limits of the scenarios as written | by hand, from the sidecars |
 | `RUN-NOTES.md` | per chunk of units, what the scenario writer flagged (interactions whose outcome depends on Forge's implementation, rules skipped as unreachable) and what the verifier fixed | from the workflow results |
 
 The subcommands are those of `python scripts/rules_catalogue.py`: `split`, `packets`,

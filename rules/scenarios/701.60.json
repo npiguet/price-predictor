@@ -71,7 +71,13 @@
         "Swamp",
         "Barbed Servitor"
       ],
-      "forge_notes": "Forge's Card.setSuspected returns true for a card that is already suspected, so Frantic Scapegoat's RememberAltered may record Barbed Servitor and end Frantic Scapegoat's suspicion in the base variant too; Forge is expected to diverge from the rules here."
+      "forge_notes": "Forge's Card.setSuspected returns true for a card that is already suspected, so Frantic Scapegoat's RememberAltered may record Barbed Servitor and end Frantic Scapegoat's suspicion in the base variant too; Forge is expected to diverge from the rules here.",
+      "departure": {
+        "status": "confirmed",
+        "resolution": "unpatched",
+        "forge_behaviour": "Card.setSuspected(true) returns true for a card already suspected (its comment cites the rule and returns true anyway), so AlterAttribute's RememberAltered records Barbed Servitor and Frantic Scapegoat's DBAbsolve ends Frantic Scapegoat's suspicion in the base variant too.",
+        "note": "Read in forge-game Card.setSuspected and AlterAttributeEffect."
+      }
     },
     {
       "id": "701.60a-1",

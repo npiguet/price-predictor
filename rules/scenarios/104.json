@@ -76,7 +76,7 @@
         "Forest",
         "Platinum Angel"
       ],
-      "forge_notes": "In the angel variant Platinum Angel is on B's battlefield from the start of that variant. Player.hasWon() in Forge returns false while cantWin() holds, so with Platinum Angel on B's side Forge may report the game as not won even though B conceded; the angel variant records the Comprehensive Rules result and may be where Forge deviates.",
+      "forge_notes": "In the angel variant Platinum Angel is on B's battlefield from the start of that variant. A conceding player's outcome is a loss, the remaining player is given a win when the game ends, and GameOutcome reads the players' outcomes rather than Player.hasWon(), which Platinum Angel's cantWin affects: Forge follows the rule. The harness must force the concession, which no AI makes.",
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",

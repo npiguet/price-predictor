@@ -405,7 +405,7 @@
         "Mountain",
         "Lightning Bolt"
       ],
-      "forge_notes": "Forge may treat an attacker whose planeswalker has left the battlefield as removed from combat (dealing no damage at all) rather than as attacking nothing; the base and blocked variants need the 702.19e exception to be implemented."
+      "forge_notes": "Forge keeps the attacker in combat attacking a placeholder defender when the planeswalker leaves; a Trample:Planeswalker attacker then assigns past that placeholder, which needs no lethal damage, to the defending player, while plain trample assigns to the placeholder alone: Forge follows the rule."
     },
     {
       "id": "702.19f-1",

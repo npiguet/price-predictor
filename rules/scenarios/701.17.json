@@ -383,7 +383,7 @@
         "Counterspell",
         "Island"
       ],
-      "forge_notes": "Charmed Pendant's 'Special EachColoredManaSymbol_Milled' may only read one milled card in Forge; if so the doubled variant yields {G}{G} and Forge deviates from 701.17d."
+      "forge_notes": "Forge's Mill cost records every card milled after the replacement (Player.mill takes Bruvac's updated number), and EachColoredManaSymbol_Milled reads each of them: Forge follows the rule."
     }
   ]
 }

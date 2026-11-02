@@ -89,6 +89,70 @@
       "forge_notes": ""
     },
     {
+      "id": "704.3-2",
+      "rules": [
+        "704.3"
+      ],
+      "title": "A player's loss and a creature's death in one state-based check",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 1
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Pestilence"
+          ],
+          "B": [
+            "Llanowar Elves"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A activates Pestilence for {B}, tapping Swamp.",
+        "Both players pass; the ability resolves and deals 1 damage to each creature and each player."
+      ],
+      "variants": [
+        {
+          "label": "lethal",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "B is at 0 life and loses the game, which ends at once. Llanowar Elves stays on the battlefield with 1 damage marked. A is at 19 life."
+        },
+        {
+          "label": "survives",
+          "polarity": "does_not_fire",
+          "delta": "B is at 2 life.",
+          "expected": "B is at 1 life and the game goes on. Llanowar Elves, dealt 1 damage, is put into B's graveyard by the state-based check. A is at 19 life.",
+          "operation": "life"
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Pestilence",
+        "Llanowar Elves"
+      ],
+      "forge_notes": "",
+      "detector": {
+        "none": "What the check would do beside the game loss happens after the game is over, and no record shows it: the resolution's effect half stops at the damage, and sba_zone_move leaves out every record whose changes end the game for this reason."
+      },
+      "departure": {
+        "status": "confirmed",
+        "resolution": "accepted",
+        "forge_behaviour": "GameAction.checkStateEffects first calls checkGameOverCondition and returns once the game is over, so a check that finds a player at 0 life ends the game before performing its other state-based actions: the creatures it would destroy stay on the battlefield.",
+        "note": "Rule 704.3 performs every applicable action at once: B loses and Llanowar Elves is put into the graveyard together. Accepted because the game is over either way and nothing observable follows in a two-player game; the expected outcomes are Forge's."
+      }
+    },
+    {
       "id": "704.4-1",
       "rules": [
         "704.4"
