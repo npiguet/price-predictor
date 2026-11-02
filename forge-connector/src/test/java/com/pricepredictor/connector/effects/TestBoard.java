@@ -58,7 +58,7 @@ public final class TestBoard {
     }
 
     /** The same, past the start: state-based actions run and the stack resolves. */
-    static Game startedTwoPlayerGame(PhaseType phase) {
+    public static Game startedTwoPlayerGame(PhaseType phase) {
         Game game = twoPlayerGame(phase);
         game.setAge(GameStage.Play);
         return game;
@@ -107,7 +107,7 @@ public final class TestBoard {
     }
 
     /** A card that has just entered the battlefield, summoning sick. */
-    static Card onBattlefield(Game game, Player owner, String name) {
+    public static Card onBattlefield(Game game, Player owner, String name) {
         return game.getAction().moveToPlay(card(game, owner, name), owner, null, null);
     }
 
@@ -232,7 +232,7 @@ public final class TestBoard {
      * {@code blocked} attacks {@code defending} and {@code blocker} blocks
      * it, and each of {@code unblocked} attacks unblocked.
      */
-    static Combat blockedCombat(Game game, Player attacking, Player defending,
+    public static Combat blockedCombat(Game game, Player attacking, Player defending,
                                 Card blocked, Card blocker, Card... unblocked) {
         Combat combat = new Combat(attacking);
         combat.addAttacker(blocked, defending);
