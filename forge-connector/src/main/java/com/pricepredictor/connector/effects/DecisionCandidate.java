@@ -70,12 +70,8 @@ record DecisionCandidate(
      * around it.
      */
     private static List<String> legalTargetsOf(SpellAbility candidate) {
-        if (!candidate.usesTargeting() || candidate.getTargetRestrictions() == null) {
-            return List.of();
-        }
         List<String> ids = new ArrayList<>();
-        for (GameEntity entity
-                : candidate.getTargetRestrictions().getAllCandidates(candidate)) {
+        for (GameEntity entity : TargetingClauses.candidatesOf(candidate)) {
             Refs.ofAny(entity).ifPresent(ids::add);
             if (ids.size() >= MAX_LEGAL_TARGETS) {
                 break;

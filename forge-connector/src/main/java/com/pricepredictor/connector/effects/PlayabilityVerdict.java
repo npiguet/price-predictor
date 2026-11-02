@@ -1,11 +1,9 @@
 package com.pricepredictor.connector.effects;
 
 import forge.ai.ComputerUtilMana;
-import forge.game.ability.ApiType;
 import forge.game.cost.Cost;
 import forge.game.cost.CostPayment;
 import forge.game.player.Player;
-import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 
 /**
@@ -42,7 +40,7 @@ public record PlayabilityVerdict(boolean canPlay, boolean affordable, boolean ha
             return NONE;
         }
         return new PlayabilityVerdict(
-                candidate.canPlay(), affordable(candidate, activator), hasLegalTargets(candidate));
+                candidate.canPlay(), affordable(candidate, activator), TargetingClauses.reachMinimum(candidate));
     }
 
     /** Whether the player has the mana and the additional costs, ignoring every AI preference. */
@@ -53,53 +51,5 @@ public record PlayabilityVerdict(boolean canPlay, boolean affordable, boolean ha
         }
         return ComputerUtilMana.canPayManaCost(cost, candidate, payer, 0, false)
                 && CostPayment.canPayAdditionalCosts(cost, candidate, false, payer);
-    }
-
-    /**
-     * Whether every targeting clause of the ability can reach its minimum.
-     *
-     * <p>A charm's sub-ability chain is the modes someone chose — the AI's
-     * last evaluation, or nobody's yet — not the modes the rules offer, so the
-     * walk stops at a charm and asks whether enough of its offered modes could
-     * be chosen.
-     */
-    static boolean hasLegalTargets(SpellAbility ability) {
-        for (SpellAbility clause = ability; clause != null; clause = clause.getSubAbility()) {
-            if (!clauseCanReachMinimum(clause)) {
-                return false;
-            }
-            if (clause.getApi() == ApiType.Charm) {
-                return enoughChoosableModes(clause);
-            }
-        }
-        return true;
-    }
-
-    private static boolean clauseCanReachMinimum(SpellAbility clause) {
-        return !clause.usesTargeting()
-                || clause.getTargetRestrictions().getNumCandidates(clause) >= clause.getMinTargets();
-    }
-
-    /**
-     * Whether the charm's minimum number of modes can be met by modes whose
-     * own targets are reachable (CR 700.2a: a mode with no legal target can't
-     * be chosen).
-     *
-     * <p>Counted here rather than through {@code CharmEffect.makePossibleOptions},
-     * which renumbers each offered mode's {@code CharmOrder} as it filters and
-     * so would write to the game.
-     */
-    private static boolean enoughChoosableModes(SpellAbility charm) {
-        int choosable = 0;
-        for (AbilitySub mode : charm.getAdditionalAbilityList("Choices")) {
-            if (clauseCanReachMinimum(mode)) {
-                choosable++;
-            }
-        }
-        int required = CharmModes.minimumModes(charm);
-        if (charm.hasParam("CanRepeatModes")) {
-            required = Math.min(required, 1);
-        }
-        return choosable >= required;
     }
 }

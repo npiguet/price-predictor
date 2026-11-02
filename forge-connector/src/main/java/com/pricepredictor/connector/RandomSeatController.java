@@ -3,6 +3,7 @@ package com.pricepredictor.connector;
 import com.pricepredictor.connector.effects.PlayabilityChannel;
 import com.pricepredictor.connector.effects.PlayabilityVerdict;
 import com.pricepredictor.connector.effects.RandomChoices;
+import com.pricepredictor.connector.effects.TargetingClauses;
 import forge.LobbyPlayer;
 import forge.ai.ComputerUtilAbility;
 import forge.ai.ComputerUtilCost;
@@ -374,7 +375,7 @@ public final class RandomSeatController extends PlayerControllerAi {
      */
     private void redrawTargets(SpellAbility sa) {
         Map<SpellAbility, TargetChoices> kept = new LinkedHashMap<>();
-        for (SpellAbility clause : targetingClausesOf(sa)) {
+        for (SpellAbility clause : TargetingClauses.chosen(sa)) {
             kept.put(clause, clause.getTargets());
         }
         boolean drawn = true;
@@ -386,36 +387,6 @@ public final class RandomSeatController extends PlayerControllerAi {
         }
         if (!drawn) {
             kept.forEach(SpellAbility::setTargets);
-        }
-    }
-
-    /**
-     * The clauses of a play that target: the root chain, or for a charm the
-     * root plus the chosen modes' own chains — the clones the AI chained are
-     * rebuilt from those originals at the cast.
-     */
-    private static List<SpellAbility> targetingClausesOf(SpellAbility sa) {
-        List<SpellAbility> clauses = new ArrayList<>();
-        if (sa.getApi() == ApiType.Charm) {
-            if (sa.usesTargeting()) {
-                clauses.add(sa);
-            }
-            if (sa.getChosenList() != null) {
-                for (AbilitySub mode : sa.getChosenList()) {
-                    addTargetingClauses(mode, clauses);
-                }
-            }
-            return clauses;
-        }
-        addTargetingClauses(sa, clauses);
-        return clauses;
-    }
-
-    private static void addTargetingClauses(SpellAbility chain, List<SpellAbility> into) {
-        for (SpellAbility clause = chain; clause != null; clause = clause.getSubAbility()) {
-            if (clause.usesTargeting()) {
-                into.add(clause);
-            }
         }
     }
 
