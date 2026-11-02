@@ -1768,18 +1768,19 @@ the scenarios.
 
 | scenarios by record kind | count |
 |---|---:|
-| resolution | 636 |
+| resolution | 646 |
 | playability | 414 |
-| trigger | 312 |
-| continuous | 216 |
-| rewrite | 93 |
-| combat | 92 |
-| all scenarios | 1,763 |
+| trigger | 308 |
+| continuous | 196 |
+| rewrite | 94 |
+| combat | 86 |
+| turn action | 20 |
+| all scenarios | 1,764 |
 
 | variants by polarity | count |
 |---|---:|
-| fires | 1,984 |
-| does not fire | 1,960 |
+| fires | 1,985 |
+| does not fire | 1,961 |
 | other, a third branch | 307 |
 
 **Most of the 95 skipped rules describe a situation no Forge card produces.** Two instances of
