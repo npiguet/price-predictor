@@ -1927,6 +1927,7 @@ class TestEventTypeCoverage:
         "agrees with the record it mirrors",
         "non-keyword provenance keys",
         "probe forks",
+        "name the mana they made",
         "event types",
     ],
 )
@@ -1990,3 +1991,127 @@ class TestGen2FieldPresence:
         self._write(tmp_path / "a.jsonl", rows)
         with pytest.raises(ValueError, match="what_if"):
             self._finding(tmp_path)
+
+
+class TestGen3FieldPresence:
+    """Root § 8.13 on the raw lines: what every gen-3 record owes, what a
+    gen-3 attackers record no longer carries, and the curation member (T076)."""
+
+    def _write(self, path: Path, rows: list[dict]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+    def _findings(self, tmp_path: Path, rows: list[dict]) -> Findings:
+        self._write(tmp_path / "a.jsonl", rows)
+        presence = FieldPresence()
+        return validate_corpus(read_window(tmp_path, observe=presence.observe),
+                               presence=presence)
+
+    @staticmethod
+    def _golden() -> list[dict]:
+        from tests.unit.effects.builders import java_golden_records
+
+        return [json.loads(json.dumps(raw)) for raw in java_golden_records()]
+
+    def test_the_collector_s_records_owe_nothing_they_lack(self, tmp_path):
+        findings = self._findings(tmp_path, self._golden())
+        gen3 = _named(findings, "gen-3 fields")
+        assert gen3.ok, gen3.detail
+        assert gen3.measured.startswith(f"0/{len(self._golden())} gen-3 records")
+        assert _named(findings, "gen-2 envelope").ok
+        assert _named(findings, "curation").ok
+
+    def test_an_effect_half_without_conditions_met_is_short(self, tmp_path):
+        rows = self._golden()
+        half = next(row for row in rows if row["kind"] == "resolution"
+                    and row["moment"] == "resolution")
+        del half["payload"]["conditions_met"]
+        finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
+        assert not finding.ok
+        assert "payload.conditions_met 1" in finding.detail[0]
+        assert finding.detail[1] == f"{half['record_id']}: no payload.conditions_met"
+
+    @pytest.mark.parametrize(("site", "edit"), [
+        ("state.links", lambda row: row["state"].pop("links")),
+        ("state.global.day_night", lambda row: row["state"]["global"].pop("day_night")),
+        ("state.players[].turn_counts",
+         lambda row: row["state"]["players"][0].pop("turn_counts")),
+        ("state.entities[].owner", lambda row: row["state"]["entities"][0].pop("owner")),
+        ("state.refs.random", lambda row: row["state"]["refs"].pop("random")),
+    ])
+    def test_a_snapshot_member_missing_anywhere_is_named(self, tmp_path, site, edit):
+        rows = self._golden()
+        edit(rows[0])
+        finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
+        assert not finding.ok and f"{site} 1" in finding.detail[0]
+
+    def test_a_static_line_without_active_is_short(self, tmp_path):
+        rows = self._golden()
+        line = next(line for row in rows for entity in row["state"]["entities"]
+                    for line in entity["lines"] if line["kind"] == "static")
+        del line["active"]
+        finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
+        assert "state.entities[].lines[static].active 1" in finding.detail[0]
+
+    @pytest.mark.parametrize(("subkind", "member"), [
+        ("attackers", "legal_defenders"), ("blockers", "must_block")])
+    def test_a_legality_payload_member_missing_is_named(self, tmp_path, subkind, member):
+        rows = self._golden()
+        row = next(row for row in rows if row.get("subkind") == subkind)
+        del row["payload"][member]
+        finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
+        assert f"payload.{member} 1" in finding.detail[0]
+
+    def test_a_candidate_without_timing_or_failed_checks_is_short(self, tmp_path):
+        rows = self._golden()
+        candidate = next(row for row in rows
+                         if row.get("subkind") == "decision")["payload"]["candidates"][0]
+        del candidate["verdict"]["timing"], candidate["failed_checks"]
+        finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
+        assert "payload.candidates[].verdict.timing 1" in finding.detail[0]
+        assert "payload.candidates[].failed_checks 1" in finding.detail[0]
+
+    def test_a_gen3_attackers_record_carrying_what_if_fails(self, tmp_path):
+        rows = self._golden()
+        next(row for row in rows if row.get("subkind") == "attackers")["what_if"] = False
+        finding = _named(self._findings(tmp_path, rows), "gen-2 envelope")
+        assert not finding.ok and "gen-3 attackers" in " ".join(finding.detail)
+
+    def test_a_gen3_blockers_record_without_what_if_fails(self, tmp_path):
+        rows = self._golden()
+        next(row for row in rows if row.get("subkind") == "blockers").pop("what_if")
+        assert not _named(self._findings(tmp_path, rows), "gen-2 envelope").ok
+
+    def test_a_curation_member_is_refused(self, tmp_path):
+        rows = self._golden()
+        rows[3]["curation"] = {"natural_share": 1, "copies": 1, "drawn_rule": None,
+                               "drawn_rules": [], "rule_entities": []}
+        finding = _named(self._findings(tmp_path, rows), "curation")
+        assert not finding.ok and finding.measured.startswith("1 record(s) in 1 of 1")
+
+    def test_a_gen2_shard_owes_no_gen3_member(self, tmp_path):
+        from effects.infrastructure.shard_io import iter_shard_lines
+
+        fixture = Path(__file__).parents[3] / "fixtures" / "effects" / "gen2-records.jsonl.gz"
+        rows = [json.loads(line) for line in iter_shard_lines(fixture)]
+        findings = self._findings(tmp_path, rows)
+        assert _named(findings, "gen-3 fields").measured.startswith("0/0 gen-3 records")
+        assert _named(findings, "gen-2 envelope").ok
+
+
+class TestEmptyMana:
+    """Story 2, acceptance 12: the count of mana_produced events naming no mana."""
+
+    @staticmethod
+    def _mana(record_id: str, mana) -> EffectRecord:
+        params = {} if mana is None else {"mana_by_color": mana}
+        return _resolution(record_id, payload=ResolutionPayload(events=(
+            Event(type=EventType.MANA_PRODUCED, subjects=("P0",), params=params),)))
+
+    def test_the_empty_ones_are_counted_and_watched(self):
+        records = [self._mana("r1", {"G": 1}), self._mana("r2", {}),
+                   self._mana("r3", None), self._mana("r4", {"W": 0, "U": 0})]
+        finding = _named(validate_corpus(records), "name the mana they made")
+        assert finding.watched
+        assert finding.measured.startswith("3/4 mana_produced events have an empty")
+        assert finding.detail == ("resolution: 3",)

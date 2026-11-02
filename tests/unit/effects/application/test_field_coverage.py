@@ -12,9 +12,11 @@ from __future__ import annotations
 import dataclasses
 
 from effects.application.field_coverage import (
+    GEN3_FIELDS,
     KNOWN_CONSTANT_FIELDS,
     FieldCoverage,
     field_coverage,
+    gen3_report_lines,
     report_lines,
 )
 from effects.domain.event_schema import Event, EventType
@@ -299,3 +301,54 @@ class TestReportLines:
             "listed as constant but carrying data — remove from the list:",
             f"  {known}",
         ]
+
+
+class TestTheGen3Fields:
+    """Root § 8.13's fields, each with a row of its own on a gen-3 corpus (T076)."""
+
+    @staticmethod
+    def _golden() -> list[EffectRecord]:
+        from effects.infrastructure.record_codec import record_from_dict
+        from tests.unit.effects.builders import java_golden_records
+
+        return [record_from_dict(raw) for raw in java_golden_records()]
+
+    @staticmethod
+    def _turn_action() -> EffectRecord:
+        from dataclasses import replace
+
+        from effects.domain.records import TurnActionPayload, TurnActionSubkind
+
+        golden = TestTheGen3Fields._golden()[0]
+        return replace(golden, kind=RecordKind.TURN_ACTION, moment=None,
+                       subkind=TurnActionSubkind.DRAW, ability=None, link_id=None,
+                       payload=TurnActionPayload(events=(
+                           Event(type=EventType.ZONE_CHANGE, subjects=("E9",)),)))
+
+    def test_every_listed_path_is_one_the_walk_reaches(self):
+        walked = field_coverage([*self._golden(), self._turn_action()])
+        assert set(GEN3_FIELDS) <= set(walked), sorted(set(GEN3_FIELDS) - set(walked))
+
+    def test_the_report_rows_each_gen3_field(self):
+        lines = gen3_report_lines(field_coverage(self._golden()))
+        assert lines[1].startswith("gen-3 fields (root § 8.13): ")
+        assert len(lines) == 2 + len(GEN3_FIELDS)
+        status = {}
+        for line in lines[2:]:
+            tag, rest = line.strip()[1:].split("] ", 1)
+            status[rest.split()[0]] = tag.strip()
+        assert list(status) == list(GEN3_FIELDS)
+        assert status["record.state.entities[].owner"] == "varies"
+        assert status["record.payload<TurnActionPayload>.events"] == "absent"
+        assert status["record.state.global_.dungeons"] == "const"
+
+    def test_a_corpus_without_gen3_records_gets_no_section(self):
+        record = _record(ResolutionPayload(), moment=Moment.RESOLUTION,
+                         kind=RecordKind.RESOLUTION)
+        assert gen3_report_lines(field_coverage([record])) == []
+        assert not any("gen-3 fields" in line for line in report_lines(
+            field_coverage([record])))
+
+    def test_the_section_follows_the_constant_fields(self):
+        lines = report_lines(field_coverage(self._golden()))
+        assert any(line.startswith("gen-3 fields") for line in lines)

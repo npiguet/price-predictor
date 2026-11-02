@@ -8,6 +8,10 @@ audited too.
 Absence is not proof: a field reads constant whether it is unwired or the corpus
 merely never exercised it, which is why :data:`KNOWN_CONSTANT_FIELDS` is
 asserted in one direction only.
+
+The walk reaches every gen-3 field too; :data:`GEN3_FIELDS` names the ones
+root § 8.13 adds so a gen-3 corpus's report rows each one of them, absent
+ones included, which the walk alone cannot show.
 """
 
 from __future__ import annotations
@@ -66,6 +70,35 @@ KNOWN_CONSTANT_FIELDS: frozenset[str] = frozenset({
 })
 
 
+_ENTITY = "record.state.entities[]"
+_DECISION = "record.payload<PlayabilityDecisionPayload>.candidates[]"
+_ATTACKERS = "record.payload<PlayabilityAttackersPayload>"
+
+#: The fields of the gen-3 record (root § 8.13, with the snapshot facts of
+#: § 8.4 it points to), by walk path. A gen-3 pilot is judged on each one
+#: varying, being listed as constant, or being absent for a reason the
+#: operator accepts (SC-003), so the report gives every one its own row.
+GEN3_FIELDS: tuple[str, ...] = (
+    "record.generation", "record.aimed_at", "record.directed",
+    *(f"{_ENTITY}.{name}" for name in (
+        "owner", "face_state", "mana_cost", "printed_loyalty", "printed_defense",
+        "real_face", "designations", "x_paid", "chosen", "costs_paid", "history",
+        "order_rank", "role")),
+    f"{_ENTITY}.lines[].active", f"{_ENTITY}.lines[].affected",
+    *(f"record.state.players[].{name}" for name in (
+        "speed", "city_blessing", "rad", "monarch", "initiative", "turn_counts")),
+    *(f"record.state.global_.{name}" for name in (
+        "day_night", "floating_effects", "delayed_triggers", "dungeons")),
+    "record.state.refs.random", "record.state.links",
+    "record.payload<ResolutionPayload>.conditions_met",
+    f"{_DECISION}.timing", f"{_DECISION}.failed_checks",
+    *(f"{_ATTACKERS}.{name}" for name in (
+        "anchor_attacker", "legal_defenders", "must_attack", "tapped_by_attack")),
+    "record.payload<PlayabilityBlockersPayload>.must_block",
+    "record.payload<TurnActionPayload>.events",
+)
+
+
 def field_coverage(records: Iterable[EffectRecord]) -> dict[str, FieldCoverage]:
     """Per-field coverage over a corpus, keyed by dotted path.
 
@@ -109,7 +142,34 @@ def report_lines(
     if stale:
         lines += ["", "listed as constant but carrying data — remove from the list:"]
         lines.extend(f"  {path}" for path in stale)
-    return lines
+    return lines + gen3_report_lines(coverage)
+
+
+def gen3_report_lines(coverage: dict[str, FieldCoverage]) -> list[str]:
+    """One row per :data:`GEN3_FIELDS` path, when the corpus holds gen-3 records.
+
+    ``absent`` is a path no record reached (no record of its kind, or no
+    instance of its block); ``const`` one that never varied, ``known`` when
+    :data:`KNOWN_CONSTANT_FIELDS` lists it.
+    """
+    generation = coverage.get("record.generation")
+    if generation is None or not generation.populated:
+        return []
+    rows, tally = [], {"varies": 0, "const": 0, "absent": 0}
+    for path in GEN3_FIELDS:
+        row = coverage.get(path)
+        if row is None:
+            status, seen = "absent", ""
+        elif row.constant:
+            status = "const"
+            seen = f"   (seen {row.seen}{', known' if path in KNOWN_CONSTANT_FIELDS else ''})"
+        else:
+            status, seen = "varies", f"   ({row.populated}/{row.seen})"
+        tally[status] += 1
+        rows.append(f"  [{status:<6}] {path}{seen}")
+    head = (f"gen-3 fields (root § 8.13): {tally['varies']} vary, {tally['const']} "
+            f"constant, {tally['absent']} absent")
+    return ["", head, *rows]
 
 
 class _Tally:

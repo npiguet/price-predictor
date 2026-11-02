@@ -1,5 +1,6 @@
 """The checks that read a record's events: repeats inside one record,
-zone-change origins, clause attribution, causes and the event types seen."""
+zone-change origins, clause attribution, causes, unreadable mana and the event
+types seen."""
 
 from __future__ import annotations
 
@@ -200,6 +201,41 @@ class CauseBearing:
                 f"{event_type}: {counts.hit}/{counts.seen}"
                 for event_type, counts in sorted(self.by_type.items())
             ),
+        )
+
+
+class EmptyMana:
+    """``mana_produced`` events whose ``mana_by_color`` names no mana (story 2,
+    acceptance 12).
+
+    Such an event says mana was made without saying which, and the observed-mana
+    reading counts it for nothing. Watched: a healthy share is not known yet.
+    Empty means no symbol with a positive amount: absent, ``{}`` or all zeros.
+    """
+
+    def __init__(self) -> None:
+        self.empty = Share()
+        #: Per record kind: how many of its mana_produced events were empty.
+        self.by_kind: Counter[str] = Counter()
+
+    def add(self, record: EffectRecord) -> None:
+        for event in record.payload.all_events():
+            if event.type is EventType.MANA_PRODUCED:
+                mana = event.params.get("mana_by_color") or {}
+                empty = not any(amount > 0 for amount in mana.values())
+                self.empty.note(empty)
+                self.by_kind[record.kind.value] += empty
+
+    def findings(self, limits: Thresholds) -> Iterator[Finding]:
+        empty = self.empty
+        yield Finding.watch(
+            name="mana_produced events name the mana they made",
+            measured=(
+                f"{empty.hit}/{empty.seen} mana_produced events have an empty "
+                f"mana_by_color ({empty.rate:.1%})"
+            ),
+            detail=tuple(f"{kind}: {count}"
+                         for kind, count in sorted(self.by_kind.items()) if count),
         )
 
 

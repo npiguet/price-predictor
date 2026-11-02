@@ -36,6 +36,7 @@ from effects.application.corpus_validation.event_checks import (
     Attribution,
     CauseBearing,
     DuplicateEvents,
+    EmptyMana,
     EventTypes,
     ZoneChanges,
     fork_events,
@@ -94,9 +95,9 @@ def validate_corpus(
     """Every invariant, measured over one pass of ``records``.
 
     ``sidecars`` of ``None`` reports the key-join checks as unchecked rather
-    than as holding. ``presence`` is the per-shard envelope tally
-    ``shard_io.read_window`` fills from the raw lines (FR-033), since a parsed
-    record cannot say whether a field was on the wire.
+    than as holding. ``presence`` is the per-shard member tally
+    ``shard_io.read_window`` fills from the raw lines (FR-033, root § 8.13),
+    since a parsed record cannot say whether a field was on the wire.
     """
     checks = _checks(sidecars)
     for record in records:
@@ -106,7 +107,7 @@ def validate_corpus(
         finding for check in checks for finding in check.findings(thresholds)
     )
     if presence is not None:
-        findings.append(presence.finding())
+        findings.extend(presence.findings())
     return findings
 
 
@@ -142,5 +143,6 @@ def _checks(sidecars: SidecarLookup | None) -> tuple[Check, ...]:
         CauseBearing(),
         MirrorTurns(record_ids),
         ProbeForks(),
+        EmptyMana(),
         EventTypes(),
     )
