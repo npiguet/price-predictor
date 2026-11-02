@@ -182,6 +182,43 @@ special one stage 1 kept. The shared snapshot is rejected: at these rates a stop
 than one candidate. The bucket is decided in `FE/DecisionSample.java` from the verdict and the
 ability; the stage-2 draw is in `FE/PlayabilityChannel.java`.
 
+**Second pilot, measured (T064d, 2026-11-02): gen-3 now writes about two and a half times gen-2's gzipped bytes
+per game, down from 19.7, and decision records are 5% of its records.** Same command and flags as
+the first pilot at the new sampling defaults, 10 workers for 10 minutes, into
+`output/effects/records-gen3-pilot2/` (its sealed rows filed beside the shards). Pilot 2a ran the
+same way before a failed `zone` decided the bucket (`output/effects/records-gen3-pilot2a/`): there,
+lands outside the hand failing `land_play_limit` beside `zone` were 60% of decision records and other
+players' abilities failing the activator check 16%, all written as special. Measured as above.
+
+| | gen-2 full-strength | gen-3 pilot | gen-3 pilot 2a | gen-3 pilot 2 | pilot 2 / gen-2 |
+|---|---|---|---|---|---|
+| games (ended with `player_won`) | 21,372 (21,021) | 975 (931) | 437 (419) | 414 (396) | |
+| gzipped bytes per game | 145 KB | 2.85 MB | 436 KB | 354 KB | 2.45 |
+| JSON bytes per game | 6.6 MB | 56 MB | 8.7 MB | 7.1 MB | 1.09 |
+| records per game | 310 | 1,448 | 230 | 192 | 0.62 |
+| decision records per game | | 1,267 | 46.6 | 10.2 | |
+| games per hour, all workers | 4,983 | 1,991 | 2,806 | 2,687 | 0.54 |
+| games per hour per worker | 415 | 199 | 281 | 269 | 0.65 |
+
+What is left of the growth is the records gen-3 adds or reshapes, not decisions. Records per game by
+kind (gen-2 counts its three playability subkinds together):
+
+| kind | gen-2 full-strength | gen-3 pilot | gen-3 pilot 2 |
+|---|---|---|---|
+| playability: decision | 206.6 (all subkinds) | 1,266.7 | 10.2 |
+| playability: attackers | | 36.6 | 35.8 |
+| playability: blockers | | 12.3 | 12.1 |
+| resolution: effect half | 64.4 (both halves) | 33.8 | 33.9 |
+| resolution: activation (cost half) | | 27.7 | 27.7 |
+| turn_action (draw, untap, others) | | 33.9 | 34.0 |
+| trigger | 16.6 | 15.1 | 15.5 |
+| continuous | 12.1 | 11.2 | 11.9 |
+| combat | 9.2 | 9.3 | 9.4 |
+| rewrite | 1.5 | 1.3 | 1.3 |
+
+Attackers records, one per creature, are now the largest kind by JSON bytes (1.5 MB of 7.1 MB per
+game), ahead of the resolution halves; decision records are 0.34 MB.
+
 ## Project Structure
 
 ### Documentation (this feature)
