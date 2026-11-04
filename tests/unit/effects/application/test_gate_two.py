@@ -22,6 +22,7 @@ under-sampled verdict and the agreement verdict are read off the same row.
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import pytest
 import torch
@@ -63,6 +64,7 @@ from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
 from effects.domain.provenance import ProvenanceKey, SidecarLine
 from effects.domain.records import CombatPayload, EffectRecord, RecordKind
 from effects.domain.state_snapshot import (
+    CardLine,
     CombatStatus,
     EntityState,
     GlobalState,
@@ -85,8 +87,15 @@ from tests.unit.effects.builders import (
 _FIRST_STRIKE = ProvenanceKey("cardsfolder/w/white_knight.txt", 0, "static", 0)
 _PUMP = ProvenanceKey("cardsfolder/w/white_knight.txt", 0, "activated", 0)
 _OTHER = ProvenanceKey("cardsfolder/g/grizzly_bears.txt", 0, "static", 0)
+#: An Equipment's static granting first strike: on gen-3 the line it grants is
+#: keyed by this static, and only the line's fragment says which keyword it is.
+_EQUIPPED = ProvenanceKey("cardsfolder/b/bonesplitter.txt", 0, "static", 0)
 
 _LINES = {
+    _EQUIPPED: SidecarLine(
+        line_index=0, line_kind="static", provenance=(_EQUIPPED,),
+        script_text="Equipped creature has first strike.",
+    ),
     _FIRST_STRIKE: SidecarLine(
         line_index=0, line_kind="static", provenance=(_FIRST_STRIKE,),
         script_text="First Strike",
@@ -295,6 +304,59 @@ class TestStrippingTheOverlayChannel:
         )
         assert self._overlay_bit(base, "A") == 1.0
         assert self._overlay_bit(stripped, "A") == 0.0
+
+
+def _gen3_board() -> EffectRecord:
+    """A gen-3 attacker stating first strike twice, printed and granted by an
+    Equipment's static, with its keyword list and flag; the pump line beside
+    them. The blocker prints nothing relevant."""
+    attacker = replace(_creature(
+        "A", 2, 2, keywords=("first_strike",),
+        combat=CombatStatus(attacking="P1", blocked_by=("B0",), became_blocked=True),
+    ), lines=(
+        CardLine(keys=(_FIRST_STRIKE,), kind="keyword", granted=False,
+                 fragment="First Strike"),
+        CardLine(keys=(_PUMP,), kind="activated", granted=False),
+        CardLine(keys=(_EQUIPPED,), kind="keyword", granted=True, active=True,
+                 fragment="First Strike"),
+    ))
+    blocker = replace(_creature(
+        "B0", 2, 2, controller="P1", combat=CombatStatus(blocking=("A",)),
+    ), lines=(CardLine(keys=(_OTHER,), kind="keyword", granted=False, fragment="Trample"),))
+    return _combat_record(attacker, blocker, substep="first_strike")
+
+
+class TestStrippingAGen3Carrier:
+    """Research M5: the strip edits the kept flag and every line of the
+    keyword, printed or granted, so the twin is left with no line of it."""
+
+    def _twin(self, record):
+        batcher = _batcher()
+        _batch, surfaces, _encoded = batcher.build(
+            [record, record], _NoEncoder(),
+            strip_per_record=[NO_STRIP, {"A": frozenset({"first_strike"})}],
+        )
+        return batcher, surfaces
+
+    def test_a_stripped_keyword_leaves_no_line(self):
+        record = _gen3_board()
+        batcher, (base, stripped) = self._twin(record)
+        rows = _rows(batcher, [record])
+        assert _ability_count(base, "A") == 3
+        kept = [slot.e for slot in slots_of_kind(stripped, SlotKind.ABILITY)
+                if slot.entity_id == "A"]
+        assert kept == [rows["W: this creature gets +1/+0"]]
+
+    def test_its_flag_is_cleared_and_the_other_entity_is_intact(self):
+        record = _gen3_board()
+        _batcher_, (base, stripped) = self._twin(record)
+
+        def flag(surface):
+            slot = next(s for s in slots_of_kind(surface, SlotKind.CARD) if s.entity_id == "A")
+            return _overlay_column(slot.features, "first_strike")
+
+        assert (flag(base), flag(stripped)) == (1.0, 0.0)
+        assert _ability_count(stripped, "B0") == _ability_count(base, "B0") == 1
 
 
 class TestBatchThreading:

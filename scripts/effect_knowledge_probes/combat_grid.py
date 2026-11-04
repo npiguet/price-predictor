@@ -12,7 +12,8 @@ the board and reads one creature's predicted death:
 - ``blocker``: the attacker's power against the blocker's toughness, reading the blocker;
 - ``attacker``: the blocker's power against the attacker's toughness, reading the attacker.
 
-A variant grants one creature a keyword through the until-end-of-turn channel, which
+A variant grants one creature a keyword as an effect until end of turn grants it, a
+granted keyword line plus the keyword's kept flag (``BoardEdit.grant_keyword``), which
 changes the rule's answer in a known way: deathtouch kills on any damage, indestructible
 never dies. A record covers one damage step, and the model predicts that step alone, so
 a first or double striker is read in the first-strike step, which the variant sets: there

@@ -225,7 +225,13 @@ def _score_chunk(
     chunk: list[Observation], runnable: Runnable, scores: dict[str, KeywordScore], *,
     active: frozenset[str], keywords_of: KeywordsOf,
 ) -> None:
-    """Run one chunk of observations, paired, and fold it into ``scores``."""
+    """Run one chunk of observations, paired, and fold it into ``scores``.
+
+    The twin strips the row's keyword from its carrier in both places the
+    input states it (root spec § 9.6, research M5): the kept flag is cleared
+    and every line of the keyword is dropped, printed or granted, so the
+    carrier is left with no line of it (``SurfaceBuilder.build``).
+    """
     built = [observation.record for observation in chunk] * 2
     strips = [NO_STRIP] * len(chunk) + [
         {observation.participant.carrier.id: frozenset({observation.row.keyword})}

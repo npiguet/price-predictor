@@ -9,7 +9,8 @@ grid cell reads as the list of what it changed::
 
 An input the record states in two places is edited in both by the caller that
 knows the second place (``sweeps.set_untapped_lands``, the combat grid's damage
-assignment); the edits here touch one field each.
+assignment); the edits here touch one field each, but for a granted keyword,
+which a gen-3 entity states as a list entry and a line, both edited here.
 
 Nothing here does work at import time.
 """
@@ -79,13 +80,34 @@ class BoardEdit:
         return edited
 
     def grant_keyword(self, entity_id: str, keyword: str) -> BoardEdit:
-        """``keyword`` granted until end of turn, the overlay channel the model reads."""
+        """``keyword`` granted until end of turn, as a resolved effect grants it
+        (root spec § 9.6): in the keyword list, which sets its kept flag where
+        the keyword keeps one, and as a granted keyword line with no key, which
+        the model reads through the keyword's reminder text. A keyword without
+        a kept flag (fear, intimidate, unblockable) reaches the model through
+        that line alone. A gen-1 or gen-2 entity has no lines, so its list is
+        all an edit can change.
+
+        ``keyword`` is in the package's spelling (``first_strike``,
+        ``protection_from_red``); an entity that has it already is left alone.
+        """
+        from effects.domain.keyword_names import normalize_keyword
+        from effects.domain.state_snapshot import CardLine, LineKind
+
         def edit(entity):
             granted = entity.granted_temporary
-            if keyword in granted.keywords:
+            if keyword not in granted.keywords:
+                entity = replace(entity, granted_temporary=replace(
+                    granted, keywords=(*granted.keywords, keyword)))
+            fragment = keyword_fragment(keyword)
+            if entity.lines is None or any(
+                    line.in_force and (line.fragment == fragment
+                                       or line.keyword == normalize_keyword(keyword))
+                    for line in entity.lines):
                 return entity
-            return replace(entity, granted_temporary=replace(
-                granted, keywords=(*granted.keywords, keyword)))
+            line = CardLine(keys=(), kind=LineKind.KEYWORD.value, granted=True,
+                            fragment=fragment)
+            return replace(entity, lines=(*entity.lines, line))
 
         return self.edit_entity(entity_id, edit)
 
@@ -110,3 +132,20 @@ class BoardEdit:
     def add_supertype(self, entity_id: str, supertype: str) -> BoardEdit:
         return self.edit_entity(entity_id, lambda e: replace(
             e, supertypes=tuple(sorted({*e.supertypes, supertype}))))
+
+
+#: Grants no Forge keyword spells: "can't be blocked" is a static in Forge, so
+#: its line reads the text a converted card prints for that static.
+_FRAGMENTS = {"unblockable": "CARDNAME can't be blocked."}
+
+
+def keyword_fragment(keyword: str) -> str:
+    """The fragment Forge writes on a keyword line for ``keyword``, given in
+    the package's spelling: ``first_strike`` is ``First strike``,
+    ``protection_from_red`` is ``Protection from red``. The keyword table
+    matches a fragment's name case-insensitively, so the capital alone
+    matters."""
+    if keyword in _FRAGMENTS:
+        return _FRAGMENTS[keyword]
+    words = keyword.replace("_", " ")
+    return words[:1].upper() + words[1:]

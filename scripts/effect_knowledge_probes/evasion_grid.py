@@ -11,16 +11,18 @@ shares no colour with the attacker, and the attacker has a colour other than bla
 One triple per game.
 
 Each grid cell grants the attacker one evasion keyword and gives the blocker one
-trait, both through channels the model reads (the until-end-of-turn keyword overlay,
+trait, both through channels the model reads (a keyword as an effect until end of
+turn grants it, a granted keyword line plus its kept flag, ``BoardEdit.grant_keyword``;
 the type and colour lists), and reads the predicted legality of that blocker for that
-attacker (the ``blocker_legal`` field at the blocker's slot). The rule's answer is
-computed for every edited record by ``may_block``, so the score holds whatever the
-real creatures are.
+attacker (the ``blocker_legal`` field at the blocker's slot). Fear, intimidate and
+unblockable keep no flag, so the model reads them through the line alone. The rule's
+answer is computed for every edited record by ``may_block``, so the score holds
+whatever the real creatures are.
 
 Protection from a colour is two rows: from the blocker's colour, where the rule
-forbids the block, and from another colour, where it does not. The model's keyword
-flags carry protection without its colour, so the two rows give it identical inputs
-and measure what the missing colour costs.
+forbids the block, and from another colour, where it does not. The keyword flag
+carries protection without its colour; the granted line names the colour, so the
+two rows differ in that line's text alone and measure whether the model reads it.
 """
 from __future__ import annotations
 

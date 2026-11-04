@@ -1199,6 +1199,81 @@ class TestEvasionGrid:
         assert evasion_grid.qualifying_pair(black, _keywords) is None
 
 
+# ── a granted keyword on a gen-3 board (research M5) ────────────────────
+
+
+@pytest.fixture(scope="module")
+def gen3_creature():
+    """A gen-3 fixture record and one battlefield creature on it with neither
+    flying nor fear nor any line of either."""
+    from effects.infrastructure.shard_io import read_shard
+
+    for record in read_shard(_FIXTURES / "gen3-records.jsonl.gz"):
+        for entity in record.state.entities:
+            if (entity.lines is not None and entity.on_battlefield and entity.is_creature
+                    and not {"flying", "fear"} & set(entity.granted_temporary.keywords)
+                    and not any(line.keyword in ("flying", "fear")
+                                for line in entity.lines)):
+                return record, entity.id
+    raise AssertionError("no gen-3 fixture creature without flying or fear")
+
+
+class TestGrantingAKeywordOnGen3:
+    """A grant writes the kept flag and the granted keyword line; a keyword
+    with no flag reaches the model through its line alone."""
+
+    def _granted(self, gen3_creature, *keywords):
+        record, entity_id = gen3_creature
+        board = BoardEdit(record)
+        for keyword in keywords:
+            board = board.grant_keyword(entity_id, keyword)
+        return record, board.record.state.entity(entity_id), record.state.entity(entity_id)
+
+    @staticmethod
+    def _flag(entity, record, keyword) -> float:
+        from effects.domain.effect_head_input import card_features, card_segments
+        from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
+
+        flags = card_features(entity, record)[card_segments(entity, record)["keyword_flags"]]
+        return flags[KEPT_KEYWORD_FLAGS.index(keyword)]
+
+    def test_a_kept_keyword_gets_its_flag_and_a_granted_line(self, gen3_creature):
+        from effects.domain.effect_head_input import keyword_line_key, slot_lines
+
+        record, granted, before = self._granted(gen3_creature, "flying")
+        added = granted.lines[len(before.lines):]
+        assert [(line.keys, line.kind, line.granted, line.fragment) for line in added] == [
+            ((), "keyword", True, "Flying")]
+        assert keyword_line_key("Flying") in {line.key for line in slot_lines(granted)}
+        assert self._flag(granted, record, "flying") == 1.0
+        assert self._flag(before, record, "flying") == 0.0
+
+    def test_a_keyword_without_a_flag_is_read_through_its_line_alone(self, gen3_creature):
+        from effects.domain.effect_head_input import card_features, keyword_line_key, slot_lines
+        from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
+
+        assert "fear" not in KEPT_KEYWORD_FLAGS
+        record, granted, before = self._granted(gen3_creature, "fear")
+        assert card_features(granted, record) == card_features(before, record)
+        assert keyword_line_key("Fear") in {line.key for line in slot_lines(granted)}
+
+    @pytest.mark.parametrize("keyword, fragment", [
+        ("first_strike", "First strike"),
+        ("protection_from_green", "Protection from green"),
+        ("unblockable", "CARDNAME can't be blocked."),
+    ])
+    def test_the_line_spells_the_keyword_as_forge_writes_it(
+        self, gen3_creature, keyword, fragment,
+    ):
+        _record, granted, before = self._granted(gen3_creature, keyword)
+        assert granted.lines[len(before.lines):][-1].fragment == fragment
+
+    def test_granting_twice_adds_one_line(self, gen3_creature):
+        _record, granted, before = self._granted(gen3_creature, "unblockable", "unblockable")
+        assert len(granted.lines) == len(before.lines) + 1
+        assert granted.granted_temporary.keywords.count("unblockable") == 1
+
+
 class TestTargetRestrictions:
     def test_numbers_are_masked(self):
         assert target_restrictions.masked("Creature.powerLE2") == "Creature.powerLE#"
