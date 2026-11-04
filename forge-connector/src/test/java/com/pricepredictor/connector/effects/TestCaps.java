@@ -21,6 +21,9 @@ public final class TestCaps {
     private double randomSeatProbability;
     private Optional<List<String>> aimedAt;
     private boolean countDroppedEvents;
+    private List<String> directedForkRules;
+    private int directedForksPerGame;
+    private double directedForkProbability;
 
     private TestCaps(CollectionCaps from) {
         manaCap = from.manaCap();
@@ -34,6 +37,9 @@ public final class TestCaps {
         randomSeatProbability = from.randomSeatProbability();
         aimedAt = from.aimedAt();
         countDroppedEvents = from.countDroppedEvents();
+        directedForkRules = from.directedForkRules();
+        directedForksPerGame = from.directedForksPerGame();
+        directedForkProbability = from.directedForkProbability();
     }
 
     /** {@link CollectionCaps#defaults()}, to be varied. */
@@ -96,10 +102,23 @@ public final class TestCaps {
         return this;
     }
 
+    /**
+     * Directed forks for {@code rules}, in tie-break order, at most
+     * {@code perGame} a game, a matching boundary forking with
+     * {@code probability} (FR-010a, FR-012).
+     */
+    public TestCaps directed(int perGame, double probability, String... rules) {
+        directedForkRules = List.of(rules);
+        directedForksPerGame = perGame;
+        directedForkProbability = probability;
+        return this;
+    }
+
     public CollectionCaps build() {
         return new CollectionCaps(manaCap, playabilityRate, zoneCandidateRate,
                 plainCandidateRate, interventions, probes,
                 probeKeywords, randomSeatShare, randomSeatProbability, aimedAt,
-                countDroppedEvents);
+                countDroppedEvents, directedForkRules, directedForksPerGame,
+                directedForkProbability);
     }
 }

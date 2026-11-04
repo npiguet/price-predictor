@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.google.common.eventbus.Subscribe;
+import com.pricepredictor.connector.effects.directed.DirectedRules;
 import forge.game.Game;
 import forge.game.event.GameEventTurnPhase;
 
@@ -36,6 +37,8 @@ public final class GameRecording implements AutoCloseable {
     private final Optional<InterventionScheduler> interventions;
     /** Stage three's damage-step probes, when the run takes any. */
     private final Optional<ProbeScheduler> probes;
+    /** The directed forks (FR-010), when the run names a rule. */
+    private final Optional<DirectedForkScheduler> directed;
     /** Where the game's dropped-event counts go when it ends, or null when the run counts none. */
     private final Path droppedEventsFile;
     /**
@@ -80,6 +83,19 @@ public final class GameRecording implements AutoCloseable {
     public GameRecording(
             Game game, RecordShardWriter writer, String gameId, CollectionCaps caps,
             long seed, String randomSeatPlayerId, ForkSeats forkSeats) {
+        this(game, writer, gameId, caps, seed, randomSeatPlayerId, forkSeats,
+                DirectedRules.registered(), DirectedForkTally.lifetime());
+    }
+
+    /**
+     * Build one game's collectors, directed forks taken for {@code
+     * directedRules} and counted in {@code tally}; the public constructors
+     * pass the registered rules and the JVM lifetime's tally.
+     */
+    GameRecording(
+            Game game, RecordShardWriter writer, String gameId, CollectionCaps caps,
+            long seed, String randomSeatPlayerId, ForkSeats forkSeats,
+            DirectedRules directedRules, DirectedForkTally tally) {
         this.game = game;
         this.fork = false;
         this.caps = caps;
@@ -112,6 +128,15 @@ public final class GameRecording implements AutoCloseable {
         this.patched = new PatchedCollectors(game, context.get(), caps, seed, bracket);
         this.droppedEventsFile = caps.countDroppedEvents() ? droppedEventsFile(writer) : null;
         this.playForward = new ForkPlayForward(this, forkSeats, seed);
+        // Directed forks, on a patched checkout as the other two kinds: the
+        // fork plays on through the live game's hooks.
+        boolean directing = mode == AttributionMode.PATCHED && caps.directedForksEnabled();
+        this.directed = directing
+                ? Optional.of(new DirectedForkScheduler(
+                        game, caps, directedRules, budget, tally, seed,
+                        new DirectedFork(game, playForward, bracket::heldRecordId,
+                                () -> game.getPhaseHandler().getPlayerTurn())::take))
+                : Optional.empty();
     }
 
     /**
@@ -132,6 +157,7 @@ public final class GameRecording implements AutoCloseable {
         this.envelope = context;
         this.interventions = Optional.empty();
         this.probes = Optional.empty();
+        this.directed = Optional.empty();
         this.bracket = new BusBracketCollector(fork, context, recordId -> { });
         this.patched = PatchedCollectors.forFork(fork, context, caps, seed, bracket);
         this.droppedEventsFile = null;
@@ -287,6 +313,9 @@ public final class GameRecording implements AutoCloseable {
             // event fires ahead of it, which is the only moment a probe can
             // fork from a board where nothing has been dealt yet.
             probes.ifPresent(ProbeScheduler::collect);
+            // Last: a directed fork plays the turn on, and the boundary's
+            // other collection reads the live board before any fork is taken.
+            directed.ifPresent(scheduler -> scheduler.collect(event.phase()));
         }
     }
 }

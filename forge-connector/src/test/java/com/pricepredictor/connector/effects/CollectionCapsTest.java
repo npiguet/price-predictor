@@ -152,6 +152,48 @@ class CollectionCapsTest {
     }
 
     /**
+     * The directed forks (FR-012): no rule named unless the supervisor names
+     * one, two a game and a quarter of matching boundaries by default, and
+     * all three read from their properties.
+     */
+    @Test
+    void theDirectedForkCapsAreReadFromSystemProperties() {
+        CollectionCaps defaults = CollectionCaps.defaults();
+        assertEquals(List.of(), defaults.directedForkRules());
+        assertEquals(2, defaults.directedForksPerGame());
+        assertEquals(0.25, defaults.directedForkProbability());
+        assertFalse(defaults.directedForksEnabled());
+        assertEquals(defaults, CollectionCaps.fromSystemProperties());
+        Map<String, String> properties = Map.of(
+                CollectionCaps.DIRECTED_FORK_RULES, "704.5f, 702.19b",
+                CollectionCaps.DIRECTED_FORKS_PER_GAME, "3",
+                CollectionCaps.DIRECTED_FORK_PROBABILITY, "1.0");
+        properties.forEach(System::setProperty);
+        try {
+            CollectionCaps caps = CollectionCaps.fromSystemProperties();
+            assertEquals(List.of("704.5f", "702.19b"), caps.directedForkRules());
+            assertEquals(3, caps.directedForksPerGame());
+            assertEquals(1.0, caps.directedForkProbability());
+            assertTrue(caps.directedForksEnabled());
+        } finally {
+            properties.keySet().forEach(System::clearProperty);
+        }
+    }
+
+    /** A blank rule list, which is what a run naming no rule sends, takes no directed fork. */
+    @Test
+    void aBlankRuleListTakesNoDirectedFork() {
+        System.setProperty(CollectionCaps.DIRECTED_FORK_RULES, "");
+        try {
+            assertFalse(CollectionCaps.fromSystemProperties().directedForksEnabled());
+        } finally {
+            System.clearProperty(CollectionCaps.DIRECTED_FORK_RULES);
+        }
+        assertFalse(TestCaps.caps().directed(0, 1.0, "704.5f").build().directedForksEnabled(),
+                "nor does a budget of none");
+    }
+
+    /**
      * A game's counts are appended as one {@code event_type, phase, count}
      * line each, so a lifetime's file is the concatenation of its games and
      * the supervisor sums the lines.

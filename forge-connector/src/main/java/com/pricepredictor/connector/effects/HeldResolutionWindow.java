@@ -116,6 +116,17 @@ final class HeldResolutionWindow {
     }
 
     /**
+     * The id of the held resolution's first effect half, or null when none
+     * is held: the live record a fork taken now was forked beside (D5).
+     */
+    String heldRecordId() {
+        if (held == null || held.halves().halves().isEmpty()) {
+            return null;
+        }
+        return held.halves().halves().get(0).about().recordId();
+    }
+
+    /**
      * File a permanent's leaving, which a state-based check has just caused,
      * into the held resolution that left it behind.
      *

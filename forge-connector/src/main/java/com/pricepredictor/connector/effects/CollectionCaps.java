@@ -22,6 +22,14 @@ import java.util.Optional;
  * @param countDroppedEvents whether each game's events that reached no record
  *                are written beside the shard for the supervisor to sum
  *                (FR-041, {@link DroppedEvents})
+ * @param directedForkRules the rules directed forks are taken for, in the
+ *                order that breaks a tie between two rules matching one
+ *                boundary (FR-010a); empty takes none
+ * @param directedForksPerGame the directed forks one game may take, kept or
+ *                discarded, beside the other fork budgets (FR-012)
+ * @param directedForkProbability the chance a boundary where an enabled
+ *                rule's precondition holds forks, in (0, 1]; the supervisor
+ *                refuses any other value before a worker starts (FR-014)
  */
 public record CollectionCaps(
         int manaCap,
@@ -34,11 +42,19 @@ public record CollectionCaps(
         double randomSeatShare,
         double randomSeatProbability,
         Optional<List<String>> aimedAt,
-        boolean countDroppedEvents) {
+        boolean countDroppedEvents,
+        List<String> directedForkRules,
+        int directedForksPerGame,
+        double directedForkProbability) {
+
+    public CollectionCaps {
+        directedForkRules = List.copyOf(directedForkRules);
+    }
 
     public static CollectionCaps defaults() {
         return new CollectionCaps(
-                1, 0.01, 0.0001, 0.001, 2, 2, List.of(), 0.0, 0.0, Optional.empty(), false);
+                1, 0.01, 0.0001, 0.001, 2, 2, List.of(), 0.0, 0.0, Optional.empty(), false,
+                List.of(), 2, 0.25);
     }
 
     public static final String MANA_CAP = "effect.mana.cap";
@@ -52,6 +68,9 @@ public record CollectionCaps(
     public static final String RANDOM_SEAT_PROBABILITY = "effect.random.seat.probability";
     public static final String AIMED_AT = "effect.aimed.at";
     public static final String COUNT_DROPPED_EVENTS = "effect.count.dropped.events";
+    public static final String DIRECTED_FORK_RULES = "effect.directed.fork.rules";
+    public static final String DIRECTED_FORKS_PER_GAME = "effect.directed.forks.per.game";
+    public static final String DIRECTED_FORK_PROBABILITY = "effect.directed.fork.probability";
 
     /**
      * Read from the {@code effect.*} system properties the supervisor sets.
@@ -90,7 +109,22 @@ public record CollectionCaps(
                 // on no other: its presence is what marks the run's records
                 // aimed (FR-009a), its value the rules they were aimed at.
                 WorkerProperties.presentListProperty(AIMED_AT),
-                WorkerProperties.flag(COUNT_DROPPED_EVENTS));
+                WorkerProperties.flag(COUNT_DROPPED_EVENTS),
+                // The directed forks (FR-012). Unset, as on a worker an older
+                // supervisor started, no rule is named and none is taken.
+                WorkerProperties.listProperty(DIRECTED_FORK_RULES),
+                WorkerProperties.intProperty(
+                        DIRECTED_FORKS_PER_GAME, defaults.directedForksPerGame(), policy),
+                WorkerProperties.doubleProperty(
+                        DIRECTED_FORK_PROBABILITY, defaults.directedForkProbability(), policy));
+    }
+
+    /**
+     * Whether any directed fork may be taken: a rule is named and the budget
+     * allows one.
+     */
+    public boolean directedForksEnabled() {
+        return !directedForkRules.isEmpty() && directedForksPerGame > 0;
     }
 
     /** Whether any match of this run may seat a random player at all. */

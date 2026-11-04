@@ -305,6 +305,15 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
+     * The id of a live record still open, its id already taken, or null: the
+     * held resolution's first effect half. A directed fork taken at a phase
+     * boundary finds none, because the boundary closes the held window first.
+     */
+    String heldRecordId() {
+        return heldResolution.heldRecordId();
+    }
+
+    /**
      * A phase change closes the combat bracket, if one is open, and the last
      * step's turn-action window, and opens this step's.
      *

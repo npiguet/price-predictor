@@ -52,7 +52,7 @@ class ForkPlayForwardTest {
 
     private static final Consumer<EffectRecord> DIRECTED = record -> record.fork(true).interventional(false);
 
-    private static Game board(Game game) {
+    static Game board(Game game) {
         game.setAge(GameStage.Play);
         Player active = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
@@ -71,11 +71,11 @@ class ForkPlayForwardTest {
         return game;
     }
 
-    private static Game board() {
+    static Game board() {
         return board(TestBoard.twoPlayerGame(PhaseType.MAIN1));
     }
 
-    private static Card sneakAttack(Game game) {
+    static Card sneakAttack(Game game) {
         Player active = game.getPlayers().get(0);
         Card sneak = onBattlefield(game, "Sneak Attack");
         SpellAbility put = TestBoard.ability(sneak, ApiType.ChangeZone);
@@ -123,7 +123,7 @@ class ForkPlayForwardTest {
         }
     }
 
-    private static void playTheTurnOut(Game game) {
+    static void playTheTurnOut(Game game) {
         int turn = game.getPhaseHandler().getTurn();
         for (int steps = 0; !game.isGameOver() && game.getPhaseHandler().getTurn() == turn; steps++) {
             if (steps > ForkPlayForward.MAX_STEPS) {
@@ -162,7 +162,7 @@ class ForkPlayForwardTest {
         return all.stream().filter(record -> !isFork(record)).toList();
     }
 
-    private static String deathOf(Card card) {
+    static String deathOf(Card card) {
         return "{\"type\":\"zone_change\",\"subjects\":[\"E" + card.getId()
                 + "\"],\"params\":{\"from_zone\":\"battlefield\",\"to_zone\":\"graveyard\"";
     }

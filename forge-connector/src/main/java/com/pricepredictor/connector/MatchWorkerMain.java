@@ -5,6 +5,7 @@ import com.pricepredictor.connector.effects.AttributionMode;
 import com.pricepredictor.connector.effects.GameRecording;
 import com.pricepredictor.connector.effects.PatchHooks;
 import com.pricepredictor.connector.effects.RecordShardWriter;
+import com.pricepredictor.connector.effects.directed.DirectedRules;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -249,6 +250,24 @@ public class MatchWorkerMain {
     }
 
     /**
+     * Name the directed-fork state at startup, as the probe state is, and any
+     * rule the worker cannot fork for. The supervisor's startup check refuses
+     * such a rule before a worker starts (FR-014), so one here means the
+     * worker was started some other way; it takes no fork for it.
+     */
+    private static void announceDirectedForks(CollectionCaps caps) {
+        System.out.println("Directed forks: " + String.join(",", caps.directedForkRules())
+                + ", up to " + caps.directedForksPerGame() + " per game, probability "
+                + caps.directedForkProbability());
+        for (String rule : caps.directedForkRules()) {
+            if (DirectedRules.registered().find(rule).isEmpty()) {
+                System.err.println("Directed forks: " + rule
+                        + " is not registered in forge-connector; it takes no fork");
+            }
+        }
+    }
+
+    /**
      * The shard this worker appends effect records to, announced on stdout
      * with the collection state it runs under, or null when the run collects
      * none.
@@ -278,6 +297,9 @@ public class MatchWorkerMain {
         caps.aimedAt().ifPresent(rules -> System.out.println(
                 "Aimed at: " + (rules.isEmpty() ? "no rule" : String.join(",", rules))
                         + " (every record carries aimed_at)"));
+        if (caps.directedForksEnabled()) {
+            announceDirectedForks(caps);
+        }
         if (caps.countDroppedEvents()) {
             System.out.println("Dropped events: counted per game into "
                     + GameRecording.droppedEventsFile(effectRecords));

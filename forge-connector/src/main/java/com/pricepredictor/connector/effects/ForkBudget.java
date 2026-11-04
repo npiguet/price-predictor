@@ -9,9 +9,11 @@ import java.util.Map;
 /**
  * How many forks one game may still take, of each kind.
  *
- * <p>Both kinds spend their budget when the fork is <b>taken</b>, before the
+ * <p>Every kind spends its budget when the fork is <b>taken</b>, before the
  * score check, so a discarded fork still counts: otherwise a systematically
- * failing copy would retry until the game ended.
+ * failing copy would retry until the game ended. Directed forks (FR-012)
+ * have a budget of their own beside the other two, so a run that enables
+ * them takes no intervention or probe fewer.
  */
 final class ForkBudget {
 
@@ -21,15 +23,18 @@ final class ForkBudget {
     private final int interventionsPerGame;
     private final int probesPerGame;
     private final List<String> probeKeywords;
+    private final int directedPerGame;
 
     private int interventionsUsed;
     private int probesUsed;
+    private int directedUsed;
     private final Map<Integer, Integer> forksPerResolution = new HashMap<>();
 
     ForkBudget(CollectionCaps caps) {
         this.interventionsPerGame = caps.interventionsPerGame();
         this.probesPerGame = caps.probesPerGame();
         this.probeKeywords = List.copyOf(caps.probeKeywords());
+        this.directedPerGame = caps.directedForksPerGame();
     }
 
     /**
@@ -82,5 +87,15 @@ final class ForkBudget {
     /** Spend one probe. */
     void spendProbe() {
         probesUsed++;
+    }
+
+    /** Whether another directed fork may be taken this game ({@code --directed-forks-per-game}). */
+    boolean mayDirect() {
+        return directedUsed < directedPerGame;
+    }
+
+    /** Spend one directed fork, kept or discarded. */
+    void spendDirected() {
+        directedUsed++;
     }
 }

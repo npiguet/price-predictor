@@ -1,6 +1,13 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import com.pricepredictor.connector.effects.directed.Application;
+import com.pricepredictor.connector.effects.directed.Binding;
+import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.DirectedRules;
+import com.pricepredictor.connector.effects.directed.DirectedTag;
+import com.pricepredictor.connector.effects.directed.ForkOperation;
+import com.pricepredictor.connector.effects.directed.operations.PtOperation;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.card.CounterEnumType;
@@ -16,10 +23,14 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
+import static com.pricepredictor.connector.effects.RecordLines.parse;
 import static com.pricepredictor.connector.effects.RecordLines.payloadOf;
 import static com.pricepredictor.connector.effects.RecordLines.records;
 import static com.pricepredictor.connector.effects.RecordLines.stateOf;
@@ -591,5 +602,127 @@ class ForkRecordsTest {
                 .findFirst().orElseThrow(() -> new AssertionError(
                         "no damage to " + card + " in "
                                 + events.stream().map(EffectEvent::toJson).toList()));
+    }
+    // ── directed forks (T090, D5) ───────────────────────────────────────
+
+    /**
+     * 704.5f's rule, for these tests only: as the end step begins with
+     * Grizzly Bears on the battlefield, its toughness becomes 5.
+     */
+    private static DirectedRule tougherBears() {
+        return DirectedRule.of("704.5f", "704.5f-1", live -> {
+            if (live.getPhaseHandler().getPhase() != PhaseType.END_OF_TURN) {
+                return Optional.empty();
+            }
+            return live.getCardsIn(ZoneType.Battlefield).stream()
+                    .filter(card -> card.getName().equals("Grizzly Bears")).findFirst()
+                    .map(bears -> Binding.empty().with("creature", bears));
+        }, "tougher", new Application(ForkOperation.PT,
+                binding -> new PtOperation(binding.card("creature"), null, 5)));
+    }
+
+    /** The live turn of the Sneak Attack board played out with the rule enabled; the shard's lines. */
+    private List<String> directedTurn(CollectionCaps caps) throws Throwable {
+        Game game = ForkPlayForwardTest.board();
+        ForkPlayForwardTest.sneakAttack(game);
+        RecordShardWriter shard = ShardRun.writer(tempDir);
+        try (GameRecording recording = new GameRecording(
+                game, shard, ShardRun.GAME_ID, caps, 7L, null, ForkSeats.NONE,
+                DirectedRules.of(tougherBears()), new DirectedForkTally())) {
+            recording.open();
+            ForkPlayForwardTest.playTheTurnOut(game);
+        } finally {
+            shard.close();
+        }
+        return ShardRun.readShard(shard.path());
+    }
+
+    private static List<String> split(List<String> all, boolean fork) {
+        List<String> kept = new ArrayList<>();
+        for (String record : all) {
+            if (Boolean.valueOf(fork).equals(parse(record).get("fork"))) {
+                kept.add(record);
+            }
+        }
+        return kept;
+    }
+
+    /**
+     * Every record of a directed fork names its one rule, is a
+     * non-interventional fork and says which variant and operation it
+     * applied; taken at a phase boundary, where no live record is open, it
+     * mirrors none. The live game's records carry none of it on a
+     * match-outcomes run.
+     */
+    @Test
+    void aDirectedForksRecordsNameTheRuleTheVariantAndTheOperation() throws Throwable {
+        List<String> all = directedTurn(
+                forkCaps().interventions(0).probes(0).directed(1, 1.0, "704.5f").build());
+        List<String> forked = split(all, true);
+
+        assertFalse(forked.isEmpty(), "the fork at the end step was kept and recorded");
+        for (String record : forked) {
+            Map<String, Object> parsed = parse(record);
+            assertEquals(List.of("704.5f"), parsed.get("aimed_at"), record);
+            assertEquals(Boolean.FALSE, parsed.get("interventional"), record);
+            assertEquals(Map.of("variant", "tougher", "operation", "pt"), parsed.get("directed"), record);
+            assertNull(parsed.get("mirror_of"), record);
+            assertEquals(ShardRun.GAME_ID, parsed.get("game_id"), record);
+        }
+        for (String record : split(all, false)) {
+            assertFalse(parse(record).containsKey("aimed_at"), record);
+            assertFalse(parse(record).containsKey("directed"), record);
+        }
+    }
+
+    /**
+     * The edit publishes a stats change on the fork's bus, but the fork's
+     * collectors start listening after it: no fork record holds the
+     * toughness change as an event the turn caused.
+     */
+    @Test
+    void theEditItselfIsNoEventOfTheFork() throws Throwable {
+        List<String> all = directedTurn(
+                forkCaps().interventions(0).probes(0).directed(1, 1.0, "704.5f").build());
+
+        for (String record : split(all, true)) {
+            assertFalse(eventTypes(record).contains("pt_change"), record);
+        }
+    }
+
+    /**
+     * On a run aimed at several rules (collect-variants), the live records
+     * carry the run's list and a directed fork's records the one rule it was
+     * taken for.
+     */
+    @Test
+    void aDirectedForkOnAnAimedRunNamesItsOwnRule() throws Throwable {
+        List<String> all = directedTurn(forkCaps().interventions(0).probes(0)
+                .aimedAt("704.5f", "702.19b").directed(1, 1.0, "704.5f").build());
+
+        assertFalse(split(all, true).isEmpty());
+        for (String record : split(all, true)) {
+            assertEquals(List.of("704.5f"), parse(record).get("aimed_at"), record);
+        }
+        for (String record : split(all, false)) {
+            assertEquals(List.of("704.5f", "702.19b"), parse(record).get("aimed_at"), record);
+        }
+    }
+
+    /** {@code mirror_of} is written only when a live record was open at the fork point (D5). */
+    @Test
+    void aDirectedForkMirrorsALiveRecordOnlyWhenOneWasOpen() {
+        List<String> held = new ArrayList<>();
+        CollectorContext live = TestCollectors.context(ShardRun.writer(tempDir), ShardRun.GAME_ID, null);
+        DirectedTag tag = new DirectedTag("tougher", ForkOperation.PT);
+        CollectorContext opened = live.forFork(DirectedFork.flags("704.5f", tag, "run.0-l1.7"), held::add);
+        CollectorContext none = live.forFork(DirectedFork.flags("704.5f", tag, null), held::add);
+
+        opened.emit(opened.newRecord(RecordKind.COMBAT).actor("P0").state("{}").payload("{}"));
+        none.emit(none.newRecord(RecordKind.COMBAT).actor("P0").state("{}").payload("{}"));
+
+        assertEquals("run.0-l1.7", parse(held.get(0)).get("mirror_of"));
+        assertNull(parse(held.get(1)).get("mirror_of"));
+        assertEquals(List.of("704.5f"), parse(held.get(1)).get("aimed_at"));
     }
 }
