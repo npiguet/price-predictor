@@ -1,11 +1,16 @@
 package com.pricepredictor.connector.effects.directed.rules;
 
 import forge.game.Game;
+import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
+import forge.game.trigger.Trigger;
+import forge.game.zone.ZoneType;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -51,5 +56,58 @@ final class Boards {
                 .mapToInt(Player::getLife)
                 .max()
                 .orElseThrow(() -> new IllegalStateException("no other player"));
+    }
+
+    /** Whether {@code player} has as many untapped lands as {@code card}'s mana value: a cheap bound on casting it. */
+    static boolean affordable(Player player, Card card) {
+        return card.getCMC() <= untappedLands(player);
+    }
+
+    /**
+     * The one untapped permanent {@code player} controls that can make mana
+     * now, or empty when it controls none or several: the last mana it has
+     * for a cost. A summoning-sick creature's tap ability makes none.
+     */
+    static Optional<Card> soleManaSource(Player player) {
+        List<Card> sources = player.getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> !card.isTapped() && !card.getManaAbilities().isEmpty())
+                .filter(card -> !(card.isCreature() && card.isSick()))
+                .toList();
+        return sources.size() == 1 ? Optional.of(sources.get(0)) : Optional.empty();
+    }
+
+    /** The parameters of the ability script {@code host} holds as {@code svar}, empty when it holds none. */
+    static Map<String, String> script(Card host, String svar) {
+        if (svar == null || !host.hasSVar(svar)) {
+            return Map.of();
+        }
+        return AbilityFactory.getMapParams(host.getSVar(svar));
+    }
+
+    /** The parameters of the ability {@code trigger} executes, empty when it names none. */
+    static Map<String, String> executed(Trigger trigger) {
+        return trigger.hasParam("Execute") ? script(trigger.getHostCard(), trigger.getParam("Execute")) : Map.of();
+    }
+
+    /** The API a script's parameters name, whether it is a spell, an ability or a sub-ability. */
+    static String api(Map<String, String> script) {
+        for (String kind : List.of("SP", "AB", "DB")) {
+            if (script.containsKey(kind)) {
+                return script.get(kind);
+            }
+        }
+        return "";
+    }
+
+    /** {@code value} as a number, or empty when it is an X, a count or absent. */
+    static Optional<Integer> number(String value) {
+        if (value == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(Integer.parseInt(value.trim()));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
     }
 }

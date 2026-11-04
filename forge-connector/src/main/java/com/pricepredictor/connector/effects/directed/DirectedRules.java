@@ -1,15 +1,29 @@
 package com.pricepredictor.connector.effects.directed;
 
 import com.pricepredictor.connector.effects.directed.rules.Aftermath;
+import com.pricepredictor.connector.effects.directed.rules.BattleDefense;
+import com.pricepredictor.connector.effects.directed.rules.CantGainLifeExchange;
+import com.pricepredictor.connector.effects.directed.rules.CantLoseLifeExchange;
 import com.pricepredictor.connector.effects.directed.rules.Dethrone;
+import com.pricepredictor.connector.effects.directed.rules.DrawFromEmptyLibrary;
 import com.pricepredictor.connector.effects.directed.rules.Enlist;
+import com.pricepredictor.connector.effects.directed.rules.FinalityCounter;
 import com.pricepredictor.connector.effects.directed.rules.GraveyardReplacement;
 import com.pricepredictor.connector.effects.directed.rules.Intimidate;
 import com.pricepredictor.connector.effects.directed.rules.LifeExchange;
+import com.pricepredictor.connector.effects.directed.rules.LifeTotalWin;
+import com.pricepredictor.connector.effects.directed.rules.MutagenToken;
+import com.pricepredictor.connector.effects.directed.rules.OptionalSearch;
+import com.pricepredictor.connector.effects.directed.rules.PoisonLoss;
+import com.pricepredictor.connector.effects.directed.rules.ReplacedSacrificeCost;
+import com.pricepredictor.connector.effects.directed.rules.RestartGame;
 import com.pricepredictor.connector.effects.directed.rules.SimultaneousDamage;
+import com.pricepredictor.connector.effects.directed.rules.SorcererRole;
 import com.pricepredictor.connector.effects.directed.rules.StunCounter;
 import com.pricepredictor.connector.effects.directed.rules.ToughnessZero;
+import com.pricepredictor.connector.effects.directed.rules.TypeSettingAura;
 import com.pricepredictor.connector.effects.directed.rules.VanishingInstances;
+import com.pricepredictor.connector.effects.directed.rules.VirtuousRole;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -39,7 +53,21 @@ public final class DirectedRules {
      * (story 3, acceptance 3).
      */
     private static final DirectedRules REGISTERED = of(
+            LifeTotalWin.rule(),
+            PoisonLoss.rule(),
+            RestartGame.rule(),
+            SorcererRole.rule(),
+            VirtuousRole.rule(),
+            MutagenToken.rule(),
+            ReplacedSacrificeCost.rule(),
+            OptionalSearch.rule(),
+            CantGainLifeExchange.rule(),
+            CantLoseLifeExchange.rule(),
+            DrawFromEmptyLibrary.rule(),
             StunCounter.rule(),
+            BattleDefense.rule(),
+            FinalityCounter.rule(),
+            TypeSettingAura.rule(),
             GraveyardReplacement.rule(),
             LifeExchange.rule(),
             Intimidate.rule(),

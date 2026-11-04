@@ -8,9 +8,11 @@ import com.pricepredictor.connector.effects.directed.DirectedRule;
 import com.pricepredictor.connector.effects.directed.DirectedRules;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.KeywordEdit;
+import forge.StaticData;
 import forge.ai.simulation.GameCopier;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.card.CardFactory;
 import forge.game.card.CounterEnumType;
 import forge.game.combat.Combat;
 import forge.game.keyword.Keyword;
@@ -425,6 +427,490 @@ class RegisteredRulesTest {
         }
         assertTrue(fork.getCombat().isBlocking(knight, twin.fork().card("attacker")));
         assertTrue(knight.hasFirstStrike());
+    }
+
+    // ── 104.2b, a win at a life total: life ─────────────────────────────
+
+    private static Board sovereignBoard(int life) {
+        Board board = new Board(PhaseType.UPKEEP);
+        board.subject = board.card(board.you, "Felidar Sovereign");
+        board.you.setLife(life, null);
+        return board;
+    }
+
+    @Test
+    void lifeTotalWinBindsTheSovereignAtFortyLife() {
+        Board board = sovereignBoard(40);
+        Binding binding = LifeTotalWin.bind(board.game).orElseThrow();
+        assertEquals(board.subject, binding.card("permanent"));
+        assertEquals(board.you, binding.player("player"));
+    }
+
+    @Test
+    void lifeTotalWinBindsNothingOneLifeShort() {
+        assertTrue(LifeTotalWin.bind(sovereignBoard(39).game).isEmpty());
+    }
+
+    @Test
+    void lifeTotalWinForksThePlayerOneLifeShort() {
+        Twin twin = sovereignBoard(45).twin(LifeTotalWin.rule());
+        assertEquals(Set.of("P0.life"), twin.changes());
+        assertEquals(39, twin.fork().player("player").getLife());
+    }
+
+    // ── 104.3d, ten poison counters: counters ───────────────────────────
+
+    private static Board poisonBoard(int poison) {
+        Board board = new Board(PhaseType.MAIN1);
+        board.card(board.you, "Swamp");
+        board.opponent.setCounters(CounterEnumType.POISON, poison, null, false);
+        return board;
+    }
+
+    @Test
+    void poisonLossBindsThePlayerOneCounterShort() {
+        Board board = poisonBoard(9);
+        assertEquals(board.opponent, PoisonLoss.bind(board.game).orElseThrow().player("player"));
+    }
+
+    @Test
+    void poisonLossBindsNothingTwoCountersShort() {
+        assertTrue(PoisonLoss.bind(poisonBoard(8).game).isEmpty());
+    }
+
+    @Test
+    void poisonLossForksThePlayerWithEightCounters() {
+        Twin twin = poisonBoard(9).twin(PoisonLoss.rule());
+        assertEquals(Set.of("P1.poison"), twin.changes());
+        assertEquals(8, twin.fork().player("player").getPoisonCounters());
+    }
+
+    // ── 104.6, restarting the game: counters ────────────────────────────
+
+    private static Board karnBoard(int loyalty) {
+        Board board = new Board(PhaseType.MAIN1);
+        board.subject = board.card(board.you, "Karn Liberated");
+        board.subject.setCounters(CounterEnumType.LOYALTY, loyalty);
+        return board;
+    }
+
+    @Test
+    void restartGameBindsKarnWithFourteenLoyalty() {
+        Board board = karnBoard(14);
+        assertEquals(board.subject, RestartGame.bind(board.game).orElseThrow().card("planeswalker"));
+    }
+
+    @Test
+    void restartGameBindsNothingOneLoyaltyShort() {
+        assertTrue(RestartGame.bind(karnBoard(13).game).isEmpty());
+    }
+
+    @Test
+    void restartGameForksKarnOneLoyaltyShort() {
+        Board board = karnBoard(16);
+        Twin twin = board.twin(RestartGame.rule());
+        assertEquals(Set.of(id(board.subject) + ".counters"), twin.changes());
+        assertEquals(13, twin.fork().card("planeswalker").getCounters(CounterEnumType.LOYALTY));
+    }
+
+    // ── 111.10n, a Sorcerer Role: remove_permanent ──────────────────────
+
+    private static Board vendorBoard(int plains) {
+        Board board = new Board(PhaseType.MAIN1);
+        board.other = board.card(board.you, "Spellbook Vendor");
+        for (int i = 0; i < plains; i++) {
+            board.subject = board.card(board.you, "Plains");
+        }
+        return board;
+    }
+
+    @Test
+    void sorcererRoleBindsTheLastManaSource() {
+        Board board = vendorBoard(1);
+        assertEquals(board.subject, SorcererRole.bind(board.game).orElseThrow().card("mana source"));
+    }
+
+    @Test
+    void sorcererRoleBindsNothingWithManaToSpare() {
+        assertTrue(SorcererRole.bind(vendorBoard(2).game).isEmpty());
+    }
+
+    @Test
+    void sorcererRoleForksTheBoardWithoutTheManaSource() {
+        Board board = vendorBoard(1);
+        assertOnlyRemoved(board.twin(SorcererRole.rule()), board.subject, "mana source");
+    }
+
+    // ── 111.10p, a Virtuous Role: remove_permanent ──────────────────────
+
+    private static Board elliverBoard() {
+        Board board = new Board(PhaseType.MAIN1);
+        for (String land : List.of("Forest", "Forest", "Forest", "Plains")) {
+            board.card(board.you, land);
+        }
+        board.subject = board.card(board.you, "Grizzly Bears");
+        board.other = TestBoard.inHand(board.game, board.you, "Ellivere of the Wild Court");
+        return board;
+    }
+
+    @Test
+    void virtuousRoleBindsTheOnlyOtherCreatureAndEllivere() {
+        Board board = elliverBoard();
+        Binding binding = VirtuousRole.bind(board.game).orElseThrow();
+        assertEquals(board.subject, binding.card("creature"));
+        assertEquals(board.other, binding.card("card"));
+    }
+
+    @Test
+    void virtuousRoleBindsNothingWithTwoTargets() {
+        Board board = elliverBoard();
+        board.card(board.you, "Hill Giant");
+        assertTrue(VirtuousRole.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void virtuousRoleForksTheBoardWithoutTheCreature() {
+        Board board = elliverBoard();
+        assertOnlyRemoved(board.twin(VirtuousRole.rule()), board.subject, "creature");
+    }
+
+    // ── 111.10v, a Mutagen token: remove_permanent ──────────────────────
+
+    private static Board mutagenBoard(boolean islandTapped) {
+        Board board = new Board(PhaseType.MAIN1);
+        board.card(board.you, "Crustacean Commando");
+        Card token = CardFactory.getCard(
+                StaticData.instance().getAllTokens().getToken("c_a_mutagen_sac"), board.you, board.game);
+        board.other = board.game.getAction().moveToPlay(token, board.you, null, null);
+        board.other.setGameTimestamp(board.game.getNextTimestamp());
+        board.subject = board.card(board.you, "Island");
+        board.subject.setTapped(islandTapped);
+        return board;
+    }
+
+    @Test
+    void mutagenTokenBindsTheTokenAndTheLastManaSource() {
+        Board board = mutagenBoard(false);
+        Binding binding = MutagenToken.bind(board.game).orElseThrow();
+        assertEquals(board.other, binding.card("token"));
+        assertEquals(board.subject, binding.card("mana source"));
+    }
+
+    @Test
+    void mutagenTokenBindsNothingWithNoManaLeft() {
+        assertTrue(MutagenToken.bind(mutagenBoard(true).game).isEmpty());
+    }
+
+    @Test
+    void mutagenTokenForksTheBoardWithoutTheManaSource() {
+        Board board = mutagenBoard(false);
+        assertOnlyRemoved(board.twin(MutagenToken.rule()), board.subject, "mana source");
+    }
+
+    // ── 118.11, a replaced sacrifice cost: remove_permanent ─────────────
+
+    private static Board bombardmentBoard(boolean restInPeace) {
+        Board board = new Board(PhaseType.MAIN1);
+        board.other = board.card(board.you, "Goblin Bombardment");
+        board.subject = board.card(board.you, "Grizzly Bears");
+        if (restInPeace) {
+            board.card(board.you, "Rest in Peace");
+        }
+        return board;
+    }
+
+    @Test
+    void replacedSacrificeCostBindsTheOnlyCreatureToSacrifice() {
+        Board board = bombardmentBoard(true);
+        Binding binding = ReplacedSacrificeCost.bind(board.game).orElseThrow();
+        assertEquals(board.subject, binding.card("creature"));
+        assertEquals(board.other, binding.card("permanent"));
+    }
+
+    @Test
+    void replacedSacrificeCostBindsNothingWithoutAReplacement() {
+        assertTrue(ReplacedSacrificeCost.bind(bombardmentBoard(false).game).isEmpty());
+    }
+
+    @Test
+    void replacedSacrificeCostBindsNothingWithTwoCreaturesToSacrifice() {
+        Board board = bombardmentBoard(true);
+        board.card(board.you, "Hill Giant");
+        assertTrue(ReplacedSacrificeCost.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void replacedSacrificeCostForksTheBoardWithoutTheCreature() {
+        Board board = bombardmentBoard(true);
+        assertOnlyRemoved(board.twin(ReplacedSacrificeCost.rule()), board.subject, "creature");
+    }
+
+    // ── 118.12b, an optional search: move_card ──────────────────────────
+
+    /** Elfhame Sanctuary as A's upkeep begins, over A's library listed top card first. */
+    private static Board sanctuaryBoard(String... library) {
+        Board board = new Board(PhaseType.UPKEEP);
+        board.card(board.you, "Elfhame Sanctuary");
+        for (String name : library) {
+            Card card = board.game.getAction().moveToLibrary(
+                    TestBoard.card(board.game, board.you, name), -1, null, null);
+            if (name.equals("Forest")) {
+                board.subject = card;
+            }
+        }
+        return board;
+    }
+
+    @Test
+    void optionalSearchBindsTheOnlyBasicLandInTheLibrary() {
+        Board board = sanctuaryBoard("Shock", "Forest");
+        assertEquals(board.subject, OptionalSearch.bind(board.game).orElseThrow().card("card"));
+    }
+
+    @Test
+    void optionalSearchBindsNothingWithTwoBasicLands() {
+        assertTrue(OptionalSearch.bind(sanctuaryBoard("Forest", "Shock", "Forest").game).isEmpty());
+    }
+
+    @Test
+    void optionalSearchForksALightningBoltInTheLandsPlace() {
+        Board board = sanctuaryBoard("Shock", "Forest");
+        Twin twin = board.twin(OptionalSearch.rule());
+        List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
+        assertEquals(List.of("Shock", OptionalSearch.BOLT), library.stream().map(Card::getName).toList());
+        String forest = id(board.subject);
+        String bolt = id(library.get(1));
+        for (String change : twin.changes()) {
+            assertTrue(change.equals("-" + forest) || change.equals("+" + bolt)
+                            || change.startsWith("-link ") && change.contains("=" + forest)
+                            || change.startsWith("+link ") && change.contains("=" + bolt),
+                    "replacing changed " + change + "; all: " + twin.changes());
+        }
+    }
+
+    // ── 119.7, an exchange a can't-gain-life effect stops: life ─────────
+
+    private static Board redemptionBoard(boolean leyline) {
+        Board board = new Board(PhaseType.MAIN1);
+        board.subject = board.card(board.you, "Tree of Redemption");
+        if (leyline) {
+            board.card(board.you, "Leyline of Punishment");
+        }
+        board.you.setLife(5, null);
+        return board;
+    }
+
+    @Test
+    void cantGainLifeExchangeBindsTheTreeAndItsController() {
+        Board board = redemptionBoard(true);
+        Binding binding = CantGainLifeExchange.bind(board.game).orElseThrow();
+        assertEquals(board.subject, binding.card("permanent"));
+        assertEquals(board.you, binding.player("player"));
+    }
+
+    @Test
+    void cantGainLifeExchangeBindsNothingWhenThePlayerCanGainLife() {
+        assertTrue(CantGainLifeExchange.bind(redemptionBoard(false).game).isEmpty());
+    }
+
+    @Test
+    void cantGainLifeExchangeForksALifeTotalAboveTheToughness() {
+        Twin twin = redemptionBoard(true).twin(CantGainLifeExchange.rule());
+        assertEquals(Set.of("P0.life"), twin.changes());
+        assertEquals(20, twin.fork().player("player").getLife());
+    }
+
+    // ── 119.8, an exchange a can't-lose-life effect stops: remove_permanent
+
+    private static Board perditionBoard(int opponentLife) {
+        Board board = new Board(PhaseType.MAIN1);
+        board.other = board.card(board.you, "Tree of Perdition");
+        // Set before the Emperion arrives, which keeps the life total from changing.
+        board.opponent.setLife(opponentLife, null);
+        board.subject = board.card(board.opponent, "Platinum Emperion");
+        return board;
+    }
+
+    @Test
+    void cantLoseLifeExchangeBindsTheTreeTheOpponentAndTheEmperion() {
+        Board board = perditionBoard(20);
+        Binding binding = CantLoseLifeExchange.bind(board.game).orElseThrow();
+        assertEquals(board.other, binding.card("permanent"));
+        assertEquals(board.opponent, binding.player("opponent"));
+        assertEquals(board.subject, binding.card("source"));
+    }
+
+    @Test
+    void cantLoseLifeExchangeBindsNothingWhenTheExchangeWouldRaiseTheLife() {
+        assertTrue(CantLoseLifeExchange.bind(perditionBoard(10).game).isEmpty());
+    }
+
+    @Test
+    void cantLoseLifeExchangeForksTheBoardWithoutTheEmperion() {
+        Board board = perditionBoard(20);
+        Twin twin = board.twin(CantLoseLifeExchange.rule());
+        assertOnlyRemoved(twin, board.subject, "source");
+        assertTrue(twin.fork().player("opponent").canLoseLife());
+    }
+
+    // ── 121.4, a draw from an empty library: move_card ──────────────────
+
+    private static Board divinationBoard(int library) {
+        Board board = new Board(PhaseType.MAIN1);
+        for (int i = 0; i < 3; i++) {
+            board.card(board.you, "Island");
+        }
+        board.other = TestBoard.inHand(board.game, board.you, "Divination");
+        for (int i = 0; i < library; i++) {
+            board.subject = board.game.getAction().moveToLibrary(
+                    TestBoard.card(board.game, board.you, "Forest"), -1, null, null);
+        }
+        return board;
+    }
+
+    @Test
+    void drawFromEmptyLibraryBindsTheLastCardAndTheDrawSpell() {
+        Board board = divinationBoard(1);
+        Binding binding = DrawFromEmptyLibrary.bind(board.game).orElseThrow();
+        assertEquals(board.subject, binding.card("card"));
+        assertEquals(board.other, binding.card("spell"));
+    }
+
+    @Test
+    void drawFromEmptyLibraryBindsNothingWithTwoCardsLeft() {
+        assertTrue(DrawFromEmptyLibrary.bind(divinationBoard(2).game).isEmpty());
+    }
+
+    @Test
+    void drawFromEmptyLibraryForksAnEmptyLibrary() {
+        Board board = divinationBoard(1);
+        Twin twin = board.twin(DrawFromEmptyLibrary.rule());
+        String forest = id(board.subject);
+        assertTrue(twin.changes().containsAll(Set.of("P0.library", "P0.graveyard")), twin.changes().toString());
+        for (String change : twin.changes()) {
+            assertTrue(Set.of("P0.library", "P0.graveyard").contains(change) || change.startsWith(forest + "."),
+                    "moving changed " + change + "; all: " + twin.changes());
+        }
+        assertTrue(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library).isEmpty());
+    }
+
+    // ── 122.1g, a battle's last defense counter: counters ───────────────
+
+    private static Board battleBoard(int defense) {
+        Board board = new Board(PhaseType.MAIN1);
+        board.card(board.you, "Mountain");
+        board.other = TestBoard.inHand(board.game, board.you, "Lightning Bolt");
+        board.subject = board.card(board.you, "Invasion of Zendikar");
+        board.subject.setCounters(CounterEnumType.DEFENSE, defense);
+        board.subject.setProtectingPlayer(board.opponent);
+        return board;
+    }
+
+    @Test
+    void battleDefenseBindsTheBattleTheSpellWouldDefeat() {
+        Board board = battleBoard(3);
+        Binding binding = BattleDefense.bind(board.game).orElseThrow();
+        assertEquals(board.subject, binding.card("battle"));
+        assertEquals(board.other, binding.card("spell"));
+    }
+
+    @Test
+    void battleDefenseBindsNothingWhenTheSpellLeavesADefenseCounter() {
+        assertTrue(BattleDefense.bind(battleBoard(4).game).isEmpty());
+    }
+
+    @Test
+    void battleDefenseForksOneDefenseCounterMoreThanTheDamage() {
+        Board board = battleBoard(2);
+        Twin twin = board.twin(BattleDefense.rule());
+        assertEquals(Set.of(id(board.subject) + ".counters"), twin.changes());
+        assertEquals(4, twin.fork().card("battle").getCounters(CounterEnumType.DEFENSE));
+    }
+
+    // ── 122.1h, a finality counter: counters ────────────────────────────
+
+    private static Board finalityBoard(int finality) {
+        Board board = new Board(PhaseType.MAIN1);
+        board.subject = board.card(board.opponent, "Grizzly Bears");
+        board.subject.setCounters(CounterEnumType.FINALITY, finality);
+        return board;
+    }
+
+    @Test
+    void finalityCounterBindsTheCreatureWithOne() {
+        Board board = finalityBoard(1);
+        assertEquals(board.subject, FinalityCounter.bind(board.game).orElseThrow().card("creature"));
+    }
+
+    @Test
+    void finalityCounterBindsNothingWithoutOne() {
+        assertTrue(FinalityCounter.bind(finalityBoard(0).game).isEmpty());
+    }
+
+    @Test
+    void finalityCounterForksTheCreatureWithoutIt() {
+        Board board = finalityBoard(1);
+        Twin twin = board.twin(FinalityCounter.rule());
+        String bears = id(board.subject);
+        assertTrue(twin.changes().contains(bears + ".counters"), twin.changes().toString());
+        assertTrue(Set.of(bears + ".counters", bears + ".lines").containsAll(twin.changes()),
+                twin.changes().toString());
+        assertEquals(0, twin.fork().card("creature").getCounters(CounterEnumType.FINALITY));
+    }
+
+    // ── 205.1a, a type-setting effect: counters ─────────────────────────
+
+    private static Board dryadsBoard(int forests) {
+        Board board = new Board(PhaseType.MAIN1);
+        for (int i = 0; i < forests; i++) {
+            board.card(board.you, "Forest");
+        }
+        board.other = TestBoard.inHand(board.game, board.you, "Song of the Dryads");
+        board.subject = board.card(board.opponent, "Grizzly Bears");
+        return board;
+    }
+
+    @Test
+    void typeSettingAuraBindsTheCreatureAndTheAura() {
+        Board board = dryadsBoard(3);
+        Binding binding = TypeSettingAura.bind(board.game).orElseThrow();
+        assertEquals(board.subject, binding.card("creature"));
+        assertEquals(board.other, binding.card("aura"));
+    }
+
+    @Test
+    void typeSettingAuraBindsNothingWithoutTheManaToCastIt() {
+        assertTrue(TypeSettingAura.bind(dryadsBoard(2).game).isEmpty());
+    }
+
+    @Test
+    void typeSettingAuraForksTheCreatureWithACounter() {
+        Board board = dryadsBoard(3);
+        Twin twin = board.twin(TypeSettingAura.rule());
+        String bears = id(board.subject);
+        assertTrue(twin.changes().contains(bears + ".counters"), twin.changes().toString());
+        assertTrue(Set.of(bears + ".counters", bears + ".pt_boosts").containsAll(twin.changes()),
+                twin.changes().toString());
+        assertEquals(1, twin.fork().card("creature").getCounters(CounterEnumType.P1P1));
+    }
+
+    // ── shared checks ───────────────────────────────────────────────────
+
+    /**
+     * The fork differs from the live board by {@code removed} alone: it is
+     * gone, with its links, the battlefield's ranks after it and the mana its
+     * controller has untapped.
+     */
+    private static void assertOnlyRemoved(Twin twin, Card removed, String role) {
+        String gone = id(removed);
+        assertTrue(twin.changes().contains("-" + gone), twin.changes().toString());
+        for (String change : twin.changes()) {
+            assertTrue(change.equals("-" + gone) || change.endsWith(".order_rank")
+                            || change.endsWith(".untapped_production")
+                            || change.startsWith("-link ") && change.contains("=" + gone),
+                    "removing changed " + change + "; all: " + twin.changes());
+        }
+        assertNull(twin.fork().card(role).getZone());
     }
 
     // ── the board and its fork ──────────────────────────────────────────

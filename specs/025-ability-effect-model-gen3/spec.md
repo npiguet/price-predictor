@@ -275,10 +275,12 @@ score-checked before the change, and counts against `--directed-forks-per-game`.
 
 **Acceptance Scenarios**:
 
-1. **Given** `--directed-fork-rules 704.5f`, `--directed-fork-probability 1` and a live board with a 2/2 creature about to be
-   dealt 2 damage, **When** the phase boundary is reached, **Then** the collector forks, raises
-   the creature's toughness to 3 through "change a creature's power or toughness", plays the fork
-   to the end of the turn, writes the fork's records and discards the fork.
+1. **Given** `--directed-fork-rules 704.5f`, `--directed-fork-probability 1` and a live board where
+   a main phase begins with a player holding a castable -2/-2 spell and an opponent controlling
+   a 1/1 creature, which the spell would take to toughness 0 or less, **When** the phase boundary
+   is reached, **Then** the collector forks, raises the creature's base toughness by 2 to 3
+   through "change a creature's power or toughness", plays the fork to the end of the turn,
+   writes the fork's records and discards the fork.
 2. **Given** a rule in `--directed-fork-rules` whose every contrasting variant is marked
    unclassifiable, or which has no board precondition in `forge-connector`, **When**
    `match-outcomes` starts, **Then** it exits 1 naming the rule.
