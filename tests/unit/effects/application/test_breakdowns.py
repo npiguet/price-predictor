@@ -31,11 +31,11 @@ _FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
 def rows() -> list[RecordResult]:
     """One row per real fixture record, with a deterministic made-up loss."""
     sidecars = SidecarCache({
-        "cardsfolder": _FIXTURES / "gen1-sidecars" / "cardsfolder",
-        "tokenscripts": _FIXTURES / "gen1-sidecars" / "tokenscripts",
+        "cardsfolder": _FIXTURES / "gen3-sidecars" / "cardsfolder",
+        "tokenscripts": _FIXTURES / "gen3-sidecars" / "tokenscripts",
     })
     out = []
-    for position, record in enumerate(read_shard(_FIXTURES / "gen1-records.jsonl.gz")):
+    for position, record in enumerate(read_shard(_FIXTURES / "gen3-records.jsonl.gz")):
         text = None
         for key in record.ability or ():
             line = sidecars.line_for(key)
@@ -128,10 +128,11 @@ class TestPolicyAndDecisionSlices:
     """Scenarios 3 and 4."""
 
     def test_random_seat_records_are_reported_apart(self, rows):
-        off = replace(rows[0], random_seat=True)
-        groups = bd.policy_slice([off, *rows[1:]])
-        assert groups[bd.OFF_POLICY].per_record.records == 1
-        assert groups[bd.ON_POLICY].per_record.records == len(rows) - 1
+        off = sum(1 for row in rows if row.random_seat)
+        assert 0 < off < len(rows), "the gen-3 fixture holds both policies"
+        groups = bd.policy_slice(rows)
+        assert groups[bd.OFF_POLICY].per_record.records == off
+        assert groups[bd.ON_POLICY].per_record.records == len(rows) - off
 
     def test_legality_records_split_into_real_what_if_and_unknown(self, rows):
         legality = [r for r in rows if r.subkind in LEGALITY_SUBKINDS]
@@ -139,9 +140,9 @@ class TestPolicyAndDecisionSlices:
         marked = [
             replace(legality[0], what_if=False),
             replace(legality[1], what_if=True),
-            *legality[2:],
+            replace(legality[2], what_if=None),
         ]
-        groups = bd.decision_slice([*marked, *rows])
+        groups = bd.decision_slice(marked)
         assert groups[LegalityDecision.REAL].per_record.records == 1
         assert groups[LegalityDecision.WHAT_IF].per_record.records == 1
         assert LegalityDecision.UNKNOWN in groups
@@ -185,7 +186,8 @@ class TestTheReport:
         assert f"{Stratum.CARD_DISJOINT} legality real" in names
         assert all(check.status is not CheckStatus.FAIL for check in checks)
 
-    def test_a_gen1_set_reports_the_policy_and_decision_slices_as_skipped(self, rows):
+    def test_a_set_with_no_random_seat_or_real_decision_skips_those_slices(self, rows):
+        rows = [replace(row, random_seat=False, what_if=None) for row in rows]
         checks = {c.name: c for c in breakdown_checks(
             {Stratum.CARD_DISJOINT: rows, Stratum.GAME_DISJOINT: rows},
             games_by_text={}, withheld_keyword="flying",

@@ -40,15 +40,11 @@ from effects.domain.state_snapshot import (
 from effects.domain.text_holdout import HoldoutUnit, holdout_key
 
 EFFECTS_FIXTURES = Path(__file__).parents[2] / "fixtures" / "effects"
-#: The converted card and token trees the gen-1 fixture records were collected against.
-GEN1_SIDECAR_FOLDERS = (
-    EFFECTS_FIXTURES / "gen1-sidecars" / "cardsfolder",
-    EFFECTS_FIXTURES / "gen1-sidecars" / "tokenscripts",
-)
-GEN1_KEYWORD_DEFINITIONS = EFFECTS_FIXTURES / "keyword-definitions.json"
-#: The seed and shard count of the short real runs over the gen-1 records.
-GEN1_TRAINING_SEED = 11
-GEN1_TRAINING_SHARDS = 3
+#: Forge's keyword table, as the fixture records' runs read it.
+FIXTURE_KEYWORD_DEFINITIONS = EFFECTS_FIXTURES / "keyword-definitions.json"
+#: The seed and shard count of the short real runs over the gen-3 records.
+FIXTURE_TRAINING_SEED = 11
+FIXTURE_TRAINING_SHARDS = 3
 
 #: Real gen-3 JSON: the goldens the connector's characterization tests emit
 #: (``-Dcharacterization.update=true``), read until the gen-3 fixture exists.
@@ -97,6 +93,16 @@ def gen3_fixture_records() -> list[dict]:
 
     with gzip.open(GEN3_RECORDS, "rt", encoding="utf-8") as handle:
         return [json.loads(line) for line in handle if line.strip()]
+
+
+def curated_fixture_records() -> list:
+    """The gen-3 fixture's records as a curated corpus holds them, parsed:
+    every record but the ``turn_action`` ones, which ``build-corpus`` writes
+    into no stratum, so no trainer reads one."""
+    from effects.domain.records import RecordKind
+    from effects.infrastructure.shard_io import read_shard
+
+    return [r for r in read_shard(GEN3_RECORDS) if r.kind is not RecordKind.TURN_ACTION]
 
 
 _EVENT = Event(type=EventType.LIFE_CHANGE, params={"delta": 1})
@@ -545,16 +551,16 @@ def keyword_score(qualifying: int, agreeing: int):
     )
 
 
-def gen1_training_config(corpus, out, **overrides):
+def fixture_training_config(corpus, out, **overrides):
     """A short real run's config over the application conftest's ``corpus``
     fixture, every draw the host half takes switched on."""
     from effects.application.train_effect_model import TrainEffectModelConfig
 
     settings = dict(
-        corpus=str(corpus.root), cards_folders=GEN1_SIDECAR_FOLDERS,
-        keyword_definitions=GEN1_KEYWORD_DEFINITIONS, vocab_path=corpus.vocab,
-        model_output=out, seed=GEN1_TRAINING_SEED, batch_size=8, steps_per_epoch=7,
-        shards_per_epoch=GEN1_TRAINING_SHARDS, epochs=2, curriculum_epoch=2, patience=5,
+        corpus=str(corpus.root), cards_folders=GEN3_SIDECAR_FOLDERS,
+        keyword_definitions=FIXTURE_KEYWORD_DEFINITIONS, vocab_path=corpus.vocab,
+        model_output=out, seed=FIXTURE_TRAINING_SEED, batch_size=8, steps_per_epoch=7,
+        shards_per_epoch=FIXTURE_TRAINING_SHARDS, epochs=2, curriculum_epoch=2, patience=5,
         e_dim=16, encoder_layers=1, encoder_d_model=32,
         # Every draw the host half takes, at rates that make each one fire.
         keyword_expand_p=0.5, context_dropout=0.2, mlm_weight=0.1,

@@ -1,4 +1,4 @@
-"""Fixtures the application tests share: the gen-1 records, and a small
+"""Fixtures the application tests share: the gen-3 records, and a small
 corpus over them that a real training run can read."""
 
 from __future__ import annotations
@@ -8,15 +8,15 @@ import torch
 
 from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
 from effects.domain.baselines import baseline_masks
-from effects.infrastructure.shard_io import read_shard, write_shard
+from effects.infrastructure.shard_io import write_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.tokenizer_loading import load_keyword_definitions
 from price_predictor.infrastructure.tokenizer_store import save_vocabulary
 from tests.unit.effects.builders import (
-    EFFECTS_FIXTURES,
-    GEN1_KEYWORD_DEFINITIONS,
-    GEN1_SIDECAR_FOLDERS,
-    GEN1_TRAINING_SHARDS,
+    FIXTURE_KEYWORD_DEFINITIONS,
+    FIXTURE_TRAINING_SHARDS,
+    GEN3_SIDECAR_FOLDERS,
+    curated_fixture_records,
     make_batcher,
 )
 from tests.unit.effects.domain.conftest import ability_key, make_record, snapshot  # noqa: F401
@@ -24,7 +24,7 @@ from tests.unit.effects.domain.conftest import ability_key, make_record, snapsho
 
 @pytest.fixture(scope="module")
 def records():
-    return list(read_shard(EFFECTS_FIXTURES / "gen1-records.jsonl.gz"))
+    return curated_fixture_records()
 
 
 @pytest.fixture(scope="module")
@@ -38,19 +38,19 @@ def corpus(tmp_path_factory, records):
     games = sorted({record.game_id for record in records})
     held = games[0]
     shards = []
-    for index in range(GEN1_TRAINING_SHARDS):
+    for index in range(FIXTURE_TRAINING_SHARDS):
         path = root / f"train{index}.jsonl.gz"
         write_shard(path, [
             r for i, r in enumerate(records)
-            if i % GEN1_TRAINING_SHARDS == index and r.game_id != held
+            if i % FIXTURE_TRAINING_SHARDS == index and r.game_id != held
         ])
         shards.append(path)
     sample = root / "validation.jsonl.gz"
     write_shard(sample, records[:24])
 
-    cards, tokens = GEN1_SIDECAR_FOLDERS
+    cards, tokens = GEN3_SIDECAR_FOLDERS
     sidecars = SidecarCache({"cardsfolder": cards, "tokenscripts": tokens})
-    definitions = load_keyword_definitions(GEN1_KEYWORD_DEFINITIONS)
+    definitions = load_keyword_definitions(FIXTURE_KEYWORD_DEFINITIONS)
     base = {token: index for index, token in enumerate(SPECIAL_TOKENS)}
     bare = AbilityTokenizer(base, definitions, surface="script")
     batcher = make_batcher(

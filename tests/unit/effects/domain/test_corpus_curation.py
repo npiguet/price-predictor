@@ -189,7 +189,7 @@ def test_a_rate_plan_writes_its_quota_in_expectation():
     assert rate_plan(100, 300) == CopyPlan(base=3)
 
 
-_FIXTURE = Path(__file__).parents[3] / "fixtures" / "effects" / "gen1-records.jsonl.gz"
+_FIXTURE = Path(__file__).parents[3] / "fixtures" / "effects" / "gen3-records.jsonl.gz"
 
 
 class TestOutcomeSignature:

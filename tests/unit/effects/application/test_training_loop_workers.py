@@ -1,6 +1,6 @@
 """Worker processes prepare the host half; the run is the same run.
 
-The determinism tests train two real epochs end to end on the gen-1 fixture
+The determinism tests train two real epochs end to end on the gen-3 fixture
 records — split into three shards, with every draw the host half takes switched
 on and a validation game the split names, which no training shard holds — once with
 the host half in this process and twice with it in worker processes. A step's
@@ -45,12 +45,12 @@ from effects.domain.split import (
 )
 from effects.infrastructure.tensor_packing import pack, unpack
 from tests.unit.effects.builders import (
-    GEN1_TRAINING_SEED,
-    gen1_training_config,
+    FIXTURE_TRAINING_SEED,
+    fixture_training_config,
     make_training_loop,
 )
 
-SEED = GEN1_TRAINING_SEED
+SEED = FIXTURE_TRAINING_SEED
 
 
 class _Interrupted(Exception):
@@ -129,7 +129,7 @@ def _run(
     caplog.clear()
     with caplog.at_level(logging.INFO, logger="effects.application"):
         loop = make_training_loop(
-            gen1_training_config(
+            fixture_training_config(
                 corpus, out, prefetch_workers=workers, seed=seed, resume=resume,
                 **config,
             ),
@@ -429,7 +429,7 @@ def test_a_step_prepared_as_a_worker_prepares_it_equals_one_prepared_here(
 ):
     """The worker's resources, built from settings, and the packing between."""
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    config = gen1_training_config(corpus, corpus.root / "unused")
+    config = fixture_training_config(corpus, corpus.root / "unused")
     loop = make_training_loop(config, rarity={"x": 3})
     settings = preparer_settings(loop.spec, widths=feature_widths(records))
     assert settings.heads == frozenset({"value", "api", "mlm"})

@@ -3,7 +3,7 @@
 Feature 023 defined the verdict, created-objects, MLM and script-API heads and
 called none of their losses, so a decision record's ``[ACT]`` read a zero ``e``
 and the verdict head trained on nothing. These tests pin what each record kind
-now feeds, on real gen-1 records, and that a head whose weight is zero is not
+now feeds, on real gen-3 records, and that a head whose weight is zero is not
 computed at all.
 """
 
@@ -44,10 +44,9 @@ from effects.domain.records import (
     TriggerPayload,
     events_of,
 )
-from effects.infrastructure.shard_io import read_shard
 from tests.unit.effects.builders import (
-    EFFECTS_FIXTURES,
-    GEN1_SIDECAR_FOLDERS,
+    GEN3_SIDECAR_FOLDERS,
+    curated_fixture_records,
     make_cpu_training_loop,
     make_preparer,
 )
@@ -55,7 +54,7 @@ from tests.unit.effects.builders import (
 
 @pytest.fixture(scope="module")
 def records():
-    return list(read_shard(EFFECTS_FIXTURES / "gen1-records.jsonl.gz"))
+    return curated_fixture_records()
 
 
 def _model(**overrides) -> EffectModel:
@@ -227,8 +226,8 @@ class TestTheHeadTerms:
 
 
 def _fixture_preparer(directory):
-    """A preparer over the gen-1 fixture's sidecars, on their script surface."""
-    return make_preparer(directory, cards_folders=GEN1_SIDECAR_FOLDERS)
+    """A preparer over the gen-3 fixture's sidecars, on their script surface."""
+    return make_preparer(directory, cards_folders=GEN3_SIDECAR_FOLDERS)
 
 
 class TestEpochShares:

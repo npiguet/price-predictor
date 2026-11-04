@@ -1106,14 +1106,6 @@ class TestAttachedTo:
         assert card_features(replace(aura, attached_to=None), record) == card_features(
             aura, record)
 
-    def test_a_gen2_record_relates_an_attached_card_without_links(self):
-        record = _record(state=_snapshot(entities=(
-            _entity("E1", attached_to="E2"), _entity("E2"))))
-        assert record.state.links is None
-        surface = _build(record)
-        assert _linked(surface, _subject_slot(surface, "E1"), _subject_slot(surface, "E2"),
-                       "attached_to")
-
 
 _FALTER = ProvenanceKey("cardsfolder/f/falter.txt", 0, "spell", 0)
 

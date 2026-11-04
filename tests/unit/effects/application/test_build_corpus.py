@@ -74,10 +74,16 @@ from effects.infrastructure.sidecar_io import sidecar_path_for
 from tests.unit.effects.builders import (
     held_out_cards,
     make_entity,
-    make_record,
     make_snapshot,
     write_sidecar,
 )
+from tests.unit.effects.builders import make_record as _any_generation_record
+
+
+def make_record(kind: RecordKind = RecordKind.RESOLUTION, **overrides) -> EffectRecord:
+    """A gen-3 record: ``build-corpus`` reads gen-3 shards alone (FR-020)."""
+    return _any_generation_record(kind, **{"generation": 3, **overrides})
+
 
 _HELD_OUT_CARD = "Held Out Bears"
 #: Found by brute force over ``text_is_held_out(..., permille=20)`` (the
@@ -1288,7 +1294,7 @@ def test_a_records_set_mixing_generations_is_refused(tmp_path, a_corpus):
     from effects.infrastructure.record_codec import record_to_dict
 
     gen1 = record_to_dict(_resolution("old.1", "g-old", ability=(_BOLT_KEY,)))
-    del gen1["random_seat"]
+    del gen1["random_seat"], gen1["generation"]
     path = a_corpus.records / "full-strength" / "old.jsonl.gz"
     with gzip.open(path, "wt", encoding="utf-8") as handle:
         handle.write(json.dumps(gen1) + "\n")

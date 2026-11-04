@@ -31,9 +31,9 @@ from effects.application.training_loop import local_steps
 from effects.application.training_schedule import epoch_shards
 from effects.domain.records import CombatPayload, RecordKind
 from tests.unit.effects.builders import (
-    EFFECTS_FIXTURES,
-    GEN1_SIDECAR_FOLDERS,
+    GEN3_SIDECAR_FOLDERS,
     StubLosses,
+    curated_fixture_records,
     make_cpu_training_loop,
     make_preparer,
     make_training_loop,
@@ -156,6 +156,15 @@ def test_a_failing_read_surfaces_at_its_own_shard(epoch):
 # ── the steps of one shard ──────────────────────────────────────────────
 
 
+def _curated_shard(directory):
+    """The gen-3 fixture as a curated training shard holds it."""
+    from effects.infrastructure.shard_io import write_shard
+
+    path = directory / "training.jsonl.gz"
+    write_shard(path, curated_fixture_records())
+    return path
+
+
 def _shard(monkeypatch, directory, *, failing_at: int | None = None):
     """Train one fixture shard with stubbed halves; what each did, and when."""
     marks: list = []
@@ -176,9 +185,9 @@ def _shard(monkeypatch, directory, *, failing_at: int | None = None):
     monkeypatch.setattr(StepPreparer, "prepare_training_step", prepare)
     loop = make_cpu_training_loop(monkeypatch, batch_size=8)
     loop.losses = StubLosses(device_loss)
-    preparer = make_preparer(directory, cards_folders=GEN1_SIDECAR_FOLDERS, batch_size=8)
+    preparer = make_preparer(directory, cards_folders=GEN3_SIDECAR_FOLDERS, batch_size=8)
     task = ShardTask(
-        shard=EFFECTS_FIXTURES / "gen1-records.jsonl.gz", epoch=1, position=1,
+        shard=_curated_shard(directory), epoch=1, position=1,
         budget=4, fields=(),
     )
     run = SimpleNamespace(

@@ -21,7 +21,7 @@ from effects.application.model_loading import Runnable
 from effects.application.validation_pass import FieldParts, Validator
 from effects.domain.effect_model import EffectModel
 from effects.infrastructure.shard_io import write_shard
-from tests.unit.effects.builders import gen1_training_config, make_training_loop
+from tests.unit.effects.builders import fixture_training_config, make_training_loop
 
 BATCH_SIZE = 32
 
@@ -65,7 +65,7 @@ def scored(corpus, records, tmp_path_factory):
             )),
         )
         loop = make_training_loop(
-            gen1_training_config(
+            fixture_training_config(
                 corpus, root / "out", prefetch_workers=0, epochs=1,
                 batch_size=BATCH_SIZE,
             ),

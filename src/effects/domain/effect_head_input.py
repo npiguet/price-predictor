@@ -1073,7 +1073,6 @@ class _SlotRelations:
         self._lines: dict[tuple[str, ProvenanceKey], int] = {}
         self._named: dict[str, list[int]] = {}
         self._chosen_names: list[tuple[int, tuple[str, ...]]] = []
-        self._attached: list[tuple[int, str]] = []
         self._triples: dict[tuple[int, int, int], None] = {}
 
     def link(self, a: int | None, b: int | None, family: str,
@@ -1111,8 +1110,6 @@ class _SlotRelations:
             self._named.setdefault(_name_key(entity.name), []).append(start)
         if entity.chosen is not None and entity.chosen.names:
             self._chosen_names.append((start, entity.chosen.names))
-        if entity.attached_to is not None:
-            self._attached.append((start, entity.attached_to))
 
     def _end(self, end) -> int | None:
         if isinstance(end, LineRef):
@@ -1128,11 +1125,6 @@ class _SlotRelations:
                 for at in self._named.get(_name_key(name), ()):
                     self.link(chooser, at, "has_the_same_name")
         state = record.state
-        if state.links is None:
-            # Gen-1 and gen-2 write no links; their attachment is the one the
-            # removed "card is attached" flag carried (root spec § 10.4).
-            for at, host in self._attached:
-                self.link(at, self.subjects.get(host), "attached_to")
         for found in state.links or ():
             index = (found.index or 0) if found.type == "targets" else None
             self.link(self._end(found.from_), self._end(found.to), found.type, index)

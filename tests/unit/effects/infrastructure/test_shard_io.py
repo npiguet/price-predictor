@@ -336,6 +336,132 @@ class TestShardGeneration:
             [gen3], ShardGeneration.GEN_2, ShardGeneration.GEN_3) is ShardGeneration.GEN_3
 
 
+#: A real shard of each generation the gen-3 readers refuse.
+_EARLIER = {
+    "gen-1": _GEN1_FIXTURE,
+    "gen-2": _GEN1_FIXTURE.with_name("gen2-records.jsonl.gz"),
+}
+_GEN3_FIXTURE = _GEN1_FIXTURE.with_name("gen3-records.jsonl.gz")
+
+
+def _curated(root: Path, shard: Path) -> Path:
+    """A curated dataset every one of whose shards is a copy of ``shard``:
+    its training shard and both validation samples, beside a manifest."""
+    import shutil
+
+    from effects.infrastructure.corpus_store import CorpusStore
+    from tests.unit.effects.application.test_train_startup import _manifest
+
+    store = CorpusStore(root / "corpus")
+    store.training_dir.mkdir(parents=True)
+    store.samples_dir.mkdir(parents=True)
+    shutil.copyfile(shard, store.training_dir / "t.jsonl.gz")
+    for stratum in ("card-disjoint", "game-disjoint"):
+        shutil.copyfile(shard, store.sample_path(stratum))
+    store.save(_manifest())
+    return store.directory
+
+
+def _build_corpus(root: Path, corpus: Path) -> None:
+    from effects.application.build_corpus import _require_generation
+
+    _require_generation(corpus)
+
+
+def _train(root: Path, corpus: Path) -> None:
+    from effects.application.train_effect_model import TrainEffectModelConfig, run
+    from tests.unit.effects.application.test_train_startup import _card_tree
+
+    run(TrainEffectModelConfig(
+        corpus=str(corpus), cards_folders=(_card_tree(root / "cardsfolder"),),
+        vocab_path="models/effects/vocab-script.txt",
+    ))
+
+
+def _evaluate(root: Path, corpus: Path) -> None:
+    import torch
+
+    from effects.application.evaluation_context import EvaluateEffectModelConfig, load_context
+    from effects.domain.ability_encoder import AbilityEncoderConfig
+    from effects.domain.effect_head_input import layout_settings
+    from effects.domain.effect_model import EffectModel, EffectModelConfig
+    from effects.domain.split_provenance import SplitProvenance
+    from effects.infrastructure.corpus_store import CorpusStore
+    from effects.infrastructure.effect_model_store import (
+        EffectCheckpoint,
+        EffectModelStore,
+        content_hash,
+    )
+
+    vocab, keywords = root / "vocab-script.txt", root / "kw.json"
+    vocab.write_text("[PAD]\n[UNK]\n", encoding="utf-8")
+    keywords.write_text("{}", encoding="utf-8")
+    model = EffectModelConfig(
+        global_features=3, act_features=3, player_features=3, card_features=3,
+        e_dim=4, d_model=8, n_layers=1, n_heads=2, ff_dim=16,
+    )
+    torch.manual_seed(0)
+    store = EffectModelStore(root / "models")
+    store.save(EffectCheckpoint(
+        encoder_config=AbilityEncoderConfig(vocab_size=10, e_dim=4, d_model=8, n_layers=1),
+        model_config=model, encoder_state={},
+        model_state=EffectModel(model).state_dict(),
+        provenance=SplitProvenance(
+            vocab_path=str(vocab), keyword_definitions_path=str(keywords),
+            vocab_hash=content_hash(vocab), keyword_definitions_hash=content_hash(keywords),
+            corpus_path=str(corpus), corpus_digest=CorpusStore(corpus).load().digest(),
+        ),
+        training_settings=layout_settings(),
+    ))
+    load_context(EvaluateEffectModelConfig(checkpoint=store.latest_path()))
+
+
+def _probe(root: Path, corpus: Path) -> None:
+    from effect_knowledge_probes import common
+
+    list(common.read_games(iter_shards(corpus), {"any game"}))
+
+
+class TestEveryConsumerReadsGen3Only:
+    """FR-020: ``build-corpus``, ``train-effect-model``,
+    ``evaluate-effect-model`` and the knowledge probes refuse a gen-1 and a
+    gen-2 records set before reading a record; ``rule-counts`` alone still
+    reads gen-2 (``test_rule_counts.py``)."""
+
+    _CONSUMERS = {"build-corpus": _build_corpus, "train": _train,
+                  "evaluate": _evaluate, "probes": _probe}
+
+    @pytest.fixture(autouse=True)
+    def _scripts_on_the_path(self):
+        import sys
+
+        scripts = str(Path(__file__).parents[4] / "scripts")
+        if scripts not in sys.path:
+            sys.path.insert(0, scripts)
+
+    @pytest.mark.parametrize("generation", sorted(_EARLIER))
+    @pytest.mark.parametrize("consumer", sorted(_CONSUMERS))
+    def test_an_earlier_generation_is_refused_naming_its_shard(
+        self, tmp_path, consumer, generation,
+    ):
+        from effects.domain.corpus_plan import BuildCorpusError
+        from effects.domain.shard_generation import UnacceptedGenerationError
+
+        corpus = _curated(tmp_path, _EARLIER[generation])
+        with pytest.raises((UnacceptedGenerationError, BuildCorpusError),
+                           match=rf"holds {generation} records; this command reads gen-3 only"):
+            self._CONSUMERS[consumer](tmp_path, corpus)
+
+    def test_a_gen3_set_passes_the_check(self, tmp_path):
+        from effects.domain.shard_generation import ACCEPTED_GENERATIONS, ShardGeneration
+        from effects.infrastructure.shard_io import require_generation
+
+        corpus = _curated(tmp_path, _GEN3_FIXTURE)
+        assert ACCEPTED_GENERATIONS == (ShardGeneration.GEN_3,)
+        assert require_generation(iter_shards(corpus), *ACCEPTED_GENERATIONS) is (
+            ShardGeneration.GEN_3)
+
+
 class TestReadRecordsMatching:
     """The envelope-head filter keeps exactly what the full parse would."""
 

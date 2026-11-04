@@ -74,6 +74,16 @@ def _manifest(**overrides) -> CorpusManifest:
 
 
 @pytest.fixture
+def make_record(make_record):
+    """The shared builder's records as gen-3: the trainer reads gen-3 shards
+    alone (FR-020)."""
+    def build(*args, **overrides):
+        return make_record(*args, **{"generation": 3, **overrides})
+
+    return build
+
+
+@pytest.fixture
 def corpus(tmp_path, make_record):
     """A curated dataset with just enough on disk for ``run`` to reach the loop."""
     store = CorpusStore(tmp_path / "corpus")
@@ -340,7 +350,7 @@ def test_a_records_set_mixing_generations_is_refused(corpus, config, make_record
     from effects.infrastructure.record_codec import record_to_dict
 
     gen1 = record_to_dict(make_record(record_id="old", game_id="og"))
-    del gen1["random_seat"]
+    del gen1["random_seat"], gen1["generation"]
     import gzip
     import json
 

@@ -768,10 +768,10 @@ class TestHeldOutTextUnit:
         resolve is not satisfied."""
         from effects.application.collect_coverage import count_text_shard
 
-        resolutions, everything = _texts_by_game(_GEN1_SHARD)
+        resolutions, everything = _texts_by_game(_GEN3_SHARD)
         assert resolutions and everything != resolutions
         counted = count_text_shard(
-            _GEN1_SHARD, roots=_GEN1_ROOTS, held_out=_holding(everything),
+            _GEN3_SHARD, roots=_GEN3_ROOTS, held_out=_holding(everything),
         )
         assert counted == resolutions
 
@@ -827,7 +827,7 @@ class TestHeldOutTextUnit:
         from effects.infrastructure.shard_io import read_shard, write_shard
 
         effects = [
-            record for record in read_shard(_GEN1_SHARD)
+            record for record in read_shard(_GEN3_SHARD)
             if isinstance(record.payload, ResolutionPayload)
         ]
         flood = (Event(type=EventType.DAMAGE_DEALT, subjects=("P0",)),) * (
@@ -839,11 +839,11 @@ class TestHeldOutTextUnit:
             replace(record, payload=replace(record.payload, events=flood))
             for record in effects
         ])
-        _, everything = _texts_by_game(_GEN1_SHARD)
+        _, everything = _texts_by_game(_GEN3_SHARD)
         held_out = _holding(everything)
 
-        assert count_text_shard(clean, roots=_GEN1_ROOTS, held_out=held_out)
-        assert count_text_shard(flooded, roots=_GEN1_ROOTS, held_out=held_out) == {}
+        assert count_text_shard(clean, roots=_GEN3_ROOTS, held_out=held_out)
+        assert count_text_shard(flooded, roots=_GEN3_ROOTS, held_out=held_out) == {}
 
     def test_a_process_reads_each_sidecar_once_across_shards(self, monkeypatch):
         """A sidecar cache per shard re-read every sidecar the shard named."""
@@ -860,10 +860,10 @@ class TestHeldOutTextUnit:
         monkeypatch.setattr(sidecar_io, "read_sidecar", counting_read)
         converted_trees._process_sidecars.cache_clear()
         roots = {
-            "cardsfolder": str(_FIXTURES / "gen1-sidecars" / "cardsfolder"),
-            "tokenscripts": str(_FIXTURES / "gen1-sidecars" / "tokenscripts"),
+            "cardsfolder": str(_FIXTURES / "gen3-sidecars" / "cardsfolder"),
+            "tokenscripts": str(_FIXTURES / "gen3-sidecars" / "tokenscripts"),
         }
-        shard = _FIXTURES / "gen1-records.jsonl.gz"
+        shard = _FIXTURES / "gen3-records.jsonl.gz"
         first = collect_coverage.count_text_shard(shard, roots=roots, held_out=_holding(()))
         read_by_one = len(reads)
         second = collect_coverage.count_text_shard(shard, roots=roots, held_out=_holding(()))
@@ -923,10 +923,10 @@ class TestHeldOutTextUnit:
         assert all(set(deck) <= {"alpha"} | basics for deck in decks)
 
 
-_GEN1_SHARD = _FIXTURES / "gen1-records.jsonl.gz"
-_GEN1_ROOTS = {
-    "cardsfolder": str(_FIXTURES / "gen1-sidecars" / "cardsfolder"),
-    "tokenscripts": str(_FIXTURES / "gen1-sidecars" / "tokenscripts"),
+_GEN3_SHARD = _FIXTURES / "gen3-records.jsonl.gz"
+_GEN3_ROOTS = {
+    "cardsfolder": str(_FIXTURES / "gen3-sidecars" / "cardsfolder"),
+    "tokenscripts": str(_FIXTURES / "gen3-sidecars" / "tokenscripts"),
 }
 
 
@@ -944,7 +944,7 @@ def _texts_by_game(shard: Path) -> tuple[dict[str, set[str]], dict[str, set[str]
     from effects.infrastructure.shard_io import read_shard
     from effects.infrastructure.sidecar_io import SidecarCache
 
-    cache = SidecarCache({tree: Path(root) for tree, root in _GEN1_ROOTS.items()})
+    cache = SidecarCache({tree: Path(root) for tree, root in _GEN3_ROOTS.items()})
     resolutions: dict[str, set[str]] = {}
     everything: dict[str, set[str]] = {}
     for record in read_shard(shard):

@@ -32,11 +32,10 @@ class ShardGeneration(StrEnum):
         return cls.GEN_2 if "random_seat" in raw else cls.GEN_1
 
 
-#: The generations the corpus, training, evaluation and probe readers accept.
-#: Every generation until the gen-3 input layout lands; gen-3 alone after it.
-ACCEPTED_GENERATIONS: tuple[ShardGeneration, ...] = (
-    ShardGeneration.GEN_1, ShardGeneration.GEN_2, ShardGeneration.GEN_3,
-)
+#: The generations the corpus, training, evaluation and probe readers accept:
+#: gen-3 alone, the one the gen-3 input layout reads (FR-020). ``rule-counts``
+#: keeps its own list, which still reads gen-2.
+ACCEPTED_GENERATIONS: tuple[ShardGeneration, ...] = (ShardGeneration.GEN_3,)
 
 
 class MixedGenerationsError(ValueError):
