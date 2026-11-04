@@ -14,7 +14,13 @@ import torch
 import torch.nn as nn
 
 from effects.domain.ability_encoder import DROPOUT, ENCODER_D_MODEL, FF_MULTIPLIER
-from effects.domain.effect_head_input import ACT_SLOT, SlotKind
+from effects.domain.effect_head_input import (
+    ACT_SLOT,
+    COUNTER_ROWS,
+    ID_PADDING,
+    SUBTYPE_ROWS,
+    SlotKind,
+)
 from effects.domain.effect_head_layout import (
     CREATED_OBJECTS_WIDTH,
     PER_ENTITY_WIDTH,
@@ -34,6 +40,9 @@ MAX_POSITION = 512
 
 #: An ordinary ability row, and a charm mode's ``option`` row (FR-063a).
 OPTION_KINDS = 2
+#: The standard deviation the named-counter rows start at: each is scaled by
+#: a count up to the magnitude cap, so it starts small.
+COUNTER_INIT_STD = 0.02
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +53,8 @@ class EffectModelConfig:
     act_features: int
     player_features: int
     card_features: int
+    #: The ``[ABILITY]`` slot's line flags; 0 builds no projection for them.
+    ability_features: int = 0
     e_dim: int = 256
     vocab_size: int = 0
     n_api_types: int = 0
@@ -110,7 +121,21 @@ class EffectModel(nn.Module):
         self.act_proj = nn.Linear(config.act_features, d)
         self.player_proj = nn.Linear(config.player_features, d)
         self.card_proj = nn.Linear(config.card_features, d)
+        self.ability_proj = (
+            nn.Linear(config.ability_features, d) if config.ability_features else None
+        )
         self.e_proj = nn.Linear(config.e_dim, d)
+        # One row per subtype, summed into a card slot; a chosen creature type
+        # reads the same rows through its own map (root spec § 9.4).
+        self.subtype_embedding = nn.Embedding(SUBTYPE_ROWS, d, padding_idx=ID_PADDING)
+        self.chosen_type_proj = nn.Linear(d, d, bias=False)
+        # One scalar input per named counter, kept sparse: a row per counter
+        # type, its first half scaled by the count and its second by log1p of
+        # it, which is a linear map of the dense raw-plus-log1p block.
+        self.counter_embedding = nn.Embedding(COUNTER_ROWS, 2 * d, padding_idx=ID_PADDING)
+        nn.init.normal_(self.counter_embedding.weight, std=COUNTER_INIT_STD)
+        with torch.no_grad():
+            self.counter_embedding.weight[ID_PADDING].zero_()
         self.slot_kind_embedding = nn.Embedding(len(SlotKind), d)
         # Zero rows: a checkpoint saved before option rows existed loads
         # without this key and must read every row as it trained (FR-063a).
@@ -165,10 +190,30 @@ class EffectModel(nn.Module):
         )
         if inputs.option_kinds is not None:
             hidden = hidden + self.option_kind_embedding(inputs.option_kinds)
+        if self.ability_proj is not None and SlotKind.ABILITY in features:
+            hidden = hidden + self.ability_proj(features[SlotKind.ABILITY])
+        hidden = hidden + self._card_ids(inputs)
         hidden = self.dropout(hidden)
         hidden = self.trunk(hidden, src_key_padding_mask=inputs.attention_mask == 0,
                             relations=inputs.relations)
         return self.norm(hidden)
+
+    def _card_ids(self, inputs: TrunkInputs) -> torch.Tensor | float:
+        """What a card slot's id lists add: its subtypes' rows, its chosen
+        types' rows through their map, and each named counter's row scaled by
+        the count (raw and log1p). Padding rows are zero."""
+        added: torch.Tensor | float = 0.0
+        if inputs.subtype_ids is not None:
+            added = added + self.subtype_embedding(inputs.subtype_ids).sum(-2)
+        if inputs.chosen_type_ids is not None:
+            added = added + self.chosen_type_proj(
+                self.subtype_embedding(inputs.chosen_type_ids).sum(-2))
+        if inputs.counter_ids is not None:
+            raw, logged = self.counter_embedding(inputs.counter_ids).chunk(2, dim=-1)
+            counts = inputs.counter_counts.unsqueeze(-1)
+            scaled = raw * counts + logged * torch.sign(counts) * torch.log1p(counts.abs())
+            added = added + scaled.sum(-2)
+        return added
 
     def per_entity(self, hidden: torch.Tensor) -> torch.Tensor:
         """The shared per-entity head over every trunk output it is handed."""

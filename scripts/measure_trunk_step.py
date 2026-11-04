@@ -200,6 +200,7 @@ def measure(records: list[EffectRecord], *, batch_size: int, steps: int, warmup:
     config = EffectModelConfig(
         global_features=widths[SlotKind.GLOBAL], act_features=widths[SlotKind.ACT],
         player_features=widths[SlotKind.PLAYER], card_features=widths[SlotKind.CARD],
+        ability_features=widths[SlotKind.ABILITY],
         e_dim=e_dim)
     model = EffectModel(config).to(device).train()
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)

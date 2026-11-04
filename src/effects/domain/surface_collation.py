@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 import numpy as np
 import torch
 
-from effects.domain.effect_head_input import SlotKind
+from effects.domain.effect_head_input import ID_PADDING, SlotKind
 from effects.domain.effect_head_layout import FieldSpec
 from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityFieldTargets, EntityTargetBatch
@@ -38,6 +38,14 @@ class TrunkInputs:
     #: ``(N, 4)`` long ``[batch row, from slot, to slot, relation type]``; None
     #: or empty where the batch holds no relation (root spec § 10.1).
     relations: torch.Tensor | None = None
+    #: ``(batch, slots, k)`` long rows of the subtype table, padded with
+    #: ``ID_PADDING``: each ``[CARD]`` slot's subtypes, and its chosen types.
+    subtype_ids: torch.Tensor | None = None
+    chosen_type_ids: torch.Tensor | None = None
+    #: ``(batch, slots, k)`` rows of the named-counter table, padded with
+    #: ``ID_PADDING``, and the count beside each.
+    counter_ids: torch.Tensor | None = None
+    counter_counts: torch.Tensor | None = None
 
     def _mapped(self, move) -> TrunkInputs:
         def moved(tensor):
@@ -52,6 +60,10 @@ class TrunkInputs:
             option_kinds=moved(self.option_kinds),
             e_rows=moved(self.e_rows),
             relations=moved(self.relations),
+            subtype_ids=moved(self.subtype_ids),
+            chosen_type_ids=moved(self.chosen_type_ids),
+            counter_ids=moved(self.counter_ids),
+            counter_counts=moved(self.counter_counts),
         )
 
     def to(self, device, *, non_blocking: bool = False) -> TrunkInputs:
@@ -116,6 +128,14 @@ def collate_surfaces(
          for i, j, r in getattr(surface, "relations", ())],
         dtype=np.int64).reshape(-1, 4)
 
+    depth = max((len(getattr(slot, name, ())) for surface in surfaces for slot in surface.slots
+                 for name in ("subtypes", "chosen_types", "counters")), default=0)
+    depth = max(depth, 1)
+    subtype_ids = np.full((batch, width, depth), ID_PADDING, dtype=np.int64)
+    chosen_type_ids = np.full((batch, width, depth), ID_PADDING, dtype=np.int64)
+    counter_ids = np.full((batch, width, depth), ID_PADDING, dtype=np.int64)
+    counter_counts = np.zeros((batch, width, depth), dtype=np.float32)
+
     for row, surface in enumerate(surfaces):
         slots = surface.slots
         filled = len(slots)
@@ -131,6 +151,13 @@ def collate_surfaces(
                 e_rows[row, column] = slot.e
             elif slot.e is not None:
                 e_vectors[row, column, : len(slot.e)] = slot.e
+            if slot.subtypes:
+                subtype_ids[row, column, : len(slot.subtypes)] = slot.subtypes
+            if slot.chosen_types:
+                chosen_type_ids[row, column, : len(slot.chosen_types)] = slot.chosen_types
+            for k, (counter, count) in enumerate(slot.counters):
+                counter_ids[row, column, k] = counter
+                counter_counts[row, column, k] = count
 
     return TrunkInputs(
         slot_features={
@@ -143,6 +170,10 @@ def collate_surfaces(
         option_kinds=torch.from_numpy(option_kinds),
         e_rows=torch.from_numpy(e_rows),
         relations=torch.from_numpy(relations),
+        subtype_ids=torch.from_numpy(subtype_ids),
+        chosen_type_ids=torch.from_numpy(chosen_type_ids),
+        counter_ids=torch.from_numpy(counter_ids),
+        counter_counts=torch.from_numpy(counter_counts),
     )
 
 

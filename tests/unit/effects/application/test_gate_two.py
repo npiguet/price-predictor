@@ -48,9 +48,8 @@ from effects.domain.damage_step_keywords import (
 )
 from effects.domain.effect_head_input import (
     NO_STRIP,
-    OVERLAY_KEYWORDS_GEN2,
-    THERMOMETER_STEPS,
     SlotKind,
+    card_segments,
 )
 from effects.domain.effect_head_layout import (
     FIELD_SLICES,
@@ -60,6 +59,7 @@ from effects.domain.effect_head_layout import (
     ZONE_OUTCOMES,
 )
 from effects.domain.evaluation_report import CheckStatus
+from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
 from effects.domain.provenance import ProvenanceKey, SidecarLine
 from effects.domain.records import CombatPayload, EffectRecord, RecordKind
 from effects.domain.state_snapshot import (
@@ -72,7 +72,13 @@ from effects.domain.state_snapshot import (
     StateSnapshot,
 )
 from effects.domain.surface_collation import gather_entities
-from tests.unit.effects.builders import keyword_score, make_batcher, slots_of_kind
+from tests.unit.effects.builders import (
+    keyword_score,
+    make_batcher,
+    make_entity,
+    make_record,
+    slots_of_kind,
+)
 
 # ── a board: one first-striking attacker, one blocker ────────────────────
 
@@ -277,8 +283,6 @@ class TestStrippingTheOverlayChannel:
         slot = next(
             s for s in slots_of_kind(surface, SlotKind.CARD) if s.entity_id == entity_id
         )
-        # The multi-hot sits at a fixed offset from the end of the card block;
-        # find it by the one value the base board sets.
         return _overlay_column(slot.features, "first_strike")
 
     def test_the_granted_keyword_bit_is_cleared(self):
@@ -319,18 +323,10 @@ def _ability_count(surface, entity_id: str) -> int:
 
 
 def _overlay_column(features: tuple[float, ...], keyword: str) -> float:
-    """Read one overlay-keyword bit out of a ``[CARD]`` slot's features.
-
-    The multi-hot is followed by a fixed tail (granted-ability count, three
-    relation flags, the stack block, the two per-kind overlays and the gen-2
-    layout's three thermometer codes), so the block's position is found by
-    counting back from the end rather than by re-deriving every field ahead of
-    it.
-    """
-    tail = 2 + 3 + 6 + 3 + 2 + 3 * THERMOMETER_STEPS
-    end = len(features) - tail
-    start = end - (len(OVERLAY_KEYWORDS_GEN2) + 1)
-    return features[start + OVERLAY_KEYWORDS_GEN2.index(keyword)]
+    """Read one kept keyword's flag out of a ``[CARD]`` slot's features; every
+    part of the card block has a fixed width, so any entity gives its place."""
+    flags = card_segments(make_entity("E0", "probe"), make_record())["keyword_flags"]
+    return features[flags][KEPT_KEYWORD_FLAGS.index(keyword)]
 
 
 class _NoEncoder:

@@ -19,7 +19,6 @@ from effects.domain.effect_head_input import (
     ACT_SLOT,
     NO_STRIP,
     OVERLAY_KEYWORDS,
-    OVERLAY_KEYWORDS_GEN2,
     PHASES,
     THERMOMETER_STEPS,
     SlotKind,
@@ -27,11 +26,14 @@ from effects.domain.effect_head_input import (
     _push_scalar,
     act_features,
     card_features,
+    card_segments,
     continuous_masked_keywords,
+    counter_rows,
     global_features,
     player_features,
 )
 from effects.domain.event_schema import Event, EventType
+from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     ActivationPayload,
@@ -93,6 +95,13 @@ class _Lines:
     has_line: Callable = lambda key: True
     keyword_of: Callable = lambda key: None
     options_for: Callable = lambda key: ()
+
+
+def _flags(slot) -> dict[str, float]:
+    """An ``[ABILITY]`` slot's line flags by name."""
+    active, granted, temporary, cast, count, _, chosen = slot.features
+    return {"active": active, "granted": granted, "temporary": temporary,
+            "cast_with": cast, "count": count, "chosen": chosen}
 
 
 def _entity(entity_id: str, **overrides) -> EntityState:
@@ -289,18 +298,20 @@ class TestAbilityTokens:
         vectors = [s.e for s in slots_of_kind(surface, SlotKind.ABILITY)]
         assert vectors == [_VECTORS[_ANTHEM], _VECTORS[_WARD]]
 
-    def test_temporary_grants_do_not_become_tokens(self):
-        """FR-073: they ride the overlay instead."""
+    def test_temporary_grants_become_tokens_flagged_temporary(self):
+        """Root spec § 9.2: a temporary grant is a line, in place of a count."""
         entity = _entity(
             "E1", printed=(_ANTHEM,),
             granted_temporary=GrantedTemporary(abilities=(_WARD,)),
         )
         surface = _build(_record(state=_snapshot(entities=(entity,))))
-        assert len(slots_of_kind(surface, SlotKind.ABILITY)) == 1
+        abilities = slots_of_kind(surface, SlotKind.ABILITY)
+        assert [slot.e for slot in abilities] == [_VECTORS[_ANTHEM], _VECTORS[_WARD]]
+        assert [_flags(slot)["temporary"] for slot in abilities] == [0.0, 1.0]
 
     def test_a_gen3_entity_builds_the_surface_its_gen2_twin_builds(self):
-        """The lines in force become the tokens, printed or granted; an unmet
-        static and a temporary grant give none (T074)."""
+        """The lines in force read as the gen-2 twin's tokens, printed or
+        attached; an unmet static is one more token, flagged inactive (T074)."""
         from effects.domain.state_snapshot import CardLine
 
         lines = (
@@ -308,10 +319,12 @@ class TestAbilityTokens:
             CardLine(keys=(_WARD,), kind="static", granted=True, active=True),
             CardLine(keys=(_BOLT,), kind="static", granted=False, active=False),
         )
-        gen3 = _entity("E1", lines=lines)
-        gen2 = _entity("E1", printed=(_ANTHEM,), granted_attached=(_WARD,))
-        assert _build(_record(state=_snapshot(entities=(gen3,)))) == _build(
-            _record(state=_snapshot(entities=(gen2,))))
+        gen3 = _build(_record(state=_snapshot(entities=(_entity("E1", lines=lines),))))
+        gen2 = _build(_record(state=_snapshot(entities=(
+            _entity("E1", printed=(_ANTHEM,), granted_attached=(_WARD,)),))))
+        assert gen3.slots[:-1] == gen2.slots
+        inactive = gen3.slots[-1]
+        assert inactive.e == _VECTORS[_BOLT] and _flags(inactive)["active"] == 0.0
 
     def test_context_dropout_can_drop_a_context_ability(self):
         record = _record()
@@ -350,10 +363,11 @@ class TestControllerTags:
         record = _record()
         mine = player_features(record.state.players[0], record)
         theirs = player_features(record.state.players[1], record)
-        # The three flags sit just before the life thermometer.
-        flags = slice(-3 - THERMOMETER_STEPS, -THERMOMETER_STEPS)
-        assert mine[flags] == (1.0, 0.0, 0.0)
-        assert theirs[flags] == (0.0, 1.0, 0.0)
+        # Acting, not acting, active, holding priority and targeted sit just
+        # before the life thermometer; P0 is active and holds priority.
+        flags = slice(-5 - THERMOMETER_STEPS, -THERMOMETER_STEPS)
+        assert mine[flags] == (1.0, 0.0, 1.0, 1.0, 0.0)
+        assert theirs[flags] == (0.0, 1.0, 0.0, 0.0, 0.0)
 
     def test_a_targeted_player_is_flagged(self):
         state = _snapshot(refs=Refs(targets=("P1",)))
@@ -422,7 +436,7 @@ class TestPerKindVariations:
                          state=_snapshot(entities=(entity,)))
         masked = card_features(entity, record, masked_keywords=frozenset({"flying"}))
         without = card_features(entity, record)
-        # Only the overlay's flying bit differs.
+        # Only the flying flag differs.
         differing = [i for i, (a, b) in enumerate(zip(masked, without)) if a != b]
         assert len(differing) == 1
 
@@ -636,24 +650,18 @@ class TestGen2Layout:
             assert self._phase_slot(_record(state=state))[-1] == 0.0
 
     def test_plus_one_counters_read_as_p1p1(self):
-        entity = _entity("E1", counters={"+1/+1": 2})
-        record = _record(state=_snapshot(entities=(entity,)))
-        plain = _entity("E1", counters={"P1P1": 2})
-        reference = card_features(plain, _record(state=_snapshot(entities=(plain,))))
-        assert card_features(entity, record) == reference
+        assert counter_rows(_entity("E1", counters={"+1/+1": 2})) == counter_rows(
+            _entity("E1", counters={"P1P1": 2}))
 
-    def test_protection_from_a_colour_and_landwalk_set_their_bits(self):
+    def test_protection_from_a_colour_and_landwalk_set_their_flags(self):
         entity = _entity("E1", granted_temporary=GrantedTemporary(
             keywords=("protection_from_red", "landwalk"),
         ))
         record = _record(state=_snapshot(entities=(entity,)))
-        features = card_features(entity, record)
-        tail = 2 + 3 + 6 + 3 + 2 + 3 * THERMOMETER_STEPS
-        end = len(features) - tail
-        block = features[end - (len(OVERLAY_KEYWORDS_GEN2) + 1):end]
-        assert block[OVERLAY_KEYWORDS_GEN2.index("protection")] == 1.0
-        assert block[OVERLAY_KEYWORDS_GEN2.index("landwalk")] == 1.0
-        assert block[-1] == 0.0
+        block = card_features(entity, record)[card_segments(entity, record)["keyword_flags"]]
+        assert block[KEPT_KEYWORD_FLAGS.index("protection")] == 1.0
+        assert block[KEPT_KEYWORD_FLAGS.index("landwalk")] == 1.0
+        assert sum(block) == 2
 
     def test_the_card_ends_with_power_toughness_and_remaining_toughness(self):
         entity = _entity(
@@ -692,3 +700,345 @@ class TestGen2Layout:
         features = player_features(players[0], record)
         assert sum(features[-THERMOMETER_STEPS:]) == 33
 
+
+# ── gen-3 inputs (T111-T113) ──────────────────────────────────────────────
+
+_CHOICE = ProvenanceKey("cardsfolder/c/charm.txt", 0, "spell", 0)
+_KICKER = ProvenanceKey("cardsfolder/k/kicker.txt", 0, "keyword", 0)
+
+
+def _line(key, kind="static", granted=False, **fields):
+    from effects.domain.state_snapshot import CardLine
+
+    return CardLine(keys=(key,) if key else (), kind=kind, granted=granted, **fields)
+
+
+def _card_part(entity, record, name):
+    return card_features(entity, record)[card_segments(entity, record)[name]]
+
+
+class TestLineFlags:
+    """Root spec § 9.2: every ability slot carries its line's flags."""
+
+    def _abilities(self, entity, **build):
+        return slots_of_kind(
+            _build(_record(state=_snapshot(entities=(entity,))), **build), SlotKind.ABILITY)
+
+    def test_every_ability_slot_has_the_flags_width(self):
+        from effects.domain.effect_head_input import ABILITY_FEATURE_WIDTH
+
+        entity = _entity("E1", lines=(_line(_ANTHEM), _line(_WARD, active=False)))
+        assert {len(slot.features) for slot in self._abilities(entity)} == {
+            ABILITY_FEATURE_WIDTH}
+
+    def test_a_face_not_up_is_slots_flagged_inactive(self):
+        entity = _entity("E1", lines=(
+            _line(_ANTHEM, active=True), _line(_WARD, kind="trigger", active=False)))
+        assert [_flags(slot)["active"] for slot in self._abilities(entity)] == [1.0, 0.0]
+
+    def test_a_grant_by_a_static_is_granted_but_not_temporary(self):
+        entity = _entity("E1", lines=(_line(_ANTHEM, kind="activated", granted=True),))
+        flags = _flags(self._abilities(entity)[0])
+        assert (flags["granted"], flags["temporary"]) == (1.0, 0.0)
+
+    def test_a_keyword_an_effect_granted_reads_through_its_reminder_line(self):
+        from effects.domain.effect_head_input import keyword_line_fragment
+
+        entity = _entity("E1", lines=(
+            _line(None, kind="keyword", granted=True, fragment="Flying"),))
+        keys = []
+        abilities = self._abilities(entity, e_for=lambda key: keys.append(key) or None)
+        flags = _flags(abilities[0])
+        assert (flags["granted"], flags["temporary"]) == (1.0, 1.0)
+        assert keyword_line_fragment(keys[-1]) == "Flying"
+
+    def test_a_line_with_no_key_and_no_keyword_has_no_slot(self):
+        entity = _entity("E1", lines=(_line(None, kind="trigger"), _line(_ANTHEM)))
+        assert len(self._abilities(entity)) == 1
+
+    def test_cast_with_carries_the_multikicker_count(self):
+        entity = _entity("E1", lines=(_line(_KICKER, kind="keyword", cast_with=3),))
+        flags = _flags(self._abilities(entity)[0])
+        assert flags["cast_with"] == 1.0 and flags["count"] == 3.0
+
+    def test_the_chosen_flag_sits_on_the_chosen_mode(self):
+        modes = tuple(ProvenanceKey(_CHOICE.script_file, 0, "spell", 0, n) for n in range(3))
+        entity = _entity("E1", lines=(_line(_CHOICE, kind="spell", chosen=(0, 2)),))
+        abilities = self._abilities(
+            entity, options_for=lambda key: modes if key == _CHOICE else ())
+        assert [_flags(slot)["chosen"] for slot in abilities] == [0.0, 1.0, 0.0, 1.0]
+
+    def test_a_keyword_counter_is_a_granted_keyword_line_not_a_counter(self):
+        from effects.domain.effect_head_input import counter_id, keyword_line_fragment, slot_lines
+
+        entity = _entity("E1", counters={"FLYING": 1, "P1P1": 2})
+        lines = slot_lines(entity)
+        assert [keyword_line_fragment(line.key) for line in lines] == ["FLYING"]
+        assert lines[0].granted and not lines[0].temporary
+        assert counter_rows(entity) == ((counter_id("P1P1"), 2.0),)
+
+    def test_a_keyword_counter_adds_no_line_where_the_keyword_has_one(self):
+        from effects.domain.effect_head_input import slot_lines
+
+        entity = _entity("E1", counters={"FLYING": 1}, lines=(
+            _line(None, kind="keyword", granted=True, fragment="Flying"),))
+        assert len(slot_lines(entity)) == 1
+
+    def test_stripping_a_keyword_drops_its_granted_line_and_its_flag(self):
+        entity = _entity(
+            "E1", granted_temporary=GrantedTemporary(keywords=("first_strike",)),
+            lines=(_line(None, kind="keyword", granted=True, fragment="First Strike"),
+                   _line(_ANTHEM)),
+        )
+        record = _record(state=_snapshot(entities=(entity,)))
+        base = _build(record)
+        stripped = _build(record, stripped={"E1": frozenset({"first_strike"})})
+        assert len(slots_of_kind(base, SlotKind.ABILITY)) == 2
+        assert len(slots_of_kind(stripped, SlotKind.ABILITY)) == 1
+        flags = card_segments(entity, record)["keyword_flags"]
+        assert sum(slots_of_kind(stripped, SlotKind.CARD)[0].features[flags]) == 0.0
+        assert sum(slots_of_kind(base, SlotKind.CARD)[0].features[flags]) == 1.0
+
+
+class TestKeywordFlags:
+    """Root spec § 9.6: only the kept keywords keep a flag."""
+
+    def test_a_keyword_without_a_kept_flag_sets_none(self):
+        assert "exalted" not in KEPT_KEYWORD_FLAGS
+        entity = _entity("E1", granted_temporary=GrantedTemporary(keywords=("exalted",)))
+        record = _record(state=_snapshot(entities=(entity,)))
+        assert sum(_card_part(entity, record, "keyword_flags")) == 0.0
+
+    def test_split_second_keeps_its_flag(self):
+        entity = _entity("E1", granted_temporary=GrantedTemporary(keywords=("split_second",)))
+        record = _record(state=_snapshot(entities=(entity,)))
+        flags = _card_part(entity, record, "keyword_flags")
+        assert flags[KEPT_KEYWORD_FLAGS.index("split_second")] == 1.0
+
+    def test_an_in_force_keyword_line_sets_its_flag_and_a_face_not_up_none(self):
+        up = _entity("E1", lines=(_line(None, kind="keyword", fragment="Flying"),))
+        down = _entity("E1", lines=(
+            _line(None, kind="keyword", fragment="Flying", active=False),))
+        record = _record()
+        index = KEPT_KEYWORD_FLAGS.index("flying")
+        assert _card_part(up, record, "keyword_flags")[index] == 1.0
+        assert _card_part(down, record, "keyword_flags")[index] == 0.0
+
+
+class TestCardSlotInputs:
+    """Root spec § 9.4: the card slot's new inputs."""
+
+    def test_face_state_replaces_the_face_down_flag(self):
+        from effects.domain.effect_head_input import FACE_STATES
+
+        record = _record()
+        for face in FACE_STATES:
+            part = _card_part(_entity("E1", face_state=face), record, "face_state")
+            assert part[FACE_STATES.index(face)] == 1.0 and sum(part) == 1.0
+        gen2 = _card_part(_entity("E1", face_down=True), record, "face_state")
+        assert gen2[FACE_STATES.index("face_down")] == 1.0
+
+    def test_two_face_down_cards_differ_only_in_their_inactive_lines(self):
+        from effects.domain.state_snapshot import RealFace
+
+        def face_down(name, key):
+            return _entity(
+                "E1", name="", face_state="face_down", types=("creature",), colors=(),
+                mana_value=0, pt=PowerToughness(base=(2, 2)),
+                real_face=RealFace(name=name, types=("creature",), colors=("R",),
+                                   mana_value=5, base_pt=(5, 4)),
+                lines=(_line(key, kind="trigger", active=False),),
+            )
+
+        one = _build(_record(state=_snapshot(entities=(face_down("A", _ANTHEM),))))
+        two = _build(_record(state=_snapshot(entities=(face_down("B", _WARD),))))
+        assert slots_of_kind(one, SlotKind.CARD) == slots_of_kind(two, SlotKind.CARD)
+        one_line, = slots_of_kind(one, SlotKind.ABILITY)
+        two_line, = slots_of_kind(two, SlotKind.ABILITY)
+        assert one_line.features == two_line.features and one_line.e != two_line.e
+
+    def test_is_a_copy_and_is_a_token(self):
+        record = _record()
+        plain = _card_part(_entity("E1"), record, "characteristics")
+        copy = _card_part(_entity("E1", copy_source="E9"), record, "characteristics")
+        token = _card_part(_entity("E1", token_script_id="c_1_1_soldier"), record,
+                           "characteristics")
+        assert (plain[-2:], copy[-2:], token[-2:]) == ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0))
+
+    def test_mana_cost_reads_each_symbol(self):
+        from effects.domain.effect_head_input import MANA_SYMBOLS
+
+        entity = _entity("E1", mana_cost={"generic": 2, "W/U": 1, "G/P": 2})
+        part = _card_part(entity, _record(), "mana_cost")
+        assert part[0] == 1.0
+        assert part[1 + 2 * MANA_SYMBOLS.index("W/U")] == 1.0
+        assert part[1 + 2 * MANA_SYMBOLS.index("G/P")] == 2.0
+        assert part[1 + 2 * MANA_SYMBOLS.index("generic")] == 2.0
+        assert _card_part(_entity("E1"), _record(), "mana_cost")[0] == 0.0
+
+    def test_printed_loyalty_carries_a_thermometer(self):
+        part = _card_part(_entity("E1", printed_loyalty=3), _record(),
+                          "printed_loyalty_defense")
+        loyalty = part[:3 + THERMOMETER_STEPS]
+        assert loyalty[:2] == (1.0, 3.0) and sum(loyalty[3:]) == 3
+
+    def test_the_designations_are_the_collector_s_table(self):
+        """``CardFacts.designationTable`` writes the closed list the input reads."""
+        import re
+        from pathlib import Path
+
+        from effects.domain.effect_head_input import DESIGNATIONS
+
+        java = (Path(__file__).resolve().parents[4] / "forge-connector/src/main/java/com/"
+                "pricepredictor/connector/effects/CardFacts.java").read_text(encoding="utf-8")
+        assert tuple(re.findall(r'table\.put\("([a-z_]+)"', java)) == DESIGNATIONS
+
+    def test_designations_x_paid_history_and_order_rank(self):
+        from effects.domain.effect_head_input import DESIGNATIONS
+        from effects.domain.state_snapshot import CardHistory
+
+        entity = _entity(
+            "E1", designations=("goaded", "monstrous"), x_paid=4, order_rank=2,
+            history=CardHistory(entered_this_turn=True, loyalty_activated=True),
+        )
+        record = _record()
+        designations = _card_part(entity, record, "designations")
+        assert designations[DESIGNATIONS.index("goaded")] == 1.0
+        assert sum(designations) == 2.0
+        assert _card_part(entity, record, "x_paid")[:2] == (1.0, 4.0)
+        assert _card_part(entity, record, "history") == (1.0, 0.0, 0.0, 1.0)
+        assert _card_part(entity, record, "order_rank")[:2] == (1.0, 2.0)
+
+    def test_chosen_values_and_costs_paid(self):
+        from effects.domain.state_snapshot import COLORS, CardChoices, CostsPaid
+
+        entity = _entity(
+            "E1", chosen=CardChoices(colors=("white",), type="Human", number=3),
+            costs_paid=CostsPaid(mana={"B": 2}, cast_from="graveyard", mana_rider=True),
+        )
+        record = _record()
+        chosen = _card_part(entity, record, "chosen")
+        assert chosen[COLORS.index("W")] == 1.0
+        paid = _card_part(entity, record, "costs_paid")
+        assert paid[0] == 1.0 and paid[1 + 2 * COLORS.index("B")] == 2.0 and paid[-1] == 1.0
+
+    def test_subtypes_and_chosen_types_share_the_subtype_rows(self):
+        from effects.domain.effect_head_input import SUBTYPE_ROWS, subtype_id
+        from effects.domain.state_snapshot import CardChoices
+
+        entity = _entity("E1", subtypes=("human", "soldier"),
+                         chosen=CardChoices(type="Human"))
+        card, = slots_of_kind(_build(_record(state=_snapshot(entities=(entity,)))),
+                              SlotKind.CARD)
+        assert card.subtypes == (subtype_id("human"), subtype_id("soldier"))
+        assert card.chosen_types == (subtype_id("Human"),) == card.subtypes[:1]
+        assert subtype_id("not a subtype") == SUBTYPE_ROWS - 1
+
+    def test_a_chosen_card_type_is_no_subtype(self):
+        from effects.domain.effect_head_input import chosen_subtypes
+        from effects.domain.state_snapshot import CardChoices
+
+        assert chosen_subtypes(_entity("E1", chosen=CardChoices(type="Artifact"))) == ()
+
+    def test_every_named_counter_has_a_row_of_its_own(self):
+        from effects.domain.effect_head_input import COUNTER_ROWS, counter_id
+
+        rows = dict(counter_rows(_entity("E1", counters={"OIL": 2, "+1/+1": 1, "ZZZ": 4})))
+        assert rows[counter_id("OIL")] == 2.0 and rows[counter_id("P1P1")] == 1.0
+        assert rows[COUNTER_ROWS - 1] == 4.0
+        assert len({counter_id("OIL"), counter_id("P1P1"), counter_id("ACORN")}) == 3
+
+    def test_turn_and_control_inputs(self):
+        record = _record(state=_snapshot(global_=GlobalState(
+            turn=2, phase="main1", active="P1", priority="P0", stack_size=0)))
+        stolen = _entity("E1", controller="P0", owner="P1")
+        part = _card_part(stolen, record, "relation_to_act")
+        # controller active, controller holds priority, owner acting, owner differs
+        assert part[3:] == (0.0, 1.0, 0.0, 1.0)
+
+
+class TestPlayerGlobalAndActInputs:
+    """Root spec § 9.4-§ 9.5 and the land-play limit of FR-044."""
+
+    def test_max_land_plays_beside_lands_played_and_unlimited(self):
+        from effects.domain.effect_head_input import THIS_TURN_COUNTERS
+
+        record = _record()
+        at = 6 * 2 + len(THIS_TURN_COUNTERS) * 2
+
+        def limit(player):
+            return player_features(player, record)[at:at + 3]
+
+        two = PlayerState(id="P0", life=20, hand=0, library=0, graveyard=0, max_land_plays=2)
+        free = PlayerState(id="P0", life=20, hand=0, library=0, graveyard=0,
+                           land_plays_unlimited=True)
+        assert limit(two) == pytest.approx((2.0, math.log1p(2), 0.0))
+        assert limit(free) == (0.0, 0.0, 1.0)
+
+    def test_player_designations_reach_the_slot(self):
+        record = _record()
+        plain = PlayerState(id="P0", life=20, hand=0, library=0, graveyard=0)
+        for change in ({"speed": 2}, {"rad": 3}, {"monarch": True},
+                       {"initiative": True}, {"city_blessing": True}):
+            assert player_features(replace(plain, **change), record) != player_features(
+                plain, record), change
+
+    def test_day_night_and_the_pending_event_reach_the_global_slot(self):
+        from effects.domain.effect_head_input import DAY_NIGHT, EVENT_TYPES
+
+        night = _record(state=_snapshot(global_=GlobalState(
+            turn=2, phase="main1", active="P0", priority="P0", stack_size=0,
+            day_night="night")))
+        # turn, stack size, the phase and substep one-hots, the two actor
+        # flags and the emblem count come first.
+        from effects.domain.effect_head_input import COMBAT_SUBSTEPS
+
+        start = 4 + len(PHASES) + 1 + len(COMBAT_SUBSTEPS) + 1 + 2 + 2
+        assert global_features(night)[start + DAY_NIGHT.index("night")] == 1.0
+        pending = Event(type=EventType.DAMAGE_DEALT, subjects=("E1",), params={"amount": 3})
+        record = _record(kind=RecordKind.TRIGGER, moment=None,
+                         state=_snapshot(pending_event=pending),
+                         payload=TriggerPayload(event=pending, fired=True))
+        at = start + len(DAY_NIGHT) + 1
+        event = global_features(record)[at:at + len(EVENT_TYPES) + 3]
+        assert event[EVENT_TYPES.index("damage_dealt")] == 1.0
+        assert event[-2] == 3.0
+
+    def test_dice_and_coins_reach_the_act_slot(self):
+        from effects.domain.state_snapshot import RandomResults
+
+        rolled = _record(state=_snapshot(refs=Refs(
+            random=RandomResults(dice=(4, 6), coin_flips_won=1))))
+        assert act_features(rolled) != act_features(_record())
+        assert len(act_features(rolled)) == len(act_features(_record()))
+
+
+class TestTheGen3Fixture:
+    """The real gen-3 records lay out at one width per slot kind."""
+
+    @pytest.fixture(scope="class")
+    def records(self):
+        from effects.infrastructure.record_codec import record_from_dict
+        from tests.unit.effects.builders import gen3_fixture_records
+
+        return [record_from_dict(raw) for raw in gen3_fixture_records()]
+
+    def test_every_slot_kind_keeps_one_width(self, records):
+        from effects.domain.effect_head_input import feature_widths
+
+        widths = feature_widths(records)
+        seen: dict = {}
+        for record in records:
+            for slot in _build(record).slots:
+                seen.setdefault(slot.kind, set()).add(len(slot.features))
+        assert seen == {kind: {widths[kind]} for kind in seen}
+
+    def test_the_fixture_reaches_the_new_inputs(self, records):
+        from effects.domain.effect_head_input import keyword_line_fragment, slot_lines
+
+        entities = [entity for record in records for entity in record.state.entities]
+        lines = [line for entity in entities for line in slot_lines(entity)]
+        assert any(not line.active for line in lines)
+        assert any(line.temporary and keyword_line_fragment(line.key) for line in lines)
+        assert any(counter_rows(entity) for entity in entities)
+        assert any(entity.chosen and entity.chosen.type for entity in entities)

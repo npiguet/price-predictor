@@ -145,3 +145,64 @@ class TestRelationTrunk:
         torch.manual_seed(0)
         off = EffectModel(replace(_CONFIG, relation_values=False))
         assert "trunk.layers.0.rel_v" not in dict(off.named_parameters())
+
+
+class TestGen3Inputs:
+    """T111-T112: the line-flag projection and the card slot's id tables."""
+
+    def _model(self, ability_features: int = 0) -> EffectModel:
+        torch.manual_seed(0)
+        return EffectModel(replace(_CONFIG, ability_features=ability_features)).eval()
+
+    def test_a_model_without_line_flags_builds_no_projection(self):
+        assert self._model().ability_proj is None
+        assert self._model(7).ability_proj.in_features == 7
+
+    def test_the_line_flags_reach_the_trunk(self):
+        model = self._model(7)
+        batch = _surface()
+        features = dict(batch.slot_features)
+        features[SlotKind.ABILITY] = torch.zeros(2, 6, 7)
+        flagged = dict(features)
+        flagged[SlotKind.ABILITY] = torch.zeros(2, 6, 7)
+        flagged[SlotKind.ABILITY][:, 5, 0] = 1.0
+        with torch.no_grad():
+            assert not torch.allclose(model(replace(batch, slot_features=features)),
+                                      model(replace(batch, slot_features=flagged)))
+
+    def test_padding_ids_add_nothing(self):
+        model = self._model()
+        batch = _surface()
+        padded = replace(
+            batch, subtype_ids=torch.zeros(2, 6, 3, dtype=torch.long),
+            chosen_type_ids=torch.zeros(2, 6, 1, dtype=torch.long),
+            counter_ids=torch.zeros(2, 6, 2, dtype=torch.long),
+            counter_counts=torch.zeros(2, 6, 2))
+        with torch.no_grad():
+            assert torch.equal(model(batch), model(padded))
+
+    def test_a_subtype_and_a_chosen_type_read_one_row_differently(self):
+        model = self._model()
+        batch = _surface()
+        ids = torch.zeros(2, 6, 1, dtype=torch.long)
+        ids[:, 4, 0] = 5
+        with torch.no_grad():
+            as_subtype = model(replace(batch, subtype_ids=ids))
+            as_chosen = model(replace(batch, chosen_type_ids=ids))
+        assert not torch.allclose(as_subtype, model(batch).detach())
+        assert not torch.allclose(as_subtype, as_chosen)
+
+    def test_a_counter_row_scales_with_its_count(self):
+        model = self._model()
+        batch = _surface()
+        ids = torch.zeros(2, 6, 1, dtype=torch.long)
+        ids[:, 4, 0] = 3
+        counts = torch.zeros(2, 6, 1)
+        added = []
+        for count in (1.0, 2.0):
+            counts[:, 4, 0] = count
+            added.append(model._card_ids(replace(batch, counter_ids=ids,
+                                                 counter_counts=counts.clone()))[0, 4])
+        raw, logged = model.counter_embedding.weight[3].chunk(2)
+        expected = raw * 2 + logged * torch.log1p(torch.tensor(2.0))
+        assert torch.allclose(added[1], expected) and not torch.allclose(added[0], added[1])

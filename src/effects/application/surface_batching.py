@@ -29,7 +29,10 @@ from effects.domain.effect_head_input import (
     SlotKind,
     SurfaceBuilder,
     feature_widths,
+    keyword_line_fragment,
+    slot_lines,
 )
+from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup
 from effects.domain.records import acting_keys
 from effects.domain.surface_collation import TrunkInputs, collate_surfaces
@@ -339,9 +342,25 @@ class SurfaceBatcher:
         return self.stager.surface
 
     def _resolve(self, key) -> tuple[str | None, SidecarLine | None]:
-        """``(text, line)`` for one key: its override, else the join."""
+        """``(text, line)`` for one key: its override, a keyword line's
+        reminder text, else the join."""
         override = self._overrides.get(key)
-        return override if override is not None else self.resolver.resolve(key)
+        if override is not None:
+            return override
+        fragment = keyword_line_fragment(key)
+        if fragment is not None:
+            return self._keyword_line_text(fragment), None
+        return self.resolver.resolve(key)
+
+    def _keyword_line_text(self, fragment: str) -> str:
+        """The text a keyword line with no script of its own is encoded from:
+        its keyword's reminder text, its values filled in (root spec § 9.2);
+        the fragment itself for a keyword the definitions do not expand."""
+        keywords = self.stager.tokenizer.keywords
+        line = keywords.line_of(fragment)
+        if line is None or not keywords.expands(line.name):
+            return fragment
+        return keywords.line_text(line.name, line.details) or fragment
 
     def text_of(self, key) -> str | None:
         """The text one ability key is encoded from, on this run's surface:
@@ -397,16 +416,18 @@ class SurfaceBatcher:
                 if note(key) is not None:
                     break
             for entity in record.state.entities:
-                for key in entity.ability_keys:
-                    if note(key) is not None:
-                        for mode in self.options_for(key):
+                for line in slot_lines(entity):
+                    if note(line.key) is not None:
+                        for mode in self.options_for(line.key):
                             note(mode)
         return texts
 
     def options_for(self, key) -> tuple:
         """The keys of the charm-mode lines that follow ``key``'s line
-        (FR-063a); none for an overridden key."""
-        return () if key in self._overrides else self.resolver.options_for(key)
+        (FR-063a); none for an overridden key or a keyword line."""
+        if key in self._overrides or keyword_line_fragment(key) is not None:
+            return ()
+        return self.resolver.options_for(key)
 
     def _keys_of(self, text: str) -> list:
         """The keys resolved to ``text`` so far: how a truncation is named."""
@@ -439,6 +460,9 @@ class SurfaceBatcher:
 
     def keyword_of_key(self, key) -> str | None:
         """Which keyword one ability key's line *is*, if any."""
+        fragment = keyword_line_fragment(key)
+        if fragment is not None:
+            return normalize_keyword(fragment)
         line = self._resolve(key)[1]
         return line.bare_keyword if line is not None else None
 
@@ -480,9 +504,16 @@ class SurfaceBatcher:
         masks = self.spec.masks
         features = inputs.slot_features
         if masks.zero_state:
-            for kind in (SlotKind.PLAYER, SlotKind.CARD):
-                features[kind] = torch.zeros_like(features[kind])
+            for kind in (SlotKind.PLAYER, SlotKind.CARD, SlotKind.ABILITY):
+                if kind in features:
+                    features[kind] = torch.zeros_like(features[kind])
             features[SlotKind.GLOBAL][..., :-KIND_FLAG_WIDTH] = 0.0
+            # A card's subtypes and counters are card features too.
+            inputs = dataclasses.replace(inputs, **{
+                name: torch.zeros_like(getattr(inputs, name))
+                for name in ("subtype_ids", "chosen_type_ids", "counter_ids", "counter_counts")
+                if getattr(inputs, name) is not None
+            })
             # The board's links are state too: no-state reads none.
             if inputs.relations is not None:
                 inputs = dataclasses.replace(inputs, relations=inputs.relations[:0])

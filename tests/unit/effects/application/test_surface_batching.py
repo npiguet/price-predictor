@@ -588,3 +588,73 @@ class TestRelationsUnderTheMasks:
 
         batcher = make_batcher(masks=baseline_masks(Baseline.FULL))
         assert batcher._masked(self._inputs()).relations.tolist() == [[0, 0, 1, 2]]
+
+
+def _flying_batcher(**settings):
+    from effects.domain.ability_tokenizer import AbilityTokenizer
+    from effects.domain.keyword_definitions import KeywordDefinition
+
+    words = ["[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "flying", "cant", "be"]
+    tokenizer = AbilityTokenizer(
+        {word: index for index, word in enumerate(words)},
+        {"Flying": KeywordDefinition(
+            keyword="Flying",
+            reminder_template="cant be blocked except by creatures with flying or reach",
+        )},
+    )
+    return make_batcher(
+        tokenizer=tokenizer, sidecars=_Sidecars(), masks=settings.pop("masks", BaselineMasks()),
+        surface="prose", e_dim=4, device=torch.device("cpu"), **settings,
+    )
+
+
+def _resolution(entities) -> EffectRecord:
+    return make_record(
+        record_id="run.0.1", run_id="run", game_id="run.0.1", ability=(_ACT,),
+        state=make_snapshot(entities=entities),
+    )
+
+
+def test_a_keyword_line_with_no_script_reads_its_reminder_text():
+    """Root spec § 9.2: a keyword an effect granted is a line read through its
+    reminder text; a keyword the definitions do not know reads as written."""
+    from effects.domain.effect_head_input import keyword_line_key
+
+    batcher = _flying_batcher(widths={})
+    flying = keyword_line_key("Flying")
+    assert batcher.text_of(flying) == "cant be blocked except by creatures with flying or reach"
+    assert batcher.line_of(flying) is None
+    assert batcher.options_for(flying) == ()
+    assert batcher.keyword_of_key(flying) == "flying"
+    assert batcher.text_of(keyword_line_key("Mystery:3")) == "Mystery:3"
+
+
+def test_a_batch_encodes_the_reminder_text_of_a_granted_keyword_line():
+    from effects.domain.state_snapshot import CardLine
+
+    entity = EntityState(
+        id="E1", name="hornclaw", zone="battlefield", controller="P0",
+        lines=(CardLine(keys=(), kind="keyword", granted=True, fragment="Flying"),),
+    )
+    record = _resolution(entities=(entity,))
+    texts = _flying_batcher(widths={}).batch_texts([record])
+    assert "cant be blocked except by creatures with flying or reach" in texts
+
+
+def test_no_state_zeroes_the_line_flags_and_the_card_ids():
+    from effects.domain.effect_head_input import feature_widths
+
+    entity = EntityState(
+        id="E1", name="soldier", zone="battlefield", controller="P0",
+        subtypes=("human",), counters={"OIL": 2}, printed=(_ACT,),
+    )
+    record = _resolution(entities=(entity,))
+    widths = feature_widths([record])
+    full = _flying_batcher(widths=widths).prepare([record]).inputs
+    blind = _flying_batcher(
+        widths=widths, masks=BaselineMasks(zero_state=True)).prepare([record]).inputs
+    assert full.slot_features[SlotKind.ABILITY].abs().sum() > 0
+    assert full.subtype_ids.abs().sum() > 0 and full.counter_counts.abs().sum() > 0
+    assert blind.slot_features[SlotKind.ABILITY].abs().sum() == 0
+    for name in ("subtype_ids", "chosen_type_ids", "counter_ids", "counter_counts"):
+        assert getattr(blind, name).abs().sum() == 0, name
