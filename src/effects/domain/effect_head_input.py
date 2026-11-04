@@ -15,6 +15,14 @@ text through a :func:`keyword_line_key`. Three card-slot inputs are lists of
 ids rather than features, each id a learned row in ``effect_model.py``:
 subtypes, chosen creature types (the subtypes' rows) and named counters (a
 row per counter type, scaled by the count).
+
+The board's cards include the gen-3 snapshot's extras (library cards, cards
+exiled with a permanent, a mutated permanent's components, the pending
+event's last known subject) and, after them, a command-zone card per floating
+effect or delayed trigger the snapshot lists no entity for, whose ability
+slots are the source lines that made it (root spec § 9.3). Every link between
+two slots is a relation, a ``(from slot, to slot, type)`` triple acting only
+inside the trunk's attention (root spec § 10).
 """
 
 from __future__ import annotations
@@ -34,24 +42,31 @@ from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
 from effects.domain.keyword_names import normalize_keyword, overlay_keyword
 from effects.domain.provenance import ProvenanceKey, TraitKind, first_text
 from effects.domain.records import (
-    ActivationPayload,
     CombatPayload,
     ContinuousPayload,
     EffectRecord,
     Moment,
     PlayabilitySubkind,
     RecordKind,
-    ResolutionOutcome,
     acting_keys,
 )
-from effects.domain.relation_types import RELATION_TYPES, TARGET_INDICES
+from effects.domain.relation_types import (
+    RELATION_TYPES,
+    TARGET_INDICES,
+    Direction,
+    relation_type,
+)
 from effects.domain.state_snapshot import (
     COLORS,
+    CardLine,
     CombatSubstep,
+    CommandZoneObject,
     DayNight,
+    EffectDuration,
     EntityState,
     FaceState,
     LineKind,
+    LineRef,
     PlayerState,
     TurnCounts,
     Zone,
@@ -107,6 +122,8 @@ TURN_COUNTS: tuple[str, ...] = tuple(TurnCounts.__dataclass_fields__)
 FACE_STATES: tuple[str, ...] = tuple(face.value for face in FaceState)
 #: Day, night, or neither (the snapshot's null).
 DAY_NIGHT: tuple[str, ...] = (DayNight.DAY.value, DayNight.NIGHT.value, "neither")
+#: A command-zone object's duration, over the three values the collector buckets.
+EFFECT_DURATIONS: tuple[str, ...] = tuple(duration.value for duration in EffectDuration)
 #: Forge's closed designation list, as ``CardFacts.designationTable`` writes it.
 DESIGNATIONS: tuple[str, ...] = (
     "bestowed", "cloaked", "commander", "foretold", "goaded", "harnessed",
@@ -439,10 +456,11 @@ ACT_SLOT = 1
 
 
 def act_features(record: EffectRecord) -> tuple[float, ...]:
-    """Announced values, the dice and coins the resolution rolled and flipped
-    (``in.random_results``), and the resolution outcome flag; zeros for
-    ``combat`` and the ``attackers``/``blockers`` subkinds, where no single
-    line acts."""
+    """Announced values and the dice and coins the resolution rolled and
+    flipped (``in.random_results``); zeros for ``combat`` and the
+    ``attackers``/``blockers`` subkinds, where no single line acts. Whether a
+    cost half's spell resolved is an output, not an input (root spec § 11.5,
+    FR-052)."""
     if not record.has_act_line:
         return tuple([0.0] * _ACT_FEATURE_WIDTH)
     refs = record.state.refs
@@ -453,14 +471,6 @@ def act_features(record: EffectRecord) -> tuple[float, ...]:
     _push_scalar(out, len(refs.targets))
     _push_scalar(out, len(refs.choices))
     _push_random_results(out, refs.random)
-    # The outcome flag comes from the paired cost record; a half with no
-    # partner resolved by definition, which is why `resolved` is the default.
-    payload = record.payload
-    outcome = (
-        payload.outcome if isinstance(payload, ActivationPayload)
-        else ResolutionOutcome.RESOLVED
-    )
-    out += _one_hot(outcome.value, _RESOLUTION_OUTCOMES)
     return tuple(out)
 
 
@@ -475,12 +485,9 @@ def _push_random_results(out: list[float], random_results) -> None:
     _push_scalar(out, random_results.coin_flips_lost if random_results is not None else 0)
 
 
-_RESOLUTION_OUTCOMES: tuple[str, ...] = tuple(
-    o.value for o in ResolutionOutcome
-)
 #: The populated and X-present flags, the X, mode, target and choice scalars,
-#: the five random-result scalars, and the outcome one-hot.
-_ACT_FEATURE_WIDTH = 2 + 9 * _SCALAR_WIDTH + _one_hot_width(_RESOLUTION_OUTCOMES)
+#: and the five random-result scalars.
+_ACT_FEATURE_WIDTH = 2 + 9 * _SCALAR_WIDTH
 
 
 def player_features(player: PlayerState, record: EffectRecord) -> tuple[float, ...]:
@@ -617,10 +624,6 @@ def _push_status(out, entity: EntityState, record, masked) -> None:
     out.append(1.0 if combat and combat.blocking else 0.0)
     out.append(1.0 if combat and combat.became_blocked else 0.0)
     _push_scalar(out, len(combat.blocked_by) if combat else 0)
-
-
-def _push_attached(out, entity: EntityState, record, masked) -> None:
-    out.append(1.0 if entity.attached_to else 0.0)
 
 
 def keywords_of(entity: EntityState) -> set[str]:
@@ -779,6 +782,26 @@ def _push_pending_event(out, entity: EntityState, record: EffectRecord, masked) 
     out.append(1.0 if entity.id in pending.subjects else 0.0)
 
 
+def command_zone_object(record: EffectRecord, object_id: str) -> CommandZoneObject | None:
+    """The floating effect or pending delayed trigger named ``object_id``;
+    None for any other id, and on a gen-1 or gen-2 record, which lists none."""
+    g = record.state.global_
+    for found in (*g.floating_effects, *g.delayed_triggers):
+        if found.id == object_id:
+            return found
+    return None
+
+
+def _push_command_zone(out, entity: EntityState, record: EffectRecord, masked) -> None:
+    """What a command-zone object's text cannot say (root spec § 9.3): its
+    duration over the three values, and the amount left on a counting-down
+    shield after a present flag; zeros on any other card. Its links are
+    relations, and what it does is its source lines' ``e``."""
+    found = command_zone_object(record, entity.id)
+    out += _one_hot(found.duration if found is not None else None, EFFECT_DURATIONS)
+    _push_optional(out, found.shield_left if found is not None else None)
+
+
 def _push_comparable_amounts(out, entity: EntityState, record, masked) -> None:
     """Thermometers of total power, total toughness, and the toughness left
     after marked damage, subtracted here so the trunk need not learn to."""
@@ -798,7 +821,6 @@ _CARD_PARTS = (
     ("mana_cost", _push_mana_cost),
     ("printed_loyalty_defense", _push_printed_loyalty_defense),
     ("status", _push_status),
-    ("attached", _push_attached),
     ("keyword_flags", _push_keyword_flags),
     ("relation_to_act", _push_relation_to_act),
     ("designations", _push_designations),
@@ -810,6 +832,7 @@ _CARD_PARTS = (
     ("stack_extras", _push_stack_extras),
     ("damage_assignment", _push_damage_assignment),
     ("pending_event", _push_pending_event),
+    ("command_zone", _push_command_zone),
     ("comparable_amounts", _push_comparable_amounts),
 )
 
@@ -823,6 +846,47 @@ def counter_rows(entity: EntityState) -> tuple[tuple[int, float], ...]:
             row = counter_id(name)
             rows[row] = rows.get(row, 0.0) + float(count)
     return tuple(rows.items())
+
+
+# ── the command zone ──────────────────────────────────────────────────────
+
+
+def command_zone_entities(record: EffectRecord) -> tuple[EntityState, ...]:
+    """A card for each floating effect and pending delayed trigger that is no
+    card of the snapshot (a timestamped ``F`` effect, a ``D`` trigger), read
+    like a permanent in the command zone (root spec § 9.3): its lines are the
+    source lines that made it, granted, and its controller is that of the card
+    its ``created_by`` link ends at. An effect card (``E``) is a snapshot
+    entity already, its lines its source lines. None on gen-1 and gen-2."""
+    state = record.state
+    g = state.global_
+    if not (g.floating_effects or g.delayed_triggers):
+        return ()
+    known = {entity.id for entity in state.entities}
+    controllers = {entity.id: entity.controller for entity in state.entities}
+    makers: dict[str, str] = {}
+    for link in state.links or ():
+        if link.type == "created_by" and isinstance(link.from_, str):
+            end = link.to.entity if isinstance(link.to, LineRef) else link.to
+            makers.setdefault(link.from_, end)
+    return tuple(
+        EntityState(
+            id=found.id, name="", zone=Zone.COMMAND.value,
+            controller=controllers.get(makers.get(found.id, ""), ""),
+            lines=tuple(
+                CardLine(keys=(key,), kind=key.trait_kind, granted=True)
+                for key in found.source_lines
+            ),
+        )
+        for found in (*g.floating_effects, *g.delayed_triggers)
+        if found.id not in known
+    )
+
+
+def board_entities(record: EffectRecord) -> tuple[EntityState, ...]:
+    """Every card the surface gives a ``[CARD]`` slot: the snapshot's
+    entities, then :func:`command_zone_entities`."""
+    return (*record.state.entities, *command_zone_entities(record))
 
 
 # ── the ability slots ─────────────────────────────────────────────────────
@@ -966,6 +1030,119 @@ class LineLookup(Protocol):
 NO_STRIP: Mapping[str, frozenset[str]] = MappingProxyType({})
 
 
+# ── relations ─────────────────────────────────────────────────────────────
+
+
+@lru_cache(maxsize=None)
+def _relation_pair(family: str, target_index: int | None) -> tuple[int, int]:
+    """A family's forward and reverse type rows (one target index's for ``targets``)."""
+    return (relation_type(family, Direction.FORWARD, target_index),
+            relation_type(family, Direction.REVERSE, target_index))
+
+
+def _name_key(name: str) -> str:
+    return name.strip().lower()
+
+
+class _SlotRelations:
+    """One surface's relations (root spec § 10.3), gathered while its slots
+    are laid out and built once they are fixed.
+
+    Every link is two triples, the family's forward type from the end the
+    table names and its reverse type from the other, each triple once. The
+    reader builds four families itself: ``line_of`` (each ability slot to its
+    card), ``line_of_the_same_card`` (each pair of one card's ability slots),
+    ``mode_of`` (a charm's mode slots to their root) and ``has_the_same_name``
+    (each pair of cards whose names match, and a card that chose a name to
+    each card of that name). The rest are the record's ``links``. ``[ACT]``
+    reads ``targets`` to the acting ability's targets and ``source_of`` from
+    its source, as gen-2's target and source flags do (root spec § 10.4).
+
+    A link end that is a line reads that line's slot; where the line has no
+    slot (context dropout, gate 2's strip, a key with no rendered line) it
+    reads the line's card, as the collector writes a link whose line Forge
+    does not record. A link to an object the surface has no slot for is
+    dropped, and so is a link both of whose ends read one slot.
+    """
+
+    def __init__(self) -> None:
+        #: A player's or card's id to its slot.
+        self.subjects: dict[str, int] = {}
+        self._lines: dict[tuple[str, ProvenanceKey], int] = {}
+        self._named: dict[str, list[int]] = {}
+        self._chosen_names: list[tuple[int, tuple[str, ...]]] = []
+        self._attached: list[tuple[int, str]] = []
+        self._triples: dict[tuple[int, int, int], None] = {}
+
+    def link(self, a: int | None, b: int | None, family: str,
+             target_index: int | None = None) -> None:
+        if a is None or b is None or a == b:
+            return
+        forward, reverse = _relation_pair(family, target_index)
+        self._triples[(a, b, forward)] = None
+        self._triples[(b, a, reverse)] = None
+
+    def _pairs(self, rows: list[int], family: str) -> None:
+        for i, a in enumerate(rows):
+            for b in rows[i + 1:]:
+                self.link(a, b, family)
+
+    def add_card(self, entity: EntityState, start: int, block: list[Slot],
+                 keys: list[ProvenanceKey | None]) -> None:
+        """One card's block, laid out from slot ``start``: its own lines'
+        relations now, the rest noted for :meth:`build`."""
+        self.subjects.setdefault(entity.id, start)
+        lines: list[int] = []
+        root = start
+        for offset in range(1, len(block)):
+            at = start + offset
+            self._lines.setdefault((entity.id, keys[offset]), at)
+            self.link(at, start, "line_of")
+            if block[offset].option:
+                self.link(at, root, "mode_of")
+            else:
+                root = at
+            lines.append(at)
+        self._pairs(lines, "line_of_the_same_card")
+        # A face-down card's name would be its real face's: it has none here.
+        if entity.name and face_state_of(entity) != FaceState.FACE_DOWN:
+            self._named.setdefault(_name_key(entity.name), []).append(start)
+        if entity.chosen is not None and entity.chosen.names:
+            self._chosen_names.append((start, entity.chosen.names))
+        if entity.attached_to is not None:
+            self._attached.append((start, entity.attached_to))
+
+    def _end(self, end) -> int | None:
+        if isinstance(end, LineRef):
+            at = self._lines.get((end.entity, end.key))
+            return at if at is not None else self.subjects.get(end.entity)
+        return self.subjects.get(end)
+
+    def build(self, record: EffectRecord) -> tuple[tuple[int, int, int], ...]:
+        for rows in self._named.values():
+            self._pairs(rows, "has_the_same_name")
+        for chooser, names in self._chosen_names:
+            for name in names:
+                for at in self._named.get(_name_key(name), ()):
+                    self.link(chooser, at, "has_the_same_name")
+        state = record.state
+        if state.links is None:
+            # Gen-1 and gen-2 write no links; their attachment is the one the
+            # removed "card is attached" flag carried (root spec § 10.4).
+            for at, host in self._attached:
+                self.link(at, self.subjects.get(host), "attached_to")
+        for found in state.links or ():
+            index = (found.index or 0) if found.type == "targets" else None
+            self.link(self._end(found.from_), self._end(found.to), found.type, index)
+        if record.has_act_line:
+            refs = state.refs
+            for index, target in enumerate(refs.targets):
+                self.link(ACT_SLOT, self.subjects.get(target), "targets", index)
+            if refs.source is not None:
+                self.link(self.subjects.get(refs.source), ACT_SLOT, "source_of")
+        return tuple(self._triples)
+
+
 class SurfaceBuilder:
     """Lays records out as the token surface, under one batch's constants.
 
@@ -995,6 +1172,12 @@ class SurfaceBuilder:
         as ability slots, the keyword's lines whether printed or granted; the
         continuous mask must not silence a printed line of the same keyword,
         so the two stay apart.
+
+        A floating effect or delayed trigger that is no snapshot entity gets a
+        ``[CARD]`` slot after the board's (:func:`command_zone_entities`), but
+        no per-entity target: nothing the head predicts happens to it.
+        Relations are built last, over the slots as they stand after context
+        dropout and the strip (:class:`_SlotRelations`).
         """
         slots = [
             Slot(
@@ -1006,9 +1189,11 @@ class SurfaceBuilder:
                 features=act_features(record), e=self._act_vector(record),
             ),
         ]
+        relations = _SlotRelations()
         entity_slots: list[int] = []
         for player in record.state.players:
             entity_slots.append(len(slots))
+            relations.subjects[player.id] = len(slots)
             slots.append(Slot(
                 kind=SlotKind.PLAYER, position=len(slots),
                 features=player_features(player, record),
@@ -1020,19 +1205,33 @@ class SurfaceBuilder:
         for entity in record.state.entities:
             gone = stripped.get(entity.id, frozenset())
             entity_slots.append(len(slots))
-            slots += self._entity_block(
+            block, keys = self._entity_block(
                 entity, record, masked=masked.get(entity.id, frozenset()) | gone,
                 gone=frozenset(overlay_keyword(keyword) for keyword in gone),
                 dropout=self.context_dropout if entity.id != source_id else 0.0,
             )
-        return EffectHeadInput(slots=tuple(slots), entity_slots=tuple(entity_slots))
+            relations.add_card(entity, len(slots), block, keys)
+            slots += block
+        for entity in command_zone_entities(record):
+            block, keys = self._entity_block(
+                entity, record, masked=frozenset(), gone=frozenset(),
+                dropout=self.context_dropout,
+            )
+            relations.add_card(entity, len(slots), block, keys)
+            slots += block
+        return EffectHeadInput(
+            slots=tuple(slots), entity_slots=tuple(entity_slots),
+            relations=relations.build(record),
+        )
 
     def _entity_block(
         self, entity: EntityState, record: EffectRecord, *,
         masked: frozenset[str], gone: frozenset[str], dropout: float,
-    ) -> list[Slot]:
+    ) -> tuple[list[Slot], list[ProvenanceKey | None]]:
         """One entity's ``CARD`` slot, then an ``ABILITY`` slot per line it
-        keeps, each charm root followed by its mode lines; positions restart."""
+        keeps, each charm root followed by its mode lines; positions restart.
+        Beside the block, the key each slot reads (None for the card)."""
+        keys: list[ProvenanceKey | None] = [None]
         block = [Slot(
             kind=SlotKind.CARD, position=0,
             features=card_features(entity, record, masked_keywords=masked),
@@ -1056,7 +1255,8 @@ class SurfaceBuilder:
                     e=self._zero if resolved is None else resolved,
                     entity_id=entity.id, option=option,
                 ))
-        return block
+                keys.append(mode_key)
+        return block, keys
 
     def _keeps(self, line: SlotLine, *, gone: frozenset[str], dropout: float) -> bool:
         """Whether one of an entity's lines gets a slot."""

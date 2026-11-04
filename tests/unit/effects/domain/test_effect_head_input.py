@@ -275,7 +275,8 @@ class TestActSlot:
         missing = ProvenanceKey("cardsfolder/x/absent.txt", 0, "spell", 0)
         assert _build(_record(ability=(missing,))).slots[1].e == _ZERO
 
-    def test_the_cost_halfs_outcome_reaches_the_act_slot(self):
+    def test_the_cost_halfs_outcome_is_no_input(self):
+        """Whether the spell resolved is what a cost half predicts (T115)."""
         resolved = _record(
             moment=Moment.ACTIVATION,
             payload=ActivationPayload(
@@ -288,7 +289,7 @@ class TestActSlot:
                 costs=Costs(), outcome=ResolutionOutcome.COUNTERED,
             ),
         )
-        assert act_features(resolved) != act_features(countered)
+        assert act_features(resolved) == act_features(countered)
 
 
 class TestAbilityTokens:
@@ -1042,3 +1043,390 @@ class TestTheGen3Fixture:
         assert any(line.temporary and keyword_line_fragment(line.key) for line in lines)
         assert any(counter_rows(entity) for entity in entities)
         assert any(entity.chosen and entity.chosen.type for entity in entities)
+
+
+# ── command-zone slots and relations (T114-T117) ──────────────────────────
+
+
+@pytest.fixture(scope="module")
+def gen3_records():
+    from effects.infrastructure.record_codec import record_from_dict
+    from tests.unit.effects.builders import gen3_fixture_records
+
+    return {record.record_id: record
+            for record in map(record_from_dict, gen3_fixture_records())}
+
+
+_RUN = "e8aa2e54-4112-425c-a7fa-96c7bb7340db"
+
+
+def _relation(family, direction="forward", index=None):
+    from effects.domain.relation_types import relation_type
+
+    return relation_type(family, direction, index)
+
+
+def _subject_slot(surface, subject):
+    """The slot of the card or player ``subject`` names."""
+    return next(index for index, slot in enumerate(surface.slots)
+                if slot.kind in (SlotKind.CARD, SlotKind.PLAYER) and slot.subject_id == subject)
+
+
+def _linked(surface, a, b, family, index=None) -> bool:
+    """Whether the surface relates slots ``a`` and ``b`` by ``family``, both ways."""
+    relations = set(surface.relations)
+    return ((a, b, _relation(family, "forward", index)) in relations
+            and (b, a, _relation(family, "reverse", index)) in relations)
+
+
+def _gen3_entity(entity_id, name="Serra Angel", lines=(), **fields):
+    return _entity(entity_id, name=name, lines=lines, **fields)
+
+
+def _gen3_record(entities, links=(), players=None, **snapshot):
+    """A gen-3 record: a snapshot with ``links`` is one."""
+    defaults = {"entities": tuple(entities), "links": tuple(links)}
+    if players is not None:
+        defaults["players"] = players
+    defaults.update(snapshot)
+    return _record(state=_snapshot(**defaults))
+
+
+class TestAttachedTo:
+    """Story 5 acceptance 1 (T115, T116)."""
+
+    def test_an_aura_relates_to_its_creature_and_no_card_input_says_so(self, gen3_records):
+        record = gen3_records[f"{_RUN}.0-mvyv5jxepqmy.516"]
+        aura = record.state.entity("E24")
+        assert "aura" in aura.subtypes and aura.attached_to == "E22"
+        surface = _build(record)
+        assert _linked(surface, _subject_slot(surface, "E24"), _subject_slot(surface, "E22"),
+                       "attached_to")
+        assert "attached" not in card_segments(aura, record)
+        assert card_features(replace(aura, attached_to=None), record) == card_features(
+            aura, record)
+
+    def test_a_gen2_record_relates_an_attached_card_without_links(self):
+        record = _record(state=_snapshot(entities=(
+            _entity("E1", attached_to="E2"), _entity("E2"))))
+        assert record.state.links is None
+        surface = _build(record)
+        assert _linked(surface, _subject_slot(surface, "E1"), _subject_slot(surface, "E2"),
+                       "attached_to")
+
+
+_FALTER = ProvenanceKey("cardsfolder/f/falter.txt", 0, "spell", 0)
+
+
+class TestCommandZoneSlots:
+    """Root spec § 9.3 (T114) and story 5 acceptance 2."""
+
+    def _falter_record(self, **effect):
+        from effects.domain.state_snapshot import CommandZoneObject, LineRef, Link
+
+        floating = CommandZoneObject(
+            id="F40", source_lines=(_FALTER,), affected=("E1", "E2"),
+            duration=effect.pop("duration", "end_of_turn"), **effect)
+        caster = _gen3_entity("E3", name="Falter", zone="graveyard",
+                              lines=(_line(_FALTER, kind="spell"),))
+        return _gen3_record(
+            (_gen3_entity("E1"), _gen3_entity("E2", controller="P1"), caster),
+            links=(Link("F40", "E1", "affects"), Link("F40", "E2", "affects"),
+                   Link("F40", LineRef("E3", _FALTER), "created_by")),
+            global_=GlobalState(turn=3, phase="main1", active="P0", priority="P0",
+                                stack_size=0, floating_effects=(floating,)),
+        )
+
+    def test_creatures_cant_block_this_turn_is_a_command_zone_card(self):
+        from effects.domain.effect_head_input import EFFECT_DURATIONS, command_zone_entities
+
+        record = self._falter_record()
+        falter_e = (0.5, 0.5, 0.0, 0.0)
+        surface = _build(record, e_for=lambda key: falter_e if key == _FALTER else None)
+        at = _subject_slot(surface, "F40")
+        assert at not in surface.entity_slots
+        line = surface.slots[at + 1]
+        assert line.kind is SlotKind.ABILITY and line.entity_id == "F40"
+        assert line.e == falter_e and _flags(line)["granted"] == 1.0
+        for creature in ("E1", "E2"):
+            assert _linked(surface, at, _subject_slot(surface, creature), "affects")
+        # created_by ends at the casting line's own slot, not its card.
+        caster_line = _subject_slot(surface, "E3") + 1
+        assert _linked(surface, at, caster_line, "created_by")
+        effect, = command_zone_entities(record)
+        assert effect.controller == "P0" and effect.zone == "command"
+        duration = _card_part(effect, record, "command_zone")
+        assert duration[EFFECT_DURATIONS.index("end_of_turn")] == 1.0
+        assert sum(duration[:len(EFFECT_DURATIONS) + 1]) == 1.0
+
+    def test_a_shield_reads_what_it_has_left(self):
+        from effects.domain.effect_head_input import EFFECT_DURATIONS, command_zone_entities
+
+        record = self._falter_record(duration="until_leaves", shield_left=3)
+        effect, = command_zone_entities(record)
+        part = _card_part(effect, record, "command_zone")
+        assert part[EFFECT_DURATIONS.index("until_leaves")] == 1.0
+        assert part[len(EFFECT_DURATIONS) + 1:] == pytest.approx((1.0, 3.0, math.log1p(3)))
+        # Any other card reads zeros there.
+        assert sum(_card_part(record.state.entities[0], record, "command_zone")) == 0.0
+
+    def test_an_effect_card_on_the_board_reads_its_duration_and_gets_no_second_slot(self):
+        from effects.domain.effect_head_input import EFFECT_DURATIONS
+        from effects.domain.state_snapshot import CommandZoneObject
+
+        card = _gen3_entity("E81", name="Regeneration", zone="command", lines=(
+            _line(_FALTER, kind="trigger", granted=True),))
+        record = _gen3_record((card,), global_=GlobalState(
+            turn=3, phase="main1", active="P0", priority="P0", stack_size=0,
+            floating_effects=(CommandZoneObject(id="E81", source_lines=(_FALTER,)),)))
+        surface = _build(record)
+        assert len(slots_of_kind(surface, SlotKind.CARD)) == 1
+        assert _card_part(card, record, "command_zone")[
+            EFFECT_DURATIONS.index("permanent")] == 1.0
+
+    def test_a_real_floating_effect_affects_each_creature_it_pumps(self, gen3_records):
+        record = gen3_records[f"{_RUN}.1-mvyw1pozylvp.13630"]
+        floating = next(f for f in record.state.global_.floating_effects if f.id == "F91")
+        rampage = floating.source_lines[0]
+        vector = (0.0, 0.0, 0.0, 1.0)
+        surface = _build(record, e_for=lambda key: vector if key == rampage else None)
+        at = _subject_slot(surface, "F91")
+        assert surface.slots[at + 1].e == vector
+        assert floating.affected == ("E6", "E30", "E26", "E22", "E8")
+        for creature in floating.affected:
+            assert _linked(surface, at, _subject_slot(surface, creature), "affects")
+
+    def test_a_real_delayed_trigger_is_a_card_reading_its_source_line(self, gen3_records):
+        record = gen3_records[f"{_RUN}.6-mvyvq4x9ozb2.53904"]
+        trigger, = record.state.global_.delayed_triggers
+        vector = (0.0, 1.0, 1.0, 0.0)
+        surface = _build(record, e_for=lambda key: vector if key in trigger.source_lines else None)
+        at = _subject_slot(surface, trigger.id)
+        assert surface.slots[at + 1].e == vector
+        # Its rebounding card sits in exile, which no tier reaches: the
+        # pending_on link names an object the surface has no slot for.
+        assert record.state.entity("E12") is None
+
+    def test_a_delayed_trigger_is_pending_on_its_card(self):
+        from effects.domain.state_snapshot import CommandZoneObject, Link
+
+        record = _gen3_record((_gen3_entity("E1"),), links=(Link("D7", "E1", "pending_on"),),
+                              global_=GlobalState(
+                                  turn=3, phase="main1", active="P0", priority="P0",
+                                  stack_size=0, delayed_triggers=(CommandZoneObject(
+                                      id="D7", source_lines=(_FALTER,), remembered=("E1",)),)))
+        surface = _build(record)
+        assert _linked(surface, _subject_slot(surface, "D7"), _subject_slot(surface, "E1"),
+                       "pending_on")
+
+    @pytest.mark.parametrize(("record_id", "family", "a", "b"), [
+        (f"{_RUN}.0-mvyv5jxepqmy.127", "last_known_state_of", "L35", "E35"),
+        (f"{_RUN}.9-mvyw6uvu1ii5.232", "merged_with", "E16", "E15"),
+        (f"{_RUN}.7-mvyvapedpsus.1303", "in_dungeon", "E96", "P1"),
+    ])
+    def test_the_extra_cards_are_slots_their_links_relate(
+        self, gen3_records, record_id, family, a, b,
+    ):
+        surface = _build(gen3_records[record_id])
+        assert _linked(surface, _subject_slot(surface, a), _subject_slot(surface, b), family)
+
+    def test_a_library_card_reads_its_position_as_order_rank(self, gen3_records):
+        record, entity = next(
+            (record, entity) for record in gen3_records.values()
+            for entity in record.state.entities
+            if entity.role == "library_card" and entity.order_rank)
+        assert _card_part(entity, record, "order_rank")[:2] == (1.0, float(entity.order_rank))
+        surface = _build(record)
+        assert _subject_slot(surface, entity.id) in surface.entity_slots
+
+
+class TestRelations:
+    """T116: relations from the record's links and from the reader's own layout."""
+
+    def test_a_cards_lines_its_modes_and_the_lines_of_one_card(self):
+        modes = tuple(ProvenanceKey(_CHOICE.script_file, 0, "spell", 0, n) for n in range(2))
+        charm = _gen3_entity("E1", lines=(_line(_CHOICE, kind="spell"), _line(_ANTHEM)))
+        surface = _build(_gen3_record((charm,)),
+                         options_for=lambda key: modes if key == _CHOICE else ())
+        card = _subject_slot(surface, "E1")
+        root, first, second, anthem = card + 1, card + 2, card + 3, card + 4
+        for line in (root, first, second, anthem):
+            assert _linked(surface, line, card, "line_of")
+        assert _linked(surface, first, root, "mode_of")
+        assert _linked(surface, second, root, "mode_of")
+        assert not _linked(surface, anthem, root, "mode_of")
+        same = [t for t in surface.relations if t[2] in (
+            _relation("line_of_the_same_card"), _relation("line_of_the_same_card", "reverse"))]
+        assert len(same) == 4 * 3
+
+    def test_same_names_and_a_chosen_name_relate_and_a_face_down_card_does_not(self):
+        from effects.domain.state_snapshot import CardChoices
+
+        record = _gen3_record((
+            _gen3_entity("E1", name="Plains"), _gen3_entity("E2", name="plains"),
+            _gen3_entity("E3", name="Island"),
+            _gen3_entity("E4", name="Pithing Needle", chosen=CardChoices(names=("Plains",))),
+            _gen3_entity("E5", name="Plains", face_state="face_down"),
+        ))
+        surface = _build(record)
+        e1, e2, e3, e4, e5 = (_subject_slot(surface, f"E{n}") for n in range(1, 6))
+        assert _linked(surface, e1, e2, "has_the_same_name")
+        assert _linked(surface, e4, e1, "has_the_same_name")
+        assert _linked(surface, e4, e2, "has_the_same_name")
+        named = {end for t in surface.relations if t[2] in (
+            _relation("has_the_same_name"), _relation("has_the_same_name", "reverse"))
+            for end in t[:2]}
+        assert named == {e1, e2, e4}
+        assert e3 not in named and e5 not in named
+
+    def test_the_act_slot_targets_by_index_and_reads_its_source(self):
+        record = _gen3_record(
+            (_gen3_entity("E1"), _gen3_entity("E2")),
+            refs=Refs(targets=("E2", "P1"), source="E1"),
+        )
+        surface = _build(record)
+        assert _linked(surface, ACT_SLOT, _subject_slot(surface, "E2"), "targets", 0)
+        assert _linked(surface, ACT_SLOT, _subject_slot(surface, "P1"), "targets", 1)
+        assert _linked(surface, _subject_slot(surface, "E1"), ACT_SLOT, "source_of")
+
+    def test_a_target_index_past_the_last_type_shares_it(self):
+        from effects.domain.relation_types import TARGET_INDICES
+        from effects.domain.state_snapshot import LineRef, Link
+
+        record = _gen3_record(
+            (_gen3_entity("E1", lines=(_line(_BOLT, kind="spell"),)), _gen3_entity("E2")),
+            links=(Link(LineRef("E1", _BOLT), "E2", "targets", 5),))
+        surface = _build(record)
+        line = _subject_slot(surface, "E1") + 1
+        assert _linked(surface, line, _subject_slot(surface, "E2"), "targets",
+                       TARGET_INDICES - 1)
+
+    @pytest.mark.parametrize("why", ["no line", "stripped"])
+    def test_a_link_from_a_line_with_no_slot_reads_its_card(self, why):
+        from effects.domain.state_snapshot import LineRef, Link
+
+        ward = _line(_WARD, kind="keyword", fragment="Ward:2")
+        record = _gen3_record(
+            (_gen3_entity("E1", lines=(ward, _line(_ANTHEM))), _gen3_entity("E2")),
+            links=(Link(LineRef("E1", _WARD), "E2", "affects"),))
+        if why == "no line":
+            surface = _build(record, has_line=lambda key: key != _WARD)
+        else:
+            surface = _build(record, stripped={"E1": frozenset({"ward"})})
+        card = _subject_slot(surface, "E1")
+        assert [slot.entity_id for slot in slots_of_kind(surface, SlotKind.ABILITY)] == ["E1"]
+        assert _linked(surface, card, _subject_slot(surface, "E2"), "affects")
+        assert _linked(surface, card + 1, card, "line_of")
+
+    def test_exploration_affects_its_controllers_player_slot(self):
+        """Story 5 acceptance 8."""
+        from effects.domain.effect_head_input import THIS_TURN_COUNTERS
+        from effects.domain.state_snapshot import LineRef, Link
+
+        exploration_static = ProvenanceKey("cardsfolder/e/exploration.txt", 0, "static", 0)
+        exploration = _gen3_entity("E1", name="Exploration", types=("enchantment",), pt=None,
+                                   lines=(_line(exploration_static, affected=("P0",)),))
+        players = (
+            PlayerState(id="P0", life=20, hand=3, library=30, graveyard=0,
+                        this_turn={"lands_played": 1}, max_land_plays=2),
+            PlayerState(id="P1", life=20, hand=3, library=30, graveyard=0, max_land_plays=1),
+        )
+        record = _gen3_record(
+            (exploration,), players=players,
+            links=(Link(LineRef("E1", exploration_static), "P0", "affects"),))
+        surface = _build(record)
+        player = _subject_slot(surface, "P0")
+        lands = 6 * 2 + THIS_TURN_COUNTERS.index("lands_played") * 2
+        limit = 6 * 2 + len(THIS_TURN_COUNTERS) * 2
+        features = surface.slots[player].features
+        assert features[lands] == 1.0 and features[limit] == 2.0
+        static = _subject_slot(surface, "E1") + 1
+        assert _linked(surface, static, player, "affects")
+        assert not _linked(surface, static, _subject_slot(surface, "P1"), "affects")
+
+    def test_every_fixture_link_between_two_slots_is_two_triples(self, gen3_records):
+        checked = 0
+        for record in gen3_records.values():
+            surface = _build(record)
+            subjects = {slot.subject_id: index for index, slot in enumerate(surface.slots)
+                        if slot.kind in (SlotKind.CARD, SlotKind.PLAYER)}
+            for found in record.state.links:
+                a, b = subjects.get(found.from_), subjects.get(found.to)
+                if a is None or b is None or a == b:
+                    continue
+                index = (found.index or 0) if found.type == "targets" else None
+                assert _linked(surface, a, b, found.type, index), (record.record_id, found)
+                checked += 1
+        assert checked > 10_000
+
+    def test_relations_survive_context_dropout_with_remapped_indices(self, gen3_records):
+        record = max(gen3_records.values(),
+                     key=lambda r: sum(1 for link in r.state.links
+                                       if not isinstance(link.from_, str)))
+        full = _build(record)
+        dropped = _build(record, rng=random.Random(3), context_dropout=0.5)
+        assert len(slots_of_kind(dropped, SlotKind.ABILITY)) < len(
+            slots_of_kind(full, SlotKind.ABILITY))
+        assert all(max(i, j) < len(dropped.slots) for i, j, _ in dropped.relations)
+
+        line_of = _relation("line_of")
+        for i, j, r in dropped.relations:
+            if r == line_of:
+                assert dropped.slots[i].kind is SlotKind.ABILITY
+                assert dropped.slots[j].kind is SlotKind.CARD
+                assert dropped.slots[i].entity_id == dropped.slots[j].entity_id
+
+        def board(surface):
+            """The triples between cards, players and [ACT], by what their ends
+            stand for rather than where they sit."""
+            out = set()
+            for i, j, r in surface.relations:
+                a, b = surface.slots[i], surface.slots[j]
+                if SlotKind.ABILITY not in (a.kind, b.kind):
+                    out.add((a.kind, a.subject_id, b.kind, b.subject_id, r))
+            return out
+
+        # A dropped line's links read its card: only ever more card-level triples.
+        assert board(full) <= board(dropped)
+
+    def test_two_face_down_cards_build_the_same_relations(self):
+        from effects.domain.state_snapshot import RealFace
+
+        def board(real_name):
+            hidden = _gen3_entity(
+                "E1", name="", face_state="face_down", types=("creature",),
+                real_face=RealFace(name=real_name), lines=(_line(_ANTHEM, active=False),))
+            return _gen3_record((hidden, _gen3_entity("E2", name=real_name)))
+
+        assert _build(board("Serra Angel")).relations == _build(board("Grizzly Bears")).relations
+
+
+class TestTheGen3FixtureInTheModel:
+    """The fixture's widths are the model's, relations included (T117)."""
+
+    def test_the_fixture_runs_through_the_model(self, gen3_records):
+        import torch
+
+        from effects.domain.effect_head_input import ABILITY_FEATURE_WIDTH, feature_widths
+        from effects.domain.effect_model import EffectModel, EffectModelConfig
+        from effects.domain.surface_collation import collate_surfaces
+
+        records = list(gen3_records.values())[:16]
+        widths = feature_widths(records)
+        entity, record = records[0].state.entities[0], records[0]
+        assert widths[SlotKind.CARD] == len(card_features(entity, record)) == max(
+            part.stop for part in card_segments(entity, record).values())
+        assert widths[SlotKind.ABILITY] == ABILITY_FEATURE_WIDTH
+        surfaces = [_build(record) for record in records]
+        inputs = collate_surfaces(surfaces, e_dim=E_DIM, widths=widths)
+        assert inputs.relations.shape[0] == sum(len(s.relations) for s in surfaces) > 0
+        torch.manual_seed(0)
+        model = EffectModel(EffectModelConfig(
+            global_features=widths[SlotKind.GLOBAL], act_features=widths[SlotKind.ACT],
+            player_features=widths[SlotKind.PLAYER], card_features=widths[SlotKind.CARD],
+            ability_features=widths[SlotKind.ABILITY], e_dim=E_DIM,
+            d_model=16, n_layers=1, n_heads=2, ff_dim=32,
+        ))
+        hidden = model(inputs)
+        assert hidden.shape[:2] == inputs.slot_kinds.shape
+        assert torch.isfinite(hidden).all()

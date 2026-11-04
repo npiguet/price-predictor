@@ -658,3 +658,32 @@ def test_no_state_zeroes_the_line_flags_and_the_card_ids():
     assert blind.slot_features[SlotKind.ABILITY].abs().sum() == 0
     for name in ("subtype_ids", "chosen_type_ids", "counter_ids", "counter_counts"):
         assert getattr(blind, name).abs().sum() == 0, name
+
+
+def test_a_floating_effects_card_reads_its_source_lines_text():
+    """Root spec § 9.3 (T114): a timestamped floating effect's ``[CARD]``
+    is followed by its source line, encoded with the batch like any other."""
+    from effects.domain.effect_head_input import command_zone_entities
+    from effects.infrastructure.record_codec import record_from_dict
+    from tests.unit.effects.builders import (
+        GEN3_SIDECAR_FOLDERS,
+        gen3_fixture_records,
+    )
+
+    record = next(
+        record_from_dict(raw) for raw in gen3_fixture_records()
+        if raw["record_id"].endswith(".1-mvyw1pozylvp.13630"))
+    floating, = command_zone_entities(record)
+    sidecars = SidecarCache({folder.name: folder for folder in GEN3_SIDECAR_FOLDERS})
+    batcher = make_batcher(
+        tokenizer=None, sidecars=sidecars, masks=BaselineMasks(),
+        surface="script", e_dim=4, widths={}, device=torch.device("cpu"),
+    )
+    source = batcher.text_of(floating.lines[0].keys[0])
+    texts = batcher.batch_texts([record])
+    assert source is not None and source in texts
+    rows = {text: row for row, text in enumerate(sorted(texts))}
+    surface = batcher.surface_builder(rows).build(record)
+    at = next(index for index, slot in enumerate(surface.slots)
+              if slot.kind is SlotKind.CARD and slot.entity_id == floating.id)
+    assert surface.slots[at + 1].e == rows[source]

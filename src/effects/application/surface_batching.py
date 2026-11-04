@@ -28,6 +28,7 @@ from effects.domain.effect_head_input import (
     NO_STRIP,
     SlotKind,
     SurfaceBuilder,
+    board_entities,
     feature_widths,
     keyword_line_fragment,
     slot_lines,
@@ -401,8 +402,9 @@ class SurfaceBatcher:
 
     def batch_texts(self, records) -> dict[str, SidecarLine | None]:
         """Every ability text this batch's surfaces reference, to its line:
-        the acting line of each record and every ability on every entity, since
-        a text left out reaches the model as a zero vector."""
+        the acting line of each record and every ability on every card the
+        surface lays out, command-zone objects included, since a text left out
+        reaches the model as a zero vector."""
         texts: dict[str, SidecarLine | None] = {}
 
         def note(key) -> str | None:
@@ -415,7 +417,7 @@ class SurfaceBatcher:
             for key in acting_keys(record):
                 if note(key) is not None:
                     break
-            for entity in record.state.entities:
+            for entity in board_entities(record):
                 for line in slot_lines(entity):
                     if note(line.key) is not None:
                         for mode in self.options_for(line.key):
