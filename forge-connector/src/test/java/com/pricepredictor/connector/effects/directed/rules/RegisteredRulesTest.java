@@ -12,8 +12,10 @@ import forge.StaticData;
 import forge.ai.simulation.GameCopier;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.card.CardCopyService;
 import forge.game.card.CardFactory;
 import forge.game.card.CounterEnumType;
+import forge.game.card.token.TokenInfo;
 import forge.game.combat.Combat;
 import forge.game.keyword.Keyword;
 import forge.game.phase.PhaseType;
@@ -22,10 +24,12 @@ import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 import static com.pricepredictor.connector.effects.directed.BoardChanges.changes;
 import static com.pricepredictor.connector.effects.directed.BoardChanges.id;
@@ -1154,6 +1158,11 @@ class RegisteredRulesTest {
     }
 
     @Test
+    void auraSwapBindsNothingForAnAuraThatCannotEnchantTheHost() {
+        assertTrue(AuraSwap.bind(auraSwapBoard("Wild Growth").game).isEmpty());
+    }
+
+    @Test
     void auraSwapForksAGiantGrowthInTheAurasPlace() {
         Board board = auraSwapBoard("Holy Strength");
         Twin twin = board.twin(AuraSwap.rule());
@@ -1327,6 +1336,599 @@ class RegisteredRulesTest {
         assertFalse(SimultaneousShuffles.shufflesIntoLibrary(bears));
     }
 
+    // ── 701.39a, bolster: remove_permanent ──────────────────────────────
+
+    /** A's Cached Defenses over three Forests, beside A's {@code creatures}; the first is the subject. */
+    private static Board bolsterBoard(String... creatures) {
+        Board board = new Board(PhaseType.MAIN1);
+        for (int i = 0; i < 3; i++) {
+            board.card(board.you, "Forest");
+        }
+        for (String name : creatures) {
+            Card creature = board.card(board.you, name);
+            if (board.subject == null) {
+                board.subject = creature;
+            }
+        }
+        board.card(board.opponent, "Savannah Lions");
+        TestBoard.inHand(board.game, board.you, "Cached Defenses");
+        return board;
+    }
+
+    @Test
+    void bolsterBindsTheOnlyCreatureOfTheBolsteringPlayer() {
+        Board board = bolsterBoard("Grizzly Bears");
+        assertEquals(board.subject, Bolster.bind(board.game).orElseThrow().card("creature"));
+    }
+
+    @Test
+    void bolsterBindsNothingWithTwoCreatures() {
+        assertTrue(Bolster.bind(bolsterBoard("Grizzly Bears", "Wall of Wood").game).isEmpty());
+    }
+
+    @Test
+    void bolsterForksTheBoardWithoutTheCreature() {
+        Board board = bolsterBoard("Grizzly Bears");
+        assertOnlyRemoved(board.twin(Bolster.rule()), board.subject, "creature");
+    }
+
+    // ── 701.42a-c, meld: replace_card ───────────────────────────────────
+
+    /**
+     * A's {@code host} beside A's {@code partner}, a card or a token copy of
+     * one (built as a game copy builds a token: the card's copiable values,
+     * its front face alone); the partner is the subject.
+     */
+    private static Board meldBoard(String host, String partner, boolean token, int mountains) {
+        Board board = new Board(PhaseType.MAIN1);
+        for (int i = 0; i < mountains; i++) {
+            board.card(board.you, "Mountain");
+        }
+        board.other = board.card(board.you, host);
+        if (token) {
+            Card card = TestBoard.card(board.game, board.you, partner);
+            Card copy = new TokenInfo(card).makeOneToken(board.you, board.game.nextCardId());
+            new CardCopyService(card).copyCopiableCharacteristics(copy, null, null);
+            board.subject = board.game.getAction().moveToPlay(copy, board.you, null, null);
+            board.subject.setSickness(false);
+            board.subject.setGameTimestamp(board.game.getNextTimestamp());
+        } else {
+            board.subject = board.card(board.you, partner);
+        }
+        return board;
+    }
+
+    @Test
+    void meldBindsThePartnerCard() {
+        Board board = meldBoard("Graf Rats", "Midnight Scavengers", false, 0);
+        assertEquals(board.subject, Meld.bind(board.game).orElseThrow().card("partner"));
+    }
+
+    @Test
+    void meldBindsNothingWithoutAPartner() {
+        assertTrue(Meld.bind(meldBoard("Graf Rats", "Hill Giant", false, 0).game).isEmpty());
+        assertTrue(Meld.bind(meldBoard("Graf Rats", "Midnight Scavengers", true, 0).game).isEmpty());
+    }
+
+    @Test
+    void meldBindsNothingInTheSecondMainPhase() {
+        Board board = meldBoard("Graf Rats", "Midnight Scavengers", false, 0);
+        board.game.getPhaseHandler().devModeSet(PhaseType.MAIN2, board.you);
+        assertTrue(Meld.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void meldForksHillGiantInThePartnersPlace() {
+        Board board = meldBoard("Graf Rats", "Midnight Scavengers", false, 0);
+        assertOnlyReplaced(board.twin(Meld.rule()), board.subject, Meld.GIANT);
+    }
+
+    @Test
+    void tokenMeldPartnerBindsTheTokenPartnerOfATriggeredMeld() {
+        Board board = meldBoard("Graf Rats", "Midnight Scavengers", true, 0);
+        assertEquals(board.subject, TokenMeldPartner.bind(board.game).orElseThrow().card("partner"));
+    }
+
+    @Test
+    void tokenMeldPartnerBindsNothingForACardPartnerOrAnActivatedMeld() {
+        assertTrue(TokenMeldPartner.bind(meldBoard("Graf Rats", "Midnight Scavengers", false, 0).game).isEmpty());
+        assertTrue(TokenMeldPartner.bind(
+                meldBoard("Hanweir Battlements", "Hanweir Garrison", true, 5).game).isEmpty());
+    }
+
+    @Test
+    void tokenMeldPartnerForksTheCardInTheTokensPlace() {
+        Board board = meldBoard("Graf Rats", "Midnight Scavengers", true, 0);
+        Card card = assertOnlyReplaced(board.twin(TokenMeldPartner.rule()), board.subject, "Midnight Scavengers",
+                "token_script_id");
+        assertFalse(card.isToken());
+    }
+
+    @Test
+    void unmeldableStayBindsTheTokenPartnerOfAnAffordableActivatedMeld() {
+        Board board = meldBoard("Hanweir Battlements", "Hanweir Garrison", true, 5);
+        assertEquals(board.subject, UnmeldableStay.bind(board.game).orElseThrow().card("partner"));
+    }
+
+    @Test
+    void unmeldableStayBindsNothingWithoutTheManaToActivate() {
+        assertTrue(UnmeldableStay.bind(meldBoard("Hanweir Battlements", "Hanweir Garrison", true, 4).game).isEmpty());
+        assertTrue(UnmeldableStay.bind(meldBoard("Graf Rats", "Midnight Scavengers", true, 5).game).isEmpty());
+    }
+
+    @Test
+    void unmeldableStayForksTheCardInTheTokensPlace() {
+        Board board = meldBoard("Hanweir Battlements", "Hanweir Garrison", true, 5);
+        Card card = assertOnlyReplaced(board.twin(UnmeldableStay.rule()), board.subject, "Hanweir Garrison",
+                "token_script_id");
+        assertFalse(card.isToken());
+    }
+
+    // ── 701.44b, exploring with an empty library: move_card ─────────────
+
+    /** A's Merfolk Branchwalker in hand over two Forests, Wildgrowth Walker, a Forest in A's graveyard. */
+    private static Board branchwalkerBoard() {
+        Board board = new Board(PhaseType.MAIN1);
+        board.card(board.you, "Forest");
+        board.card(board.you, "Forest");
+        board.card(board.you, "Wildgrowth Walker");
+        TestBoard.inHand(board.game, board.you, "Merfolk Branchwalker");
+        board.subject = TestBoard.inGraveyard(board.game, board.you, "Forest");
+        return board;
+    }
+
+    @Test
+    void exploreEmptyLibraryBindsTheLandInTheGraveyard() {
+        Board board = branchwalkerBoard();
+        assertEquals(board.subject, ExploreEmptyLibrary.bind(board.game).orElseThrow().card("land"));
+    }
+
+    @Test
+    void exploreEmptyLibraryBindsNothingWithACardInTheLibrary() {
+        Board board = branchwalkerBoard();
+        board.library(board.you, "Island");
+        assertTrue(ExploreEmptyLibrary.bind(board.game).isEmpty());
+    }
+
+    @Test
+    void exploreEmptyLibraryForksTheLandOnTopOfTheLibrary() {
+        Board board = branchwalkerBoard();
+        Twin twin = board.twin(ExploreEmptyLibrary.rule());
+        assertOnlyChanged(twin, board.subject, board.subject, "P0.library", "P0.graveyard");
+        assertEquals(List.of(twin.fork().card("land")),
+                List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library)));
+    }
+
+    // ── 701.44d, several permanents exploring: replace_card ─────────────
+
+    /** Hakbal of the Surging Soul beside A's {@code other}, over a library of Forest then Shock. */
+    private static Board hakbalBoard(String other) {
+        Board board = new Board(PhaseType.MAIN1);
+        board.other = board.card(board.you, "Hakbal of the Surging Soul");
+        board.subject = board.card(board.you, other);
+        board.library(board.you, "Forest", "Shock");
+        return board;
+    }
+
+    @Test
+    void severalExploreBindsTheOtherMerfolk() {
+        Board board = hakbalBoard("Merfolk Branchwalker");
+        assertEquals(board.subject, SeveralExplore.bind(board.game).orElseThrow().card("explorer"));
+    }
+
+    @Test
+    void severalExploreBindsNothingWithOneMerfolk() {
+        assertTrue(SeveralExplore.bind(hakbalBoard("Grizzly Bears").game).isEmpty());
+    }
+
+    @Test
+    void severalExploreForksGrizzlyBearsInTheMerfolksPlace() {
+        Board board = hakbalBoard("Merfolk Branchwalker");
+        assertOnlyReplaced(board.twin(SeveralExplore.rule()), board.subject, SeveralExplore.BEARS);
+    }
+
+    // ── 701.50f, conniving when drawing is impossible: move_card ────────
+
+    /**
+     * A has drawn its one card this turn (a Forest), and holds Echo Inspector
+     * and the Forest over four Islands and Glorious Purpose; B's Spirit of the
+     * Labyrinth, when {@code spirit}.
+     */
+    private static Board inspectorBoard(boolean spirit) {
+        Board board = new Board(PhaseType.MAIN1);
+        for (int i = 0; i < 4; i++) {
+            board.card(board.you, "Island");
+        }
+        board.card(board.you, "Glorious Purpose");
+        if (spirit) {
+            board.card(board.opponent, "Spirit of the Labyrinth");
+        }
+        TestBoard.inHand(board.game, board.you, "Echo Inspector");
+        board.library(board.you, "Forest");
+        board.subject = board.you.drawCard().get(0);
+        return board;
+    }
+
+    @Test
+    void conniveWithoutDrawBindsTheOtherCardInHand() {
+        Board board = inspectorBoard(true);
+        assertEquals(board.subject, ConniveWithoutDraw.bind(board.game).orElseThrow().card("card"));
+    }
+
+    @Test
+    void conniveWithoutDrawBindsNothingWhenThePlayerCanDraw() {
+        assertTrue(ConniveWithoutDraw.bind(inspectorBoard(false).game).isEmpty());
+    }
+
+    @Test
+    void conniveWithoutDrawForksTheCardAtTheBottomOfTheLibrary() {
+        Board board = inspectorBoard(true);
+        Twin twin = board.twin(ConniveWithoutDraw.rule());
+        assertOnlyChanged(twin, board.subject, board.subject, "P0.hand", "P0.library");
+        assertTrue(twin.fork().card("card").getZone().is(ZoneType.Library));
+        assertEquals(1, twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Hand).size());
+    }
+
+    // ── 701.57b, a discovery that finds nothing: move_card ──────────────
+
+    /** A's Geological Appraiser over four Mountains and Val, Marooned Surveyor; A's library top card first. */
+    private static Board appraiserBoard(String... library) {
+        Board board = new Board(PhaseType.MAIN1);
+        for (int i = 0; i < 4; i++) {
+            board.card(board.you, "Mountain");
+        }
+        board.card(board.you, "Val, Marooned Surveyor");
+        TestBoard.inHand(board.game, board.you, "Geological Appraiser");
+        List<Card> cards = board.library(board.you, library);
+        board.subject = cards.stream().filter(card -> !card.isLand()).findFirst().orElse(null);
+        return board;
+    }
+
+    @Test
+    void discoverNothingFoundBindsTheFirstNonlandCard() {
+        Board board = appraiserBoard("Forest", "Hill Giant", "Island");
+        assertEquals(board.subject, DiscoverNothingFound.bind(board.game).orElseThrow().card("card"));
+    }
+
+    @Test
+    void discoverNothingFoundBindsNothingWhenACardWouldBeFound() {
+        assertTrue(DiscoverNothingFound.bind(appraiserBoard("Forest", "Grizzly Bears", "Island").game).isEmpty());
+    }
+
+    @Test
+    void discoverNothingFoundForksGrizzlyBearsInTheCardsPlace() {
+        Board board = appraiserBoard("Forest", "Hill Giant", "Island");
+        Twin twin = board.twin(DiscoverNothingFound.rule());
+        List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
+        assertEquals(List.of("Forest", DiscoverNothingFound.BEARS, "Island"),
+                library.stream().map(Card::getName).toList());
+        assertOnlyChanged(twin, board.subject, library.get(1));
+    }
+
+    // ── 702.1c, keywords shared by "the same is true for": replace_card ─
+
+    /** A's Concerted Effort beside A's {@code creatures} as the upkeep begins; the first is the subject. */
+    private static Board concertedBoard(String... creatures) {
+        Board board = new Board(PhaseType.UPKEEP);
+        board.card(board.you, "Concerted Effort");
+        for (String name : creatures) {
+            Card creature = board.card(board.you, name);
+            if (board.subject == null) {
+                board.subject = creature;
+            }
+        }
+        return board;
+    }
+
+    @Test
+    void sharedKeywordsBindsTheOneCreatureWithAListedKeyword() {
+        Board board = concertedBoard("White Knight", "Grizzly Bears");
+        assertEquals(board.subject, SharedKeywords.bind(board.game).orElseThrow().card("creature"));
+    }
+
+    @Test
+    void sharedKeywordsBindsNothingWithTwoHoldersOrNoOtherCreature() {
+        assertTrue(SharedKeywords.bind(concertedBoard("White Knight", "Youthful Knight").game).isEmpty());
+        assertTrue(SharedKeywords.bind(concertedBoard("White Knight").game).isEmpty());
+    }
+
+    @Test
+    void sharedKeywordsForksHillGiantInTheKnightsPlace() {
+        Board board = concertedBoard("White Knight", "Grizzly Bears");
+        assertOnlyReplaced(board.twin(SharedKeywords.rule()), board.subject, SharedKeywords.GIANT);
+    }
+
+    // ── 702.35a, madness: move_card ─────────────────────────────────────
+
+    /** A's Tormenting Voice and Fiery Temper in hand over {@code mountains} Mountains. */
+    private static Board madnessBoard(int mountains) {
+        Board board = new Board(PhaseType.MAIN1);
+        for (int i = 0; i < mountains; i++) {
+            board.card(board.you, "Mountain");
+        }
+        TestBoard.inHand(board.game, board.you, "Tormenting Voice");
+        board.subject = TestBoard.inHand(board.game, board.you, "Fiery Temper");
+        return board;
+    }
+
+    @Test
+    void madnessBindsTheMadnessCard() {
+        Board board = madnessBoard(3);
+        assertEquals(board.subject, Madness.bind(board.game).orElseThrow().card("card"));
+    }
+
+    @Test
+    void madnessBindsNothingWithoutTheManaForTheDiscardOutlet() {
+        assertTrue(Madness.bind(madnessBoard(1).game).isEmpty());
+    }
+
+    @Test
+    void madnessForksAShockInTheMadnessCardsPlace() {
+        Board board = madnessBoard(3);
+        Twin twin = board.twin(Madness.rule());
+        Card shock = twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Hand).stream()
+                .filter(card -> card.getName().equals(Madness.SHOCK)).findFirst().orElseThrow();
+        assertOnlySwapped(twin, board.subject, shock);
+    }
+
+    // ── 702.53a, transmute: move_card ───────────────────────────────────
+
+    /** A's Dimir Infiltrator in hand over an Island, a Swamp and a Forest; A's library top card first. */
+    private static Board infiltratorBoard(String... library) {
+        Board board = new Board(PhaseType.MAIN1);
+        for (String land : List.of("Island", "Swamp", "Forest")) {
+            board.card(board.you, land);
+        }
+        board.other = TestBoard.inHand(board.game, board.you, "Dimir Infiltrator");
+        board.subject = board.library(board.you, library).stream()
+                .filter(card -> card.getName().equals("Grizzly Bears")).findFirst().orElse(null);
+        return board;
+    }
+
+    @Test
+    void transmuteBindsTheTransmuterAndTheOneCardOfItsManaValue() {
+        Board board = infiltratorBoard("Forest", "Shock", "Grizzly Bears", "Island");
+        Binding binding = Transmute.bind(board.game).orElseThrow();
+        assertEquals(board.other, binding.card("transmuter"));
+        assertEquals(board.subject, binding.card("card"));
+    }
+
+    @Test
+    void transmuteBindsNothingWithTwoCardsOfItsManaValue() {
+        assertTrue(Transmute.bind(infiltratorBoard("Grizzly Bears", "Grizzly Bears").game).isEmpty());
+    }
+
+    @Test
+    void transmuteForksACentaurCourserInTheCardsPlace() {
+        Board board = infiltratorBoard("Forest", "Shock", "Grizzly Bears", "Island");
+        Twin twin = board.twin(Transmute.rule());
+        List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
+        assertEquals(List.of("Forest", "Shock", Transmute.COURSER, "Island"),
+                library.stream().map(Card::getName).toList());
+        assertOnlyChanged(twin, board.subject, library.get(2));
+    }
+
+    // ── 702.62c, a prohibition stopping a suspend: remove_permanent ─────
+
+    private static Board balothBoard(boolean golem) {
+        Board board = new Board(PhaseType.MAIN1);
+        board.card(board.you, "Forest");
+        if (golem) {
+            board.subject = board.card(board.you, "Steel Golem");
+        }
+        TestBoard.inHand(board.game, board.you, "Durkwood Baloth");
+        return board;
+    }
+
+    @Test
+    void suspendProhibitedBindsTheProhibitingPermanent() {
+        Board board = balothBoard(true);
+        assertEquals(board.subject, SuspendProhibited.bind(board.game).orElseThrow().card("permanent"));
+    }
+
+    @Test
+    void suspendProhibitedBindsNothingWithoutAProhibition() {
+        assertTrue(SuspendProhibited.bind(balothBoard(false).game).isEmpty());
+    }
+
+    @Test
+    void suspendProhibitedForksTheBoardWithoutTheProhibitingPermanent() {
+        Board board = balothBoard(true);
+        assertOnlyRemoved(board.twin(SuspendProhibited.rule()), board.subject, "permanent");
+    }
+
+    // ── 702.65a, Aura swap's exchange: move_card ────────────────────────
+
+    @Test
+    void auraSwapExchangeBindsTheAuraInHandAndTheAttachedAura() {
+        Board board = auraSwapBoard("Holy Strength");
+        Binding binding = AuraSwapExchange.rule().precondition(board.game).orElseThrow();
+        assertEquals(board.subject, binding.card("card"));
+        assertEquals(board.other, binding.card("aura"));
+    }
+
+    @Test
+    void auraSwapExchangeBindsNothingForAnAuraThatCannotEnchantTheHost() {
+        assertTrue(AuraSwapExchange.rule().precondition(auraSwapBoard("Wild Growth").game).isEmpty());
+    }
+
+    @Test
+    void auraSwapExchangeForksGrizzlyBearsInTheAurasPlace() {
+        Board board = auraSwapBoard("Holy Strength");
+        Twin twin = board.twin(AuraSwapExchange.rule());
+        List<Card> hand = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Hand));
+        assertEquals(List.of(AuraSwapExchange.BEARS), hand.stream().map(Card::getName).toList());
+        assertOnlySwapped(twin, board.subject, hand.get(0));
+    }
+
+    // ── 702.65b, an Aura swap whose Aura cannot enchant: move_card ──────
+
+    @Test
+    void auraSwapCantEnchantBindsAnAuraInHandThatCannotEnchantTheHost() {
+        Board board = auraSwapBoard("Wild Growth");
+        Binding binding = AuraSwapCantEnchant.bind(board.game).orElseThrow();
+        assertEquals(board.subject, binding.card("card"));
+        assertEquals(board.other, binding.card("aura"));
+    }
+
+    @Test
+    void auraSwapCantEnchantBindsNothingForAnAuraThatCanEnchant() {
+        assertTrue(AuraSwapCantEnchant.bind(auraSwapBoard("Holy Strength").game).isEmpty());
+    }
+
+    @Test
+    void auraSwapCantEnchantForksHolyStrengthInTheAurasPlace() {
+        Board board = auraSwapBoard("Wild Growth");
+        Twin twin = board.twin(AuraSwapCantEnchant.rule());
+        List<Card> hand = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Hand));
+        assertEquals(List.of(AuraSwapCantEnchant.HOLY_STRENGTH), hand.stream().map(Card::getName).toList());
+        assertOnlySwapped(twin, board.subject, hand.get(0));
+    }
+
+    // ── 702.70b, poisonous instances: remove_permanent ──────────────────
+
+    /** A's Virulent Sliver attacks B; {@code slivers} more Virulent Slivers stay home; no blocker declared yet. */
+    private static Board sliverBoard(int slivers) {
+        Board board = new Board(PhaseType.COMBAT_DECLARE_BLOCKERS);
+        board.other = board.card(board.you, "Virulent Sliver");
+        for (int i = 0; i < slivers; i++) {
+            board.subject = board.card(board.you, "Virulent Sliver");
+        }
+        Combat combat = new Combat(board.you);
+        combat.addAttacker(board.other, board.opponent);
+        board.game.getPhaseHandler().setCombat(combat);
+        board.game.getAction().checkStaticAbilities();
+        return board;
+    }
+
+    @Test
+    void poisonousInstancesBindsTheOtherGrantingSliver() {
+        Board board = sliverBoard(1);
+        assertEquals(2, board.other.getKeywords(Keyword.POISONOUS).size());
+        assertEquals(board.subject, PoisonousInstances.bind(board.game).orElseThrow().card("permanent"));
+    }
+
+    @Test
+    void poisonousInstancesBindsNothingOnOneInstance() {
+        assertTrue(PoisonousInstances.bind(sliverBoard(0).game).isEmpty());
+    }
+
+    @Test
+    void poisonousInstancesForksTheBoardWithoutTheGrantingSliver() {
+        Board board = sliverBoard(1);
+        Twin twin = board.twin(PoisonousInstances.rule());
+        String gone = id(board.subject);
+        String attacker = id(board.other);
+        assertTrue(twin.changes().contains("-" + gone), twin.changes().toString());
+        for (String change : twin.changes()) {
+            // The attacker loses the instance the removed Sliver granted it.
+            assertTrue(change.equals("-" + gone) || change.endsWith(".order_rank")
+                            || change.equals(attacker + ".lines") || change.equals(attacker + ".granted_temporary")
+                            || change.startsWith("-link ") && change.contains("=" + gone),
+                    "removing changed " + change + "; all: " + twin.changes());
+        }
+        Card forkedAttacker = twin.forkGame().getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> id(card).equals(attacker)).findFirst().orElseThrow();
+        assertEquals(1, forkedAttacker.getKeywords(Keyword.POISONOUS).size());
+    }
+
+    // ── 702.71a, transfigure: move_card ─────────────────────────────────
+
+    /** A's Fleshwrither (mana value 4) over three Swamps; A's library top card first. */
+    private static Board fleshwritherBoard(String... library) {
+        Board board = new Board(PhaseType.MAIN1);
+        for (int i = 0; i < 3; i++) {
+            board.card(board.you, "Swamp");
+        }
+        board.other = board.card(board.you, "Fleshwrither");
+        board.subject = board.library(board.you, library).get(0);
+        return board;
+    }
+
+    @Test
+    void transfigureBindsTheCreatureAndTheOneCreatureCardOfItsManaValue() {
+        Board board = fleshwritherBoard("Hill Giant", "Grizzly Bears");
+        Binding binding = Transfigure.bind(board.game).orElseThrow();
+        assertEquals(board.other, binding.card("creature"));
+        assertEquals(board.subject, binding.card("card"));
+    }
+
+    @Test
+    void transfigureBindsNothingWithTwoCreatureCardsOfItsManaValue() {
+        assertTrue(Transfigure.bind(fleshwritherBoard("Hill Giant", "Hill Giant").game).isEmpty());
+    }
+
+    @Test
+    void transfigureForksACrawWurmInTheCardsPlace() {
+        Board board = fleshwritherBoard("Hill Giant", "Grizzly Bears");
+        Twin twin = board.twin(Transfigure.rule());
+        List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
+        assertEquals(List.of(Transfigure.WURM, "Grizzly Bears"), library.stream().map(Card::getName).toList());
+        assertOnlyChanged(twin, board.subject, library.get(0));
+    }
+
+    // ── 702.84a, unearth from the graveyard only: move_card ─────────────
+
+    private static Board dregscapeBoard(boolean swampUntapped) {
+        Board board = new Board(PhaseType.MAIN1);
+        board.card(board.you, "Swamp").setTapped(!swampUntapped);
+        board.subject = TestBoard.inGraveyard(board.game, board.you, "Dregscape Zombie");
+        return board;
+    }
+
+    @Test
+    void unearthBindsTheCardInTheGraveyard() {
+        Board board = dregscapeBoard(true);
+        assertEquals(board.subject, Unearth.bind(board.game).orElseThrow().card("card"));
+    }
+
+    @Test
+    void unearthBindsNothingWithoutTheManaToUnearth() {
+        assertTrue(Unearth.bind(dregscapeBoard(false).game).isEmpty());
+    }
+
+    @Test
+    void unearthForksTheCardInHand() {
+        Board board = dregscapeBoard(true);
+        Twin twin = board.twin(Unearth.rule());
+        assertOnlyChanged(twin, board.subject, board.subject, "P0.hand", "P0.graveyard");
+        assertTrue(twin.fork().card("card").getZone().is(ZoneType.Hand));
+    }
+
+    // ── 702.85a, cascade: move_card ─────────────────────────────────────
+
+    /** A's Bloodbraid Elf over two Mountains and two Forests; A's library top card first. */
+    private static Board bloodbraidBoard(String... library) {
+        Board board = new Board(PhaseType.MAIN1);
+        for (String land : List.of("Mountain", "Mountain", "Forest", "Forest")) {
+            board.card(board.you, land);
+        }
+        board.card(board.opponent, "Grizzly Bears");
+        TestBoard.inHand(board.game, board.you, "Bloodbraid Elf");
+        board.subject = board.library(board.you, library).get(1);
+        return board;
+    }
+
+    @Test
+    void cascadeBindsTheOneCheaperNonlandCard() {
+        Board board = bloodbraidBoard("Mountain", "Shock", "Hill Giant");
+        assertEquals(board.subject, Cascade.bind(board.game).orElseThrow().card("card"));
+    }
+
+    @Test
+    void cascadeBindsNothingWithTwoCheaperCards() {
+        assertTrue(Cascade.bind(bloodbraidBoard("Mountain", "Shock", "Grizzly Bears").game).isEmpty());
+    }
+
+    @Test
+    void cascadeForksACrawWurmInTheCardsPlace() {
+        Board board = bloodbraidBoard("Mountain", "Shock", "Hill Giant");
+        Twin twin = board.twin(Cascade.rule());
+        List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
+        assertEquals(List.of("Mountain", Cascade.WURM, "Hill Giant"), library.stream().map(Card::getName).toList());
+        assertOnlyChanged(twin, board.subject, library.get(1));
+    }
+
     // ── shared checks ───────────────────────────────────────────────────
 
     /**
@@ -1365,15 +1967,18 @@ class RegisteredRulesTest {
      * The fork differs from the live board by a {@code name} in
      * {@code replaced}'s place alone: read with the new card's id wherever the
      * old one's stood, what is left differs only in what makes the card that
-     * card. Returns the new card.
+     * card, and in the {@code alsoChanged} members the variant names besides
+     * (a token's {@code token_script_id}, where a card takes its place).
+     * Returns the new card.
      */
-    private static Card assertOnlyReplaced(Twin twin, Card replaced, String name) {
+    private static Card assertOnlyReplaced(Twin twin, Card replaced, String name, String... alsoChanged) {
         Card card = twin.forkGame().getCardsIn(ZoneType.Battlefield).stream()
                 .filter(c -> c.getName().equals(name) && twin.changes().contains("+" + id(c)))
                 .findFirst().orElseThrow(() -> new AssertionError("no new " + name + "; all: " + twin.changes()));
         Set<String> left = changes(renamed(twin.real(), id(replaced), id(card)), twin.forked());
-        Set<String> identity = Set.of("name", "colors", "types", "subtypes", "mana_value", "mana_cost",
-                "base_pt", "lines", "granted_temporary");
+        Set<String> identity = new TreeSet<>(List.of("name", "colors", "types", "subtypes", "mana_value",
+                "mana_cost", "base_pt", "lines", "granted_temporary"));
+        identity.addAll(List.of(alsoChanged));
         for (String change : left) {
             assertTrue(change.startsWith(id(card) + ".")
                             && identity.contains(change.substring(change.indexOf('.') + 1)),
@@ -1395,6 +2000,23 @@ class RegisteredRulesTest {
                             || change.startsWith("-link ") && change.contains("=" + gone)
                             || change.startsWith("+link ") && change.contains("=" + added),
                     "replacing changed " + change + "; all: " + twin.changes());
+        }
+    }
+
+    /**
+     * The fork differs from the live board by {@code gone} leaving the
+     * snapshot and {@code added} joining it alone (the same card for a move),
+     * with their links and own members, and the player members named.
+     */
+    private static void assertOnlyChanged(Twin twin, Card gone, Card added, String... members) {
+        Set<String> ids = new TreeSet<>(List.of(id(gone), id(added)));
+        for (String change : twin.changes()) {
+            boolean own = ids.stream().anyMatch(card -> change.equals("-" + card) || change.equals("+" + card)
+                    || change.startsWith(card + ".")
+                    || change.startsWith("-link ") && change.contains("=" + card)
+                    || change.startsWith("+link ") && change.contains("=" + card));
+            assertTrue(own || List.of(members).contains(change),
+                    "changed " + change + "; all: " + twin.changes());
         }
     }
 
@@ -1433,6 +2055,15 @@ class RegisteredRulesTest {
             Card card = TestBoard.inPlay(game, owner, name);
             card.setGameTimestamp(game.getNextTimestamp());
             return card;
+        }
+
+        /** {@code names} at the bottom of {@code owner}'s library in order, so the first listed is the topmost of them. */
+        List<Card> library(Player owner, String... names) {
+            List<Card> cards = new ArrayList<>();
+            for (String name : names) {
+                cards.add(game.getAction().moveToLibrary(TestBoard.card(game, owner, name), -1, null, null));
+            }
+            return cards;
         }
 
         /**

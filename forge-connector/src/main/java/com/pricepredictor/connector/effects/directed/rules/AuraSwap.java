@@ -24,8 +24,8 @@ import java.util.Optional;
  *
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, it controls an attached Aura with Aura swap whose cost it has the
- * lands for, and its hand holds exactly one Aura card. It binds that card and
- * the attached Aura.
+ * lands for, and its hand holds exactly one Aura card, which can enchant what
+ * the attached Aura enchants. It binds that card and the attached Aura.
  *
  * <p>Variant {@code no_aura_in_hand} ({@code move_card}): a Giant Growth is in
  * that card's place in the hand, so there is nothing to exchange with and the
@@ -48,6 +48,17 @@ public final class AuraSwap {
     }
 
     static Optional<Binding> bind(Game live) {
+        return find(live, true);
+    }
+
+    /**
+     * The one Aura card in the active player's hand and an attached Aura it
+     * could exchange with, read at the start of its main phase: an Aura with
+     * Aura swap whose cost it has the lands for, whose host the hand's Aura
+     * can enchant ({@code fits}) or cannot. The board 701.12e, 702.65a and
+     * 702.65b share.
+     */
+    static Optional<Binding> find(Game live, boolean fits) {
         if (!Boards.atMainPhase(live)) {
             return Optional.empty();
         }
@@ -56,10 +67,12 @@ public final class AuraSwap {
         if (aurasInHand.size() != 1) {
             return Optional.empty();
         }
+        Card card = aurasInHand.get(0);
         return active.getCardsIn(ZoneType.Battlefield).stream()
-                .filter(card -> card.isAura() && card.isAttachedToEntity() && swappable(card, active))
+                .filter(aura -> aura.isAura() && aura.isAttachedToEntity() && swappable(aura, active)
+                        && aura.getEntityAttachedTo().canBeAttached(card, null) == fits)
                 .findFirst()
-                .map(aura -> Binding.empty().with("card", aurasInHand.get(0)).with("aura", aura));
+                .map(aura -> Binding.empty().with("card", card).with("aura", aura));
     }
 
     /** Whether the Aura has Aura swap and {@code player} has as many untapped lands as its cost's mana value. */

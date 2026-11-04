@@ -3,15 +3,22 @@ package com.pricepredictor.connector.effects.directed;
 import com.pricepredictor.connector.effects.directed.rules.Aftermath;
 import com.pricepredictor.connector.effects.directed.rules.AttractionVisit;
 import com.pricepredictor.connector.effects.directed.rules.AuraSwap;
+import com.pricepredictor.connector.effects.directed.rules.AuraSwapCantEnchant;
+import com.pricepredictor.connector.effects.directed.rules.AuraSwapExchange;
 import com.pricepredictor.connector.effects.directed.rules.BattleDefense;
+import com.pricepredictor.connector.effects.directed.rules.Bolster;
 import com.pricepredictor.connector.effects.directed.rules.CantEnterBattlefield;
 import com.pricepredictor.connector.effects.directed.rules.CantGainLifeExchange;
 import com.pricepredictor.connector.effects.directed.rules.CantLoseLifeExchange;
+import com.pricepredictor.connector.effects.directed.rules.Cascade;
 import com.pricepredictor.connector.effects.directed.rules.Champion;
+import com.pricepredictor.connector.effects.directed.rules.ConniveWithoutDraw;
 import com.pricepredictor.connector.effects.directed.rules.Dethrone;
+import com.pricepredictor.connector.effects.directed.rules.DiscoverNothingFound;
 import com.pricepredictor.connector.effects.directed.rules.DistinctTargets;
 import com.pricepredictor.connector.effects.directed.rules.DrawFromEmptyLibrary;
 import com.pricepredictor.connector.effects.directed.rules.Enlist;
+import com.pricepredictor.connector.effects.directed.rules.ExploreEmptyLibrary;
 import com.pricepredictor.connector.effects.directed.rules.FinalChapterResolves;
 import com.pricepredictor.connector.effects.directed.rules.FinalityCounter;
 import com.pricepredictor.connector.effects.directed.rules.GraveyardReplacement;
@@ -19,12 +26,17 @@ import com.pricepredictor.connector.effects.directed.rules.Intimidate;
 import com.pricepredictor.connector.effects.directed.rules.LifeExchange;
 import com.pricepredictor.connector.effects.directed.rules.LifeTotalWin;
 import com.pricepredictor.connector.effects.directed.rules.LimitedSearch;
+import com.pricepredictor.connector.effects.directed.rules.Madness;
+import com.pricepredictor.connector.effects.directed.rules.Meld;
 import com.pricepredictor.connector.effects.directed.rules.MorphFaceUp;
 import com.pricepredictor.connector.effects.directed.rules.MutagenToken;
 import com.pricepredictor.connector.effects.directed.rules.OptionalSearch;
 import com.pricepredictor.connector.effects.directed.rules.PoisonLoss;
+import com.pricepredictor.connector.effects.directed.rules.PoisonousInstances;
 import com.pricepredictor.connector.effects.directed.rules.ReplacedSacrificeCost;
 import com.pricepredictor.connector.effects.directed.rules.RestartGame;
+import com.pricepredictor.connector.effects.directed.rules.SeveralExplore;
+import com.pricepredictor.connector.effects.directed.rules.SharedKeywords;
 import com.pricepredictor.connector.effects.directed.rules.ShuffleAndPlaceOnTop;
 import com.pricepredictor.connector.effects.directed.rules.SimultaneousDamage;
 import com.pricepredictor.connector.effects.directed.rules.SimultaneousShuffles;
@@ -32,9 +44,15 @@ import com.pricepredictor.connector.effects.directed.rules.SkippedUpkeepTrigger;
 import com.pricepredictor.connector.effects.directed.rules.SmallLibraryShuffle;
 import com.pricepredictor.connector.effects.directed.rules.SorcererRole;
 import com.pricepredictor.connector.effects.directed.rules.StunCounter;
+import com.pricepredictor.connector.effects.directed.rules.SuspendProhibited;
 import com.pricepredictor.connector.effects.directed.rules.TextBoxExchange;
+import com.pricepredictor.connector.effects.directed.rules.TokenMeldPartner;
 import com.pricepredictor.connector.effects.directed.rules.ToughnessZero;
+import com.pricepredictor.connector.effects.directed.rules.Transfigure;
+import com.pricepredictor.connector.effects.directed.rules.Transmute;
 import com.pricepredictor.connector.effects.directed.rules.TypeSettingAura;
+import com.pricepredictor.connector.effects.directed.rules.Unearth;
+import com.pricepredictor.connector.effects.directed.rules.UnmeldableStay;
 import com.pricepredictor.connector.effects.directed.rules.VanishingInstances;
 import com.pricepredictor.connector.effects.directed.rules.VirtuousRole;
 
@@ -96,8 +114,26 @@ public final class DirectedRules {
             SmallLibraryShuffle.rule(),
             SimultaneousShuffles.rule(),
             ShuffleAndPlaceOnTop.rule(),
+            Bolster.rule(),
+            Meld.rule(),
+            TokenMeldPartner.rule(),
+            UnmeldableStay.rule(),
+            ExploreEmptyLibrary.rule(),
+            SeveralExplore.rule(),
+            ConniveWithoutDraw.rule(),
+            DiscoverNothingFound.rule(),
+            SharedKeywords.rule(),
             Intimidate.rule(),
+            Madness.rule(),
+            Transmute.rule(),
+            SuspendProhibited.rule(),
             VanishingInstances.rule(),
+            AuraSwapExchange.rule(),
+            AuraSwapCantEnchant.rule(),
+            PoisonousInstances.rule(),
+            Transfigure.rule(),
+            Unearth.rule(),
+            Cascade.rule(),
             Dethrone.rule(),
             Aftermath.rule(),
             Enlist.rule(),

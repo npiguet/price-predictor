@@ -2,14 +2,21 @@ package com.pricepredictor.connector.effects.directed.rules;
 
 import forge.game.Game;
 import forge.game.ability.AbilityFactory;
+import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.cost.Cost;
+import forge.game.keyword.Keyword;
+import forge.game.keyword.KeywordInterface;
+import forge.game.keyword.KeywordWithCostAndAmount;
+import forge.game.keyword.KeywordWithCostInterface;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
+import forge.game.trigger.TriggerType;
 import forge.game.zone.ZoneType;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -101,6 +108,50 @@ final class Boards {
                 .filter(card -> affordable(player, card))
                 .filter(card -> card.getSpells().stream().anyMatch(spell))
                 .toList();
+    }
+
+    /** The costs of the card's instances of {@code keyword} (Transmute, Unearth, Suspend), in the card's order. */
+    static List<Cost> keywordCosts(Card card, Keyword keyword) {
+        List<Cost> costs = new ArrayList<>();
+        for (KeywordInterface instance : card.getKeywords(keyword)) {
+            if (instance instanceof KeywordWithCostInterface withCost) {
+                costs.add(withCost.getCost());
+            } else if (instance instanceof KeywordWithCostAndAmount withCost) {
+                costs.add(withCost.getCost());
+            }
+        }
+        return costs;
+    }
+
+    /**
+     * Whether {@code player} has as many untapped lands as the mana value of
+     * one of the card's {@code keyword} costs: a cheap bound on paying it.
+     */
+    static boolean canPayKeyword(Player player, Card card, Keyword keyword) {
+        return keywordCosts(card, keyword).stream().anyMatch(cost -> manaValue(cost) <= untappedLands(player));
+    }
+
+    /**
+     * Whether one of the card's spells, or the ability one of its triggers
+     * executes, has {@code api} at its root: a card that explores, connives or
+     * discovers as it resolves or as it enters.
+     */
+    static boolean acts(Card card, ApiType api) {
+        return card.getSpells().stream().anyMatch(spell -> spell.getApi() == api)
+                || card.getTriggers().stream().anyMatch(trigger -> api.name().equals(api(executed(trigger))));
+    }
+
+    /** Whether {@code player} holds a card it has the lands for ({@link #affordable}) that {@link #acts} with {@code api}. */
+    static boolean holdsActing(Player player, ApiType api) {
+        return player.getCardsIn(ZoneType.Hand).stream()
+                .anyMatch(card -> affordable(player, card) && acts(card, api));
+    }
+
+    /** Whether a permanent on the battlefield has a trigger of {@code mode} (Explores, Connives, Discover). */
+    static boolean watched(Game live, TriggerType mode) {
+        return live.getCardsIn(ZoneType.Battlefield).stream()
+                .flatMap(card -> card.getTriggers().stream())
+                .anyMatch(trigger -> trigger.getMode() == mode);
     }
 
     /** Whether a comma-separated script value lists {@code item}. */
