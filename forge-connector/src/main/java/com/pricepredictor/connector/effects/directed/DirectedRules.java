@@ -1,5 +1,16 @@
 package com.pricepredictor.connector.effects.directed;
 
+import com.pricepredictor.connector.effects.directed.rules.Aftermath;
+import com.pricepredictor.connector.effects.directed.rules.Dethrone;
+import com.pricepredictor.connector.effects.directed.rules.Enlist;
+import com.pricepredictor.connector.effects.directed.rules.GraveyardReplacement;
+import com.pricepredictor.connector.effects.directed.rules.Intimidate;
+import com.pricepredictor.connector.effects.directed.rules.LifeExchange;
+import com.pricepredictor.connector.effects.directed.rules.SimultaneousDamage;
+import com.pricepredictor.connector.effects.directed.rules.StunCounter;
+import com.pricepredictor.connector.effects.directed.rules.ToughnessZero;
+import com.pricepredictor.connector.effects.directed.rules.VanishingInstances;
+
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -22,10 +33,22 @@ import java.util.Optional;
 public final class DirectedRules {
 
     /**
-     * Every registered rule, in registration order. The rules themselves are
-     * registered by T094-T096.
+     * Every registered rule, in the catalogue's rule order: one class per
+     * rule in {@code directed/rules/}, each naming its scenario, its board
+     * precondition and its variants. Together they cover the ten operations
+     * (story 3, acceptance 3).
      */
-    private static final DirectedRules REGISTERED = of();
+    private static final DirectedRules REGISTERED = of(
+            StunCounter.rule(),
+            GraveyardReplacement.rule(),
+            LifeExchange.rule(),
+            Intimidate.rule(),
+            VanishingInstances.rule(),
+            Dethrone.rule(),
+            Aftermath.rule(),
+            Enlist.rule(),
+            SimultaneousDamage.rule(),
+            ToughnessZero.rule());
 
     private final Map<String, DirectedRule> rules;
 

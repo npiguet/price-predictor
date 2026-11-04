@@ -236,8 +236,8 @@ class TestTheCollectors:
 
 @pytest.mark.integration
 def test_the_worker_lists_its_registered_rules():
-    """One real run of DirectedRulesMain: it exits 0 and prints rule ids only
-    (none are registered before T094)."""
+    """One real run of DirectedRulesMain: it exits 0 and prints rule ids only,
+    704.5f's among them."""
     from price_predictor.infrastructure.forge_jvm import resolve_connector_jar
 
     try:
@@ -246,3 +246,4 @@ def test_the_worker_lists_its_registered_rules():
         pytest.skip("the connector JAR is not built")
     registered = flags.registered_directed_rules()
     assert all(rule and " " not in rule for rule in registered)
+    assert "704.5f" in registered

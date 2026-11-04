@@ -709,6 +709,53 @@ class ForkRecordsTest {
         }
     }
 
+    /**
+     * Story 3 acceptance 1 on the registered 704.5f (T094): the active player
+     * holds Disfigure and an untapped Swamp and the opponent's Drudge
+     * Skeletons is a 1/1, so as the main phase begins the collector forks,
+     * raises the Skeletons' toughness through {@code pt}, plays the fork to
+     * the end of the turn (its end step sacrifices Sneak Attack's Hill Giant)
+     * and writes the fork's records, each showing the 1/3 the fork made.
+     */
+    @Test
+    void theRegisteredToughnessZeroRuleForksATougherCreatureToTheEndOfTheTurn() throws Throwable {
+        Game game = ForkPlayForwardTest.board();
+        ForkPlayForwardTest.sneakAttack(game);
+        Player active = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        TestBoard.inPlay(game, active, "Swamp");
+        TestBoard.inHand(game, active, "Disfigure");
+        Card skeletons = TestBoard.inPlay(game, opponent, "Drudge Skeletons");
+        CollectionCaps caps = forkCaps().interventions(0).probes(0).directed(1, 1.0, "704.5f").build();
+        RecordShardWriter shard = ShardRun.writer(tempDir);
+        try (GameRecording recording = new GameRecording(game, shard, ShardRun.GAME_ID, caps, 7L, null)) {
+            recording.open();
+            // The main phase's boundary, before either seat has had priority
+            // in it: given priority earlier, the AI casts Disfigure at once.
+            TestBoard.enterStep(game, PhaseType.MAIN1);
+            ForkPlayForwardTest.playTheTurnOut(game);
+        } finally {
+            shard.close();
+        }
+        List<String> forked = split(ShardRun.readShard(shard.path()), true);
+
+        assertFalse(forked.isEmpty(), "the fork was kept and recorded");
+        boolean sawSkeletons = false;
+        for (String record : forked) {
+            Map<String, Object> parsed = parse(record);
+            assertEquals(List.of("704.5f"), parsed.get("aimed_at"), record);
+            assertEquals(Map.of("variant", "tougher", "operation", "pt"), parsed.get("directed"), record);
+            for (Object entity : (List<?>) RecordLines.asMap(parsed.get("state")).get("entities")) {
+                Map<String, Object> fields = RecordLines.asMap(entity);
+                if (("E" + skeletons.getId()).equals(fields.get("id"))) {
+                    assertEquals(List.of(1L, 3L), fields.get("base_pt"), record);
+                    sawSkeletons = true;
+                }
+            }
+        }
+        assertTrue(sawSkeletons, "a fork record shows the Skeletons");
+    }
+
     /** {@code mirror_of} is written only when a live record was open at the fork point (D5). */
     @Test
     void aDirectedForkMirrorsALiveRecordOnlyWhenOneWasOpen() {

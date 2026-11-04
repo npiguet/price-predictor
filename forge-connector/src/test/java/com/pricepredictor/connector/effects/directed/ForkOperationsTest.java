@@ -27,14 +27,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
 
+import static com.pricepredictor.connector.effects.directed.BoardChanges.changes;
+import static com.pricepredictor.connector.effects.directed.BoardChanges.entity;
+import static com.pricepredictor.connector.effects.directed.BoardChanges.id;
+import static com.pricepredictor.connector.effects.directed.BoardChanges.indexed;
+import static com.pricepredictor.connector.effects.directed.BoardChanges.links;
+import static com.pricepredictor.connector.effects.directed.BoardChanges.renamed;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -47,7 +50,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 6): no trigger fires from the edit, and no per-turn count moves.
  *
  * <p>Every check compares the board-only snapshot a record would carry,
- * before and after the edit, member by member: {@link #changes} names each
+ * before and after the edit, member by member: {@link BoardChanges#changes} names each
  * entity, player or global member that differs, each entity that appeared or
  * went, and each link that appeared or went. The edits run on a fresh
  * {@code TestBoard} game, which is what a fork is to its edit.
@@ -462,90 +465,6 @@ class ForkOperationsTest {
 
     // ── comparing snapshots ─────────────────────────────────────────────
 
-    private static String id(Card card) {
-        return "E" + card.getId();
-    }
-
-    /**
-     * What differs between two snapshots: {@code E5.tapped} for an entity
-     * member, {@code P1.life} for a player member, {@code global.turn} for a
-     * global one, {@code +E9} / {@code -E5} for an entity that appeared or
-     * went, and {@code +link …} / {@code -link …} for a link.
-     */
-    static Set<String> changes(Map<String, Object> before, Map<String, Object> after) {
-        Set<String> changed = new TreeSet<>();
-        members("global", asMap(before.get("global")), asMap(after.get("global")), changed);
-        byId("players", before, after, changed);
-        byId("entities", before, after, changed);
-        Set<String> was = links(before);
-        Set<String> is = links(after);
-        for (String link : was) {
-            if (!is.contains(link)) {
-                changed.add("-link " + link);
-            }
-        }
-        for (String link : is) {
-            if (!was.contains(link)) {
-                changed.add("+link " + link);
-            }
-        }
-        return changed;
-    }
-
-    private static void byId(String block, Map<String, Object> before, Map<String, Object> after,
-                             Set<String> changed) {
-        Map<String, Map<String, Object>> was = indexed(before, block);
-        Map<String, Map<String, Object>> is = indexed(after, block);
-        for (Map.Entry<String, Map<String, Object>> entry : was.entrySet()) {
-            Map<String, Object> now = is.get(entry.getKey());
-            if (now == null) {
-                changed.add("-" + entry.getKey());
-            } else {
-                members(entry.getKey(), entry.getValue(), now, changed);
-            }
-        }
-        for (String id : is.keySet()) {
-            if (!was.containsKey(id)) {
-                changed.add("+" + id);
-            }
-        }
-    }
-
-    private static void members(String owner, Map<String, Object> was, Map<String, Object> is,
-                                Set<String> changed) {
-        Set<String> keys = new HashSet<>(was.keySet());
-        keys.addAll(is.keySet());
-        for (String key : keys) {
-            if (!java.util.Objects.equals(was.get(key), is.get(key))) {
-                changed.add(owner + "." + key);
-            }
-        }
-    }
-
-    private static Map<String, Map<String, Object>> indexed(Map<String, Object> state, String block) {
-        Map<String, Map<String, Object>> byId = new LinkedHashMap<>();
-        for (Object item : (List<?>) state.get(block)) {
-            Map<String, Object> map = asMap(item);
-            byId.put((String) map.get("id"), map);
-        }
-        return byId;
-    }
-
-    /** Each link as one string, its members in name order: {@code {from=P0, to=E3, type=controls}}. */
-    private static Set<String> links(Map<String, Object> state) {
-        Set<String> links = new TreeSet<>();
-        for (Object link : (List<?>) state.get("links")) {
-            links.add(new TreeMap<>(asMap(link)).toString());
-        }
-        return links;
-    }
-
-    private static Map<String, Object> entity(Map<String, Object> state, String id) {
-        Map<String, Object> entity = indexed(state, "entities").get(id);
-        assertTrue(entity != null, "no entity " + id);
-        return entity;
-    }
-
     /** The changes of one entity or player, by their {@code prefix}. */
     private static Set<String> only(Set<String> changed, String prefix) {
         Set<String> kept = new TreeSet<>();
@@ -555,27 +474,5 @@ class ForkOperationsTest {
             }
         }
         return kept;
-    }
-
-    /** {@code value} with every string equal to {@code from} read as {@code to}. */
-    @SuppressWarnings("unchecked")
-    private static <T> T renamed(T value, String from, String to) {
-        if (value instanceof Map<?, ?> map) {
-            Map<String, Object> copy = new LinkedHashMap<>();
-            map.forEach((key, entry) -> copy.put((String) key, renamed(entry, from, to)));
-            return (T) copy;
-        }
-        if (value instanceof List<?> list) {
-            return (T) list.stream().map(entry -> renamed(entry, from, to)).toList();
-        }
-        if (from.equals(value)) {
-            return (T) to;
-        }
-        return value;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> asMap(Object value) {
-        return (Map<String, Object>) value;
     }
 }

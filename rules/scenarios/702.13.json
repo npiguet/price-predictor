@@ -65,6 +65,13 @@
           "operation": {
             "unclassifiable": "choice: B declares Phyrexian Walker as the blocker instead of Grizzly Bears: a different block."
           }
+        },
+        {
+          "label": "recolored_blocker",
+          "polarity": "does_not_fire",
+          "delta": "Grizzly Bears is red, the color of Bladetusk Boar, instead of green.",
+          "expected": "Grizzly Bears shares a color with Bladetusk Boar, so declaring it as a blocker of Bladetusk Boar is legal.",
+          "operation": "colour_type"
         }
       ],
       "cards": [
