@@ -401,6 +401,105 @@ class TestTheRealEncoder:
         assert "truncated" not in caplog.text
 
 
+class TestAGen3Checkpoint:
+    """SC-009: ``encode-abilities`` loads a checkpoint as a gen-3 run writes it
+    — gen-3 input layout and widths, the relation trunk, an encoder at a
+    non-default size, ``e`` at the default 256 — from the checkpoint alone, and
+    writes the 256-wide cache."""
+
+    @pytest.fixture
+    def checkpoint(self, tmp_path):
+        from effects.application.run_context import training_settings
+        from effects.application.train_effect_model import (
+            CorpusFacts,
+            RunSpec,
+            TrainEffectModelConfig,
+        )
+        from effects.domain.ability_encoder import AbilityEncoder
+        from effects.domain.effect_head_input import (
+            ABILITY_FEATURE_WIDTH,
+            SlotKind,
+            feature_widths,
+        )
+        from effects.infrastructure.shard_io import read_shard
+        from tests.unit.effects.builders import GEN3_RECORDS
+
+        cards = tmp_path / "cardsfolder"
+        (cards / "s").mkdir(parents=True)
+        write_sidecar(
+            _sidecar("cardsfolder/s/serra_angel.txt", 3),
+            sidecar_path_for(cards / "s" / "serra_angel.txt"),
+        )
+        (cards / "s" / "serra_angel.txt").write_text(
+            "name: serra angel\nstatic[0]: creatures you control get +1/+1\n"
+            "static[1]: flying\nstatic[2]: vigilance\nstatic[3]: creatures you control\n"
+            "static[4]: flying\nstatic[5]: vigilance\n",
+            encoding="utf-8",
+        )
+        vocab = tmp_path / "vocab.txt"
+        vocab.write_text("\n".join([
+            "[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "creatures",
+            "you", "control", "get", "flying", "vigilance", "1",
+        ]) + "\n", encoding="utf-8")
+        keywords = tmp_path / "kw.json"
+        keywords.write_text("{}", encoding="utf-8")
+
+        widths = feature_widths(list(read_shard(GEN3_RECORDS)))
+        model_config = EffectModelConfig(
+            global_features=widths[SlotKind.GLOBAL], act_features=widths[SlotKind.ACT],
+            player_features=widths[SlotKind.PLAYER], card_features=widths[SlotKind.CARD],
+            ability_features=ABILITY_FEATURE_WIDTH, d_model=16, n_layers=1, n_heads=2,
+            ff_dim=32, encoder_d_model=32,
+        )
+        encoder_config = AbilityEncoderConfig(vocab_size=12, d_model=32, n_layers=1, n_heads=2)
+        torch.manual_seed(0)
+        store = EffectModelStore(tmp_path / "models" / "effect-model")
+        store.save(EffectCheckpoint(
+            encoder_config=encoder_config, model_config=model_config,
+            encoder_state=AbilityEncoder(encoder_config).state_dict(),
+            model_state=EffectModel(model_config).state_dict(),
+            provenance=SplitProvenance(
+                vocab_path=str(vocab), keyword_definitions_path=str(keywords),
+                vocab_hash=content_hash(vocab),
+                keyword_definitions_hash=content_hash(keywords),
+            ),
+            training_settings=training_settings(
+                RunSpec(TrainEffectModelConfig(corpus="unused"), CorpusFacts(), seed=1),
+                api_types=[], param_keys=[],
+            ),
+        ))
+        return store.latest_path(), cards
+
+    def test_the_command_writes_the_256_wide_cache_from_the_checkpoint_alone(
+        self, checkpoint, tmp_path,
+    ):
+        from effects.infrastructure.cli import build_parser
+
+        path, cards = checkpoint
+        out = tmp_path / "abilities"
+        args = build_parser().parse_args([
+            "encode-abilities", "--checkpoint", str(path), "--cards-folder", str(cards),
+            "--output-root", str(out),
+        ])
+        assert args.func(args) == 0
+        rows = AbilityCacheStore(out, variant=Baseline.FULL).read(
+            "cardsfolder/s/serra_angel.txt")
+        assert rows.shape == (3, 256) and rows.dtype == np.float32
+        assert not np.allclose(rows[0], rows[1]) and not np.allclose(rows[1], rows[2])
+
+    def test_the_checkpoint_loads_whole_at_the_gen3_layout(self, checkpoint):
+        from effects.domain.effect_head_input import INPUT_LAYOUT_KEY
+        from effects.infrastructure.effect_model_store import (
+            load_effect_checkpoint,
+            load_weights,
+        )
+
+        loaded = load_effect_checkpoint(checkpoint[0])
+        assert loaded.training_settings[INPUT_LAYOUT_KEY] == "gen-3"
+        encoder, model = load_weights(loaded, torch.device("cpu"))
+        assert encoder.config.e_dim == model.config.e_dim == 256
+
+
 class TestProseOfAVariant:
     def test_a_variants_source_script_is_not_read_as_prose(self, tmp_path):
         """The trainer encodes a variant from its script; the cache must too."""
