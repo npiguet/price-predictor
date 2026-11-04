@@ -19,6 +19,10 @@ DEFAULT_RANDOM_SEAT_SHARE = 0.0
 #: Only ever travels beside a share of 0: a share above zero without an
 #: explicit ``P`` is refused (FR-026).
 DEFAULT_RANDOM_SEAT_PROBABILITY = 0.0
+#: Directed forks (FR-012): at most two a game, and a quarter of the
+#: boundaries where an enabled rule's precondition holds.
+DEFAULT_DIRECTED_FORKS_PER_GAME = 2
+DEFAULT_DIRECTED_FORK_PROBABILITY = 0.25
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +57,13 @@ class CollectionCaps:
     #: Whether each worker appends its games' dropped-event counts beside its
     #: shard, for the supervisor to sum and print when the run ends (FR-041).
     count_dropped_events: bool = False
+    #: The rules directed forks are taken for (``collect-variants``; never
+    #: ``collect-coverage``, whose ``--directed-fork-rules`` only aims its
+    #: records); empty takes none. Comma-joined, blank when empty.
+    directed_fork_rules: tuple[str, ...] = ()
+    directed_forks_per_game: int = DEFAULT_DIRECTED_FORKS_PER_GAME
+    #: The chance a boundary where an enabled rule's precondition holds forks.
+    directed_fork_probability: float = DEFAULT_DIRECTED_FORK_PROBABILITY
 
     def as_system_properties(self) -> dict[str, str]:
         """The `-D effect.*` properties the worker reads them back from."""
@@ -70,7 +81,10 @@ def _property_name(field_name: str) -> str:
 
 
 def _property_value(value: object) -> str:
-    """A flag as the ``true``/``false`` the worker's flag reader expects."""
+    """A flag as the ``true``/``false`` the worker's flag reader expects, and a
+    list comma-joined, as its list reader splits it."""
     if isinstance(value, bool):
         return "true" if value else "false"
+    if isinstance(value, tuple):
+        return ",".join(value)
     return str(value)

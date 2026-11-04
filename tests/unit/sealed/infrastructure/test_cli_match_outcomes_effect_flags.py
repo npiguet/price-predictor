@@ -233,3 +233,59 @@ class TestDecisionSamplingRates:
         args = parse("match-outcomes", "--zone-candidate-rate", "0.5")
         assert run_match_outcomes(args) == 2
         assert "--zone-candidate-rate" in capsys.readouterr().err
+
+
+class TestDirectedForkFlags:
+    """FR-012, FR-014: the three directed-fork flags, their properties, and
+    the startup check that exits 1 naming the rule before any game."""
+
+    def test_the_defaults_are_the_contracts(self):
+        args = parse("match-outcomes")
+        assert args.directed_fork_rules == ()
+        assert args.directed_forks_per_game == 2
+        assert args.directed_fork_probability == 0.25
+
+    def test_the_rules_are_comma_separated_and_blanks_dropped(self):
+        args = parse("match-outcomes", "--directed-fork-rules", "704.5f, ,702.19b")
+        assert args.directed_fork_rules == ("704.5f", "702.19b")
+
+    def test_the_flags_reach_the_worker_properties(self):
+        properties = _effect_collection_caps(parse(
+            "match-outcomes", "--directed-fork-rules", "704.5f",
+            "--directed-forks-per-game", "1", "--directed-fork-probability", "0.5",
+        ))
+        assert properties["effect.directed.fork.rules"] == "704.5f"
+        assert properties["effect.directed.forks.per.game"] == "1"
+        assert properties["effect.directed.fork.probability"] == "0.5"
+
+    def test_no_rule_sends_a_blank_list(self):
+        assert _effect_collection_caps(parse("match-outcomes"))[
+            "effect.directed.fork.rules"
+        ] == ""
+
+    @staticmethod
+    def _refused(monkeypatch, capsys, *argv) -> str:
+        import sealed.application.match_outcomes as module
+
+        def no_supervisor(*args, **kwargs):
+            raise AssertionError("a refused run must not start a supervisor")
+
+        monkeypatch.setattr(module, "MatchOutcomeSupervisor", no_supervisor)
+        assert run_match_outcomes(parse("match-outcomes", *argv)) == 1
+        return capsys.readouterr().err
+
+    def test_a_probability_outside_the_interval_exits_1(self, monkeypatch, capsys):
+        err = self._refused(monkeypatch, capsys, "--directed-fork-probability", "0")
+        assert "--directed-fork-probability must be in (0, 1]" in err
+
+    def test_an_unknown_rule_exits_1_naming_it(self, monkeypatch, capsys):
+        err = self._refused(monkeypatch, capsys, "--directed-fork-rules", "no-such-rule")
+        assert "no-such-rule" in err
+
+    def test_an_unregistered_rule_exits_1_naming_it(self, monkeypatch, capsys):
+        """704.5f passes the catalogue's checks; the JVM, stubbed, lists none."""
+        import sealed.infrastructure.effect_collection_flags as flags
+
+        monkeypatch.setattr(flags, "registered_directed_rules", lambda: frozenset())
+        err = self._refused(monkeypatch, capsys, "--directed-fork-rules", "704.5f")
+        assert "704.5f has no board precondition registered" in err

@@ -18,6 +18,8 @@ from sealed.infrastructure.cli_resume import (
 from sealed.infrastructure.effect_collection_flags import (
     COUNT_DROPPED_EVENTS_PROPERTY,
     EFFECT_COUNT_DROPPED_EVENTS,
+    EFFECT_DIRECTED_FORK_PROBABILITY,
+    EFFECT_DIRECTED_FORK_RULES,
     EFFECT_INTERVENTIONS_PER_GAME,
     EFFECT_MANA_CAP,
     EFFECT_PLAIN_CANDIDATE_RATE,
@@ -28,8 +30,11 @@ from sealed.infrastructure.effect_collection_flags import (
     EFFECT_RANDOM_SEAT_SHARE,
     EFFECT_ZONE_CANDIDATE_RATE,
     add_cap_flags,
+    add_directed_fork_flags,
     announce_probe_state,
     candidate_rate_error,
+    directed_fork_error,
+    directed_fork_properties,
     random_seat_error,
 )
 from sealed.infrastructure.match_worker_connector import DEFAULT_SIDE_B_DECKS_WEIGHT
@@ -1039,6 +1044,7 @@ def _effect_collection_caps(args: argparse.Namespace) -> dict[str, str]:
             "true" if getattr(args, "count_dropped_events", EFFECT_COUNT_DROPPED_EVENTS)
             else "false"
         ),
+        **directed_fork_properties(args),
     }
 
 
@@ -1054,6 +1060,7 @@ def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
         ),
     )
     add_cap_flags(parser)
+    add_directed_fork_flags(parser)
 
 
 def check_random_seat_flags(args: argparse.Namespace) -> str | None:
@@ -1780,6 +1787,16 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
     if rate_error is not None:
         print(f"Error: {rate_error}", file=sys.stderr)
         return 2
+
+    # FR-014: exit 1 naming the rule, before any game. One JVM query, and
+    # only when a rule is listed.
+    directed_error = directed_fork_error(
+        getattr(args, "directed_fork_rules", EFFECT_DIRECTED_FORK_RULES),
+        getattr(args, "directed_fork_probability", EFFECT_DIRECTED_FORK_PROBABILITY),
+    )
+    if directed_error is not None:
+        print(f"Error: {directed_error}", file=sys.stderr)
+        return 1
 
     output_path = Path("output") / "sealed" / "match-outcomes.txt"
     side_a_decks = Path(args.side_a_decks) if args.side_a_decks else None

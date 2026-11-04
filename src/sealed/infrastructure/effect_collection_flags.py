@@ -10,7 +10,9 @@ cannot drift into collecting under different defaults. Loads no torch: the
 from __future__ import annotations
 
 import argparse
+import json
 from collections import Counter
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 EFFECT_MANA_CAP = 1
@@ -36,6 +38,19 @@ EFFECT_RANDOM_SEAT_PROBABILITY = 0.0
 EFFECT_COUNT_DROPPED_EVENTS = False
 #: The property ``--count-dropped-events`` travels to the worker as.
 COUNT_DROPPED_EVENTS_PROPERTY = "effect.count.dropped.events"
+#: Directed forks (FR-012): no rule unless a run names one, at most two a
+#: game beside the other fork budgets, and a quarter of the boundaries where
+#: an enabled rule's precondition holds.
+EFFECT_DIRECTED_FORK_RULES: tuple[str, ...] = ()
+EFFECT_DIRECTED_FORKS_PER_GAME = 2
+EFFECT_DIRECTED_FORK_PROBABILITY = 0.25
+DIRECTED_FORK_RULES_PROPERTY = "effect.directed.fork.rules"
+DIRECTED_FORKS_PER_GAME_PROPERTY = "effect.directed.forks.per.game"
+DIRECTED_FORK_PROBABILITY_PROPERTY = "effect.directed.fork.probability"
+#: The rules catalogue the startup check reads (``rules/README.md``).
+DEFAULT_RULES_DIR = Path("rules")
+#: Prints the rule ids the worker holds a board precondition for.
+DIRECTED_RULES_MAIN = "com.pricepredictor.connector.DirectedRulesMain"
 
 #: The file each worker lifetime appends its games' dropped-event counts to,
 #: beside its shard: ``{run_id}.{worker}-{lifetime}`` then this. The JVM's
@@ -117,6 +132,167 @@ def add_cap_flags(parser: argparse.ArgumentParser) -> None:
             "run ends"
         ),
     )
+
+
+def rule_list(text: str) -> tuple[str, ...]:
+    """``--directed-fork-rules``: comma-separated rule ids, blanks dropped, so
+    an empty value names no rule."""
+    return tuple(rule.strip() for rule in text.split(",") if rule.strip())
+
+
+def add_directed_fork_flags(parser: argparse.ArgumentParser) -> None:
+    """The directed-fork flags of ``match-outcomes`` and ``collect-variants``
+    (FR-012). ``collect-coverage`` takes ``--directed-fork-rules`` as a label
+    only and none of these."""
+    parser.add_argument(
+        "--directed-fork-rules", type=rule_list, default=EFFECT_DIRECTED_FORK_RULES,
+        help=(
+            "Comma-separated rule ids to take directed forks for, each with a "
+            "board precondition in forge-connector; the order breaks a tie "
+            "between rules matching one boundary (default: none)"
+        ),
+    )
+    parser.add_argument(
+        "--directed-forks-per-game", type=int, default=EFFECT_DIRECTED_FORKS_PER_GAME,
+        help=(
+            "Directed forks per game, kept or discarded, a budget beside the "
+            "other forks' (default: %(default)s)"
+        ),
+    )
+    parser.add_argument(
+        "--directed-fork-probability", type=float,
+        default=EFFECT_DIRECTED_FORK_PROBABILITY,
+        help=(
+            "Chance a phase boundary where an enabled rule's precondition holds "
+            "forks, in (0, 1] (default: %(default)s)"
+        ),
+    )
+
+
+def directed_fork_properties(args: argparse.Namespace) -> dict[str, str]:
+    """The directed-fork flags as the ``-D`` properties the worker reads; a
+    command without them sends the defaults, which name no rule."""
+    rules = getattr(args, "directed_fork_rules", EFFECT_DIRECTED_FORK_RULES)
+    return {
+        DIRECTED_FORK_RULES_PROPERTY: ",".join(rules),
+        DIRECTED_FORKS_PER_GAME_PROPERTY: str(
+            getattr(args, "directed_forks_per_game", EFFECT_DIRECTED_FORKS_PER_GAME)
+        ),
+        DIRECTED_FORK_PROBABILITY_PROPERTY: str(
+            getattr(args, "directed_fork_probability", EFFECT_DIRECTED_FORK_PROBABILITY)
+        ),
+    }
+
+
+_DETECTOR_RANK = {"missing": 0, "none": 1, "declared": 2}
+
+
+def rule_readiness(rules_dir: Path = DEFAULT_RULES_DIR) -> dict[str, tuple[str, bool]]:
+    """Per rule id of the catalogue: its detector state, and whether a
+    contrasting variant of one of its scenarios is classified into a fork
+    operation.
+
+    The detector state is ``"declared"`` when some scenario listing the rule
+    declares a detector family, else ``"none"`` when one declares
+    ``{"none": reason}``, else ``"missing"``. The base variant, the first,
+    makes nothing, and an unclassifiable variant's operation is an object.
+
+    Read here rather than through ``effects.infrastructure.rules_catalogue_io``,
+    which this package may not import; ``test_directed_fork_flags.py`` pins the
+    two readings together over the real catalogue.
+    """
+    detector: dict[str, str] = {}
+    forkable: dict[str, bool] = {}
+    for path in sorted(Path(rules_dir, "scenarios").glob("*.json")):
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        for scenario in doc.get("scenarios") or ():
+            declaration = scenario.get("detector")
+            if declaration is None:
+                state = "missing"
+            elif "none" in declaration:
+                state = "none"
+            else:
+                state = "declared"
+            classified = any(
+                isinstance(variant.get("operation"), str)
+                for variant in (scenario.get("variants") or ())[1:]
+            )
+            for rule in scenario.get("rules") or ():
+                if _DETECTOR_RANK[state] >= _DETECTOR_RANK[detector.get(rule, "missing")]:
+                    detector[rule] = state
+                forkable[rule] = forkable.get(rule, False) or classified
+    return {rule: (detector[rule], forkable[rule]) for rule in detector}
+
+
+def registered_directed_rules() -> frozenset[str]:
+    """The rule ids one run of ``DirectedRulesMain`` prints: those the worker
+    holds a board precondition for (FR-014).
+
+    Raises ``RuntimeError`` when the query fails, and ``FileNotFoundError``
+    when the connector JAR or java is missing.
+    """
+    from price_predictor.infrastructure.forge_jvm import run_forge_worker
+
+    result = run_forge_worker(DIRECTED_RULES_MAIN, input_text="")
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"DirectedRulesMain exited {result.returncode}: {(result.stderr or '').strip()}"
+        )
+    return frozenset(line.strip() for line in result.stdout.splitlines() if line.strip())
+
+
+def directed_fork_error(
+    rules: Sequence[str],
+    probability: float,
+    *,
+    rules_dir: Path = DEFAULT_RULES_DIR,
+    registered: Callable[[], frozenset[str]] | None = None,
+) -> str | None:
+    """Why the directed-fork flags cannot run, naming the rule, or None when
+    they can (FR-014): the startup check of ``match-outcomes`` and
+    ``collect-variants``, never of ``collect-coverage``, whose
+    ``--directed-fork-rules`` is a label only.
+
+    A listed rule needs a detector declared in its scenarios (not ``none``),
+    a contrasting variant classified into a fork operation, and a board
+    precondition registered in ``forge-connector``, which one run of
+    ``DirectedRulesMain`` lists. The JVM is asked once the catalogue's checks
+    pass, and not at all when no rule is listed; ``registered`` replaces that
+    query, for a test.
+    """
+    if not 0.0 < probability <= 1.0:
+        return f"--directed-fork-probability must be in (0, 1], got {probability}"
+    if not rules:
+        return None
+    readiness = rule_readiness(rules_dir)
+    for rule in rules:
+        detector, forkable = readiness.get(rule, ("missing", False))
+        if detector == "missing":
+            return (
+                f"--directed-fork-rules: {rule} has no detector declaration "
+                f"in {Path(rules_dir, 'scenarios')}"
+            )
+        if detector == "none":
+            return (
+                f"--directed-fork-rules: {rule} declares its detector none, so "
+                "no record of its fork could be tagged"
+            )
+        if not forkable:
+            return (
+                f"--directed-fork-rules: {rule} has no contrasting variant "
+                "classified into a fork operation"
+            )
+    try:
+        known = (registered or registered_directed_rules)()
+    except (OSError, RuntimeError) as exc:
+        return f"--directed-fork-rules: cannot list the registered rules: {exc}"
+    for rule in rules:
+        if rule not in known:
+            return (
+                f"--directed-fork-rules: {rule} has no board precondition "
+                "registered in forge-connector (DirectedRulesMain does not list it)"
+            )
+    return None
 
 
 def random_seat_error(args: argparse.Namespace) -> str | None:

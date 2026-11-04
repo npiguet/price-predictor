@@ -33,6 +33,7 @@ from effects.domain.script_variants import (
 from effects.domain.split import HeldOutCards
 from effects.infrastructure.one_shot_workers import write_variant_sidecars
 from price_predictor.infrastructure.card_filenames import sanitize_card_name
+from sealed.infrastructure.effect_collection_flags import directed_fork_error
 
 logger = logging.getLogger(__name__)
 
@@ -241,6 +242,7 @@ def run(config: CollectVariantsConfig) -> int:
 def _collect(config: CollectVariantsConfig) -> int:
     """:func:`run`'s steps, each raising :class:`CollectorAbort` once there
     is nothing left to play."""
+    _check_directed_forks(config)
     if not config.forge_cards_path.is_dir():
         logger.error(
             "No Forge card scripts at %s. This command reads the *source* "
@@ -253,6 +255,17 @@ def _collect(config: CollectVariantsConfig) -> int:
     _write_sidecars(config.variant_scripts)
     variants = _keep_unheld(config, _keep_loadable(variants, config.variant_scripts))
     return _play_and_check_growth(config, variants, budget)
+
+
+def _check_directed_forks(config: CollectVariantsConfig) -> None:
+    """The startup check ``match-outcomes`` runs (FR-014): aborts naming the
+    rule before any variant is written when a listed rule cannot fork."""
+    error = directed_fork_error(
+        config.caps.directed_fork_rules, config.caps.directed_fork_probability,
+    )
+    if error is not None:
+        logger.error("collect-variants: %s", error)
+        raise CollectorAbort
 
 
 def _size_budget(config: CollectVariantsConfig, scripts: int) -> int:

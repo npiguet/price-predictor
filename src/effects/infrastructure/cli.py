@@ -59,9 +59,11 @@ from effects.domain.text_holdout import HoldoutUnit
 from price_predictor.domain.dataclass_defaults import field_default
 from sealed.infrastructure.effect_collection_flags import (
     add_cap_flags,
+    add_directed_fork_flags,
     announce_probe_state,
     candidate_rate_error,
     random_seat_error,
+    rule_list,
 )
 
 logger = logging.getLogger(__name__)
@@ -437,12 +439,10 @@ def _collect_variants_parser(subparsers) -> None:
     _add_holdout_flags(parser)
     add_config_flags(parser, CollectVariantsConfig, only=("decks_per_round", "workers"))
     add_cap_flags(parser)
-
-
-def rule_list(text: str) -> tuple[str, ...]:
-    """``--directed-fork-rules``: comma-separated rule ids, blanks dropped, so
-    an empty value names no rule."""
-    return tuple(rule.strip() for rule in text.split(",") if rule.strip())
+    # Directed forks run here as on match-outcomes, startup check included
+    # (collect_variants.run); the rules also aim every record.
+    add_directed_fork_flags(parser)
+    parser.set_defaults(takes_directed_forks=True)
 
 
 def collection_caps(args: argparse.Namespace) -> CollectionCaps:
@@ -450,7 +450,10 @@ def collection_caps(args: argparse.Namespace) -> CollectionCaps:
 
     Every record of either is aimed (FR-009a): ``aimed_at`` lists the run's
     ``--directed-fork-rules``, and is empty, never absent, where it names none.
+    Only ``collect-variants`` takes directed forks for them (FR-012); on
+    ``collect-coverage`` the list is a label and no fork is taken.
     """
+    rules = tuple(getattr(args, "directed_fork_rules", ()))
     # An unset --random-seat-probability is None so a share above 0 without
     # one can be refused; with the share at 0 the worker never reads it.
     probability = args.random_seat_probability
@@ -459,7 +462,8 @@ def collection_caps(args: argparse.Namespace) -> CollectionCaps:
         random_seat_probability=(
             DEFAULT_RANDOM_SEAT_PROBABILITY if probability is None else probability
         ),
-        aimed_at=tuple(getattr(args, "directed_fork_rules", ())),
+        aimed_at=rules,
+        directed_fork_rules=rules if getattr(args, "takes_directed_forks", False) else (),
     )
 
 

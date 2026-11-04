@@ -17,6 +17,8 @@ from pathlib import Path
 import pytest
 
 from effects.domain.collection_caps import (
+    DEFAULT_DIRECTED_FORK_PROBABILITY,
+    DEFAULT_DIRECTED_FORKS_PER_GAME,
     DEFAULT_INTERVENTIONS_PER_GAME,
     DEFAULT_MANA_CAP,
     DEFAULT_PLAIN_CANDIDATE_RATE,
@@ -33,6 +35,9 @@ from sealed.infrastructure.cli import _effect_collection_caps
 from sealed.infrastructure.effect_collection_flags import (
     DROPPED_EVENTS_SUFFIX,
     EFFECT_COUNT_DROPPED_EVENTS,
+    EFFECT_DIRECTED_FORK_PROBABILITY,
+    EFFECT_DIRECTED_FORK_RULES,
+    EFFECT_DIRECTED_FORKS_PER_GAME,
     EFFECT_INTERVENTIONS_PER_GAME,
     EFFECT_MANA_CAP,
     EFFECT_PLAIN_CANDIDATE_RATE,
@@ -90,6 +95,9 @@ class TestTheTwoSidesAgree:
         assert EFFECT_RANDOM_SEAT_SHARE == DEFAULT_RANDOM_SEAT_SHARE
         assert EFFECT_RANDOM_SEAT_PROBABILITY == DEFAULT_RANDOM_SEAT_PROBABILITY
         assert EFFECT_COUNT_DROPPED_EVENTS == CollectionCaps().count_dropped_events
+        assert EFFECT_DIRECTED_FORK_RULES == CollectionCaps().directed_fork_rules
+        assert EFFECT_DIRECTED_FORKS_PER_GAME == DEFAULT_DIRECTED_FORKS_PER_GAME
+        assert EFFECT_DIRECTED_FORK_PROBABILITY == DEFAULT_DIRECTED_FORK_PROBABILITY
 
     def test_the_property_names_match(self):
         """Both sides must spell the -D properties the worker reads identically."""
@@ -257,3 +265,53 @@ class TestTheRandomSeat:
         assert _effect_collection_caps(args)["effect.random.seat.probability"] == (
             str(DEFAULT_RANDOM_SEAT_PROBABILITY)
         )
+
+
+class TestTheDirectedForks:
+    """FR-012: no rule, two a game and a quarter of matching boundaries by
+    default, spelled alike on both sides and in the JVM's defaults."""
+
+    def test_the_defaults(self):
+        assert CollectionCaps().directed_fork_rules == ()
+        assert DEFAULT_DIRECTED_FORKS_PER_GAME == 2
+        assert DEFAULT_DIRECTED_FORK_PROBABILITY == 0.25
+
+    def test_the_property_spellings(self):
+        properties = CollectionCaps(
+            directed_fork_rules=("704.5f", "702.19b"), directed_forks_per_game=3,
+            directed_fork_probability=1.0,
+        ).as_system_properties()
+        assert properties["effect.directed.fork.rules"] == "704.5f,702.19b"
+        assert properties["effect.directed.forks.per.game"] == "3"
+        assert properties["effect.directed.fork.probability"] == "1.0"
+
+    def test_no_rule_travels_blank_and_takes_no_fork(self):
+        assert CollectionCaps().as_system_properties()["effect.directed.fork.rules"] == ""
+
+    def test_the_sealed_supervisor_writes_the_same_properties(self):
+        args = argparse.Namespace(
+            directed_fork_rules=("704.5f", "702.19b"), directed_forks_per_game=3,
+            directed_fork_probability=1.0,
+        )
+        assert {
+            key: value for key, value in _effect_collection_caps(args).items()
+            if key.startswith("effect.directed.")
+        } == {
+            "effect.directed.fork.rules": "704.5f,702.19b",
+            "effect.directed.forks.per.game": "3",
+            "effect.directed.fork.probability": "1.0",
+        }
+
+    @pytest.mark.skipif(
+        not _JAVA_CAPS.exists(), reason="the connector source is not checked out"
+    )
+    def test_the_jvm_defaults_are_the_same(self):
+        """A worker started without the properties takes none, at the same
+        budget and probability a supervisor would send."""
+        source = _JAVA_CAPS.read_text(encoding="utf-8")
+        defaults = re.search(
+            r"Optional\.empty\(\), false,\s*List\.of\(\), (\d+), ([0-9.]+)\);", source
+        )
+        assert defaults is not None
+        assert int(defaults.group(1)) == DEFAULT_DIRECTED_FORKS_PER_GAME
+        assert float(defaults.group(2)) == DEFAULT_DIRECTED_FORK_PROBABILITY

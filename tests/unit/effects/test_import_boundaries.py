@@ -49,7 +49,8 @@ _ALLOWED: dict[str, set[str] | None] = {
     # match-outcomes and the effects collectors alike.
     "sealed.infrastructure.effect_collection_flags": {
         "add_cap_flags", "announce_probe_state", "dropped_events_report",
-        "random_seat_error",
+        "random_seat_error", "candidate_rate_error", "add_directed_fork_flags",
+        "rule_list", "directed_fork_error",
     },
     "sealed.infrastructure.match_worker_connector": {"MatchWorkerConnector"},
     "sealed.infrastructure.pool_file_reader": {"format_generated_deck"},

@@ -24,10 +24,16 @@ from sealed.infrastructure.cli import build_parser as sealed_parser
 #: ``random_seat_probability`` is left out: its flag defaults to None so that a
 #: share above 0 without it can be refused (FR-026). So is ``aimed_at``, which
 #: no cap flag sets: the collectors stamp it from ``--directed-fork-rules``.
+#: So are the directed-fork caps, which only ``collect-variants`` takes
+#: (``DIRECTED_DEFAULTS``): on ``collect-coverage`` the rules are a label.
+DIRECTED_CAPS = ("directed_fork_rules", "directed_forks_per_game", "directed_fork_probability")
 CAP_DEFAULTS = {
     spec.name: spec.default
     for spec in fields(CollectionCaps)
-    if spec.name not in ("random_seat_probability", "aimed_at")
+    if spec.name not in ("random_seat_probability", "aimed_at", *DIRECTED_CAPS)
+}
+DIRECTED_DEFAULTS = {
+    spec.name: spec.default for spec in fields(CollectionCaps) if spec.name in DIRECTED_CAPS
 }
 
 
@@ -398,3 +404,53 @@ class TestEveryCollectorRecordIsAimed:
                 "collect-coverage", "--directed-fork-rules", "no-such-rule",
             )) == 0
         collect.assert_called_once()
+
+
+class TestDirectedForksOnCollectVariants:
+    """FR-012, contracts/cli.md § collect-variants: the three flags as on
+    ``match-outcomes``, with the same startup check; the rules both take
+    directed forks and aim every record."""
+
+    def test_the_defaults_are_the_contracts(self):
+        args = parse("collect-variants")
+        for name, default in DIRECTED_DEFAULTS.items():
+            assert getattr(args, name) == default, name
+        assert args.directed_fork_rules == ()
+        assert args.directed_forks_per_game == 2
+        assert args.directed_fork_probability == 0.25
+
+    def test_the_flags_reach_the_worker_properties(self):
+        from effects.infrastructure.cli import collection_caps
+
+        caps = collection_caps(parse(
+            "collect-variants", "--directed-fork-rules", "704.5f,702.19b",
+            "--directed-forks-per-game", "3", "--directed-fork-probability", "1",
+        ))
+        properties = caps.as_system_properties()
+        assert properties["effect.directed.fork.rules"] == "704.5f,702.19b"
+        assert properties["effect.directed.forks.per.game"] == "3"
+        assert properties["effect.directed.fork.probability"] == "1.0"
+        assert caps.aimed_at == ("704.5f", "702.19b")
+
+    def test_collect_coverage_takes_only_the_label(self):
+        """No directed fork runs on a coverage round: its rules aim the
+        records and reach no fork property."""
+        from effects.infrastructure.cli import collection_caps
+
+        with pytest.raises(SystemExit):
+            parse("collect-coverage", "--directed-forks-per-game", "3")
+        with pytest.raises(SystemExit):
+            parse("collect-coverage", "--directed-fork-probability", "1")
+        caps = collection_caps(parse("collect-coverage", "--directed-fork-rules", "704.5f"))
+        assert caps.directed_fork_rules == ()
+        assert caps.as_system_properties()["effect.directed.fork.rules"] == ""
+        assert caps.aimed_at == ("704.5f",)
+
+    def test_the_rules_reach_the_config_the_collector_checks(self):
+        from unittest.mock import patch
+
+        with patch("effects.application.collect_variants.run", return_value=0) as collect:
+            assert run_collect_variants(parse(
+                "collect-variants", "--directed-fork-rules", "704.5f",
+            )) == 0
+        assert collect.call_args.args[0].caps.directed_fork_rules == ("704.5f",)
