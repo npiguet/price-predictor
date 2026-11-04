@@ -7,6 +7,10 @@ Subcommands:
   packets   group units into agent work packets (rules/packets.json)
   validate  check every triage and scenario sidecar against the rules index and Forge's cardsfolder
   status    regenerate rules/STATUS.md from the sidecars
+  directed-rules --counts FILE
+            write rules/directed-fork-rules.txt (the rules enabled for directed forks) and
+            rules/coverage-wording-cards.txt (the cards of their scenarios) from gen-2's
+            per-rule counts
 
 A unit is a three-digit section (704), except sections 701 and 702, whose units are their
 second-level rules (702.2, one keyword each), because those two sections hold a third of all rules.
@@ -17,8 +21,9 @@ import json
 import re
 import sys
 from collections import Counter, defaultdict
+from pathlib import Path
 
-from _lib.paths import FORGE_RES, REPO
+from _lib.paths import FORGE_RES, OUTPUT, REPO
 
 from effects.domain import rule_catalogue
 
@@ -724,6 +729,147 @@ def cmd_status(_args):
     print(f"triaged {n_tri}/{len(counts)}, scenario units {n_scen}, scenarios {n_pairs}")
 
 
+#: Fewer `fires` records than this over all sources makes a rule rare (FR-014b).
+RARE_FIRES = 100
+#: Enabled for directed forks whatever its counts (FR-014b).
+ALWAYS_DIRECTED = ("704.5f",)
+FIRES, DOES_NOT_FIRE = "fires", "does_not_fire"
+
+
+def rule_unit(rule_id):
+    section, _, rest = rule_id.partition(".")
+    return unit_of(section, re.match(r"\d+", rest).group(0))
+
+
+def load_scenarios_by_rule(rules_dir):
+    """``rule id -> [scenario, …]`` over every scenarios file under ``rules_dir``."""
+    by_rule = defaultdict(list)
+    paths = sorted((rules_dir / "scenarios").glob("*.json"), key=lambda p: unit_sort_key(p.stem))
+    for path in paths:
+        for scenario in json.loads(path.read_text(encoding="utf-8")).get("scenarios", []):
+            for rule in scenario.get("rules", []):
+                by_rule[rule].append(scenario)
+    return by_rule
+
+
+def counted_on_gen2(scenario):
+    """Whether the scenario's detector tags gen-2 records: a family declared
+    over a record kind gen-2 writes, and no gen-3 field read, by the
+    declaration or by the family's params."""
+    from effects.domain.records import RecordKind
+    from effects.domain.rule_detectors import families
+
+    declaration = scenario.get("detector") or {}
+    family = families().get(declaration.get("family"))
+    return (family is not None and declaration.get("record_kind") != RecordKind.TURN_ACTION
+            and not declaration.get("needs")
+            and not family.needs(declaration.get("params") or {}))
+
+
+def rule_counts(counts, rule, scenarios):
+    """``(fires, does_not_fire)`` over all sources, or None where the counts
+    cannot speak for the rule. The counts list only rules some record tagged,
+    so a rule they omit has none of either when a detector of its tags gen-2
+    records; one not countable there, declared ``none``, or with no gen-2
+    detector is not shown by them at all."""
+    found = counts["rules"].get(rule)
+    if found is not None:
+        return (sum(found.get(FIRES, {}).values()), sum(found.get(DOES_NOT_FIRE, {}).values()))
+    if rule in counts["not_countable"] or rule in counts["none"]:
+        return None
+    return (0, 0) if any(counted_on_gen2(s) for s in scenarios) else None
+
+
+def lacking_polarities(fires, does_not_fire):
+    """The sides the counts lack: `fires` on a rare rule, `does_not_fire` on a one-sided one."""
+    return (({FIRES} if fires < RARE_FIRES else set())
+            | ({DOES_NOT_FIRE} if does_not_fire == 0 else set()))
+
+
+def forkable_variants(scenarios, lacking):
+    """``(scenario id, label, polarity, operation)`` of every non-base variant
+    classified into an operation, those of a polarity the counts lack first."""
+    found = [(s["id"], v["label"], v["polarity"], v["operation"])
+             for s in scenarios for v in s.get("variants", [])[1:]
+             if isinstance(v.get("operation"), str)]
+    return sorted(found, key=lambda f: f[2] not in lacking)
+
+
+def directed_rules(counts, by_rule):
+    """The rules FR-014b enables, in unit order: ``rule -> {counts, lacking,
+    variants, by_counts}``; ``by_counts`` is False for a rule listed only as
+    one of ``ALWAYS_DIRECTED``."""
+    out = {}
+    for rule, scenarios in by_rule.items():
+        found = rule_counts(counts, rule, scenarios)
+        lacking = lacking_polarities(*found) if found is not None else set()
+        by_counts = bool(lacking)
+        if not by_counts and rule not in ALWAYS_DIRECTED:
+            continue
+        variants = forkable_variants(scenarios, lacking)
+        if variants:
+            out[rule] = {"counts": found, "lacking": lacking, "variants": variants,
+                         "by_counts": by_counts}
+    return dict(sorted(out.items(), key=lambda item: (unit_sort_key(rule_unit(item[0])),
+                                                      rule_sort_key(item[0]))))
+
+
+def converted_card_of_face(cards_folder):
+    """``face name -> converted card name`` over a converted tree: a scenario
+    may name a back face (Ribbons, a meld result), which the coverage round
+    knows only by the card's own ``name:``, its first."""
+    from price_predictor.domain.tokenizer import extract_card_name
+
+    out = {}
+    for path in cards_folder.rglob("*.txt"):
+        text = path.read_text(encoding="utf-8")
+        card = extract_card_name(text)
+        for line in text.splitlines():
+            if line.startswith("name:"):
+                out.setdefault(line[len("name:"):].strip(), card)
+        out[card] = card
+    return out
+
+
+def wording_cards(chosen, by_rule, card_of_face):
+    """The cards of the scenarios of the rules enabled for their counts, as
+    the converted lower-case names (FR-038a), and the folded names no
+    converted card carries."""
+    from effects.domain.card_names import fold_card_name
+
+    named = {fold_card_name(card) for rule, row in chosen.items() if row["by_counts"]
+             for scenario in by_rule[rule] for card in scenario.get("cards", [])}
+    unknown = sorted(name for name in named if name not in card_of_face)
+    return sorted({card_of_face.get(name, name) for name in named}), unknown
+
+
+def cmd_directed_rules(args):
+    rules_dir = args.rules_dir
+    counts = json.loads(args.counts.read_text(encoding="utf-8"))
+    by_rule = load_scenarios_by_rule(rules_dir)
+    chosen = directed_rules(counts, by_rule)
+    cards, unknown = wording_cards(chosen, by_rule, converted_card_of_face(args.cards_folder))
+    (rules_dir / "directed-fork-rules.txt").write_text(
+        "".join(f"{rule}\n" for rule in chosen), encoding="utf-8", newline="\n")
+    (rules_dir / "coverage-wording-cards.txt").write_text(
+        "".join(f"{card}\n" for card in cards), encoding="utf-8", newline="\n")
+    for rule, row in chosen.items():
+        fires, does_not_fire = row["counts"] if row["counts"] is not None else ("?", "?")
+        why = ", ".join(sorted(({"rare"} if FIRES in row["lacking"] else set())
+                               | ({"one-sided"} if DOES_NOT_FIRE in row["lacking"] else set())))
+        print(f"{rule:12s} fires {fires:>9} does_not_fire {does_not_fire:>9}  {why or 'always'}")
+        for scenario_id, label, polarity, operation in row["variants"]:
+            mark = "*" if polarity in row["lacking"] else " "
+            print(f"    {mark} {scenario_id} {label} ({polarity}): {operation}")
+    rare = sum(FIRES in row["lacking"] for row in chosen.values())
+    one_sided = sum(DOES_NOT_FIRE in row["lacking"] for row in chosen.values())
+    print(f"{len(chosen)} rules ({rare} rare, {one_sided} one-sided, "
+          f"{sum(not row['by_counts'] for row in chosen.values())} always), {len(cards)} wording "
+          f"cards; * marks a variant of a polarity the counts lack")
+    if unknown:
+        print(f"no converted card under {args.cards_folder}: {', '.join(unknown)}")
+
+
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -739,9 +885,18 @@ def main():
     sub.add_parser("status")
     sub.add_parser("premark")
     sub.add_parser("gen3-fields")
+    p = sub.add_parser("directed-rules", help="write the rules enabled for directed forks and "
+                       "the cards of their scenarios (FR-014b, FR-038a)")
+    p.add_argument("--counts", type=Path, required=True,
+                   help="gen-2's per-rule counts, as `effects rule-counts` writes them")
+    p.add_argument("--cards-folder", type=Path, default=OUTPUT / "cardsfolder",
+                   help="the converted card tree whose names the wording list uses "
+                   "(default: %(default)s)")
+    p.add_argument("--rules-dir", type=Path, default=RULES, help=argparse.SUPPRESS)
     args = ap.parse_args()
     {"split": cmd_split, "packets": cmd_packets, "validate": cmd_validate, "status": cmd_status,
-     "premark": cmd_premark, "gen3-fields": cmd_gen3_fields}[args.cmd](args)
+     "premark": cmd_premark, "gen3-fields": cmd_gen3_fields,
+     "directed-rules": cmd_directed_rules}[args.cmd](args)
 
 
 if __name__ == "__main__":

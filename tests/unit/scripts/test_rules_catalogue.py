@@ -6,8 +6,10 @@ one fact its check refuses.
 
 from __future__ import annotations
 
+import argparse
 import copy
 import json
+import sys
 
 import pytest
 import rules_catalogue as rc
@@ -108,3 +110,155 @@ def test_the_real_tree_passes_every_check_but_the_gen3_fields():
             rc.load_unit("scenarios", unit), rc.load_unit("triage", unit), all_ids,
             rc._AnyName())
         assert errors == [], (unit, errors[:3])
+
+
+# --- directed-rules (T095a): the run-time lists of FR-014b and FR-038a ------------------------
+
+
+def _scenario(sid, rules, cards, variants, *, kind="resolution", detector=None):
+    """A scenario shaped like ``rules/scenarios/*.json``'s: a base variant, then
+    ``variants`` as ``(label, polarity, operation)``."""
+    return {
+        "id": sid, "rules": rules, "title": sid, "record_kind": kind,
+        "variants": [{"label": "base", "polarity": "fires", "delta": "", "expected": "e"}]
+        + [{"label": label, "polarity": polarity, "delta": "d", "expected": "e",
+            "operation": operation} for label, polarity, operation in variants],
+        "cards": cards,
+        "detector": detector or {"family": "sba_zone_move", "record_kind": kind,
+                                 "outcome": "o", "near_miss": "n",
+                                 "params": {"check": "toughness_zero"}, "needs": []},
+    }
+
+
+_UNCLASSIFIABLE = {"unclassifiable": "choice: a target"}
+
+
+def _sides(fires, does_not_fire):
+    out = {}
+    if fires:
+        out["fires"] = {"forge_ai": fires - fires // 3, "random_seat": fires // 3}
+    if does_not_fire:
+        out["does_not_fire"] = {"forge_ai": does_not_fire}
+    return out
+
+
+@pytest.fixture
+def catalogue(tmp_path):
+    """A rules dir, a converted tree and gen-2 counts covering each way a rule
+    gets in or stays out."""
+    rules = tmp_path / "rules"
+    (rules / "scenarios").mkdir(parents=True)
+    units = {
+        "121": [_scenario("121.4-1", ["121.4"], ["Mind Rot", "Swamp"],
+                          [("empty", "does_not_fire", "move_card"),
+                           ("hand", "fires", "add_permanent")])],
+        "400": [_scenario("400.6-1", ["400.6"], ["Rest in Peace"],
+                          [("no_replacement", "does_not_fire", "remove_permanent")])],
+        "500": [_scenario("500.1-1", ["500.1"], ["Common Card"],
+                          [("off", "does_not_fire", "tap")]),
+                _scenario("500.2-1", ["500.2"], ["Choice Card"],
+                          [("other_target", "does_not_fire", _UNCLASSIFIABLE)]),
+                _scenario("500.3-1", ["500.3"], ["Unseen Card"],
+                          [("off", "does_not_fire", "life")]),
+                _scenario("500.4-1", ["500.4"], ["Gen3 Card"],
+                          [("off", "does_not_fire", "life")],
+                          detector={"family": "sba_zone_move", "record_kind": "resolution",
+                                    "outcome": "o", "near_miss": "n",
+                                    "params": {"check": "toughness_zero"},
+                                    "needs": ["failed_checks"]}),
+                _scenario("500.5-1", ["500.5"], ["Untap Card"],
+                          [("off", "does_not_fire", "tap")], kind="turn_action",
+                          detector={"family": "outcome_event", "record_kind": "turn_action",
+                                    "outcome": "o", "near_miss": "n",
+                                    "params": {"event": "untapped"}, "needs": []}),
+                _scenario("500.6-1", ["500.6"], ["Uncountable Card"],
+                          [("off", "does_not_fire", "life")])],
+        "702.9": [_scenario("702.9a-1", ["702.9a"], ["Cut"],
+                            [("ribbons", "does_not_fire", "move_card")])],
+        "702.10": [_scenario("702.10b-1", ["702.10b", "702.10c"], ["Ribbons", "Forest"],
+                             [("no_haste", "does_not_fire", "keyword")])],
+        "704": [_scenario("704.5f-1", ["704.5f"], ["Disfigure", "Drudge Skeletons"],
+                          [("counters", "does_not_fire", "counters")])],
+    }
+    for unit, scenarios in units.items():
+        (rules / "scenarios" / f"{unit}.json").write_text(
+            json.dumps({"unit": unit, "verified": True, "scenarios": scenarios}),
+            encoding="utf-8")
+    counts = {
+        "records": 1000,
+        "rules": {
+            "121.4": _sides(0, 94402),       # rare: the fires side is lacking
+            "400.6": _sides(23335, 0),       # one-sided: no does_not_fire record
+            "500.1": _sides(5000, 4000),     # common and two-sided: out
+            "500.2": _sides(3, 0),           # rare, but nothing forkable: out
+            "702.9a": _sides(99, 7),         # one short of common
+            "702.10b": _sides(100, 0),       # common, one-sided
+            "702.10c": _sides(100, 1),       # common and two-sided: out
+            "704.5f": _sides(6814, 15221),   # always, though common
+        },
+        "not_countable": ["500.6"],
+        "none": {},
+        "review": [],
+    }
+    counts_path = tmp_path / "rule-counts-gen2.json"
+    counts_path.write_text(json.dumps(counts), encoding="utf-8")
+    cards = tmp_path / "cardsfolder" / "c"
+    cards.mkdir(parents=True)
+    (cards / "cut_ribbons.txt").write_text(
+        "layout: split\nname: cut\ntypes: sorcery\n\nALTERNATE\n\nname: ribbons\n"
+        "types: sorcery\n", encoding="utf-8")
+    for name in ("mind rot", "swamp", "rest in peace", "unseen card", "forest", "disfigure",
+                 "drudge skeletons"):
+        (cards / f"{name.replace(' ', '_')}.txt").write_text(f"name: {name}\n",
+                                                              encoding="utf-8")
+    return argparse.Namespace(rules_dir=rules, counts=counts_path,
+                              cards_folder=tmp_path / "cardsfolder")
+
+
+def _run(args, capsys):
+    rc.cmd_directed_rules(args)
+    listed = (args.rules_dir / "directed-fork-rules.txt").read_text(encoding="utf-8")
+    cards = (args.rules_dir / "coverage-wording-cards.txt").read_text(encoding="utf-8")
+    return listed.splitlines(), cards.splitlines(), capsys.readouterr().out
+
+
+def test_the_rare_and_one_sided_forkable_rules_and_704_5f_are_listed_by_unit(catalogue, capsys):
+    listed, _, _ = _run(catalogue, capsys)
+    # 500.3 has no record but a detector gen-2 records show: none of either side.
+    assert listed == ["121.4", "400.6", "500.3", "702.9a", "702.10b", "704.5f"]
+
+
+def test_the_wording_cards_are_those_rules_scenarios_cards_as_converted_names(
+        catalogue, capsys):
+    _, cards, out = _run(catalogue, capsys)
+    # Ribbons is Cut's back face; 704.5f's cards are left out, since its counts
+    # do not enable it; a 702.10b scenario's card is in though 702.10c is common.
+    assert cards == ["cut", "forest", "mind rot", "rest in peace", "swamp", "unseen card"]
+    assert "no converted card" not in out
+
+
+def test_a_card_no_converted_file_carries_is_kept_and_named(catalogue, capsys):
+    (catalogue.cards_folder / "c" / "forest.txt").unlink()
+    _, cards, out = _run(catalogue, capsys)
+    assert "forest" in cards
+    assert "no converted card under" in out and out.rstrip().endswith("forest")
+
+
+def test_each_rule_prints_its_counts_and_variants_lacking_polarity_first(catalogue, capsys):
+    _, _, out = _run(catalogue, capsys)
+    block = out[out.index("121.4"):out.index("400.6")].splitlines()
+    assert block[0].split() == ["121.4", "fires", "0", "does_not_fire", "94402", "rare"]
+    assert block[1].split() == ["*", "121.4-1", "hand", "(fires):", "add_permanent"]
+    assert block[2].split() == ["121.4-1", "empty", "(does_not_fire):", "move_card"]
+    assert "704.5f       fires      6814 does_not_fire     15221  always" in out
+    assert out.splitlines()[-1].startswith(
+        "6 rules (3 rare, 3 one-sided, 1 always), 6 wording cards")
+
+
+def test_the_subcommand_is_wired(catalogue, monkeypatch):
+    monkeypatch.setattr(sys, "argv", [
+        "rules_catalogue.py", "directed-rules", "--counts", str(catalogue.counts),
+        "--cards-folder", str(catalogue.cards_folder), "--rules-dir", str(catalogue.rules_dir)])
+    rc.main()
+    assert (catalogue.rules_dir / "directed-fork-rules.txt").read_text(
+        encoding="utf-8").splitlines()[0] == "121.4"
