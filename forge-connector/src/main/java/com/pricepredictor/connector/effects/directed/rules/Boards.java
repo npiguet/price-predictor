@@ -94,6 +94,20 @@ final class Boards {
         return sources.size() == 1 ? Optional.of(sources.get(0)) : Optional.empty();
     }
 
+    /**
+     * A land {@code player} needs every one of for a cost of {@code value}
+     * mana: when the permanents it can make mana with now ({@link #manaSources})
+     * are all lands and number exactly {@code value}, the first of them; else
+     * empty. Without it the cost is one mana short.
+     */
+    static Optional<Card> lastLandFor(Player player, int value) {
+        List<Card> sources = manaSources(player);
+        if (value <= 0 || sources.size() != value || !sources.stream().allMatch(Card::isLand)) {
+            return Optional.empty();
+        }
+        return Optional.of(sources.get(0));
+    }
+
     /** The mana value of a cost's mana part, 0 for none. */
     static int manaValue(Cost cost) {
         return cost == null || cost.getTotalMana() == null ? 0 : cost.getTotalMana().getCMC();
