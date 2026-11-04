@@ -8,8 +8,8 @@ left behind:
 - no row in ``match-outcomes.txt`` or ``cards-played.txt``, though both writers
   are wired and matches completed (FR-025);
 - ``random_seat`` on every record right after ``synthetic``, and varying;
-  ``what_if`` right after it on the two legality subkinds and nowhere else
-  (FR-030, FR-031);
+  ``what_if`` right after it on blockers records and nowhere else, a gen-3
+  attackers record carrying none (FR-030, FR-031);
 - a real attack declaration for every combat, and no legality record that is
   not a real declaration (FR-029);
 - one effect half per chosen mode of a resolved charm, each through its
@@ -169,12 +169,13 @@ def test_both_envelope_fields_are_present_in_order(pilot) -> None:
     if not raw:
         pytest.skip("worker produced no records within the collection window")
 
-    legality = {s.value for s in (PlayabilitySubkind.ATTACKERS, PlayabilitySubkind.BLOCKERS)}
+    # Gen-3 attackers records carry no ``what_if``: blockers alone keep it.
+    with_what_if = {PlayabilitySubkind.BLOCKERS.value}
     for item in raw:
         keys = list(item)
         assert "random_seat" in item, item["record_id"]
         assert keys.index("random_seat") == keys.index("synthetic") + 1, keys
-        if item.get("subkind") in legality:
+        if item.get("subkind") in with_what_if:
             assert keys.index("what_if") == keys.index("random_seat") + 1, keys
         else:
             assert "what_if" not in item, item["record_id"]
@@ -207,14 +208,15 @@ def test_every_real_attack_declaration_is_written(pilot) -> None:
     A combat record means attackers were declared that turn, and the engine's
     declaration hook writes a real ``attackers`` record before the combat it
     opens, whichever seat declared. The hook reports declarations only, so no
-    legality record is a what-if.
+    legality record is a what-if; a gen-3 attackers record carries no
+    ``what_if`` at all, and only a blockers record could say so.
     """
     *_, shards = pilot
     records = [r for _, rs in shards for r in rs]
     real = {
         (r.game_id, r.state.global_.turn)
         for r in records
-        if r.subkind is PlayabilitySubkind.ATTACKERS and r.what_if is False
+        if r.subkind is PlayabilitySubkind.ATTACKERS and not r.fork
     }
     combats = {
         (r.game_id, r.state.global_.turn)
