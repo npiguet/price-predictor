@@ -77,6 +77,25 @@ def test_only_the_current_layout_is_accepted():
     require_input_layout(layout_settings())
     with pytest.raises(CheckpointLayoutError, match="relation_types"):
         require_input_layout({**layout_settings(), "relation_types": ["line_of:forward"]})
-    for settings in ({}, None, {INPUT_LAYOUT_KEY: "gen-1"}, {INPUT_LAYOUT_KEY: "gen-0"}):
+    for settings in ({}, None, {INPUT_LAYOUT_KEY: "gen-1"}, {INPUT_LAYOUT_KEY: "gen-2"},
+                     {**layout_settings(), INPUT_LAYOUT_KEY: "gen-2"}):
         with pytest.raises(CheckpointLayoutError, match=INPUT_LAYOUT):
             require_input_layout(settings)
+
+
+def test_a_fresh_run_records_the_gen3_layout():
+    """FR-045: what a new checkpoint records is what every loader accepts."""
+    from effects.application.run_context import training_settings
+    from effects.application.train_effect_model import (
+        CorpusFacts,
+        RunSpec,
+        TrainEffectModelConfig,
+    )
+    from effects.domain.effect_head_input import INPUT_LAYOUT_KEY, require_input_layout
+
+    settings = training_settings(
+        RunSpec(TrainEffectModelConfig(corpus="unused"), CorpusFacts(), seed=1),
+        api_types=[], param_keys=[],
+    )
+    assert settings[INPUT_LAYOUT_KEY] == "gen-3"
+    require_input_layout(settings)

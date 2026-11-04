@@ -167,8 +167,10 @@ PHASE_ALIASES: dict[str, str] = {
 
 #: The input layout every training run builds and records, and the only one a
 #: loader accepts (FR-045): a checkpoint recording another layout, or none, was
-#: trained on inputs this code no longer builds.
-INPUT_LAYOUT = "gen-2"
+#: trained on inputs this code no longer builds. Gen-3 is the card's lines as
+#: ability slots, its gen-3 card, player, global and act inputs, command-zone
+#: slots and the relations (root spec § 9 – § 10); a gen-2 checkpoint is refused.
+INPUT_LAYOUT = "gen-3"
 
 
 class CheckpointLayoutError(ValueError):

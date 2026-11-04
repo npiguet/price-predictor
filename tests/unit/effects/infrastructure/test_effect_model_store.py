@@ -414,7 +414,7 @@ class TestTheInputLayout:
     """Every loader goes through the store, so its one check refuses an
     earlier layout everywhere (FR-045, M1)."""
 
-    @pytest.mark.parametrize("settings", [{}, {INPUT_LAYOUT_KEY: "earlier"}])
+    @pytest.mark.parametrize("settings", [{}, {INPUT_LAYOUT_KEY: "gen-2"}])
     def test_a_checkpoint_recording_another_layout_or_none_is_refused(
         self, tmp_path, files, settings,
     ):
