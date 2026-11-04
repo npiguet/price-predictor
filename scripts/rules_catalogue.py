@@ -7,6 +7,11 @@ Subcommands:
   packets   group units into agent work packets (rules/packets.json)
   validate  check every triage and scenario sidecar against the rules index and Forge's cardsfolder
   status    regenerate rules/STATUS.md from the sidecars
+  gen3-fields
+            write each heads line's gen-3 ids and learnable_after_gen3 and rules/GEN3-FIELDS.md,
+            print the rules newly learnable against the list rules/gen3-fields.json recorded at
+            the last run, and record the new list there; refuses a turn_action-only rule whose
+            verdict is not `recorded`
   directed-rules --counts FILE
             write rules/directed-fork-rules.txt (the rules enabled for directed forks) and
             rules/coverage-wording-cards.txt (the cards of their scenarios) from gen-2's
@@ -518,11 +523,14 @@ class _AnyName:
         return True
 
 
-GEN3_FIELDS = RULES / "gen3-fields.json"
+GEN3_FIELDS_NAME = "gen3-fields.json"
+GEN3_FIELDS = RULES / GEN3_FIELDS_NAME
 GEN3_KEYS = ("gen3_inputs", "gen3_outputs", "gen3_fixes", "gen3_dropped", "learnable_after_gen3")
+#: The registry's member listing the rules learnable at the last run, written by gen3-fields.
+LEARNABLE = "learnable"
 
 
-def gen3_registry():
+def gen3_registry(path=None):
     """``(entries by id, {context: {name: id or None}})`` from gen3-fields.json.
 
     A name is looked up in its own context: a missing input among the inputs, an
@@ -530,7 +538,7 @@ def gen3_registry():
     ``new:room_unlocked``) were proposed in both roles. Within a context a name maps
     to one entry; ``None`` is covered or dropped.
     """
-    reg = json.loads(GEN3_FIELDS.read_text(encoding="utf-8"))
+    reg = json.loads((path or GEN3_FIELDS).read_text(encoding="utf-8"))
     entries = {}
     by_context = {"input": defaultdict(set), "output": defaultdict(set)}
 
@@ -600,11 +608,84 @@ def gen3_line(row, entries, lookup, overrides):
     }, unmapped
 
 
-def cmd_gen3_fields(_args):
-    reg, entries, lookup, overrides = gen3_registry()
+def learnable_today(row):
+    """Whether the model learns a rule as the layout stands: an output trained
+    on its outcome, and every fact deciding it read."""
+    return row["output"] == "trained" and row["input"] == "complete"
+
+
+def turn_action_rules(by_rule):
+    """The rules whose declared detectors all read ``turn_action`` records: no
+    class of the mixture writes those, so only the verdict ``recorded`` is
+    right for them (FR-036). A ``none`` detector declares nothing."""
+    from effects.domain.records import RecordKind
+
+    out = set()
+    for rule, scenarios in by_rule.items():
+        kinds = [s["detector"].get("record_kind") for s in scenarios
+                 if isinstance(s.get("detector"), dict) and "none" not in s["detector"]]
+        if kinds and all(kind == RecordKind.TURN_ACTION for kind in kinds):
+            out.add(rule)
+    return out
+
+
+def turn_action_verdict_errors(heads_rows, by_rule):
+    """One message per turn_action-only rule whose heads verdict is not ``recorded``."""
+    only = turn_action_rules(by_rule)
+    return [f"{row['id']}: shown by turn_action records only, verdict {row['output']!r} "
+            f"is not 'recorded'" for row in heads_rows
+            if row["id"] in only and row["output"] != "recorded"]
+
+
+def write_learnable(path, learnable):
+    """Set the registry's ``learnable`` member to ``learnable``, leaving every
+    other byte of the hand-kept file as it is."""
+    text = path.read_text(encoding="utf-8")
+    value = json.dumps(learnable)
+    member = re.compile(rf'^(  "{LEARNABLE}": )\[[^\]]*\]', re.M)
+    if member.search(text):
+        text = member.sub(lambda m: m.group(1) + value, text)
+    else:
+        body = text.rstrip()
+        if not body.endswith("}"):
+            raise ValueError(f"{path} does not end with its closing brace")
+        text = f'{body[:-1].rstrip()},\n  "{LEARNABLE}": {value}\n}}\n'
+    if json.loads(text)[LEARNABLE] != learnable:
+        raise ValueError(f"{path}: could not write its {LEARNABLE} member")
+    path.write_text(text, encoding="utf-8", newline="\n")
+
+
+def print_learnable_change(previous, current):
+    """The rules the change made learnable, and any it made unlearnable, against
+    the list the previous run recorded."""
+    if previous is None:
+        print(f"no previous {LEARNABLE} list: recording {len(current)} rules as the baseline")
+        return
+    gained = sorted(set(current) - set(previous), key=rule_sort_key)
+    lost = sorted(set(previous) - set(current), key=rule_sort_key)
+    for rule in gained:
+        print(f"NEWLY LEARNABLE {rule}")
+    for rule in lost:
+        print(f"NO LONGER LEARNABLE {rule}")
+    print(f"{len(gained)} rules newly learnable, {len(lost)} no longer, "
+          f"against the previous {GEN3_FIELDS_NAME}")
+
+
+def cmd_gen3_fields(args):
+    rules_dir = args.rules_dir
+    registry_path = rules_dir / GEN3_FIELDS_NAME
+    reg, entries, lookup, overrides = gen3_registry(registry_path)
+    heads = [(path, read_jsonl(path)) for path in
+             sorted((rules_dir / "heads").glob("*.jsonl"), key=lambda p: unit_sort_key(p.stem))]
+    errors = turn_action_verdict_errors([row for _, rows in heads for row in rows],
+                                        load_scenarios_by_rule(rules_dir))
+    for error in errors:
+        print(f"VERDICT {error}")
+    if errors:
+        print(f"{len(errors)} turn_action-only rules not marked recorded; nothing written")
+        sys.exit(1)
     all_rows, n_unmapped = [], 0
-    for path in sorted((RULES / "heads").glob("*.jsonl"), key=lambda p: unit_sort_key(p.stem)):
-        rows = read_jsonl(path)
+    for path, rows in heads:
         for row in rows:
             fields, unmapped = gen3_line(row, entries, lookup, overrides)
             for name in unmapped:
@@ -619,10 +700,13 @@ def cmd_gen3_fields(_args):
     if n_unmapped:
         print(f"{n_unmapped} unmapped names")
         sys.exit(1)
-    write_gen3_summary(reg, entries, all_rows)
+    write_gen3_summary(reg, entries, all_rows, rules_dir)
+    learnable = sorted((r["id"] for r in all_rows if learnable_today(r)), key=rule_sort_key)
+    print_learnable_change(reg.get(LEARNABLE), learnable)
+    write_learnable(registry_path, learnable)
 
 
-def write_gen3_summary(reg, entries, rows):
+def write_gen3_summary(reg, entries, rows, rules_dir=RULES):
     """rules/GEN3-FIELDS.md: each canonical field, with the rules it serves."""
 
     def closure(i):
@@ -639,7 +723,7 @@ def write_gen3_summary(reg, entries, rows):
             subsumed = any(ids <= closure(j) for j in ids if j != i and i in closure(j))
             if ids <= closure(i) and not subsumed:
                 alone[i] += 1
-    now = sum(1 for r in rows if r["output"] == "trained" and r["input"] == "complete")
+    now = sum(1 for r in rows if learnable_today(r))
     after = sum(1 for r in rows if r["learnable_after_gen3"])
     out = ["# Gen-3 inputs and outputs", "",
            "Generated by `python scripts/rules_catalogue.py gen3-fields` from "
@@ -678,7 +762,7 @@ def write_gen3_summary(reg, entries, rows):
         if o["to"] is None:
             out.append(f"| {o['reason']} ({o['rule']}) | `{o['name']}` | 1 |")
     out.append("")
-    (RULES / "GEN3-FIELDS.md").write_text("\n".join(out), encoding="utf-8", newline="\n")
+    (rules_dir / "GEN3-FIELDS.md").write_text("\n".join(out), encoding="utf-8", newline="\n")
     print(f"learnable today {now}, after gen-3 {after}, of {len(rows)}")
 
 
@@ -884,7 +968,9 @@ def main():
     p.add_argument("--heads", action="store_true", help="also check rules/heads/")
     sub.add_parser("status")
     sub.add_parser("premark")
-    sub.add_parser("gen3-fields")
+    p = sub.add_parser("gen3-fields", help="write each heads line's gen-3 ids and "
+                       "learnable_after_gen3, and print the rules newly learnable (FR-016)")
+    p.add_argument("--rules-dir", type=Path, default=RULES, help=argparse.SUPPRESS)
     p = sub.add_parser("directed-rules", help="write the rules enabled for directed forks and "
                        "the cards of their scenarios (FR-014b, FR-038a)")
     p.add_argument("--counts", type=Path, required=True,

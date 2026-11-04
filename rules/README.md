@@ -28,7 +28,7 @@ survives, the spell resolves or fizzles, the trigger fires or does not.
 | `scenarios/<unit>.json` | phase 2: scenarios for the unit's mechanical and legality rules, with their variants | scenario agents |
 | `MODEL-FIELDS.md` | what the gen-2 effect model reads and is trained on, compiled from the code; the reference the heads pass checks against | by hand |
 | `heads/<unit>.jsonl` | heads pass: for each mechanical or legality rule, whether an output is trained on its outcome and which deciding facts the model does not read | heads agents (`scripts/rules_heads_workflow.js`) |
-| `gen3-fields.json` | the canonical gen-3 inputs, outputs, extensions, planned items and fixes, with every heads-pass name merged into one of them or dropped with a reason | by hand |
+| `gen3-fields.json` | the canonical gen-3 inputs, outputs, extensions, planned items and fixes, with every heads-pass name merged into one of them or dropped with a reason; its `learnable` member lists the rules learnable at the last `gen3-fields` run | by hand; `learnable` by `gen3-fields` |
 | `GEN3-FIELDS.md` | each canonical field's slot, shape and source, and the rules it serves | `gen3-fields` |
 | `STATUS.md` | per-unit checklist and totals | `status` |
 | `FINDINGS.md` | implementation notes: the rules that need new record fields, by family; why rules were skipped; the writers' Forge notes by kind, the Forge departures and how its code settles them, and the causes of the records whose board and outcome disagree; the verifier's error types; limits of the scenarios as written | by hand, from the sidecars |
@@ -88,6 +88,13 @@ One line per rule whose category is `mechanical` or `legality` and whose observa
 `gen3_fixes`, `gen3_dropped` (the names left out by design), and `learnable_after_gen3`. A name
 is looked up in its own role, so `new:text_change` as a missing input and as an output can map to
 different fields. Rerun it after editing either the registry or a heads line.
+
+A rule is learnable when its `output` is `trained` and its `input` is `complete`. Each run prints
+the rules learnable now that the `learnable` list of `gen3-fields.json` did not hold (and any it
+held that are learnable no longer), then records the new list there, so a map rerun after a layout
+change reports what the change made learnable. A run refuses, writing nothing, while a rule whose
+declared detectors all read `turn_action` records has a verdict other than `recorded`: no class
+of the mixture writes those records, so no output trains on them.
 
 `validate --heads` checks completeness, the enums and the gen-3 ids. Rerun the pass whenever the input layout or
 the heads change, to count what the change made learnable.

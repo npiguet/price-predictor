@@ -262,3 +262,169 @@ def test_the_subcommand_is_wired(catalogue, monkeypatch):
     rc.main()
     assert (catalogue.rules_dir / "directed-fork-rules.txt").read_text(
         encoding="utf-8").splitlines()[0] == "121.4"
+
+
+# --- gen3-fields (T108): newly learnable rules and the turn_action verdict -------------------
+
+
+def _registry():
+    """A gen3-fields.json holding one input, one output and one dropped name."""
+    entry = {"slot": "card", "shape": "s", "source": "snapshot", "what": "w"}
+    return {
+        "about": "a", "conventions": {"text": "t"},
+        "inputs": [{"id": "in.subtypes", **entry, "names": ["snapshot:subtypes"]}],
+        "outputs": [{"id": "out.game_lost", **entry, "names": ["new:game_result"]}],
+        "extensions": [], "planned": [], "fixes": [],
+        "covered": {"names": ["record:event:untapped"], "reason": "r"},
+        "dropped": [{"reason": "subgames", "names": ["new:subgame_boundary"]}],
+        "overrides": [],
+    }
+
+
+def _heads_row(rule, output="trained", missing=(), outputs=("zone_outcome",)):
+    return {"id": rule, "output": output, "outputs": list(outputs),
+            "input": "incomplete" if missing else "complete", "inputs_missing": list(missing),
+            "note": ""}
+
+
+_TURN_ACTION = {"family": "outcome_event", "record_kind": "turn_action", "outcome": "o",
+                "near_miss": "n", "params": {"event": "untapped"}, "needs": []}
+
+
+@pytest.fixture
+def mapped(tmp_path):
+    """A rules dir as a map rerun leaves it: heads lines, scenarios, the registry."""
+    rules = tmp_path / "rules"
+    (rules / "heads").mkdir(parents=True)
+    (rules / "scenarios").mkdir()
+    (rules / rc.GEN3_FIELDS_NAME).write_text(json.dumps(_registry(), indent=2) + "\n",
+                                             encoding="utf-8")
+    scenarios = [
+        _scenario("500.1-1", ["500.1"], ["A"], [("off", "does_not_fire", "tap")]),
+        _scenario("500.5-1", ["500.5"], ["B"], [("off", "does_not_fire", "tap")],
+                  kind="turn_action", detector=_TURN_ACTION),
+        _scenario("500.6-1", ["500.6"], ["C"], [("off", "does_not_fire", "tap")],
+                  kind="turn_action", detector=_TURN_ACTION),
+        _scenario("500.6-2", ["500.6"], ["C"], [("off", "does_not_fire", "tap")],
+                  detector={"none": "no record shows it"}),
+        _scenario("500.7-1", ["500.7"], ["D"], [("off", "does_not_fire", "tap")],
+                  kind="turn_action", detector=_TURN_ACTION),
+        _scenario("500.7-2", ["500.7"], ["D"], [("off", "does_not_fire", "tap")]),
+    ]
+    (rules / "scenarios" / "500.json").write_text(
+        json.dumps({"unit": "500", "verified": True, "scenarios": scenarios}), encoding="utf-8")
+    _write_heads(rules, [
+        _heads_row("500.1"),
+        _heads_row("500.2", missing=["snapshot:subtypes"]),
+        _heads_row("500.3", missing=["new:subgame_boundary"]),
+        _heads_row("500.5", output="recorded", outputs=["record:event:untapped"]),
+        _heads_row("500.6", output="recorded", outputs=["record:event:untapped"]),
+        _heads_row("500.7", output="missing", outputs=["new:game_result"]),
+    ])
+    return argparse.Namespace(rules_dir=rules)
+
+
+def _write_heads(rules, rows):
+    (rules / "heads" / "500.jsonl").write_text(
+        "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+
+
+def _edit_heads(rules, rule, **changes):
+    rows = rc.read_jsonl(rules / "heads" / "500.jsonl")
+    for row in rows:
+        if row["id"] == rule:
+            row.update(changes)
+    _write_heads(rules, rows)
+
+
+def _gen3_fields(args, capsys):
+    rc.cmd_gen3_fields(args)
+    return capsys.readouterr().out
+
+
+def _registry_on_disk(args):
+    return json.loads((args.rules_dir / rc.GEN3_FIELDS_NAME).read_text(encoding="utf-8"))
+
+
+def _heads_on_disk(args):
+    return {r["id"]: r for r in rc.read_jsonl(args.rules_dir / "heads" / "500.jsonl")}
+
+
+def test_the_first_run_records_the_learnable_rules_as_the_baseline(mapped, capsys):
+    out = _gen3_fields(mapped, capsys)
+    assert "no previous learnable list: recording 1 rules as the baseline" in out
+    assert "NEWLY LEARNABLE" not in out
+    assert _registry_on_disk(mapped)["learnable"] == ["500.1"]
+
+
+def test_a_rerun_prints_the_rules_the_change_made_learnable_and_records_them(mapped, capsys):
+    _gen3_fields(mapped, capsys)
+    _edit_heads(mapped.rules_dir, "500.2", input="complete", inputs_missing=[])
+    _edit_heads(mapped.rules_dir, "500.7", output="trained", outputs=["zone_outcome"])
+    out = _gen3_fields(mapped, capsys)
+    assert [line for line in out.splitlines() if "LEARNABLE" in line] == [
+        "NEWLY LEARNABLE 500.2", "NEWLY LEARNABLE 500.7"]
+    assert "2 rules newly learnable, 0 no longer, against the previous gen3-fields.json" in out
+    assert _registry_on_disk(mapped)["learnable"] == ["500.1", "500.2", "500.7"]
+
+
+def test_a_rule_that_stops_being_learnable_is_named(mapped, capsys):
+    _gen3_fields(mapped, capsys)
+    _edit_heads(mapped.rules_dir, "500.1", output="recorded")
+    out = _gen3_fields(mapped, capsys)
+    assert "NO LONGER LEARNABLE 500.1" in out
+    assert _registry_on_disk(mapped)["learnable"] == []
+
+
+def test_recording_the_list_leaves_the_rest_of_the_registry_as_written(mapped, capsys):
+    path = mapped.rules_dir / rc.GEN3_FIELDS_NAME
+    before = path.read_text(encoding="utf-8")
+    _gen3_fields(mapped, capsys)
+    _edit_heads(mapped.rules_dir, "500.2", input="complete", inputs_missing=[])
+    _gen3_fields(mapped, capsys)
+    after = path.read_text(encoding="utf-8")
+    assert after == before.rstrip()[:-1].rstrip() + ',\n  "learnable": ["500.1", "500.2"]\n}\n'
+
+
+def test_learnable_after_gen3_is_recomputed_from_the_heads_line(mapped, capsys):
+    _gen3_fields(mapped, capsys)
+    heads = _heads_on_disk(mapped)
+    assert heads["500.2"]["learnable_after_gen3"] is True
+    assert heads["500.2"]["gen3_inputs"] == ["in.subtypes"]
+    assert heads["500.3"]["learnable_after_gen3"] is False
+    assert heads["500.3"]["gen3_dropped"] == ["new:subgame_boundary"]
+    _edit_heads(mapped.rules_dir, "500.3", inputs_missing=["snapshot:subtypes"])
+    _gen3_fields(mapped, capsys)
+    assert _heads_on_disk(mapped)["500.3"]["learnable_after_gen3"] is True
+
+
+def test_the_turn_action_only_rules_ignore_a_none_detector_and_not_a_declared_one(mapped):
+    by_rule = rc.load_scenarios_by_rule(mapped.rules_dir)
+    # 500.6's other scenario declares none; 500.7's other reads resolution records.
+    assert rc.turn_action_rules(by_rule) == {"500.5", "500.6"}
+
+
+@pytest.mark.parametrize("rule", ["500.5", "500.6"])
+@pytest.mark.parametrize("verdict", ["trained", "missing", "planned"])
+def test_a_turn_action_only_rule_not_marked_recorded_fails_and_writes_nothing(
+        mapped, capsys, rule, verdict):
+    _edit_heads(mapped.rules_dir, rule, output=verdict)
+    heads_before = (mapped.rules_dir / "heads" / "500.jsonl").read_text(encoding="utf-8")
+    registry_before = (mapped.rules_dir / rc.GEN3_FIELDS_NAME).read_text(encoding="utf-8")
+    with pytest.raises(SystemExit) as exit_info:
+        rc.cmd_gen3_fields(mapped)
+    assert exit_info.value.code == 1
+    out = capsys.readouterr().out
+    assert f"VERDICT {rule}: shown by turn_action records only, verdict {verdict!r}" in out
+    assert (mapped.rules_dir / "heads" / "500.jsonl").read_text(encoding="utf-8") == heads_before
+    assert (mapped.rules_dir / rc.GEN3_FIELDS_NAME).read_text(
+        encoding="utf-8") == registry_before
+    assert not (mapped.rules_dir / "GEN3-FIELDS.md").exists()
+
+
+def test_the_gen3_fields_subcommand_is_wired(mapped, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", [
+        "rules_catalogue.py", "gen3-fields", "--rules-dir", str(mapped.rules_dir)])
+    rc.main()
+    assert _registry_on_disk(mapped)["learnable"] == ["500.1"]
+    assert (mapped.rules_dir / "GEN3-FIELDS.md").exists()
