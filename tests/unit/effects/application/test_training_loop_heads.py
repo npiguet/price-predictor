@@ -142,21 +142,27 @@ class TestTheTargets:
     def test_a_decision_record_yields_its_candidates_verdict_bits(self, records):
         record = next(r for r in records if r.subkind is not None
                       and isinstance(r.payload, PlayabilityDecisionPayload))
+        from effects.domain.effect_head_layout import VERDICT_BITS, VERDICT_LAYOUT
+
         target, mask = verdict_targets(record)
         candidate = record.payload.candidates[0]
         assert target[:3] == [float(candidate.can_play), float(candidate.affordable),
                               float(candidate.has_legal_target)]
-        assert mask[:3] == [True] * 3 and not any(mask[3:])
+        supervised = {str(spec.name) for spec, on in zip(VERDICT_LAYOUT.fields, mask) if on}
+        assert set(VERDICT_BITS) <= supervised <= {
+            *VERDICT_BITS, "timing", "failed_checks", "cost_adjustment"}
 
     def test_a_cost_half_yields_the_mana_it_paid(self, records):
+        from effects.domain.effect_head_layout import VERDICT_LAYOUT
         from effects.domain.state_snapshot import COLORS
 
         record = next(r for r in records if isinstance(r.payload, ActivationPayload))
         target, mask = verdict_targets(record)
         paid = record.payload.costs.mana_by_color
-        assert target[3:3 + len(COLORS)] == [float(paid.get(c, 0)) for c in COLORS]
-        assert mask[3:3 + len(COLORS)] == [True] * len(COLORS)
-        assert not mask[0] and not mask[-1]
+        start, end = VERDICT_LAYOUT.target_slices["mana_paid"]
+        assert target[start:end] == [float(paid.get(c, 0)) for c in COLORS]
+        supervised = {str(spec.name) for spec, on in zip(VERDICT_LAYOUT.fields, mask) if on}
+        assert supervised == {"mana_paid", "resolution_outcome"}
 
     def test_a_trigger_record_yields_its_fired_bit(self, records):
         for fired in (True, False):
@@ -164,8 +170,12 @@ class TestTheTargets:
                 r for r in records
                 if isinstance(r.payload, TriggerPayload) and r.payload.fired is fired
             )
+            from effects.domain.effect_head_layout import VERDICT_LAYOUT
+
             target, mask = verdict_targets(record)
-            assert target[-1] == float(fired) and mask[-1] and sum(mask) == 1
+            column, _ = VERDICT_LAYOUT.target_slices["trigger_fired"]
+            assert target[column] == float(fired) and sum(mask) == 1
+            assert mask[VERDICT_LAYOUT.index["trigger_fired"]]
 
     def test_combat_supervises_neither_head(self, records):
         record = next(r for r in records if r.kind is RecordKind.COMBAT)
@@ -178,8 +188,9 @@ class TestTheTargets:
             and any(e.type is EventType.TOKEN_CREATED for e in events_of(r))
         ]
         assert made, "the fixture holds no token-making effect half"
-        target = created_objects_targets(made[0])
+        target, known = created_objects_targets(made[0])
         assert target[0] == 1.0 and target[2] >= 1.0
+        assert known[0] and known[2]
 
 
 class TestTheHeadTerms:
@@ -222,7 +233,7 @@ class TestTheHeadTerms:
             monkeypatch, preparer, losses, batch, _Batcher(["SP$ Draw"], {}), _model(),
             torch.randn(len(batch), 6, 8), training=False,
         )
-        assert set(terms) <= {"verdict", "created_objects"}
+        assert set(terms) <= {"verdict", "created_objects", "global"}
 
 
 def _fixture_preparer(directory):
@@ -319,6 +330,7 @@ class TestTheBatchersTheLoopBuilds:
             "seed", "e_noise", "value_weight", "mlm_weight", "mlm_mask_prob",
             "api_weight", "api_types", "param_keys", "tokenizer_rules", "input_layout",
             "relation_types", "relation_target_indices", "subtypes", "named_counters",
+            "subtypes_changed", "keywords_changed",
         ]
         assert keys() == rest
         assert keys(lethality_copies=2) == ["lethality_copies", *rest]

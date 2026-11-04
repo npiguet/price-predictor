@@ -17,6 +17,7 @@ import torch
 from effects.domain.effect_losses import (
     api_loss,
     created_objects_loss,
+    global_loss,
     value_loss,
     verdict_loss,
 )
@@ -27,6 +28,8 @@ class Head(StrEnum):
 
     VERDICT = "verdict"
     CREATED_OBJECTS = "created_objects"
+    #: Turn structure and day/night, which belong to no card or player.
+    GLOBAL = "global"
     VALUE = "value"
     MLM = "mlm"
     API = "api"
@@ -47,8 +50,12 @@ def _verdict(model, hidden, target, mask) -> torch.Tensor:
     return verdict_loss(model.verdict(hidden).float(), target, mask)
 
 
-def _created_objects(model, hidden, target, mask) -> torch.Tensor:
-    return created_objects_loss(model.created_objects(hidden).float(), target, mask)
+def _created_objects(model, hidden, target, mask, known=None) -> torch.Tensor:
+    return created_objects_loss(model.created_objects(hidden).float(), target, mask, known)
+
+
+def _global(model, hidden, target, mask) -> torch.Tensor:
+    return global_loss(model.global_outputs(hidden).float(), target, mask)
 
 
 def _value(model, matrix, values, mask) -> torch.Tensor:
@@ -103,8 +110,9 @@ AUX_HEADS: tuple[HeadSpec, ...] = (
     HeadSpec(Head.VERDICT, HeadInput.TRUNK, ("verdict_head",), loss=_verdict),
     HeadSpec(
         Head.CREATED_OBJECTS, HeadInput.TRUNK, ("created_objects_head",),
-        loss=_created_objects,
+        loss=_created_objects, on_device=(0, 2),
     ),
+    HeadSpec(Head.GLOBAL, HeadInput.TRUNK, ("global_head",), loss=_global),
     HeadSpec(
         Head.VALUE, HeadInput.ENCODED, ("value_head",), weight_field="value_weight",
         loss=_value,

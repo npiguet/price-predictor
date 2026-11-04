@@ -17,10 +17,16 @@ from enum import StrEnum
 from effects.domain.effect_head_input import (
     CARD_TYPES,
     COUNTER_TYPES,
-    OVERLAY_KEYWORDS,
+    DESIGNATIONS,
+    FACE_STATES,
+    MANA_SYMBOLS,
+    SUPERTYPES,
     THERMOMETER_STEPS,
 )
 from effects.domain.field_types import FieldType
+from effects.domain.forge_vocabularies import NAMED_COUNTERS
+from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
+from effects.domain.records import PlayabilityCheck, ResolutionOutcome, RewriteResult
 from effects.domain.sampling import SamplingClass
 from effects.domain.state_snapshot import COLORS
 from effects.domain.value_targets import VALUE_TARGETS
@@ -40,10 +46,19 @@ class ZoneOutcome(StrEnum):
     PHASED_OUT = "phased_out"
     BLINKED = "blinked"
     COUNTERED = "countered"
+    # Gen-3 (root spec § 11.3), appended so every earlier class keeps its column.
+    #: Onto the battlefield from anywhere but a blink: a permanent spell
+    #: resolving, a reanimation, a land put onto the battlefield.
+    ENTERED = "entered"
+    SHUFFLED_INTO_LIBRARY = "shuffled_into_library"
+    TO_COMMAND = "to_command"
+    #: Moved to no zone at all (a token or a copy leaving the game's zones).
+    CEASED_TO_EXIST = "ceased_to_exist"
+    PHASED_IN = "phased_in"
 
 
 #: The zone outcomes in the head's column order, which a target stores as an index.
-ZONE_OUTCOMES: tuple[ZoneOutcome, ...] = tuple(ZoneOutcome)
+ZONE_OUTCOMES: tuple[str, ...] = tuple(outcome.value for outcome in ZoneOutcome)
 
 
 class Duration(StrEnum):
@@ -62,6 +77,7 @@ class LibraryEvent(StrEnum):
     TUTOR = "tutor"
     REVEAL = "reveal"
     REORDER = "reorder"
+    SHUFFLE = "shuffle"
 
 
 #: The durations and library events in the head's column order. Append to
@@ -112,6 +128,43 @@ class HeadField(StrEnum):
     ATTACKER_LEGAL = "attacker_legal"
     BLOCKER_LEGAL = "blocker_legal"
     MIN_BLOCKERS = "min_blockers"
+    # ── gen-3's outputs (root spec § 11.2, § 11.4), appended ──
+    COPIED = "copied"
+    SPELL_COPIES = "spell_copies"
+    TARGETS_CHANGED = "targets_changed"
+    DESIGNATIONS_GAINED = "designations_gained"
+    DESIGNATIONS_LOST = "designations_lost"
+    CLASS_LEVELS_GAINED = "class_levels_gained"
+    DOOR_UNLOCKED = "door_unlocked"
+    PAIRED = "paired"
+    PROTECTOR_CHANGED = "protector_changed"
+    MERGED = "merged"
+    FACE_AFTER = "face_after"
+    REMOVED_FROM_COMBAT = "removed_from_combat"
+    BECAME_BLOCKED = "became_blocked"
+    ENTERED_IN_COMBAT = "entered_in_combat"
+    SUBTYPES_GAINED = "subtypes_gained"
+    SUBTYPES_LOST = "subtypes_lost"
+    SUPERTYPES_GAINED = "supertypes_gained"
+    SUPERTYPES_LOST = "supertypes_lost"
+    ABILITIES_GAINED = "abilities_gained"
+    ABILITIES_LOST = "abilities_lost"
+    TEXT_CHANGED = "text_changed"
+    BASE_POWER_DELTA = "base_power_delta"
+    BASE_TOUGHNESS_DELTA = "base_toughness_delta"
+    REGENERATED = "regenerated"
+    DAMAGE_PREVENTED = "damage_prevented"
+    BECAME_MONARCH = "became_monarch"
+    TOOK_INITIATIVE = "took_initiative"
+    GAINED_CITY_BLESSING = "gained_city_blessing"
+    VENTURED = "ventured"
+    COMPLETED_DUNGEON = "completed_dungeon"
+    SPEED_GAINED = "speed_gained"
+    GAME_LOST = "game_lost"
+    RAD_DELTA = "rad_delta"
+    ENERGY_DELTA = "energy_delta"
+    ATTACK_TARGET_LEGAL = "attack_target_legal"
+    COMBAT_REQUIREMENT = "combat_requirement"
 
 
 class FieldGroup(StrEnum):
@@ -129,6 +182,14 @@ class FieldScope(StrEnum):
     PLAYER = "player"
     #: The legality bits, which only a payload's own marks ever set.
     LEGALITY = "legality"
+    #: Cards and players both (``damage_prevented``).
+    ENTITY = "entity"
+
+    def covers(self, scope: FieldScope) -> bool:
+        """Whether an entity of ``scope`` takes this field's silent value."""
+        return scope is self or (
+            self is FieldScope.ENTITY and scope in (FieldScope.PERMANENT, FieldScope.PLAYER)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +209,11 @@ class FieldSpec:
     #: supervising class names no change to the field; every member of a
     #: multi-binary field. None for a field only a written value supervises.
     silent: float | None = None
+    #: Whether the field trains only where the affected gate's target fires.
+    #: The legality outputs do not (root spec § 11.4): an entity can be a
+    #: legal target that nothing affected, and a playability record trains
+    #: no gate at all.
+    gated: bool = True
 
     def __post_init__(self) -> None:
         # The type carries the field's width and target shape, so a spec that
@@ -177,7 +243,7 @@ class FieldSpec:
             return value
         if (
             self.silent is None or self.name in unknown
-            or scope is not self.scope or record_class not in self.supervised_by
+            or not self.scope.covers(scope) or record_class not in self.supervised_by
         ):
             return None
         if self.type.per_member:
@@ -192,7 +258,15 @@ OTHER_COUNTER = "OTHER"
 
 def counter_field(counter_type: str) -> str:
     """The generated per-entity field one counter type's changes land in."""
-    return f"counters_delta_{counter_type.lower()}"
+    return f"counters_delta_{counter_type.lower().replace(' ', '_')}"
+
+
+#: The counter types with a signed-delta output each (root spec § 11.3):
+#: every named counter Forge defines. A keyword counter has none; what it
+#: grants reaches ``keywords_gained`` through the keyword change it makes, and
+#: its count lands in :attr:`HeadField.COUNTERS_DELTA_OTHER` with every type
+#: this list lacks.
+OUTPUT_COUNTER_TYPES: tuple[str, ...] = NAMED_COUNTERS
 
 
 def mana_field(color: str) -> str:
@@ -209,7 +283,7 @@ def _counter_fields() -> tuple[FieldSpec, ...]:
             group=FieldGroup.SPARSE,
             silent=0.0,
         )
-        for name in (*COUNTER_TYPES, OTHER_COUNTER)
+        for name in (*OUTPUT_COUNTER_TYPES, OTHER_COUNTER)
     )
 
 
@@ -225,13 +299,34 @@ def _mana_fields() -> tuple[FieldSpec, ...]:
     )
 
 
+#: Decision records, which supervise ``target_legal``.
+_DECISIONS = frozenset({SamplingClass.PLAYABILITY_DECISION})
+#: Attackers and blockers records, which supervise the combat legality bits
+#: and, on a declared anchor, its ``tap_state`` (root spec § 11.3).
+_DECLARATIONS = frozenset({SamplingClass.PLAYABILITY_LEGALITY})
+
+
+def _sparse(name: str, field_type: FieldType, scope: FieldScope, **settings) -> FieldSpec:
+    """A field of the sparse group (FR-082): every gen-3 output but the
+    legality bits is rare, and a head meeting it from step zero learns to
+    answer zero for good."""
+    return FieldSpec(name, field_type, scope, group=FieldGroup.SPARSE, **settings)
+
+
 #: The per-entity head's full field list. Order is the head's output layout, so
 #: appending is safe and reordering is not.
+#:
+#: A gen-3 field takes a silent value only where the collector writes the
+#: event it reads for every occurrence in the records of its supervising
+#: classes; a field whose event is missing or names no subject (``abilities_*``
+#: on an Animate, a designation Forge sets without an event) trains only where
+#: a record writes it, so a record that cannot say teaches no zero.
 PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
     # ── permanents and stack entities ──
     FieldSpec(HeadField.ZONE_OUTCOME, FieldType.CATEGORICAL, FieldScope.PERMANENT,
               classes=ZONE_OUTCOMES, silent=float(ZONE_OUTCOMES.index(ZoneOutcome.STAYED))),
-    FieldSpec(HeadField.TAP_STATE, FieldType.BINARY, FieldScope.PERMANENT),
+    FieldSpec(HeadField.TAP_STATE, FieldType.BINARY, FieldScope.PERMANENT,
+              supervised_by=_EFFECTFUL | _DECLARATIONS),
     FieldSpec(HeadField.DAMAGE_TAKEN, FieldType.COUNT, FieldScope.PERMANENT, silent=0.0),
     FieldSpec(HeadField.POWER_DELTA, FieldType.SIGNED_DELTA, FieldScope.PERMANENT,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
@@ -257,10 +352,10 @@ PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
               classes=DURATIONS, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS),
     FieldSpec(HeadField.KEYWORDS_GAINED, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
-              classes=OVERLAY_KEYWORDS, group=FieldGroup.SPARSE,
+              classes=KEYWORDS_CHANGED, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
     FieldSpec(HeadField.KEYWORDS_LOST, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
-              classes=OVERLAY_KEYWORDS, group=FieldGroup.SPARSE,
+              classes=KEYWORDS_CHANGED, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
     FieldSpec(HeadField.CONTROL_CHANGE, FieldType.BINARY, FieldScope.PERMANENT,
               group=FieldGroup.SPARSE, silent=0.0),
@@ -276,15 +371,68 @@ PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
     # Not in FR-077's player group, but gate 2's infect row needs it.
     FieldSpec(HeadField.POISON_DELTA, FieldType.SIGNED_DELTA, FieldScope.PLAYER, silent=0.0),
     *_mana_fields(),
-    # ── legality bits: only a payload's own marks set them ──
+    # ── legality bits: only a payload's own marks set them, gate or no gate ──
     FieldSpec(HeadField.TARGET_LEGAL, FieldType.BINARY, FieldScope.LEGALITY,
-              supervised_by=frozenset({SamplingClass.PLAYABILITY_DECISION})),
+              supervised_by=_DECISIONS, gated=False),
     FieldSpec(HeadField.ATTACKER_LEGAL, FieldType.BINARY, FieldScope.LEGALITY,
-              supervised_by=frozenset({SamplingClass.PLAYABILITY_LEGALITY})),
+              supervised_by=_DECLARATIONS, gated=False),
     FieldSpec(HeadField.BLOCKER_LEGAL, FieldType.BINARY, FieldScope.LEGALITY,
-              supervised_by=frozenset({SamplingClass.PLAYABILITY_LEGALITY})),
+              supervised_by=_DECLARATIONS, gated=False),
     FieldSpec(HeadField.MIN_BLOCKERS, FieldType.COUNT, FieldScope.LEGALITY,
-              supervised_by=frozenset({SamplingClass.PLAYABILITY_LEGALITY})),
+              supervised_by=_DECLARATIONS, gated=False),
+    # ── gen-3: stack objects and cards (root spec § 11.2) ──
+    _sparse(HeadField.COPIED, FieldType.BINARY, FieldScope.PERMANENT, silent=0.0),
+    _sparse(HeadField.SPELL_COPIES, FieldType.COUNT, FieldScope.PERMANENT, silent=0.0),
+    _sparse(HeadField.TARGETS_CHANGED, FieldType.BINARY, FieldScope.PERMANENT, silent=0.0),
+    _sparse(HeadField.DESIGNATIONS_GAINED, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
+            classes=DESIGNATIONS),
+    _sparse(HeadField.DESIGNATIONS_LOST, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
+            classes=DESIGNATIONS),
+    _sparse(HeadField.CLASS_LEVELS_GAINED, FieldType.COUNT, FieldScope.PERMANENT),
+    _sparse(HeadField.DOOR_UNLOCKED, FieldType.BINARY, FieldScope.PERMANENT),
+    _sparse(HeadField.PAIRED, FieldType.BINARY, FieldScope.PERMANENT),
+    _sparse(HeadField.PROTECTOR_CHANGED, FieldType.BINARY, FieldScope.PERMANENT),
+    _sparse(HeadField.MERGED, FieldType.BINARY, FieldScope.PERMANENT),
+    _sparse(HeadField.FACE_AFTER, FieldType.CATEGORICAL, FieldScope.PERMANENT,
+            classes=FACE_STATES),
+    _sparse(HeadField.REMOVED_FROM_COMBAT, FieldType.BINARY, FieldScope.PERMANENT, silent=0.0),
+    _sparse(HeadField.BECAME_BLOCKED, FieldType.BINARY, FieldScope.PERMANENT),
+    _sparse(HeadField.ENTERED_IN_COMBAT, FieldType.BINARY, FieldScope.PERMANENT),
+    _sparse(HeadField.SUBTYPES_GAINED, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
+            classes=SUBTYPES_CHANGED, supervised_by=_STATIC_CHANNELS, silent=0.0),
+    _sparse(HeadField.SUBTYPES_LOST, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
+            classes=SUBTYPES_CHANGED, supervised_by=_STATIC_CHANNELS, silent=0.0),
+    _sparse(HeadField.SUPERTYPES_GAINED, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
+            classes=SUPERTYPES, supervised_by=_STATIC_CHANNELS, silent=0.0),
+    _sparse(HeadField.SUPERTYPES_LOST, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
+            classes=SUPERTYPES, supervised_by=_STATIC_CHANNELS, silent=0.0),
+    _sparse(HeadField.ABILITIES_GAINED, FieldType.COUNT, FieldScope.PERMANENT),
+    _sparse(HeadField.ABILITIES_LOST, FieldType.BINARY, FieldScope.PERMANENT),
+    _sparse(HeadField.TEXT_CHANGED, FieldType.BINARY, FieldScope.PERMANENT, silent=0.0),
+    _sparse(HeadField.BASE_POWER_DELTA, FieldType.SIGNED_DELTA, FieldScope.PERMANENT,
+            supervised_by=_STATIC_CHANNELS),
+    _sparse(HeadField.BASE_TOUGHNESS_DELTA, FieldType.SIGNED_DELTA, FieldScope.PERMANENT,
+            supervised_by=_STATIC_CHANNELS),
+    _sparse(HeadField.REGENERATED, FieldType.BINARY, FieldScope.PERMANENT, silent=0.0),
+    _sparse(HeadField.DAMAGE_PREVENTED, FieldType.COUNT, FieldScope.ENTITY, silent=0.0),
+    # ── gen-3: players ──
+    _sparse(HeadField.BECAME_MONARCH, FieldType.BINARY, FieldScope.PLAYER, silent=0.0),
+    _sparse(HeadField.TOOK_INITIATIVE, FieldType.BINARY, FieldScope.PLAYER, silent=0.0),
+    _sparse(HeadField.GAINED_CITY_BLESSING, FieldType.BINARY, FieldScope.PLAYER),
+    _sparse(HeadField.VENTURED, FieldType.BINARY, FieldScope.PLAYER, silent=0.0),
+    _sparse(HeadField.COMPLETED_DUNGEON, FieldType.BINARY, FieldScope.PLAYER),
+    _sparse(HeadField.SPEED_GAINED, FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
+    # No silent value: a burn spell's lethal resolution holds no game-end
+    # event (the game-end rescue record does), so its silence is no "lost
+    # nothing".
+    _sparse(HeadField.GAME_LOST, FieldType.BINARY, FieldScope.PLAYER),
+    _sparse(HeadField.RAD_DELTA, FieldType.SIGNED_DELTA, FieldScope.PLAYER, silent=0.0),
+    _sparse(HeadField.ENERGY_DELTA, FieldType.SIGNED_DELTA, FieldScope.PLAYER, silent=0.0),
+    # ── gen-3: legality (root spec § 11.4) ──
+    FieldSpec(HeadField.ATTACK_TARGET_LEGAL, FieldType.BINARY, FieldScope.LEGALITY,
+              supervised_by=_DECLARATIONS, gated=False),
+    FieldSpec(HeadField.COMBAT_REQUIREMENT, FieldType.BINARY, FieldScope.LEGALITY,
+              supervised_by=_DECLARATIONS, gated=False),
 )
 
 #: ``{field name: (start, end)}`` into the per-entity head's output vector.
@@ -302,24 +450,181 @@ FIELDS_BY_NAME: dict[str, FieldSpec] = {s.name: s for s in PER_ENTITY_FIELDS}
 CREATED_OBJECT_SLOTS = 4
 
 
+class CreatedKind(StrEnum):
+    """What a created-objects group is (root spec § 11.3), in column order."""
+
+    TOKEN = "token"
+    EMBLEM = "emblem"
+    #: An effect object Forge builds in the command zone for a lasting effect.
+    EFFECT = "effect"
+    #: A card made outside the game (``MakeCard``).
+    CARD = "card"
+
+
+CREATED_KINDS: tuple[str, ...] = tuple(kind.value for kind in CreatedKind)
+
+
 class CreatedSlot:
-    """Offsets within one created-objects slot."""
+    """Offsets within one created-objects slot: the two flags, the magnitudes
+    (count, power, toughness, then counters per type), then the binaries."""
 
     PRESENT = 0
     SCRIPTED = 1
     COUNT = 2
     POWER = 3
     TOUGHNESS = 4
-    TYPES = 5
-    KEYWORDS = TYPES + len(CARD_TYPES)
+    #: One count per :data:`COUNTER_TYPES` member, then every other type.
+    COUNTERS = 5
+    OTHER_CONTROLLER = COUNTERS + len(COUNTER_TYPES) + 1
+    KIND = OTHER_CONTROLLER + 1
+    TYPES = KIND + len(CREATED_KINDS)
+    SUBTYPES = TYPES + len(CARD_TYPES)
+    KEYWORDS = SUBTYPES + len(SUBTYPES_CHANGED)
 
 
-CREATED_SLOT_WIDTH = CreatedSlot.KEYWORDS + len(OVERLAY_KEYWORDS)
+CREATED_SLOT_WIDTH = CreatedSlot.KEYWORDS + len(KEYWORDS_CHANGED)
 CREATED_OBJECTS_WIDTH = CREATED_OBJECT_SLOTS * CREATED_SLOT_WIDTH + 1
 
-#: Verdict head (FR-079): three verdict bits, cost paid per colour, trigger fired.
-VERDICT_BITS: tuple[str, ...] = ("can_play", "affordable", "has_legal_target")
-VERDICT_WIDTH = len(VERDICT_BITS) + len(COLORS) + 1
+
+@dataclass(frozen=True, slots=True)
+class RecordField:
+    """One output of a head with one row per record (the verdict and global
+    heads): a field type, its classes, and its members, a member repeating
+    the type over its own columns (one signed delta per mana symbol).
+
+    A target holds one value per member (one, without members); a categorical's
+    is a class index. Members share one mask column: they are supervised together.
+    """
+
+    name: str
+    type: FieldType
+    classes: tuple[str, ...] = ()
+    members: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.type is FieldType.MULTI_BINARY:
+            raise ValueError(f"{self.name}: a record field spells a multi-binary as members")
+
+    @property
+    def arity(self) -> int:
+        return len(self.classes) or 1
+
+    @property
+    def count(self) -> int:
+        """Target columns: one per member, else one."""
+        return len(self.members) or 1
+
+    @property
+    def width(self) -> int:
+        return self.type.width(self.arity) * self.count
+
+
+class RecordHeadLayout:
+    """A per-record head's fields, their output slices and target columns."""
+
+    def __init__(self, fields: tuple[RecordField, ...]) -> None:
+        self.fields = fields
+        self.slices: dict[str, tuple[int, int]] = {}
+        self.target_slices: dict[str, tuple[int, int]] = {}
+        self.index: dict[str, int] = {}
+        output = target = 0
+        for position, spec in enumerate(fields):
+            self.slices[spec.name] = (output, output + spec.width)
+            self.target_slices[spec.name] = (target, target + spec.count)
+            self.index[spec.name] = position
+            output += spec.width
+            target += spec.count
+        self.width = output
+        self.target_width = target
+        self.by_name: dict[str, RecordField] = {spec.name: spec for spec in fields}
+
+    def blank(self) -> tuple[list[float], list[bool]]:
+        """An all-unsupervised target row and its per-field mask."""
+        return [0.0] * self.target_width, [False] * len(self.fields)
+
+    def put(self, row: tuple[list[float], list[bool]], name: str, value) -> None:
+        """Supervise ``name`` with ``value``, one number per member."""
+        values, mask = row
+        start, end = self.target_slices[name]
+        given = list(value) if isinstance(value, (list, tuple)) else [value]
+        if len(given) != end - start:
+            raise ValueError(f"{name} takes {end - start} values, not {len(given)}")
+        values[start:end] = [float(item) for item in given]
+        mask[self.index[name]] = True
+
+
+class VerdictField(StrEnum):
+    """The verdict head's outputs at ``[ACT]`` (FR-079, root spec § 11.2, § 11.5)."""
+
+    CAN_PLAY = "can_play"
+    AFFORDABLE = "affordable"
+    HAS_LEGAL_TARGET = "has_legal_target"
+    MANA_PAID = "mana_paid"
+    TRIGGER_FIRED = "trigger_fired"
+    TIMING = "timing"
+    FAILED_CHECKS = "failed_checks"
+    COST_ADJUSTMENT = "cost_adjustment"
+    RESOLUTION_OUTCOME = "resolution_outcome"
+    EFFECTS_CREATED = "effects_created"
+    REPLACEMENT_RESULT = "replacement_result"
+
+
+#: The decision record's three verdict bits, the verdict head's first columns.
+VERDICT_BITS: tuple[str, ...] = (
+    VerdictField.CAN_PLAY.value, VerdictField.AFFORDABLE.value,
+    VerdictField.HAS_LEGAL_TARGET.value,
+)
+#: One column per check a candidate can fail, in :class:`PlayabilityCheck`
+#: order, ``script_restriction`` and ``land_play_limit`` included.
+FAILED_CHECKS: tuple[str, ...] = tuple(check.value for check in PlayabilityCheck)
+RESOLUTION_OUTCOMES: tuple[str, ...] = tuple(outcome.value for outcome in ResolutionOutcome)
+REPLACEMENT_RESULTS: tuple[str, ...] = tuple(result.value for result in RewriteResult)
+
+VERDICT_LAYOUT = RecordHeadLayout((
+    *(RecordField(bit, FieldType.BINARY) for bit in VERDICT_BITS),
+    RecordField(VerdictField.MANA_PAID, FieldType.COUNT, members=COLORS),
+    RecordField(VerdictField.TRIGGER_FIRED, FieldType.BINARY),
+    RecordField(VerdictField.TIMING, FieldType.BINARY),
+    RecordField(VerdictField.FAILED_CHECKS, FieldType.BINARY, members=FAILED_CHECKS),
+    RecordField(VerdictField.COST_ADJUSTMENT, FieldType.SIGNED_DELTA, members=MANA_SYMBOLS),
+    RecordField(VerdictField.RESOLUTION_OUTCOME, FieldType.CATEGORICAL,
+                classes=RESOLUTION_OUTCOMES),
+    RecordField(VerdictField.EFFECTS_CREATED, FieldType.COUNT),
+    RecordField(VerdictField.REPLACEMENT_RESULT, FieldType.CATEGORICAL,
+                classes=REPLACEMENT_RESULTS),
+))
+VERDICT_WIDTH = VERDICT_LAYOUT.width
+
+
+class GlobalField(StrEnum):
+    """The global head's outputs at ``[GLOBAL]``: what belongs to no card or
+    player (root spec § 11.1, § 11.2)."""
+
+    TURN_STRUCTURE_CHANGE = "turn_structure_change"
+    DAY_NIGHT_CHANGE = "day_night_change"
+
+
+#: ``turn_structure_change``'s members, each a count.
+TURN_STRUCTURE_CHANGES: tuple[str, ...] = (
+    "extra_turns", "turns_skipped", "extra_phases", "phases_skipped",
+)
+
+
+class DayNightChange(StrEnum):
+    BECAME_DAY = "became_day"
+    BECAME_NIGHT = "became_night"
+    UNCHANGED = "unchanged"
+
+
+DAY_NIGHT_CHANGES: tuple[str, ...] = tuple(change.value for change in DayNightChange)
+
+GLOBAL_LAYOUT = RecordHeadLayout((
+    RecordField(GlobalField.TURN_STRUCTURE_CHANGE, FieldType.COUNT,
+                members=TURN_STRUCTURE_CHANGES),
+    RecordField(GlobalField.DAY_NIGHT_CHANGE, FieldType.CATEGORICAL,
+                classes=DAY_NIGHT_CHANGES),
+))
+GLOBAL_WIDTH = GLOBAL_LAYOUT.width
 
 #: ``target -> (start, end)`` into the value head's output (FR-058), each
 #: target as wide as a per-entity field of its type.

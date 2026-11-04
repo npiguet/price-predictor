@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-from effects.domain.effect_head_layout import VERDICT_BITS, HeadField
+from effects.domain.effect_head_layout import GLOBAL_LAYOUT, VERDICT_LAYOUT, HeadField
 from effects.domain.fork_operation import ForkOperation
 from effects.domain.records import RecordKind
 
@@ -102,9 +102,9 @@ OUTPUT_TAGS: tuple[str, ...] = ("record:", "new:", "planned:")
 #: The same three roles for a missing input.
 INPUT_TAGS: tuple[str, ...] = ("snapshot:", "new:", "planned:")
 
-#: Outputs a heads line names that are not per-entity fields: the gate, the
-#: verdict head's cost and trigger columns, and the created-objects head.
-_NON_ENTITY_OUTPUTS: tuple[str, ...] = ("gate", "mana_paid", "trigger_fired", "created_objects")
+#: Outputs a heads line names that are neither a per-entity field nor a
+#: verdict or global head field: the gate and the created-objects head.
+_NON_ENTITY_OUTPUTS: tuple[str, ...] = ("gate", "created_objects")
 
 
 def head_outputs() -> frozenset[str]:
@@ -116,7 +116,8 @@ def head_outputs() -> frozenset[str]:
     not listed by name.
     """
     entity = {f.value for f in HeadField if f is not HeadField.COUNTERS_DELTA_OTHER}
-    return frozenset(entity | set(VERDICT_BITS) | set(_NON_ENTITY_OUTPUTS))
+    record_heads = {str(spec.name) for spec in (*VERDICT_LAYOUT.fields, *GLOBAL_LAYOUT.fields)}
+    return frozenset(entity | record_heads | set(_NON_ENTITY_OUTPUTS))
 
 
 def is_model_output(name: str) -> bool:

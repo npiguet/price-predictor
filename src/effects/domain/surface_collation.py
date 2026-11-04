@@ -199,10 +199,15 @@ def entity_target_tensors(
 
     ``index`` selects the ``[CARD]`` and ``[PLAYER]`` columns of the trunk
     output; an entity no slot represents is not gathered. A field's value
-    where it is not present is a zero the loss never reads.
+    where it is not present is a zero the loss never reads. A record's
+    targets carrying ``gated`` false (:class:`RecordTargets`) train no gate.
     """
     batch = len(surfaces)
     width = max((len(s.entity_slots) for s in surfaces), default=1)
+    gated = np.array(
+        [getattr(targets, "gated", True) for targets in targets_per_surface] or [True],
+        dtype=np.bool_,
+    )[:batch]
     gate = np.zeros((batch, width), dtype=np.float32)
     mask = np.zeros((batch, width), dtype=np.float32)
     collected: dict[str, np.ndarray] = {}
@@ -237,6 +242,7 @@ def entity_target_tensors(
         ),
         torch.from_numpy(mask),
         entity_index(surfaces),
+        torch.from_numpy(gated),
     )
 
 

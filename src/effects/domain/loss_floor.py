@@ -61,8 +61,8 @@ def constant_predictor_outputs(
     if supervised is None:
         supervised = {spec.name: _supervised(batches, spec.name) for spec in fields}
     vector = torch.zeros(PER_ENTITY_WIDTH)
-    # The gate is one binary column over every real entity.
-    real = [batch.gate[batch.real] for batch in batches]
+    # The gate is one binary column over every entity it trains on.
+    real = [batch.gate[batch.gate_scored] for batch in batches]
     vector[GATE_INDEX] = FIELD_KINDS[FieldType.BINARY].best_constant(
         torch.cat(real or [torch.zeros(0)]), arity=1, cap=MAGNITUDE_CAP,
     )

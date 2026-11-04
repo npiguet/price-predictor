@@ -14,11 +14,14 @@ from effects.domain.effect_head_input import COMBAT_SUBSTEPS, ZONES
 from effects.domain.effect_head_layout import (
     AT_LEAST_SLICES,
     DURATIONS,
+    GLOBAL_WIDTH,
     LIBRARY_EVENTS,
     OTHER_COUNTER,
     PER_ENTITY_WIDTH,
     VALUE_SLICES,
     VALUE_WIDTH,
+    VERDICT_WIDTH,
+    ZONE_OUTCOMES,
     HeadField,
     counter_field,
 )
@@ -28,7 +31,12 @@ _PINNED = [
     (COMBAT_SUBSTEPS, ("first_strike", "regular")),
     (ZONES, ("battlefield", "stack", "hand", "graveyard", "library", "exile", "command")),
     (DURATIONS, ("instant", "end_of_turn", "permanent")),
-    (LIBRARY_EVENTS, ("scry", "surveil", "tutor", "reveal", "reorder")),
+    (LIBRARY_EVENTS, ("scry", "surveil", "tutor", "reveal", "reorder", "shuffle")),
+    (ZONE_OUTCOMES, (
+        "stayed", "died", "exiled", "to_hand", "library_top", "library_bottom",
+        "transformed", "face_changed", "phased_out", "blinked", "countered",
+        "entered", "shuffled_into_library", "to_command", "ceased_to_exist", "phased_in",
+    )),
     (DIRECTIONS, ("negative", "zero", "positive")),
 ]
 
@@ -45,7 +53,12 @@ def test_the_generated_counter_fields_keep_their_names():
 
 
 def test_the_heads_keep_their_widths():
-    assert PER_ENTITY_WIDTH == 220
+    """Gen-3's widths (root spec § 11): the per-entity head's 1,386 columns
+    are 932 for the 233 counter fields, the verdict head's 170 are 136 for
+    the cost adjustment's 34 mana symbols."""
+    assert PER_ENTITY_WIDTH == 1386
+    assert VERDICT_WIDTH == 170
+    assert GLOBAL_WIDTH == 7
     assert VALUE_WIDTH == 541
 
 

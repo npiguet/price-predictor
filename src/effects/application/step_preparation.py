@@ -31,6 +31,7 @@ from effects.application.train_effect_model import (
 from effects.domain.ability_encoder import TruncationLog
 from effects.domain.aux_head_targets import (
     created_objects_targets,
+    global_targets,
     supervises_created_objects,
     verdict_targets,
 )
@@ -38,7 +39,13 @@ from effects.domain.aux_heads import TRAINING_HEADS, Head
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_families import effect_family
 from effects.domain.effect_head_input import SlotKind
-from effects.domain.effect_head_layout import CREATED_OBJECTS_WIDTH, VERDICT_WIDTH, FieldSpec
+from effects.domain.effect_head_layout import (
+    CREATED_OBJECTS_WIDTH,
+    GLOBAL_LAYOUT,
+    VERDICT_LAYOUT,
+    FieldSpec,
+    RecordHeadLayout,
+)
 from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.lethality_counterfactuals import counterfactual, qualify
@@ -352,25 +359,24 @@ class StepPreparer:
         training-only ``heads`` (FR-058, FR-060b). The MLM mask is the step's
         last draw from the batcher's generator."""
         targets = HeadTargets()
-        verdicts = [verdict_targets(record) for record in records]
-        if any(v is not None for v in verdicts):
-            targets[Head.VERDICT] = (
-                torch.tensor(
-                    [v[0] if v else [0.0] * VERDICT_WIDTH for v in verdicts],
-                ),
-                torch.tensor(
-                    [v[1] if v else [False] * VERDICT_WIDTH for v in verdicts],
-                ),
-            )
+        for head, layout, derive in (
+            (Head.VERDICT, VERDICT_LAYOUT, verdict_targets),
+            (Head.GLOBAL, GLOBAL_LAYOUT, global_targets),
+        ):
+            rows = _record_head_rows(records, layout, derive)
+            if rows is not None:
+                targets[head] = rows
         created = [supervises_created_objects(record) for record in records]
         if any(created):
+            blank = ([0.0] * CREATED_OBJECTS_WIDTH, [True] * CREATED_OBJECTS_WIDTH)
+            made = [
+                created_objects_targets(record) if wanted else blank
+                for record, wanted in zip(records, created)
+            ]
             targets[Head.CREATED_OBJECTS] = (
-                torch.tensor([
-                    created_objects_targets(record) if wanted
-                    else [0.0] * CREATED_OBJECTS_WIDTH
-                    for record, wanted in zip(records, created)
-                ]),
+                torch.tensor([target for target, _ in made]),
                 torch.tensor(created),
+                torch.tensor([known for _, known in made]),
             )
         # No text, no matrix for these heads to read.
         if not heads or not batch.staged.rows:
@@ -519,3 +525,16 @@ class StepPreparer:
         }
         truncated, self.truncated = tuple(self.truncated), []
         yield ShardClosed(unresolved=unresolved, truncated=truncated)
+
+
+def _record_head_rows(records, layout: RecordHeadLayout, derive):
+    """A per-record head's ``(targets, mask)`` over ``records``, or None where
+    no record sets any of its fields."""
+    rows = [derive(record) for record in records]
+    if all(row is None for row in rows):
+        return None
+    filled = [row if row is not None else layout.blank() for row in rows]
+    return (
+        torch.tensor([values for values, _ in filled]),
+        torch.tensor([mask for _, mask in filled]),
+    )

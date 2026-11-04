@@ -9,6 +9,8 @@ from functools import cached_property
 
 import torch
 
+from effects.domain.effect_head_layout import FIELDS_BY_NAME
+
 
 @dataclass(frozen=True)
 class EntityFieldTargets:
@@ -55,22 +57,34 @@ class EntityTargetBatch:
 
     ``gate`` is 1 where an entity was affected, ``mask`` 1 for a real entity,
     and ``index`` the trunk-output column each entity is gathered from; all
-    three are ``(batch, entities)``. Kept whole, so the loss, the margins and
-    the constant-predictor floor all read exactly the entities the head did,
-    selected by :attr:`real`, :attr:`affected` and :meth:`scored`. No slots:
-    the two masks are cached, since the loss reads ``affected`` once per field.
+    three are ``(batch, entities)``. ``gated`` is ``(batch,)``, 1 for a record
+    that trains the gate (a playability record does not); None trains it on
+    every record. Kept whole, so the loss, the margins and the
+    constant-predictor floor all read exactly the entities the head did,
+    selected by :attr:`real`, :attr:`gate_scored`, :attr:`affected` and
+    :meth:`scored`. No slots: the masks are cached, since the loss reads
+    ``affected`` once per field.
     """
 
     gate: torch.Tensor
     fields: EntityFieldTargets
     mask: torch.Tensor
     index: torch.Tensor
+    gated: torch.Tensor | None = None
 
     @cached_property
     def real(self) -> torch.Tensor:
         """``(batch, entities)`` bool on the host: a real entity, not padding.
         The gate trains on every one, players included."""
         return self.mask.detach().bool().cpu()
+
+    @cached_property
+    def gate_scored(self) -> torch.Tensor:
+        """``(batch, entities)`` bool on the host: where the gate trains, every
+        real entity of a record that trains it (root spec § 11.4)."""
+        if self.gated is None:
+            return self.real
+        return self.real & self.gated.detach().bool().cpu().unsqueeze(-1)
 
     @cached_property
     def affected(self) -> torch.Tensor:
@@ -81,8 +95,11 @@ class EntityTargetBatch:
 
     def scored(self, name: str) -> torch.Tensor:
         """Where field ``name`` trains: an affected entity the field is
-        present at (FR-081)."""
-        return self.affected & self.fields.present[name].detach().bool().cpu()
+        present at (FR-081); a legality field, every real entity it is
+        present at, whatever the gate's target (root spec § 11.4)."""
+        spec = FIELDS_BY_NAME.get(name)
+        where = self.affected if spec is None or spec.gated else self.real
+        return where & self.fields.present[name].detach().bool().cpu()
 
     def fields_on(self, device, *, non_blocking: bool = False) -> EntityTargetBatch:
         """The batch with its field values on ``device``. The gate, mask and
@@ -99,4 +116,5 @@ class EntityTargetBatch:
     def select(self, rows) -> EntityTargetBatch:
         return EntityTargetBatch(
             self.gate[rows], self.fields.select(rows), self.mask[rows], self.index[rows],
+            None if self.gated is None else self.gated[rows],
         )

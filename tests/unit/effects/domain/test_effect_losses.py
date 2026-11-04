@@ -21,6 +21,8 @@ from effects.domain.effect_head_layout import (
     GATE_INDEX,
     PER_ENTITY_FIELDS,
     PER_ENTITY_WIDTH,
+    VERDICT_BITS,
+    VERDICT_LAYOUT,
     VERDICT_WIDTH,
     ZONE_OUTCOMES,
     FieldType,
@@ -290,13 +292,17 @@ class TestLosses:
 class TestGen2Losses:
     """The verdict, created-objects, value and script-API losses."""
 
-    def test_the_verdict_loss_scores_only_the_masked_columns(self):
+    def test_the_verdict_loss_scores_only_the_masked_fields(self):
         prediction = torch.zeros(2, VERDICT_WIDTH)
-        target = torch.ones(2, VERDICT_WIDTH)
-        mask = torch.zeros(2, VERDICT_WIDTH, dtype=torch.bool)
-        mask[0, :3] = True
+        target = torch.zeros(2, VERDICT_LAYOUT.target_width)
+        for bit in VERDICT_BITS:
+            target[:, VERDICT_LAYOUT.target_slices[bit][0]] = 1.0
+        target[:, VERDICT_LAYOUT.target_slices["trigger_fired"][0]] = 1.0
+        mask = torch.zeros(2, len(VERDICT_LAYOUT.fields), dtype=torch.bool)
+        for bit in VERDICT_BITS:
+            mask[0, VERDICT_LAYOUT.index[bit]] = True
         bits_only = verdict_loss(prediction, target, mask)
-        mask[1, -1] = True
+        mask[1, VERDICT_LAYOUT.index["trigger_fired"]] = True
         with_trigger = verdict_loss(prediction, target, mask)
         assert 0 < float(bits_only) < float(with_trigger)
 
@@ -395,10 +401,12 @@ class TestHostPickedRowsMatchBooleanMasks:
         affected = mask & gate_target.bool()
         for spec in fields:
             start, end = FIELD_SLICES[spec.name]
-            if affected.any():
+            # A legality field trains gate or no gate (root spec § 11.4).
+            where = affected if spec.gated else mask
+            if where.any():
                 total = total + field_loss(
-                    spec, outputs[..., start:end][affected],
-                    field_targets.values[spec.name][affected],
+                    spec, outputs[..., start:end][where],
+                    field_targets.values[spec.name][where],
                 )
         return total / outputs.shape[0]
 
@@ -437,14 +445,17 @@ class TestHostPickedRowsMatchBooleanMasks:
         whole = created_objects_loss(prediction[mask], target[mask], None)
         assert torch.allclose(picked, whole * mask.sum() / mask.numel())
 
+        from effects.domain.effect_head_layout import VERDICT_LAYOUT
+
+        fields = len(VERDICT_LAYOUT.fields)
         verdict = torch.randn(4, VERDICT_WIDTH, generator=generator)
-        verdict_target = torch.rand(4, VERDICT_WIDTH, generator=generator).round()
-        per_output = torch.rand(4, VERDICT_WIDTH, generator=generator) > 0.5
+        verdict_target = torch.rand(4, VERDICT_LAYOUT.target_width, generator=generator).round()
+        per_field = torch.rand(4, fields, generator=generator) > 0.5
         assert torch.allclose(
-            verdict_loss(verdict, verdict_target, per_output),
-            verdict_loss(verdict, verdict_target, per_output.float()),
+            verdict_loss(verdict, verdict_target, per_field),
+            verdict_loss(verdict, verdict_target, per_field.float()),
         )
-        assert float(verdict_loss(verdict, verdict_target, torch.zeros(4, VERDICT_WIDTH))) == 0.0
+        assert float(verdict_loss(verdict, verdict_target, torch.zeros(4, fields))) == 0.0
 
 
 class TestMagnitudeCap:

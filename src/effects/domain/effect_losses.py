@@ -23,14 +23,16 @@ from effects.domain.effect_head_layout import (
     CREATED_SLOT_WIDTH,
     FIELD_SLICES,
     GATE_INDEX,
+    GLOBAL_LAYOUT,
     VALUE_SLICES,
-    VERDICT_BITS,
+    VERDICT_LAYOUT,
     CreatedSlot,
     FieldSpec,
+    RecordHeadLayout,
 )
 from effects.domain.entity_field_targets import EntityTargetBatch
-from effects.domain.field_kinds import FIELD_KINDS, capped, poisson
-from effects.domain.state_snapshot import COLORS
+from effects.domain.field_kinds import FIELD_KINDS, capped
+from effects.domain.field_types import FieldType
 from effects.domain.value_targets import VALUE_TARGETS
 
 
@@ -117,8 +119,8 @@ def per_entity_loss(
             column for column with ``targets``.
         fields: the fields active at this step.
 
-    The gate trains on every :attr:`~EntityTargetBatch.real` entity, a field
-    wherever :meth:`~EntityTargetBatch.scored` puts it.
+    The gate trains wherever :attr:`~EntityTargetBatch.gate_scored` puts it,
+    a field wherever :meth:`~EntityTargetBatch.scored` does.
     """
     names: list[str] = []
     terms: list[torch.Tensor] = []
@@ -148,12 +150,15 @@ def per_entity_loss(
 
 
 def _gate_term(flat_outputs: torch.Tensor, targets: EntityTargetBatch) -> torch.Tensor:
-    """The affected gate's BCE over every real entity, summed."""
+    """The affected gate's BCE over every real entity of a record that trains
+    it, summed (a playability record trains none, root spec § 11.4)."""
     device = flat_outputs.device
-    real = _Rows.of(targets.real, device)
-    affected = real.select(targets.gate.detach().cpu().flatten()).float()
+    scored = _Rows.of(targets.gate_scored, device)
+    if scored.empty:
+        return flat_outputs.new_zeros(())
+    affected = scored.select(targets.gate.detach().cpu().flatten()).float()
     return functional.binary_cross_entropy_with_logits(
-        real.select(flat_outputs)[:, GATE_INDEX],
+        scored.select(flat_outputs)[:, GATE_INDEX],
         affected.to(device, non_blocking=True),
         reduction="sum",
     )
@@ -181,11 +186,13 @@ def _field_term(
 
 def created_objects_loss(
     prediction: torch.Tensor, target: torch.Tensor,
-    mask: torch.Tensor | None = None,
+    mask: torch.Tensor | None = None, known: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Bits plus counts over the K slots, which are in canonical order
     (FR-078) so no assignment problem arises. ``mask`` selects the records
-    that supervise the head."""
+    that supervise the head; ``known`` ``(records, width)`` the columns each
+    record says, a column it leaves unsaid (a token's controller) training
+    nothing."""
     records = int(prediction.shape[0])
     if mask is not None:
         rows = _Rows.of(mask, prediction.device)
@@ -193,57 +200,88 @@ def created_objects_loss(
             return prediction.new_zeros(())
         prediction = rows.select(prediction)
         target = rows.select(target).to(prediction.device)
+        if known is not None:
+            known = rows.select(known)
+    weights = (
+        torch.ones_like(target) if known is None
+        else known.to(prediction.device, non_blocking=True).to(target.dtype)
+    )
     # Every slot at once, as ``(records, slots, slot width)``.
     slots = (-1, CREATED_OBJECT_SLOTS, CREATED_SLOT_WIDTH)
     predicted = prediction[:, :-1].reshape(slots)
     wanted = target[:, :-1].reshape(slots)
-    flags = slice(CreatedSlot.PRESENT, CreatedSlot.COUNT)
-    magnitudes = slice(CreatedSlot.COUNT, CreatedSlot.TYPES)
-    rest = slice(CreatedSlot.TYPES, CREATED_SLOT_WIDTH)
-    total = functional.binary_cross_entropy_with_logits(
-        predicted[..., flags], wanted[..., flags], reduction="sum",
-    )
-    total = total + poisson(
+    weight = weights[:, :-1].reshape(slots)
+    total = prediction.new_zeros(())
+    for columns in (
+        slice(CreatedSlot.PRESENT, CreatedSlot.COUNT),
+        slice(CreatedSlot.OTHER_CONTROLLER, CREATED_SLOT_WIDTH),
+    ):
+        total = total + (functional.binary_cross_entropy_with_logits(
+            predicted[..., columns], wanted[..., columns], reduction="none",
+        ) * weight[..., columns]).sum()
+    magnitudes = slice(CreatedSlot.COUNT, CreatedSlot.OTHER_CONTROLLER)
+    total = total + (functional.poisson_nll_loss(
         predicted[..., magnitudes], capped(wanted[..., magnitudes], MAGNITUDE_CAP),
-    )
-    total = total + functional.binary_cross_entropy_with_logits(
-        predicted[..., rest], wanted[..., rest], reduction="sum",
-    )
-    total = total + functional.binary_cross_entropy_with_logits(
-        prediction[:, -1], target[:, -1], reduction="sum",
-    )
+        log_input=True, full=True, reduction="none",
+    ) * weight[..., magnitudes]).sum()
+    total = total + (functional.binary_cross_entropy_with_logits(
+        prediction[:, -1], target[:, -1], reduction="none",
+    ) * weights[:, -1]).sum()
+    return per_row(total, records)
+
+
+def record_head_loss(
+    prediction: torch.Tensor, target: torch.Tensor, mask: torch.Tensor,
+    layout: RecordHeadLayout,
+) -> torch.Tensor:
+    """A per-record head's loss: each field's own loss over the records that
+    set it, a field's members scored together (FR-079).
+
+    ``target`` is ``(batch, layout.target_width)``, a categorical's column a
+    class index; ``mask`` ``(batch, fields)``, or ``(batch,)`` for a record
+    that sets every field.
+    """
+    records = int(prediction.shape[0])
+    mask = mask.detach().bool().cpu()
+    if mask.dim() == 1:
+        mask = mask.unsqueeze(-1).expand(-1, len(layout.fields))
+    if not mask.any():
+        return prediction.new_zeros(())
+    target = target.to(prediction.device, non_blocking=True)
+    total = prediction.new_zeros(())
+    for position, spec in enumerate(layout.fields):
+        rows = _Rows.of(mask[:, position], prediction.device)
+        if rows.empty:
+            continue
+        start, end = layout.slices[spec.name]
+        first, last = layout.target_slices[spec.name]
+        predicted = rows.select(prediction)[:, start:end]
+        wanted = rows.select(target)[:, first:last]
+        if spec.members:
+            predicted = predicted.reshape(-1, spec.count, spec.type.width(spec.arity))
+        else:
+            wanted = wanted.squeeze(-1)
+        if spec.type is not FieldType.SIGNED_DELTA and spec.members:
+            predicted = predicted.squeeze(-1)
+        total = total + FIELD_KINDS[spec.type].loss(
+            predicted, wanted, arity=spec.arity, cap=MAGNITUDE_CAP,
+        )
     return per_row(total, records)
 
 
 def verdict_loss(
     prediction: torch.Tensor, target: torch.Tensor, mask: torch.Tensor,
 ) -> torch.Tensor:
-    """Verdict bits and the trigger bit binary; cost paid Poisson per colour.
+    """The verdict head's loss at ``[ACT]``: each record kind supervises only
+    its own fields (:data:`VERDICT_LAYOUT`)."""
+    return record_head_loss(prediction, target, mask, VERDICT_LAYOUT)
 
-    ``mask`` is per record ``(batch,)`` or per output ``(batch,
-    VERDICT_WIDTH)``, as training passes it: each record kind supervises only
-    its own columns.
-    """
-    records = int(prediction.shape[0])
-    mask = mask.detach().bool().cpu()
-    if mask.dim() == 1:
-        mask = mask.unsqueeze(-1).expand(-1, prediction.shape[-1])
-    if not mask.any():
-        return prediction.new_zeros(())
-    bits = len(VERDICT_BITS)
-    cost = slice(bits, bits + len(COLORS))
-    weights = mask.to(prediction.dtype).to(prediction.device, non_blocking=True)
-    binary = functional.binary_cross_entropy_with_logits(
-        prediction, target, reduction="none",
-    )
-    counts = functional.poisson_nll_loss(
-        prediction[:, cost], target[:, cost], log_input=True, full=True,
-        reduction="none",
-    )
-    total = (binary[:, :bits] * weights[:, :bits]).sum()
-    total = total + (counts * weights[:, cost]).sum()
-    total = total + (binary[:, -1] * weights[:, -1]).sum()
-    return per_row(total, records)
+
+def global_loss(
+    prediction: torch.Tensor, target: torch.Tensor, mask: torch.Tensor,
+) -> torch.Tensor:
+    """The global head's loss at ``[GLOBAL]`` (:data:`GLOBAL_LAYOUT`)."""
+    return record_head_loss(prediction, target, mask, GLOBAL_LAYOUT)
 
 
 def value_loss(

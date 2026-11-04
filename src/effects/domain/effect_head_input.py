@@ -40,6 +40,7 @@ from effects.domain.event_schema import EventType
 from effects.domain.forge_vocabularies import KEYWORD_COUNTERS, NAMED_COUNTERS, SUBTYPES
 from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
 from effects.domain.keyword_names import normalize_keyword, overlay_keyword
+from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.provenance import ProvenanceKey, TraitKind, first_text
 from effects.domain.records import (
     CombatPayload,
@@ -185,18 +186,26 @@ RELATION_TARGET_INDICES_KEY = "relation_target_indices"
 #: fixes its embedding rows.
 SUBTYPES_KEY = "subtypes"
 NAMED_COUNTERS_KEY = "named_counters"
+#: The head's closed output lists (root spec 11.2, 11.3), whose order fixes
+#: the subtype and keyword outputs' columns.
+SUBTYPES_CHANGED_KEY = "subtypes_changed"
+KEYWORDS_CHANGED_KEY = "keywords_changed"
 
 
 def layout_settings() -> dict:
     """What a run records about the inputs it was built on: the input layout,
-    the relation types whose order fixes the trunk's table rows, and the
-    subtypes and named counters whose order fixes the card slot's rows."""
+    the relation types whose order fixes the trunk's table rows, the
+    subtypes and named counters whose order fixes the card slot's rows and
+    the named counters' output columns, and the closed output lists whose
+    order fixes the subtype and keyword outputs' columns."""
     return {
         INPUT_LAYOUT_KEY: INPUT_LAYOUT,
         RELATION_TYPES_KEY: list(RELATION_TYPES),
         RELATION_TARGET_INDICES_KEY: TARGET_INDICES,
         SUBTYPES_KEY: list(SUBTYPES),
         NAMED_COUNTERS_KEY: list(NAMED_COUNTERS),
+        SUBTYPES_CHANGED_KEY: list(SUBTYPES_CHANGED),
+        KEYWORDS_CHANGED_KEY: list(KEYWORDS_CHANGED),
     }
 
 

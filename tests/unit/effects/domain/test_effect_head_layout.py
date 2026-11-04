@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from effects.domain.effect_head_input import COUNTER_TYPES
 from effects.domain.effect_head_layout import (
     DURATIONS,
     FIELD_SLICES,
@@ -16,6 +15,7 @@ from effects.domain.effect_head_layout import (
     FieldSpec,
     active_fields,
 )
+from effects.domain.forge_vocabularies import KEYWORD_COUNTERS, NAMED_COUNTERS
 from effects.domain.sampling import SAMPLING_CLASSES, SamplingClass
 from effects.domain.state_snapshot import COLORS
 
@@ -43,9 +43,14 @@ class TestFieldLayout:
                 "library_events"} <= player
         assert {f"mana_delta_{c.lower()}" for c in COLORS} <= player
 
-    def test_every_counter_type_has_a_delta_plus_a_catch_all(self):
+    def test_every_named_counter_has_a_delta_plus_a_catch_all(self):
+        """Root spec § 11.3: a signed delta per named counter, a keyword
+        counter none (it lands in the catch-all)."""
         counters = [s for s in PER_ENTITY_FIELDS if s.name.startswith("counters_delta_")]
-        assert len(counters) == len(COUNTER_TYPES) + 1
+        assert len(counters) == len(NAMED_COUNTERS) + 1
+        names = {s.name for s in counters}
+        assert "counters_delta_p1p1" in names and "counters_delta_acquired_taste" in names
+        assert not {f"counters_delta_{k}" for k in KEYWORD_COUNTERS} & names
 
 
 class TestFieldActivation:

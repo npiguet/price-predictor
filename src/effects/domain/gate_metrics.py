@@ -143,10 +143,10 @@ class MarginAccumulator:
         self._count_true: list[np.ndarray] = []
 
     def add(self, gathered: torch.Tensor, targets: EntityTargetBatch) -> None:
-        """Fold one chunk in: the gate over every real entity, zone and
+        """Fold one chunk in: the gate wherever it trains, zone and
         magnitude only where they train (target affected, field present)."""
         field_targets = targets.fields
-        real = targets.real
+        real = targets.gate_scored
         self._gate_pred.append(
             (gathered[..., GATE_INDEX][real] > 0).numpy().astype(np.int8)
         )

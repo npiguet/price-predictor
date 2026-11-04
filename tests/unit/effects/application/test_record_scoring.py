@@ -57,8 +57,9 @@ class TestPerRecordLosses:
 
     def test_every_term_equals_the_masked_sum_over_that_record(self):
         """Each reported term, not only the total, is the gate BCE over the real
-        entities plus each field's loss over the target-affected ones — the
-        same numbers a hand-masked sum gives, on targets that are not all zero."""
+        entities plus each field's loss over the target-affected ones (a
+        legality field's over the real ones) — the same numbers a hand-masked
+        sum gives, on targets that are not all zero."""
         import torch
         from torch.nn import functional
 
@@ -103,13 +104,16 @@ class TestPerRecordLosses:
             expected = {"gate": float(functional.binary_cross_entropy_with_logits(
                 outputs[row, :, GATE_INDEX][real], gate[row][real], reduction="sum",
             ))}
-            if bool(affected.any()):
-                for spec in fields:
-                    start, end = FIELD_SLICES[spec.name]
-                    expected[spec.name] = float(field_loss(
-                        spec, outputs[row, :, start:end][affected],
-                        values[spec.name][row][affected],
-                    ))
+            for spec in fields:
+                # A legality field trains gate or no gate (root spec 11.4).
+                where = affected if spec.gated else real
+                if not bool(where.any()):
+                    continue
+                start, end = FIELD_SLICES[spec.name]
+                expected[spec.name] = float(field_loss(
+                    spec, outputs[row, :, start:end][where],
+                    values[spec.name][row][where],
+                ))
             losses = _record_losses(row, outputs, targets, fields)
             assert set(losses) == {*expected, TOTAL}
             for name, value in expected.items():

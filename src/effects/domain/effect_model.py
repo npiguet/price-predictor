@@ -1,9 +1,10 @@
 """The effect head: a game state plus an ability, to what that ability does.
 
-A transformer trunk over the token surface, with three shipped heads: one
+A transformer trunk over the token surface, with four shipped heads: one
 per-entity head shared over every ``[CARD]`` and ``[PLAYER]`` output (a gate,
-then fields where the gate fires), a created-objects head at ``[GLOBAL]``, and
-a verdict head at ``[ACT]``.
+then fields where the gate fires), a created-objects head and a global head
+(turn structure, day and night) at ``[GLOBAL]``, and a verdict head at
+``[ACT]``.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from effects.domain.effect_head_input import (
 )
 from effects.domain.effect_head_layout import (
     CREATED_OBJECTS_WIDTH,
+    GLOBAL_WIDTH,
     PER_ENTITY_WIDTH,
     VALUE_WIDTH,
     VERDICT_WIDTH,
@@ -110,7 +112,7 @@ class RelationTrunk(nn.Module):
 
 
 class EffectModel(nn.Module):
-    """Trunk plus the three shipped heads and the training-only auxiliaries."""
+    """Trunk plus the four shipped heads and the training-only auxiliaries."""
 
     def __init__(self, config: EffectModelConfig) -> None:
         super().__init__()
@@ -154,6 +156,7 @@ class EffectModel(nn.Module):
         self.per_entity_head = _mlp(d, d, PER_ENTITY_WIDTH)
         self.created_objects_head = _mlp(d, d, CREATED_OBJECTS_WIDTH)
         self.verdict_head = _mlp(d, d, VERDICT_WIDTH)
+        self.global_head = _mlp(d, d, GLOBAL_WIDTH)
 
         # ── training-only auxiliaries (FR-063), filtered at save time by
         # ``aux_heads.TRAINING_ONLY_MODULES`` ──
@@ -231,3 +234,7 @@ class EffectModel(nn.Module):
 
     def verdict(self, hidden: torch.Tensor) -> torch.Tensor:
         return self.verdict_head(hidden[:, ACT_SLOT, :])
+
+    def global_outputs(self, hidden: torch.Tensor) -> torch.Tensor:
+        """The global head at ``[GLOBAL]``: what belongs to no card or player."""
+        return self.global_head(hidden[:, 0, :])

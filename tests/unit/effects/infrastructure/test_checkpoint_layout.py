@@ -77,6 +77,9 @@ def test_only_the_current_layout_is_accepted():
     require_input_layout(layout_settings())
     with pytest.raises(CheckpointLayoutError, match="relation_types"):
         require_input_layout({**layout_settings(), "relation_types": ["line_of:forward"]})
+    with pytest.raises(CheckpointLayoutError):
+        # Another closed output list moves the subtype outputs' columns.
+        require_input_layout({**layout_settings(), "subtypes_changed": ["goblin"]})
     for settings in ({}, None, {INPUT_LAYOUT_KEY: "gen-1"}, {INPUT_LAYOUT_KEY: "gen-2"},
                      {**layout_settings(), INPUT_LAYOUT_KEY: "gen-2"}):
         with pytest.raises(CheckpointLayoutError, match=INPUT_LAYOUT):

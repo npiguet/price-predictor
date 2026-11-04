@@ -56,7 +56,7 @@ class TestTrainingOnlyHeads:
                 assert hasattr(model, name), (spec.head, name)
 
     def test_no_shipped_head_is_in_the_filter_list(self):
-        shipped = {"per_entity_head", "created_objects_head", "verdict_head"}
+        shipped = {"per_entity_head", "created_objects_head", "verdict_head", "global_head"}
         assert not shipped & set(TRAINING_ONLY_MODULES)
         assert {m for spec in SHIPPED_HEADS for m in spec.modules} <= shipped
 
