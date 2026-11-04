@@ -3,8 +3,10 @@ package com.pricepredictor.connector.effects.directed.rules;
 import forge.game.Game;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
+import forge.game.cost.Cost;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
+import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
 import forge.game.zone.ZoneType;
 
@@ -12,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * What the board preconditions read off a live game, in the words the
@@ -64,16 +67,45 @@ final class Boards {
     }
 
     /**
-     * The one untapped permanent {@code player} controls that can make mana
-     * now, or empty when it controls none or several: the last mana it has
-     * for a cost. A summoning-sick creature's tap ability makes none.
+     * The untapped permanents {@code player} controls that can make mana now.
+     * A summoning-sick creature's tap ability makes none.
      */
-    static Optional<Card> soleManaSource(Player player) {
-        List<Card> sources = player.getCardsIn(ZoneType.Battlefield).stream()
+    static List<Card> manaSources(Player player) {
+        return player.getCardsIn(ZoneType.Battlefield).stream()
                 .filter(card -> !card.isTapped() && !card.getManaAbilities().isEmpty())
                 .filter(card -> !(card.isCreature() && card.isSick()))
                 .toList();
+    }
+
+    /**
+     * The one untapped permanent {@code player} controls that can make mana
+     * now, or empty when it controls none or several: the last mana it has
+     * for a cost.
+     */
+    static Optional<Card> soleManaSource(Player player) {
+        List<Card> sources = manaSources(player);
         return sources.size() == 1 ? Optional.of(sources.get(0)) : Optional.empty();
+    }
+
+    /** The mana value of a cost's mana part, 0 for none. */
+    static int manaValue(Cost cost) {
+        return cost == null || cost.getTotalMana() == null ? 0 : cost.getTotalMana().getCMC();
+    }
+
+    /**
+     * The cards in {@code player}'s hand it has the mana to cast
+     * ({@link #affordable}) with a spell {@code spell} accepts.
+     */
+    static List<Card> castableInHand(Player player, Predicate<SpellAbility> spell) {
+        return player.getCardsIn(ZoneType.Hand).stream()
+                .filter(card -> affordable(player, card))
+                .filter(card -> card.getSpells().stream().anyMatch(spell))
+                .toList();
+    }
+
+    /** Whether a comma-separated script value lists {@code item}. */
+    static boolean lists(String value, String item) {
+        return value != null && List.of(value.split(",")).contains(item);
     }
 
     /** The parameters of the ability script {@code host} holds as {@code svar}, empty when it holds none. */

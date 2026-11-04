@@ -1,25 +1,38 @@
 package com.pricepredictor.connector.effects.directed;
 
 import com.pricepredictor.connector.effects.directed.rules.Aftermath;
+import com.pricepredictor.connector.effects.directed.rules.AttractionVisit;
+import com.pricepredictor.connector.effects.directed.rules.AuraSwap;
 import com.pricepredictor.connector.effects.directed.rules.BattleDefense;
+import com.pricepredictor.connector.effects.directed.rules.CantEnterBattlefield;
 import com.pricepredictor.connector.effects.directed.rules.CantGainLifeExchange;
 import com.pricepredictor.connector.effects.directed.rules.CantLoseLifeExchange;
+import com.pricepredictor.connector.effects.directed.rules.Champion;
 import com.pricepredictor.connector.effects.directed.rules.Dethrone;
+import com.pricepredictor.connector.effects.directed.rules.DistinctTargets;
 import com.pricepredictor.connector.effects.directed.rules.DrawFromEmptyLibrary;
 import com.pricepredictor.connector.effects.directed.rules.Enlist;
+import com.pricepredictor.connector.effects.directed.rules.FinalChapterResolves;
 import com.pricepredictor.connector.effects.directed.rules.FinalityCounter;
 import com.pricepredictor.connector.effects.directed.rules.GraveyardReplacement;
 import com.pricepredictor.connector.effects.directed.rules.Intimidate;
 import com.pricepredictor.connector.effects.directed.rules.LifeExchange;
 import com.pricepredictor.connector.effects.directed.rules.LifeTotalWin;
+import com.pricepredictor.connector.effects.directed.rules.LimitedSearch;
+import com.pricepredictor.connector.effects.directed.rules.MorphFaceUp;
 import com.pricepredictor.connector.effects.directed.rules.MutagenToken;
 import com.pricepredictor.connector.effects.directed.rules.OptionalSearch;
 import com.pricepredictor.connector.effects.directed.rules.PoisonLoss;
 import com.pricepredictor.connector.effects.directed.rules.ReplacedSacrificeCost;
 import com.pricepredictor.connector.effects.directed.rules.RestartGame;
+import com.pricepredictor.connector.effects.directed.rules.ShuffleAndPlaceOnTop;
 import com.pricepredictor.connector.effects.directed.rules.SimultaneousDamage;
+import com.pricepredictor.connector.effects.directed.rules.SimultaneousShuffles;
+import com.pricepredictor.connector.effects.directed.rules.SkippedUpkeepTrigger;
+import com.pricepredictor.connector.effects.directed.rules.SmallLibraryShuffle;
 import com.pricepredictor.connector.effects.directed.rules.SorcererRole;
 import com.pricepredictor.connector.effects.directed.rules.StunCounter;
+import com.pricepredictor.connector.effects.directed.rules.TextBoxExchange;
 import com.pricepredictor.connector.effects.directed.rules.ToughnessZero;
 import com.pricepredictor.connector.effects.directed.rules.TypeSettingAura;
 import com.pricepredictor.connector.effects.directed.rules.VanishingInstances;
@@ -69,7 +82,20 @@ public final class DirectedRules {
             FinalityCounter.rule(),
             TypeSettingAura.rule(),
             GraveyardReplacement.rule(),
+            MorphFaceUp.rule(),
+            AttractionVisit.rule(),
+            DistinctTargets.rule(),
+            Champion.rule(),
+            FinalChapterResolves.rule(),
+            SkippedUpkeepTrigger.rule(),
+            CantEnterBattlefield.rule(),
+            AuraSwap.rule(),
             LifeExchange.rule(),
+            TextBoxExchange.rule(),
+            LimitedSearch.rule(),
+            SmallLibraryShuffle.rule(),
+            SimultaneousShuffles.rule(),
+            ShuffleAndPlaceOnTop.rule(),
             Intimidate.rule(),
             VanishingInstances.rule(),
             Dethrone.rule(),
