@@ -44,7 +44,7 @@ class EffectModelConfig:
     act_features: int
     player_features: int
     card_features: int
-    e_dim: int = 64
+    e_dim: int = 256
     vocab_size: int = 0
     n_api_types: int = 0
     n_param_keys: int = 0

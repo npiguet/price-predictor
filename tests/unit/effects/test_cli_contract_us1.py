@@ -76,7 +76,7 @@ class TestTrainEffectModel:
 
     def test_the_architecture_defaults_are_the_contracts(self):
         args = parse(*TRAIN)
-        assert args.e_dim == 64
+        assert args.e_dim == 256
         assert args.e_noise == 0.1
         assert args.keyword_expand_p == 0.25
         assert args.context_dropout == 0.15

@@ -45,7 +45,7 @@ class AbilityEncoderConfig:
     self-describing. No noise here: the batcher applies it (FR-057)."""
 
     vocab_size: int
-    e_dim: int = 64
+    e_dim: int = 256
     d_model: int = ENCODER_D_MODEL
     n_layers: int = ENCODER_N_LAYERS
     n_heads: int = ENCODER_N_HEADS

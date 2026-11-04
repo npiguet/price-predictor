@@ -117,7 +117,7 @@ class TrainEffectModelConfig:
         "{variant}/ for a baseline)"
     )})
     variant: Baseline = Baseline.FULL
-    e_dim: int = 64
+    e_dim: int = 256
     relation_values: str = field(default="on", metadata={"type": on_off, "help": (
         "on: the trunk's relations change what a slot receives as well as how "
         "much it attends; off: the value tables stay at zero and untrained "
