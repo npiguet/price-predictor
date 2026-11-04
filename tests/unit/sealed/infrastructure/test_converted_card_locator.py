@@ -149,7 +149,12 @@ class TestLoadEmbedding:
 
 class TestBasicLandConstants:
     def test_lowercase_set_contents(self):
-        assert BASIC_LAND_NAMES == {"plains", "island", "swamp", "mountain", "forest"}
+        """Every Basic-supertype card, as Forge's rule in ``BasicLands.java`` has it."""
+        assert BASIC_LAND_NAMES == {
+            "plains", "island", "swamp", "mountain", "forest", "wastes",
+            "snow-covered plains", "snow-covered island", "snow-covered swamp",
+            "snow-covered mountain", "snow-covered forest", "snow-covered wastes",
+        }
 
 
 class TestSourceTrees:

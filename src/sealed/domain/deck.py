@@ -8,8 +8,15 @@ from dataclasses import dataclass
 
 # Basic land identity is domain knowledge (not a file-lookup detail), so it
 # lives here. ``converted_card_locator`` re-exports it for its callers.
+# Every card with the Basic supertype, the rule the connector's ``BasicLands``
+# takes from Forge, so the pools and cards-played rows it writes and the decks
+# read here agree: Wastes and the snow-covered basics count too.
 BASIC_LAND_NAMES: frozenset[str] = frozenset(
-    {"plains", "island", "swamp", "mountain", "forest"}
+    {
+        "plains", "island", "swamp", "mountain", "forest", "wastes",
+        "snow-covered plains", "snow-covered island", "snow-covered swamp",
+        "snow-covered mountain", "snow-covered forest", "snow-covered wastes",
+    }
 )
 
 
