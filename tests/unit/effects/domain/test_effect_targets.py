@@ -881,6 +881,60 @@ class TestLibraryEventExtensions:
         ))["P0"].fields["library_events"]
         assert flags[LIBRARY_EVENTS.index("tutor")] == 0.0
 
+    @pytest.mark.parametrize(("mode", "kind"), [
+        ("Scry", "scry"), ("Surveil", "surveil"), ("SearchedLibrary", "tutor"),
+    ])
+    def test_a_named_mode_decides_the_library_event(self, mode, kind):
+        flags = derive_targets(_resolution(
+            Event(type=EventType.CARD_LOOKED_AT, subjects=("P0",), params={"mode": mode}),
+        ))["P0"].fields["library_events"]
+        assert [name for i, name in enumerate(LIBRARY_EVENTS) if flags[i] == 1.0] == [kind]
+
+    def test_a_surveil_keeping_every_card_on_top_is_still_a_surveil(self):
+        flags = self._looked()
+        named = derive_targets(_resolution(
+            Event(type=EventType.CARD_LOOKED_AT, subjects=("P0",),
+                  params={"count": 2, "mode": "Surveil"}),
+        ))["P0"].fields["library_events"]
+        assert flags[LIBRARY_EVENTS.index("scry")] == 1.0
+        assert named[LIBRARY_EVENTS.index("surveil")] == 1.0
+        assert named[LIBRARY_EVENTS.index("scry")] == 0.0
+
+
+class TestStateFlagOutputs:
+    """T123g's ``state_flag_change`` flags reach their own fields."""
+
+    def _fields(self, subject, flag, value=True):
+        return derive_targets(_resolution(
+            Event(type=EventType.STATE_FLAG_CHANGE, subjects=(subject,),
+                  params={"flag": flag, "value": value}),
+        ))[subject].fields
+
+    @pytest.mark.parametrize(("flag", "field"), [
+        ("door_unlocked", "door_unlocked"),
+        ("paired", "paired"),
+        ("merged", "merged"),
+        ("entered_attacking", "entered_in_combat"),
+        ("entered_blocking", "entered_in_combat"),
+    ])
+    def test_a_permanent_flag_sets_its_field(self, flag, field):
+        assert self._fields("E1", flag)[field] == 1.0
+
+    @pytest.mark.parametrize(("flag", "field"), [
+        ("city_blessing", "gained_city_blessing"),
+        ("dungeon_completed", "completed_dungeon"),
+    ])
+    def test_a_player_flag_sets_its_field(self, flag, field):
+        assert self._fields("P0", flag)[field] == 1.0
+
+    def test_each_class_level_event_counts_one_level(self):
+        targets = derive_targets(_resolution(*(
+            Event(type=EventType.STATE_FLAG_CHANGE, subjects=("E1",),
+                  params={"flag": "class_level", "value": level})
+            for level in (2, 3)
+        )))
+        assert targets["E1"].fields["class_levels_gained"] == 2.0
+
 
 class TestCopiesAndRetargets:
     def test_a_clone_entering_as_a_copy_is_placed_on_the_clone(self):

@@ -119,6 +119,25 @@ _SETTERS: dict[EventType, tuple[str, int]] = {
 #: The restrictions a ``restriction_change`` names that are designations.
 _RESTRICTION_DESIGNATIONS: dict[str, str] = {"goad": "goaded"}
 
+#: ``card_looked_at.params.mode`` -> the library event it is (T123d).
+_LOOK_MODES: dict[str, LibraryEvent] = {
+    "Scry": LibraryEvent.SCRY,
+    "Surveil": LibraryEvent.SURVEIL,
+    "SearchedLibrary": LibraryEvent.TUTOR,
+}
+
+#: ``state_flag_change`` flags that are outputs of their own (T123g), each to
+#: its binary field; ``class_level`` counts levels gained instead.
+_STATE_FLAG_FIELDS: dict[str, HeadField] = {
+    "door_unlocked": HeadField.DOOR_UNLOCKED,
+    "paired": HeadField.PAIRED,
+    "merged": HeadField.MERGED,
+    "entered_attacking": HeadField.ENTERED_IN_COMBAT,
+    "entered_blocking": HeadField.ENTERED_IN_COMBAT,
+    "city_blessing": HeadField.GAINED_CITY_BLESSING,
+    "dungeon_completed": HeadField.COMPLETED_DUNGEON,
+}
+
 
 def keyword_index(raw: str) -> int | None:
     """The keyword-output column a keyword, in any spelling Forge writes, sets."""
@@ -367,9 +386,15 @@ def _apply_restriction(entry: EntityTargets, event: Event) -> None:
 
 
 def _apply_state_flag(entry: EntityTargets, event: Event) -> None:
-    _flag_designation(
-        entry, str(event.params.get("flag", "")), gained=bool(event.params.get("value", True)),
-    )
+    flag = str(event.params.get("flag", ""))
+    if flag == "class_level":
+        entry.add(HeadField.CLASS_LEVELS_GAINED, 1.0)
+        return
+    field = _STATE_FLAG_FIELDS.get(flag)
+    if field is not None:
+        entry.set(field, 1.0 if event.params.get("value", True) else 0.0)
+        return
+    _flag_designation(entry, flag, gained=bool(event.params.get("value", True)))
 
 
 def _apply_ability_change(entry: EntityTargets, event: Event) -> None:
@@ -541,16 +566,19 @@ class _RecordPass:
     # ── library events ──
 
     def _library_events(self) -> None:
-        """A scry and a surveil both look at and reorder cards; a surveil is
-        the one that also mills. A shuffle after cards left the library is a
-        search: a tutor."""
+        """A ``card_looked_at`` names its library action in ``params.mode``
+        (``Scry``, ``Surveil``, or ``SearchedLibrary``: a tutor). A record
+        without the mode reads it from what else happened: a scry and a
+        surveil both look at and reorder cards, a surveil is the one that also
+        mills, and a shuffle after cards left the library is a search."""
         milled = {
             subject for event in self.by_type[EventType.CARD_MILLED]
             for subject in event.subjects
         }
         for event in self.by_type[EventType.CARD_LOOKED_AT]:
+            named = _LOOK_MODES.get(str(event.params.get("mode") or ""))
             for subject in event.subjects:
-                kind = LibraryEvent.SURVEIL if subject in milled else LibraryEvent.SCRY
+                kind = named or (LibraryEvent.SURVEIL if subject in milled else LibraryEvent.SCRY)
                 _flag_library(self.targets[subject], kind)
         searched = set()
         for event in self.by_type[EventType.ZONE_CHANGE]:
