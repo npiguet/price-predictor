@@ -124,7 +124,7 @@ class PassCollector(Protocol):
 
 
 class FieldParts:
-    """The loss by field, averaged over the pass's batches."""
+    """The loss by field, per record over the pass's records."""
 
     wants_parts = True
 
@@ -132,7 +132,7 @@ class FieldParts:
         self._means = PartsMean()
 
     def add(self, prepared: DeviceStep, computed: StepLoss) -> None:
-        self._means.add(computed.parts)
+        self._means.add(computed.parts, rows=int(prepared.targets.gate.shape[0]))
 
     def finish(self) -> None:
         pass

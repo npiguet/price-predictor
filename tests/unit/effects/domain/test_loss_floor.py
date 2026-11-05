@@ -133,22 +133,22 @@ class TestConstantPredictorFloor:
 
 
 class TestPartsMean:
-    def test_each_field_is_averaged_over_the_batches_that_carried_it(self):
-        """Summed on the device in float64 and read once, the means are the
-        ones a float read of every part and a Python sum give."""
+    def test_each_term_is_per_record_over_every_batch_added(self):
+        """A term a batch does not carry counts zero there, and each batch
+        weighs its records: the unit of a step's loss term and of the floor."""
         batches = [
-            LossParts(("gate", "tap_state"), torch.tensor([0.1, 0.7], dtype=torch.float64)),
-            LossParts(("gate",), torch.tensor([0.3], dtype=torch.float64)),
-            LossParts(),
-            LossParts(("gate", "tap_state"), torch.tensor([0.2, 0.9], dtype=torch.float64)),
+            (LossParts(("gate", "tap_state"), torch.tensor([0.1, 0.7], dtype=torch.float64)), 2),
+            (LossParts(("gate",), torch.tensor([0.3], dtype=torch.float64)), 4),
+            (LossParts(), 1),
+            (LossParts(("gate", "tap_state"), torch.tensor([0.2, 0.9], dtype=torch.float64)), 3),
         ]
         means = PartsMean()
-        for parts in batches:
-            means.add(parts)
+        for parts, rows in batches:
+            means.add(parts, rows=rows)
 
-        assert means.means() == {
-            "gate": (0.1 + 0.3 + 0.2) / 3, "tap_state": (0.7 + 0.9) / 2,
-        }
+        assert means.means() == pytest.approx({
+            "gate": (0.1 * 2 + 0.3 * 4 + 0.2 * 3) / 10, "tap_state": (0.7 * 2 + 0.9 * 3) / 10,
+        })
 
     def test_nothing_added_reads_as_no_fields(self):
         assert PartsMean().means() == {}
@@ -216,3 +216,190 @@ class TestDegenerateFields:
         )
         assert floor["gate"] == pytest.approx(4 * math.log(2) / 2, abs=1e-5)
         assert floor["damage_taken"] == 0.0
+
+
+def _verdict_batch(rows: int, values: dict, supervised: dict):
+    """A verdict head's ``(target, mask)`` with ``values[name]`` per record
+    (a list of member values for a member field) where ``supervised[name]``."""
+    from effects.domain.effect_head_layout import VERDICT_LAYOUT
+
+    target = torch.zeros(rows, VERDICT_LAYOUT.target_width)
+    mask = torch.zeros(rows, len(VERDICT_LAYOUT.fields), dtype=torch.bool)
+    for name, per_record in values.items():
+        first, last = VERDICT_LAYOUT.target_slices[name]
+        target[:, first:last] = torch.tensor(per_record, dtype=torch.float32).reshape(rows, -1)
+        mask[:, VERDICT_LAYOUT.index[name]] = torch.tensor(supervised[name])
+    return target, mask
+
+
+def _sample(entity_records: int, heads: dict):
+    from effects.domain.loss_floor import TargetSample
+
+    sample = TargetSample()
+    sample.add(make_entity_targets(torch.zeros(entity_records, 1)), heads)
+    return sample
+
+
+class TestEveryHead:
+    """One function gives every shipped head's floor (T143): the verdict and
+    global heads by field, the created-objects head by slot column."""
+
+    def test_a_verdict_bit_s_floor_is_its_entropy_per_record_of_the_sample(self):
+        """Two of four records set the bit, one of them positive: the floor
+        is the two records' entropy spread over all four."""
+        from effects.domain.loss_floor import constant_predictor_losses
+
+        target, mask = _verdict_batch(
+            4, {"can_play": [1.0, 0.0, 0.0, 0.0]},
+            {"can_play": [True, True, False, False]},
+        )
+        losses = constant_predictor_losses(_sample(4, {"verdict": (target, mask)}), fields=())
+        assert set(losses["verdict"]) == {"can_play"}
+        assert losses["verdict"]["can_play"] == pytest.approx(2 * math.log(2) / 4, abs=1e-5)
+
+    def test_a_count_member_field_fits_each_member_and_one_dispersion(self):
+        """``mana_paid`` holds a count per colour: each colour keeps its own
+        mean, all of them one fitted dispersion."""
+        from effects.domain.effect_head_layout import VERDICT_LAYOUT
+        from effects.domain.effect_losses import record_head_terms
+        from effects.domain.loss_floor import constant_predictor_losses
+
+        generator = torch.Generator().manual_seed(9)
+        members = VERDICT_LAYOUT.by_name["mana_paid"].count
+        paid = torch.poisson(
+            torch.linspace(0.5, 4.0, members).expand(200, members), generator,
+        ) * torch.randint(0, 3, (200, 1), generator=generator)
+        target, mask = _verdict_batch(
+            200, {"mana_paid": paid.tolist()}, {"mana_paid": [True] * 200},
+        )
+        floor = constant_predictor_losses(
+            _sample(200, {"verdict": (target, mask)}), fields=(),
+        )["verdict"]["mana_paid"]
+
+        start, _ = VERDICT_LAYOUT.slices["mana_paid"]
+        index = VERDICT_LAYOUT.index["mana_paid"]
+
+        def scored(log_rates, log_dispersion):
+            outputs = torch.zeros(200, VERDICT_LAYOUT.width)
+            outputs[:, start:start + members] = log_rates
+            dispersion = torch.zeros(len(VERDICT_LAYOUT.dispersed))
+            dispersion[VERDICT_LAYOUT.dispersion_index["mana_paid"]] = log_dispersion
+            return float(record_head_terms(
+                outputs, target, mask, VERDICT_LAYOUT, log_dispersion=dispersion,
+            )[index]) / 200
+
+        means = torch.log(paid.mean(0))
+        fitted = fit_log_dispersion(paid, paid.mean(0))
+        assert floor == pytest.approx(scored(means, fitted), rel=1e-5)
+        # The fit is the best constant: moving the means or the dispersion costs.
+        assert floor < scored(means + 0.1, fitted)
+        assert floor < scored(means, fitted + 0.2)
+        assert floor < scored(means, fitted - 0.2)
+        # Overdispersed by construction, so it fits well below the Poisson bound.
+        assert float(fitted) < 2.0
+
+    def test_a_global_count_and_categorical_each_get_a_floor(self):
+        from effects.domain.effect_head_layout import GLOBAL_LAYOUT
+        from effects.domain.loss_floor import constant_predictor_losses
+
+        target = torch.zeros(3, GLOBAL_LAYOUT.target_width)
+        first, _ = GLOBAL_LAYOUT.target_slices["turn_structure_change"]
+        target[:, first] = torch.tensor([1.0, 0.0, 2.0])
+        column, _ = GLOBAL_LAYOUT.target_slices["day_night_change"]
+        target[:, column] = torch.tensor([0.0, 1.0, 2.0])
+        mask = torch.ones(3, len(GLOBAL_LAYOUT.fields), dtype=torch.bool)
+        losses = constant_predictor_losses(
+            _sample(3, {"global": (target, mask)}), fields=(),
+        )["global"]
+        assert set(losses) == {"turn_structure_change", "day_night_change"}
+        assert losses["day_night_change"] == pytest.approx(math.log(3), abs=1e-5)
+        assert losses["turn_structure_change"] > 0.0
+
+    def test_the_created_objects_head_reports_each_slot_column(self):
+        from effects.domain.effect_head_layout import (
+            CREATED_OBJECTS_WIDTH,
+            CREATED_SLOT_WIDTH,
+            CREATED_TERMS,
+            CreatedSlot,
+        )
+        from effects.domain.loss_floor import constant_predictor_losses
+
+        target = torch.zeros(4, CREATED_OBJECTS_WIDTH)
+        target[:2, CreatedSlot.PRESENT] = 1.0
+        target[:2, CreatedSlot.COUNT] = torch.tensor([1.0, 3.0])
+        target[0, CREATED_SLOT_WIDTH + CreatedSlot.PRESENT] = 1.0
+        target[0, CREATED_SLOT_WIDTH + CreatedSlot.COUNT] = 2.0
+        known = torch.ones_like(target)
+        known[:, CreatedSlot.OTHER_CONTROLLER] = 0.0  # said by no record
+        mask = torch.tensor([True, True, True, False])
+        losses = constant_predictor_losses(
+            _sample(4, {"created_objects": (target, mask, known)}), fields=(),
+        )["created_objects"]
+        assert set(losses) <= set(CREATED_TERMS)
+        assert losses["present"] > 0.0 and losses["count"] > 0.0
+        # Unsaid in the first slot only: the later slots still give it a floor.
+        assert "other_controller" in losses
+        assert losses["scripted"] == 0.0  # never set: degenerate
+
+    def test_a_head_no_record_supervises_is_absent(self):
+        from effects.domain.loss_floor import PER_ENTITY, constant_predictor_losses
+
+        losses = constant_predictor_losses(_sample(2, {}), fields=())
+        assert set(losses) == {PER_ENTITY}
+
+    def test_a_term_reads_per_record_over_every_batch(self):
+        """A batch that never supervises a field still counts its records:
+        the floor is in the unit of a step's loss term."""
+        from effects.domain.loss_floor import TargetSample, constant_predictor_losses
+
+        values = [[1.0, 0.0], [0.0, 0.0]]
+        carrying = _tap_batch(values)
+        silent = make_entity_targets(torch.ones(2, 2))
+        alone = constant_predictor_losses(TargetSample.of([carrying]), fields=_TAP)
+        both = constant_predictor_losses(TargetSample.of([carrying, silent]), fields=_TAP)
+        assert both["per_entity"]["tap_state"] == pytest.approx(
+            alone["per_entity"]["tap_state"] / 2, rel=1e-6,
+        )
+
+
+_TAP = (FIELDS_BY_NAME["tap_state"],)
+
+
+def _tap_batch(values):
+    gate = torch.ones(len(values), len(values[0]))
+    return make_entity_targets(
+        gate, fields_everywhere({"tap_state": torch.tensor(values)}),
+    )
+
+
+class TestNegativeBinomialFloor:
+    def test_newton_steps_improve_on_the_moment_estimate(self):
+        """The floor is the likelihood's best constant, not the moment fit's."""
+        from effects.domain.field_kinds import negative_binomial
+
+        generator = torch.Generator().manual_seed(2)
+        counts = torch.poisson(torch.distributions.Gamma(0.7, 0.7 / 3.0).sample((300,)), generator)
+        mean = counts.mean()
+        moment = torch.log(mean ** 2 / (counts.var(unbiased=False) - mean))
+
+        def nll(log_dispersion):
+            return float(negative_binomial(
+                torch.log(mean).expand_as(counts), counts, log_dispersion,
+            ).sum())
+
+        assert nll(fit_log_dispersion(counts, mean)) <= nll(moment)
+
+    def test_a_count_fields_dispersion_is_fitted_per_field(self):
+        from effects.domain.effect_head_layout import DISPERSION_INDEX
+
+        wide = [[0.0, 0.0, 0.0, 12.0], [0.0, 1.0, 0.0, 9.0]]
+        narrow = [[2.0, 2.0, 3.0, 2.0], [2.0, 1.0, 2.0, 2.0]]
+        batch = make_entity_targets(
+            torch.ones(2, 4),
+            fields_everywhere({
+                "damage_taken": torch.tensor(wide), "cards_drawn": torch.tensor(narrow),
+            }),
+        )
+        fields = (FIELDS_BY_NAME["damage_taken"], FIELDS_BY_NAME["cards_drawn"])
+        fitted = constant_predictor_dispersion([batch], fields=fields)
+        assert fitted[DISPERSION_INDEX["damage_taken"]] < fitted[DISPERSION_INDEX["cards_drawn"]]
