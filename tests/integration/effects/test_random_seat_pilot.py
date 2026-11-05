@@ -258,9 +258,10 @@ def test_a_resolved_charm_has_one_effect_half_per_chosen_mode(pilot) -> None:
                 )
                 charm_links[record.link_id] = charm
             elif record.moment is Moment.RESOLUTION:
-                if record.interventional:
+                if record.interventional and record.link_id is None:
                     # A forced resolution has no cost half; by FR-029f its
-                    # halves still go through the option lines.
+                    # halves still go through the option lines. A protection
+                    # fork's halves are linked as live ones (FR-058).
                     if patched:
                         assert all(k.option is not None for k in record.ability), (
                             f"a forked charm half acts through the root: {record.record_id}"

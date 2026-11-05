@@ -99,9 +99,14 @@ def test_a_fork_record_carries_the_forks_own_state(tmp_path: Path) -> None:
         # describe a situation the resolution never saw.
         assert fork.state.entities or fork.state.players
 
+    # A forced resolution writes its effect half alone; a protection fork,
+    # played on to the turn's end (FR-058), links its cost halves as a live
+    # game does, so a linked interventional record finds its partner there.
     interventional = [f for f in forks if f.interventional]
-    for record in interventional:
-        assert record.link_id is None, "an intervention has no activation partner"
+    linked = {f.link_id for f in interventional if f.link_id is not None}
+    for link_id in linked:
+        halves = [f for f in interventional if f.link_id == link_id]
+        assert len(halves) >= 2, f"interventional half {link_id} has no partner"
 
 
 def test_forks_pair_to_the_records_they_mirror(tmp_path: Path) -> None:
@@ -134,8 +139,10 @@ def test_an_intervention_records_what_the_ability_did(tmp_path: Path) -> None:
     )
     for record in with_events:
         assert record.fork and record.interventional
+    # A protection fork's records are of every kind and link their halves; the
+    # forced resolutions are the unlinked resolution records.
+    for record in (f for f in with_events if f.kind.value == "resolution" and f.link_id is None):
         assert record.ability, "an intervention names the line it forced"
-        assert record.link_id is None, "an intervention has no activation partner"
 
 
 def test_an_intervention_forces_something_observation_misses(

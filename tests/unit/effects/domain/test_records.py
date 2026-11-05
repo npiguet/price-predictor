@@ -63,9 +63,11 @@ class TestFlagSignatures:
         assert (record.interventional, record.fork) == (False, True)
         assert record.is_probe
 
-    def test_an_intervention_must_be_a_resolution(self, make_record):
-        with pytest.raises(ValueError, match="forced resolution"):
-            make_record(kind=RecordKind.COMBAT, interventional=True, fork=True)
+    def test_a_protection_fork_writes_records_of_any_kind(self, make_record):
+        # FR-058: the fork is played on to the turn's end, so it records combat too.
+        record = make_record(kind=RecordKind.COMBAT, interventional=True, fork=True)
+        assert (record.interventional, record.fork) == (True, True)
+        assert not record.is_probe
 
     def test_an_intervention_is_always_a_fork(self, make_record):
         with pytest.raises(ValueError, match="always a fork"):
@@ -119,11 +121,13 @@ class TestLinkId:
         )
         assert record.link_id == "pair-1"
 
-    def test_an_interventional_effect_half_has_no_partner_to_link_to(
-        self, make_record,
-    ):
-        with pytest.raises(ValueError, match="no activation partner"):
-            make_record(interventional=True, fork=True, link_id="pair-1")
+    def test_a_protection_fork_links_its_cost_half_as_a_live_one(self, make_record):
+        record = make_record(
+            moment=Moment.ACTIVATION,
+            payload=ActivationPayload(costs=Costs(), outcome=ResolutionOutcome.RESOLVED),
+            interventional=True, fork=True, link_id="pair-1",
+        )
+        assert record.link_id == "pair-1"
 
     def test_a_partnerless_outcome_without_a_link_id_is_fine(self, make_record):
         record = make_record(

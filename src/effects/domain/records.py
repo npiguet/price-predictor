@@ -670,12 +670,14 @@ class EffectRecord:
     ==========================  ============  ===============  ======
     ordinary observation        any           False            False
     interventional resolution   resolution    True             True
+    protection fork (gen-3)     any           True             True
     damage-step probe           combat        False            True
     directed fork (gen-3)       any           False            True
     ==========================  ============  ===============  ======
 
     A directed fork also carries ``directed`` and the rule it aimed at in
-    ``aimed_at``.
+    ``aimed_at``. A forced resolution writes its effect half alone, with no
+    ``link_id``; a protection fork's cost halves link to their effect halves.
     """
 
     record_id: str
@@ -781,14 +783,10 @@ class EffectRecord:
         )
 
     def _check_flags(self) -> None:
-        if self.interventional:
-            if self.kind is not RecordKind.RESOLUTION:
-                raise ValueError(
-                    "an interventional record is a forced resolution; kind="
-                    f"{self.kind.value}"
-                )
-            if not self.fork:
-                raise ValueError("an interventional record is always a fork")
+        # A forced resolution's effect half, or any record of a protection fork
+        # played on to the turn's end (FR-058), cost halves linked as live ones.
+        if self.interventional and not self.fork:
+            raise ValueError("an interventional record is always a fork")
         if self.mirror_of is not None and not self.fork:
             raise ValueError("mirror_of names the real record a fork mirrors")
         if self.variant_of is not None and not self.synthetic:
@@ -809,11 +807,6 @@ class EffectRecord:
     def _check_link_id(self) -> None:
         if self.link_id is None:
             return
-        if self.interventional:
-            raise ValueError(
-                "an interventional resolution writes the effect half only, so it "
-                "has no activation partner to link to"
-            )
         payload = self.payload
         if isinstance(payload, ActivationPayload) and not payload.has_partner:
             raise ValueError(
