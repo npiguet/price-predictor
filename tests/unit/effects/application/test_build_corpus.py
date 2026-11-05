@@ -34,6 +34,7 @@ reads ``default_build``, built once for the module.
 
 from __future__ import annotations
 
+import math
 from collections import Counter
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -219,13 +220,22 @@ def _rewrite(
     )
 
 
+#: A rules directory that does not exist: no scenario tags a record and no
+#: heads line budgets a rule, so these hand-built corpora show gen-2's
+#: curation alone; the gen-3 fixture's tests below read the real ``rules/``.
+_NO_RULES = Path(__file__).with_name("no-rules")
+
 #: Feature 023's rules, which most of this file was written against: the held-out
 #: text above is held out under the ``text`` unit, ``0.16`` places exactly one
 #: game (``g-clean-3``) in the game-disjoint stratum, and one copy per record.
+#: Placement's precision thresholds are off (research E5): no half needs a
+#: minimum of games, so nothing is promoted past gen-2's draw, and no
+#: component a precision target, so a build of four games exits 0.
 _LEGACY_RULES = dict(
     holdout=HoldoutRule(unit=HoldoutUnit.TEXT),
     game_disjoint_share=0.16, game_disjoint_keyword_share=0.16,
-    reuse_cap=1,
+    reuse_cap=1, rules_dir=_NO_RULES, min_games_per_half=0,
+    max_component_error=math.inf,
 )
 
 
@@ -931,31 +941,47 @@ def test_defective_records_reach_no_output_and_are_counted(tmp_path, a_corpus):
                                   store.game_disjoint_dir, store.gate_one_dir)
            for r in read_records(d)}
     assert "junk-train" not in ids and "junk-held" not in ids
-    # ``no-acting-text`` is the fixture's own ``g-clean-3.cast``, refused by
-    # the third rule in every build this file runs.
     assert store.load().quality_dropped == {
         QualityDefect.NO_ABILITY: 1, QualityDefect.EVENT_FLOOD: 1,
-        QualityDefect.NO_ACTING_TEXT: 1,
     }
 
 
-def test_a_resolution_record_acting_only_through_a_dropped_key_is_refused(default_build):
-    """FR-148's third rule, end to end through both passes.
+def test_a_permanent_spell_s_resolution_survives_keyed_to_its_card(default_build):
+    """Story 6 acceptance 4 (FR-059), end to end through both passes.
 
     ``g-clean-3.cast`` acts through the implicit permanent spell alone — a
-    ``dropped_keys`` entry — so it would reach the head with an empty acting
-    slot. ``g-clean-3.level`` acts through a key past everything the face
-    declared, which is a real ability whose text the join cannot reach yet,
-    and is kept.
+    ``dropped_keys`` entry no line carries — and is kept, its acting key the
+    permanent's card. ``g-clean-3.level`` acts through a key past everything
+    the face declared, which is a real ability whose text the join cannot
+    reach yet, and is kept too.
     """
     manifest = default_build.load()
-    assert manifest.quality_dropped.get("no-acting-text") == 1
-    assert manifest.no_acting_text_scripts == {_BEAR_FILE: 1}
-    written = {r.record_id for r in read_records(default_build.training_dir)}
-    written |= {r.record_id for r in read_records(default_build.card_disjoint_dir)}
-    written |= {r.record_id for r in read_records(default_build.game_disjoint_dir)}
-    assert "g-clean-3.cast" not in written
+    assert "no-acting-text" not in manifest.quality_dropped
+    assert manifest.no_acting_text_scripts == {}
+    written = {r.record_id: r for r in read_records(default_build.training_dir)}
+    written |= {r.record_id: r for r in read_records(default_build.card_disjoint_dir)}
+    written |= {r.record_id: r for r in read_records(default_build.game_disjoint_dir)}
+    assert written["g-clean-3.cast"].ability == (_BEAR_CAST_KEY,)
+    assert _BEAR_CAST_KEY.script_file == _BEAR_FILE
     assert "g-clean-3.level" in written
+
+
+def test_a_dropped_key_that_is_no_permanent_spell_is_still_refused(tmp_path, a_corpus):
+    """FR-148's third rule, end to end: a resolution acting through nothing
+    but a dropped trait other than the implicit cast spell has no text."""
+    from effects.domain.record_quality import QualityDefect
+
+    corpus = a_corpus.with_extra_records([
+        a_corpus.resolution(
+            "g-clean-1.dropped", game="g-clean-1",
+            ability=(ProvenanceKey(_BEAR_FILE, 0, "trigger", 0),)),
+    ])
+    _write_card(
+        corpus.cards[0].parent, _BEAR_FILE, _BEAR_CARD, _BEAR_TEXT, index_within_kind=1,
+        dropped=(_BEAR_CAST_KEY, ProvenanceKey(_BEAR_FILE, 0, "trigger", 0)),
+    )
+    store = corpus.build(tmp_path / "out")
+    assert store.load().quality_dropped == {QualityDefect.NO_ACTING_TEXT: 1}
 
 
 def test_a_record_acting_through_an_unjoinable_key_is_refused_not_fatal(tmp_path, a_corpus):
@@ -1343,10 +1369,17 @@ def test_two_builds_with_one_seed_write_the_same_training_records(
 
 
 def test_random_seat_changes_no_selection(tmp_path, shared_corpus, gen2_build):
-    """FR-050: the off-policy flag is reported, never selected on."""
+    """FR-050: the off-policy flag is reported, never selected on.
+
+    Flipped on the training games only: a random seat keeps a game out of
+    both validation strata (FR-059), which is placement, not selection.
+    """
+    manifest = gen2_build.load()
+    validation = {*manifest.card_disjoint_games, *manifest.game_disjoint_games}
     flipped_root = tmp_path / "flipped"
     for shard in iter_shards(shared_corpus.records):
-        records = [replace(r, random_seat=True) for r in read_shard(shard)]
+        records = [r if r.game_id in validation else replace(r, random_seat=True)
+                   for r in read_shard(shard)]
         write_shard(flipped_root / shard.relative_to(shared_corpus.records), records)
     flipped = shared_corpus.build(
         tmp_path / "flipped-out", rules=_GEN2_RULES, records_dir=flipped_root,

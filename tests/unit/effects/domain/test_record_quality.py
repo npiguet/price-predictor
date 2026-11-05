@@ -119,9 +119,27 @@ def test_a_record_acting_through_a_rendered_line_is_kept(make_record):
     assert acting_text_defect(make_record(), _resolver(spell=KeyResolution.LINE)) is None
 
 
-def test_a_record_acting_only_through_dropped_keys_is_refused(make_record):
+def test_a_record_acting_only_through_dropped_keys_is_refused(make_record, ability_key):
+    keys = (ProvenanceKey(ability_key.script_file, 0, "trigger", 1),)
+    assert acting_text_defect(
+        make_record(ability=keys), _resolver(trigger=KeyResolution.DROPPED)
+    ) == QualityDefect.NO_ACTING_TEXT
+
+
+def test_a_permanent_spell_s_resolution_is_kept(make_record, ability_key):
+    """Story 6 acceptance 4 (FR-059): a creature resolves through its implicit
+    cast spell, the face's first spell trait, which no line carries; the
+    record is kept, keyed to the permanent's card by that key."""
+    assert ability_key.trait_kind == "spell" and ability_key.index_within_kind == 0
     assert acting_text_defect(
         make_record(), _resolver(spell=KeyResolution.DROPPED)
+    ) is None
+
+
+def test_a_later_dropped_spell_trait_is_no_permanent_spell(make_record, ability_key):
+    keys = (ProvenanceKey(ability_key.script_file, 0, "spell", 1),)
+    assert acting_text_defect(
+        make_record(ability=keys), _resolver(spell=KeyResolution.DROPPED)
     ) == QualityDefect.NO_ACTING_TEXT
 
 

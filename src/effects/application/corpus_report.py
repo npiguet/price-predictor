@@ -266,6 +266,7 @@ def build_manifest(
         game_disjoint_keyword_share=config.game_disjoint_keyword_share,
         game_disjoint_keywords=tuple(config.game_disjoint_keywords),
         reuse_cap=config.reuse_cap,
+        **decisions.rule_fields,
     )
 
 
@@ -283,6 +284,38 @@ def log_report(
         len(decisions.strata.game_disjoint), len(decisions.keyword_threshold_games),
         len(manifest.held_out_texts_without_resolution),
         len(manifest.held_out_texts_under_five_games), HELD_OUT_GAME_FLOOR,
+    )
+    _log_rules(manifest, decisions, written)
+
+
+def _log_rules(manifest: CorpusManifest, decisions: Decisions, written: WriteResult) -> None:
+    """The rule budgets, the halves and what was left out (FR-054-FR-060)."""
+    logger.info(
+        "%d tagged rule(s), %d budgeted; copies added: %s; protection copies: %s",
+        len(manifest.rule_map), len(manifest.budgeted_rules),
+        dict(sorted(written.added.items())) or "none",
+        dict(sorted(written.protection.items())) or "none",
+    )
+    for klass, rules in sorted(manifest.one_sided_rules.items()):
+        logger.info("%-22s %d one-sided rule(s): %s", klass, len(rules), ", ".join(rules[:10]))
+    for klass, carriers in sorted(manifest.one_sided_conditions.items()):
+        logger.info("%-22s condition(s) on one side only: %s", klass, ", ".join(carriers))
+    short = sum(
+        1 for by_rule in manifest.rules.values() for rows in by_rule.values()
+        for row in rows.values() if row.shortfall
+    )
+    logger.info("%d (class, rule, polarity) half(s) short of their share", short)
+    for stratum, by_half in sorted(decisions.strata.halves.items()):
+        logger.info(
+            "%-22s halves: %s", stratum,
+            ", ".join(f"{half} {len(games)} game(s)" for half, games in by_half.items()),
+        )
+    for stratum, by_half in sorted(manifest.left_out_of_half.items()):
+        for half, rules in sorted(by_half.items()):
+            logger.info("%-22s %s leaves out %d rule(s)", stratum, half, len(rules))
+    logger.info(
+        "turn_action record(s) written nowhere: %s",
+        dict(manifest.turn_action_left_out) or "none",
     )
 
 

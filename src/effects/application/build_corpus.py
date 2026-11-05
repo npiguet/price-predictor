@@ -2,18 +2,25 @@
 
 Between the survey (:mod:`effects.application.corpus_survey`) and the write
 pass (:mod:`effects.application.corpus_write`), this module folds provenance
-keys to ability texts and decides the split and the plan.
+keys to ability texts and decides the placement, the plan and the rule
+budgets: :func:`~effects.domain.stratum_placement.place_games` over the whole
+corpus, gen-2's natural share (``plan_selection``) over the training games it
+leaves, then :func:`~effects.domain.rule_budgets.plan_rule_budgets` over the
+training stratum and each validation stratum (FR-054, FR-068a). ``rules/heads/``
+and ``rules/scenarios/`` are read once, here (FR-060a).
 """
 
 from __future__ import annotations
 
+import functools
 import logging
 import shutil
 import sys
-from collections.abc import Callable
+from collections import Counter
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from effects.application.corpus_report import (
     build_manifest,
@@ -23,25 +30,32 @@ from effects.application.corpus_report import (
     report_write_pass,
 )
 from effects.application.corpus_survey import (
-    GameTally,
     RarityTally,
     ReadConfig,
     Survey,
     SurveyConfig,
+    SurveyedRecord,
     WorkerContext,
     run_survey,
 )
-from effects.application.corpus_write import WriteConfig, WritePlan, WriteResult, run_write_pass
+from effects.application.corpus_write import (
+    WriteConfig,
+    WritePlan,
+    WriteResult,
+    WriteTask,
+    run_write_pass,
+)
+from effects.application.rule_counts import none_rules
 from effects.domain import default_paths
 from effects.domain.ability_tokenizer import Surface
+from effects.domain.corpus_curation import one_sided_conditions
+from effects.domain.corpus_manifest import rule_curation_fields
 from effects.domain.corpus_plan import (
     BuildCorpusError,
-    GameRouting,
     GameStrata,
     Keys,
     SelectionPlan,
     TrainingSupply,
-    admit_card_disjoint,
     members_of,
     plan_selection,
 )
@@ -50,14 +64,31 @@ from effects.domain.keyword_names import display_name_of, normalize_keyword
 from effects.domain.provenance import ProvenanceKey, SourceTree, first_text, split_script_file
 from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
 from effects.domain.records import acting_keys
+from effects.domain.rule_budgets import BudgetedRecord, RuleBudgets, plan_rule_budgets
+from effects.domain.rule_catalogue import (
+    MapVerdict,
+    Polarity,
+    RuleMapEntry,
+    ScenarioCatalogue,
+)
 from effects.domain.sampling import DEFAULT_KIND_MIX
 from effects.domain.shard_generation import (
-    ACCEPTED_GENERATIONS,
     MixedGenerationsError,
+    ShardGeneration,
     UnacceptedGenerationError,
 )
 from effects.domain.split import HeldOutCards, HoldoutRule
-from effects.domain.strata import OUTPUT_STRATA
+from effects.domain.strata import OUTPUT_STRATA, Stratum
+from effects.domain.stratum_placement import (
+    MAX_COMPONENT_ERROR,
+    MAX_ITEM_ERROR,
+    MIN_GAMES_PER_HALF,
+    GameCensus,
+    PlacementRule,
+    RuleCell,
+    place_games,
+    rule_test_misses,
+)
 
 if TYPE_CHECKING:
     from effects.infrastructure.converted_trees import ConvertedTrees, SourceTrees
@@ -179,6 +210,14 @@ class BuildCorpusConfig:
     verify: bool = field(default=False, metadata={"help": (
         "Report drift against an existing manifest and write nothing"
     )})
+    #: The rules catalogue (``scenarios/`` and ``heads/``), read once. No
+    #: flag (contracts/cli.md): a field so a test can point at its own.
+    rules_dir: Path = Path("rules")
+    #: The precision thresholds of research E5. No operator flag overrides
+    #: them; fields so a test can lower them.
+    min_games_per_half: int = MIN_GAMES_PER_HALF
+    max_item_error: float = MAX_ITEM_ERROR
+    max_component_error: float = MAX_COMPONENT_ERROR
 
     def __post_init__(self) -> None:
         self._refuse_negative_counts()
@@ -255,11 +294,61 @@ class BuildCorpusConfig:
         return self.text_cap if self.text_cap > 0 else sys.maxsize
 
     @property
-    def routing(self) -> GameRouting:
-        return GameRouting(
+    def placement(self) -> PlacementRule:
+        """Placement's flags and precision thresholds (research R3, E5)."""
+        return PlacementRule(
             game_disjoint_share=self.game_disjoint_share,
             keyword_share=self.game_disjoint_keyword_share,
+            card_disjoint_text_cap=self.card_disjoint_text_cap,
+            seed=self.seed,
+            min_games_per_half=self.min_games_per_half,
+            max_item_error=self.max_item_error,
+            max_component_error=self.max_component_error,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class RuleCatalogue:
+    """``rules/scenarios/`` and ``rules/heads/`` as one build read them (FR-060a).
+
+    Budgets, the manifest's map snapshot and every reader after it take a
+    rule's verdict and outputs from here, never from the files again.
+    """
+
+    scenarios: ScenarioCatalogue
+    #: ``rule -> RuleMapEntry`` for every heads line.
+    heads: dict[str, RuleMapEntry]
+    #: ``rules_catalogue_io.heads_digest``: the map's content hash.
+    digest: str
+
+    @classmethod
+    def read(cls, rules_dir: Path) -> RuleCatalogue:
+        from effects.infrastructure.rules_catalogue_io import (
+            heads_digest,
+            load_heads,
+            load_scenarios,
+        )
+
+        return cls(load_scenarios(rules_dir), load_heads(rules_dir), heads_digest(rules_dir))
+
+    @classmethod
+    def empty(cls) -> RuleCatalogue:
+        """No scenario and no map: nothing is tagged, nothing budgeted."""
+        return cls(ScenarioCatalogue(()), {}, "")
+
+    @property
+    def budgeted(self) -> frozenset[str]:
+        """The rules the map marks ``trained`` (FR-054)."""
+        return frozenset(
+            rule for rule, entry in self.heads.items() if entry.verdict is MapVerdict.TRAINED)
+
+    def snapshot(self, rules: Iterable[str]) -> dict[str, RuleMapEntry]:
+        """The manifest's ``rule_map``: every tagged rule's verdict and outputs,
+        ``missing`` for one no heads line names."""
+        return {
+            rule: self.heads.get(rule) or RuleMapEntry(rule=rule, verdict=MapVerdict.MISSING)
+            for rule in sorted(set(rules))
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,6 +368,17 @@ class Decisions:
     key_text: dict[Keys, str]
     #: Kept records per legality mode (FR-053's ``legality_mode_counts``).
     mode_counts: dict[str, int]
+    #: The training stratum's rule budgets (FR-054), which the manifest reports.
+    budgets: RuleBudgets = field(default_factory=lambda: plan_rule_budgets(
+        (), class_targets={}, budgeted=(), reuse_cap=1, text_cap=0))
+    #: Each validation stratum's, planned the same way over its own records.
+    validation_budgets: dict[Stratum, RuleBudgets] = field(default_factory=dict)
+    #: ``game -> record hash -> drawn rule per added copy`` over every stratum.
+    copies: dict[str, dict[int, tuple[str, ...]]] = field(default_factory=dict)
+    #: Placement's per-game rule inventories, which the precision check reads.
+    inventories: dict[str, dict[RuleCell, int]] = field(default_factory=dict)
+    #: The manifest's gen-3 fields (``corpus_manifest.rule_curation_fields``).
+    rule_fields: dict = field(default_factory=dict)
 
     def write_plan(self, store: CorpusStore) -> WritePlan:
         """What the write pass applies: these decisions, its parts in ``store``."""
@@ -291,6 +391,16 @@ class Decisions:
             keyless_plans=self.selection.keyless,
             mode_counts=self.mode_counts,
         )
+
+    def write_tasks(self, survey: Survey) -> list[WriteTask]:
+        """One task per raw shard, each carrying its own games' added copies."""
+        tasks = []
+        for shard in survey.shards:
+            games = survey.shard_games.get(shard.name, frozenset())
+            tasks.append(WriteTask(shard=shard, copies={
+                game: self.copies[game] for game in games if game in self.copies
+            }))
+        return tasks
 
 
 def _keyword_misfires(
@@ -322,8 +432,11 @@ def decide(
     sidecars: SidecarCache,
     surface: Surface,
     config: BuildCorpusConfig,
+    rules: RuleCatalogue | None = None,
 ) -> Decisions:
-    """Fold keys to texts, split the games, and plan every record's copies."""
+    """Fold keys to texts, place the games, and plan every record's copies:
+    the natural share, then the rule budgets of each stratum."""
+    rules = rules or RuleCatalogue.empty()
     totals = survey.totals
     _refuse_another_heap_cap(totals.supply, config)
 
@@ -335,22 +448,143 @@ def decide(
 
     key_text, text_games = _fold_keys_to_texts(totals.rarity, text_of)
     _refuse_keyword_misfires(key_text, sidecars, config.keyword_definitions)
-    strata = _split_games(totals.games, config)
+    census = _census(survey)
+    strata = place_games(census, config.placement)
+    selection = plan_selection(
+        members_of(_training_supply(survey, strata), key_text), mix=config.mix(),
+        ceiling=config.training_records, text_cap=config.text_cap,
+        reuse_cap=config.reuse_cap,
+    )
+    budgets, validation = _rule_budgets(
+        survey, strata, selection, key_text, config=config, budgeted=rules.budgeted,
+    )
+    copies: dict[str, dict[int, tuple[str, ...]]] = dict(budgets.copies)
+    for planned in validation.values():
+        copies.update(planned.copies)
+    rule_counts = totals.rule_counts.to_json(none_rules(rules.scenarios))
     return Decisions(
-        selection=plan_selection(
-            members_of(totals.supply, key_text), mix=config.mix(),
-            ceiling=config.training_records, text_cap=config.text_cap,
-            reuse_cap=config.reuse_cap,
-        ),
+        selection=selection,
         strata=strata,
         keyword_threshold_games=frozenset(
             game for game in strata.game_disjoint
-            if config.routing.under_keyword_threshold(game)
+            if game in census.keyword_combat
+            and config.placement.under_keyword_threshold(game)
+            and config.placement.base_game_disjoint(game, keyword_combat=True)
         ),
         rarity={text: len(games) for text, games in text_games.items()},
         key_text=key_text,
         mode_counts=dict(sorted(totals.mode_counts.items())),
+        budgets=budgets,
+        validation_budgets=validation,
+        copies=copies,
+        inventories=dict(census.inventories),
+        rule_fields=rule_curation_fields(
+            budgets=budgets, strata=strata,
+            rule_map=rules.snapshot(_rules_named(rule_counts, budgets, validation)),
+            rule_map_digest=rules.digest, rule_counts=rule_counts,
+            one_sided_conditions=one_sided_conditions(totals.condition_counts),
+            turn_action_left_out=dict(totals.turn_actions),
+            subtypes=totals.subtypes, keywords=totals.keywords,
+        ),
     )
+
+
+def _rules_named(
+    rule_counts: Mapping[str, Any], budgets: RuleBudgets,
+    validation: Mapping[Stratum, RuleBudgets],
+) -> set[str]:
+    """Every rule the map snapshot must hold: each tagged rule, and each rule
+    a copy can be drawn for, a protection rule no detector tags included,
+    since the trainer reads a drawn rule's outputs off the manifest."""
+    named = set(rule_counts["rules"])
+    for planned in (budgets, *validation.values()):
+        named |= {rule for rows in planned.rows.values() for rule in rows}
+    return named
+
+
+def _census(survey: Survey) -> GameCensus:
+    """What placement reads of the survey (research R3)."""
+    games = survey.totals.games
+    return GameCensus(
+        games=frozenset(games.games),
+        held_out=frozenset(games.held_out),
+        random_seat=frozenset(games.random_seat),
+        keyword_combat=frozenset(games.keyword_combat),
+        held_out_text_games=games.held_out_text_games,
+        inventories=dict(survey.totals.inventories),
+    )
+
+
+def _training_supply(survey: Survey, strata: GameStrata) -> TrainingSupply:
+    """The survey's supply with the candidate games placement trained folded
+    in, their legality cells folded as the survey's were."""
+    totals = survey.totals
+    supply = TrainingSupply(totals.supply.heap_cap)
+    supply.merge(totals.supply)
+    for record in totals.candidates:
+        if not record.held_out_text and strata.stratum_of(record.game) is Stratum.TRAINING:
+            supply.add(record.cell.resolved(totals.mode_counts), record.keys, record.record_hash)
+    return supply
+
+
+def _rule_budgets(
+    survey: Survey, strata: GameStrata, selection: SelectionPlan, key_text: dict[Keys, str],
+    *, config: BuildCorpusConfig, budgeted: frozenset[str],
+) -> tuple[RuleBudgets, dict[Stratum, RuleBudgets]]:
+    """The training stratum's rule budgets over gen-2's natural share, and
+    each validation stratum's over its records written once each (FR-068a):
+    every stratum is built with the same rule budgets, a class's target being
+    the records it writes before any copy is added."""
+    totals = survey.totals
+    mode_counts = totals.mode_counts
+
+    def natural(record: SurveyedRecord) -> int:
+        return selection.copies(record.cell.resolved(mode_counts), record.keys,
+                                record.record_hash)
+
+    training = [*totals.tagged, *(
+        record for record in totals.candidates
+        if not record.held_out_text and strata.stratum_of(record.game) is Stratum.TRAINING
+        and (record.tags or record.protection)
+    )]
+    plan = functools.partial(
+        plan_rule_budgets, budgeted=budgeted, reuse_cap=config.reuse_cap,
+        text_cap=config.text_cap,
+    )
+    budgets = plan(
+        _budgeted_records(training, key_text, natural), class_targets=selection.targets,
+    )
+    validation: dict[Stratum, RuleBudgets] = {}
+    for stratum in (Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT):
+        records = [r for r in totals.candidates if strata.stratum_of(r.game) is stratum]
+        targets = Counter(str(record.klass) for record in records)
+        validation[stratum] = plan(
+            _budgeted_records(records, key_text, lambda _record: 1),
+            class_targets=dict(targets),
+        )
+    return budgets, validation
+
+
+def _budgeted_records(
+    records: Iterable[SurveyedRecord], key_text: dict[Keys, str],
+    natural: Callable[[SurveyedRecord], int],
+) -> Iterator[BudgetedRecord]:
+    """Each tagged record as the budgets read it, and beside it each record
+    offering protection copies as a record of its own, natural share zero,
+    tagged ``fires`` with every protection rule it offers (FR-058)."""
+    for record in records:
+        text = key_text.get(record.keys)
+        if record.tags:
+            yield BudgetedRecord(
+                game=record.game, record_hash=record.record_hash, klass=str(record.klass),
+                text=text, natural=natural(record), source=record.source, tags=record.tags,
+            )
+        if record.protection:
+            yield BudgetedRecord(
+                game=record.game, record_hash=record.protection_hash,
+                klass=str(record.klass), text=text, natural=0, source=record.source,
+                tags=tuple((rule, Polarity.FIRES) for rule in record.protection),
+            )
 
 
 def _refuse_another_heap_cap(supply: TrainingSupply, config: BuildCorpusConfig) -> None:
@@ -395,22 +629,10 @@ def _refuse_keyword_misfires(
         )
 
 
-def _split_games(games: GameTally, config: BuildCorpusConfig) -> GameStrata:
-    """The validation strata from the survey's routing, the card-disjoint one
-    capped per held-out text."""
-    held_out = frozenset(games.held_out)
-    return GameStrata(
-        card_disjoint=admit_card_disjoint(
-            held_out, games.held_out_text_games,
-            cap=config.card_disjoint_text_cap, seed=config.seed,
-        ),
-        game_disjoint=frozenset(games.game_disjoint) - held_out,
-        held_out=held_out,
-    )
-
-
 def build(config: BuildCorpusConfig) -> int:
-    """Build a curated dataset, or verify an existing one. Returns an exit code."""
+    """Build a curated dataset, or verify an existing one. Returns an exit code:
+    1, after the corpus and its manifest are written, when a rule-test
+    component already misses its precision target (research E5)."""
     from effects.domain.ability_encoder import surface_of
     from effects.infrastructure.corpus_store import CorpusStore
 
@@ -418,24 +640,26 @@ def build(config: BuildCorpusConfig) -> int:
     if config.verify:
         return _verify(config, store)
 
+    _require_generation(config.records_dir)
+    rules = RuleCatalogue.read(config.rules_dir)
     roots = config.source_trees.sidecar_roots()
     trees = _converted_trees(config, roots)
     held_out = _select_holdout(config, trees)
     surface = surface_of(config.vocab_path)
     _log_holdout(config, held_out, surface)
-    _require_generation(config.records_dir)
     read = ReadConfig(
         records_dir=config.records_dir, sidecar_roots=roots,
         max_events=config.max_events_per_record, held_out=held_out, seed=config.seed,
+        catalogue=rules.scenarios,
     )
-    survey = _survey(config, read)
-    decisions = _decide_or_refuse(config, survey, trees, surface, held_out)
+    survey = _survey(config, read, rules)
+    decisions = _decide_or_refuse(config, survey, trees, surface, held_out, rules)
 
     # Before the first output shard, and only on a real build: a rebuild
     # replaces the dataset rather than layering over it (FR-144).
     store.clear_outputs()
     written = run_write_pass(
-        survey.shards,
+        decisions.write_tasks(survey),
         config=WriteConfig(read=read, plan=decisions.write_plan(store)),
         workers=config.workers,
     )
@@ -453,6 +677,25 @@ def build(config: BuildCorpusConfig) -> int:
         "Wrote %d training record(s) to %s (digest %s).",
         sum(written.training.kept.values()), store.directory, manifest.digest(),
     )
+    return _precision_exit(config, decisions)
+
+
+def _precision_exit(config: BuildCorpusConfig, decisions: Decisions) -> int:
+    """1, naming each stratum, half and component, when a rule-test component
+    already misses its precision target (FR-068b); 0 otherwise.
+
+    Only the rule tests can be told here: the probes, grids and explained
+    deviance are measured when the selection set is frozen.
+    """
+    misses = rule_test_misses(decisions.strata, decisions.inventories, config.placement)
+    for miss in misses:
+        logger.error("precision target missed — %s", miss.describe(config.max_component_error))
+    if misses:
+        logger.error(
+            "%d half(s) miss the rule-test precision target; the corpus and its "
+            "manifest are written and readable (research E5).", len(misses),
+        )
+        return 1
     return 0
 
 
@@ -524,49 +767,63 @@ def _select_holdout(config: BuildCorpusConfig, trees: ConvertedTrees) -> HeldOut
 
 
 def _require_generation(records_dir: Path) -> None:
-    """Before any record is read (FR-020, FR-033)."""
+    """Gen-3 only, before any record is read (FR-018, FR-020)."""
     from effects.infrastructure.shard_io import iter_shards, require_generation
 
     try:
-        require_generation(iter_shards(records_dir), *ACCEPTED_GENERATIONS)
+        require_generation(iter_shards(records_dir), ShardGeneration.GEN_3)
     except (MixedGenerationsError, UnacceptedGenerationError) as exc:
         raise BuildCorpusError(str(exc)) from exc
 
 
-def _survey(config: BuildCorpusConfig, read: ReadConfig) -> Survey:
+def _known_keywords(definitions: Path | None) -> frozenset[str]:
+    """Forge's keywords for the closed keyword list; none without the table,
+    which leaves the overlay keywords alone."""
+    if definitions is None or not Path(definitions).exists():
+        return frozenset()
+    from effects.infrastructure.tokenizer_loading import load_keyword_definitions
+
+    return frozenset(normalize_keyword(name)
+                     for name in load_keyword_definitions(Path(definitions)))
+
+
+def _survey(config: BuildCorpusConfig, read: ReadConfig, rules: RuleCatalogue) -> Survey:
     """The parallel survey, logged."""
     survey = run_survey(
         config.records_dir,
         config=SurveyConfig(
-            read=read, heap_cap=config.heap_cap, routing=config.routing,
+            read=read, heap_cap=config.heap_cap, placement=config.placement,
             game_disjoint_keywords=tuple(
                 normalize_keyword(name) for name in config.game_disjoint_keywords
             ),
+            budgeted=rules.budgeted,
+            known_keywords=_known_keywords(config.keyword_definitions),
         ),
         workers=config.workers,
     )
     totals = survey.totals
-    supply = totals.supply
     logger.info(
         "Surveyed %d record(s) in %d game(s); %d game(s) name a held-out card, "
-        "%d are game-disjoint; %d record(s) are training-bound, and %d more act "
-        "through a held-out text.",
+        "%d have a random seat; %d game(s) are placement candidates; %d "
+        "turn-action record(s) are written nowhere; %d record(s) act through a "
+        "held-out text in a game naming no held-out card.",
         totals.records, len(totals.games.games), len(totals.games.held_out),
-        len(totals.games.game_disjoint),
-        sum(supply.keyed.values()) + sum(supply.keyless.values()),
-        sum(totals.held_out_text_dropped.values()),
+        len(totals.games.random_seat), len({r.game for r in totals.candidates}),
+        sum(totals.turn_actions.values()), sum(totals.held_out_text_dropped.values()),
     )
     return survey
 
 
 def _decide_or_refuse(
     config: BuildCorpusConfig, survey: Survey, trees: ConvertedTrees, surface: Surface,
-    held_out: HeldOutCards,
+    held_out: HeldOutCards, rules: RuleCatalogue,
 ) -> Decisions:
     """:func:`decide`, refusing a corpus the quality rules reject or a dataset
     gate 1 could not be scored on."""
     check_refusals(survey.totals.refusals, survey.totals.kept)
-    decisions = decide(survey, sidecars=trees.sidecars, surface=surface, config=config)
+    decisions = decide(
+        survey, sidecars=trees.sidecars, surface=surface, config=config, rules=rules,
+    )
     if not decisions.strata.card_disjoint:
         raise BuildCorpusError(
             "No game is admitted to the card-disjoint stratum, so the dataset "

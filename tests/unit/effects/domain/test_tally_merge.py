@@ -44,3 +44,13 @@ def test_a_field_it_cannot_add_raises():
 
     with pytest.raises(TypeError, match="label"):
         merge_into(_Odd("a"), _Odd("b"))
+
+
+def test_a_list_extends_in_order():
+    @dataclass
+    class _Listed:
+        items: list[int] = field(default_factory=list)
+
+    left = _Listed([1, 2])
+    merge_into(left, _Listed([3]))
+    assert left.items == [1, 2, 3]

@@ -3,23 +3,34 @@
 A worker re-reads one raw shard through the survey's :class:`WorkerContext`
 and writes one part per output stratum, which ``build()`` repacks; every number
 the manifest reports about what was written is tallied here.
+
+Every written copy carries its ``curation`` (research T1): a training record's
+natural copies, the ones gen-2's budgets give it, then the copies the rule
+budgets added, each carrying the rule it was drawn for and that rule's tag
+entities; a validation record's one natural copy and its added copies, by the
+same rule budgets planned over its stratum (FR-068a); and a record's
+protection copies (FR-058), each a synthetic record of its own. ``turn_action``
+records are written nowhere and counted by subkind (FR-059).
 """
 
 from __future__ import annotations
 
 import functools
+import random
 from collections import Counter
-from collections.abc import Sequence
-from dataclasses import dataclass, field
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from effects.application.corpus_survey import ReadConfig, RefusalTally, WorkerContext
 from effects.application.parallel_map import run_parallel
 from effects.domain.corpus_curation import CopyPlan
 from effects.domain.corpus_manifest import SourceShard
-from effects.domain.corpus_plan import Cell, GameStrata, Keys
+from effects.domain.corpus_plan import Cell, GameStrata, Keys, planned_copies
+from effects.domain.protection_copies import protection_copy, qualify
 from effects.domain.record_quality import has_unattributed_events
 from effects.domain.records import (
+    Curation,
     EffectRecord,
     LegalityDecision,
     RecordKind,
@@ -45,10 +56,24 @@ class WritePlan:
     mode_counts: dict[str, int] = field(default_factory=dict)
 
 
+#: ``game -> record hash -> drawn rule per added copy``: the rule budgets'
+#: draws (``RuleBudgets.copies``), a record's protection copies under its
+#: protection hash. A worker receives its own shard's games only.
+CopyMap = Mapping[str, Mapping[int, tuple[str, ...]]]
+
+
 @dataclass(frozen=True, slots=True)
 class WriteConfig:
     read: ReadConfig
     plan: WritePlan
+
+
+@dataclass(frozen=True, slots=True)
+class WriteTask:
+    """One raw shard to write, and the added copies of its games."""
+
+    shard: SourceShard
+    copies: CopyMap = field(default_factory=dict)
 
 
 # ── the tallies ─────────────────────────────────────────────────────────
@@ -119,12 +144,15 @@ class WriteResult:
     #: Kept records whose events name no producing clause (FR-148), watched
     #: rather than refused.
     unattributed: int = 0
+    #: Copies the rule budgets added, protection copies included, per stratum.
+    added: Counter[Stratum] = field(default_factory=Counter)
+    #: Protection copies written per drawn rule (FR-058).
+    protection: Counter[str] = field(default_factory=Counter)
+    #: ``turn_action`` records by subkind, written to no stratum (FR-059).
+    turn_actions: Counter[str] = field(default_factory=Counter)
 
 
 # ── the pass ────────────────────────────────────────────────────────────
-
-_NO_COPIES = CopyPlan()
-
 
 class WriteWorker:
     """One process's write side: the plan, and the read context every shard
@@ -134,26 +162,33 @@ class WriteWorker:
         self.plan = config.plan
         self.context = WorkerContext(config.read)
 
-    def write(self, shard: SourceShard) -> WriteResult:
+    def write(self, task: WriteTask) -> WriteResult:
         """Filter one shard into its output parts."""
-        writer = _ShardWriter(self.plan, self.context)
-        for record in self.context.records(shard):
+        writer = _ShardWriter(self.plan, self.context, task.copies)
+        for record in self.context.records(task.shard):
             writer.observe(record)
-        return writer.finish(shard.part_name)
+        return writer.finish(task.shard.part_name)
+
+
+_NO_ADDED: Mapping[int, tuple[str, ...]] = {}
 
 
 class _ShardWriter:
     """One shard's write pass in progress: every record routed to its outputs
     and tallied, then each output written as one part."""
 
-    def __init__(self, plan: WritePlan, context: WorkerContext) -> None:
+    def __init__(self, plan: WritePlan, context: WorkerContext, copies: CopyMap) -> None:
         self.plan = plan
         self.context = context
+        self.copies = copies
         self.out = WriteResult()
         self.outputs: dict[Stratum, list] = {stratum: [] for stratum in OUTPUT_STRATA}
 
     def observe(self, record: EffectRecord) -> None:
         """Route one record to its outputs and tally it."""
+        if record.kind is RecordKind.TURN_ACTION:
+            self.out.turn_actions[str(record.subkind)] += 1
+            return
         klass = self.context.admit(record, self.out.refusals)
         if klass is None:
             return
@@ -169,23 +204,22 @@ class _ShardWriter:
         else:
             self._hold(record, stratum, keys)
 
-    def _emit(self, stratum: Stratum, record: EffectRecord, keys: Keys) -> None:
-        self.outputs[stratum].append(record)
-        self.out.strata.note(stratum, keys)
-
     def _hold(self, record: EffectRecord, stratum: Stratum, keys: Keys) -> None:
-        """A validation game's record, and gate 1's copy of a card-disjoint
-        resolution acting through a held-out text."""
-        self._emit(stratum, record, keys)
+        """A validation game's record, its added copies and protection copies,
+        and gate 1's one copy of a card-disjoint resolution acting through a
+        held-out text."""
+        natural = self._write(stratum, record, keys, natural=1)[0]
+        self._protection_copies(record, stratum, keys)
         if stratum is Stratum.CARD_DISJOINT and record.kind is RecordKind.RESOLUTION:
             text = self.context.held_out_text(keys)
             if text is not None:
-                self._emit(Stratum.GATE_ONE, record, keys)
+                self.outputs[Stratum.GATE_ONE].append(natural)
+                self.out.strata.note(Stratum.GATE_ONE, keys)
                 self.out.strata.gate_one_texts.add(text)
 
     def _train(self, record: EffectRecord, klass: SamplingClass, keys: Keys) -> None:
         """A training game's record, written as many times as its cell's plan
-        draws for it."""
+        draws for it, then the copies the rule budgets added."""
         out = self.out
         if self.context.held_out_text(keys) is not None:
             # A token or variant printing a held-out text: the rest of the game
@@ -193,23 +227,70 @@ class _ShardWriter:
             out.strata.note(Stratum.DROPPED_HELD_OUT_TEXT, ())
             return
         cell = self.context.cell_of(record, self.plan.mode_counts)
-        copies = self._copy_plan(cell, keys).copies(self.context.hash_of(record))
-        if copies <= 0:
+        natural = planned_copies(
+            self.plan.plans, self.plan.keyless_plans, cell, keys, self.context.hash_of(record),
+        )
+        written = len(self._write(Stratum.TRAINING, record, keys, natural=natural))
+        written += self._protection_copies(record, Stratum.TRAINING, keys)
+        if not written:
             out.training.dropped_by_cap[klass] += 1
             return
-        self.outputs[Stratum.TRAINING].extend([record] * copies)
-        out.strata.note(Stratum.TRAINING, keys, copies)
-        out.training.kept[klass] += copies
+        out.training.kept[klass] += written
         if keys:
             out.training.kept_keys.setdefault(klass, set()).add(keys)
-        out.families.note(record, klass, cell, copies)
+        if natural > 0:
+            # The families report gen-2's budgets: natural copies alone.
+            out.families.note(record, klass, cell, natural)
 
-    def _copy_plan(self, cell: Cell, keys: Keys) -> CopyPlan:
-        """The plan of the record's ``(cell, keys)`` group, else its cell's."""
-        copy_plan = self.plan.plans.get((cell, keys)) if keys else None
-        if copy_plan is None:
-            copy_plan = self.plan.keyless_plans.get(cell, _NO_COPIES)
-        return copy_plan
+    def _write(
+        self, stratum: Stratum, record: EffectRecord, keys: Keys, *, natural: int,
+    ) -> list[EffectRecord]:
+        """``natural`` copies of ``record`` then its added copies, each with
+        its curation; the copies written, natural first."""
+        added = self.copies.get(record.game_id, _NO_ADDED).get(
+            self.context.hash_of(record), ())
+        total = natural + len(added)
+        if total <= 0:
+            return []
+        drawn = tuple(sorted(set(added)))
+        copies = [replace(record, curation=Curation(natural, total, None, drawn))] * natural
+        if added:
+            entities = {tag.rule: tag.entities for tag in self.context.tags(record).tags}
+            copies += [
+                replace(record, curation=Curation(
+                    natural, total, rule, drawn, entities.get(rule, ())))
+                for rule in added
+            ]
+            self.out.added[stratum] += len(added)
+        self.outputs[stratum].extend(copies)
+        self.out.strata.note(stratum, keys, total)
+        return copies
+
+    def _protection_copies(self, record: EffectRecord, stratum: Stratum, keys: Keys) -> int:
+        """The protection copies the rule budgets drew for ``record`` (FR-058),
+        each a synthetic record carrying its drawn rule; how many were written.
+
+        The draws are seeded by the record's protection hash, so a rebuild
+        writes the same copies."""
+        value = self.context.protection_hash_of(record)
+        rules = self.copies.get(record.game_id, _NO_ADDED).get(value, ())
+        if not rules:
+            return 0
+        opportunities = qualify(record)
+        rng = random.Random(value)
+        drawn = tuple(sorted(set(rules)))
+        written = 0
+        for index, rule in enumerate(rules):
+            made = protection_copy(record, opportunities, rule=rule, rng=rng, index=index)
+            if made is None:
+                continue
+            self.outputs[stratum].append(replace(made.record, curation=Curation(
+                0, len(rules), rule, drawn, made.rule_entities)))
+            self.out.protection[rule] += 1
+            written += 1
+        self.out.strata.note(stratum, keys, written)
+        self.out.added[stratum] += written
+        return written
 
     def finish(self, name: str) -> WriteResult:
         """Write each non-empty output as part ``name`` of its stratum."""
@@ -222,13 +303,13 @@ class _ShardWriter:
 
 
 def run_write_pass(
-    shards: Sequence[SourceShard], *, config: WriteConfig, workers: int | None,
+    tasks: Sequence[WriteTask], *, config: WriteConfig, workers: int | None,
     progress_every: int = 50,
 ) -> WriteResult:
     """Write every shard's output parts, in parallel, reporting progress."""
     total = WriteResult()
     for part in run_parallel(
-        shards, WriteWorker.write, context=functools.partial(WriteWorker, config),
+        tasks, WriteWorker.write, context=functools.partial(WriteWorker, config),
         workers=workers, label="Wrote", progress_every=progress_every,
     ):
         merge_into(total, part)

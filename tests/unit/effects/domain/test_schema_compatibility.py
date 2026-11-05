@@ -33,6 +33,7 @@ from effects.domain.records import (
     PAYLOAD_TYPES,
     ActivationPayload,
     CollectionMode,
+    Curation,
     EffectRecord,
     Moment,
     PlayabilitySubkind,
@@ -97,6 +98,9 @@ _FROZEN_ENVELOPE: dict[str, str] = {
     "generation": "int | None",
     "aimed_at": "tuple[str, ...] | None",
     "directed": "DirectedTag | None",
+    # Written by build-corpus on curated records only (research T1): how
+    # curation copied the record, never collected.
+    "curation": "Curation | None",
     "extra_fields": "dict",
 }
 
@@ -323,12 +327,9 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
         {"generation": None},
         {"aimed_at": ()},
         {"aimed_at": ("704.5f",)},
-        # No dataclass models ``curation`` until the write pass writes it
-        # (T136): until then it reaches a record as an envelope member the
-        # reader keeps verbatim.
-        {"extra_fields": {"curation": {
-            "natural_share": 1, "copies": 2, "drawn_rule": "704.5f",
-            "drawn_rules": ["704.5f"], "rule_entities": ["E2"]}}},
+        {"curation": Curation(
+            natural_share=1, copies=2, drawn_rule="704.5f",
+            drawn_rules=("704.5f",), rule_entities=("E2",))},
     ])
     def test_a_resolution_s_surface_ignores_the_flag(self, flip):
         base = make_record(state=_board(), ability=(_ACTING,), generation=3)

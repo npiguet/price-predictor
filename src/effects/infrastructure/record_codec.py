@@ -36,6 +36,7 @@ from effects.domain.records import (
     ContinuousPayload,
     Contribution,
     Costs,
+    Curation,
     DirectedTag,
     EffectRecord,
     FailedCheck,
@@ -84,7 +85,8 @@ from effects.domain.state_snapshot import (
 _KNOWN_ENVELOPE_KEYS = frozenset({
     "record_id", "generation", "run_id", "timestamp", "game_id", "kind", "moment", "subkind",
     "link_id", "mirror_of", "variant_of", "mode", "interventional", "fork",
-    "synthetic", "random_seat", "what_if", "aimed_at", "directed", "actor_player", "ability",
+    "synthetic", "random_seat", "what_if", "aimed_at", "directed", "curation", "actor_player",
+    "ability",
     "ability_unresolved", "state", "payload",
 })
 
@@ -1040,6 +1042,8 @@ def record_to_dict(record: EffectRecord) -> dict:
     if record.directed is not None:
         out["directed"] = {"variant": record.directed.variant,
                            "operation": record.directed.operation.value}
+    if record.curation is not None:
+        out["curation"] = _curation_to_json(record.curation)
     out |= {
         "actor_player": record.actor_player,
         "ability": (
@@ -1059,6 +1063,26 @@ def record_to_dict(record: EffectRecord) -> dict:
     return out
 
 
+def _curation_to_json(curation: Curation) -> dict:
+    return {
+        "natural_share": curation.natural_share,
+        "copies": curation.copies,
+        "drawn_rule": curation.drawn_rule,
+        "drawn_rules": list(curation.drawn_rules),
+        "rule_entities": list(curation.rule_entities),
+    }
+
+
+def _curation_from_json(data: dict) -> Curation:
+    return Curation(
+        natural_share=int(data["natural_share"]),
+        copies=int(data["copies"]),
+        drawn_rule=data.get("drawn_rule"),
+        drawn_rules=tuple(data.get("drawn_rules") or ()),
+        rule_entities=tuple(data.get("rule_entities") or ()),
+    )
+
+
 def record_from_dict(data: dict) -> EffectRecord:
     """Parse one shard line into an :class:`EffectRecord`."""
     kind = RecordKind(data["kind"])
@@ -1068,6 +1092,7 @@ def record_from_dict(data: dict) -> EffectRecord:
     ability = data.get("ability")
     aimed_at = data.get("aimed_at")
     directed = data.get("directed")
+    curation = data.get("curation")
     return EffectRecord(
         record_id=data["record_id"],
         run_id=data["run_id"],
@@ -1092,6 +1117,7 @@ def record_from_dict(data: dict) -> EffectRecord:
         aimed_at=tuple(aimed_at) if aimed_at is not None else None,
         directed=(DirectedTag(directed["variant"], ForkOperation(directed["operation"]))
                   if directed is not None else None),
+        curation=_curation_from_json(curation) if curation is not None else None,
         ability=_keys_from_json(ability) if ability is not None else None,
         ability_unresolved=data.get("ability_unresolved"),
         extra_fields={

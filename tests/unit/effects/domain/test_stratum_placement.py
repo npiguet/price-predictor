@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import math
+
+import pytest
+
 from effects.domain.corpus_curation import game_disjoint_draw
+from effects.domain.corpus_plan import GameStrata
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import RuleTag
 from effects.domain.seeded_draw import stable_order
@@ -12,7 +17,9 @@ from effects.domain.stratum_placement import (
     PlacementRule,
     place_games,
     rule_test_eligible,
+    rule_test_misses,
     rule_test_records_needed,
+    rule_test_standard_error,
 )
 from tests.unit.effects.builders import make_record
 
@@ -170,3 +177,51 @@ def test_rule_test_records_are_natural_observed_tags():
     assert not rule_test_eligible(make_record(generation=3, aimed_at=()), _tag())
     assert not rule_test_eligible(make_record(generation=3), _tag(Polarity.OTHER))
     assert not rule_test_eligible(make_record(generation=3), _tag(observed=False))
+
+
+# ── what build-corpus can already tell of the precision target (E5) ─────
+
+
+def test_the_rule_test_standard_error_is_the_specs():
+    """``2·√((n₊ + n₋ + 1) / (12·n₊·n₋))``: n = 68 a side is the first under 0.1."""
+    assert rule_test_standard_error(68, 68) < 0.1 < rule_test_standard_error(67, 67)
+    assert rule_test_standard_error(68, 68) == pytest.approx(0.0994, abs=1e-4)
+    assert rule_test_standard_error(5, 0) == math.inf
+
+
+def _two_halves(selection: dict, reporting: dict):
+    strata = GameStrata(
+        card_disjoint=frozenset(), game_disjoint=frozenset({"a", "b"}),
+        held_out=frozenset(),
+        halves={Stratum.GAME_DISJOINT: {
+            Half.SELECTION: frozenset({"a"}), Half.REPORTING: frozenset({"b"})}},
+    )
+    return strata, {"a": selection, "b": reporting}
+
+
+def test_a_half_whose_rule_tests_meet_the_targets_is_no_miss():
+    strata, inventories = _two_halves(
+        {("r", FIRES): 68, ("r", NOT): 68}, {("r", FIRES): 68, ("r", NOT): 68})
+    assert rule_test_misses(strata, inventories, rule(max_item_error=0.1,
+                                                     max_component_error=0.1)) == []
+
+
+def test_a_half_with_no_rule_to_test_misses_and_is_named():
+    strata, inventories = _two_halves(
+        {("r", FIRES): 68, ("r", NOT): 68}, {("r", FIRES): 3, ("r", NOT): 3})
+    misses = rule_test_misses(strata, inventories, rule(max_item_error=0.1,
+                                                        max_component_error=0.1))
+    assert [(m.stratum, m.half, m.items) for m in misses] == [
+        (Stratum.GAME_DISJOINT, Half.REPORTING, 0)]
+    assert "game-disjoint reporting: rule tests" in misses[0].describe(0.05)
+
+
+def test_one_rule_alone_misses_the_default_component_target():
+    """√(SE²) / 1 = SE, so one rule at 0.0994 misses 0.05: a component needs
+    several rules before it is that precise."""
+    strata, inventories = _two_halves(
+        {("r", FIRES): 68, ("r", NOT): 68}, {("r", FIRES): 68, ("r", NOT): 68})
+    misses = rule_test_misses(strata, inventories, rule(max_item_error=0.1,
+                                                        max_component_error=0.05))
+    assert [m.items for m in misses] == [1, 1]
+    assert misses[0].standard_error == pytest.approx(0.0994, abs=1e-4)

@@ -77,16 +77,32 @@ def acting_text_defect(
     """``NO_ACTING_TEXT`` when every acting key maps to no rendered line.
 
     A ``RUNTIME_ONLY`` key keeps the record: it is a real ability whose text
-    the join does not reach. Apart from ``quality_defect`` because it needs
+    the join does not reach. So does a permanent spell's implicit cast
+    (:func:`is_permanent_spell`): the record of a permanent resolving is kept,
+    keyed to the permanent's card by that key (FR-059), though no line
+    carries text for it. Apart from ``quality_defect`` because it needs
     the sidecars, which ``validate-corpus`` does not have; run
     ``unjoinable_key_defect`` first, since ``resolve`` raises on such a key.
     """
     if record.kind is not RecordKind.RESOLUTION or not record.ability:
         return None
-    outcomes = {resolve(key) for key in record.ability}
-    if KeyResolution.LINE in outcomes or KeyResolution.RUNTIME_ONLY in outcomes:
+    outcomes = {key: resolve(key) for key in record.ability}
+    if KeyResolution.LINE in outcomes.values() or KeyResolution.RUNTIME_ONLY in outcomes.values():
+        return None
+    if any(is_permanent_spell(key, outcome) for key, outcome in outcomes.items()):
         return None
     return QualityDefect.NO_ACTING_TEXT
+
+
+def is_permanent_spell(key: ProvenanceKey, resolution: KeyResolution) -> bool:
+    """Whether ``key`` is a permanent's implicit cast spell: the first spell
+    trait of a face, which the converter drops because the card's own lines
+    carry everything it does. A creature or other permanent spell resolves
+    through it alone."""
+    return (
+        resolution is KeyResolution.DROPPED and key.trait_kind == "spell"
+        and key.index_within_kind == 0 and key.option is None
+    )
 
 
 def record_refusal(

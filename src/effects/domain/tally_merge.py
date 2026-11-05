@@ -17,8 +17,8 @@ NOT_MERGED = {"merge": False}
 def merge_into(target, other) -> None:
     """Add every field of the dataclass ``other`` into ``target``'s.
 
-    A ``Counter`` adds, a set unions, a dict unions its set values key by key,
-    an ``int`` sums, an object with its own ``merge`` merges through it, and a
+    A ``Counter`` adds, a set unions, a list extends, a dict unions its set
+    values key by key, an ``int`` sums, an object with its own ``merge`` merges through it, and a
     nested dataclass recurses. Anything else raises ``TypeError`` rather than
     keeping one side's value.
     """
@@ -31,6 +31,8 @@ def merge_into(target, other) -> None:
             mine.update(theirs)
         elif isinstance(mine, set):
             mine |= theirs
+        elif isinstance(mine, list):
+            mine.extend(theirs)
         elif isinstance(mine, dict):
             for key, values in theirs.items():
                 mine.setdefault(key, set()).update(values)

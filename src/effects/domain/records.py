@@ -208,6 +208,36 @@ class DirectedTag:
     operation: ForkOperation
 
 
+@dataclass(frozen=True, slots=True)
+class Curation:
+    """How ``build-corpus`` wrote one copy of a record (research T1): curated
+    records only, never a collected shard. Curation metadata: it says how the
+    record was copied, never what the board was, so it never reaches the model.
+
+    ``natural_share`` (n) is the copies gen-2's budgets give the record and
+    ``copies`` (d) every copy written, natural and added. ``drawn_rule`` is set
+    on an added copy only, ``drawn_rules`` lists the rule of every added copy
+    of the record, and ``rule_entities`` holds the drawn rule's tag entities.
+    """
+
+    natural_share: int
+    copies: int
+    drawn_rule: str | None = None
+    drawn_rules: tuple[str, ...] = ()
+    rule_entities: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.drawn_rule is not None and self.drawn_rule not in self.drawn_rules:
+            raise ValueError(
+                f"drawn rule {self.drawn_rule} is not among the record's drawn "
+                f"rules {self.drawn_rules}"
+            )
+
+    @property
+    def is_added(self) -> bool:
+        return self.drawn_rule is not None
+
+
 class _PayloadQueries:
     """What every payload answers about its events and keys; each default is
     the answer of a payload carrying none of it."""
@@ -686,6 +716,9 @@ class EffectRecord:
     aimed_at: tuple[str, ...] | None = None
     #: A directed fork's variant and operation; None elsewhere. Collection metadata.
     directed: DirectedTag | None = None
+    #: How ``build-corpus`` copied the record (research T1); None on every
+    #: collected record. Curation metadata.
+    curation: Curation | None = None
     #: Envelope keys a newer writer added that this code does not model, kept
     #: verbatim so a read-and-rewrite round trip is lossless (compatibility
     #: rule 1).

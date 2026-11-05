@@ -6,8 +6,9 @@ build records with explicit ``ability`` key tuples and check what the survey
 counts against those keys.
 
 Two populations are counted apart: rarity, the games and the held-out texts'
-games over every kept record, and the training supply over the records the
-write pass will route to training alone.
+games over every kept record, and the training supply over the records of
+games that train whatever placement decides; a candidate game keeps its
+records for placement (research R3).
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from effects.application.corpus_survey import (
 from effects.application.parallel_map import progress_line
 from effects.domain.corpus_curation import game_disjoint_draw
 from effects.domain.corpus_manifest import SourceShard
-from effects.domain.corpus_plan import Cell, GameRouting, TrainingSupply
+from effects.domain.corpus_plan import Cell, TrainingSupply
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.records import (
@@ -41,6 +42,7 @@ from effects.domain.records import (
     TriggerPayload,
 )
 from effects.domain.split import HeldOutCards
+from effects.domain.stratum_placement import PlacementRule
 from effects.infrastructure.shard_io import list_shards, write_shard
 from effects.infrastructure.sidecar_io import sidecar_path_for
 from tests.unit.effects.builders import (
@@ -146,7 +148,9 @@ def a_config(
             seed=42,
         ),
         heap_cap=heap_cap,
-        routing=GameRouting(game_disjoint_share=share, keyword_share=share),
+        placement=PlacementRule(
+            game_disjoint_share=share, keyword_share=share, card_disjoint_text_cap=0, seed=42,
+        ),
     )
 
 
@@ -308,20 +312,24 @@ def test_a_refused_record_still_routes_its_game_to_the_card_disjoint_stratum(tmp
 # ── the training supply: training-bound records only (G4) ──────────────
 
 
-def test_the_supply_counts_only_records_the_write_pass_trains_on(tmp_path):
+def test_the_supply_counts_only_records_of_games_that_train_whatever_placement_does(
+    tmp_path,
+):
     """Every budget and copy threshold is sized on this supply.
 
     Counted over held-out and game-disjoint games too, it planned training
     slots for records the write pass then routed to validation or dropped, and
-    gen-2 delivered 82% of what it planned. Rarity still counts every game.
+    gen-2 delivered 82% of what it planned. A game of the candidate pool (a
+    draw below ten times the share) or naming a held-out card keeps its
+    records for placement instead; rarity still counts every game.
     """
     games = [f"g{i}" for i in range(400)]
-    disjoint = next(g for g in games if game_disjoint_draw(g) < 0.05)
-    training = next(g for g in games if game_disjoint_draw(g) >= 0.05)
-    held = next(g for g in games if g not in (disjoint, training))
+    pooled = next(g for g in games if game_disjoint_draw(g) < 0.5)
+    training = next(g for g in games if game_disjoint_draw(g) >= 0.5)
+    held = next(g for g in games if g not in (pooled, training))
     out = _survey_one(tmp_path, [
         a_record(record_id="t", game_id=training, kind="rewrite", ability=_BOLT),
-        a_record(record_id="d", game_id=disjoint, kind="rewrite", ability=_BOLT),
+        a_record(record_id="d", game_id=pooled, kind="rewrite", ability=_BOLT),
         a_record(record_id="h", game_id=held, kind="rewrite", ability=_BOLT,
                  entity_names=("Soul Echo",)),
     ], held_out=held_out_cards({"soul echo"}),
@@ -329,20 +337,26 @@ def test_the_supply_counts_only_records_the_write_pass_trains_on(tmp_path):
 
     assert sum(out.supply.keyed.values()) == 1
     assert out.rarity.key_records[_BOLT] == 3
-    assert out.games.game_disjoint == {disjoint}
+    assert {record.game for record in out.candidates} == {pooled, held}
     assert out.games.held_out == {held}
 
 
-def test_a_keyword_combat_places_its_game_at_the_keyword_threshold(tmp_path):
-    from effects.domain.corpus_plan import GameRoute
-
-    routing = GameRouting(game_disjoint_share=0.01, keyword_share=0.15)
+def test_a_random_seat_game_trains_unless_it_names_a_held_out_card(tmp_path):
+    """FR-059: no random-seat game enters a validation stratum, so one in the
+    pool trains outright and one naming a held-out card is dropped."""
     games = [f"g{i}" for i in range(400)]
-    between = next(g for g in games if 0.01 <= game_disjoint_draw(g) < 0.15)
-    assert routing.route(between, held_out=False, keyword_combat=False) is GameRoute.TRAINING
-    assert routing.route(between, held_out=False, keyword_combat=True) is GameRoute.GAME_DISJOINT
-    assert routing.route(between, held_out=True, keyword_combat=True) is GameRoute.HELD_OUT
-    assert routing.under_keyword_threshold(between)
+    pooled = [g for g in games if game_disjoint_draw(g) < 0.5]
+    out = _survey_one(tmp_path, [
+        a_record(record_id="p", game_id=pooled[0], kind="rewrite", ability=_BOLT,
+                 random_seat=True),
+        a_record(record_id="h", game_id=pooled[1], kind="rewrite", ability=_BOLT,
+                 entity_names=("Soul Echo",), random_seat=True),
+    ], held_out=held_out_cards({"soul echo"}),
+        sidecar_roots=converted_tree(tmp_path, *_BOLT), share=0.05)
+
+    assert out.games.random_seat == {pooled[0], pooled[1]}
+    assert sum(out.supply.keyed.values()) == 1
+    assert out.candidates == []
 
 
 # ── held-out texts (G13, G14) ──────────────────────────────────────────
@@ -379,3 +393,92 @@ def test_a_training_record_acting_through_a_held_out_text_is_not_supplied(tmp_pa
     assert out.games.held_out == set()
     assert [keys for _cell, keys in out.supply.keyed] == [_BOLT]
     assert out.held_out_text_dropped == Counter({"rewrite": 1})
+
+
+# ── the gen-3 survey: tags, inventories, turn actions, closed lists (T135) ─
+
+
+@pytest.fixture(scope="module")
+def gen3_survey(tmp_path_factory):
+    """The gen-3 fixture surveyed with the real catalogue, every pool game a
+    candidate (share 0.1, so the pool is every game)."""
+    import shutil
+
+    from effects.infrastructure.rules_catalogue_io import load_heads, load_scenarios
+    from tests.unit.effects.builders import GEN3_RECORDS, GEN3_SIDECAR_FOLDERS
+
+    root = tmp_path_factory.mktemp("gen3-survey")
+    shutil.copy(GEN3_RECORDS, root / GEN3_RECORDS.name)
+    heads = load_heads()
+    config = SurveyConfig(
+        read=ReadConfig(
+            records_dir=root, max_events=64, held_out=held_out_cards(), seed=42,
+            sidecar_roots={"cardsfolder": GEN3_SIDECAR_FOLDERS[0],
+                           "tokenscripts": GEN3_SIDECAR_FOLDERS[1]},
+            catalogue=load_scenarios(),
+        ),
+        heap_cap=200,
+        placement=PlacementRule(game_disjoint_share=0.1, keyword_share=0.1,
+                                card_disjoint_text_cap=0, seed=42),
+        budgeted=frozenset(r for r, e in heads.items() if e.verdict == "trained"),
+    )
+    return run_survey(root, config=config, workers=1), config
+
+
+def test_turn_action_records_are_counted_by_subkind_and_nothing_else(gen3_survey):
+    """Story 6 acceptance 8: none is kept, classed or supplied."""
+    survey, _config = gen3_survey
+    totals = survey.totals
+    assert totals.turn_actions == Counter({
+        "draw": 2, "untap": 2, "day_night": 2, "cleanup_discard": 2,
+        "lore_counter": 2, "phasing": 2})
+    assert sum(totals.kept.values()) + sum(totals.refusals.by_class.values()) == (
+        totals.records - sum(totals.turn_actions.values()))
+
+
+def test_every_record_is_tagged_and_counted_as_rule_counts_counts_it(gen3_survey):
+    survey, _config = gen3_survey
+    counts = survey.totals.rule_counts
+    assert counts.records == survey.totals.records == 205
+    assert counts.counts
+    assert {source for (_rule, _polarity, source) in counts.counts} <= {
+        "forge_ai", "random_seat", "aimed"}
+
+
+def test_candidates_are_forge_ai_games_with_their_inventories(gen3_survey):
+    """Inventories count budgeted rules' rule-test-eligible tags (research R3)."""
+    survey, config = gen3_survey
+    totals = survey.totals
+    candidate_games = {record.game for record in totals.candidates}
+    assert candidate_games == totals.games.games - totals.games.random_seat
+    assert totals.games.random_seat
+    inventories = dict(totals.inventories)
+    assert inventories and set(inventories) <= candidate_games
+    assert {rule for inventory in inventories.values() for rule, _ in inventory} <= (
+        config.budgeted)
+
+
+def test_training_records_kept_for_the_budgets_are_tagged(gen3_survey):
+    """Only random-seat games train outright here; each tagged record of one
+    is kept with its tags and the source the rule counts give it."""
+    survey, _config = gen3_survey
+    tagged = survey.totals.tagged
+    assert tagged
+    assert all(record.tags or record.protection for record in tagged)
+    assert {record.source for record in tagged} == {"random_seat"}
+
+
+def test_the_closed_lists_are_what_effects_grant_or_remove(gen3_survey):
+    """FR-052, FR-053: ``closed_lists``' names, unioned over the corpus."""
+    from effects.domain.closed_lists import subtypes_named
+    from effects.domain.records import RecordKind
+    from effects.infrastructure.shard_io import read_shard
+    from tests.unit.effects.builders import GEN3_RECORDS
+
+    survey, _config = gen3_survey
+    expected = set()
+    for record in read_shard(GEN3_RECORDS):
+        if record.kind is not RecordKind.TURN_ACTION:
+            expected |= subtypes_named(record)
+    assert survey.totals.subtypes <= expected
+    assert survey.totals.subtypes

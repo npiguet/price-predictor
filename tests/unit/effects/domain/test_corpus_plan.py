@@ -1,18 +1,20 @@
-"""The corpus plan's pure rules: the allocation tree, legality cells, admission, strata."""
+"""The corpus plan's pure rules: the allocation tree, legality cells, strata.
+
+Admission and the game-disjoint draw are placement's, in
+``test_stratum_placement.py``.
+"""
 
 from __future__ import annotations
 
 from collections import Counter
 
-from effects.domain.corpus_curation import CapHeap, CopyPlan, game_disjoint_draw
+from effects.domain.corpus_curation import CapHeap, CopyPlan
 from effects.domain.corpus_plan import (
     AllocationNode,
     Cell,
     FamilyShare,
-    GameRouting,
     GameStrata,
     TrainingSupply,
-    admit_card_disjoint,
     members_of,
     plan_selection,
 )
@@ -94,36 +96,6 @@ class TestLegalityCells:
         assert folded.keyless == Counter({block: 2, Cell("combat", "", "none"): 1})
         assert folded.keyed == Counter({(block, key): 2})
         assert sorted(folded.heaps[block, key].values()) == [5, 6]
-
-
-class TestCardDisjointAdmission:
-    """FR-142: at most the cap of games per held-out text, every text under it."""
-
-    def test_the_cap_admits_exactly_its_cap_of_games(self):
-        games = {f"g{i}" for i in range(20)}
-        admitted = admit_card_disjoint(games, {"text": games}, cap=2, seed=1)
-        assert len(admitted) == 2
-
-    def test_a_game_is_declined_once_any_of_its_texts_is_full(self):
-        games = {f"g{i}" for i in range(10)}
-        texts = {"busy": games, **{f"own{i}": {f"g{i}"} for i in range(10)}}
-        admitted = admit_card_disjoint(games, texts, cap=3, seed=1)
-        assert len(admitted) == 3
-
-    def test_a_held_out_game_resolving_no_held_out_text_is_not_admitted(self):
-        admitted = admit_card_disjoint({"g1", "g2"}, {"text": {"g1"}}, cap=0, seed=1)
-        assert admitted == frozenset({"g1"})
-
-    def test_only_held_out_games_are_admitted(self):
-        """A variant printing a held-out template can resolve in a training game."""
-        admitted = admit_card_disjoint({"g1"}, {"text": {"g1", "g9"}}, cap=0, seed=1)
-        assert admitted == frozenset({"g1"})
-
-    def test_the_draw_is_seeded(self):
-        games = {f"g{i}" for i in range(20)}
-        first = admit_card_disjoint(games, {"text": games}, cap=2, seed=7)
-        again = admit_card_disjoint(games, {"text": games}, cap=2, seed=7)
-        assert first == again
 
 
 def test_a_held_out_game_the_cap_declined_is_dropped_never_validated():
@@ -259,27 +231,3 @@ def test_the_supply_keeps_each_slots_smallest_hashes():
     assert supply.keyed[Cell("rewrite"), key] == 3
     assert sorted(supply.heaps[Cell("rewrite"), key].values()) == [1, 5]
     assert isinstance(supply.heaps[Cell("rewrite"), key], CapHeap)
-
-
-class TestGameDisjointPlacement:
-    """Spec Story 4 scenarios 5 and 6."""
-
-    ROUTING = GameRouting(game_disjoint_share=0.01, keyword_share=0.15)
-
-    def test_a_game_below_the_share_enters(self):
-        game = next(f"g{i}" for i in range(1000) if game_disjoint_draw(f"g{i}") < 0.01)
-        assert self.ROUTING.game_disjoint(game, keyword_combat=False)
-
-    def test_a_keyword_combat_game_uses_the_keyword_share(self):
-        game = next(
-            f"g{i}" for i in range(1000) if 0.01 <= game_disjoint_draw(f"g{i}") < 0.15
-        )
-        assert not self.ROUTING.game_disjoint(game, keyword_combat=False)
-        assert self.ROUTING.game_disjoint(game, keyword_combat=True)
-
-    def test_placement_depends_on_the_game_alone(self):
-        routing = GameRouting(game_disjoint_share=0.05, keyword_share=0.15)
-        games = [f"g{i}" for i in range(2000)]
-        first = {g for g in games[:500] if routing.game_disjoint(g, keyword_combat=False)}
-        grown = {g for g in games if routing.game_disjoint(g, keyword_combat=False)}
-        assert first <= grown

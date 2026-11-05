@@ -9,11 +9,9 @@ family, cell and ability text with one
 from __future__ import annotations
 
 import dataclasses
-import random
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
-from enum import StrEnum
 from functools import partial
 from typing import Any, Literal
 
@@ -24,7 +22,6 @@ from effects.domain.corpus_curation import (
     cell_signature,
     class_targets,
     copy_plan,
-    game_disjoint_draw,
     rate_plan,
     text_capacity,
 )
@@ -357,7 +354,7 @@ class FamilyShare:
 
 @dataclass(frozen=True, slots=True)
 class SelectionPlan:
-    """Every training record's copies, and what each level was given."""
+    """Every training record's natural copies, and what each level was given."""
 
     #: ``(cell, acting keys) -> copies``. Keys folding to one text share a plan.
     plans: dict[tuple[Cell, Keys], CopyPlan]
@@ -371,6 +368,26 @@ class SelectionPlan:
     shortfall: dict[str, int]
     #: Distinct records each class can supply under the text cap, no repeats.
     available: dict[str, int]
+
+    def copies(self, cell: Cell, keys: Keys, value: int) -> int:
+        """A record's natural share: the plan of its ``(cell, keys)`` group,
+        else its cell's keyless plan, applied to its hash ``value``."""
+        return planned_copies(self.plans, self.keyless, cell, keys, value)
+
+
+_NO_COPIES = CopyPlan()
+
+
+def planned_copies(
+    plans: Mapping[tuple[Cell, Keys], CopyPlan], keyless: Mapping[Cell, CopyPlan],
+    cell: Cell, keys: Keys, value: int,
+) -> int:
+    """What :meth:`SelectionPlan.copies` reads, for a caller holding only the
+    two plan tables: the write pass's workers, which receive no family table."""
+    plan = plans.get((cell, keys)) if keys else None
+    if plan is None:
+        plan = keyless.get(cell, _NO_COPIES)
+    return plan.copies(value)
 
 
 def plan_selection(
@@ -472,51 +489,6 @@ def _copy_plans(
 # ── where each game goes ────────────────────────────────────────────────
 
 
-class GameRoute(StrEnum):
-    """Where the survey places a game, before the card-disjoint cap is applied."""
-
-    TRAINING = "training"
-    GAME_DISJOINT = "game-disjoint"
-    #: Card-disjoint or dropped, decided by the cap later.
-    HELD_OUT = "held-out"
-
-
-@dataclass(frozen=True, slots=True)
-class GameRouting:
-    """Gen-2's per-game draw, decided once per game by the survey (FR-044-046).
-
-    A function of the game alone, but no longer the whole placement:
-    :func:`effects.domain.stratum_placement.place_games` starts from the same
-    draw (``PlacementRule.base_game_disjoint``), then promotes games and
-    splits the strata into halves over the whole corpus, so a rebuild over a
-    grown corpus can move a game it placed before (research R3). Removed once
-    ``build-corpus`` places through it.
-    """
-
-    game_disjoint_share: float
-    keyword_share: float
-
-    def route(self, game_id: str, *, held_out: bool, keyword_combat: bool) -> GameRoute:
-        if held_out:
-            return GameRoute.HELD_OUT
-        if self.game_disjoint(game_id, keyword_combat=keyword_combat):
-            return GameRoute.GAME_DISJOINT
-        return GameRoute.TRAINING
-
-    def game_disjoint(self, game_id: str, *, keyword_combat: bool) -> bool:
-        """Whether a game not held out enters the game-disjoint stratum (SC-007).
-
-        A game holding a qualifying keyword combat takes the higher threshold,
-        since those are what gate 2 scores.
-        """
-        threshold = self.keyword_share if keyword_combat else self.game_disjoint_share
-        return game_disjoint_draw(game_id) < threshold
-
-    def under_keyword_threshold(self, game_id: str) -> bool:
-        """A game-disjoint game placed only by the keyword threshold."""
-        return game_disjoint_draw(game_id) >= self.game_disjoint_share
-
-
 @dataclass(frozen=True, slots=True)
 class GameStrata:
     """Every game's stratum, as the write pass applies it, and each validation
@@ -549,42 +521,3 @@ class GameStrata:
                 if game_id in games:
                     return half
         return None
-
-
-def admit_card_disjoint(
-    held_out_games: Iterable[str],
-    text_games: Mapping[str, Iterable[str]],
-    *,
-    cap: int,
-    seed: int,
-) -> frozenset[str]:
-    """Held-out games admitted while every held-out text they resolve is under cap.
-
-    Whole games (FR-142, FR-136). ``text_games`` maps each held-out text to the
-    games holding a resolution record acting through it, the only kind gate 1
-    scores; a game with none is not admitted. Requiring every text to be under
-    cap, not just one, keeps the cap a true ceiling at the cost of leaving
-    some texts short. Seeded order, so two builds admit the same games;
-    ``cap <= 0`` means no cap.
-    """
-    held = set(held_out_games)
-    texts_of: dict[str, set[str]] = defaultdict(set)
-    for text, games in text_games.items():
-        for game in games:
-            if game in held:
-                texts_of[game].add(text)
-
-    order = sorted(held)
-    random.Random(seed).shuffle(order)
-    taken: Counter[str] = Counter()
-    admitted: set[str] = set()
-    for game in order:
-        texts = texts_of.get(game)
-        if not texts:
-            continue
-        if cap > 0 and any(taken[text] >= cap for text in texts):
-            continue
-        admitted.add(game)
-        for text in texts:
-            taken[text] += 1
-    return frozenset(admitted)

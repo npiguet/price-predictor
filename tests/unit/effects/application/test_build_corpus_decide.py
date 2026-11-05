@@ -74,8 +74,8 @@ def fake_sidecars() -> FakeSidecarCache:
 def a_survey(
     *, heap_cap: int = 200, cells: dict | None = None,
     keyless: dict | None = None, key_games: dict | None = None,
-    held_out: frozenset[str] = frozenset(), game_disjoint: frozenset[str] = frozenset(),
-    held_out_text_games: dict | None = None,
+    held_out: frozenset[str] = frozenset(), games: frozenset[str] = frozenset(),
+    keyword_combat: frozenset[str] = frozenset(), held_out_text_games: dict | None = None,
 ) -> Survey:
     """A real ``Survey`` whose supply holds ``cells`` and ``keyless``.
 
@@ -98,14 +98,15 @@ def a_survey(
             supply.add(cell, keys, item)
         supply.keyed[cell, keys] = count
         rarity.key_records[keys] += count
-    for keys, games in (key_games or {}).items():
+    for keys, hashes in (key_games or {}).items():
         rarity.key_records.setdefault(keys, 0)
-        rarity.key_games[keys] = set(games)
+        rarity.key_games[keys] = set(hashes)
     return Survey(
         totals=ShardSurvey(
             shard=SourceShard(name="", size=0), supply=supply, rarity=rarity,
             games=GameTally(
-                held_out=set(held_out), game_disjoint=set(game_disjoint),
+                games=set(games) | set(held_out), held_out=set(held_out),
+                keyword_combat=set(keyword_combat),
                 held_out_text_games={
                     text: set(games) for text, games in (held_out_text_games or {}).items()
                 },
@@ -116,7 +117,9 @@ def a_survey(
 
 
 def a_config(**overrides) -> BuildCorpusConfig:
+    """No half needs a minimum of games, so placement keeps gen-2's draw."""
     overrides.setdefault("keyword_definitions", None)
+    overrides.setdefault("min_games_per_half", 0)
     return BuildCorpusConfig(records_dir=Path("."), **overrides)
 
 
@@ -186,14 +189,17 @@ def test_a_survey_built_at_a_different_text_cap_raises(fake_sidecars):
 # ── the strata ─────────────────────────────────────────────────────────
 
 
-def test_the_game_disjoint_stratum_is_the_surveys_never_a_held_out_game(fake_sidecars):
-    """The survey routes each game once; decide applies it rather than redrawing."""
-    survey = a_survey(
-        game_disjoint=frozenset({"g1", "g2", "g3"}), held_out=frozenset({"g3"}),
-    )
-    decisions = _decide(survey, fake_sidecars)
+def test_the_game_disjoint_stratum_is_placed_never_a_held_out_game(fake_sidecars):
+    """Placement starts from gen-2's draw, and a game naming a held-out card
+    is never game-disjoint, whatever its draw."""
+    from effects.domain.corpus_curation import game_disjoint_draw
 
-    assert decisions.strata.game_disjoint == frozenset({"g1", "g2"})
+    games = {f"g{i}" for i in range(400)}
+    below = {g for g in games if game_disjoint_draw(g) < 0.01}
+    held = frozenset(sorted(below)[:1])
+    decisions = _decide(a_survey(games=frozenset(games), held_out=held), fake_sidecars)
+
+    assert decisions.strata.game_disjoint == frozenset(below - held)
 
 
 def test_keyword_threshold_games_are_the_ones_over_the_plain_share(fake_sidecars):
@@ -203,9 +209,10 @@ def test_keyword_threshold_games_are_the_ones_over_the_plain_share(fake_sidecars
     between = {g for g in games if 0.01 <= game_disjoint_draw(g) < 0.15}
     below = {g for g in games if game_disjoint_draw(g) < 0.01}
     assert between and below, "the fixture needs games on both sides of 0.01"
-    survey = a_survey(game_disjoint=frozenset(between | below))
+    survey = a_survey(games=frozenset(games), keyword_combat=frozenset(between | below))
     decisions = _decide(survey, fake_sidecars)
 
+    assert decisions.strata.game_disjoint == frozenset(between | below)
     assert decisions.keyword_threshold_games == frozenset(between)
 
 

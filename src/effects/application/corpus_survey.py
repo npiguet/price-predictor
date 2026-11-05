@@ -2,12 +2,29 @@
 
 Keyed on the provenance key rather than the ability text: folding every key to
 its text needs the whole sidecar tree, so it happens once, in the main process.
-Rarity, the legality mode table and the game sets count the whole corpus
-(FR-141); the :class:`TrainingSupply` the plan is sized on counts
-training-bound records only, so a game's records are buffered to the end of
-its shard (one JVM lifetime, which no game outlives) and counted once its
-route is known. Both passes read through one :class:`WorkerContext`, so the
-refusal rule, the held-out test and a record's cell cannot drift apart.
+Rarity, the legality mode table, the rule counts, the closed lists and the
+game sets count the whole corpus (FR-141). Every record is tagged with the
+catalogue's detectors (``tag_record``) as ``rule-counts`` tags it.
+
+Where a game goes is decided once, over the whole corpus, after the survey
+(:func:`effects.domain.stratum_placement.place_games`; research R3), so a
+shard's records are buffered to the end of the shard (one JVM lifetime, which
+no game outlives) and then split by what placement could still do with their
+game:
+
+- a game naming no held-out card whose game-disjoint draw keeps it out of the
+  candidate pool, or that has a random seat, trains whatever placement
+  decides: its records fold into the :class:`TrainingSupply` here, and each
+  tagged one is kept as a :class:`SurveyedRecord` for the rule budgets;
+- a candidate game, a Forge-AI game of the pool or naming a held-out card,
+  keeps every kept record as a :class:`SurveyedRecord` and its rule inventory,
+  and folds into the supply only once placement trains it;
+- a random-seat game naming a held-out card is dropped and keeps nothing.
+
+``turn_action`` records are written to no stratum (FR-059): the survey counts
+them by subkind and reads nothing else of them but their game's properties.
+Both passes read through one :class:`WorkerContext`, so the refusal rule, the
+held-out test, the tags and a record's cell cannot drift apart.
 """
 
 from __future__ import annotations
@@ -17,36 +34,46 @@ import logging
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from effects.application.parallel_map import run_parallel
+from effects.application.rule_counts import RuleCounts
+from effects.domain.closed_lists import keywords_named, subtypes_named
 from effects.domain.corpus_curation import (
+    CONDITION_CLASSES,
+    condition_key,
     game_hash,
     record_hash,
+    turn_step_condition,
 )
 from effects.domain.corpus_manifest import SourceShard
 from effects.domain.corpus_plan import (
     BuildCorpusError,
     Cell,
-    GameRoute,
-    GameRouting,
     Keys,
     TrainingSupply,
 )
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME, qualifying_observations
+from effects.domain.protection_copies import PROTECTION_RULES, qualify, rules_offered
 from effects.domain.record_quality import QualityDefect, record_refusal
 from effects.domain.records import (
     EffectRecord,
     RecordKind,
     acting_keys,
 )
+from effects.domain.rule_catalogue import Polarity
+from effects.domain.rule_detectors import RuleSource, RuleTag, TagResult
 from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.split import HeldOutCards, record_names_held_out_card
+from effects.domain.stratum_placement import PlacementRule, RuleCell, rule_test_eligible
 from effects.domain.tally_merge import NOT_MERGED, merge_into
 
 if TYPE_CHECKING:
     from effects.domain.damage_step_keywords import KeywordResolver
+    from effects.domain.rule_catalogue import ScenarioCatalogue
+    from effects.domain.rule_detectors import DetectorIndex
     from effects.infrastructure.sidecar_io import SidecarCache
 
 logger = logging.getLogger(__name__)
@@ -66,19 +93,29 @@ class ReadConfig:
     max_events: int
     held_out: HeldOutCards
     seed: int
+    #: ``rules/scenarios/`` as the build read it once (FR-060a); None tags
+    #: nothing, as a catalogue declaring no detector would.
+    catalogue: ScenarioCatalogue | None = None
+
+
+def protection_hash(record_id: str, *, seed: int) -> int:
+    """The hash a record's protection copies (FR-058) are planned under: a
+    second, distinct entry beside the record's own in the rule budgets."""
+    return record_hash(f"{record_id}~pc", seed=seed)
 
 
 class WorkerContext:
-    """One process's read side: its config, sidecar cache, resolver and memo,
-    built lazily and kept for the context's life, so a process reads each
-    sidecar once rather than once per shard. The cache is the process's own
-    (:func:`~effects.infrastructure.converted_trees.process_sidecars`), so every
-    context over the same roots in one process shares it."""
+    """One process's read side: its config, sidecar cache, resolver, detector
+    index and memo, built lazily and kept for the context's life, so a process
+    reads each sidecar once rather than once per shard. The cache is the
+    process's own (:func:`~effects.infrastructure.converted_trees.process_sidecars`),
+    so every context over the same roots in one process shares it."""
 
     def __init__(self, read: ReadConfig) -> None:
         self.read = read
         self._sidecars: SidecarCache | None = None
         self._resolver = None
+        self._index: DetectorIndex | None = None
         self._held_text: dict[Keys, str | None] = {}
 
     @property
@@ -97,6 +134,18 @@ class WorkerContext:
             self._resolver = KeywordResolver(self.sidecars)
         return self._resolver
 
+    def tags(self, record: EffectRecord) -> TagResult:
+        """The rules ``record`` shows, by the catalogue's detectors."""
+        if self.read.catalogue is None:
+            return TagResult()
+        if self._index is None:
+            from effects.domain.rule_detectors import DetectorIndex
+
+            self._index = DetectorIndex.of(self.read.catalogue)
+        from effects.domain.rule_detectors import tag_record
+
+        return tag_record(record, self._index, self.sidecars)
+
     def records(self, shard: SourceShard) -> Iterator[EffectRecord]:
         from effects.infrastructure.shard_io import read_shard
 
@@ -112,7 +161,8 @@ class WorkerContext:
         self, record: EffectRecord, refusals: RefusalTally,
     ) -> SamplingClass | None:
         """The record's sampling class, or None when :meth:`refusal` refuses
-        it, which ``refusals`` then counts: both passes' first step."""
+        it, which ``refusals`` then counts: both passes' first step after
+        setting ``turn_action`` records aside, which have no class."""
         klass = sampling_class(record)
         defect = self.refusal(record)
         if defect is not None:
@@ -127,6 +177,9 @@ class WorkerContext:
 
     def hash_of(self, record: EffectRecord) -> int:
         return record_hash(record.record_id, seed=self.read.seed)
+
+    def protection_hash_of(self, record: EffectRecord) -> int:
+        return protection_hash(record.record_id, seed=self.read.seed)
 
     def held_out_text(self, keys: Keys) -> str | None:
         """The held-out script text these acting keys resolve to, normalized,
@@ -181,16 +234,42 @@ class RarityTally:
 
 @dataclass(slots=True)
 class GameTally:
-    """Which games the corpus holds, and where the survey routed them."""
+    """Which games the corpus holds, and what placement reads about each."""
 
     #: Games holding at least one record the quality rules keep.
     games: set[str] = field(default_factory=set)
     #: Refused records included: the game played the card either way.
     held_out: set[str] = field(default_factory=set)
-    game_disjoint: set[str] = field(default_factory=set)
+    #: Games any of whose records carries ``random_seat``.
+    random_seat: set[str] = field(default_factory=set)
+    #: Games holding a qualifying combat for a ``--game-disjoint-keywords`` keyword.
+    keyword_combat: set[str] = field(default_factory=set)
     #: Held-out text -> games holding a resolution record acting through it,
     #: which the card-disjoint cap counts (FR-142).
     held_out_text_games: dict[str, set[str]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class SurveyedRecord:
+    """One kept record as the rule budgets, placement and the supply fold read it.
+
+    ``cell`` is the survey's, its legality modes not yet folded; ``tags``
+    every rule the detectors tag, budgeted or not (an unbudgeted rule is still
+    counted); ``protection`` the budgeted protection rules the record offers
+    (FR-058), planned under ``protection_hash`` as a record of their own.
+    """
+
+    game: str
+    record_hash: int
+    klass: SamplingClass
+    cell: Cell
+    keys: Keys
+    tags: tuple[tuple[str, Polarity], ...]
+    source: RuleSource
+    #: Acts through a held-out text: never trains, even in a training game.
+    held_out_text: bool = False
+    protection: tuple[str, ...] = ()
+    protection_hash: int = 0
 
 
 @dataclass(slots=True)
@@ -199,6 +278,7 @@ class ShardSurvey:
     :attr:`Survey.totals`. Plain data, so it pickles back cheaply."""
 
     shard: SourceShard = field(metadata=NOT_MERGED)
+    #: Records of games that train whatever placement decides.
     supply: TrainingSupply
     records: int = 0
     rarity: RarityTally = field(default_factory=RarityTally)
@@ -207,8 +287,26 @@ class ShardSurvey:
     #: Records per class the quality rules keep, the refusal guard's other half.
     kept: Counter[SamplingClass] = field(default_factory=Counter)
     mode_counts: Counter[str] = field(default_factory=Counter)
-    #: Training-bound records per class acting through a held-out text.
+    #: Records per class acting through a held-out text in a game naming no
+    #: held-out card: never trained, wherever the game goes.
     held_out_text_dropped: Counter[SamplingClass] = field(default_factory=Counter)
+    #: Tagged or protection-offering records of games that train whatever
+    #: placement decides, held-out-text ones left out.
+    tagged: list[SurveyedRecord] = field(default_factory=list)
+    #: Every kept record of a candidate game.
+    candidates: list[SurveyedRecord] = field(default_factory=list)
+    #: ``(game, {(rule, polarity): records})`` per Forge-AI candidate game,
+    #: over budgeted rules and rule-test-eligible tags.
+    inventories: list[tuple[str, dict[RuleCell, int]]] = field(default_factory=list)
+    #: Every record read, tagged as ``rule-counts`` tags it (FR-008).
+    rule_counts: RuleCounts = field(default_factory=RuleCounts)
+    #: ``turn_action`` records by subkind, written to no stratum (FR-059).
+    turn_actions: Counter[str] = field(default_factory=Counter)
+    #: ``corpus_curation.condition_key`` -> kept records (FR-056).
+    condition_counts: Counter[tuple[str, str, str]] = field(default_factory=Counter)
+    #: The closed lists' names (FR-052, FR-053), read off every kept record.
+    subtypes: set[str] = field(default_factory=set)
+    keywords: set[str] = field(default_factory=set)
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,9 +314,10 @@ class Survey:
     """What the whole corpus holds: every shard's survey folded together, and
     what only the fold can see."""
 
-    #: Its ``shard`` is blank; ``supply`` counts training-bound records only,
-    #: its legality cells folded into their families, which only the whole
-    #: corpus's mode counts can decide (:func:`merge_surveys`).
+    #: Its ``shard`` is blank; ``supply`` counts the records of games that
+    #: train whatever placement decides, its legality cells folded into their
+    #: families, which only the whole corpus's mode counts can decide
+    #: (:func:`merge_surveys`). Candidate games fold in after placement.
     totals: ShardSurvey
     shards: tuple[SourceShard, ...]
     #: Per top-level source directory (FR-149): held-out games in a depleted
@@ -228,6 +327,9 @@ class Survey:
     #: Games found in more than one shard, each planned from one shard's view
     #: and so possibly counted toward training slots it never fills.
     split_games: int = 0
+    #: Shard name -> the games it holds a kept record of: what the write pass
+    #: hands each shard's worker of the copy map.
+    shard_games: dict[str, frozenset[str]] = field(default_factory=dict)
 
 
 # ── the pass ────────────────────────────────────────────────────────────
@@ -240,9 +342,16 @@ class SurveyConfig:
     read: ReadConfig
     #: How many smallest hashes the supply keeps per cell and key.
     heap_cap: int
-    routing: GameRouting
+    #: The candidate pool's draw (``PlacementRule.in_pool``).
+    placement: PlacementRule
     #: In gate 2's spelling (FR-045).
     game_disjoint_keywords: tuple[str, ...] = ()
+    #: The rules the map marks ``trained``: what the inventories count and
+    #: which protection copies can be planned (FR-054, FR-058).
+    budgeted: frozenset[str] = frozenset()
+    #: Forge's keywords in ``normalize_keyword``'s spelling, for the closed
+    #: keyword list (``closed_lists.keywords_named``).
+    known_keywords: frozenset[str] = frozenset()
 
 
 class SurveyWorker:
@@ -254,7 +363,7 @@ class SurveyWorker:
         self.context = WorkerContext(config.read)
 
     def survey(self, shard: SourceShard) -> ShardSurvey:
-        """One shard's survey, its games routed at the end of the shard."""
+        """One shard's survey, its games split at the end of the shard."""
         surveyor = _ShardSurveyor(self.config, self.context, ShardSurvey(
             shard=shard, supply=TrainingSupply(self.config.heap_cap),
         ))
@@ -263,9 +372,17 @@ class SurveyWorker:
         return surveyor.finish()
 
 
+class _Fate(StrEnum):
+    """What placement can still do with a game, as the survey sees it."""
+
+    TRAINS = "trains"
+    CANDIDATE = "candidate"
+    DROPPED = "dropped"
+
+
 @dataclass(frozen=True, slots=True)
 class _PendingRecord:
-    """A kept record, counted into the supply once its game's route is known."""
+    """A kept record, split once its game's fate and source are known."""
 
     game: str
     klass: SamplingClass
@@ -274,10 +391,16 @@ class _PendingRecord:
     value: int
     #: Never trains, even in a training game.
     acts_through_held_out_text: bool
+    tags: tuple[RuleTag, ...]
+    #: Rule-test-eligible ``(rule, polarity)`` cells over budgeted rules.
+    eligible: tuple[RuleCell, ...]
+    aimed: bool
+    protection: tuple[str, ...]
+    protection_hash: int
 
 
 class _ShardSurveyor:
-    """One shard's survey in progress: every record observed, then every game routed."""
+    """One shard's survey in progress: every record observed, then every game split."""
 
     def __init__(
         self, config: SurveyConfig, context: WorkerContext, out: ShardSurvey,
@@ -289,32 +412,53 @@ class _ShardSurveyor:
             KEYWORDS_BY_NAME[name] for name in config.game_disjoint_keywords
             if name in KEYWORDS_BY_NAME
         )
-        self.keyword_games: set[str] = set()
+        self.protection_rules = frozenset(config.budgeted) & PROTECTION_RULES
         self.pending: list[_PendingRecord] = []
+        #: ``(game, aimed, tags)`` of every tagged record read, refused ones
+        #: included, counted once the game's source is known.
+        self.counted: list[tuple[str, bool, tuple[RuleTag, ...]]] = []
 
     def observe(self, record: EffectRecord) -> None:
         self.out.records += 1
         self._note_game_properties(record)
+        found = self._count_tags(record)
+        if record.kind is RecordKind.TURN_ACTION:
+            self.out.turn_actions[str(record.subkind)] += 1
+            return
         klass = self.context.admit(record, self.out.refusals)
         if klass is None:
             return
         self.out.kept[klass] += 1
-        self.pending.append(self._kept(record, klass))
+        self.pending.append(self._kept(record, klass, found))
 
     def _note_game_properties(self, record: EffectRecord) -> None:
-        """The keyword threshold and the held-out test: properties of the game
-        (FR-046), so read before the quality check refuses the record."""
-        game = record.game_id
+        """The keyword threshold, the random seat and the held-out test:
+        properties of the game (FR-046), so read before the quality check
+        refuses the record."""
+        game, games = record.game_id, self.out.games
+        if record.random_seat:
+            games.random_seat.add(game)
         if (
             self.keyword_rows and record.kind is RecordKind.COMBAT
-            and game not in self.keyword_games
+            and game not in games.keyword_combat
             and qualifying_observations(record, self.keyword_rows, self.context.resolver)
         ):
-            self.keyword_games.add(game)
+            games.keyword_combat.add(game)
         if record_names_held_out_card(record, self.config.read.held_out):
-            self.out.games.held_out.add(game)
+            games.held_out.add(game)
 
-    def _kept(self, record: EffectRecord, klass: SamplingClass) -> _PendingRecord:
+    def _count_tags(self, record: EffectRecord) -> TagResult:
+        found = self.context.tags(record)
+        counts = self.out.rule_counts
+        counts.not_countable |= found.not_countable
+        counts.review |= {(record.record_id, tag.scenario) for tag in found.review}
+        if found.tags:
+            self.counted.append((record.game_id, record.aimed_at is not None, found.tags))
+        return found
+
+    def _kept(
+        self, record: EffectRecord, klass: SamplingClass, found: TagResult,
+    ) -> _PendingRecord:
         """Count a kept record into the whole-corpus tallies; return it pending."""
         out, context, game = self.out, self.context, record.game_id
         out.games.games.add(game)
@@ -326,38 +470,99 @@ class _ShardSurveyor:
         held_text = context.held_out_text(keys)
         if held_text is not None and record.kind is RecordKind.RESOLUTION:
             out.games.held_out_text_games.setdefault(held_text, set()).add(game)
+        self._note_lists(record, klass)
+        protection = self._protection(record)
         return _PendingRecord(
             game=game, klass=klass, cell=cell, keys=keys,
             value=context.hash_of(record),
             acts_through_held_out_text=held_text is not None,
+            tags=found.tags,
+            eligible=tuple(
+                (tag.rule, tag.polarity) for tag in found.tags
+                if tag.rule in self.config.budgeted and rule_test_eligible(record, tag)
+            ),
+            aimed=record.aimed_at is not None,
+            protection=protection,
+            protection_hash=context.protection_hash_of(record) if protection else 0,
         )
 
+    def _note_lists(self, record: EffectRecord, klass: SamplingClass) -> None:
+        """The condition counts and the closed lists (FR-052, FR-053, FR-056)."""
+        out = self.out
+        if klass in CONDITION_CLASSES:
+            condition = turn_step_condition(record, self.context.sidecars)
+            if condition is not None:
+                out.condition_counts[condition_key(klass, condition)] += 1
+        out.subtypes |= subtypes_named(record)
+        out.keywords |= keywords_named(record, self.config.known_keywords)
+
+    def _protection(self, record: EffectRecord) -> tuple[str, ...]:
+        """The budgeted protection rules ``record``'s copies can be drawn for."""
+        if not self.protection_rules:
+            return ()
+        offered = rules_offered(qualify(record))
+        return tuple(rule for rule in offered if rule in self.protection_rules)
+
     def finish(self) -> ShardSurvey:
-        self._fold_training_supply(self._route_games())
+        seat_games = self.out.games.random_seat
+        for game, aimed, tags in self.counted:
+            source = RuleSource.of(aimed=aimed, random_seat_game=game in seat_games)
+            for tag in tags:
+                self.out.rule_counts.counts[tag.rule, str(tag.polarity), str(source)] += 1
+        self.out.rule_counts.records = self.out.records
+        candidates = self._candidate_games()
+        inventories: dict[str, Counter[RuleCell]] = defaultdict(Counter)
+        held_out = self.out.games.held_out
+        for pending in self.pending:
+            fate = self._fate(pending.game, candidates)
+            if fate is _Fate.DROPPED:
+                continue
+            surveyed = self._surveyed(pending, seat_games)
+            if pending.acts_through_held_out_text and pending.game not in held_out:
+                self.out.held_out_text_dropped[pending.klass] += 1
+            if fate is _Fate.CANDIDATE:
+                self.out.candidates.append(surveyed)
+                inventories[pending.game].update(pending.eligible)
+            elif not pending.acts_through_held_out_text:
+                self.out.supply.add(pending.cell, pending.keys, pending.value)
+                if surveyed.tags or surveyed.protection:
+                    self.out.tagged.append(surveyed)
+        self.out.inventories = [
+            (game, dict(inventory)) for game, inventory in sorted(inventories.items())
+            if inventory
+        ]
         return self.out
 
-    def _route_games(self) -> dict[str, GameRoute]:
-        games = self.out.games
-        routes = {
-            game: self.config.routing.route(
-                game, held_out=game in games.held_out,
-                keyword_combat=game in self.keyword_games,
+    def _candidate_games(self) -> frozenset[str]:
+        """Forge-AI games placement may put in a validation stratum: every one
+        naming a held-out card, and every other of the candidate pool."""
+        games, placement = self.out.games, self.config.placement
+        return frozenset(
+            game for game in games.games
+            if game not in games.random_seat and (
+                game in games.held_out
+                or placement.in_pool(game, keyword_combat=game in games.keyword_combat)
             )
-            for game in games.games
-        }
-        games.game_disjoint = {
-            game for game, route in routes.items() if route is GameRoute.GAME_DISJOINT
-        }
-        return routes
+        )
 
-    def _fold_training_supply(self, routes: Mapping[str, GameRoute]) -> None:
-        for pending in self.pending:
-            if routes[pending.game] is not GameRoute.TRAINING:
-                continue
-            if pending.acts_through_held_out_text:
-                self.out.held_out_text_dropped[pending.klass] += 1
-                continue
-            self.out.supply.add(pending.cell, pending.keys, pending.value)
+    def _fate(self, game: str, candidates: frozenset[str]) -> _Fate:
+        if game in candidates:
+            return _Fate.CANDIDATE
+        if game in self.out.games.held_out:
+            # A random-seat game naming a held-out card: dropped (FR-059).
+            return _Fate.DROPPED
+        return _Fate.TRAINS
+
+    def _surveyed(self, pending: _PendingRecord, seat_games: set[str]) -> SurveyedRecord:
+        return SurveyedRecord(
+            game=pending.game, record_hash=pending.value, klass=pending.klass,
+            cell=pending.cell, keys=pending.keys,
+            tags=tuple((tag.rule, tag.polarity) for tag in pending.tags),
+            source=RuleSource.of(aimed=pending.aimed,
+                                 random_seat_game=pending.game in seat_games),
+            held_out_text=pending.acts_through_held_out_text,
+            protection=pending.protection, protection_hash=pending.protection_hash,
+        )
 
 
 def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
@@ -367,6 +572,7 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
     shards: list[SourceShard] = []
     games_by_source: dict[str, set[str]] = defaultdict(set)
     held_by_source: dict[str, set[str]] = defaultdict(set)
+    shard_games: dict[str, frozenset[str]] = {}
     split_games = 0
 
     for part in parts:
@@ -376,6 +582,7 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
         source = part.shard.source
         games_by_source[source] |= part.games.games
         held_by_source[source] |= part.games.held_out
+        shard_games[part.shard.name] = frozenset(part.games.games)
     total.supply = total.supply.resolved(total.mode_counts)
 
     return Survey(
@@ -384,6 +591,7 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
         games_by_source={s: len(g) for s, g in games_by_source.items()},
         held_out_games_by_source={s: len(g) for s, g in held_by_source.items()},
         split_games=split_games,
+        shard_games=shard_games,
     )
 
 

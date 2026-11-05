@@ -27,6 +27,10 @@ two Forge AIs played.
 A rule with test records of both polarities in the corpus whose half holds
 none of one polarity is named as left out of that half.
 
+:func:`rule_test_misses` is what ``build-corpus`` can already tell of the
+rule-test component's precision target (FR-068b) from the same inventories,
+before any rule test is frozen.
+
 Placement is deterministic for a given corpus but not stable as it grows: a
 promotion or a half depends on every other game (R3).
 
@@ -58,17 +62,31 @@ TEST_POLARITIES: tuple[Polarity, ...] = (Polarity.FIRES, Polarity.DOES_NOT_FIRE)
 MIN_GAMES_PER_HALF = 300
 #: The rescaled standard error a rule test may have in a half (FR-068b).
 MAX_ITEM_ERROR = 0.1
+#: The rescaled standard error a component may have in a half (FR-068b).
+MAX_COMPONENT_ERROR = 0.05
 #: The candidate pool's game-disjoint draw, as a multiple of the share (R3).
 POOL_FACTOR = 10.0
 
 
+def rule_test_standard_error(fires: int, does_not_fire: int) -> float:
+    """A rule test's worst-case standard error on the rescaled scale:
+    Hanley–McNeil at an AUC of 0.5, times two (research E4),
+    ``2·√((n₊ + n₋ + 1) / (12·n₊·n₋))``; infinite without both polarities.
+
+    The freeze's estimator (``score_scales``, T150) is to replace this copy.
+    """
+    if fires <= 0 or does_not_fire <= 0:
+        return math.inf
+    return 2 * math.sqrt((fires + does_not_fire + 1) / (12 * fires * does_not_fire))
+
+
 def rule_test_records_needed(max_item_error: float = MAX_ITEM_ERROR) -> int:
     """Records of each polarity a rule test needs in a half: the smallest n
-    whose worst-case rescaled standard error, Hanley–McNeil at an AUC of 0.5
-    with n records each side, ``2·√((2n + 1) / (12n²))``, is at most
-    ``max_item_error`` (FR-068b): 68 at 0.1."""
+    whose worst-case rescaled standard error with n records each side,
+    ``2·√((2n + 1) / (12n²))``, is at most ``max_item_error`` (FR-068b): 68
+    at 0.1."""
     n = 1
-    while 2 * math.sqrt((2 * n + 1) / (12 * n * n)) > max_item_error:
+    while rule_test_standard_error(n, n) > max_item_error:
         n += 1
     return n
 
@@ -96,6 +114,7 @@ class PlacementRule:
     min_games_per_half: int = MIN_GAMES_PER_HALF
     max_item_error: float = MAX_ITEM_ERROR
     pool_factor: float = POOL_FACTOR
+    max_component_error: float = MAX_COMPONENT_ERROR
 
     def base_game_disjoint(self, game_id: str, *, keyword_combat: bool) -> bool:
         """Gen-2's draw: a game holding a qualifying keyword combat takes the
@@ -352,3 +371,58 @@ def _left_out(
             if missing:
                 out.setdefault(stratum, {})[half] = missing
     return out
+
+
+@dataclass(frozen=True, slots=True)
+class PrecisionMiss:
+    """One half whose rule-test component already misses its target (FR-068b)."""
+
+    stratum: Stratum
+    half: Half
+    #: Rules whose test meets the item target in the half: the component's items.
+    items: int
+    #: The component's standard error, ``√(Σ SEᵢ²) / m``; infinite with no item.
+    standard_error: float
+
+    def describe(self, target: float) -> str:
+        if not self.items:
+            return (f"{self.stratum} {self.half}: rule tests — no rule has enough "
+                    "test records of both polarities to enter the component")
+        return (f"{self.stratum} {self.half}: rule tests — standard error "
+                f"{self.standard_error:.4f} over {self.items} rule(s), above {target}")
+
+
+def rule_test_misses(
+    strata: GameStrata,
+    inventories: Mapping[str, Mapping[RuleCell, int]],
+    rule: PlacementRule,
+) -> list[PrecisionMiss]:
+    """Every half whose rule-test component misses its precision target.
+
+    A rule enters a half's component when its test's standard error
+    (:func:`rule_test_standard_error`) is at most ``max_item_error``; the
+    component's, ``√(Σ SEᵢ²) / m`` over its m rules, must be at most
+    ``max_component_error``, and a half where no rule enters misses it. The
+    counts are every rule-test-eligible record, before the freeze subsamples
+    a polarity: the freeze can only raise a standard error, so a half missing
+    here misses there too.
+    """
+    misses: list[PrecisionMiss] = []
+    for stratum, by_half in sorted(strata.halves.items()):
+        for half in Half:
+            counts: Counter[RuleCell] = Counter()
+            for game in by_half.get(half, ()):
+                counts.update(inventories.get(game, {}))
+            rules = sorted({rule_id for rule_id, _ in counts})
+            errors = [
+                error for error in (
+                    rule_test_standard_error(counts[rule_id, Polarity.FIRES],
+                                             counts[rule_id, Polarity.DOES_NOT_FIRE])
+                    for rule_id in rules)
+                if error <= rule.max_item_error
+            ]
+            component = (math.sqrt(sum(e * e for e in errors)) / len(errors)
+                         if errors else math.inf)
+            if component > rule.max_component_error:
+                misses.append(PrecisionMiss(stratum, half, len(errors), component))
+    return misses
