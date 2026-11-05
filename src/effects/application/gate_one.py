@@ -12,7 +12,8 @@ from collections.abc import Callable
 
 from effects.application.ability_text import KeyResolver
 from effects.application.evaluation_context import EvaluationContext
-from effects.application.model_loading import Runnable, forward_chunks
+from effects.application.model_loading import Runnable
+from effects.application.record_forward import entity_chunks
 from effects.domain.evaluation_report import (
     Bound,
     CheckName,
@@ -89,7 +90,8 @@ def measure(records, runnable: Runnable) -> GateOneMetrics:
     margins = MarginAccumulator(
         runnable.fields, runnable.model.per_entity_dispersion().detach(),
     )
-    for _chunk, gathered, targets in forward_chunks(records, runnable):
+    for _chunk, gathered, targets in entity_chunks(
+            records, runnable.forward(), runnable.batcher, runnable.fields):
         margins.add(gathered, targets)
     return margins.metrics()
 

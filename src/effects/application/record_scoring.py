@@ -1,6 +1,6 @@
 """Every record's own losses and grouping keys, for the evaluation's breakdowns.
 
-Gate 1's forward pass (:func:`effects.application.model_loading.forward_chunks`),
+Gate 1's forward pass (:func:`effects.application.record_forward.entity_chunks`),
 split by row into the trainer's per-entity loss over each record alone.
 """
 
@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 import torch
 
 from effects.application.breakdowns import TOTAL, RecordResult
-from effects.application.model_loading import forward_chunks
+from effects.application.record_forward import entity_chunks
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_families import effect_family
 from effects.domain.effect_losses import per_entity_loss
@@ -38,7 +38,8 @@ def score_records(
     resolver = runnable.keyword_resolver()
     results: list[RecordResult] = []
     dispersion = runnable.model.per_entity_dispersion().detach().cpu()
-    for chunk, gathered, targets in forward_chunks(records, runnable):
+    for chunk, gathered, targets in entity_chunks(
+            records, runnable.forward(), runnable.batcher, runnable.fields):
         for row, record in enumerate(chunk):
             results.append(_record_result(
                 record, runnable.batcher, resolver,

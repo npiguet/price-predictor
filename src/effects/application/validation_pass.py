@@ -7,15 +7,15 @@ moves only with the model.
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 import torch
 
-from effects.application.step_loss import StepLoss, StepLossComputer, TrainedModules
+from effects.application.record_forward import RecordForward
+from effects.application.step_loss import StepLoss, StepLossComputer
 from effects.application.step_preparation import DeviceStep
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_log import format_floor
@@ -70,19 +70,6 @@ class ValidationSamples:
                 sampling_class(record) for record in (*card_disjoint, *game_disjoint)
             ),
         )
-
-
-@contextmanager
-def evaluating(modules: TrainedModules) -> Iterator[None]:
-    """Both modules in evaluation mode for the block, back in training mode
-    however it ends: every training step assumes training mode."""
-    modules.encoder.eval()
-    modules.model.eval()
-    try:
-        yield
-    finally:
-        modules.encoder.train()
-        modules.model.train()
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,8 +201,7 @@ class ValidationPass:
         epoch.
 
         A progress reading, not the gate: the evaluator scores only the
-        unique-text stratum, and in float32 where this pass runs under bf16
-        autocast, so a logit near zero can land on the other side here.
+        unique-text stratum, where this pass reads the whole sample.
         """
         assert self.margins is not None
         return self.margins.metrics()
@@ -278,22 +264,36 @@ class Validator:
         """
         if not records:
             return float("nan")
-        report_parts = any(collector.wants_parts for collector in collectors)
         size = self.batch_size
-        total = torch.zeros((), device=self.device)
-        batches = 0
-        with evaluating(run), torch.no_grad():
-            for start in range(0, len(records), size):
-                prepared = run.preparer.prepare_scoring_step(
-                    records[start:start + size], fields,
-                )
-                computed = self.losses.device_loss(
-                    prepared, run, run.scoring, report_parts=report_parts,
-                )
-                total += computed.shipped
-                batches += 1
-                for collector in collectors:
-                    collector.add(prepared, computed)
-            for collector in collectors:
-                collector.finish()
-        return float(total) / batches if batches else float("nan")
+        prepared = (
+            run.preparer.prepare_scoring_step(records[start:start + size], fields)
+            for start in range(0, len(records), size)
+        )
+        return score_steps(
+            prepared, RecordForward(run.encoder, run.model, run.scoring), self.losses,
+            collectors, device=self.device,
+        )
+
+
+def score_steps(
+    steps: Iterable[DeviceStep], forward: RecordForward, losses: StepLossComputer,
+    collectors: tuple[PassCollector, ...] = (), *, device: torch.device,
+) -> float:
+    """The mean shipped loss over ``steps`` through the one chunked forward
+    (:mod:`effects.application.record_forward`), each of ``collectors`` folding
+    in every step as prepared and scored; NaN for no step.
+
+    The steps may come prepared one by one, as validation's do, or from a
+    cache prepared once, as the control score's deviance sample does.
+    """
+    report_parts = any(collector.wants_parts for collector in collectors)
+    total = torch.zeros((), device=device)
+    batches = 0
+    for prepared, computed in forward.steps(steps, losses, report_parts=report_parts):
+        total += computed.shipped
+        batches += 1
+        for collector in collectors:
+            collector.add(prepared, computed)
+    for collector in collectors:
+        collector.finish()
+    return float(total) / batches if batches else float("nan")

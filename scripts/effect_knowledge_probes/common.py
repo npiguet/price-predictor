@@ -244,24 +244,23 @@ def predict(probe_model, records: list, read) -> list:
     ``outputs`` is the per-entity head's, ``verdict`` the verdict head's, both
     for the whole batch; ``read`` picks out what its probe asks of one row.
     """
-    import torch
-
-    with torch.no_grad():
-        built = probe_model.batcher.build(records, probe_model.encoder)
-        hidden = probe_model.model(built.inputs)
-        outputs = probe_model.model.per_entity(hidden)
-        verdict = probe_model.model.verdict(hidden)
-    return [
-        read(outputs, verdict, surface, row)
-        for row, surface in enumerate(built.surfaces)
-    ]
+    return predict_all(probe_model, records, read, chunk=max(len(records), 1))
 
 
 def predict_all(probe_model, records: list, read, *, chunk: int = 32) -> list:
-    """:func:`predict` over ``records`` a chunk at a time, to bound the batch."""
+    """:func:`predict` over ``records`` a chunk at a time, to bound the batch,
+    through the package's one chunked forward (``record_forward``), so a probe
+    reads the model at the precision the control score selects on."""
+    from effects.application.record_forward import RecordForward
+
+    forward = RecordForward(probe_model.encoder, probe_model.model,
+                            probe_model.batcher.materializer)
     out: list = []
-    for start in range(0, len(records), chunk):
-        out += predict(probe_model, records[start : start + chunk], read)
+    for part in forward.records(records, probe_model.batcher, size=chunk):
+        outputs = part.outputs.per_entity()
+        verdict = part.outputs.verdict()
+        out += [read(outputs, verdict, surface, row)
+                for row, surface in enumerate(part.surfaces)]
     return out
 
 

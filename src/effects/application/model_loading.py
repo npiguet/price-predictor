@@ -19,6 +19,8 @@ from itertools import batched
 import torch
 
 from effects.application.ability_text import KeyResolver
+from effects.application.record_forward import BATCH_RECORDS as FORWARD_BATCH_RECORDS
+from effects.application.record_forward import RecordForward
 from effects.application.surface_batching import (
     IDENTITY_TABLE_KEY,
     IdentityTable,
@@ -37,9 +39,8 @@ from effects.domain.baselines import baseline_masks
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_head_layout import FieldSpec, active_fields
 from effects.domain.effect_model import EffectModel
-from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.sampling import sampling_class
-from effects.domain.surface_collation import entity_index, per_entity_targets
+from effects.domain.surface_collation import entity_index
 from effects.domain.tokenizer_files import TokenizerFiles
 from effects.infrastructure.effect_model_store import EffectCheckpoint, load_weights
 from effects.infrastructure.sidecar_io import SidecarCache
@@ -52,7 +53,7 @@ logger = logging.getLogger(__name__)
 EVALUATION_SEED = 42
 
 #: Records per forward pass when gate 1 and the breakdowns score a checkpoint.
-BATCH_RECORDS = 32
+BATCH_RECORDS = FORWARD_BATCH_RECORDS
 
 #: Observations per forward pass in gate 2: each is built twice, as collected
 #: and perturbed, in one batch.
@@ -89,21 +90,15 @@ class Runnable:
         index = entity_index(surfaces).to(hidden.device)
         return self.model.per_entity_at(hidden, index).float().cpu(), surfaces
 
+    def forward(self) -> RecordForward:
+        """The one chunked forward (:mod:`effects.application.record_forward`)
+        over this checkpoint's modules and its batcher's device half."""
+        return RecordForward(self.encoder, self.model, self.batcher.materializer)
+
     def keyword_resolver(self) -> KeywordResolver:
         """A resolver over the batcher's own sidecar cache, never a second
         one: reading different joins, a perturbation would strip nothing."""
         return KeywordResolver(self.batcher.sidecars)
-
-
-def forward_chunks(
-    records, runnable: Runnable,
-) -> Iterator[tuple[list, torch.Tensor, EntityTargetBatch]]:
-    """``(chunk, gathered, targets)`` per chunk of ``records``, on the host,
-    ``gathered`` aligned column for column with the targets: gate 1's margins
-    and :mod:`effects.application.record_scoring` read one pass."""
-    for chunk in runnable.inference_chunks(records, BATCH_RECORDS):
-        gathered, surfaces = runnable.per_entity_outputs(chunk)
-        yield chunk, gathered, per_entity_targets(chunk, surfaces, runnable.fields)
 
 
 @dataclass(frozen=True, slots=True)

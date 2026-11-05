@@ -586,6 +586,34 @@ def fixture_training_config(corpus, out, **overrides):
     return TrainEffectModelConfig(**settings)
 
 
+def fixture_run(corpus, records, out, **overrides):
+    """A real run's context over the application conftest's ``corpus``, on
+    the CPU at a tiny trunk: the encoder, model, scoring materializer and
+    preparer a training loop builds, ``records`` sizing the feature widths."""
+    from dataclasses import replace
+    from unittest.mock import patch
+
+    import torch
+
+    from effects.application import run_context
+    from effects.application.step_preparation import StepPreparer
+    from effects.domain.effect_head_input import feature_widths
+    from effects.domain.effect_model import EffectModel
+    from effects.domain.sampling import sampling_class
+
+    loop = make_training_loop(fixture_training_config(
+        corpus, out, prefetch_workers=0, **overrides))
+    preparer = StepPreparer(run_context.preparer_settings(
+        loop.spec, widths=feature_widths(list(records))))
+    tiny = lambda config: EffectModel(replace(  # noqa: E731
+        config, d_model=32, n_layers=1, n_heads=2, ff_dim=64))
+    with patch.object(run_context, "EffectModel", tiny):
+        torch.manual_seed(0)
+        return run_context.build_run(
+            loop.spec, preparer, frozenset(sampling_class(r) for r in records),
+            device=torch.device("cpu"))
+
+
 def write_sidecar(sidecar, path: Path) -> None:
     """Write one sidecar where ``convert`` would, so a test can produce one
     without Forge; the inverse of ``sidecar_io.read_sidecar``."""
