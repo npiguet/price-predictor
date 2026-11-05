@@ -250,3 +250,170 @@ class TestGameDisjointDraw:
 
         assert game_hash("run.0-a.3") == zlib.crc32(b"run.0-a.3")
         assert game_hash("run.0-a.3") == game_hash("run.0-a.3")
+
+
+# ── condition balance (FR-056; story 6 acceptance 3) ────────────────────
+
+
+_KINGS_ASSASSIN = (
+    "AB$ Destroy | ActivationFirstCombat$ True | ActivationPhases$ Upkeep->BeginCombat"
+    " | Cost$ T | PlayerTurn$ True | ValidTgts$ Creature.tapped"
+)
+_TURN_CLAUSE = (
+    "SP$ Pump | ConditionPresent$ Card.Mount | NumAtt$ +1 | SubAbility$ SV1"
+    " [SEG] SV1: DB$ Draw | ConditionPlayerTurn$ True | NumCards$ 1"
+)
+_TURN_STATIC = "Mode$ Continuous | Affected$ Creature.YouCtrl | AddPower$ 1 | Condition$ PlayerTurn"
+
+
+class _Lines:
+    """A sidecar lookup over ``key -> script text``."""
+
+    def __init__(self, scripts):
+        from effects.domain.provenance import SidecarLine
+
+        self._lines = {
+            key: SidecarLine(line_index=0, line_kind="spell", provenance=(key,),
+                             script_text=text)
+            for key, text in scripts.items()
+        }
+
+    def line_for(self, key):
+        return self._lines.get(key)
+
+    def first_line(self, keys):
+        return next((self._lines[k] for k in keys if k in self._lines), None)
+
+
+def _key(name, kind="spell"):
+    from effects.domain.provenance import ProvenanceKey
+
+    return ProvenanceKey(f"cardsfolder/x/{name}.txt", 0, kind, 0)
+
+
+def _decision(key, failed):
+    from effects.domain.records import (
+        Candidate,
+        FailedCheck,
+        PlayabilityDecisionPayload,
+        RecordKind,
+    )
+    from tests.unit.effects.builders import make_record
+
+    candidate = Candidate(
+        ability=(key,), can_play=not failed, affordable=True, has_legal_target=True,
+        failed_checks=tuple(FailedCheck(check) for check in failed),
+    )
+    return make_record(RecordKind.PLAYABILITY, generation=3,
+                       payload=PlayabilityDecisionPayload(candidates=(candidate,)))
+
+
+def _resolution(key, conditions):
+    from effects.domain.records import ConditionMet, ResolutionPayload
+    from tests.unit.effects.builders import make_record
+
+    return make_record(generation=3, ability=(key,), payload=ResolutionPayload(
+        conditions_met=tuple(ConditionMet(segment, met) for segment, met in conditions),
+    ))
+
+
+def _continuous(key, active):
+    from effects.domain.records import RecordKind
+    from effects.domain.state_snapshot import CardLine
+    from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+
+    host = make_entity("E1", "anthem", lines=(
+        CardLine(keys=(key,), kind="static", granted=False, active=active),
+    ))
+    return make_record(RecordKind.CONTINUOUS, generation=3, ability=(key,),
+                       state=make_snapshot(entities=(host,)))
+
+
+class TestConditionBalance:
+    def test_a_candidates_turn_restriction_held_unless_a_timing_check_failed(self):
+        from effects.domain.corpus_curation import ConditionSide, turn_step_condition
+
+        key = _key("kings_assassin")
+        lines = _Lines({key: _KINGS_ASSASSIN})
+        assert turn_step_condition(_decision(key, ()), lines).side is ConditionSide.MET
+        held = turn_step_condition(_decision(key, ("cost",)), lines)
+        assert held.side is ConditionSide.MET and held.carrier == key
+        for check in ("whose_turn", "phase", "combat"):
+            assert turn_step_condition(_decision(key, (check,)), lines).side is (
+                ConditionSide.UNMET)
+
+    def test_a_candidate_with_no_turn_restriction_carries_none(self):
+        from effects.domain.corpus_curation import turn_step_condition
+
+        key = _key("shock")
+        lines = _Lines({key: "SP$ DealDamage | NumDmg$ 2 | SorcerySpeed$ True"})
+        assert turn_step_condition(_decision(key, ("casting_speed",)), lines) is None
+
+    def test_a_resolved_clause_reads_its_own_segments_condition(self):
+        from effects.domain.corpus_curation import ConditionSide, turn_step_condition
+
+        key = _key("pump_then_draw")
+        lines = _Lines({key: _TURN_CLAUSE})
+        # The root's ConditionPresent$ is no turn condition; segment 0 is SV1.
+        record = _resolution(key, [("root", True), ("0", False)])
+        assert turn_step_condition(record, lines).side is ConditionSide.UNMET
+        assert turn_step_condition(_resolution(key, [("root", True)]), lines) is None
+        assert turn_step_condition(_resolution(key, []), lines) is None
+
+    def test_a_listed_static_reads_its_lines_active(self):
+        from effects.domain.corpus_curation import ConditionSide, turn_step_condition
+
+        key = _key("anthem", "static")
+        lines = _Lines({key: _TURN_STATIC})
+        assert turn_step_condition(_continuous(key, False), lines).side is ConditionSide.UNMET
+        assert turn_step_condition(_continuous(key, True), lines).side is ConditionSide.MET
+        assert turn_step_condition(_continuous(key, None), lines) is None
+
+    def test_the_condition_joins_the_outcome_signature(self):
+        from effects.domain.corpus_curation import cell_signature, outcome_signature
+        from effects.domain.sampling import SamplingClass
+
+        key = _key("kings_assassin")
+        lines = _Lines({key: _KINGS_ASSASSIN})
+        decision = SamplingClass.PLAYABILITY_DECISION
+        assert cell_signature(_decision(key, ()), decision, lines) == "condition:met"
+        assert cell_signature(_decision(key, ("phase",)), decision, lines) == "condition:unmet"
+
+        clause = _key("pump_then_draw")
+        effect = _resolution(clause, [("0", True)])
+        plain = signature_label(outcome_signature(effect))
+        assert cell_signature(effect, SamplingClass.RESOLUTION_EFFECT, _Lines(
+            {clause: _TURN_CLAUSE})) == f"{plain}|condition:met"
+        assert cell_signature(effect, SamplingClass.RESOLUTION_EFFECT, _Lines({})) == plain
+
+    def test_met_and_unmet_draw_equal_budgets_a_short_side_repeating(self):
+        from effects.domain.corpus_plan import Cell, Member, plan_selection
+        from effects.domain.sampling import SamplingClass
+
+        klass = SamplingClass.PLAYABILITY_DECISION
+        met = Cell(klass, family="Destroy", signature="condition:met")
+        unmet = Cell(klass, family="Destroy", signature="condition:unmet")
+        plan = plan_selection(
+            {met: {"": Member(distinct=10)}, unmet: {"": Member(distinct=2)}},
+            mix={klass: 1.0}, ceiling=12, text_cap=0, reuse_cap=4,
+        )
+        assert plan.keyless[unmet].base == 3
+        assert plan.keyless[met] == rate_plan(10, 6)
+
+    def test_a_condition_seen_on_one_side_only_is_named(self):
+        from effects.domain.corpus_curation import (
+            ConditionSide,
+            TurnStepCondition,
+            condition_key,
+            one_sided_conditions,
+        )
+        from effects.domain.sampling import SamplingClass
+
+        both, one = _key("kings_assassin"), _key("anthem", "static")
+        klass = SamplingClass.PLAYABILITY_DECISION
+        counts = {
+            condition_key(klass, TurnStepCondition(both, ConditionSide.MET)): 4,
+            condition_key(klass, TurnStepCondition(both, ConditionSide.UNMET)): 1,
+            condition_key(klass, TurnStepCondition(one, ConditionSide.MET)): 7,
+        }
+        assert one_sided_conditions(counts) == {str(klass): [one.label]}

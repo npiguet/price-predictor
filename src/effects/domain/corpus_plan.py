@@ -19,15 +19,13 @@ from typing import Any, Literal
 
 from effects.domain.budget_allocation import allocate
 from effects.domain.corpus_curation import (
-    SIGNATURE_CLASSES,
     CapHeap,
     CopyPlan,
+    cell_signature,
     class_targets,
     copy_plan,
     game_disjoint_draw,
-    outcome_signature,
     rate_plan,
-    signature_label,
     text_capacity,
 )
 from effects.domain.damage_step_keywords import KeywordResolver
@@ -61,8 +59,10 @@ class BuildCorpusError(ValueError):
 class Cell:
     """One selection cell of FR-049: class, legality half, family, signature.
 
-    ``half`` is set on ``playability-legality`` only, ``signature`` on the
-    four classes FR-049 step 2 splits by outcome. ``modes`` is set on a
+    ``half`` is set on ``playability-legality`` only. ``signature`` holds the
+    outcome signature on the four classes FR-049 step 2 splits by outcome,
+    then, on those and the decision and legality classes, whether a turn or
+    step condition held (FR-056; ``corpus_curation.cell_signature``). ``modes`` is set on a
     survey's legality cell until :meth:`resolved` folds it into the family
     once the corpus-wide mode counts exist.
     """
@@ -95,19 +95,19 @@ class Cell:
         """
         klass = sampling_class(record)
         half = _what_if_half(record, klass)
+        signature = cell_signature(record, klass, sidecars)
         if klass == SamplingClass.PLAYABILITY_LEGALITY:
             modes = legality_modes(record, sidecars)
             family = "" if modes else FamilySentinel.NONE
-            cell = cls(klass=klass, half=half, family=family, modes=modes)
+            cell = cls(
+                klass=klass, half=half, family=family, signature=signature, modes=modes,
+            )
             return cell if legality_mode_counts is None else cell.resolved(legality_mode_counts)
         return cls(
             klass=klass,
             half=half,
             family=effect_family(record, sidecars, resolver=resolver),
-            signature=(
-                signature_label(outcome_signature(record))
-                if klass in SIGNATURE_CLASSES else ""
-            ),
+            signature=signature,
         )
 
     @property
