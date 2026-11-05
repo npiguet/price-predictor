@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import pytest
 import torch
 
-from effects.domain.effect_head_layout import FIELD_SLICES, FIELDS_BY_NAME, PER_ENTITY_WIDTH
+from effects.domain.effect_head_layout import (
+    FIELD_SLICES,
+    FIELDS_BY_NAME,
+    GATE_TERM,
+    PER_ENTITY_WIDTH,
+)
 from effects.domain.effect_losses import LossParts, per_entity_loss
 from effects.domain.field_kinds import fit_log_dispersion, negative_binomial
 from effects.domain.loss_floor import (
@@ -39,6 +45,29 @@ class TestConstantPredictorFloor:
             mask=torch.ones_like(gate) if mask is None
             else torch.tensor(mask, dtype=torch.float32),
         )
+
+    def test_a_rule_masked_samples_floor_weighs_each_target_as_the_run_does(self):
+        """FR-062 under ``--rule-mask`` (FR-061): the soft mask's fractional
+        weight counts a target at that weight, the hard mask's zero drops it.
+        Both records are the same board, so the constant is unchanged and
+        only the weighting moves the floor."""
+        values = [[1.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]]
+        batch = self._batch(gate=[[1.0, 0.0, 1.0, 0.0]] * 2, fields={"tap_state": values})
+        fields = (FIELDS_BY_NAME["tap_state"],)
+        plain = constant_predictor_floor([batch], fields=fields)
+
+        def masked(weight: float):
+            return replace(
+                batch,
+                fields=replace(batch.fields, weights={"tap_state": torch.tensor([1.0, weight])}),
+                gate_weight=torch.tensor([[1.0] * 4, [weight] * 4]),
+            )
+
+        soft = constant_predictor_floor([masked(0.25)], fields=fields)
+        hard = constant_predictor_floor([masked(0.0)], fields=fields)
+        for term in (GATE_TERM, "tap_state"):
+            assert soft[term] == pytest.approx(plain[term] * 1.25 / 2), term
+            assert hard[term] == pytest.approx(plain[term] / 2), term
 
     def test_a_binary_fields_floor_is_the_entropy_of_its_positive_rate(self):
         """Eight affected entities, a quarter of them positive, two records."""
