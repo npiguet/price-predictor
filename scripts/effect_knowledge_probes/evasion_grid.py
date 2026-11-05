@@ -1,14 +1,15 @@
 """Predicted block legality under each evasion keyword, against each blocker trait.
 
-    python scripts/effect_knowledge_probes/evasion_grid.py CHECKPOINT [--records 40]
-        [--shards 200]
+    python scripts/effect_knowledge_probes/evasion_grid.py CHECKPOINT [--half HALF]
 
 The blocking counterpart of ``combat_grid.py``. A real block-legality record anchors
 one attacker and lists the creatures that may block it. A triple qualifies when the
 candidate blocker was legal, neither creature carries an evasion keyword or a trait
 the grid sets, the blocker is a coloured non-artifact creature that is not black and
 shares no colour with the attacker, and the attacker has a colour other than black.
-One triple per game.
+One triple per game, read from the corpus's selection set: the records it froze for the
+evasion grid in ``--half`` (``reporting`` by default, ``selection`` or ``both``) of both
+validation strata.
 
 Each grid cell grants the attacker one evasion keyword and gives the blocker one
 trait, both through channels the model reads (a keyword as an effect until end of
@@ -37,7 +38,7 @@ if __package__ in (None, ""):
 
 from _lib.markdown import print_table  # noqa: E402
 
-from effect_knowledge_probes import common, readout, record_walk  # noqa: E402
+from effect_knowledge_probes import common, readout  # noqa: E402
 from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
 from effects.domain.rule_outcomes import COLOUR_WORDS, may_block  # noqa: E402
 
@@ -136,14 +137,19 @@ def label(name: str | None) -> str:
 
 
 def main() -> None:
-    from effects.domain.damage_step_keywords import KeywordResolver
 
-    args, context = common.grid_run(__doc__, records=40)
-    resolver = KeywordResolver(context.sidecars())
-    triples = record_walk.qualifying(
-        context.validation_dirs(),
-        record_walk.with_record(lambda r: qualifying_pair(r, resolver.keywords_of)),
-        args.records, shards=args.shards)
+    from effect_knowledge_probes.selection import frozen_grid_records
+
+    def options(parser) -> None:
+        parser.add_argument("--half", choices=("reporting", "selection", "both"),
+                            default="reporting")
+        parser.add_argument("--probe-set-dir", type=Path, default=common.REPORTS,
+                            help="where the corpus's selection set is")
+
+    args, context = common.grid_run(__doc__, records=40, options=options)
+    halves = ("selection", "reporting") if args.half == "both" else (args.half,)
+    triples = [(record, *entities) for record, entities in frozen_grid_records(
+        context, "evasion", halves=halves, reports_dir=args.probe_set_dir)]
     probe_model = context.model([r for r, _, _ in triples])
     common.heading(args, context, f"{len(triples)} validation attacker-blocker pairs")
 

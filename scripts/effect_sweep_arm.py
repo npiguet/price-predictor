@@ -19,9 +19,9 @@ directory then holds:
   opening with the exact command line that produced it and the commit it ran
   at. A rerun appends to a step's log under its own command line.
 
-The knowledge-probe set is frozen once per curated corpus and shared by every
-arm, so it stays in ``output/effects/reports/``; the first arm on a corpus
-freezes it.
+The selection set is frozen once per curated corpus, before any arm trains,
+and shared by every arm, so it stays in ``output/effects/reports/``; the first
+arm on a corpus freezes it (``--freeze-probe-set``) before its training step.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ EMBEDDING_PROBES = (
     "build_texts", "effect_profiles", "pca_directions",
     "linear_probes", "type_merging", "neighbours", "keyword_expansion",
 )
-STEPS = ("train", "encode", "evaluate", "embedding-probes", "knowledge-probes")
+STEPS = ("freeze", "train", "encode", "evaluate", "embedding-probes", "knowledge-probes")
 
 
 def git_state() -> str:
@@ -87,7 +87,15 @@ def plan(args: argparse.Namespace, train_args: list[str]) -> list[tuple[str, lis
     # Without the variant tree a variant record resolves to no ability text in
     # training, encoding and evaluation alike, and nothing reports it.
     variants = ["--variant-scripts", str(args.variant_scripts)]
-    commands = [
+    knowledge = python + [str(Path("scripts") / "effect_knowledge_probes" / "run.py")]
+    commands = []
+    if args.freeze_probe_set:
+        # The freeze reads the corpus alone and comes before training, which
+        # refuses a corpus without a selection set.
+        commands.append(("freeze", knowledge + [
+            "--freeze-probe-set", "--corpus", str(args.corpus),
+            "--probe-set-dir", str(args.probe_set_dir)], "freeze-selection-set.log"))
+    commands += [
         ("train", python + ["-m", "effects", "train-effect-model",
                             "--corpus", str(args.corpus),
                             "--vocab-path", str(args.vocab_path), *variants,
@@ -107,13 +115,9 @@ def plan(args: argparse.Namespace, train_args: list[str]) -> list[tuple[str, lis
                       *probe, "--reports-dir", reports],
             f"probes-{script}.log",
         ))
-    knowledge = python + [str(Path("scripts") / "effect_knowledge_probes" / "run.py"),
-                          *probe, "--reports-dir", reports,
-                          "--probe-set-dir", str(args.probe_set_dir)]
-    if args.freeze_probe_set:
-        commands.append(("knowledge-probes", knowledge + ["--freeze-probe-set"],
-                         "knowledge-probes.log"))
-    commands.append(("knowledge-probes", knowledge, "knowledge-probes.log"))
+    commands.append(("knowledge-probes", knowledge + [
+        *probe, "--reports-dir", reports, "--probe-set-dir", str(args.probe_set_dir)],
+        "knowledge-probes.log"))
     return commands
 
 
@@ -134,12 +138,13 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--variant-scripts", type=Path,
                         default=Path("output/effects/variant-scripts"),
                         help="the variant tree build-corpus was given")
-    parser.add_argument("--from-step", choices=STEPS, default="train",
+    parser.add_argument("--from-step", choices=STEPS[1:], default="train",
                         help="skip the steps before this one, e.g. after a crash")
     parser.add_argument("--probe-set-dir", type=Path, default=SHARED_REPORTS,
                         help="where the shared knowledge-probe set lives")
     parser.add_argument("--freeze-probe-set", action="store_true",
-                        help="freeze the knowledge-probe set first (first arm on a corpus)")
+                        help="freeze the corpus's selection set before training "
+                             "(first arm on a corpus)")
     parser.add_argument("--resume", action="store_true",
                         help="continue an interrupted training step from the "
                              "resume.pt it left in --run-dir, then run the rest")
@@ -170,7 +175,8 @@ def main(argv: list[str] | None = None) -> int:
     arm_log = run_dir / "arm.log"
     with arm_log.open("a", encoding="utf-8") as out:
         out.write(header([sys.executable, "-u", __file__, *argv]))
-    first = STEPS.index(args.from_step)
+    first = STEPS.index(
+        "freeze" if args.freeze_probe_set and args.from_step == "train" else args.from_step)
     for step, command, log in plan(args, train_args):
         if STEPS.index(step) < first:
             continue
@@ -179,7 +185,8 @@ def main(argv: list[str] | None = None) -> int:
         code = run_logged(command, run_dir / log)
         if code != 0:
             with arm_log.open("a", encoding="utf-8") as out:
-                again = "--resume" if step == "train" else f"--from-step {step}"
+                again = {"train": "--resume", "freeze": "--freeze-probe-set"}.get(
+                    step, f"--from-step {step}")
                 out.write(f"{datetime.datetime.now():%H:%M:%S} {step} failed "
                           f"(exit {code}); continue with {again}\n")
             return code

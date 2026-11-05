@@ -1,15 +1,20 @@
 """Probe one checkpoint's game knowledge, and how much of it lives in ``e``.
 
-    # once per curated corpus
-    python scripts/effect_knowledge_probes/run.py --checkpoint PATH --freeze-probe-set
+    # once per curated corpus, before any training
+    python scripts/effect_knowledge_probes/run.py --freeze-probe-set --corpus DIR
     # then per checkpoint trained on that corpus
     python scripts/effect_knowledge_probes/run.py --checkpoint PATH
 
-``--freeze-probe-set`` enumerates the probe items keyed by provenance, their
-labels, the probe games of both validation strata, the board-sweep records and
-the interaction join rate, and writes them with a sha256 digest (FR-076,
-FR-078). A probing run refuses without a frozen set for its corpus, reads the
-frozen set, and writes one scorecard recording its digest (FR-088):
+``--freeze-probe-set`` freezes the corpus's selection set
+(``effects.application.freeze_selection_set``) from the corpus alone, with no
+checkpoint: per validation stratum and half, the rung-3 probe items
+(``labels.record_items``), the damage, combat and evasion grids' records
+(``selection``), the rule tests and the deviance sample, written to
+``selection-set-<corpus digest>.json`` under ``--probe-set-dir`` (default
+``--reports-dir``). It exits 1, naming stratum, half and component, when the
+corpus cannot meet the precision targets. A probing run refuses without a
+frozen gen-2 probe set for its corpus, reads it, and writes one scorecard
+recording its digest (FR-088):
 
 * the read-out ladder over the ten families (``ladder``), per stratum for the
   board-dependent targets and per held-out/trained split for line properties;
@@ -84,9 +89,11 @@ METHOD_C_STEPS = 2000
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--checkpoint", type=Path, required=True)
+    parser.add_argument("--checkpoint", type=Path,
+                        help="the checkpoint to probe; refused with --freeze-probe-set")
     parser.add_argument("--corpus", type=Path,
-                        help="curated corpus; default the checkpoint's recorded one")
+                        help="curated corpus; default the checkpoint's recorded one, "
+                             "required with --freeze-probe-set")
     parser.add_argument("--records-dir", type=Path,
                         help="where the probe games' shards are; default the "
                              "corpus's validation strata")
@@ -126,6 +133,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     unknown = set(args.families or ()) - set(labels.FAMILIES)
     if unknown:
         parser.error(f"unknown families: {sorted(unknown)}")
+    if args.freeze_probe_set:
+        if args.checkpoint is not None:
+            parser.error("--freeze-probe-set freezes from the corpus alone, before any "
+                         "model exists: drop --checkpoint")
+        if args.corpus is None:
+            parser.error("--freeze-probe-set needs --corpus DIR")
+    elif args.checkpoint is None:
+        parser.error("--checkpoint is required (or --freeze-probe-set --corpus DIR)")
     return args
 
 
@@ -791,19 +806,51 @@ def report_dir(reports_dir: Path, checkpoint: Path, date: str) -> Path:
     return Path(reports_dir) / f"knowledge-probes-{label}-{date.replace('-', '')}"
 
 
+def freeze_selection(args: argparse.Namespace) -> int:
+    """Freeze the corpus's selection set with no checkpoint (research E1): 0
+    once written, 1 when a half or a component misses its target."""
+    from effect_knowledge_probes import selection
+    from effects.application import freeze_selection_set
+    from effects.application.selection_deviance import TargetDevianceLosses, scoring_targets
+    from effects.domain.damage_step_keywords import KeywordResolver
+    from effects.infrastructure.corpus_store import CorpusStore
+    from effects.infrastructure.shard_io import read_shard
+
+    corpus = Path(args.corpus)
+    manifest = CorpusStore(corpus).load()
+    cards_folders = tuple(args.cards_folder or common.DEFAULT_CARDS_FOLDERS)
+    variant_scripts = common.rooted(manifest.variant_scripts) if manifest.variant_scripts else None
+    sidecars = common.sidecar_cache(cards_folders, variant_scripts)
+    surface = getattr(manifest, "surface", None) or Surface.SCRIPT
+    keywords_of = KeywordResolver(sidecars).keywords_of
+
+    def deviance(manifest):
+        sample = []
+        for stratum in common.STRATA:
+            path = corpus / "validation" / "samples" / f"{stratum}.jsonl.gz"
+            if path.exists():
+                sample += [r for _, r in zip(range(256), read_shard(path))]
+        prepare = scoring_targets(corpus, manifest, cards_folders=cards_folders,
+                                  sample=sample)
+        return TargetDevianceLosses(prepare, {
+            rule: tuple(entry.outputs) for rule, entry in manifest.rule_map.items()})
+
+    progress(f"freezing the selection set of {corpus}")
+    return freeze_selection_set.run(
+        corpus, reports_dir=args.probe_set_dir or args.reports_dir, lines=sidecars,
+        probes=selection.ProbeItems(sidecars, _acting_text_function(sidecars, surface)),
+        grids=selection.grid_sources(sidecars, keywords_of), deviance=deviance,
+        echo=progress,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.freeze_probe_set:
+        return freeze_selection(args)
     context = common.probe_context(
         args.checkpoint, corpus=args.corpus, cards_folders=args.cards_folder)
     set_path = probe_set_location(args, context.corpus_digest)
-    if args.freeze_probe_set:
-        frozen = freeze(args, context)
-        common.write_json(set_path, frozen.to_json())
-        print(f"froze {len(frozen.items)} line items, "
-              f"{len(frozen.record_items)} record items, "
-              f"{len(frozen.pairs)} pairs; join rate "
-              f"{frozen.join_rate:.3f}; digest {frozen.digest[:12]} -> {set_path}")
-        return 0
     probe_set = load_probe_set(set_path, context.corpus_digest)
     scorecard = probe(args, context, probe_set)
     out_dir = report_dir(args.reports_dir, args.checkpoint, scorecard.date)

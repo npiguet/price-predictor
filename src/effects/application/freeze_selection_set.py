@@ -21,7 +21,8 @@ their labels alone:
    - Probe items: what a :class:`ProbeItemSource` labels in each shard's
      distinct records, synthetic protection copies left out.
    - Grid records: per :class:`GridSource`, one qualifying record a game, the
-     one of smallest keyed hash under the corpus seed.
+     one of smallest keyed hash under the corpus seed, so grids qualifying
+     the same records choose the same one.
    - The deviance sample: every copy of the half, then the
      ``deviance_cap`` of smallest keyed hash.
 3. Balance with ``r`` by a seeded draw: each rule's larger polarity to r times
@@ -235,10 +236,11 @@ class SelectionSetRefused(RuntimeError):
         super().__init__("\n".join(miss.describe() for miss in self.misses))
 
 
-def left_out_lines(selection: SelectionSet) -> list[str]:
-    """One line per half and component naming what it left out; untested
-    rules are counted rather than listed, as most rules are untested in a
-    small half."""
+def left_out_lines(selection: SelectionSet, *, limit: int = 12) -> list[str]:
+    """One line per half and component naming what it left out, the first
+    ``limit`` items by name and the rest counted; untested rules are counted
+    rather than listed, as most rules are untested in a small half. The set
+    itself names every one."""
     lines = []
     for stratum, by_half in sorted(selection.left_out.items()):
         for half, by_component in sorted(by_half.items()):
@@ -246,6 +248,8 @@ def left_out_lines(selection: SelectionSet) -> list[str]:
                 untested = sum(1 for item in items if item.reason == UNTESTED)
                 named = [f"{item.item} ({item.reason})" for item in items
                          if item.reason != UNTESTED]
+                if len(named) > limit:
+                    named = [*named[:limit], f"{len(named) - limit} more"]
                 parts = named + ([f"{untested} rule(s) untested"] if untested else [])
                 lines.append(f"{stratum} {half}, {component} left out: " + "; ".join(parts))
     return lines
@@ -378,7 +382,9 @@ def _gather(
                 qualified = grid.qualify(record)
                 if qualified is None:
                     continue
-                order = keyed_hash(f"{grid.name}|{record.record_id}", seed)
+                # Keyed by the record alone, so grids qualifying the same
+                # records (the combat grid's variants) choose the same ones.
+                order = keyed_hash(record.record_id, seed)
                 held = found.grids[grid.name].get(record.game_id)
                 if held is None or order < held[0]:
                     found.grids[grid.name][record.game_id] = (order, record.record_id, qualified)

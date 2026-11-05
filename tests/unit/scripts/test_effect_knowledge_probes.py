@@ -1469,3 +1469,126 @@ class TestLineSplit:
     ])
     def test_the_split(self, carriers, held_out, expected):
         assert run.line_split(carriers, held_out) == expected
+
+
+# ── the selection-set freeze (T156) ─────────────────────────────────────
+
+
+class TestFreezeSelectionSet:
+    """``--freeze-probe-set --corpus DIR`` freezes the selection set with no
+    checkpoint, and the combat and evasion grids read the records it froze."""
+
+    def test_the_freeze_takes_a_corpus_and_refuses_a_checkpoint(self, tmp_path):
+        args = run.parse_args(["--freeze-probe-set", "--corpus", str(tmp_path)])
+        assert args.checkpoint is None and args.corpus == tmp_path
+        for argv in (["--freeze-probe-set", "--corpus", "c", "--checkpoint", "x.pt"],
+                     ["--freeze-probe-set"], []):
+            with pytest.raises(SystemExit):
+                run.parse_args(argv)
+
+    def test_main_freezes_from_the_corpus_alone(self, tmp_path, monkeypatch):
+        from effects.application import freeze_selection_set
+        from effects.infrastructure.corpus_store import CorpusStore
+
+        corpus = tmp_path / "corpus"
+        CorpusStore(corpus).save(_corpus_manifest())
+        seen = {}
+
+        def fake_run(path, **kwargs):
+            seen.update(kwargs, corpus=path)
+            return 1
+
+        monkeypatch.setattr(freeze_selection_set, "run", fake_run)
+        monkeypatch.setattr(common, "probe_context", lambda *a, **k: pytest.fail("no checkpoint"))
+        code = run.main(["--freeze-probe-set", "--corpus", str(corpus),
+                         "--probe-set-dir", str(tmp_path / "sets"),
+                         "--cards-folder", str(_FIXTURES / "gen1-sidecars" / "cardsfolder")])
+        assert code == 1
+        assert seen["corpus"] == corpus and seen["reports_dir"] == tmp_path / "sets"
+        names = [grid.name for grid in seen["grids"]]
+        assert names[0] == "damage" and names[-1] == "evasion"
+        assert len([n for n in names if n.startswith("combat/")]) == 2 * len(combat_grid.VARIANTS)
+        assert callable(seen["deviance"])
+
+    def test_probe_items_are_the_board_targets_labelled_with_their_kind(
+        self, records, sidecars, acting,
+    ):
+        from effect_knowledge_probes.selection import ProbeItems
+
+        items = list(ProbeItems(sidecars, acting).items(records))
+        assert items
+        for item in items:
+            spec = labels.TARGETS_BY_NAME[item.probe_type]
+            assert spec.scope in ("act", "entity") and item.kind == spec.kind
+            assert np.isfinite(item.label)
+
+    def test_a_combat_grid_qualifies_a_block_with_the_rules_outcomes(
+        self, records, monkeypatch,
+    ):
+        from effect_knowledge_probes import selection
+
+        record, attacker, blocker = _one_on_one(records)
+        _outcome_by_the_rule(monkeypatch, record, attacker, blocker)
+        grids = {g.name: g for g in selection.grid_sources(None, _keywords)}
+        found = grids["combat/none/blocker"].qualify(record)
+        assert found.entities == (attacker, blocker)
+        assert found.outcomes == tuple(LETHAL_STEP.ravel())
+        assert len(grids["combat/none/blocker"].cells) == 64
+        assert set(grids["combat/attacker-deathtouch/blocker"].qualify(record).outcomes) == {1.0}
+
+    def test_the_evasion_grid_qualifies_a_block_with_the_rules_outcomes(self, records):
+        from effect_knowledge_probes.selection import EvasionGrid
+
+        record, attacker, blocker = _block_pair(records)
+        grid = EvasionGrid(_keywords)
+        found = grid.qualify(record)
+        assert found.entities == (attacker, blocker)
+        assert len(found.outcomes) == len(grid.cells)
+        assert found.outcomes[grid.cells.index("flying|none")] == 0.0
+        assert found.outcomes[grid.cells.index("flying|reach")] == 1.0
+        assert grid.qualify(replace(record, fork=True)) is None
+
+    def test_the_grids_read_the_frozen_records_each_once(self, tmp_path):
+        import gzip
+
+        from effect_knowledge_probes.selection import frozen_grid_records
+
+        from effects.domain.selection_set import (
+            FrozenGrid,
+            GridCell,
+            SelectionSet,
+            TaggedRecord,
+            selection_set_path,
+            write_selection_set,
+        )
+        from tests.unit.effects.builders import GEN3_RECORDS
+
+        with gzip.open(GEN3_RECORDS, "rt", encoding="utf-8") as handle:
+            lines = [line for line in handle if line.strip()][:3]
+        stratum = tmp_path / "validation" / "game-disjoint"
+        stratum.mkdir(parents=True)
+        (stratum / "shard-0.jsonl").write_text("".join(lines + lines[:1]), encoding="utf-8")
+        rows = [json.loads(line) for line in lines]
+        frozen = lambda ids: FrozenGrid(  # noqa: E731
+            (GridCell("1x1", 1.0),),
+            tuple(TaggedRecord(rows[i]["record_id"], rows[i]["game_id"], ("E1", "E2"))
+                  for i in ids))
+        selection = SelectionSet(
+            corpus_digest="d", r=4, halves={}, probe_kinds={}, rule_tests={},
+            probes={}, deviance_samples={}, standard_errors={}, left_out={},
+            grids={"game-disjoint": {"reporting": {"evasion": frozen([0]),
+                                                    "combat/none/blocker": frozen([1])},
+                                     "selection": {"evasion": frozen([2])}}},
+        )
+        write_selection_set(selection_set_path(tmp_path, "d"), selection)
+        context = SimpleNamespace(corpus_digest="d",
+                                  stratum_dir=lambda name: tmp_path / "validation" / name)
+        found = frozen_grid_records(context, "evasion", reports_dir=tmp_path)
+        assert [(r.record_id, e) for r, e in found] == [(rows[0]["record_id"], ("E1", "E2"))]
+        both = frozen_grid_records(context, "evasion", halves=("selection", "reporting"),
+                                   reports_dir=tmp_path)
+        assert sorted(r.record_id for r, _ in both) == sorted(
+            [rows[0]["record_id"], rows[2]["record_id"]])
+        with pytest.raises(SystemExit, match="no selection set"):
+            frozen_grid_records(SimpleNamespace(corpus_digest="other"), "evasion",
+                                reports_dir=tmp_path)

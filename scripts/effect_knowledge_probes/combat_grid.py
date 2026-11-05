@@ -1,7 +1,7 @@
 """Predicted deaths in a one-on-one block, power 1..8 x toughness 1..8, averaged over records.
 
     python scripts/effect_knowledge_probes/combat_grid.py CHECKPOINT [--source SOURCE]
-        [--variant VARIANT ...] [--records 40] [--shards 200]
+        [--variant VARIANT ...] [--half HALF] [--records 40] [--shards 200]
 
 The combat counterpart of ``damage_grid.py``. A record qualifies when exactly one
 attacker is blocked, by exactly one blocker that blocks nothing else, the record covers
@@ -33,8 +33,10 @@ damage, so the grid asks about the board before the damage step, the double stri
 first hit apart. It also sets both creatures' damage assignment to what the edited board
 assigns, because the input carries each creature's assignment beside its power.
 
-``--source validation`` (the default) reads the card-disjoint and game-disjoint strata,
-``--source training`` the training shards.
+``--source validation`` (the default) reads the blocks the corpus's selection set froze
+for the combat grids in ``--half`` (``reporting`` by default, ``selection`` or ``both``) of
+both validation strata, one a game; ``--source training`` scans the first ``--shards``
+training shards for ``--records`` blocks.
 """
 from __future__ import annotations
 
@@ -216,17 +218,27 @@ def main() -> None:
                             default="validation")
         parser.add_argument("--variant", choices=(*VARIANTS, "all"), nargs="+",
                             default=["all"])
+        parser.add_argument("--half", choices=("reporting", "selection", "both"),
+                            default="reporting")
+        parser.add_argument("--probe-set-dir", type=Path, default=common.REPORTS,
+                            help="where the corpus's selection set is")
 
     args, context = common.grid_run(__doc__, records=40, options=options)
     variants = list(VARIANTS) if "all" in args.variant else args.variant
     resolver = KeywordResolver(context.sidecars())
-    directories = ([context.training_dir] if args.source == "training"
-                   else context.validation_dirs())
-    # One block a game: a game repeats its creatures from combat to combat, and forty
-    # blocks by one large attacker would read one board forty times.
-    triples = record_walk.qualifying(
-        directories, record_walk.with_record(lambda r: single_block(r, resolver.keywords_of)),
-        args.records, shards=args.shards)
+    if args.source == "training":
+        # One block a game: a game repeats its creatures from combat to combat, and
+        # forty blocks by one large attacker would read one board forty times.
+        triples = record_walk.qualifying(
+            [context.training_dir],
+            record_walk.with_record(lambda r: single_block(r, resolver.keywords_of)),
+            args.records, shards=args.shards)
+    else:
+        from effect_knowledge_probes.selection import frozen_grid_records
+
+        halves = ("selection", "reporting") if args.half == "both" else (args.half,)
+        triples = [(record, *entities) for record, entities in frozen_grid_records(
+            context, "combat/", halves=halves, reports_dir=args.probe_set_dir)]
     probe_model = context.model([r for r, _, _ in triples])
     common.heading(args, context, f"{len(triples)} {args.source} one-on-one blocks")
     for variant in variants:

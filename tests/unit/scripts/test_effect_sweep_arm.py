@@ -50,15 +50,19 @@ class TestPlan:
             ["--run-dir", str(tmp_path), "--corpus", "c"]) if step == "embedding-probes"]
         assert logs == [f"probes-{s}.log" for s in arm.EMBEDDING_PROBES]
 
-    def test_only_the_first_arm_freezes_the_probe_set(self, tmp_path):
+    def test_only_the_first_arm_freezes_the_selection_set_before_training(self, tmp_path):
         base = ["--run-dir", str(tmp_path), "--corpus", "c"]
-        plain = [c for s, c, _ in _plan(base) if s == "knowledge-probes"]
-        first = [c for s, c, _ in _plan(base + ["--freeze-probe-set"])
-                 if s == "knowledge-probes"]
-        assert len(plain) == 1 and "--freeze-probe-set" not in plain[0]
-        assert len(first) == 2 and first[0][-1] == "--freeze-probe-set"
-        assert first[1] == plain[0]
-        assert plain[0][plain[0].index("--probe-set-dir") + 1] == str(arm.SHARED_REPORTS)
+        plain = _plan(base)
+        first = _plan(base + ["--freeze-probe-set"])
+        assert [s for s, _, _ in plain] == [s for s, _, _ in first][1:]
+        step, freeze, log = first[0]
+        assert (step, log) == ("freeze", "freeze-selection-set.log")
+        assert "--freeze-probe-set" in freeze and "--checkpoint" not in freeze
+        assert freeze[freeze.index("--corpus") + 1] == "c"
+        knowledge = [c for s, c, _ in plain if s == "knowledge-probes"]
+        assert len(knowledge) == 1 and "--freeze-probe-set" not in knowledge[0]
+        assert knowledge[0][knowledge[0].index("--probe-set-dir") + 1] == str(
+            arm.SHARED_REPORTS)
 
 
 class TestLogging:
