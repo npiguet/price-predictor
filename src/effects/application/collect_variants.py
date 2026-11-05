@@ -22,7 +22,14 @@ from effects.application.collector_common import (
 from effects.domain import default_paths
 from effects.domain.card_names import fold_card_name
 from effects.domain.coverage import DeckCandidate
+from effects.domain.rule_outcomes import (
+    CARD_TYPES,
+    CONDITIONS,
+    ProtectionQuality,
+    QualityKind,
+)
 from effects.domain.script_variants import (
+    PerturbationKind,
     is_multi_face,
     perturb,
     renamed_script,
@@ -147,12 +154,68 @@ def loadable_variants(
     return [variant for variant in generated if variant.name in accepted]
 
 
+#: The rare protection qualities a protection keyword's quality is swapped to
+#: (FR-058), spelled as :attr:`ProtectionQuality.fragment` spells them, so a
+#: variant's keyword line reads as a protection copy's and a protection fork's
+#: grant do. Every card type, every condition, everything, and the creature
+#: types limited decks field most: a whitelist rather than any parsed value,
+#: because a generated quality Forge cannot read as a filter fails to load.
+PROTECTION_QUALITY_WHITELIST: tuple[str, ...] = (
+    *(ProtectionQuality(QualityKind.CARD_TYPE, t).fragment for t in CARD_TYPES),
+    *(ProtectionQuality(QualityKind.CREATURE_TYPE, t).fragment for t in (
+        "angel", "beast", "cleric", "dragon", "elf", "goblin", "human", "knight",
+        "merfolk", "soldier", "spirit", "vampire", "warrior", "wizard", "zombie",
+    )),
+    *(ProtectionQuality(QualityKind.CONDITION, name).fragment for name in CONDITIONS),
+    ProtectionQuality.everything().fragment,
+)
+
+#: A keyword line of a Forge source script.
+_KEYWORD_LINE = "K:"
+
+
+def swap_protection_quality(
+    script_text: str, rng: random.Random,
+) -> tuple[str, str] | None:
+    """Swap the quality of a protection keyword line (``K:Protection from red``)
+    for another from :data:`PROTECTION_QUALITY_WHITELIST` (FR-058): the
+    perturbed line and what changed, or None for any other line.
+
+    The line's own quality is any :meth:`ProtectionQuality.parse` reads, a
+    colour included; a quality it cannot read (a player, a filter no condition
+    names) is left alone, like a selector outside the selector whitelist. The
+    replacement is never the quality the line already names.
+    """
+    if not script_text.startswith(_KEYWORD_LINE):
+        return None
+    original = script_text[len(_KEYWORD_LINE):].strip()
+    quality = ProtectionQuality.parse(original)
+    if quality is None:
+        return None
+    alternatives = [
+        fragment for fragment in PROTECTION_QUALITY_WHITELIST
+        if ProtectionQuality.parse(fragment) != quality
+    ]
+    replacement = rng.choice(alternatives)
+    return (
+        f"{_KEYWORD_LINE}{replacement}",
+        f"{PerturbationKind.SELECTOR}: {_KEYWORD_LINE}{original} -> {replacement}",
+    )
+
+
 def perturb_script(
     source_lines: list[str], rng: random.Random,
 ) -> tuple[list[str], str] | None:
     """Perturb the first script line that has something to perturb; None when
-    no line does."""
+    no line does. A protection keyword line swaps its quality
+    (:func:`swap_protection_quality`); any other line takes
+    :func:`~effects.domain.script_variants.perturb`."""
     for index, line in enumerate(source_lines):
+        swapped = swap_protection_quality(line, rng)
+        if swapped is not None:
+            lines = list(source_lines)
+            lines[index] = swapped[0]
+            return lines, swapped[1]
         result = perturb(line, rng)
         if result is None:
             continue

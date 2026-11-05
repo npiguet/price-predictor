@@ -21,16 +21,19 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from effects.application.collect_variants import (
+    PROTECTION_QUALITY_WHITELIST,
     RANDOM_SEED,
     CollectVariantsConfig,
     GeneratedVariant,
     generate_variants,
     loadable_variants,
     perturb_script,
+    swap_protection_quality,
     variant_budget,
     volume_ceiling,
 )
 from effects.domain.records import EffectRecord
+from effects.domain.rule_outcomes import ProtectionQuality, QualityKind
 from effects.domain.script_variants import (
     is_multi_face,
     script_mana_cost,
@@ -182,6 +185,73 @@ class TestVariantGeneration:
         perturbed, _description = result
         assert perturbed[0] == "Name:Bolt"
         assert perturbed[2] != _BOLT_SCRIPT
+
+
+class TestProtectionQualitySwap:
+    """FR-058: a protection keyword's quality swaps to a rare one from a
+    checked-in whitelist, spelled as protection copies spell the quality."""
+
+    _KNIGHT = [
+        "Name:White Knight", "ManaCost:W W", "Types:Creature Human Knight",
+        "PT:2/2", "K:First Strike", "K:Protection from black",
+    ]
+
+    def test_every_whitelisted_quality_is_rare_and_spelled_as_a_copy_spells_it(self):
+        for fragment in PROTECTION_QUALITY_WHITELIST:
+            quality = ProtectionQuality.parse(fragment)
+            assert quality is not None, fragment
+            assert quality.kind is not QualityKind.COLOUR, fragment
+            assert quality.fragment == fragment
+        kinds = {ProtectionQuality.parse(f).kind for f in PROTECTION_QUALITY_WHITELIST}
+        assert kinds == {QualityKind.CARD_TYPE, QualityKind.CREATURE_TYPE,
+                         QualityKind.CONDITION, QualityKind.EVERYTHING}
+
+    @pytest.mark.parametrize("line", [
+        "K:Protection from red",
+        "K:Protection:Artifact",
+        "K:Protection:Goblin",
+        "K:Protection:Instant:instants",
+        "K:Protection:Card.MultiColor:multicolored",
+        "K:Protection from everything",
+    ])
+    def test_a_protection_line_swaps_to_another_whitelisted_quality(self, line):
+        for seed in range(20):
+            swapped = swap_protection_quality(line, random.Random(seed))
+            assert swapped is not None
+            perturbed, description = swapped
+            replacement = perturbed.removeprefix("K:")
+            assert replacement in PROTECTION_QUALITY_WHITELIST
+            assert ProtectionQuality.parse(replacement) != ProtectionQuality.parse(line[2:])
+            assert description == f"selector-swap: {line} -> {replacement}"
+
+    @pytest.mark.parametrize("line", [
+        "K:Flying",
+        "K:Protection:Player.Opponent:each of your opponents",
+        "K:Protection:Creature.nonSpirit:non-Spirit creatures",
+        "A:SP$ Pump | KW$ Protection from red | ValidTgts$ Creature",
+    ])
+    def test_any_other_line_is_left_to_the_other_perturbations(self, line):
+        assert swap_protection_quality(line, random.Random(0)) is None
+
+    def test_a_card_with_protection_has_its_quality_swapped(self):
+        perturbed, description = perturb_script(self._KNIGHT, random.Random(1))
+        assert perturbed[:-1] == self._KNIGHT[:-1]
+        assert perturbed[-1] in {f"K:{f}" for f in PROTECTION_QUALITY_WHITELIST}
+        assert description.startswith("selector-swap: K:Protection from black -> ")
+
+    def test_a_variant_of_a_protection_card_is_written_with_the_swapped_quality(
+        self, tmp_path,
+    ):
+        source = tmp_path / "cards"
+        source.mkdir()
+        (source / "white_knight.txt").write_text("\n".join(self._KNIGHT) + "\n", encoding="utf-8")
+        [variant] = generate_variants(
+            source, tmp_path / "variants", held_out=frozenset(), limit=5,
+        )
+        written = variant.path.read_text(encoding="utf-8").splitlines()
+        assert written[0] == "Name:White Knight Variant 0"
+        assert "K:Protection from black" not in written
+        assert written[-1].removeprefix("K:") in PROTECTION_QUALITY_WHITELIST
 
 
 class TestVolumeCap:
