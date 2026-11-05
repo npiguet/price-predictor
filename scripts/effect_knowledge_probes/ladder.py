@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from effect_knowledge_probes import readout
-from effects.domain.score_scales import auc, r_squared
+from effects.domain.probe_readouts import item_score
 
 # ── constants fixed in code (research.md § Constants fixed in code) ─────
 
@@ -86,21 +86,9 @@ def width_vector(text: str, width: int, seed: int = SEED) -> np.ndarray:
     return rng.standard_normal(width).astype(np.float32)
 
 
-def score(kind: str, y: np.ndarray, prediction: np.ndarray,
-          weight: np.ndarray | None = None) -> float:
-    """AUC for a yes/no target, R² for an amount; NaN where undefined."""
-    y = np.asarray(y, dtype=np.float64)
-    prediction = np.asarray(prediction, dtype=np.float64)
-    ok = np.isfinite(y) & np.isfinite(prediction)
-    y, prediction = y[ok], prediction[ok]
-    weight = None if weight is None else np.asarray(weight, dtype=np.float64)[ok]
-    if y.size < 2:
-        return float("nan")
-    if kind == "binary":
-        if len(np.unique(y)) < 2:
-            return float("nan")
-        return auc(y, prediction, weight)
-    return r_squared(y, prediction, weight)
+#: An item's score, AUC for a yes/no target and R² for an amount; NaN where
+#: undefined. The package's, so rung 3 scores as the control score does.
+score = item_score
 
 
 #: Standardized features are clipped here, as the embedding probes clip theirs:
