@@ -119,8 +119,9 @@ flipping them leaves `SurfaceBuilder.build` unchanged.
 
 Flag signatures added: directed fork = any kind, `interventional = false`, `fork = true`, `directed`
 set; protection fork (FR-058) = any kind, `interventional = true`, `fork = true`, its cost halves
-carrying `link_id` as live halves do. A forced resolution stays the only interventional record
-without a partner.
+carrying `link_id` as live halves do. A forced resolution's effect half is written without a
+partner, and so is a protection fork's mana record (every event `mana_produced`), as a live one is;
+no flag tells the two apart.
 
 ### Snapshot (extended)
 

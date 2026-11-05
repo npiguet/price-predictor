@@ -31,8 +31,9 @@ Flag signatures, added row:
 | protection fork (FR-058) | `true` | `true` | absent | the run's, as a live record's |
 
 A protection fork's records are of any kind, played on to the end of the turn, and its cost halves
-carry `link_id` as live halves do; an interventional resolution's forced effect half stays the only
-interventional record without a partner. Readers accept an interventional record of every kind, with
+carry `link_id` as live halves do. An interventional resolution's forced effect half has no
+partner, and neither has a protection fork's mana record (every event `mana_produced`), as a live
+one has none; no flag tells the two apart. Readers accept an interventional record of every kind, with
 or without `link_id`.
 
 `mirror_of` on a directed-fork record names the live record open at the fork point, and is absent

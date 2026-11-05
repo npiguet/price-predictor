@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from effects.domain.collection_caps import CollectionCaps
+from effects.domain.event_schema import EventType
 from effects.domain.records import EffectRecord
 from effects.infrastructure.shard_io import read_records
 from price_predictor.infrastructure.forge_jvm import kill_process_tree
@@ -150,9 +151,19 @@ def test_an_intervention_forces_something_observation_misses(
 ) -> None:
     """Lands and mana abilities are excluded on purpose: every game plays them,
     so forking to force one spends a game copy to observe the commonest event in
-    the corpus."""
+    the corpus.
+
+    A forced resolution is an unlinked interventional resolution, but so is a
+    protection fork's mana record: that fork plays its turn on and taps lands as
+    a live game does. The two are alike on the record, so mana records are left
+    to the connector's ``InterventionSchedulerTest`` and this checks the rest.
+    """
     records = _run(tmp_path / "records", interventions=2)
-    forks = [r for r in records if r.interventional and r.ability]
+    forks = [
+        r for r in records
+        if r.interventional and r.ability and r.link_id is None
+        and r.kind.value == "resolution" and not _only_mana(r)
+    ]
     if not forks:
         pytest.skip("no intervention landed within the collection window")
     for record in forks:
@@ -161,6 +172,11 @@ def test_an_intervention_forces_something_observation_misses(
             ("/mountain.txt", "/island.txt", "/swamp.txt", "/plains.txt",
              "/forest.txt")
         ), f"forced a basic land: {script}"
+
+
+def _only_mana(record: EffectRecord) -> bool:
+    events = getattr(record.payload, "events", ())
+    return bool(events) and all(event.type is EventType.MANA_PRODUCED for event in events)
 
 
 _PROBED = "first_strike,trample,deathtouch"

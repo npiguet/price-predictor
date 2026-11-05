@@ -122,7 +122,7 @@ final class InterventionScheduler {
      * hand is the same line, and forcing it twice buys the second copy of one
      * observation.
      */
-    private static boolean worthIntervening(SpellAbility candidate, Set<String> seen) {
+    static boolean worthIntervening(SpellAbility candidate, Set<String> seen) {
         if (candidate.isLandAbility() || candidate.isManaAbility()) {
             return false;
         }
