@@ -15,6 +15,7 @@ from effects.domain.effect_head_input import ID_PADDING, SlotKind
 from effects.domain.effect_head_layout import FieldSpec
 from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityFieldTargets, EntityTargetBatch
+from effects.domain.rule_mask import CopyWeights
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,6 +195,7 @@ def scatter_e_rows(
 
 def entity_target_tensors(
     surfaces: list, targets_per_surface: list[dict], fields: tuple[FieldSpec, ...],
+    weights: list[CopyWeights] | None = None,
 ) -> EntityTargetBatch:
     """The batch's per-entity targets.
 
@@ -201,6 +203,10 @@ def entity_target_tensors(
     output; an entity no slot represents is not gathered. A field's value
     where it is not present is a zero the loss never reads. A record's
     targets carrying ``gated`` false (:class:`RecordTargets`) train no gate.
+    ``weights`` is each record's rule mask (FR-061): a field it weighs zero
+    is not present there, the gate trains only at the entities it weighs
+    above zero, and a fractional weight rides beside the targets; None
+    trains every record at full weight.
     """
     batch = len(surfaces)
     width = max((len(s.entity_slots) for s in surfaces), default=1)
@@ -234,16 +240,44 @@ def entity_target_tensors(
                     collected[spec.name][row, column, : len(value)] = value
                 else:
                     collected[spec.name][row, column] = float(value)
+    field_weights, gate_weight = _rule_mask(surfaces, weights, fields, present, width)
     return EntityTargetBatch(
         torch.from_numpy(gate),
         EntityFieldTargets(
             {name: torch.from_numpy(values) for name, values in collected.items()},
             {name: torch.from_numpy(rows) for name, rows in present.items()},
+            field_weights,
         ),
         torch.from_numpy(mask),
         entity_index(surfaces),
         torch.from_numpy(gated),
+        gate_weight,
     )
+
+
+def _rule_mask(
+    surfaces: list, weights: list[CopyWeights] | None, fields: tuple[FieldSpec, ...],
+    present: dict[str, np.ndarray], width: int,
+) -> tuple[dict[str, torch.Tensor], torch.Tensor | None]:
+    """Each record's rule-mask weights (FR-061) as the batch carries them:
+    a field weighed zero cleared from ``present`` in place, the fractional
+    field weights by field, and the gate's per-entity weight, None where
+    every record is unmasked."""
+    if weights is None or all(copy.unmasked for copy in weights):
+        return {}, None
+    field_weights: dict[str, torch.Tensor] = {}
+    for spec in fields:
+        row_weights = np.array([copy.weight(spec.name) for copy in weights], dtype=np.float32)
+        present[spec.name][row_weights == 0] = False
+        if ((row_weights != 0) & (row_weights != 1)).any():
+            field_weights[spec.name] = torch.from_numpy(row_weights)
+    gate_weight = np.ones((len(surfaces), width), dtype=np.float32)
+    for row, (surface, copy) in enumerate(zip(surfaces, weights)):
+        if copy.unmasked:
+            continue
+        for column, slot_index in enumerate(surface.entity_slots):
+            gate_weight[row, column] = copy.gate_weight(surface.slots[slot_index].subject_id)
+    return field_weights, torch.from_numpy(gate_weight)
 
 
 def per_entity_targets(

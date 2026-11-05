@@ -126,6 +126,7 @@ def preparer_settings(spec: RunSpec, *, widths: dict[SlotKind, int]) -> Preparer
         param_keys=tuple(param_keys), widths=dict(widths),
         heads=training_heads(config, api_types=api_types),
         legality_mode_counts=facts.legality_mode_counts,
+        rule_outputs=facts.rule_outputs,
     )
 
 

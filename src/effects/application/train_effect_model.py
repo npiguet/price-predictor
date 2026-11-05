@@ -17,6 +17,7 @@ from effects.domain import default_paths
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import Baseline
 from effects.domain.corpus_manifest import CorpusManifest
+from effects.domain.rule_mask import RuleMask
 from effects.domain.shard_generation import ACCEPTED_GENERATIONS
 from effects.domain.split import CorpusSplit, HoldoutRule
 from effects.domain.strata import VALIDATION_STRATA, Stratum
@@ -122,6 +123,12 @@ class TrainEffectModelConfig:
         "on: the trunk's relations change what a slot receives as well as how "
         "much it attends; off: the value tables stay at zero and untrained "
         "(default: %(default)s)"
+    )})
+    rule_mask: RuleMask = field(default=RuleMask.HARD, metadata={"type": RuleMask, "help": (
+        "hard: a copy rule budgets added trains only the outputs the rule map "
+        "names for the rules its record was drawn for, and the affected gate on "
+        "its rule's entities; soft: every copy trains every output, the rest "
+        "weighing natural share / copies (default: %(default)s)"
     )})
     deviance_floor: float = field(default=0.04, metadata={"help": (
         "Floor on each output term's loss denominator, its constant-prediction "
@@ -273,6 +280,9 @@ class CorpusFacts:
     #: Records per legality mode, so the epoch line places a legality record
     #: in the family the build balanced it in; empty without one.
     legality_mode_counts: Mapping[str, int] = field(default_factory=dict)
+    #: The rule map's outputs per rule, as the manifest recorded them, which
+    #: the rule mask reads (FR-060a, FR-061).
+    rule_outputs: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     #: The manifest's digest at read time (FR-147).
     digest: str = ""
 
@@ -288,6 +298,9 @@ class CorpusFacts:
             gate_one_records=manifest.per_stratum.get(Stratum.GATE_ONE, 0),
             rarity=manifest.rarity,
             legality_mode_counts=manifest.legality_mode_counts,
+            rule_outputs={
+                rule: tuple(entry.outputs) for rule, entry in manifest.rule_map.items()
+            },
             digest=manifest.digest(),
         )
 

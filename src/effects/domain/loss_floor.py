@@ -10,6 +10,13 @@ denominators (FR-062), a validation stratum's for the explained deviance
 sample, the unit a step's loss term is in, so a term the sample rarely
 supervises has a small floor rather than its loss where it fires.
 
+A sample prepared under ``--rule-mask`` (FR-061) carries each target's
+weight, and every term's loss is weighted as the run weights it (research
+T3): a target the mask drops is not in the sample, a fractional one counts
+at its weight. The constant itself is fitted over the targets the sample
+holds, unweighted; under the soft mask that puts the denominator a little
+above the weighted optimum's loss, never below it.
+
 The constant is each term's maximum-likelihood one: a rate, class
 frequencies, or a mean, and for a count a negative-binomial dispersion fitted
 around that mean by moments and then Newton steps (research T2). The value,
@@ -80,14 +87,17 @@ class TargetSample:
     """A sample's supervised targets, gathered batch by batch and kept
     compact: the gate's targets where it trains, each per-entity field's where
     it is scored, and each shipped head's ``(target, mask[, known])`` rows that
-    supervise anything. Compact because the floor needs nothing else (the
+    supervise anything; beside the per-entity targets, their rule-mask
+    weights (FR-061). Compact because the floor needs nothing else (the
     constant is the same at every entity) and a loss-denominator sample holds
     thousands of records."""
 
     def __init__(self) -> None:
         self.records = 0
         self._gate: list[torch.Tensor] = []
+        self._gate_weights: list[torch.Tensor] = []
         self._fields: dict[str, list[torch.Tensor]] = {}
+        self._field_weights: dict[str, list[torch.Tensor]] = {}
         self._heads: dict[str, list[tuple]] = {}
 
     def add(self, entity: EntityTargetBatch, heads: Mapping | None = None) -> None:
@@ -95,11 +105,17 @@ class TargetSample:
         tuples, keyed by :class:`Head` or its value; a head a batch lacks
         supervises nothing there."""
         self.records += int(entity.gate.shape[0])
-        self._gate.append(entity.gate.detach().cpu()[entity.gate_scored])
+        gate_scored = entity.gate_scored
+        self._gate.append(entity.gate.detach().cpu()[gate_scored])
+        self._gate_weights.append(_weights_at(entity.gate_weights(), gate_scored))
         for name, values in entity.fields.values.items():
-            selected = values.detach().cpu()[entity.scored(name)]
+            scored = entity.scored(name)
+            selected = values.detach().cpu()[scored]
             if selected.numel():
                 self._fields.setdefault(name, []).append(selected)
+                self._field_weights.setdefault(name, []).append(
+                    _weights_at(entity.field_weights(name), scored),
+                )
         for head, targets in (heads or {}).items():
             compact = _supervising_rows(str(head), targets)
             if compact is not None:
@@ -117,6 +133,17 @@ class TargetSample:
         """The gate's targets over every entity it trains on."""
         return torch.cat(self._gate) if self._gate else torch.zeros(0)
 
+    @property
+    def gate_weights(self) -> torch.Tensor | None:
+        """The rule mask's weight on each of :attr:`gate`'s targets; None
+        where every one weighs one."""
+        return _unless_unit(self._gate_weights)
+
+    def weights(self, name: str) -> torch.Tensor | None:
+        """The rule mask's weight on each of :meth:`supervised`'s targets;
+        None where every one weighs one."""
+        return _unless_unit(self._field_weights.get(name, []))
+
     def supervised(self, name: str) -> torch.Tensor | None:
         """One per-entity field's targets over every entity it is scored at,
         the selection :func:`per_entity_loss` scores; None where it is never
@@ -127,6 +154,29 @@ class TargetSample:
     def head_batches(self, head: str) -> list[tuple]:
         """The supervising rows of each batch carrying ``head``."""
         return self._heads.get(head, [])
+
+
+def _weights_at(weights: torch.Tensor | None, scored: torch.Tensor) -> torch.Tensor:
+    """``weights`` at the entities ``scored`` selects, one where None."""
+    if weights is None:
+        return torch.ones(int(scored.sum()))
+    return weights[scored]
+
+
+def _unless_unit(parts: list[torch.Tensor]) -> torch.Tensor | None:
+    """``parts`` joined, or None where none weighs other than one, so an
+    unmasked sample sums exactly as it always has."""
+    if not parts:
+        return None
+    joined = torch.cat(parts)
+    return None if bool((joined == 1).all()) else joined
+
+
+def _weighted_sum(terms: torch.Tensor, weights: torch.Tensor | None) -> float:
+    """``terms`` summed, each at its weight."""
+    if weights is None:
+        return float(terms.sum())
+    return float((terms.double() * weights.double().reshape(-1)).sum())
 
 
 def _supervising_rows(head: str, targets: tuple) -> tuple | None:
@@ -230,9 +280,9 @@ def _per_entity_losses(sample: TargetSample, fields: tuple[FieldSpec, ...]) -> d
     log_dispersion = constant_predictor_dispersion(sample, fields=fields)
     records = max(sample.records, 1)
     gate = sample.gate
-    losses = {GATE_TERM: float(FIELD_KINDS[FieldType.BINARY].loss(
+    losses = {GATE_TERM: _weighted_sum(FIELD_KINDS[FieldType.BINARY].terms(
         vector[GATE_INDEX].expand(gate.shape[0], 1), gate, arity=1, cap=MAGNITUDE_CAP,
-    )) / records}
+    ), sample.gate_weights) / records}
     for spec in fields:
         target = sample.supervised(spec.name)
         if target is None:
@@ -244,10 +294,10 @@ def _per_entity_losses(sample: TargetSample, fields: tuple[FieldSpec, ...]) -> d
         dispersion = (
             log_dispersion[DISPERSION_INDEX[spec.name]] if spec.type.has_magnitude else None
         )
-        losses[spec.name] = float(FIELD_KINDS[spec.type].loss(
+        losses[spec.name] = _weighted_sum(FIELD_KINDS[spec.type].terms(
             vector[start:end].expand(target.shape[0], end - start), target,
             arity=spec.arity, cap=MAGNITUDE_CAP, log_dispersion=dispersion,
-        )) / records
+        ), sample.weights(spec.name)) / records
     return losses
 
 
@@ -299,9 +349,10 @@ def _record_head_losses(
                 magnitude, magnitude.mean(0),
             )
     summed = torch.zeros(len(layout.fields), dtype=torch.float64)
-    for targets, mask in zip(batches, masks):
+    for targets in batches:
+        # The head's own mask, a weight per record under the rule mask.
         summed += record_head_terms(
-            outputs.expand(int(targets[0].shape[0]), layout.width), targets[0], mask,
+            outputs.expand(int(targets[0].shape[0]), layout.width), targets[0], targets[1],
             layout, log_dispersion=log_dispersion,
         ).double()
     records = max(sample.records, 1)

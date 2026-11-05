@@ -103,7 +103,7 @@ def _terms(monkeypatch, preparer, losses, records, batcher, model, hidden, *, tr
     forward is stood in for by the token outputs it would read.
     """
     targets = preparer._head_targets(
-        records, batcher, batcher.prepared(),
+        records, preparer.rule_mask(records), batcher, batcher.prepared(),
         heads=(
             training_heads(preparer.config, api_types=preparer.api_types)
             if training else frozenset()

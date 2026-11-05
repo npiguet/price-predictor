@@ -178,15 +178,21 @@ def _term_index(names: tuple[str, ...], device: torch.device) -> torch.Tensor:
 
 def _gate_term(flat_outputs: torch.Tensor, targets: EntityTargetBatch) -> torch.Tensor:
     """The affected gate's BCE over every real entity of a record that trains
-    it, summed (a playability record trains none, root spec § 11.4)."""
+    it, summed (a playability record trains none, root spec § 11.4), each
+    entity at its rule-mask weight (FR-061): under the hard mask an added
+    copy trains the gate on its drawn rule's entities alone."""
     device = flat_outputs.device
     scored = _Rows.of(targets.gate_scored, device)
     if scored.empty:
         return flat_outputs.new_zeros((), dtype=torch.float32)
     affected = scored.select(targets.gate.detach().cpu().flatten()).float()
+    weights = targets.gate_weights()
+    if weights is not None:
+        weights = scored.select(weights.flatten()).to(device, non_blocking=True)
     return functional.binary_cross_entropy_with_logits(
         scored.select(flat_outputs)[:, GATE_INDEX].float(),
         affected.to(device, non_blocking=True),
+        weight=weights,
         reduction="sum",
     )
 
@@ -210,7 +216,8 @@ def _field_sums(
 
     Fields of one type and width are scored together, over every entity any
     of them is scored at, each weighted 1 where it is scored and 0 elsewhere:
-    the sums the field-by-field loop takes, at one call per group.
+    the sums the field-by-field loop takes, at one call per group. A field
+    the rule mask weighs (FR-061) takes its weight where it is scored.
     """
     named: list[str] = []
     sums: list[torch.Tensor] = []
@@ -247,6 +254,12 @@ def _group_sums(
         group = [group[int(i)] for i in keep]
         masks = masks.index_select(1, keep)
     rows = _Rows.of(masks.any(1), device)
+    weighed = [targets.field_weights(spec.name) for spec in group]
+    if any(weight is not None for weight in weighed):
+        masks = masks.float() * torch.stack([
+            torch.ones(masks.shape[0]) if weight is None else weight.reshape(-1)
+            for weight in weighed
+        ], dim=1)
     weights = rows.select(masks).to(device, torch.float32, non_blocking=True)
 
     first = group[0]
@@ -366,8 +379,15 @@ def record_head_terms(
     ``target`` is ``(batch, layout.target_width)``, a categorical's column a
     class index; ``mask`` ``(batch, fields)``, or ``(batch,)`` for a record
     that sets every field; ``log_dispersion`` in ``layout.dispersed`` order.
+    A floating ``mask`` is each record's weight on the field under the rule
+    mask (FR-061), zero where the record does not set it.
     """
-    mask = mask.detach().bool().cpu()
+    weights = None
+    if mask.is_floating_point():
+        weights = mask.detach().cpu().float()
+        if weights.dim() == 1:
+            weights = weights.unsqueeze(-1).expand(-1, len(layout.fields))
+    mask = mask.detach().cpu() != 0
     if mask.dim() == 1:
         mask = mask.unsqueeze(-1).expand(-1, len(layout.fields))
     sums = [prediction.new_zeros((), dtype=torch.float32)] * len(layout.fields)
@@ -392,10 +412,19 @@ def record_head_terms(
                     "its head's log-dispersions"
                 )
             dispersion = log_dispersion[layout.dispersion_index[spec.name]]
-        sums[position] = FIELD_KINDS[spec.type].loss(
+        kind = FIELD_KINDS[spec.type]
+        if weights is None:
+            sums[position] = kind.loss(
+                predicted, wanted, arity=spec.arity, cap=MAGNITUDE_CAP,
+                log_dispersion=dispersion,
+            )
+            continue
+        terms = kind.terms(
             predicted, wanted, arity=spec.arity, cap=MAGNITUDE_CAP,
             log_dispersion=dispersion,
         )
+        weight = rows.select(weights[:, position]).to(prediction.device, non_blocking=True)
+        sums[position] = (terms * weight.reshape(-1, *([1] * (terms.dim() - 1)))).sum()
     return torch.stack(sums)
 
 
