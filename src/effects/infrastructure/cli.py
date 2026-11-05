@@ -816,7 +816,8 @@ def _train_effect_model_parser(subparsers) -> None:
     UnacceptedGenerationError: 1,
     SurfaceMismatchError: 2,
     EmptyHoldoutError: 2,
-    f"{_EFFECT_MODEL_STORE}.ResumeMismatchError": 2,
+    # A resume under other settings (contracts/cli.md).
+    f"{_EFFECT_MODEL_STORE}.ResumeMismatchError": 1,
     # A missing manifest or resume file.
     FileNotFoundError: 2,
 })

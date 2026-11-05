@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import fields, replace
 
+import pytest
+
 from effects.application.resume_state import (
     RESUME_MAY_CHANGE,
     compared_flags,
@@ -15,6 +17,7 @@ from effects.application.train_effect_model import (
     RunSpec,
     TrainEffectModelConfig,
 )
+from effects.domain.rule_mask import RuleMask
 from effects.infrastructure.effect_model_store import resume_mismatches
 
 FLAGS = {spec.name for spec in fields(TrainEffectModelConfig)}
@@ -40,8 +43,22 @@ def test_the_compared_flags_are_the_ones_that_place_a_step():
         "variant", "e_dim", "encoder_layers", "encoder_d_model",
         "keyword_expand_p", "context_dropout", "curriculum_epoch", "batch_size",
         "grad_accum", "steps_per_epoch", "shards_per_epoch", "withhold_keyword",
-        "relation_values", "rule_mask", "deviance_floor",
+        "relation_values", "rule_mask", "deviance_floor", "ema_epochs",
+        "stratum_weight",
     }
+
+
+@pytest.mark.parametrize("flag, value", [
+    ("rule_mask", RuleMask.SOFT), ("deviance_floor", 0.05), ("ema_epochs", 2.0),
+    ("stratum_weight", 0.25), ("relation_values", "off"),
+])
+def test_a_resume_changing_a_training_objective_flag_is_a_mismatch(flag, value):
+    """Story 7 acceptance 5, for every flag contracts/cli.md lists."""
+    config = TrainEffectModelConfig()
+    mismatches = resume_mismatches(
+        _settings(config), _settings(replace(config, **{flag: value})),
+    )
+    assert len(mismatches) == 1 and mismatches[0].startswith(f"{flag}:")
 
 
 def test_a_compared_flag_that_moved_is_a_mismatch_and_a_free_one_is_not():

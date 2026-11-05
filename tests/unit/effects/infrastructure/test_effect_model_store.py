@@ -461,3 +461,50 @@ class TestGen2Checkpoint:
 
         config = encoder_config_from({"vocab_size": 32, "e_dim": 64})
         assert (config.n_layers, config.d_model, config.ff_dim) == (4, 256, 1024)
+
+
+class TestGen3Checkpoint:
+    """The fields data-model.md § EffectCheckpoint adds (T149)."""
+
+    def test_the_gen3_fields_round_trip(self, tmp_path, files):
+        store = EffectModelStore(tmp_path)
+        store.save(_checkpoint(
+            files, best_control_score=0.42, rule_mask="soft", deviance_floor=0.05,
+            ema_epochs=2.0, stratum_weight=0.25, relation_values="off",
+            rule_map_digest="map", selection_set_digest="set",
+            loss_denominators={"floor": 0.04, "values": {}},
+        ))
+        loaded = store.load()
+        assert (loaded.best_control_score, loaded.rule_mask, loaded.deviance_floor) == (
+            0.42, "soft", 0.05,
+        )
+        assert (loaded.ema_epochs, loaded.stratum_weight, loaded.relation_values) == (
+            2.0, 0.25, "off",
+        )
+        assert (loaded.rule_map_digest, loaded.selection_set_digest) == ("map", "set")
+        assert loaded.loss_denominators == {"floor": 0.04, "values": {}}
+        # Each under its own name, never in ``extra``.
+        assert loaded.extra == {}
+
+    def test_a_checkpoint_saved_before_them_reads_them_as_unset(self, tmp_path, files):
+        """The control score is US8's: until it exists a run saves None."""
+        path = EffectModelStore(tmp_path).save(_checkpoint(files))
+        payload = torch.load(path, weights_only=False)
+        for name in ("best_control_score", "rule_mask", "ema_epochs", "selection_set_digest"):
+            payload.pop(name)
+        torch.save(payload, path)
+        loaded = EffectModelStore(tmp_path).load(path)
+        assert loaded.best_control_score is None and loaded.selection_set_digest is None
+        assert loaded.rule_mask == "" and loaded.ema_epochs is None
+
+    def test_the_relation_tables_layout_rides_the_training_settings(self, tmp_path, files):
+        from effects.domain.effect_head_input import (
+            RELATION_TARGET_INDICES_KEY,
+            RELATION_TYPES_KEY,
+        )
+
+        store = EffectModelStore(tmp_path)
+        store.save(_checkpoint(files))
+        settings = store.load().training_settings
+        assert settings[RELATION_TYPES_KEY] == layout_settings()[RELATION_TYPES_KEY]
+        assert RELATION_TARGET_INDICES_KEY in settings

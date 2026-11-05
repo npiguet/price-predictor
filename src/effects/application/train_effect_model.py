@@ -135,6 +135,15 @@ class TrainEffectModelConfig:
         "loss on a sample of training shards, in nats per record "
         "(default: %(default)s)"
     )})
+    ema_epochs: float = field(default=1.0, metadata={"help": (
+        "Span of the averaged weights validation, stopping and checkpoints "
+        "read, in epochs: each optimizer step after warmup weighs grad-accum / "
+        "(steps-per-epoch x this) (default: %(default)s)"
+    )})
+    stratum_weight: float = field(default=0.5, metadata={"help": (
+        "Card-disjoint share of the control score, in [0, 1]; the game-disjoint "
+        "stratum takes the rest (default: %(default)s)"
+    )})
     e_noise: float = field(default=0.1, metadata={"help": (
         "Noise ratio on e relative to e's running covariance (FR-056), ramped "
         "in over the first --steps-per-epoch steps (default: %(default)s)"
@@ -188,7 +197,8 @@ class TrainEffectModelConfig:
     )})
     epochs: int = 40
     patience: int = field(default=5, metadata={"help": (
-        "Epochs without a new card-disjoint best before stopping; 0 never stops early"
+        "Epochs without a new best before stopping, counted from warmup's end; "
+        "0 never stops early (default: %(default)s)"
     )})
     withhold_keyword: str | None = field(default=None, metadata={"help": (
         "Hold one implemented keyword's token out of training, always expanding "
@@ -217,6 +227,16 @@ class TrainEffectModelConfig:
             raise ValueError(
                 f"--deviance-floor must be above zero, got {self.deviance_floor}: "
                 "it is what a loss denominator is never below."
+            )
+        if not self.ema_epochs > 0:
+            raise ValueError(
+                f"--ema-epochs must be above zero, got {self.ema_epochs}: it is "
+                "the span the averaged weights cover."
+            )
+        if not 0.0 <= self.stratum_weight <= 1.0:
+            raise ValueError(
+                f"--stratum-weight must be in [0, 1], got {self.stratum_weight}: "
+                "it is the card-disjoint stratum's share of the control score."
             )
 
     @property
@@ -285,6 +305,8 @@ class CorpusFacts:
     rule_outputs: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     #: The manifest's digest at read time (FR-147).
     digest: str = ""
+    #: The rule map's content hash, which every checkpoint records (FR-060a).
+    rule_map_digest: str = ""
 
     @classmethod
     def of(cls, manifest) -> CorpusFacts:
@@ -302,6 +324,7 @@ class CorpusFacts:
                 rule: tuple(entry.outputs) for rule, entry in manifest.rule_map.items()
             },
             digest=manifest.digest(),
+            rule_map_digest=manifest.rule_map_digest,
         )
 
     def provenance(self, config: TrainEffectModelConfig):
@@ -478,6 +501,12 @@ def run(config: TrainEffectModelConfig) -> int:
         )
     # Before any record is read (FR-020, FR-033).
     require_generation(iter_shards(Path(config.corpus)), *ACCEPTED_GENERATIONS)
+    if not manifest.rule_counts:
+        raise MissingTrainingInputError(
+            f"The manifest of the corpus at {config.corpus} has no per-rule "
+            "counts (FR-066): the rule mask and the control score read the rules "
+            "it records. Rebuild it with a gen-3 build-corpus."
+        )
     check_manifest_holdout(manifest, config)
     facts = CorpusFacts.of(manifest)
     logger.info(

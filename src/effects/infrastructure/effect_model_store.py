@@ -110,6 +110,34 @@ class EffectCheckpoint:
     #: ``LossDenominators.as_dict()`` of the run (FR-062); empty on a
     #: checkpoint that predates the field.
     loss_denominators: dict[str, Any] = field(default_factory=dict)
+    # Gen-3 (data-model.md § EffectCheckpoint). The relation types and their
+    # target indices are in ``training_settings`` (``layout_settings``), and
+    # the weights saved are the averaged ones once warmup has ended.
+    #: The best control score of the run (FR-068c); None until US8's control
+    #: score exists (T157-T159), and on a checkpoint that predates the field.
+    best_control_score: float | None = None
+    #: ``--rule-mask``, ``--deviance-floor``, ``--ema-epochs``,
+    #: ``--stratum-weight`` and ``--relation-values`` of the run; empty or None
+    #: on a checkpoint that predates them.
+    rule_mask: str = ""
+    deviance_floor: float | None = None
+    ema_epochs: float | None = None
+    stratum_weight: float | None = None
+    relation_values: str = ""
+    #: The corpus manifest's rule-map digest (FR-060a).
+    rule_map_digest: str = ""
+    #: The selection set's digest the run was scored against; None until the
+    #: control score reads one (T159).
+    selection_set_digest: str | None = None
+
+
+#: The gen-3 fields a checkpoint's payload carries under their own names,
+#: with what a checkpoint written before them reads as.
+_GEN3_FIELDS: dict[str, Any] = {
+    "best_control_score": None, "rule_mask": "", "deviance_floor": None,
+    "ema_epochs": None, "stratum_weight": None, "relation_values": "",
+    "rule_map_digest": "", "selection_set_digest": None,
+}
 
 
 def filter_training_only(state: dict[str, Any]) -> dict[str, Any]:
@@ -146,7 +174,7 @@ def load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
 _RESERVED_PAYLOAD_KEYS = frozenset({
     "encoder_state_dict", "model_state_dict", "encoder_config", "model_config",
     "provenance", "variant", "best_val_loss", "epoch", "config",
-    "cards_folders", "training_settings", "loss_denominators",
+    "cards_folders", "training_settings", "loss_denominators", *_GEN3_FIELDS,
 })
 
 def encoder_config_from(data: dict[str, Any]) -> AbilityEncoderConfig:
@@ -178,6 +206,7 @@ class EffectModelStore:
             "cards_folders": list(checkpoint.cards_folders),
             "training_settings": dict(checkpoint.training_settings),
             "loss_denominators": dict(checkpoint.loss_denominators),
+            **{name: getattr(checkpoint, name) for name in _GEN3_FIELDS},
             **checkpoint.extra,
         }
         path = self._unused_path(datetime.now(UTC).strftime("%Y%m%d-%H%M%S"))
@@ -227,6 +256,7 @@ class EffectModelStore:
             cards_folders=tuple(payload.get("cards_folders", ())),
             training_settings=dict(payload.get("training_settings", {})),
             loss_denominators=dict(payload.get("loss_denominators", {})),
+            **{name: payload.get(name, absent) for name, absent in _GEN3_FIELDS.items()},
         )
 
 

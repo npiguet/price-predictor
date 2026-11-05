@@ -57,6 +57,10 @@ def _card_tree(root):
     return root
 
 
+#: The survey's per-rule counts, as a gen-3 build writes them (FR-066).
+_RULE_COUNTS = {"records": 2, "rules": {"702.2": {"fires": {"forge_ai": 1}}}}
+
+
 def _manifest(**overrides) -> CorpusManifest:
     fields = dict(
         seed=1, surface="script", vocab_path="models/effects/vocab-script.txt",
@@ -68,6 +72,7 @@ def _manifest(**overrides) -> CorpusManifest:
         card_disjoint_games=("cg",), game_disjoint_games=("gg",),
         rarity={}, sources=(), per_class={},
         per_stratum={"gate-one": 4096}, unique_texts={}, shortfall={},
+        rule_counts=_RULE_COUNTS, rule_map_digest="map-digest",
     )
     fields.update(overrides)
     return CorpusManifest(**fields)
@@ -149,6 +154,29 @@ def test_a_corpus_without_validation_samples_is_refused(corpus, config, started)
     assert not started
 
 
+def test_a_manifest_without_per_rule_counts_is_refused(corpus, config, started):
+    """FR-066: the rule mask and the control score read the rules the build
+    counted; a manifest with none is a corpus no gen-3 build wrote."""
+    corpus.save(_manifest(rule_counts={}))
+    with pytest.raises(MissingTrainingInputError, match="no per-rule counts"):
+        run(config)
+    assert not started
+
+
+def test_a_record_lacking_generation_three_is_refused(corpus, config, started, make_record):
+    from effects.domain.shard_generation import UnacceptedGenerationError
+
+    write_shard(corpus.training_dir / "t.jsonl.gz",
+                [make_record(record_id="t0", game_id="tg", generation=None, random_seat=False)])
+    for stratum in ("card-disjoint", "game-disjoint"):
+        write_shard(corpus.sample_path(stratum), [make_record(
+            record_id=stratum, game_id=stratum, generation=None, random_seat=False,
+        )])
+    with pytest.raises(UnacceptedGenerationError):
+        run(config)
+    assert not started
+
+
 def test_the_loop_reads_the_corpus_through_the_manifests_facts(corpus, config, started):
     assert run(config) == 0
     facts = started[-1].spec.facts
@@ -158,6 +186,7 @@ def test_the_loop_reads_the_corpus_through_the_manifests_facts(corpus, config, s
     assert facts.split.game_disjoint_games == frozenset({"gg"})
     assert facts.gate_one_records == 4096
     assert facts.digest == manifest.digest()
+    assert facts.rule_map_digest == "map-digest"
 
 
 # ── the variant-script tree ──────────────────────────────────────────────
@@ -227,7 +256,7 @@ def test_a_width_not_divisible_by_the_head_count_is_refused_before_training(
     ("HoldoutMismatchError", 1),
     ("MixedGenerationsError", 1),
     ("ValidationGameInTrainingError", 1),
-    ("ResumeMismatchError", 2),
+    ("ResumeMismatchError", 1),
     ("FileNotFoundError", 2),
 ])
 def test_an_operator_error_out_of_training_exits_with_its_code(
@@ -329,6 +358,8 @@ def test_a_real_gen1_manifest_is_accepted_under_its_text_unit(
     raw = json.loads((Path(__file__).parents[3] / "fixtures" / "effects"
                       / "gen1-manifest-trimmed.json").read_text(encoding="utf-8"))
     raw["held_out_texts"] = list(_HELD_OUT_TEXTS)
+    # Without them the manifest is refused before its unit is read (FR-066).
+    raw["rule_counts"] = _RULE_COUNTS
     store = CorpusStore(tmp_path / "corpus")
     store.training_dir.mkdir(parents=True)
     store.samples_dir.mkdir(parents=True)
