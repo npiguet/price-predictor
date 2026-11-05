@@ -116,13 +116,14 @@ balance rule cannot be met, naming stratum, half and component.
 | `--relation-values on\|off` | on | train the relation value tables |
 | `--stratum-weight W` | 0.5 | card-disjoint share of the control score, in [0, 1] |
 | `--patience N` | 5 | epochs without a new best control score |
+| `--reports-dir DIR` | `output/effects/reports/` | where the selection set frozen for `--corpus` is found, by the corpus digest |
 | `--e-dim` | 256 | was 64 |
 
 Startup, exit 1 when:
 
 - a record lacks `generation: 3`;
 - the manifest has no per-rule counts;
-- no selection set exists for the corpus digest;
+- no selection set exists for the corpus digest under `--reports-dir`, or the one there was frozen for another corpus or edited;
 - resuming with a changed `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight` or
   `--relation-values`.
 

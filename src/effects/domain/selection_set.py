@@ -48,6 +48,30 @@ from effects.domain.seeded_draw import keyed_hash
 BALANCE_RATIO = 4
 #: Records per half the deviance sample holds at most (research E2).
 DEVIANCE_SAMPLE_CAP = 16_384
+#: The worst-case standard error each grid's records are sized to (T160): a
+#: grid freezes the fewest of its records, by smallest keyed hash, that bring
+#: its standard error to this, just under the item target of 0.1, since every
+#: grid record is 64 or more forward records in every epoch (research E2, E4).
+GRID_TARGET_ERROR = 0.09
+#: Records a grid freezes at most, whatever its target asks: a grid whose rule
+#: barely varies over its cells would otherwise ask for thousands, and is left
+#: out at this many by its standard error instead.
+GRID_RECORD_CAP = 512
+
+
+def grid_records_needed(outcomes, *, target: float = GRID_TARGET_ERROR,
+                        cap: int = GRID_RECORD_CAP) -> int:
+    """How many records bring an edit grid's worst-case standard error
+    ``1 / (2 √N B)`` (research E4) to ``target``, at most ``cap``; ``B`` is the
+    error of predicting the grid's mean outcome in every cell. A grid whose
+    outcome is the same in every cell (``B = 0``) needs none: no number of
+    records bounds its error."""
+    from effects.domain.score_scales import grid_mean_error
+
+    baseline = grid_mean_error(outcomes)
+    if not baseline > 0 or not target > 0:
+        return 0
+    return min(cap, max(1, math.ceil((1.0 / (2.0 * target * baseline)) ** 2)))
 
 #: The four components of a stratum score, in the order an epoch line prints them.
 COMPONENTS: tuple[str, ...] = ("probes", "grids", "rule_tests", "deviance")

@@ -1,23 +1,32 @@
-"""Validation: both strata of the corpus's fixed samples, scored every epoch.
+"""Validation: both strata of the corpus's fixed samples, scored every epoch,
+and the control score the run selects its checkpoint by.
 
 The samples are read once and never redrawn (FR-089), so an epoch's number
-moves only with the model.
+moves only with the model. Their losses, the gate-1 progress margins and the
+constant-predictor floor are reported; the stratum scores and the control
+score that choose the best epoch (FR-068, FR-069) are the control score's
+(``control_score``), whose cache :meth:`Validator.prepare` builds once at
+startup from the corpus's frozen selection set.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, NamedTuple, Protocol
 
 import torch
 
 from effects.application.record_forward import RecordForward
 from effects.application.step_loss import StepLoss, StepLossComputer
 from effects.application.step_preparation import DeviceStep
-from effects.application.train_effect_model import TrainEffectModelConfig
+from effects.application.train_effect_model import (
+    MissingTrainingInputError,
+    TrainEffectModelConfig,
+)
 from effects.application.training_log import format_floor
 from effects.domain.effect_head_layout import FieldSpec
 from effects.domain.gate_metrics import GateOneMetrics, MarginAccumulator
@@ -27,6 +36,7 @@ from effects.domain.strata import VALIDATION_STRATA, Stratum
 from effects.infrastructure.shard_io import load_shard
 
 if TYPE_CHECKING:
+    from effects.application.control_score import ControlScore, ControlScorer, FrozenSelection
     from effects.application.run_context import RunContext
 
 logger = logging.getLogger(__name__)
@@ -207,27 +217,75 @@ class ValidationPass:
         return self.margins.metrics()
 
 
+class EpochScores(NamedTuple):
+    """One epoch's validation: both strata's reported passes, and the control
+    score the epoch is selected by."""
+
+    card: ValidationPass
+    game: ValidationPass
+    control: ControlScore
+    #: The control score's wall-clock seconds this epoch (research E2).
+    control_seconds: float = 0.0
+
+
 class Validator:
-    """Scores the validation samples with the run's scoring device half, and
-    keeps the constant-predictor floor the epoch line compares against."""
+    """Scores the validation samples with the run's scoring device half, keeps
+    the constant-predictor floor the epoch line compares against, and hands
+    each stratum's score to the control score (FR-068)."""
 
     def __init__(
         self, config: TrainEffectModelConfig, device: torch.device,
         losses: StepLossComputer,
     ) -> None:
+        self.config = config
         self.batch_size = config.batch_size
         self.device = device
         #: The device half validation shares with training, so both score
         #: one objective.
         self.losses = losses
         self.floor = FloorCache()
+        #: The control score's cache; :meth:`prepare` builds it.
+        self.scorer: ControlScorer | None = None
+
+    def prepare(
+        self, run: RunContext, selection: FrozenSelection | None, *,
+        rule_outputs: Mapping[str, tuple[str, ...]],
+    ) -> None:
+        """Build the control score's cache from the corpus's frozen selection
+        set, once, before the first epoch (research E2): every field set the
+        run's epochs score, the run's rule mask, the grids edited on the run's
+        surface. Raises ``ControlScoreError`` on a component with no item."""
+        from effects.application.control_score import ControlScorer
+        from effects.domain.grid_edits import GridEdits
+
+        if selection is None:
+            raise MissingTrainingInputError(
+                "No selection set: train-effect-model selects its checkpoint by "
+                "the control score of the corpus's frozen selection set (FR-069).")
+        self.scorer = ControlScorer.prepare(
+            selection.selection, selection.strata, preparer=run.preparer,
+            fields=list(run.fields.values()),
+            rule_outputs=rule_outputs, mask=str(self.config.rule_mask),
+            stratum_weight=self.config.stratum_weight,
+            deviance_floor=self.config.deviance_floor,
+            editor=GridEdits(run.preparer.scoring_batcher()),
+        )
+
+    def control(self, run: RunContext, fields: tuple[FieldSpec, ...]) -> ControlScore:
+        """The epoch's control score on the weights the modules hold, through
+        the one chunked forward."""
+        if self.scorer is None:
+            raise RuntimeError("the control score was never prepared")
+        return self.scorer.epoch(
+            RecordForward(run.encoder, run.model, run.scoring), self.losses, fields)
 
     def epoch(
         self, run: RunContext, samples: ValidationSamples,
         fields: tuple[FieldSpec, ...],
-    ) -> tuple[ValidationPass, ValidationPass]:
-        """Both strata's passes: the card-disjoint one by field, with gate 1's
-        progress margins, and the floor recomputed when the field set moved."""
+    ) -> EpochScores:
+        """Both strata's passes, the card-disjoint one by field, with gate 1's
+        progress margins, and the floor recomputed when the field set moved;
+        then the control score."""
         parts = FieldParts()
         margins = ProgressMargins(fields, run.model.per_entity_dispersion().detach())
         kept = KeptTargets() if self.floor.stale(fields) else None
@@ -245,7 +303,9 @@ class Validator:
                 "Constant-predictor floor (card-disjoint): %s",
                 format_floor(self.floor.floor),
             )
-        return card, game
+        started = time.perf_counter()
+        control = self.control(run, fields)
+        return EpochScores(card, game, control, time.perf_counter() - started)
 
     def score(
         self, records, run: RunContext, fields: tuple[FieldSpec, ...],

@@ -3,7 +3,7 @@
 Everything below the loop is replaced — the encoder, the head, the tokenizer,
 the sidecars, the loss and both validation passes — so what is left under test
 is the order the loop does things in: which field set each pass is handed, when
-the early stopper forgets its best, and what mode the modules are in when an
+the stopper forgets its best control score, and what mode the modules are in when an
 epoch starts. Those are the joins the per-piece suites cannot see.
 """
 
@@ -13,7 +13,7 @@ import pytest
 
 from effects.application.step_preparation import StepPreparer
 from effects.application.train_effect_model import TrainEffectModelConfig
-from effects.application.training_schedule import EarlyStopper
+from effects.application.training_schedule import ControlScoreStopper
 from effects.domain.records import CombatPayload, RecordKind
 from effects.infrastructure.shard_io import write_shard
 from tests.unit.effects.builders import (
@@ -53,9 +53,9 @@ def run(tmp_path, make_record, monkeypatch):
     )
 
     resets = []
-    original = EarlyStopper.reset
+    original = ControlScoreStopper.reset
     monkeypatch.setattr(
-        EarlyStopper, "reset",
+        ControlScoreStopper, "reset",
         lambda self: (resets.append(1), original(self))[1],
     )
 
@@ -130,3 +130,46 @@ def test_empty_validation_samples_are_refused_before_a_model_is_built(tmp_path):
     )
     with pytest.raises(MissingTrainingInputError, match="nothing to measure feature widths"):
         loop.execute()
+
+
+def test_the_best_control_score_epoch_is_the_one_checkpoint_and_patience_counts_from_it(
+    tmp_path, make_record, monkeypatch,
+):
+    """Story 8 acceptance 4, FR-069: higher is better; the best epoch's weights
+    are the checkpoint, its resume state is copied to resume-best.pt, and
+    --patience counts the epochs since without a new best."""
+    import torch
+
+    from effects.infrastructure.effect_model_store import EffectModelStore
+
+    combat = [make_record(record_id=f"r{i}", game_id=f"g{i % 2}",
+                          kind=RecordKind.COMBAT, payload=CombatPayload())
+              for i in range(8)]
+    shard = tmp_path / "train.jsonl.gz"
+    write_shard(shard, combat)
+    samples = write_validation_samples(tmp_path, combat[:2])
+    model, _encoder = stub_below_the_loop(monkeypatch)
+    monkeypatch.setattr(
+        StepPreparer, "prepare_training_step",
+        lambda self, plan, *a, fields=None, **k: ({"fields": fields}, 0),
+    )
+    out = tmp_path / "out"
+    config = TrainEffectModelConfig(
+        corpus=str(tmp_path), epochs=6, curriculum_epoch=1, steps_per_epoch=2,
+        shards_per_epoch=1, batch_size=2, seed=7, model_output=out, prefetch_workers=0,
+        patience=2,
+    )
+    loop = make_training_loop(config, training_shards=[shard], validation_samples=samples)
+    loop.losses = StubLosses(lambda prepared: model.p.sum())
+    stub_validator(loop, controls=[0.2, 0.5, 0.3, 0.1, 0.9])
+
+    assert loop.execute() == 0
+    best = EffectModelStore(out).load()
+    assert best.epoch == 2 and best.best_control_score == 0.5
+    assert len(list(out.glob("2*.pt"))) == 2          # epochs 1 and 2 set a best
+    kept = torch.load(out / "resume-best.pt", weights_only=False)
+    assert kept["epoch"] == 2 and kept["best_control_score"] == 0.5
+    last = torch.load(out / "resume.pt", weights_only=False)
+    # Epochs 3 and 4 set no best: patience 2 stops the run before epoch 5.
+    assert last["epoch"] == 4
+    assert last["stopper"]["since_best"] == 2

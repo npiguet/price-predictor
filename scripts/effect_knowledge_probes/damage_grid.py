@@ -27,29 +27,7 @@ if __package__ in (None, ""):
 from _lib.markdown import print_table  # noqa: E402
 
 from effect_knowledge_probes import common, record_walk  # noqa: E402
-
-VALUES = range(1, 9)
-
-
-def damage_target(sidecars, keywords_of):
-    """``choose`` for single-target damage records with a literal amount: the record and
-    the creature it hits."""
-    from effects.domain.effect_targets import derive_targets
-    from effects.domain.lethality_counterfactuals import qualify
-
-    def choose(record):
-        if not record.ability:
-            return None
-        line = sidecars.line_or_none(record.ability[0])
-        if line is None:
-            return None
-        qualified = qualify(record, line, derive_targets(record), keywords_of)
-        if (qualified is None or qualified.effect.kind != "damage"
-                or qualified.effect.stated != "text" or len(qualified.hit) != 1):
-            return None
-        return record, qualified.hit[0]
-
-    return choose
+from effects.domain.grid_edits import VALUES, damage_target  # noqa: E402, F401
 
 
 def _options(parser) -> None:

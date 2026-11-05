@@ -397,14 +397,14 @@ def test_the_packed_cache_unpacks_bit_for_bit(run, records):
     """Every tensor of a scoring step comes back from its host form exactly."""
     import torch
 
-    from effects.application.control_score import _map_tensors, _pack, _unpack, host_bytes
+    from effects.application.host_cache import host_bytes, map_tensors, pack, unpack
 
     step = run.preparer.prepare_scoring_step(records[:16], tuple(run.fields[max(run.fields)]))
-    packed = _pack(step)
+    packed = pack(step)
     assert host_bytes(packed) < host_bytes(step)
     before, after = [], []
-    _map_tensors(step, lambda t: before.append(t) or t)
-    _map_tensors(_unpack(packed), lambda t: after.append(t) or t)
+    map_tensors(step, lambda t: before.append(t) or t)
+    map_tensors(unpack(packed), lambda t: after.append(t) or t)
     assert len(before) == len(after)
     for want, got in zip(before, after):
         assert got.dtype == want.dtype and torch.equal(got, want)

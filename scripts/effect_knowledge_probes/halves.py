@@ -236,33 +236,20 @@ def _relabelled(item, label: float):
 
 def grid_predictions(probe_model, name: str, record, entities: Sequence[str]) -> list[float]:
     """The model's answer in each cell of frozen grid ``name`` for one of its
-    records, in the frozen cells' order (``selection``'s grid sources)."""
-    from effect_knowledge_probes import combat_grid, damage_grid, evasion_grid, sweeps
-    from effect_knowledge_probes.board_edits import BoardEdit
-    from effect_knowledge_probes.selection import VALUES
+    records, in the frozen cells' order: the cells the control score reads
+    (``effects.domain.grid_edits.GridEdits``), each edited text read through
+    the probe batcher's memo under its own key."""
+    from effects.domain.grid_edits import GridEdits
 
-    if name == "damage":
-        (entity,) = entities
-        edited = [BoardEdit(record).set_toughness(entity, t).record for t in VALUES]
-        dies = readout.at_card("dies", entity)
-        batcher = probe_model.batcher
-        key = record.ability[0]
-        original = batcher.text_of(key)
-        out: list[float] = []
-        for amount in damage_grid.VALUES:
-            with batcher.reading_as(key, sweeps.set_amount(original, "NumDmg", amount)):
-                out += common.predict(probe_model, edited, dies)
-        return out
-    attacker, blocker = entities
-    if name == "evasion":
-        cells = [evasion_grid.edited(record, attacker, blocker, row, column)[0]
-                 for row in evasion_grid.ATTACKER_KEYWORDS
-                 for column in evasion_grid.BLOCKER_TRAITS]
-        return common.predict_all(probe_model, cells, readout.at_card("may_block", blocker))
-    _, variant, which = name.split("/")
-    rows, _ = combat_grid.grid_records(record, attacker, blocker, which, variant)
-    read = readout.at_card("dies", blocker if which == "blocker" else attacker)
-    return common.predict_all(probe_model, [cell for row in rows for cell in row], read)
+    batcher = probe_model.batcher
+    cells = GridEdits(batcher).cells(name, record, entities)
+    for cell in cells:
+        for edit in cell.texts:
+            batcher.override_text(edit.key, edit.text, edit.like, script=edit.script,
+                                  role_spans=edit.role_spans)
+    (entity, name_read), = {(cell.entity, cell.readout) for cell in cells}
+    return common.predict_all(probe_model, [cell.record for cell in cells],
+                              readout.at_card(name_read, entity))
 
 
 def score_grids(probe_model, selection, read: HalfRead) -> dict[str, dict]:

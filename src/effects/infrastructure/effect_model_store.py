@@ -98,7 +98,6 @@ class EffectCheckpoint:
     model_state: dict[str, Any]
     provenance: SplitProvenance
     variant: Baseline = Baseline.FULL
-    best_val_loss: float = float("inf")
     epoch: int = 0
     extra: dict[str, Any] = field(default_factory=dict)
     #: The sidecar roots the run resolved keys against (FR-063b); empty on a
@@ -113,8 +112,8 @@ class EffectCheckpoint:
     # Gen-3 (data-model.md § EffectCheckpoint). The relation types and their
     # target indices are in ``training_settings`` (``layout_settings``), and
     # the weights saved are the averaged ones once warmup has ended.
-    #: The best control score of the run (FR-068c); None until US8's control
-    #: score exists (T157-T159), and on a checkpoint that predates the field.
+    #: The best control score of the run (FR-069): the score of the epoch
+    #: whose weights these are; None on a checkpoint that predates the field.
     best_control_score: float | None = None
     #: ``--rule-mask``, ``--deviance-floor``, ``--ema-epochs``,
     #: ``--stratum-weight`` and ``--relation-values`` of the run; empty or None
@@ -126,8 +125,8 @@ class EffectCheckpoint:
     relation_values: str = ""
     #: The corpus manifest's rule-map digest (FR-060a).
     rule_map_digest: str = ""
-    #: The selection set's digest the run was scored against; None until the
-    #: control score reads one (T159).
+    #: The digest of the selection set the run's control score read (E1);
+    #: None on a checkpoint that predates the field.
     selection_set_digest: str | None = None
 
 
@@ -173,6 +172,8 @@ def load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
 #: Payload keys the checkpoint's own fields carry; anything else is ``extra``.
 _RESERVED_PAYLOAD_KEYS = frozenset({
     "encoder_state_dict", "model_state_dict", "encoder_config", "model_config",
+    # ``best_val_loss`` is no field any more (FR-069); an older payload's is
+    # still not taken for ``extra``.
     "provenance", "variant", "best_val_loss", "epoch", "config",
     "cards_folders", "training_settings", "loss_denominators", *_GEN3_FIELDS,
 })
@@ -201,7 +202,6 @@ class EffectModelStore:
             "encoder_config": asdict(checkpoint.encoder_config),
             "provenance": checkpoint.provenance.as_dict(),
             "variant": Baseline(checkpoint.variant).value,
-            "best_val_loss": checkpoint.best_val_loss,
             "epoch": checkpoint.epoch,
             "cards_folders": list(checkpoint.cards_folders),
             "training_settings": dict(checkpoint.training_settings),
@@ -245,7 +245,6 @@ class EffectModelStore:
             model_state=payload["model_state_dict"],
             provenance=SplitProvenance.from_dict(payload.get("provenance", {})),
             variant=Baseline(payload.get("variant", Baseline.FULL)),
-            best_val_loss=payload.get("best_val_loss", float("inf")),
             epoch=payload.get("epoch", 0),
             # Round-tripped: the identity baseline reloaded without its table
             # would score on random vectors.

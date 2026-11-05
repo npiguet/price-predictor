@@ -58,40 +58,63 @@ class Curriculum:
         return active_fields(present, sparse=epoch >= self.epoch)
 
     def resets_at(self, epoch: int) -> bool:
-        """Whether the early stopper forgets its best at the start of
+        """Whether the stopper forgets its best control score at the start of
         ``epoch``: where the objective gains the sparse fields. Never at a
         first-epoch curriculum, which leaves no earlier best measuring a
         different objective."""
         return self.epoch > 1 and epoch == self.epoch
 
 
-class EarlyStopper:
-    """Stops after ``patience`` epochs with no new card-disjoint best."""
+#: What a stopper's state measures, written into ``resume.pt``: a resume file
+#: whose stopper measured something else (the card-disjoint loss it once kept,
+#: lower being better) is refused rather than read the wrong way round.
+CONTROL_SCORE_MEASURE = "control_score"
+
+
+class StopperStateError(ValueError):
+    """A stopper state written for another measure than the control score."""
+
+
+class ControlScoreStopper:
+    """Keeps the best control score (FR-069): higher is better, and the run
+    stops after ``patience`` epochs without a new best."""
 
     def __init__(self, patience: int) -> None:
         self.patience = patience
-        self.best = float("inf")
+        self.best = float("-inf")
         self.since_best = 0
 
-    def update(self, card_disjoint_loss: float) -> bool:
-        """Record an epoch; return True when it set a new best."""
-        if card_disjoint_loss < self.best:
-            self.best = card_disjoint_loss
+    def update(self, control_score: float) -> bool:
+        """Record an epoch's control score; return True when it set a new best.
+        A NaN score sets none and counts toward patience."""
+        if control_score > self.best:
+            self.best = control_score
             self.since_best = 0
             return True
         self.since_best += 1
         return False
 
+    @property
+    def best_score(self) -> float | None:
+        """The best control score so far; None before any epoch set one."""
+        return None if self.best == float("-inf") else self.best
+
     def state_dict(self) -> dict:
-        return {"best": self.best, "since_best": self.since_best}
+        return {"measure": CONTROL_SCORE_MEASURE, "best": self.best,
+                "since_best": self.since_best}
 
     def load_state_dict(self, state: dict) -> None:
+        if state.get("measure") != CONTROL_SCORE_MEASURE:
+            raise StopperStateError(
+                "the resume file's stopper kept the card-disjoint validation loss, "
+                "not the control score; a run selected by its loss cannot continue "
+                "under selection by the control score (FR-069)")
         self.best = state["best"]
         self.since_best = state["since_best"]
 
     def reset(self) -> None:
-        """Forget the best: the objective changed, so no earlier number compares."""
-        self.best = float("inf")
+        """Forget the best: the objective changed, so no earlier score compares."""
+        self.best = float("-inf")
         self.since_best = 0
 
     @property

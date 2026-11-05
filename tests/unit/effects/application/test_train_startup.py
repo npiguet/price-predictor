@@ -7,6 +7,7 @@ on, as well as by the cards that carry them.
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,12 @@ from effects.application.train_effect_model import (
     run,
 )
 from effects.domain.corpus_manifest import CorpusManifest
+from effects.domain.selection_set import (
+    SelectionSet,
+    SelectionSetError,
+    selection_set_path,
+    write_selection_set,
+)
 from effects.domain.shard_generation import MixedGenerationsError
 from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.corpus_store import CorpusStore
@@ -103,12 +110,34 @@ def corpus(tmp_path, make_record):
     return store
 
 
+def _frozen(corpus_digest: str) -> SelectionSet:
+    """An empty selection set frozen for ``corpus_digest``: what ``run``
+    looks for is the file, not what it holds."""
+    return SelectionSet(corpus_digest=corpus_digest, r=4, halves={}, probes={},
+                        probe_kinds={}, grids={}, rule_tests={}, deviance_samples={},
+                        standard_errors={}, left_out={})
+
+
+def _freeze(store: CorpusStore, directory: Path) -> Path:
+    """Write the selection set frozen for ``store``'s manifest as it now is."""
+    digest = store.load().digest()
+    write_selection_set(selection_set_path(directory, digest), _frozen(digest))
+    return directory
+
+
 @pytest.fixture
-def config(corpus, tmp_path):
+def reports(corpus, tmp_path):
+    """The reports directory, holding the selection set frozen for ``corpus``."""
+    return _freeze(corpus, tmp_path / "reports")
+
+
+@pytest.fixture
+def config(corpus, tmp_path, reports):
     return TrainEffectModelConfig(
         corpus=str(corpus.directory),
         cards_folders=(_card_tree(tmp_path / "cardsfolder"),),
         vocab_path="models/effects/vocab-script.txt",
+        reports_dir=reports,
     )
 
 
@@ -163,6 +192,35 @@ def test_a_manifest_without_per_rule_counts_is_refused(corpus, config, started):
     assert not started
 
 
+def test_a_corpus_without_a_frozen_selection_set_is_refused(corpus, config, started, reports):
+    """E1, contracts/cli.md: the control score reads the set frozen for the
+    corpus's digest; without one there is nothing to select a checkpoint by."""
+    for path in reports.glob("selection-set-*.json"):
+        path.unlink()
+    with pytest.raises(SelectionSetError, match="no selection set"):
+        run(config)
+    assert not started
+
+
+def test_a_selection_set_frozen_for_another_corpus_is_refused(corpus, config, started, reports):
+    digest = corpus.load().digest()
+    write_selection_set(selection_set_path(reports, digest), _frozen("another corpus"))
+    with pytest.raises(SelectionSetError, match="frozen against corpus digest another"):
+        run(config)
+    assert not started
+
+
+def test_the_loop_is_handed_the_frozen_set_and_a_reader_of_each_stratum(
+    corpus, config, started,
+):
+    assert run(config) == 0
+    selection = started[-1].selection
+    assert selection.selection.corpus_digest == corpus.load().digest()
+    assert selection.digest == selection.selection.computed_digest()
+    assert sorted(selection.strata) == ["card-disjoint", "game-disjoint"]
+    assert started[-1].spec.facts.selection_set_digest == selection.digest
+
+
 def test_a_record_lacking_generation_three_is_refused(corpus, config, started, make_record):
     from effects.domain.shard_generation import UnacceptedGenerationError
 
@@ -181,7 +239,8 @@ def test_the_loop_reads_the_corpus_through_the_manifests_facts(corpus, config, s
     assert run(config) == 0
     facts = started[-1].spec.facts
     manifest = corpus.load()
-    assert facts == CorpusFacts.of(manifest)
+    selection = started[-1].selection
+    assert facts == replace(CorpusFacts.of(manifest), selection_set_digest=selection.digest)
     assert facts.split.card_disjoint_games == frozenset({"cg"})
     assert facts.split.game_disjoint_games == frozenset({"gg"})
     assert facts.gate_one_records == 4096
@@ -198,6 +257,7 @@ def test_an_unset_variant_tree_is_the_one_the_corpus_was_built_against(
     """Evaluation takes it from the manifest; a training run that did not
     would read every variant ability the build kept as no text."""
     corpus.save(_manifest(variant_scripts="output/effects/variant-scripts"))
+    _freeze(corpus, config.reports_dir)
     with caplog.at_level(logging.INFO):
         assert run(config) == 0
     assert started[-1].config.variant_scripts == Path("output/effects/variant-scripts")
@@ -206,6 +266,7 @@ def test_an_unset_variant_tree_is_the_one_the_corpus_was_built_against(
 
 def test_a_named_variant_tree_wins_over_the_manifests(corpus, config, started, caplog):
     corpus.save(_manifest(variant_scripts="output/effects/variant-scripts"))
+    _freeze(corpus, config.reports_dir)
     config.variant_scripts = Path("elsewhere")
     with caplog.at_level(logging.INFO):
         assert run(config) == 0
@@ -221,6 +282,13 @@ def test_no_variant_tree_is_read_when_neither_names_one(config, started, caplog)
 
 
 # ── encoder size and sidecar roots (FR-061, FR-062, FR-063b) ─────────────
+
+
+def _control_score_error(detail: str):
+    """FR-068c: an epoch's component with nothing to score."""
+    from effects.application.control_score import ControlScoreError
+
+    return ControlScoreError("card-disjoint", "selection", "grids", detail)
 
 
 def _train_args(tmp_path, *extra: str):
@@ -257,6 +325,8 @@ def test_a_width_not_divisible_by_the_head_count_is_refused_before_training(
     ("MixedGenerationsError", 1),
     ("ValidationGameInTrainingError", 1),
     ("ResumeMismatchError", 1),
+    ("SelectionSetError", 1),
+    ("ControlScoreError", 1),
     ("FileNotFoundError", 2),
 ])
 def test_an_operator_error_out_of_training_exits_with_its_code(
@@ -273,6 +343,8 @@ def test_an_operator_error_out_of_training_exits_with_its_code(
         "MixedGenerationsError": MixedGenerationsError,
         "ValidationGameInTrainingError": train_effect_model.ValidationGameInTrainingError,
         "ResumeMismatchError": effect_model_store.ResumeMismatchError,
+        "SelectionSetError": SelectionSetError,
+        "ControlScoreError": _control_score_error,
         "FileNotFoundError": FileNotFoundError,
     }[failure]
 
@@ -342,6 +414,7 @@ def test_a_unit_differing_from_the_manifests_is_refused(config):
 
 def test_a_recomputed_holdout_that_disagrees_is_refused(corpus, config):
     corpus.save(_manifest(held_out_texts=("SP$ Bespoke | Weird$ 82",)))
+    _freeze(corpus, config.reports_dir)
     with pytest.raises(HoldoutMismatchError, match="recomputed"):
         run(config)
 
@@ -370,6 +443,7 @@ def test_a_real_gen1_manifest_is_accepted_under_its_text_unit(
     config = TrainEffectModelConfig(
         corpus=str(store.directory), cards_folders=(_card_tree(tmp_path / "cardsfolder"),),
         vocab_path="models/effects/vocab-script.txt",
+        reports_dir=_freeze(store, tmp_path / "reports"),
     )
 
     assert run(config) == 0

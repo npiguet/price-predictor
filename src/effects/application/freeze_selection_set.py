@@ -22,7 +22,11 @@ their labels alone:
      distinct records, synthetic protection copies left out.
    - Grid records: per :class:`GridSource`, one qualifying record a game, the
      one of smallest keyed hash under the corpus seed, so grids qualifying
-     the same records choose the same one.
+     the same records choose the same one; then, across games, the fewest of
+     them by smallest keyed hash that bring the grid's worst-case standard
+     error to ``grid_target_error``, at most ``grid_record_cap``
+     (``selection_set.grid_records_needed``), since each grid record is read
+     once per cell in every epoch (research E2, T160).
    - The deviance sample: every copy of the half, then the
      ``deviance_cap`` of smallest keyed hash.
 3. Balance with ``r`` by a seeded draw: each rule's larger polarity to r times
@@ -56,6 +60,7 @@ from pathlib import Path
 from typing import Protocol
 
 from effects.domain.corpus_manifest import CorpusManifest
+from effects.domain.grid_edits import GridQualification
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord
 from effects.domain.rule_catalogue import Polarity, ScenarioCatalogue
@@ -73,6 +78,8 @@ from effects.domain.selection_set import (
     BINARY,
     DEVIANCE,
     DEVIANCE_SAMPLE_CAP,
+    GRID_RECORD_CAP,
+    GRID_TARGET_ERROR,
     GRIDS,
     PROBES,
     RULE_TESTS,
@@ -87,6 +94,7 @@ from effects.domain.selection_set import (
     TaggedRecord,
     balanced,
     error_value,
+    grid_records_needed,
     item_key,
 )
 from effects.domain.strata import Half
@@ -127,17 +135,10 @@ class ProbeItemSource(Protocol):
     def items(self, records: Sequence[EffectRecord]) -> Iterable[ProbeItem]: ...
 
 
-@dataclass(frozen=True, slots=True)
-class GridQualification:
-    """A record a grid can edit: the entities the grid edits and reads, and
-    the rule's outcome in each of the grid's cells for this record."""
-
-    entities: tuple[str, ...]
-    outcomes: tuple[float, ...]
-
-
 class GridSource(Protocol):
-    """One edit grid: its name, its cells, and which records it edits."""
+    """One edit grid: its name, its cells, and which records it edits
+    (:class:`~effects.domain.grid_edits.GridQualification`); the shipped
+    grids are ``grid_edits.grid_sources``."""
 
     name: str
     cells: tuple[str, ...]
@@ -287,6 +288,8 @@ class FreezeThresholds:
     max_item_error: float = MAX_ITEM_ERROR
     max_component_error: float = MAX_COMPONENT_ERROR
     deviance_cap: int = DEVIANCE_SAMPLE_CAP
+    grid_target_error: float = GRID_TARGET_ERROR
+    grid_record_cap: int = GRID_RECORD_CAP
 
 
 @dataclass
@@ -315,12 +318,14 @@ def freeze_selection_set(
     max_item_error: float = MAX_ITEM_ERROR,
     max_component_error: float = MAX_COMPONENT_ERROR,
     deviance_cap: int = DEVIANCE_SAMPLE_CAP,
+    grid_target_error: float = GRID_TARGET_ERROR,
+    grid_record_cap: int = GRID_RECORD_CAP,
 ) -> SelectionSet:
     """The corpus's selection set, unsealed; raises :class:`SelectionSetRefused`
     naming every miss. ``strata`` reads each validation stratum the manifest
     halves."""
     limits = FreezeThresholds(r, min_games_per_half, max_item_error, max_component_error,
-                              deviance_cap)
+                              deviance_cap, grid_target_error, grid_record_cap)
     small = small_halves(manifest, limits.min_games_per_half)
     if small:
         raise SelectionSetRefused(small)
@@ -525,15 +530,23 @@ class _Assembly:
               sources: Sequence[GridSource]) -> None:
         errors, kept = [], {}
         for grid in sources:
-            chosen = sorted(found.grids.get(grid.name, {}).items())
-            if not chosen:
+            qualified = found.grids.get(grid.name, {})
+            if not qualified:
                 self.misses.append(FreezeMiss(stratum, half, GRIDS,
                                               f"grid {grid.name}: every cell is empty"))
                 continue
+            # Sized to the grid's precision target over every qualifying game,
+            # then judged on the records kept (FR-068b).
+            by_hash = sorted((order, game, record_id, q)
+                             for game, (order, record_id, q) in qualified.items())
+            needed = grid_records_needed(
+                _mean_outcomes([q for *_, q in by_hash], len(grid.cells)),
+                target=self.limits.grid_target_error, cap=self.limits.grid_record_cap)
+            chosen = sorted((game, record_id, q)
+                            for _, game, record_id, q in by_hash[:max(needed, 1)])
             records = tuple(TaggedRecord(record_id, game, q.entities)
-                            for game, (_, record_id, q) in chosen)
-            outcomes = [sum(q.outcomes[c] for _, (_, _, q) in chosen) / len(chosen)
-                        for c in range(len(grid.cells))]
+                            for game, record_id, q in chosen)
+            outcomes = _mean_outcomes([q for *_, q in chosen], len(grid.cells))
             error = grid_standard_error([len(chosen)] * len(grid.cells), outcomes)
             if not self._enters(stratum, half, GRIDS, grid.name, error):
                 continue
@@ -602,8 +615,16 @@ class _Assembly:
                 "max_item_error": self.limits.max_item_error,
                 "max_component_error": self.limits.max_component_error,
                 "deviance_cap": self.limits.deviance_cap,
+                "grid_target_error": self.limits.grid_target_error,
+                "grid_record_cap": self.limits.grid_record_cap,
             },
         )
+
+
+def _mean_outcomes(qualifications: Sequence[GridQualification], cells: int) -> list[float]:
+    """Each cell's rule outcome, averaged over a grid's records."""
+    return [sum(q.outcomes[c] for q in qualifications) / len(qualifications)
+            for c in range(cells)]
 
 
 def _above(error: float, limits: FreezeThresholds) -> str:

@@ -2,7 +2,8 @@
 
 The trainer derives nothing about the corpus (FR-125 withdrawn): the manifest
 ``build-corpus`` writes decides the split, the holdout, the validation
-samples, the gate-1 slice and the rarity table.
+samples, the gate-1 slice and the rarity table, and the selection set frozen
+for it (``--reports-dir``, research E1) what the control score reads.
 """
 
 from __future__ import annotations
@@ -113,6 +114,11 @@ class TrainEffectModelConfig:
         "from the OS and logged when omitted, so any run can be repeated"
     )})
     keyword_definitions: Path = Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS)
+    reports_dir: Path = field(default=Path(default_paths.DEFAULT_REPORTS_DIR), metadata={
+        "help": (
+            "Where the selection set frozen for --corpus is found, by the corpus "
+            "digest (default: %(default)s)"
+        )})
     model_output: Path | None = field(default=None, metadata={"help": (
         "Checkpoint directory (default: models/effects/effect-model/, under "
         "{variant}/ for a baseline)"
@@ -197,8 +203,8 @@ class TrainEffectModelConfig:
     )})
     epochs: int = 40
     patience: int = field(default=5, metadata={"help": (
-        "Epochs without a new best before stopping, counted from warmup's end; "
-        "0 never stops early (default: %(default)s)"
+        "Epochs without a new best control score before stopping, counted from "
+        "warmup's end; 0 never stops early (default: %(default)s)"
     )})
     withhold_keyword: str | None = field(default=None, metadata={"help": (
         "Hold one implemented keyword's token out of training, always expanding "
@@ -307,6 +313,9 @@ class CorpusFacts:
     digest: str = ""
     #: The rule map's content hash, which every checkpoint records (FR-060a).
     rule_map_digest: str = ""
+    #: The digest of the selection set the control score reads, which every
+    #: checkpoint records and a resume compares; empty without one.
+    selection_set_digest: str = ""
 
     @classmethod
     def of(cls, manifest) -> CorpusFacts:
@@ -507,6 +516,7 @@ def run(config: TrainEffectModelConfig) -> int:
             "counts (FR-066): the rule mask and the control score read the rules "
             "it records. Rebuild it with a gen-3 build-corpus."
         )
+    selection = frozen_selection(store, manifest, Path(config.reports_dir))
     check_manifest_holdout(manifest, config)
     facts = CorpusFacts.of(manifest)
     logger.info(
@@ -520,5 +530,22 @@ def run(config: TrainEffectModelConfig) -> int:
 
     return TrainingLoop(
         config, facts=facts, training_shards=training_shards,
-        validation_samples=validation_samples,
+        validation_samples=validation_samples, selection=selection,
     ).execute()
+
+
+def frozen_selection(store: CorpusStore, manifest: CorpusManifest, reports_dir: Path):
+    """The selection set frozen for the corpus, found by its digest under
+    ``reports_dir``, with a reader of each validation stratum; raises
+    ``SelectionSetError`` (exit 1) when none is there, or one frozen against
+    another corpus or edited (E1)."""
+    from effects.application.control_score import FrozenSelection
+    from effects.application.freeze_selection_set import stratum_reader
+    from effects.domain.selection_set import load_selection_set, selection_set_path
+
+    digest = manifest.digest()
+    selection = load_selection_set(selection_set_path(reports_dir, digest), digest)
+    logger.info("Selection set %s… frozen for the corpus, under %s.", selection.digest[:12],
+                reports_dir)
+    return FrozenSelection(selection, {
+        str(stratum): stratum_reader(store.output_dir(stratum)) for stratum in VALIDATION_STRATA})

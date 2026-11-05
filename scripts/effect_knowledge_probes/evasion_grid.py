@@ -45,142 +45,18 @@ if __package__ in (None, ""):
 from _lib.markdown import print_table  # noqa: E402
 
 from effect_knowledge_probes import common, readout  # noqa: E402
-from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
-from effects.domain.rule_outcomes import (  # noqa: E402
-    COLOUR_WORDS,
-    ProtectionQuality,
-    QualityKind,
-    may_block,
+from effects.domain.grid_edits import (  # noqa: E402, F401  (the suite's names for them)
+    ATTACKER_KEYWORDS,
+    BLOCKER_TRAITS,
+    EVASION_KEYWORDS,
+    OTHER_CREATURE_TYPES,
+    PROTECTION_ROWS,
+    label,
+    protection_quality,
 )
-
-#: Attacker rows that grant protection, each resolved to a quality against the pair
-#: (:func:`protection_quality`): ``-blocker`` names the blocker, ``-other`` does not.
-PROTECTION_ROWS: tuple[str, ...] = (
-    "protection-blocker", "protection-other",
-    "protection-type-blocker", "protection-type-other",
-    "protection-creatures", "protection-artifacts",
-    "protection-monocolored", "protection-multicolored",
-    "protection-mana-value-3-or-less", "protection-everything",
-)
-#: Attacker rows: the keyword the attacker is granted; ``None`` grants nothing.
-ATTACKER_KEYWORDS: tuple[str | None, ...] = (
-    None, "flying", "horsemanship", "fear", "intimidate", "shadow", "unblockable",
-    *PROTECTION_ROWS,
-)
-#: Creature types a ``protection-type-other`` row picks from, the first that
-#: neither creature has: types no limited creature is likely to carry.
-OTHER_CREATURE_TYPES: tuple[str, ...] = ("kraken", "leviathan", "octopus", "homarid")
-#: The rows whose quality is fixed, whatever the pair.
-_FIXED_QUALITIES: dict[str, ProtectionQuality] = {
-    "protection-creatures": ProtectionQuality(QualityKind.CARD_TYPE, "creature"),
-    "protection-artifacts": ProtectionQuality(QualityKind.CARD_TYPE, "artifact"),
-    "protection-monocolored": ProtectionQuality(QualityKind.CONDITION, "monocolored"),
-    "protection-multicolored": ProtectionQuality(QualityKind.CONDITION, "multicolored"),
-    "protection-mana-value-3-or-less": ProtectionQuality(
-        QualityKind.CONDITION, "mana value 3 or less"),
-    "protection-everything": ProtectionQuality.everything(),
-}
-#: Blocker columns: the trait the blocker is given; ``None`` changes nothing.
-BLOCKER_TRAITS: tuple[str | None, ...] = (
-    None, "flying", "reach", "horsemanship", "shadow", "artifact", "black", "shares-colour",
-)
-#: Keywords and traits that decide block legality; a qualifying pair carries none.
-EVASION_KEYWORDS = frozenset({
-    "flying", "reach", "horsemanship", "fear", "intimidate", "shadow", "unblockable",
-    "skulk", "menace", "landwalk", "defender",
-})
-
-
-# ── the edits ───────────────────────────────────────────────────────────
-
-
-def protection_quality(row: str, attacker, blocker) -> ProtectionQuality:
-    """The quality a protection row grants, resolved against the pair: the
-    blocker's first colour or creature type for a ``-blocker`` row, a colour
-    or creature type neither creature has for an ``-other`` row."""
-    if row in _FIXED_QUALITIES:
-        return _FIXED_QUALITIES[row]
-    if row == "protection-blocker":
-        return ProtectionQuality(QualityKind.COLOUR, COLOUR_WORDS[blocker.colors[0]])
-    if row == "protection-other":
-        taken = {c for c in (*attacker.colors, *blocker.colors)}
-        other = next(c for c in COLOUR_WORDS if c not in taken)
-        return ProtectionQuality(QualityKind.COLOUR, COLOUR_WORDS[other])
-    taken = {t.lower() for t in (*attacker.subtypes, *blocker.subtypes)}
-    other = next(t for t in OTHER_CREATURE_TYPES if t not in taken)
-    if row == "protection-type-blocker" and blocker.subtypes:
-        return ProtectionQuality(QualityKind.CREATURE_TYPE, blocker.subtypes[0].lower())
-    if row in ("protection-type-blocker", "protection-type-other"):
-        return ProtectionQuality(QualityKind.CREATURE_TYPE, other)
-    raise KeyError(row)
-
-
-def edited(record, attacker_id: str, blocker_id: str, row: str | None,
-           column: str | None):
-    """One grid cell's record, and the rule's answer for it."""
-    attacker = record.state.entity(attacker_id)
-    board = BoardEdit(record)
-    if column in ("flying", "reach", "horsemanship", "shadow"):
-        board = board.grant_keyword(blocker_id, column)
-    elif column == "artifact":
-        board = board.add_type(blocker_id, "artifact")
-    elif column == "black":
-        board = board.set_colours(blocker_id, ("B",))
-    elif column == "shares-colour":
-        shared = next(c for c in attacker.colors if c != "B")
-        board = board.set_colours(blocker_id, (shared,))
-    blocker = board.record.state.entity(blocker_id)
-    granted: tuple[ProtectionQuality, ...] = ()
-    if row in PROTECTION_ROWS:
-        quality = protection_quality(row, attacker, blocker)
-        board = board.grant_protection(attacker_id, quality)
-        granted = (quality,)
-    elif row is not None:
-        board = board.grant_keyword(attacker_id, row)
-    record = board.record
-    a = record.state.entity(attacker_id)
-    b = record.state.entity(blocker_id)
-    rule = may_block(a.granted_temporary.keywords, a.colors, b.granted_temporary.keywords,
-                     b.colors, b.types, attacker_protections=granted,
-                     blocker_subtypes=b.subtypes, blocker_mana_value=b.mana_value)
-    return record, rule
-
-
-# ── which records qualify ───────────────────────────────────────────────
-
-
-def qualifying_pair(record, keywords_of) -> tuple[str, str] | None:
-    """``(attacker, blocker)`` for the first qualifying legal blocker of a record."""
-    from effects.domain.records import PlayabilityBlockersPayload
-
-    payload = record.payload
-    if not isinstance(payload, PlayabilityBlockersPayload) or record.fork:
-        return None
-    if getattr(record, "what_if", False):
-        return None
-    attacker = record.state.entity(payload.anchor_attacker)
-    if attacker is None or "creature" not in attacker.types:
-        return None
-    if keywords_of(attacker) & EVASION_KEYWORDS or any(
-            k.startswith("protection") for k in keywords_of(attacker)):
-        return None
-    if not any(c != "B" for c in attacker.colors if c in COLOUR_WORDS):
-        return None
-    for blocker_id in payload.legal_blockers:
-        blocker = record.state.entity(blocker_id)
-        if blocker is None or "creature" not in blocker.types or "artifact" in blocker.types:
-            continue
-        colours = [c for c in blocker.colors if c in COLOUR_WORDS]
-        if not colours or "B" in colours or set(colours) & set(attacker.colors):
-            continue
-        if keywords_of(blocker) & EVASION_KEYWORDS:
-            continue
-        return attacker.id, blocker.id
-    return None
-
-
-def label(name: str | None) -> str:
-    return "none" if name is None else name
+from effects.domain.grid_edits import evasion_cell as edited  # noqa: E402
+from effects.domain.grid_edits import evasion_pair as qualifying_pair  # noqa: E402, F401
+from effects.domain.rule_outcomes import may_block  # noqa: E402, F401
 
 
 def main() -> None:
@@ -203,11 +79,11 @@ def main() -> None:
     grid = np.zeros((len(ATTACKER_KEYWORDS), len(BLOCKER_TRAITS)))
     rule = np.zeros_like(grid)
     per_row = {row: ([], []) for row in ATTACKER_KEYWORDS}
-    may_block = readout.at_cards("may_block", [b for _, _, b in triples])
+    read_may_block = readout.at_cards("may_block", [b for _, _, b in triples])
     for i, row in enumerate(ATTACKER_KEYWORDS):
         for j, column in enumerate(BLOCKER_TRAITS):
             cells = [edited(record, a, b, row, column) for record, a, b in triples]
-            predictions = common.predict(probe_model, [c[0] for c in cells], may_block)
+            predictions = common.predict(probe_model, [c[0] for c in cells], read_may_block)
             grid[i, j] = float(np.mean(predictions))
             rule[i, j] = float(np.mean([c[1] for c in cells]))
             per_row[row][0].extend(c[1] for c in cells)

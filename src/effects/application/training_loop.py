@@ -6,8 +6,10 @@ The schedule is ``training_schedule``'s pure functions and corpus reading
 steps a ``RunReporter``'s. An epoch is a step count, not a pass over the
 corpus, and walks ``--shards-per-epoch`` shards one at a time. Validation,
 stopping and the saved checkpoints read the averaged weights
-(``weight_average``) once warmup has ended; until US8's control score replaces
-it, the best checkpoint is chosen by the card-disjoint validation loss on them.
+(``weight_average``) once warmup has ended, and the best checkpoint is the
+epoch of the best control score on them (FR-069): the frozen selection set's
+selection halves, scored by ``control_score``, which the validator prepares
+once at startup.
 """
 
 from __future__ import annotations
@@ -16,11 +18,13 @@ import logging
 import random
 import time
 from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import NamedTuple
 
 import torch
 
+from effects.application.control_score import FrozenSelection
 from effects.application.denominator_pass import denominator_shards, loss_denominators
 from effects.application.resume_state import restore_resume, save_resume
 from effects.application.run_context import (
@@ -166,13 +170,19 @@ class TrainingLoop:
         facts: CorpusFacts,
         training_shards: Sequence[Path],
         validation_samples: Mapping[str, Path],
+        selection: FrozenSelection | None = None,
     ) -> None:
         self.config = config
+        #: The corpus's frozen selection set and its strata's readers, which the
+        #: control score is built from; a run without one is refused at startup.
+        self.selection = selection
         self._relation_tables: dict[str, list[torch.Tensor]] | None = None
         #: Processes preparing steps; 0 prepares them in this one. Not a
         #: training setting: it moves where the host half runs, not what it
         #: computes.
         self.prefetch_workers = max(int(config.prefetch_workers), 0)
+        if selection is not None:
+            facts = replace(facts, selection_set_digest=selection.digest)
         self.training_shards = list(training_shards)
         self.validation_samples = dict(validation_samples)
         self.spec = RunSpec(
@@ -228,6 +238,10 @@ class TrainingLoop:
 
         run.pool = self._start_workers(settings, run, first_epoch=first_epoch)
         try:
+            # After the workers start, so they prepare the first epoch's steps
+            # while this process prepares the control score's cache.
+            self.validator.prepare(run, self.selection,
+                                   rule_outputs=self.spec.facts.rule_outputs)
             for epoch in range(first_epoch, self.config.epochs + 1):
                 if self._run_epoch(epoch, run, samples):
                     break
@@ -249,17 +263,21 @@ class TrainingLoop:
         run.optimizer.zero_grad(set_to_none=True)
         tally = EpochTally(running=torch.zeros((), device=self.device))
         if self.curriculum.resets_at(epoch):
-            # The field set changes here, so no earlier score compares (T5).
+            # The field set changes here, so no earlier score compares (T5,
+            # FR-069): the best control score and the patience start over.
             run.stopper.reset()
             self.reporter.curriculum(epoch, len(run.fields[epoch]))
+        started = time.perf_counter()
         self._train_epoch(epoch, run, tally)
+        trained = time.perf_counter() - started
         # An epoch ending before warmup does has no average yet: it is
         # validated on the current weights and is no best candidate.
         with run.average.applied() as averaged:
-            card, game = self.validator.epoch(run, samples, run.fields[epoch])
-            self.reporter.epoch(epoch, tally, card, game, self.validator.floor.floor)
+            scores = self.validator.epoch(run, samples, run.fields[epoch])
+            best = self._save_epoch(epoch, run, scores.control.control, candidate=averaged)
+            self.reporter.epoch(epoch, tally, scores, self.validator.floor.floor,
+                                best=run.stopper.best_score, trained=trained)
             self.reporter.unresolved(run.preparer)
-            best = self._save_epoch(epoch, run, card.loss, candidate=averaged)
         save_resume(run, epoch, best=best)
         if run.stopper.should_stop:
             self.reporter.early_stop()
@@ -281,12 +299,13 @@ class TrainingLoop:
                 run.pool.submit(task)
 
     def _save_epoch(
-        self, epoch: int, run: RunContext, card_disjoint_loss: float, *, candidate: bool,
+        self, epoch: int, run: RunContext, control_score: float, *, candidate: bool,
     ) -> bool:
-        """Save what the epoch earned, with the weights it was validated on;
-        True when it set a new best. An epoch that is no best ``candidate``
-        leaves the stopper alone, so it counts toward no patience."""
-        best = candidate and run.stopper.update(card_disjoint_loss)
+        """Save what the epoch earned, with the weights it was scored on; True
+        when its control score set a new best, whose checkpoint is the run's
+        one best (FR-069). An epoch that is no best ``candidate`` leaves the
+        stopper alone, so it counts toward no patience."""
+        best = candidate and run.stopper.update(control_score)
         if best or self.config.save_every_epoch:
             checkpoint = self._checkpoint(epoch, run)
             output = self.config.resolved_model_output()
@@ -304,7 +323,6 @@ class TrainingLoop:
             model_state=run.model.state_dict(),
             provenance=self.spec.facts.provenance(self.config),
             variant=self.config.variant,
-            best_val_loss=run.stopper.best,
             epoch=epoch,
             extra=(
                 {IDENTITY_TABLE_KEY: run.identity_table.state()}
@@ -322,6 +340,7 @@ class TrainingLoop:
             stratum_weight=self.config.stratum_weight,
             relation_values=self.config.relation_values,
             rule_map_digest=self.spec.facts.rule_map_digest,
+            selection_set_digest=self.spec.facts.selection_set_digest or None,
         )
 
     def _epoch_plan(self, epoch: int, run: RunContext) -> EpochPlan:

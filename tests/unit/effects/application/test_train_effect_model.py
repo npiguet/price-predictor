@@ -14,7 +14,8 @@ import pytest
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_schedule import (
     LEARNING_RATE,
-    EarlyStopper,
+    ControlScoreStopper,
+    StopperStateError,
     learning_rate_at,
     warmup_steps,
 )
@@ -49,20 +50,47 @@ class TestScheduleConstants:
             )
 
 
-class TestEarlyStopping:
-    def test_a_new_best_resets_the_counter(self):
-        stopper = EarlyStopper(patience=2)
-        assert stopper.update(1.0)
-        assert stopper.update(0.9)
+class TestControlScoreStopper:
+    """FR-069: higher is better, and patience counts epochs without a new best."""
+
+    def test_a_higher_control_score_is_a_new_best_and_resets_the_counter(self):
+        stopper = ControlScoreStopper(patience=2)
+        assert stopper.best_score is None
+        assert stopper.update(0.1)
+        assert stopper.update(0.3)
         assert stopper.since_best == 0
+        assert stopper.best_score == 0.3
 
     def test_it_stops_after_patience_epochs_without_a_best(self):
-        stopper = EarlyStopper(patience=2)
-        stopper.update(1.0)
-        assert not stopper.update(1.1)
+        stopper = ControlScoreStopper(patience=2)
+        stopper.update(0.5)
+        assert not stopper.update(0.4)
         assert not stopper.should_stop
-        assert not stopper.update(1.2)
+        assert not stopper.update(0.5)          # a tie is no new best
         assert stopper.should_stop
+
+    def test_a_score_below_zero_is_still_a_first_best(self):
+        stopper = ControlScoreStopper(patience=1)
+        assert stopper.update(-0.7)
+        assert stopper.best_score == -0.7
+
+    def test_a_nan_score_sets_no_best_and_counts_toward_patience(self):
+        stopper = ControlScoreStopper(patience=1)
+        assert not stopper.update(float("nan"))
+        assert stopper.best_score is None and stopper.should_stop
+
+    def test_its_state_round_trips_and_names_what_it_measures(self):
+        stopper = ControlScoreStopper(patience=3)
+        stopper.update(0.2)
+        stopper.update(0.1)
+        again = ControlScoreStopper(patience=3)
+        again.load_state_dict(stopper.state_dict())
+        assert (again.best, again.since_best) == (0.2, 1)
+        assert stopper.state_dict()["measure"] == "control_score"
+
+    def test_a_stopper_state_that_kept_a_loss_is_refused(self):
+        with pytest.raises(StopperStateError, match="validation loss"):
+            ControlScoreStopper(5).load_state_dict({"best": 0.4, "since_best": 1})
 
 
 class TestModelOutput:
@@ -84,9 +112,8 @@ class TestHoldoutGuard:
     """An empty card-disjoint stratum must stop the run (T160, FR-088b).
 
     Left alone it produces a training run that writes nothing: `Validator.score`
-    over no records returns `nan`, `nan < inf` is False, so `EarlyStopper` never
-    records a best, the checkpoint is never saved, and the run early-stops after
-    its patience and exits 0. Hours of GPU time and no artifact.
+    over no records returns `nan`, and gate 1 and the reported losses would
+    measure nothing for the whole run. Hours of GPU time and no gate-1 reading.
     """
 
     def test_an_empty_card_disjoint_stratum_raises(self) -> None:
@@ -189,8 +216,8 @@ class TestProvenanceRecordsTheCorpus:
 
 
 def test_early_stopping_with_no_patience_never_stops():
-    stopper = EarlyStopper(0)
+    stopper = ControlScoreStopper(0)
     stopper.update(1.0)
     for _ in range(50):
-        stopper.update(2.0)
+        stopper.update(0.5)
     assert not stopper.should_stop

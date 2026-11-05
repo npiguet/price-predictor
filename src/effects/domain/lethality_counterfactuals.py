@@ -217,7 +217,7 @@ def _amount(kind: EffectKind, found: dict[str, str], x: int | None) -> StatedEff
     return StatedEffect(kind, -shrink, Stated.TEXT, power is not None and _literal(power) == shrink)
 
 
-def _the_one_amount(line: SidecarLine, record: EffectRecord) -> StatedEffect | None:
+def stated_effect(line: SidecarLine, record: EffectRecord) -> StatedEffect | None:
     """The chain's single positive damage or shrink amount, or None.
 
     None as well where any segment carries a :data:`BLOCKED_PARAMS` parameter,
@@ -285,7 +285,7 @@ def qualify(record: EffectRecord, line: SidecarLine | None, targets: dict[str, E
         return None
     if line is None or not line.script_text:
         return None
-    found = _the_one_amount(line, record)
+    found = stated_effect(line, record)
     if found is None:
         return None
     hits = _subjects_hit(record.state, targets, found, keywords_of)
@@ -379,7 +379,7 @@ def _relabel(entry: EntityTargets, effect: StatedEffect, amount: int, dies: bool
     return replace(entry, affected=True, fields=fields)
 
 
-def _edited_text(record: EffectRecord, effect: StatedEffect, line: SidecarLine,
+def amount_edit(record: EffectRecord, effect: StatedEffect, line: SidecarLine,
                  text: str | None, drawn: int) -> TextEdit:
     """A literal amount set to ``drawn`` in the script and the encoded text,
     both or neither, so the text never disagrees with the labels."""
@@ -443,7 +443,7 @@ def counterfactual(record: EffectRecord, qualified: Qualified,
     if qualified.effect.stated is Stated.X:
         edit, refs = TextEdit(drawn), replace(refs, x=drawn)
     else:
-        edit = _edited_text(record, qualified.effect, line, text, drawn)
+        edit = amount_edit(record, qualified.effect, line, text, drawn)
     entities = _with_toughness(record.state.entities, chosen, toughness)
     copied = replace(
         record,

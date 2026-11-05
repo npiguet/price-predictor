@@ -99,7 +99,9 @@ def plan(args: argparse.Namespace, train_args: list[str]) -> list[tuple[str, lis
         ("train", python + ["-m", "effects", "train-effect-model",
                             "--corpus", str(args.corpus),
                             "--vocab-path", str(args.vocab_path), *variants,
-                            "--model-output", str(run_dir), *train_args,
+                            "--model-output", str(run_dir),
+                            # The control score reads the set the freeze wrote.
+                            "--reports-dir", str(args.probe_set_dir), *train_args,
                             *(["--resume"] if args.resume else [])], "train.log"),
         ("encode", python + ["-m", "effects", "encode-abilities",
                              "--checkpoint", checkpoint, *variants,

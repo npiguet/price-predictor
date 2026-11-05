@@ -365,12 +365,15 @@ def make_batcher(
 
 
 def make_training_loop(
-    config, *, training_shards=(), validation_samples=None, **facts,
+    config, *, training_shards=(), validation_samples=None, selection=None, **facts,
 ):
     """A ``TrainingLoop`` over ``config`` and a corpus described by ``facts``.
 
     ``facts`` override ``CorpusFacts`` fields; by default the fixture holdout
     rule (20 permille, at most 8 carriers) and an empty rarity table.
+    ``selection`` is the control score's ``FrozenSelection``
+    (:func:`fixture_selection`); a loop without one runs only under
+    :func:`stub_validator`.
     """
     from effects.application.train_effect_model import CorpusFacts
     from effects.application.training_loop import TrainingLoop
@@ -384,7 +387,99 @@ def make_training_loop(
         }),
         training_shards=list(training_shards),
         validation_samples=validation_samples or {},
+        selection=selection,
     )
+
+
+#: The strata a fixture selection set halves.
+FIXTURE_STRATA: tuple[str, ...] = ("card-disjoint", "game-disjoint")
+
+
+def fixture_selection_set(records, *, corpus_digest: str = "fixture"):
+    """A selection set over ``records`` with every component holding items in
+    both strata: both strata hold every game of ``records``, split in two by
+    game, each half's items over its own games' records: two probe types, the
+    real damage grid (its 64 cells, edited by ``grid_edits.GridEdits``) over
+    records with an acting line and a creature, a rule test, and a deviance
+    sample whose gate and three fields the freeze kept."""
+    from effects.domain.effect_head_layout import GATE_TERM
+    from effects.domain.grid_edits import VALUES
+    from effects.domain.selection_set import (
+        DEVIANCE,
+        FrozenGrid,
+        GridCell,
+        ProbeRecord,
+        SampleRecord,
+        SelectionSet,
+        TaggedRecord,
+        item_key,
+    )
+
+    def creature(record):
+        return next((e for e in record.state.entities
+                     if e.pt is not None and e.is_creature and e.on_battlefield), None)
+
+    games = sorted({r.game_id for r in records})
+    halves = {"selection": games[::2], "reporting": games[1::2]}
+    by_half = {half: [r for r in records if r.game_id in set(held)]
+               for half, held in halves.items()}
+    cells = tuple(GridCell(f"{a}x{b}", float(a >= b)) for a in VALUES for b in VALUES)
+    probes, grids, rules, samples, errors = {}, {}, {}, {}, {}
+    for stratum in FIXTURE_STRATA:
+        probes[stratum], grids[stratum], rules[stratum], samples[stratum] = {}, {}, {}, {}
+        for half, held in by_half.items():
+            with_entities = [r for r in held if r.state.entities]
+            probes[stratum][half] = {
+                "dies": tuple(ProbeRecord(r.record_id, r.game_id, r.state.entities[0].id,
+                                          float(i % 2)) for i, r in enumerate(with_entities[:12])),
+                "affordable": tuple(ProbeRecord(r.record_id, r.game_id, None, float(i % 2))
+                                    for i, r in enumerate(held[:10])),
+            }
+            damaged = [(r, creature(r)) for r in held if r.ability and creature(r) is not None]
+            grids[stratum][half] = {"damage": FrozenGrid(cells, tuple(
+                TaggedRecord(r.record_id, r.game_id, (entity.id,)) for r, entity in damaged[:2]))}
+            tagged = [TaggedRecord(r.record_id, r.game_id, (r.state.entities[0].id,))
+                      for r in with_entities[:16]]
+            rules[stratum][half] = {
+                "r.board": {"fires": tuple(tagged[:8]), "does_not_fire": tuple(tagged[8:])},
+            }
+            samples[stratum][half] = tuple(SampleRecord(r.record_id, r.game_id, 0)
+                                           for r in held[:20])
+            for name in (GATE_TERM, "zone_outcome", "damage_taken", "pt_change"):
+                errors[item_key(stratum, half, DEVIANCE, name)] = {"hard": 0.05, "soft": 0.05}
+    return SelectionSet(
+        corpus_digest=corpus_digest, r=4,
+        halves={s: {h: tuple(g) for h, g in halves.items()} for s in FIXTURE_STRATA},
+        probes=probes, probe_kinds={"dies": "binary", "affordable": "binary"},
+        grids=grids, rule_tests=rules, deviance_samples=samples,
+        standard_errors=errors, left_out={}, settings={"max_item_error": 0.1},
+    ).sealed()
+
+
+#: The rule map's outputs of :func:`fixture_selection_set`'s rule test.
+FIXTURE_RULE_OUTPUTS: dict[str, tuple[str, ...]] = {
+    "r.board": ("gate", "zone_outcome", "damage_taken", "can_play", "trigger_fired",
+                "created_objects"),
+}
+
+
+def fixture_selection(records):
+    """A ``FrozenSelection`` of :func:`fixture_selection_set` whose strata
+    both read ``records`` as one shard."""
+    from effects.application.control_score import FrozenSelection
+
+    records = list(records)
+    return FrozenSelection(fixture_selection_set(records),
+                           dict.fromkeys(FIXTURE_STRATA, lambda: [records]))
+
+
+def control_score_of(value: float, weight: float = 0.5):
+    """A ``ControlScore`` whose every component of both strata is ``value``."""
+    from effects.application.control_score import ControlScore, StratumScore
+    from effects.domain.selection_set import COMPONENTS
+
+    return ControlScore({stratum: StratumScore(dict.fromkeys(COMPONENTS, value), {})
+                         for stratum in FIXTURE_STRATA}, weight)
 
 
 def make_cpu_training_loop(monkeypatch, **config):
@@ -436,16 +531,30 @@ class StubLosses:
         return None
 
 
-def stub_validator(loop, on_score=None) -> None:
+def stub_validator(loop, on_score=None, controls=None) -> None:
     """Swap ``loop``'s validator for one that scores every pass 1.0 without
-    running the model, calling ``on_score(fields, margins)`` for each pass.
+    running the model, calling ``on_score(fields, margins)`` for each pass,
+    and whose control score is ``controls[n]`` at its ``n``-th epoch (the
+    last one repeated; 0.0 every epoch by default), with no cache prepared.
 
-    Only ``score`` is stood in for, so the epoch's own choice of which pass
-    feeds the margins and the floor is still the real one.
+    Only ``score`` and the control score are stood in for, so the epoch's own
+    choice of which pass feeds the margins and the floor is still the real one.
     """
     from effects.application.validation_pass import ProgressMargins, Validator
 
+    scores = list(controls or [0.0])
+
     class _Scored(Validator):
+        epochs = 0
+
+        def prepare(self, run, selection, *, rule_outputs):
+            return None
+
+        def control(self, run, fields):
+            value = scores[min(self.epochs, len(scores) - 1)]
+            self.epochs += 1
+            return control_score_of(value)
+
         def score(self, records, run, fields, collectors=()):
             if on_score is not None:
                 on_score(

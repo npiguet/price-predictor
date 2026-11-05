@@ -21,7 +21,11 @@ from effects.application.model_loading import Runnable
 from effects.application.validation_pass import FieldParts, Validator
 from effects.domain.effect_model import EffectModel
 from effects.infrastructure.shard_io import write_shard
-from tests.unit.effects.builders import fixture_training_config, make_training_loop
+from tests.unit.effects.builders import (
+    control_score_of,
+    fixture_training_config,
+    make_training_loop,
+)
 
 BATCH_SIZE = 32
 
@@ -38,10 +42,18 @@ def scored(corpus, records, tmp_path_factory):
 
     class _Measured(Validator):
         """The real validator, setting each epoch's margins beside the old
-        way's on the weights it scored."""
+        way's on the weights it scored; the control score stood in for, as
+        the margins are what this measures."""
+
+        def prepare(self, run, selection, *, rule_outputs):
+            return None
+
+        def control(self, run, fields):
+            return control_score_of(0.0)
 
         def epoch(self, run, samples, fields):
-            card, game = super().epoch(run, samples, fields)
+            scores = super().epoch(run, samples, fields)
+            card = scores.card
             seen["fed"] = card.progress()
             batcher = run.preparer.scoring_batcher()
             batcher.materializer = run.scoring
@@ -54,7 +66,7 @@ def scored(corpus, records, tmp_path_factory):
             )
             run.encoder.train()
             run.model.train()
-            return card, game
+            return scores
 
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(torch.cuda, "is_available", lambda: False)

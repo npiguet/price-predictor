@@ -48,7 +48,6 @@ for ``--records`` blocks.
 from __future__ import annotations
 
 import sys
-from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -60,66 +59,18 @@ if __package__ in (None, ""):
 from _lib.markdown import print_table  # noqa: E402
 
 from effect_knowledge_probes import common, readout, record_walk  # noqa: E402
-from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
-from effects.domain.rule_outcomes import step_deaths, strikes_in_step  # noqa: E402
-
-VALUES = range(1, 9)
-#: Keywords that change who dies in a damage step; a qualifying pair carries none.
-COMBAT_KEYWORDS = frozenset({
-    "first_strike", "double_strike", "deathtouch", "indestructible", "wither", "infect",
-    "trample", "lifelink", "protection", "banding", "shadow",
-})
-#: What a grid reads: combats with one blocked attacker, or with several.
-BLOCKS: tuple[str, ...] = ("one", "several")
-#: The frozen grids' name prefix for each.
-GRID_PREFIX: dict[str, str] = {"one": "combat/", "several": "combat-several/"}
-#: ``variant -> (creature granted the keyword or None, keyword, damage step, blocker
-#: carries the attacker's first-step damage)``. A record covers one damage step, so a
-#: first or double striker is read in the first-strike step, where it deals its damage
-#: and the creature it fights deals none, and a double striker's second hit in the
-#: regular step, on a blocker already marked with the first.
-VARIANTS: dict[str, tuple[str | None, str | None, str, bool]] = {
-    "none": (None, None, "regular", False),
-    "attacker-deathtouch": ("attacker", "deathtouch", "regular", False),
-    "blocker-indestructible": ("blocker", "indestructible", "regular", False),
-    "attacker-first-strike": ("attacker", "first_strike", "first_strike", False),
-    "blocker-first-strike": ("blocker", "first_strike", "first_strike", False),
-    "attacker-double-strike": ("attacker", "double_strike", "first_strike", False),
-    "attacker-double-strike-second-hit": ("attacker", "double_strike", "regular", True),
-}
-
-
-# ── the edits ───────────────────────────────────────────────────────────
-
-
-def assign_step_damage(record, attacker: str, blocker: str):
-    """``record`` with both combatants' damage assignment matching their edited board.
-
-    A combat record's input carries each creature's assignment, the targets it assigns
-    to and the damage it assigns, so an edit to a creature's power or to the step has to
-    move its assignment with it, or the board and the assignment disagree. In a
-    one-on-one block a creature that strikes in this step assigns all its power to the
-    other; one that does not strike, or has no power, assigns nothing.
-    """
-    step = record.state.global_.combat_substep
-    choices = {source: dict(targets)
-               for source, targets in record.payload.assignment_choices.items()
-               if source not in (attacker, blocker)}
-    for source, target in ((attacker, blocker), (blocker, attacker)):
-        (power, _, _), keywords = side_of(record, source)
-        if power > 0 and strikes_in_step(keywords, step):
-            choices[source] = {target: power}
-    return replace(record, payload=replace(record.payload, assignment_choices=choices))
-
-
-def side_of(record, entity_id: str):
-    """``(power, toughness, marked damage)`` of one entity, and its granted keywords."""
-    entity = record.state.entity(entity_id)
-    power, toughness = entity.pt.total
-    return (power, toughness, entity.damage), frozenset(entity.granted_temporary.keywords)
-
-
-# ── which records qualify ───────────────────────────────────────────────
+from effects.domain.grid_edits import (  # noqa: E402, F401  (the suite's names for them)
+    BLOCKS,
+    COMBAT_KEYWORDS,
+    GRID_PREFIX,
+    VALUES,
+    VARIANTS,
+    assign_step_damage,
+    grid_block,
+    grid_records,
+    side_of,
+)
+from effects.domain.rule_outcomes import step_deaths, strikes_in_step  # noqa: E402, F401
 
 
 def single_block(record, keywords_of) -> tuple[str, str] | None:
@@ -137,101 +88,6 @@ def several_blocks(record, keywords_of) -> tuple[str, str] | None:
     with two or more blocked attackers, each pair qualifying as a one-on-one
     block does; the pair is the one whose attacker comes first in id order."""
     return grid_block(record, keywords_of, "several")
-
-
-def grid_block(record, keywords_of, blocks: str) -> tuple[str, str] | None:
-    """The pair a grid of ``blocks`` (:data:`BLOCKS`) edits, or None."""
-    from effects.domain.effect_targets import derive_targets
-    from effects.domain.records import CombatPayload, RecordKind
-    from effects.domain.state_snapshot import CombatSubstep
-
-    if record.kind is not RecordKind.COMBAT or record.fork or record.interventional:
-        return None
-    if record.state.global_.combat_substep != CombatSubstep.REGULAR:
-        return None
-    payload = record.payload
-    if not isinstance(payload, CombatPayload) or getattr(payload, "probed_keyword", None):
-        return None
-    blocked = sorted((attacker, tuple(blockers))
-                     for attacker, blockers in payload.blocks.items() if blockers)
-    if not blocked or (len(blocked) == 1) != (blocks == "one"):
-        return None
-    if any(len(blockers) != 1 for _, blockers in blocked):
-        return None
-    targets = derive_targets(record)
-    if not all(_clean_pair(record, attacker, blockers[0], keywords_of, targets)
-               for attacker, blockers in blocked):
-        return None
-    attacker_id, (blocker_id,) = blocked[0]
-    return attacker_id, blocker_id
-
-
-def _clean_pair(record, attacker_id: str, blocker_id: str, keywords_of, targets) -> bool:
-    """Whether one blocked pair is a block a grid can edit: two creatures on
-    the battlefield, no damage-step keyword on either, the blocker blocking
-    this attacker alone, no damage but this step's own, and the real outcome
-    the rule's."""
-    from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
-
-    attacker = record.state.entity(attacker_id)
-    blocker = record.state.entity(blocker_id)
-    for entity in (attacker, blocker):
-        if (entity is None or entity.pt is None or not entity.on_battlefield
-                or not entity.is_creature):
-            return False
-        if keywords_of(entity) & COMBAT_KEYWORDS:
-            return False
-    if blocker.combat is None or tuple(blocker.combat.blocking) != (attacker_id,):
-        return False
-    if attacker.power <= 0 or blocker.power < 0:
-        return False
-    # Marked damage is either none or this step's own, which the snapshot taken at
-    # the first damage event already shows; damage from earlier in the turn would
-    # make the cleared board in the grid a different board.
-    if attacker.damage not in (0, blocker.power):
-        return False
-    if blocker.damage not in (0, attacker.power):
-        return False
-    # The real outcome must obey the rule on the board before the step, so
-    # prevention, regeneration or a replacement the board does not show cannot
-    # be what the grid reads.
-    died = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
-    before = BoardEdit(record).clear_damage(attacker_id, blocker_id).record
-    expected = step_deaths(side_of(before, attacker_id)[0], side_of(before, blocker_id)[0])
-    for entity_id, should_die in zip((attacker_id, blocker_id), expected):
-        entry = targets.get(entity_id)
-        observed = entry is not None and entry.fields.get(HeadField.ZONE_OUTCOME) == died
-        if observed != should_die:
-            return False
-    return True
-
-
-# ── the grids ───────────────────────────────────────────────────────────
-
-
-def grid_records(record, attacker: str, blocker: str, which: str, variant: str):
-    """The 8 x 8 edited records of one grid, row by row, and the rule's answer for each."""
-    holder, keyword, step, carried = VARIANTS[variant]
-    base = BoardEdit(record).clear_damage(attacker, blocker).set_step(step)
-    if keyword is not None:
-        base = base.grant_keyword(attacker if holder == "attacker" else blocker, keyword)
-    striker, struck = (attacker, blocker) if which == "blocker" else (blocker, attacker)
-    rows, rules = [], []
-    for power in VALUES:
-        row, rule = [], []
-        for toughness in VALUES:
-            cell = base.set_power(striker, power).set_toughness(struck, toughness)
-            if carried:
-                cell = cell.set_marked_damage(blocker, side_of(cell.record, attacker)[0][0])
-            edited = assign_step_damage(cell.record, attacker, blocker)
-            row.append(edited)
-            a, a_kw = side_of(edited, attacker)
-            b, b_kw = side_of(edited, blocker)
-            attacker_dies, blocker_dies = step_deaths(a, b, a_kw, b_kw, step)
-            rule.append(blocker_dies if which == "blocker" else attacker_dies)
-        rows.append(row)
-        rules.append(rule)
-    return rows, np.array(rules, dtype=float)
 
 
 def score(grid: np.ndarray, rule: np.ndarray) -> str:

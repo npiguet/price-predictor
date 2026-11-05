@@ -63,6 +63,8 @@ class TestPlan:
         assert len(knowledge) == 1 and "--freeze-probe-set" not in knowledge[0]
         assert knowledge[0][knowledge[0].index("--probe-set-dir") + 1] == str(
             arm.SHARED_REPORTS)
+        train = next(c for s, c, _ in plain if s == "train")
+        assert train[train.index("--reports-dir") + 1] == str(arm.SHARED_REPORTS)
 
 
 class TestLogging:

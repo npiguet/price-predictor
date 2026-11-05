@@ -16,6 +16,7 @@ leaves no process behind.
 
 from __future__ import annotations
 
+import functools
 import logging
 import multiprocessing
 from dataclasses import replace
@@ -45,12 +46,22 @@ from effects.domain.split import (
 )
 from effects.infrastructure.tensor_packing import pack, unpack
 from tests.unit.effects.builders import (
+    FIXTURE_RULE_OUTPUTS,
     FIXTURE_TRAINING_SEED,
+    curated_fixture_records,
+    fixture_selection,
     fixture_training_config,
     make_training_loop,
 )
 
 SEED = FIXTURE_TRAINING_SEED
+
+
+@functools.cache
+def _selection():
+    """The control score's selection set over every fixture record: the
+    validation sample alone holds too few games for every component."""
+    return fixture_selection(curated_fixture_records())
 
 
 class _Interrupted(Exception):
@@ -141,6 +152,7 @@ def _run(
             validation_samples={
                 "card-disjoint": corpus.sample, "game-disjoint": corpus.sample,
             },
+            selection=_selection(), rule_outputs=FIXTURE_RULE_OUTPUTS,
         )
         record_losses(loop, losses, interrupt_at=interrupt_at)
         try:
@@ -157,6 +169,10 @@ def _run(
             load_resume_state(out)["weight_average"]
             if (out / "resume.pt").exists() else None
         ),
+        "stopper": (
+            load_resume_state(out)["stopper"] if (out / "resume.pt").exists() else None
+        ),
+        "control": [m for m in caplog.messages if "| best " in m],
         "losses": losses,
         "parameters": {
             f"{owner}.{name}": value.detach().clone()
@@ -172,6 +188,7 @@ def _run(
 def _assert_same(first: dict, second: dict) -> None:
     assert first["losses"] == second["losses"]
     assert first["shares"] == second["shares"]
+    assert first["control"] == second["control"]
     assert first["parameters"].keys() == second["parameters"].keys()
     for name, value in first["parameters"].items():
         assert torch.equal(value, second["parameters"][name]), name
@@ -235,9 +252,17 @@ class _ListHandler(logging.Handler):
 
 
 def test_the_fixture_run_exercises_what_it_claims(in_process):
-    """Steps trained and both epochs logged."""
+    """Steps trained, both epochs logged, and each scored by the control
+    score: per stratum its four components and score, then control and best
+    (FR-075)."""
     assert len(in_process["losses"]) >= 14
     assert len(in_process["shares"]) == 2
+    assert len(in_process["control"]) == 2
+    for line in in_process["control"]:
+        for stratum in ("card-disjoint", "game-disjoint"):
+            assert f"{stratum} probes " in line
+        for name in ("grids", "rule_tests", "deviance", "score", "| control", "| best"):
+            assert name in line
 
 
 def test_worker_processes_train_exactly_what_the_in_process_path_trains(
@@ -386,7 +411,10 @@ def test_a_saved_checkpoint_holds_the_averaged_weights(monkeypatch, corpus, tmp_
     for name, value in saved.encoder_state.items():
         assert torch.equal(value, averaged["encoder"][name]), name
     assert saved.ema_epochs == 1.0 and saved.rule_mask == "hard"
-    assert saved.best_control_score is None and saved.selection_set_digest is None
+    # FR-069: the epoch's own control score, and the set it was scored against.
+    state = run["stopper"]
+    assert saved.best_control_score == state["best"]
+    assert saved.selection_set_digest == _selection().digest
 
 
 def test_an_epoch_ending_before_warmup_is_no_best_candidate(
@@ -403,7 +431,9 @@ def test_an_epoch_ending_before_warmup_is_no_best_candidate(
     state = load_resume_state(out)
     assert state["warmup"] == 14
     assert state["weight_average"] == {"state": None, "start_step": None}
-    assert state["stopper"] == {"best": float("inf"), "since_best": 0}
+    assert state["stopper"] == {
+        "measure": "control_score", "best": float("-inf"), "since_best": 0}
+    assert state["best_control_score"] is None
     assert not (out / "latest.pt").exists() and not (out / "resume-best.pt").exists()
 
 

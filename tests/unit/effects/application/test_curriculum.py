@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from effects.application.training_schedule import Curriculum, EarlyStopper
+from effects.application.training_schedule import ControlScoreStopper, Curriculum
 from effects.domain.effect_head_layout import PER_ENTITY_FIELDS, FieldGroup
 from effects.domain.sampling import SamplingClass
 
@@ -27,16 +27,18 @@ def test_a_first_epoch_curriculum_enables_the_sparse_group_from_the_first_step()
 
 
 def test_the_stopper_resets():
-    stopper = EarlyStopper(patience=2)
-    assert stopper.update(1.0)
-    assert not stopper.update(2.0)
+    """FR-069: a curriculum switch forgets the best control score and the patience."""
+    stopper = ControlScoreStopper(patience=2)
+    assert stopper.update(0.5)
+    assert not stopper.update(0.2)
     stopper.reset()
-    assert stopper.best == float("inf") and stopper.since_best == 0
-    assert stopper.update(5.0)          # a worse number is a new best after the reset
+    assert stopper.best_score is None and stopper.since_best == 0
+    assert stopper.update(0.1)          # a lower score is a new best after the reset
 
 
 def test_the_loop_resets_the_stopper_when_the_curriculum_switches():
-    """Losses before and after the sparse group enables do not compare (FR-082).
+    """Scores before and after the sparse group enables do not compare (FR-082,
+    FR-069).
 
     The reset fires once, at the curriculum epoch, and never at epoch 1 — a
     ``--curriculum-epoch 1`` run enables the sparse group from its first step,

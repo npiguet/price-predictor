@@ -17,8 +17,10 @@ holds is prepared and cached —
   ``--rule-mask``, the way validation scores its own records.
 
 A record several items read is prepared once. The cache stays on the host,
-packed: each zero-padded feature tensor keeps only its rows holding a
-non-zero value, unpacked a chunk at a time as the chunk is run.
+packed (``host_cache``: each tensor in its smallest exact form), and is
+unpacked a chunk at a time as the chunk is run. The cells of one grid record
+fill chunks of their own, so a chunk's rows are near copies of each other and
+are kept as their differences.
 
 Each epoch (:meth:`ControlScorer.epoch`), on whatever weights the caller has
 swapped in (the averaged ones), only the device forward runs, through
@@ -67,12 +69,13 @@ verdict, global and created-objects heads, so neither is an item here.
 The reporting half is never read: only the selection half's games and the
 records its items name are taken from a stratum.
 
-For the training loop (T159): build one :class:`ControlScorer` at startup
-with :meth:`ControlScorer.prepare`, handing it every field set the run's
-epochs will use; at each epoch's close, inside the averaged weights' swap,
-call ``scorer.epoch(RecordForward(run.encoder, run.model, run.scoring),
-losses, fields)`` and read :attr:`ControlScore.control` and each stratum's
-:attr:`StratumScore.components`; catch :class:`ControlScoreError` for exit 1.
+In a training run the validator (``validation_pass.Validator.prepare``)
+builds one :class:`ControlScorer` at startup from the run's
+:class:`FrozenSelection`, handing it every field set the run's epochs use
+and ``grid_edits.GridEdits`` as its editor, and scores it at each epoch's
+close inside the averaged weights' swap; the training loop keeps the epoch
+of the best :attr:`ControlScore.control` (FR-069), and the CLI turns a
+:class:`ControlScoreError` into exit 1.
 """
 
 from __future__ import annotations
@@ -81,13 +84,13 @@ import logging
 import math
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field, is_dataclass, replace
-from dataclasses import fields as dataclass_fields
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 import torch
 
+from effects.application.host_cache import host_bytes, pack, unpack
 from effects.application.validation_pass import FieldParts, KeptTargets, score_steps
 from effects.domain.aux_head_targets import (
     created_objects_targets,
@@ -108,6 +111,7 @@ from effects.domain.effect_head_layout import (
     RecordHeadLayout,
 )
 from effects.domain.field_types import FieldType
+from effects.domain.grid_edits import CellRead, TextOverride
 from effects.domain.head_decoding import HeadReading, direction_balance, expected_magnitude
 from effects.domain.loss_floor import constant_predictor_floor
 from effects.domain.probe_readouts import READOUTS, item_score
@@ -145,8 +149,11 @@ logger = logging.getLogger(__name__)
 SELECTION = str(Half.SELECTION)
 #: The polarities a rule test ranks, ``fires`` first.
 FIRES, DOES_NOT_FIRE = "fires", "does_not_fire"
-#: Records per prepared chunk of the probes', grids' and rule tests' forward.
-CHUNK_RECORDS = 32
+#: Records per prepared chunk of the probes', grids' and rule tests' forward,
+#: and per deviance step: forward passes only, so a chunk this large fits the
+#: card beside a training run's state, and runs several times faster than
+#: chunks of a training batch's size (T160).
+CHUNK_RECORDS = 128
 
 
 class ControlScoreError(RuntimeError):
@@ -158,32 +165,6 @@ class ControlScoreError(RuntimeError):
 
 
 # ── the grid port ───────────────────────────────────────────────────────
-
-
-@dataclass(frozen=True, slots=True)
-class TextOverride:
-    """An ability key that reads an edited text, as a lethality copy's does
-    (``SurfaceBatcher.override_text``): ``key`` reads ``text`` with ``like``'s
-    line, its script and role spans replaced where given."""
-
-    key: object
-    text: str
-    like: object
-    script: str | None = None
-    role_spans: tuple | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class CellRead:
-    """One grid cell of one grid record: the edited record, the entity read
-    and the readout (a :data:`READOUTS` name) read there, and the edited
-    ability texts the record's keys read (a damage grid's amount), each
-    under a key of its own so the cells of one record can share a chunk."""
-
-    record: EffectRecord
-    entity: str | None
-    readout: str
-    texts: tuple[TextOverride, ...] = ()
 
 
 class GridEditor(Protocol):
@@ -311,13 +292,32 @@ class _Heads:
         return self._created
 
 
-#: ``read(heads, row, column) -> 0-d tensor``: one value of one chunk row.
-Read = Callable[[_Heads, int, int], torch.Tensor]
+#: ``read(heads, rows, columns) -> (n,) tensor``: one value per asked chunk
+#: row and gathered column, every ask of one read in a chunk at once.
+Read = Callable[[_Heads, torch.Tensor, torch.Tensor], torch.Tensor]
+
+
+class _ReadoutRead:
+    """A :data:`READOUTS` answer at the asked rows and gathered columns (a
+    verdict readout ignores the columns)."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.readout = READOUTS[name]
+
+    def __call__(self, heads: _Heads, rows: torch.Tensor, columns: torch.Tensor):
+        return self.readout(heads.gathered, heads.verdict, rows, columns)
+
+
+#: One read per readout, so a chunk's asks of one readout are read together.
+_READOUT_READS: dict[str, _ReadoutRead] = {}
 
 
 def _readout(name: str) -> Read:
-    readout = READOUTS[name]
-    return lambda heads, row, column: readout(heads.gathered, heads.verdict, row, column)
+    read = _READOUT_READS.get(name)
+    if read is None:
+        read = _READOUT_READS[name] = _ReadoutRead(name)
+    return read
 
 
 class _Decoder:
@@ -329,7 +329,9 @@ class _Decoder:
     #: Whether the candidates are probabilities of categories (else amounts).
     categorical = True
 
-    def candidates(self, heads: _Heads, row: int, column: int) -> torch.Tensor:
+    def candidates(self, heads: _Heads, rows: torch.Tensor,
+                   columns: torch.Tensor) -> torch.Tensor:
+        """``(asks, candidates)``: each ask's reading of every candidate."""
         raise NotImplementedError
 
     def entity_indicators(self, targets: EntityTargetBatch, row: int,
@@ -343,8 +345,8 @@ class _Decoder:
 class _GateDecoder(_Decoder):
     per_entity = True
 
-    def candidates(self, heads, row, column):
-        return torch.sigmoid(heads.gathered[row, column, GATE_INDEX]).reshape(1)
+    def candidates(self, heads, rows, columns):
+        return torch.sigmoid(heads.gathered[rows, columns, GATE_INDEX].float()).unsqueeze(-1)
 
     def entity_indicators(self, targets, row, column):
         if not bool(targets.gate_scored[row, column]):
@@ -362,20 +364,20 @@ class _EntityFieldDecoder(_Decoder):
         self.spec = spec
         self.categorical = not spec.type.has_magnitude
 
-    def candidates(self, heads, row, column):
-        outputs = heads.gathered[row, column]
+    def candidates(self, heads, rows, columns):
+        outputs = heads.gathered[rows, columns]
         spec = self.spec
         if spec.type.has_magnitude:
             value = HeadReading(outputs).expected(spec.name, conditional=not spec.gated)
-            return value.reshape(1)
+            return value.unsqueeze(-1)
         start, end = FIELD_SLICES[spec.name]
-        columns = outputs[start:end].float()
+        read = outputs[:, start:end].float()
         if spec.type is FieldType.CATEGORICAL:
-            value = torch.softmax(columns, dim=-1)
+            value = torch.softmax(read, dim=-1)
         else:
-            value = torch.sigmoid(columns)
+            value = torch.sigmoid(read)
         if spec.gated:
-            value = HeadReading(outputs).p_affected * value
+            value = HeadReading(outputs).p_affected.unsqueeze(-1) * value
         return value
 
     def entity_indicators(self, targets, row, column):
@@ -413,22 +415,24 @@ class _RecordFieldDecoder(_Decoder):
         self.layout, self.spec, self.head, self.derive = layout, layout.by_name[name], head, derive
         self.categorical = not self.spec.type.has_magnitude
 
-    def _outputs(self, heads: _Heads, row: int) -> torch.Tensor:
-        row_outputs = heads.verdict[row] if self.head == "verdict" else heads.global_[row]
+    def _outputs(self, heads: _Heads, rows: torch.Tensor) -> torch.Tensor:
+        """``(asks, members, member width)``."""
+        row_outputs = heads.verdict[rows] if self.head == "verdict" else heads.global_[rows]
         start, end = self.layout.slices[self.spec.name]
         spec = self.spec
-        return row_outputs[start:end].float().reshape(spec.count, spec.type.width(spec.arity))
+        return row_outputs[:, start:end].float().reshape(
+            -1, spec.count, spec.type.width(spec.arity))
 
-    def candidates(self, heads, row, column):
-        spec, members = self.spec, self._outputs(heads, row)
+    def candidates(self, heads, rows, columns):
+        spec, members = self.spec, self._outputs(heads, rows)
         if spec.type is FieldType.CATEGORICAL:
-            return torch.softmax(members[0], dim=-1)
+            return torch.softmax(members[:, 0], dim=-1)
         if spec.type is FieldType.BINARY:
-            return torch.sigmoid(members[:, 0])
+            return torch.sigmoid(members[..., 0])
         value = expected_magnitude(_Magnitude(spec.type), members)
         if spec.type.has_direction:
             value = direction_balance(_Magnitude(spec.type), members) * value
-        return value.sum().reshape(1)
+        return value.sum(-1, keepdim=True)
 
     def record_indicators(self, record):
         row = self.derive(record)
@@ -464,10 +468,10 @@ class _CreatedDecoder(_Decoder):
 
     categorical = False
 
-    def candidates(self, heads, row, column):
-        present = heads.created[row, [slot * CREATED_SLOT_WIDTH + CreatedSlot.PRESENT
-                                      for slot in range(CREATED_OBJECT_SLOTS)]]
-        return torch.sigmoid(present).sum().reshape(1)
+    def candidates(self, heads, rows, columns):
+        present = heads.created[rows][:, [slot * CREATED_SLOT_WIDTH + CreatedSlot.PRESENT
+                                          for slot in range(CREATED_OBJECT_SLOTS)]]
+        return torch.sigmoid(present.float()).sum(-1, keepdim=True)
 
     def record_indicators(self, record):
         if not supervises_created_objects(record):
@@ -525,8 +529,10 @@ class _OutputReading:
         self.sign = -1.0 if difference[self.candidate] < 0 else 1.0
         return True
 
-    def read(self, heads: _Heads, row: int, column: int) -> torch.Tensor:
-        return self.sign * self.decoder.candidates(heads, row, column)[self.candidate]
+    def __call__(self, heads: _Heads, rows: torch.Tensor,
+                 columns: torch.Tensor) -> torch.Tensor:
+        """The settled reading at every ask of one chunk: a :data:`Read`."""
+        return self.sign * self.decoder.candidates(heads, rows, columns)[:, self.candidate]
 
 
 class _Observation:
@@ -549,162 +555,55 @@ class _Observation:
 # ── the host cache ──────────────────────────────────────────────────────
 
 
-@dataclass(frozen=True, slots=True)
-class _Rows:
-    """A float tensor kept as its rows holding a non-zero value: most of a
-    collated batch is padding. A tensor of three or more dimensions is cut
-    into rows over its last dimension, a two-dimensional one (a per-entity
-    target) into single elements."""
-
-    shape: tuple[int, ...]
-    dtype: torch.dtype
-    rows: torch.Tensor
-    values: torch.Tensor
-
-    @classmethod
-    def of(cls, tensor: torch.Tensor) -> _Rows:
-        width = tensor.shape[-1] if tensor.dim() >= 3 else 1
-        flat = tensor.reshape(-1, width)
-        rows = (flat != 0).any(-1).nonzero().squeeze(1)
-        return cls(tuple(tensor.shape), tensor.dtype, rows.to(torch.int32), flat[rows])
-
-    def dense(self) -> torch.Tensor:
-        width = self.shape[-1] if len(self.shape) >= 3 else 1
-        flat = torch.zeros((math.prod(self.shape) // max(width, 1), width), dtype=self.dtype)
-        flat[self.rows.long()] = self.values
-        return flat.reshape(self.shape)
-
-    @property
-    def nbytes(self) -> int:
-        return self.rows.nbytes + self.values.nbytes
-
-
-@dataclass(frozen=True, slots=True)
-class _Bits:
-    """A boolean tensor kept a bit per element (a presence mask)."""
-
-    shape: tuple[int, ...]
-    bits: torch.Tensor
-
-    @classmethod
-    def of(cls, tensor: torch.Tensor) -> _Bits:
-        return cls(tuple(tensor.shape),
-                   torch.from_numpy(np.packbits(tensor.reshape(-1).numpy())))
-
-    def dense(self) -> torch.Tensor:
-        count = math.prod(self.shape)
-        flat = np.unpackbits(self.bits.numpy(), count=count).astype(bool)
-        return torch.from_numpy(flat).reshape(self.shape)
-
-    @property
-    def nbytes(self) -> int:
-        return self.bits.nbytes
-
-
-@dataclass(frozen=True, slots=True)
-class _Narrow:
-    """An int64 tensor whose values fit 32 bits, kept as int32 (token ids,
-    slot positions, the padded id lists)."""
-
-    dtype: torch.dtype
-    values: torch.Tensor
-
-    def dense(self) -> torch.Tensor:
-        return self.values.to(self.dtype)
-
-    @property
-    def nbytes(self) -> int:
-        return self.values.nbytes
-
-
-_PACKED = (_Rows, _Bits, _Narrow)
-_INT32 = torch.iinfo(torch.int32)
-
-
-def _packed(tensor: torch.Tensor):
-    """``tensor`` in its smaller host form, or itself."""
-    if tensor.dim() < 2 or tensor.numel() == 0:
-        return tensor
-    if tensor.is_floating_point():
-        if tensor.dim() >= 3 or 3 * int((tensor != 0).sum()) < tensor.numel():
-            return _Rows.of(tensor)
-        return tensor
-    if tensor.dtype == torch.bool:
-        return _Bits.of(tensor)
-    if tensor.dtype == torch.int64 and _INT32.min <= int(tensor.min()) and (
-            int(tensor.max()) <= _INT32.max):
-        return _Narrow(tensor.dtype, tensor.to(torch.int32))
-    return tensor
-
-
-def _map_tensors(value, fn):
-    """``value`` with ``fn`` applied to every tensor (and packed tensor) it
-    holds, through dataclasses, mappings and sequences."""
-    if isinstance(value, (torch.Tensor, *_PACKED)):
-        return fn(value)
-    if is_dataclass(value) and not isinstance(value, type):
-        changed = {}
-        for spec in dataclass_fields(value):
-            if not spec.init:
-                continue
-            held = getattr(value, spec.name)
-            mapped = _map_tensors(held, fn)
-            if mapped is not held:
-                changed[spec.name] = mapped
-        return replace(value, **changed) if changed else value
-    if isinstance(value, dict):
-        mapped = {key: _map_tensors(item, fn) for key, item in value.items()}
-        if all(mapped[key] is item for key, item in value.items()):
-            return value
-        return type(value)(mapped)
-    if isinstance(value, (list, tuple)):
-        items = [_map_tensors(item, fn) for item in value]
-        if all(new is old for new, old in zip(items, value)):
-            return value
-        if isinstance(value, tuple) and hasattr(value, "_fields"):
-            return type(value)(*items)
-        return type(value)(items)
-    return value
-
-
-def _pack(value):
-    """Every tensor of two or more dimensions in its smaller host form: a
-    float one by its non-zero rows, a boolean one a bit per element, an int64
-    one as int32 where its values fit."""
-    return _map_tensors(value, lambda t: _packed(t) if isinstance(t, torch.Tensor) else t)
-
-
-def _unpack(value):
-    return _map_tensors(value, lambda t: t.dense() if isinstance(t, _PACKED) else t)
-
-
-def host_bytes(value) -> int:
-    """The bytes of every tensor ``value`` holds, packed ones as packed."""
-    total = 0
-
-    def count(tensor):
-        nonlocal total
-        total += tensor.nbytes
-        return tensor
-
-    _map_tensors(value, count)
-    return total
-
-
 def _stripped(batch):
     """A prepared batch with the host intermediates no device half reads
     dropped, as a scoring step's is."""
     return replace(batch, texts={}, staged=replace(batch.staged, prepared=[]), surfaces=[])
 
 
+@dataclass(frozen=True)
+class _ReadGroup:
+    """Every ask of one read in a chunk: rows, gathered columns, and the value
+    positions they fill."""
+
+    read: Read
+    rows: torch.Tensor
+    columns: torch.Tensor
+    positions: np.ndarray
+
+
+def _grouped(reads: Sequence[tuple[int, int, Read, int]]) -> tuple[_ReadGroup, ...]:
+    by_read: dict[int, list] = {}
+    for row, column, read, position in reads:
+        by_read.setdefault(id(read), [read, [], [], []])
+        held = by_read[id(read)]
+        held[1].append(row)
+        held[2].append(column)
+        held[3].append(position)
+    return tuple(_ReadGroup(read, torch.tensor(rows, dtype=torch.long),
+                            torch.tensor(columns, dtype=torch.long),
+                            np.asarray(positions, dtype=np.int64))
+                 for read, rows, columns, positions in by_read.values())
+
+
 @dataclass
 class _Chunk:
     """One prepared chunk: its packed batch, the slots its per-entity reads
-    gather, and each read with the value position it fills."""
+    gather, and its reads grouped by read, each with the value positions it
+    fills."""
 
     batch: object
     index: torch.Tensor
-    reads: list[tuple[int, int, Read, int]]
+    groups: tuple[_ReadGroup, ...]
+
+    @property
+    def reads(self) -> int:
+        return sum(len(group.positions) for group in self.groups)
+
+    @property
+    def positions(self) -> np.ndarray:
+        return np.concatenate([group.positions for group in self.groups]) if self.groups else (
+            np.zeros(0, dtype=np.int64))
 
 
 @dataclass
@@ -774,7 +673,8 @@ class _ChunkBuilder:
         for row, (surface, gathered) in enumerate(zip(surfaces, asked)):
             for column, at in gathered.items():
                 index[row, at] = surface.entity_slots[column]
-        self.chunks.append(_Chunk(_pack(_stripped(batch)), index, reads))
+        self.chunks.append(_Chunk(pack(_stripped(batch), rows=len(records)), index,
+                                  _grouped(reads)))
         self.pending = []
 
 
@@ -818,6 +718,19 @@ class _StratumCache:
 #: Reads one stratum: a fresh iterable of its shards in path order, each an
 #: iterable of its records in line order (``freeze_selection_set.stratum_reader``).
 StratumReader = Callable[[], Iterable[Iterable["EffectRecord"]]]
+
+
+@dataclass(frozen=True)
+class FrozenSelection:
+    """What a training run's control score is built from: the corpus's
+    frozen selection set, and a reader of each validation stratum it halves."""
+
+    selection: SelectionSet
+    strata: Mapping[str, StratumReader]
+
+    @property
+    def digest(self) -> str:
+        return self.selection.digest
 
 
 def selection_records(
@@ -875,7 +788,7 @@ class ControlScorer:
             strata[stratum] = _prepare_stratum(
                 selection, stratum, readers[stratum], preparer=preparer, union=union,
                 rule_outputs=rule_outputs, mask=mask or "hard", editor=editor,
-                chunk_records=chunk_records, batch_size=batch_size or preparer.config.batch_size,
+                chunk_records=chunk_records, batch_size=batch_size or chunk_records,
             )
         scorer = cls(strata, stratum_weight=stratum_weight, deviance_floor=deviance_floor)
         logger.info("Control score: %s, %.1f MB on the host.", scorer.describe(),
@@ -888,7 +801,7 @@ class ControlScorer:
             parts.append(
                 f"{name} {len(cache.probes)} probe type(s), {len(cache.grids)} grid(s), "
                 f"{len(cache.rules)} rule(s), {len(cache.kept_fields)} field(s) over "
-                f"{sum(len(c.reads) for c in cache.chunks)} read(s) and "
+                f"{sum(c.reads for c in cache.chunks)} read(s) and "
                 f"{sum(int(s.targets.gate.shape[0]) for s in cache.steps)} deviance copies")
         return "; ".join(parts)
 
@@ -940,14 +853,14 @@ class ControlScorer:
         values = np.full(cache.values, np.nan)
         if not cache.chunks:
             return values
-        batches = (_unpack(chunk.batch) for chunk in cache.chunks)
+        batches = (unpack(chunk.batch) for chunk in cache.chunks)
         for chunk, outputs in zip(cache.chunks, forward.prepared(batches)):
-            if not chunk.reads:
+            if not chunk.groups:
                 continue
             heads = _Heads(outputs, chunk.index)
-            read = torch.stack([fn(heads, row, column).float().reshape(())
-                                for row, column, fn, _ in chunk.reads]).cpu().numpy()
-            values[[position for *_, position in chunk.reads]] = read
+            read = torch.cat([group.read(heads, group.rows, group.columns).float().reshape(-1)
+                              for group in chunk.groups])
+            values[chunk.positions] = read.cpu().numpy()
         return values
 
     def _deviance(self, cache: _StratumCache, forward: RecordForward,
@@ -962,7 +875,7 @@ class ControlScorer:
         parts = FieldParts()
         kept = KeptTargets() if key not in cache.floors else None
         collectors = (parts,) if kept is None else (parts, kept)
-        score_steps((_unpack(replace(step, fields=fields)) for step in cache.steps),
+        score_steps((unpack(replace(step, fields=fields)) for step in cache.steps),
                     forward, losses, collectors, device=_device_of(forward))
         if kept is not None:
             cache.floors[key] = constant_predictor_floor(kept.sample, fields=fields)
@@ -1073,15 +986,18 @@ def _prepare_stratum(
                     cell.append(position)
                     edited.add(asked.record, [_Request(asked.entity, _readout(asked.readout),
                                                        position)], asked.texts)
+            # One grid record's cells to a chunk: near copies, kept as their
+            # differences (``host_cache``).
+            edited.flush()
         if copy:
             sampled.append(record)
             if len(sampled) >= batch_size:
-                steps.append(_pack(preparer.prepare_scoring_step(sampled, union)))
+                steps.append(pack(preparer.prepare_scoring_step(sampled, union)))
                 sampled = []
     plain.flush()
     edited.flush()
     if sampled:
-        steps.append(_pack(preparer.prepare_scoring_step(sampled, union)))
+        steps.append(pack(preparer.prepare_scoring_step(sampled, union)))
     cache.chunks = plain.chunks + edited.chunks
     cache.steps = steps
     cache.kept_fields = _kept_fields(selection, stratum, mask)
@@ -1121,7 +1037,7 @@ def _requests(record: EffectRecord, asked: Iterable[tuple], cache: _StratumCache
         if not decoder.per_entity:
             position = cache.position()
             held.append([position])
-            out.append(_Request(None, reading.read, position))
+            out.append(_Request(None, reading, position))
             indicators = decoder.record_indicators(record)
             if indicators is not None:
                 reading.observe(polarity, indicators)
@@ -1131,7 +1047,7 @@ def _requests(record: EffectRecord, asked: Iterable[tuple], cache: _StratumCache
         for entity in row.entities:
             position = cache.position()
             positions.append(position)
-            out.append(_Request(entity, reading.read, position, observation))
+            out.append(_Request(entity, reading, position, observation))
         if positions:
             held.append(positions)
     return out
@@ -1153,7 +1069,7 @@ def _kept_fields(selection: SelectionSet, stratum: str, mask: str) -> frozenset[
 
 __all__ = [
     "CHUNK_RECORDS", "CellRead", "ControlScore", "ControlScoreError", "ControlScorer",
-    "GridEditor", "StratumScore", "TextOverride", "component_score", "decoder_of",
-    "explained_deviance", "host_bytes", "mixed", "probe_item", "rule_item",
+    "FrozenSelection", "GridEditor", "StratumScore", "TextOverride", "component_score",
+    "decoder_of", "explained_deviance", "host_bytes", "mixed", "probe_item", "rule_item",
     "selection_records",
 ]

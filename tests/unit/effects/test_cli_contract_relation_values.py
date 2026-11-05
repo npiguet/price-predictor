@@ -40,3 +40,11 @@ def test_off_builds_a_model_without_value_parameters():
                                relation_values=False)
     names = dict(EffectModel(config).named_parameters())
     assert "trunk.layers.0.rel_k" in names and "trunk.layers.0.rel_v" not in names
+
+
+def test_the_selection_set_is_looked_for_under_the_reports_dir_by_default():
+    """contracts/cli.md: ``--reports-dir`` defaults to ``output/effects/reports/``."""
+    from pathlib import Path
+
+    assert Path(parse().reports_dir) == Path("output/effects/reports")
+    assert Path(parse("--reports-dir", "elsewhere").reports_dir) == Path("elsewhere")

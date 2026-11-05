@@ -483,3 +483,48 @@ def test_sc010_on_the_fixture_every_component_and_balance_holds(tmp_path) -> Non
 
     write_selection_set(path, frozen)
     assert load_selection_set(path, manifest.digest()).rule_tests == frozen.rule_tests
+
+
+def test_a_grid_freezes_the_fewest_records_its_precision_target_needs() -> None:
+    """T160: a grid's records cost a forward per cell every epoch, so it
+    keeps the fewest games, by smallest keyed hash, that bring its worst-case
+    standard error ``1 / (2 sqrt(N) B)`` to the target; outcomes (1, 0) give
+    B = 0.5, so a target of 0.5 needs 4 records and one of 1 needs 1."""
+    from effects.domain.seeded_draw import keyed_hash
+    from effects.domain.selection_set import grid_records_needed
+
+    assert grid_records_needed([1.0, 0.0], target=0.5) == 4
+    assert grid_records_needed([1.0, 0.0], target=1.0) == 1
+    assert grid_records_needed([1.0, 0.0]) == 124             # the default target, 0.09
+    assert grid_records_needed([1.0, 0.0], target=0.01, cap=50) == 50
+    assert grid_records_needed([1.0, 1.0]) == 0
+    halves = _two_halves(10)
+    records, tags = _balanced_records(halves)
+    frozen = _freeze(halves, records, tags, grid_target_error=0.5)
+    for half in ("selection", "reporting"):
+        grid = frozen.grids[GD][half]["combat"]
+        assert len(grid.records) == 4
+        games = halves[GD][half]
+        first = {r.record_id for r in records if r.game_id in games}
+        seed = _manifest(halves).seed
+        smallest = sorted(min((keyed_hash(rid, seed), rid) for rid in first
+                              if rid.split(".")[0] == game) for game in games)[:4]
+        assert sorted(r.record_id for r in grid.records) == sorted(rid for _, rid in smallest)
+    assert frozen.settings["grid_target_error"] == 0.5
+    assert frozen.settings["grid_record_cap"] == 512
+
+
+def test_a_capped_grid_is_judged_on_the_records_it_keeps() -> None:
+    """FR-068b: the cap lowers a grid's precision, and the freeze's own
+    standard error judges what is left: at one record a grid of B = 0.5 has a
+    standard error of 1, above the item target, and is left out."""
+    halves = _two_halves(10)
+    records, tags = _balanced_records(halves)
+    with pytest.raises(SelectionSetRefused) as refused:
+        _freeze(halves, records, tags, grid_record_cap=1, max_item_error=0.9)
+    assert _misses(refused) == {(GD, "selection", "grids"), (GD, "reporting", "grids")}
+    frozen = refused.value.selection
+    for half in ("selection", "reporting"):
+        assert "combat" not in frozen.grids[GD][half]
+        left = {item.item: item.reason for item in frozen.left_out[GD][half]["grids"]}
+        assert "standard error 1.0000" in left["combat"]

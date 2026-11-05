@@ -32,8 +32,8 @@ from effects.application.train_effect_model import (
 from effects.application.training_schedule import (
     LEARNING_RATE,
     WEIGHT_DECAY,
+    ControlScoreStopper,
     Curriculum,
-    EarlyStopper,
     warmup_steps,
 )
 from effects.application.weight_average import WeightAverage, average_rate
@@ -94,7 +94,8 @@ class RunContext:
     #: Each epoch's field set, fixed up front so tasks queued for the workers
     #: before an epoch began read the same one.
     fields: Mapping[int, tuple[FieldSpec, ...]]
-    stopper: EarlyStopper
+    #: The best control score and the patience counted since it (FR-069).
+    stopper: ControlScoreStopper
     #: The averaged weights validation, stopping and checkpoints read (T4).
     average: WeightAverage
     #: The processes preparing the run's steps; None prepares them here.
@@ -104,10 +105,12 @@ class RunContext:
     #: Each shipped term's loss denominator (FR-062): the startup pre-pass's,
     #: or the resumed run's; None until either sets it.
     loss_denominators: LossDenominators | None = None
-    #: The best control score so far (FR-068c). The control score is US8's
-    #: (T157-T159), not built yet: carried as None through ``resume.pt`` and
-    #: every checkpoint until it is.
-    best_control_score: float | None = None
+
+    @property
+    def best_control_score(self) -> float | None:
+        """The best control score so far (FR-069), as ``resume.pt`` and every
+        checkpoint record it; None before an epoch set one."""
+        return self.stopper.best_score
 
 
 def api_vocabularies(config: TrainEffectModelConfig) -> tuple[list[str], list[str]]:
@@ -221,7 +224,7 @@ def build_run(
             epoch: curriculum.fields_for(epoch, present)
             for epoch in range(1, config.epochs + 1)
         },
-        stopper=EarlyStopper(config.patience),
+        stopper=ControlScoreStopper(config.patience),
         average=average,
     )
 

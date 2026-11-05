@@ -19,6 +19,7 @@ from effects.application.train_effect_model import (
     RunSpec,
     TrainEffectModelConfig,
 )
+from effects.application.training_schedule import StopperStateError
 from effects.domain.loss_denominators import LossDenominators
 from effects.infrastructure.effect_model_store import (
     RESUME_BEST_NAME,
@@ -36,15 +37,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 #: Flags a resumed run may set differently from the run it continues. The
-#: corpus is compared by its digest instead, the vocabulary and keyword
-#: definitions by their bytes, and the holdout unit is the corpus's own.
+#: corpus is compared by its digest instead, the selection set by its digest,
+#: the vocabulary and keyword definitions by their bytes, and the holdout unit
+#: is the corpus's own.
 #: Every other flag is compared, ``--rule-mask``, ``--deviance-floor``,
 #: ``--ema-epochs``, ``--stratum-weight`` and ``--relation-values`` included
 #: (story 7 acceptance 5).
 RESUME_MAY_CHANGE: frozenset[str] = frozenset({
     "epochs", "patience", "lr_scale", "save_every_epoch", "model_output",
     "prefetch_workers", "resume", "corpus", "cards_folders", "variant_scripts",
-    "holdout_unit", "vocab_path", "keyword_definitions",
+    "holdout_unit", "vocab_path", "keyword_definitions", "reports_dir",
 })
 
 
@@ -65,6 +67,8 @@ def resume_settings(spec: RunSpec, *, training_settings: dict) -> dict:
     return {
         "seed": spec.seed,
         "corpus_digest": spec.facts.digest,
+        # Scores against another selection set do not compare (FR-069).
+        "selection_set_digest": spec.facts.selection_set_digest,
         **tokenizer_hashes(config.tokenizer_files),
         **{name: getattr(config, name) for name in compared_flags()},
         **training_settings,
@@ -99,7 +103,7 @@ def save_resume(run: RunContext, epoch: int, *, best: bool = False) -> None:
         # ``state`` None while warmup lasts: the resumed run starts the
         # average at warmup's end, as this one would have.
         "weight_average": run.average.state_dict(),
-        # None until US8's control score exists (T157-T159).
+        # The stopper's own best, recorded under its data-model name too.
         "best_control_score": run.best_control_score,
         "rng": {
             "cpu": torch.get_rng_state(),
@@ -131,7 +135,10 @@ def restore_resume(run: RunContext) -> int | None:
     if run.identity_table is not None and state["identity_table"] is not None:
         run.identity_table.load_state_dict(state["identity_table"])
     run.optimizer.load_state_dict(state["optimizer"])
-    run.stopper.load_state_dict(state["stopper"])
+    try:
+        run.stopper.load_state_dict(state["stopper"])
+    except StopperStateError as error:
+        raise ResumeMismatchError(f"The resume file cannot continue: {error}") from error
     run.noise.load_state_dict(state["noise"], run.device)
     # Reused, never recomputed: the run divides by one set of numbers (FR-062).
     denominators = state.get("loss_denominators")
@@ -139,7 +146,6 @@ def restore_resume(run: RunContext) -> int | None:
         None if denominators is None else LossDenominators.from_dict(denominators)
     )
     run.average.load_state_dict(state.get("weight_average"))
-    run.best_control_score = state.get("best_control_score")
     torch.set_rng_state(state["rng"]["cpu"])
     if state["rng"]["cuda"] is not None and torch.cuda.is_available():
         torch.cuda.set_rng_state_all(state["rng"]["cuda"])
@@ -157,7 +163,7 @@ def restore_resume(run: RunContext) -> int | None:
         )
         return None
     logger.info(
-        "Resuming after epoch %d, step %d: best card-disjoint %.4f, %d "
+        "Resuming after epoch %d, step %d: best control score %.4f, %d "
         "epoch(s) since.", epoch, run.step, run.stopper.best,
         run.stopper.since_best,
     )

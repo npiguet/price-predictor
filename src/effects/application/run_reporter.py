@@ -32,10 +32,11 @@ from effects.application.training_log import (
     format_shares,
     format_terms,
 )
-from effects.application.validation_pass import ValidationPass, ValidationSamples
+from effects.application.validation_pass import EpochScores, ValidationSamples
 from effects.domain.ability_encoder import TruncationLog, log_truncation
 from effects.domain.rarity import RARITY_BUCKETS
 from effects.domain.sampling import SAMPLING_CLASSES
+from effects.domain.selection_set import COMPONENTS
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +150,7 @@ class RunReporter:
     def curriculum(self, epoch: int, fields: int) -> None:
         logger.info(
             "epoch %d enables the sparse field group (%d fields now); "
-            "the early stopper starts over", epoch, fields,
+            "the best control score and the patience start over", epoch, fields,
         )
 
     def shard_opened(self, opened: ShardOpened) -> None:
@@ -199,11 +200,15 @@ class RunReporter:
         )
 
     def epoch(
-        self, epoch: int, tally: EpochTally, card: ValidationPass,
-        game: ValidationPass, floor: dict[str, float],
+        self, epoch: int, tally: EpochTally, scores: EpochScores,
+        floor: dict[str, float], *, best: float | None, trained: float = 0.0,
     ) -> None:
-        """The epoch's two lines: its losses and gate 1's progress margins on
-        the card-disjoint pass, then what it trained on."""
+        """The epoch's lines: its losses and gate 1's progress margins on the
+        card-disjoint pass, its control score (FR-075) and what scoring it cost
+        against ``trained``, the epoch's training seconds (research E2: at most
+        a fifth), then what it trained on. ``best`` is the run's best control
+        score after this epoch."""
+        card, game = scores.card, scores.game
         metrics = card.progress()
         logger.info(
             "epoch %d | train %.4f | card-disjoint %.4f | "
@@ -212,6 +217,12 @@ class RunReporter:
             epoch, tally.train_loss, card.loss, game.loss,
             metrics.affected_gate_f1, metrics.zone_outcome_accuracy,
             metrics.mean_deviance, format_parts(card.parts, floor),
+        )
+        logger.info("epoch %d | %s", epoch, format_control(scores.control, best))
+        logger.info(
+            "epoch %d | control score scored in %.1fs, %.2f of the epoch's %.0fs of "
+            "training (research E2 targets at most 0.2)", epoch, scores.control_seconds,
+            scores.control_seconds / trained if trained > 0 else float("nan"), trained,
         )
         logger.info(
             "epoch %d | trained records by rarity bucket: %s%s\n"
@@ -244,6 +255,18 @@ class RunReporter:
 
     def early_stop(self) -> None:
         logger.info(
-            "Early stop: %d epochs without a new card-disjoint best",
+            "Early stop: %d epochs without a new best control score",
             self.config.patience,
         )
+
+
+def format_control(control, best: float | None) -> str:
+    """Each stratum's four components and score, then the control score and
+    the run's best (contracts/cli.md): ``card-disjoint probes 0.412 grids …
+    score 0.301 | game-disjoint … | control 0.297 | best 0.310``."""
+    parts = []
+    for stratum, score in sorted(control.strata.items()):
+        values = " ".join(f"{name} {score.components[name]:.3f}" for name in COMPONENTS)
+        parts.append(f"{stratum} {values} score {score.score:.3f}")
+    shown = "none" if best is None else f"{best:.3f}"
+    return " | ".join([*parts, f"control {control.control:.3f}", f"best {shown}"])
