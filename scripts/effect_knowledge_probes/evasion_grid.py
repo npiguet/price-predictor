@@ -20,10 +20,16 @@ unblockable keep no flag, so the model reads them through the line alone. The ru
 answer is computed for every edited record by ``may_block``, so the score holds
 whatever the real creatures are.
 
-Protection from a colour is two rows: from the blocker's colour, where the rule
-forbids the block, and from another colour, where it does not. The keyword flag
-carries protection without its colour; the granted line names the colour, so the
-two rows differ in that line's text alone and measure whether the model reads it.
+Protection takes a row per quality it can name (702.16a, FR-074), each in pairs where
+one names the blocker and the other does not: from the blocker's colour and from another
+colour, from a creature type the blocker has (another type where it has none) and from
+one it lacks, from creatures and from artifacts, from monocoloured and from multicoloured,
+from mana value 3 or less, and from everything. The keyword flag carries protection
+without its quality, and Forge spells most qualities after a colon
+(``Protection:Goblin``); the granted line names the quality, so the rows of a pair differ
+in that line's text alone and measure whether the model reads it. The rule's answer
+reads the quality the row granted (``rule_outcomes.ProtectionQuality``) against the
+edited blocker's colours, types, creature types and mana value.
 """
 from __future__ import annotations
 
@@ -40,14 +46,40 @@ from _lib.markdown import print_table  # noqa: E402
 
 from effect_knowledge_probes import common, readout  # noqa: E402
 from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
-from effects.domain.rule_outcomes import COLOUR_WORDS, may_block  # noqa: E402
+from effects.domain.rule_outcomes import (  # noqa: E402
+    COLOUR_WORDS,
+    ProtectionQuality,
+    QualityKind,
+    may_block,
+)
 
+#: Attacker rows that grant protection, each resolved to a quality against the pair
+#: (:func:`protection_quality`): ``-blocker`` names the blocker, ``-other`` does not.
+PROTECTION_ROWS: tuple[str, ...] = (
+    "protection-blocker", "protection-other",
+    "protection-type-blocker", "protection-type-other",
+    "protection-creatures", "protection-artifacts",
+    "protection-monocolored", "protection-multicolored",
+    "protection-mana-value-3-or-less", "protection-everything",
+)
 #: Attacker rows: the keyword the attacker is granted; ``None`` grants nothing.
-#: ``protection-blocker`` and ``protection-other`` resolve against the blocker's colour.
 ATTACKER_KEYWORDS: tuple[str | None, ...] = (
     None, "flying", "horsemanship", "fear", "intimidate", "shadow", "unblockable",
-    "protection-blocker", "protection-other",
+    *PROTECTION_ROWS,
 )
+#: Creature types a ``protection-type-other`` row picks from, the first that
+#: neither creature has: types no limited creature is likely to carry.
+OTHER_CREATURE_TYPES: tuple[str, ...] = ("kraken", "leviathan", "octopus", "homarid")
+#: The rows whose quality is fixed, whatever the pair.
+_FIXED_QUALITIES: dict[str, ProtectionQuality] = {
+    "protection-creatures": ProtectionQuality(QualityKind.CARD_TYPE, "creature"),
+    "protection-artifacts": ProtectionQuality(QualityKind.CARD_TYPE, "artifact"),
+    "protection-monocolored": ProtectionQuality(QualityKind.CONDITION, "monocolored"),
+    "protection-multicolored": ProtectionQuality(QualityKind.CONDITION, "multicolored"),
+    "protection-mana-value-3-or-less": ProtectionQuality(
+        QualityKind.CONDITION, "mana value 3 or less"),
+    "protection-everything": ProtectionQuality.everything(),
+}
 #: Blocker columns: the trait the blocker is given; ``None`` changes nothing.
 BLOCKER_TRAITS: tuple[str | None, ...] = (
     None, "flying", "reach", "horsemanship", "shadow", "artifact", "black", "shares-colour",
@@ -62,15 +94,25 @@ EVASION_KEYWORDS = frozenset({
 # ── the edits ───────────────────────────────────────────────────────────
 
 
-def attacker_keyword(row: str | None, attacker, blocker) -> str | None:
-    """The keyword a row grants, with protection resolved to a concrete colour."""
+def protection_quality(row: str, attacker, blocker) -> ProtectionQuality:
+    """The quality a protection row grants, resolved against the pair: the
+    blocker's first colour or creature type for a ``-blocker`` row, a colour
+    or creature type neither creature has for an ``-other`` row."""
+    if row in _FIXED_QUALITIES:
+        return _FIXED_QUALITIES[row]
     if row == "protection-blocker":
-        return f"protection_from_{COLOUR_WORDS[blocker.colors[0]]}"
+        return ProtectionQuality(QualityKind.COLOUR, COLOUR_WORDS[blocker.colors[0]])
     if row == "protection-other":
         taken = {c for c in (*attacker.colors, *blocker.colors)}
         other = next(c for c in COLOUR_WORDS if c not in taken)
-        return f"protection_from_{COLOUR_WORDS[other]}"
-    return row
+        return ProtectionQuality(QualityKind.COLOUR, COLOUR_WORDS[other])
+    taken = {t.lower() for t in (*attacker.subtypes, *blocker.subtypes)}
+    other = next(t for t in OTHER_CREATURE_TYPES if t not in taken)
+    if row == "protection-type-blocker" and blocker.subtypes:
+        return ProtectionQuality(QualityKind.CREATURE_TYPE, blocker.subtypes[0].lower())
+    if row in ("protection-type-blocker", "protection-type-other"):
+        return ProtectionQuality(QualityKind.CREATURE_TYPE, other)
+    raise KeyError(row)
 
 
 def edited(record, attacker_id: str, blocker_id: str, row: str | None,
@@ -88,14 +130,19 @@ def edited(record, attacker_id: str, blocker_id: str, row: str | None,
         shared = next(c for c in attacker.colors if c != "B")
         board = board.set_colours(blocker_id, (shared,))
     blocker = board.record.state.entity(blocker_id)
-    keyword = attacker_keyword(row, attacker, blocker)
-    if keyword is not None:
-        board = board.grant_keyword(attacker_id, keyword)
+    granted: tuple[ProtectionQuality, ...] = ()
+    if row in PROTECTION_ROWS:
+        quality = protection_quality(row, attacker, blocker)
+        board = board.grant_protection(attacker_id, quality)
+        granted = (quality,)
+    elif row is not None:
+        board = board.grant_keyword(attacker_id, row)
     record = board.record
     a = record.state.entity(attacker_id)
     b = record.state.entity(blocker_id)
     rule = may_block(a.granted_temporary.keywords, a.colors, b.granted_temporary.keywords,
-                     b.colors, b.types)
+                     b.colors, b.types, attacker_protections=granted,
+                     blocker_subtypes=b.subtypes, blocker_mana_value=b.mana_value)
     return record, rule
 
 

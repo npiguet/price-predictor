@@ -1,22 +1,27 @@
 """``rule_outcomes``: each rule function on the cases its former home pinned (T012),
-and protection's rare qualities (702.16, T137)."""
+protection's rare qualities (702.16, T137), and the turn-structure rules the
+conditions probe reads (500.1, 307.1, 702.61, T161)."""
 
 from __future__ import annotations
 
 import pytest
 
 from effects.domain.rule_outcomes import (
+    PHASE_ORDER,
     Characteristics,
     EffectKind,
     ProtectionQuality,
     QualityKind,
     damage_lethal,
     damage_prevented,
+    forge_phases,
     lethal,
     may_block,
     may_enchant,
     may_target,
     shrink_lethal,
+    sorcery_timing,
+    split_second_forbids,
     step_deaths,
     strikes_in_step,
 )
@@ -159,3 +164,38 @@ class TestProtectionQuality:
         aura = Characteristics.made(("enchantment",), ("aura",), ("B",), 2)
         assert not may_enchant((ProtectionQuality(QualityKind.CARD_TYPE, "enchantment"),), aura)
         assert may_enchant(goblins, aura)
+
+
+class TestTurnStructure:
+    @pytest.mark.parametrize("value, expected", [
+        ("Main1", {"main1"}),
+        ("Main", {"main1", "main2"}),
+        ("Upkeep->BeginCombat", {"upkeep", "draw", "main1", "combat_begin"}),
+        ("BeginCombat->Declare Attackers", {"combat_begin", "combat_declare_attackers"}),
+        ("Main2->", {"main2", "end_of_turn", "cleanup"}),
+        ("Upkeep,End of Turn", {"upkeep", "end_of_turn"}),
+        ("main1", {"main1"}),
+    ])
+    def test_a_script_phase_list_reads_as_forge_parses_it(self, value, expected):
+        assert forge_phases(value) == frozenset(expected)
+
+    @pytest.mark.parametrize("value", [None, "", "Midnight", "Main2->Upkeep"])
+    def test_a_phase_list_forge_would_not_read_names_nothing(self, value):
+        assert forge_phases(value) is None
+
+    def test_the_order_is_the_turn_s(self):
+        assert PHASE_ORDER[0] == "untap" and PHASE_ORDER[-1] == "cleanup"
+        assert PHASE_ORDER.index("main1") < PHASE_ORDER.index("combat_begin")
+
+    @pytest.mark.parametrize("own_turn, phase, stack, expected", [
+        (True, "main1", 0, True), (True, "main2", 0, True),
+        (False, "main1", 0, False), (True, "combat_begin", 0, False),
+        (True, "main1", 1, False),
+    ])
+    def test_sorcery_timing(self, own_turn, phase, stack, expected):
+        assert sorcery_timing(own_turn=own_turn, phase=phase, stack_size=stack) is expected
+
+    def test_split_second_forbids_every_candidate_but_a_land_play(self):
+        assert split_second_forbids(split_second_on_stack=True, land_play=False)
+        assert not split_second_forbids(split_second_on_stack=True, land_play=True)
+        assert not split_second_forbids(split_second_on_stack=False, land_play=False)

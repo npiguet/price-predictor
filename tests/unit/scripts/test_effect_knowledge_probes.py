@@ -534,7 +534,8 @@ class TestSweepEditor:
 
     def test_sweep_records_are_chosen_from_real_records(self, records, sidecars):
         chosen = _select_sweep_records(records, sidecars)
-        assert set(chosen) == {"toughness", "affordability", "board_size", "damage"}
+        assert set(chosen) == {"toughness", "affordability", "board_size", "damage",
+                               "activated_damage"}
         assert chosen["affordability"]
         ids = {r.record_id for r in records}
         for rows in chosen.values():
@@ -817,7 +818,7 @@ def _legality(*forbidden_kinds):
 
 class TestBoard:
     def test_a_keyword_line_and_the_other_face_are_not_unlisted(self):
-        entity = SimpleNamespace(printed=(_key("spell"),), face=0)
+        entity = SimpleNamespace(printed=(_key("spell"),), face=0, lines=None)
         sidecars = _Sidecars([
             _line_of("Keyword", _key("static")),
             _line_of("Continuous", _key("static")),
@@ -827,7 +828,7 @@ class TestBoard:
         assert board.unlisted_kinds(entity, sidecars) == {"static"}
 
     def test_a_permanent_without_printed_keys_lists_nothing(self):
-        entity = SimpleNamespace(printed=(), face=0)
+        entity = SimpleNamespace(printed=(), face=0, lines=None)
         assert board.unlisted_kinds(entity, _Sidecars([])) == frozenset()
 
     def test_legality_is_split_by_the_restricting_static(self):

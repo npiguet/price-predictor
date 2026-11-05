@@ -42,9 +42,42 @@ class BoardEdit:
 
     def set_step(self, step: str) -> BoardEdit:
         """The record as a snapshot of the given combat damage step."""
+        return self.edit_global(combat_substep=step)
+
+    def edit_global(self, **changes) -> BoardEdit:
+        """The turn structure with ``changes`` (``active``, ``phase``, ...)."""
         state = self.record.state
         return BoardEdit(replace(self.record, state=replace(
-            state, global_=replace(state.global_, combat_substep=step))))
+            state, global_=replace(state.global_, **changes))))
+
+    def set_active_player(self, player_id: str) -> BoardEdit:
+        """Whose turn it is, and so who holds priority first in it."""
+        return self.edit_global(active=player_id)
+
+    def set_phase(self, phase: str) -> BoardEdit:
+        """The phase or step, spelled as a record spells it (``main1``,
+        ``combat_begin``); leaving combat's damage steps clears the substep."""
+        substep = self.record.state.global_.combat_substep
+        if phase not in ("combat_first_strike_damage", "combat_damage"):
+            substep = None
+        return self.edit_global(phase=phase, combat_substep=substep)
+
+    def remove_entity(self, entity_id: str) -> BoardEdit:
+        """One object gone from the snapshot, with every link naming it: what
+        a destroyed permanent leaves of the board it was on."""
+        from effects.domain.state_snapshot import LineRef
+
+        def names(end) -> bool:
+            return (end.entity if isinstance(end, LineRef) else end) == entity_id
+
+        record = self.record
+        links = record.state.links
+        if links is not None:
+            links = tuple(link for link in links
+                          if not names(link.from_) and not names(link.to))
+        return BoardEdit(replace(record, state=replace(
+            record.state, links=links,
+            entities=tuple(e for e in record.state.entities if e.id != entity_id))))
 
     # ── one entity ──────────────────────────────────────────────────────
 
@@ -95,6 +128,26 @@ class BoardEdit:
         fragment = keyword_fragment(keyword)
         return self.edit_entity(
             entity_id, lambda entity: entity.with_granted_keyword(keyword, fragment))
+
+    def grant_protection(self, entity_id: str, quality) -> BoardEdit:
+        """Protection from ``quality`` (``rule_outcomes.ProtectionQuality``)
+        granted until end of turn, spelled as Forge writes its keyword line:
+        ``Protection from red``, ``Protection:Goblin``,
+        ``Protection:Card.MultiColor:multicolored``."""
+        return self.edit_entity(entity_id, lambda entity: entity.with_granted_keyword(
+            quality.keyword, quality.fragment))
+
+    def set_line_active(self, entity_id: str, key, active: bool) -> BoardEdit:
+        """Forge's answer to whether the static ``key`` on ``entity_id`` holds."""
+
+        def edit(entity):
+            if entity.lines is None:
+                return entity
+            return replace(entity, lines=tuple(
+                replace(line, active=active) if key in line.keys and line.active is not None
+                else line for line in entity.lines))
+
+        return self.edit_entity(entity_id, edit)
 
     def set_controller(self, entity_id: str, player_id: str) -> BoardEdit:
         return self.edit_entity(entity_id, lambda e: replace(e, controller=player_id))

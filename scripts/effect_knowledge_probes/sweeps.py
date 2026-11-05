@@ -1,4 +1,4 @@
-"""The four board sweeps: edit one input of a real record, read the full model (FR-084).
+"""The board sweeps: edit one input of a real record, read the full model (FR-084).
 
 ====================  ===================================  ==========================
 sweep                 edit                                 read
@@ -11,7 +11,20 @@ board size            opposing creature count, 0 to 8,     predicted deaths summ
                       by copying a creature entity         over the board
 damage                the acting text's ``NumDmg$``,       the toughness-4 target's
                       1 to 8, re-encoded                   predicted death
+activated damage      the toughness sweep on an activated  the creature's predicted
+                      "any target" ping, its text read     death and affected gate,
+                      as written and with "target          per wording
+                      creature" in place of "any target"
 ====================  ===================================  ==========================
+
+The activated-damage sweep measures one wording (FR-074): an activated ability that
+deals damage to "any target" (Prodigal Sorcerer's ping) whose target was a creature. The
+rule does not care how the target was worded, so a model that has tied the wording to
+its target gives the same curve both ways; one that doubts a creature is affected by an
+"any target" ping shows it as a lower gate on the text as written. The second reading
+re-encodes the acting text with ``ValidTgts$ Any`` as ``ValidTgts$ Creature`` and "any
+target" as "target creature" (:func:`target_creature_wording`), through the checkpoint's
+own encoder, as the damage sweep re-encodes ``NumDmg$``.
 
 Each edit changes exactly one input and returns a new record; the original is
 never touched. An input the record states in two places is edited in both, so
@@ -33,6 +46,7 @@ import numpy as np
 from effect_knowledge_probes import readout
 from effect_knowledge_probes.board_edits import BoardEdit
 from effect_knowledge_probes.common import predict
+from effects.domain.script_text import root_param
 from effects.domain.seeded_draw import id_hash
 
 TOUGHNESS_VALUES = tuple(range(1, 9))
@@ -42,6 +56,12 @@ DAMAGE_VALUES = tuple(range(1, 9))
 DAMAGE_TARGET_TOUGHNESS = 4
 #: Records per sweep in a frozen probe set.
 RECORDS_PER_SWEEP = 20
+#: The activated-damage sweep's two readings of the acting text.
+AS_WRITTEN = "any target"
+TARGET_CREATURE = "target creature"
+WORDINGS: tuple[str, ...] = (AS_WRITTEN, TARGET_CREATURE)
+_ANY_TARGET_RE = re.compile(r"\bany target\b", re.IGNORECASE)
+_VALID_ANY_RE = re.compile(r"(ValidTgts\$\s*)Any\b")
 
 _SWEEPER_APIS = frozenset({"DestroyAll", "DamageAll", "SacrificeAll", "ChangeZoneAll"})
 _NUMDMG_RE = re.compile(r"(NumDmg\$\s*)(\d+)")
@@ -254,6 +274,15 @@ def set_opposing_creatures(record, count: int):
     return BoardEdit(record).with_entities([*kept, *copies]).record
 
 
+def target_creature_wording(text: str) -> str:
+    """An "any target" text read as "target creature": ``ValidTgts$ Any`` as
+    ``ValidTgts$ Creature`` on the script surface, the words "any target" as
+    "target creature" on both (a description, the converted prose)."""
+    text = _VALID_ANY_RE.sub(lambda m: f"{m.group(1)}Creature", text)
+    return _ANY_TARGET_RE.sub(lambda m: "Target creature" if m.group(0)[0] == "A"
+                              else "target creature", text)
+
+
 def set_amount(text: str, key: str, amount: int) -> str:
     """The acting text with every literal ``key$`` (``NumDmg``, ``NumCards``) set
     to ``amount``."""
@@ -289,6 +318,7 @@ class SweepSelector:
         self.per_sweep = per_sweep
         self._found: dict[str, list[tuple[int, dict]]] = {
             "toughness": [], "affordability": [], "board_size": [], "damage": [],
+            "activated_damage": [],
         }
 
     def observe(self, record) -> None:
@@ -314,6 +344,9 @@ class SweepSelector:
                 host = "spell" if line.line_kind == "spell" else "triggered"
                 self._found["damage"].append(
                     (order, {"record_id": rid, "entity": target, "host": host}))
+            if line.line_kind == "activated" and root_param(script, "ValidTgts") == "Any":
+                self._found["activated_damage"].append(
+                    (order, {"record_id": rid, "entity": target}))
         if api in _SWEEPER_APIS and opposing_creatures(record):
             self._found["board_size"].append((order, {"record_id": rid}))
 
@@ -363,9 +396,37 @@ def run_sweep(name: str, probe_model, record, row: dict) -> list[dict]:
         for amount in values:
             with batcher.reading_as(key, set_amount(original, "NumDmg", amount)):
                 predictions += predict(probe_model, [base], dies)
+    elif name == "activated_damage":
+        return activated_damage_sweep(probe_model, record, row["entity"])
     else:
         raise KeyError(name)
     return [{"value": int(v), "prediction": p} for v, p in zip(values, predictions)]
+
+
+def activated_damage_sweep(probe_model, record, entity: str) -> list[dict]:
+    """``[{value, wording, prediction, affected}]``: the toughness sweep at
+    ``entity`` read with the acting text as written and in
+    :data:`TARGET_CREATURE` wording, ``prediction`` the predicted death and
+    ``affected`` the gate."""
+    edited = [BoardEdit(record).set_toughness(entity, t).record for t in TOUGHNESS_VALUES]
+    dies, gate = readout.at_card("dies", entity), readout.at_card("affected", entity)
+
+    def both(o, v, s, r):
+        return dies(o, v, s, r), gate(o, v, s, r)
+
+    batcher = probe_model.batcher
+    key = record.ability[0]
+    original = batcher.text_of(key)
+    out = []
+    for wording in WORDINGS:
+        if wording == AS_WRITTEN:
+            readings = predict(probe_model, edited, both)
+        else:
+            with batcher.reading_as(key, target_creature_wording(original)):
+                readings = predict(probe_model, edited, both)
+        out += [{"value": int(v), "wording": wording, "prediction": p, "affected": a}
+                for v, (p, a) in zip(TOUGHNESS_VALUES, readings)]
+    return out
 
 
 def _is_opposing(record, entity_id: str) -> bool:
@@ -375,10 +436,18 @@ def _is_opposing(record, entity_id: str) -> bool:
 
 
 def summarize(curves: list[list[dict]]) -> list[dict]:
-    """The mean prediction per value over a sweep's records."""
-    by_value: dict[int, list[float]] = {}
+    """The mean prediction per value over a sweep's records; per wording and
+    value, the gate's mean beside it, for the activated-damage sweep."""
+    by_value: dict[tuple, list[dict]] = {}
     for curve in curves:
         for point in curve:
-            by_value.setdefault(point["value"], []).append(point["prediction"])
-    return [{"value": v, "prediction": float(np.nanmean(p)), "n": len(p)}
-            for v, p in sorted(by_value.items())]
+            by_value.setdefault((point.get("wording", ""), point["value"]), []).append(point)
+    out = []
+    for (wording, value), points in sorted(by_value.items()):
+        row = {"value": value, "n": len(points),
+               "prediction": float(np.nanmean([p["prediction"] for p in points]))}
+        if wording:
+            row["wording"] = wording
+            row["affected"] = float(np.nanmean([p["affected"] for p in points]))
+        out.append(row)
+    return out

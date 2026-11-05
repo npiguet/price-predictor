@@ -1,14 +1,18 @@
-"""Board abilities: the model's error where a permanent's own text decides (FR-085b).
+"""Board abilities: the model's error where a permanent's own text decides (FR-085b, FR-074).
 
-The state snapshot gives each permanent its spell and activated abilities as
+A gen-2 snapshot gave each permanent its spell and activated abilities as
 card-slot lines, and none of its statics, triggers or replacements, so the
-model reads those only through what they have already done to the board: a
+model read those only through what they had already done to the board: a
 pump already in the toughness, a granted keyword already in the flags. What a
 static decides at the moment of the record, such as who may block or what a
-destroy turns into, reaches the model as no text at all. This probe measures
-what that costs, so gen-3's fix has a baseline: on each subset below, every
-output field's loss and the ablation of ``e`` (``ablation.run_ablation``),
-beside a control subset of the same kind.
+destroy turns into, reached the model as no text at all. A gen-3 snapshot lists
+every line a card carries now, statics, triggers and replacements among them,
+each an ability slot of its own. This probe measures what those lines are
+worth: on each subset below, every output field's loss and the ablation of
+``e`` (``ablation.run_ablation``), beside a control subset of the same kind.
+On a gen-3 checkpoint, noise in the card slots replaces those lines' ``e`` too,
+so a subset whose loss rises under it more than its control's is one where the
+model reads the static, trigger or replacement it was not given in gen-2.
 
 ======================  ====================================================
 subset                  records
@@ -45,7 +49,8 @@ SUBSETS: tuple[str, ...] = (
 RECORDS_PER_SUBSET = 300
 #: Validation shards read per stratum before giving up on a short subset.
 SHARDS_PER_STRATUM = 200
-#: The trait kinds the snapshot leaves out of a permanent's card slots.
+#: The trait kinds a gen-2 snapshot left out of a permanent's card slots,
+#: spelled as both a provenance key's trait kind and a gen-3 line's kind.
 UNLISTED_KINDS = frozenset({"static", "trigger", "replacement"})
 
 
@@ -58,10 +63,15 @@ def _sidecar_errors() -> tuple[type[Exception], ...]:
 def unlisted_kinds(entity, sidecars) -> frozenset[str]:
     """The non-keyword static, trigger and replacement lines on ``entity``'s face.
 
-    Read from the sidecar of the script its printed keys name. A keyword line
-    is left out whatever trait it folds in, because the keyword flags already
-    carry it.
+    On a gen-3 entity, its own lines in force (``entity.lines``, granted ones
+    left out, as gen-2's printed face had none); on a gen-1 or gen-2 one, the
+    sidecar of the script its printed keys name. A keyword line is left out
+    whatever trait it folds in, because the keyword flags already carry it.
     """
+    if entity.lines is not None:
+        return frozenset(line.kind for line in entity.lines
+                         if line.kind in UNLISTED_KINDS and not line.granted
+                         and line.in_force)
     if not entity.printed:
         return frozenset()
     try:

@@ -7,11 +7,15 @@ The knowledge probes score one ``legal_target`` question over every targeting
 decision. This probe splits it by what the acting ability's script restricts its
 targets to: the ``ValidTgts$`` value of its first segment, such as ``Creature.OppCtrl``
 or ``Artifact,Enchantment``. A real playability decision record names its candidate
-ability and Forge's legal targets for it; every battlefield permanent on its board is
-one item, labelled legal or not by Forge, and the model's answer is the affected
-gate at that permanent's slot, the read-out the knowledge probes use.
+ability and Forge's legal targets for it; every card and every player on its board is
+one item, labelled legal or not by Forge, and the model's answer is its ``target_legal``
+output at that card's or player's slot (FR-074): gen-3 trains that field on every card
+and player of a decision whose candidate targets, 1 at a legal target and 0 elsewhere.
+The affected gate, which gen-2's probe read because its field was only ever trained to
+1, is reported beside it.
 
-Two breakdowns are reported, each as AUC over the items it holds:
+Two breakdowns are reported, each as AUC over the items it holds (``target_legal``,
+then the gate):
 
 - by **family**, the kind of condition the restriction states: a card type alone,
   who controls it, a supertype (nonLegendary), a colour, a keyword it has, a number
@@ -19,11 +23,11 @@ Two breakdowns are reported, each as AUC over the items it holds:
 - by **restriction**, every ``ValidTgts$`` value with enough items of both labels,
   numbers masked so ``powerLE2`` and ``powerLE3`` share one row.
 
-Counterfactual flips then take legal targets of single-condition restrictions and
-break exactly that condition: hand the target to the other player (``OppCtrl``,
-``YouCtrl``), make it legendary (``nonLegendary``), or remove the one card type the
-restriction names. The rule turns each such target illegal, and the probe reports
-the model's mean predicted legality before and after.
+Counterfactual flips then take legal battlefield targets of single-condition
+restrictions and break exactly that condition: hand the target to the other player
+(``OppCtrl``, ``YouCtrl``), make it legendary (``nonLegendary``), or remove the one card
+type the restriction names. The rule turns each such target illegal, and the probe
+reports the model's mean predicted ``target_legal`` before and after.
 """
 from __future__ import annotations
 
@@ -119,7 +123,9 @@ def flipped(record, entity_id: str, flip: str):
 
 
 def decision_items(record, sidecars):
-    """``(restriction, [(entity, legal)])`` for one targeting decision, or None."""
+    """``(restriction, [(entity or player, legal)])`` for one targeting
+    decision, or None: every card of the board, in any zone, and every player,
+    as ``target_legal`` is trained on them."""
     from effects.domain.records import PlayabilityDecisionPayload
 
     payload = record.payload
@@ -136,8 +142,51 @@ def decision_items(record, sidecars):
     if not restriction:
         return None
     legal = set(candidate.legal_targets)
-    items = [(e.id, e.id in legal) for e in record.state.entities if e.zone == "battlefield"]
+    refs = [e.id for e in record.state.entities] + [p.id for p in record.state.players]
+    items = [(ref, ref in legal) for ref in refs]
     return (restriction, items) if items else None
+
+
+#: The two answers read at every item: the field, then the gate gen-2 read.
+READOUTS: tuple[str, ...] = ("target_legal", "affected")
+
+
+def read_items(probe_model, records: list) -> dict[str, list[dict[str, float]]]:
+    """``{readout: [{entity or player: answer}]}`` per record, both readouts."""
+    return {name: common.predict_all(probe_model, records, readout.at_every_entity(name))
+            for name in READOUTS}
+
+
+def breakdowns(chosen, readings) -> dict[str, dict]:
+    """``{"family" | "restriction": {key: {readout: (labels, scores)}}}``."""
+    out: dict[str, dict] = {"family": defaultdict(lambda: {r: ([], []) for r in READOUTS}),
+                            "restriction": defaultdict(
+                                lambda: {r: ([], []) for r in READOUTS})}
+    for row, (record, restriction, items) in enumerate(chosen):
+        for entity, legal in items:
+            if any(entity not in readings[name][row] for name in READOUTS):
+                continue
+            for table, key in (("family", family(restriction)),
+                               ("restriction", masked(restriction))):
+                for name in READOUTS:
+                    out[table][key][name][0].append(legal)
+                    out[table][key][name][1].append(readings[name][row][entity])
+    return out
+
+
+def flip_items(chosen) -> list[tuple[str, str, object, object]]:
+    """``(flip, entity, record, flipped record)`` for every legal battlefield
+    target of a single-condition restriction."""
+    out = []
+    for record, restriction, items in chosen:
+        flip = flip_for(restriction)
+        if flip is None:
+            continue
+        for entity, legal in items:
+            target = record.state.entity(entity)
+            if legal and target is not None and target.zone == "battlefield":
+                out.append((flip, entity, record, flipped(record, entity, flip)))
+    return out
 
 
 def main() -> None:
@@ -153,55 +202,44 @@ def main() -> None:
     probe_model = context.model([c[0] for c in chosen])
     common.heading(args, context, f"{len(chosen)} validation targeting decisions")
 
-    gates_of = readout.at_every_card("affected")
-    gates = common.predict_all(probe_model, [c[0] for c in chosen], gates_of)
-    by_family, by_restriction = defaultdict(lambda: ([], [])), defaultdict(lambda: ([], []))
-    for (record, restriction, items), gate in zip(chosen, gates):
-        for entity, legal in items:
-            if entity not in gate:
-                continue
-            for table, key in ((by_family, family(restriction)),
-                               (by_restriction, masked(restriction))):
-                table[key][0].append(legal)
-                table[key][1].append(gate[entity])
+    readings = read_items(probe_model, [c[0] for c in chosen])
+    tables = breakdowns(chosen, readings)
 
     def largest_first(table):
-        return sorted(table.items(), key=lambda kv: -len(kv[1][0]))
+        return sorted(table.items(), key=lambda kv: -len(kv[1][READOUTS[0]][0]))
+
+    def aucs(by_readout) -> list[str]:
+        return [f"{common.auc(*by_readout[name]):.3f}" for name in READOUTS]
 
     print("\nby family")
-    print_table(["family", "items", "legal", "AUC"],
-                [[key, len(labels), sum(labels), f"{common.auc(labels, scores):.3f}"]
-                 for key, (labels, scores) in largest_first(by_family)], "lrrr")
+    print_table(["family", "items", "legal", "AUC, target_legal", "AUC, gate"],
+                [[key, len(cell[READOUTS[0]][0]), sum(cell[READOUTS[0]][0]), *aucs(cell)]
+                 for key, cell in largest_first(tables["family"])], "lrrrr")
 
     print("\nby restriction")
-    print_table(["restriction", "family", "items", "legal", "AUC"],
-                [[f"`{key}`", family(key), len(labels), sum(labels),
-                  f"{common.auc(labels, scores):.3f}"]
-                 for key, (labels, scores) in largest_first(by_restriction)
-                 if args.min_each <= sum(labels) <= len(labels) - args.min_each], "llrrr")
+    print_table(["restriction", "family", "items", "legal", "AUC, target_legal", "AUC, gate"],
+                [[f"`{key}`", family(key), len(cell[READOUTS[0]][0]),
+                  sum(cell[READOUTS[0]][0]), *aucs(cell)]
+                 for key, cell in largest_first(tables["restriction"])
+                 if args.min_each <= sum(cell[READOUTS[0]][0])
+                 <= len(cell[READOUTS[0]][0]) - args.min_each], "llrrrr")
 
     flips = defaultdict(lambda: ([], []))
-    flip_records, flip_index = [], []
-    for record, restriction, items in chosen:
-        flip = flip_for(restriction)
-        if flip is None:
-            continue
-        for entity, legal in items:
-            if legal:
-                flip_records.append(flipped(record, entity, flip))
-                flip_index.append((flip, entity, record))
-    after = common.predict_all(probe_model, flip_records, gates_of)
-    gate_of = {c[0].record_id: gate for c, gate in zip(chosen, gates)}
-    before = [gate_of[r.record_id] for _, _, r in flip_index]
-    for (flip, entity, _), b, a in zip(flip_index, before, after):
+    index = flip_items(chosen)
+    after = common.predict_all(probe_model, [row[3] for row in index],
+                               readout.at_every_entity("target_legal"))
+    before_of = {c[0].record_id: reading for c, reading in zip(chosen, readings["target_legal"])}
+    for (flip, entity, record, _), a in zip(index, after):
+        b = before_of[record.record_id]
         if entity in b and entity in a:
             flips[flip][0].append(b[entity])
             flips[flip][1].append(a[entity])
     print("\ncounterfactual flips: a legal target changed so the restriction fails "
-          "(rule: legal -> illegal)")
+          "(rule: legal -> illegal), predicted target_legal")
     print_table(["flip", "targets", "predicted legal before", "after"],
                 [[flip, len(b), f"{np.mean(b):.3f}", f"{np.mean(a):.3f}"]
-                 for flip, (b, a) in largest_first(flips)], "lrrr")
+                 for flip, (b, a) in sorted(flips.items(), key=lambda kv: -len(kv[1][0]))],
+                "lrrr")
 
 
 if __name__ == "__main__":

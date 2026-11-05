@@ -52,15 +52,18 @@ def _grid_cells() -> tuple[str, ...]:
 
 @dataclass
 class _BlockMemo:
-    """``combat_grid.single_block`` of the last record asked, shared by every
-    combat grid: the freeze asks all fourteen of one record in turn."""
+    """``combat_grid.grid_block`` of the last record asked, shared by every
+    combat grid of one kind of block (``blocks``, ``combat_grid.BLOCKS``): the
+    freeze asks all fourteen of one record in turn."""
 
     keywords_of: object
+    blocks: str = "one"
     _last: tuple = (None, None)
 
     def __call__(self, record):
         if self._last[0] != record.record_id:
-            self._last = (record.record_id, combat_grid.single_block(record, self.keywords_of))
+            self._last = (record.record_id,
+                          combat_grid.grid_block(record, self.keywords_of, self.blocks))
         return self._last[1]
 
 
@@ -68,7 +71,8 @@ class _BlockMemo:
 class CombatGrid:
     """One combat grid: a variant, and whose death it reads (``blocker``: the
     attacker's power against the blocker's toughness; ``attacker``: the
-    reverse). Entities ``(attacker, blocker)``."""
+    reverse), over one-on-one blocks or over combats of several
+    (``blocks.blocks``). Entities ``(attacker, blocker)`` of the pair edited."""
 
     variant: str
     which: str
@@ -77,7 +81,7 @@ class CombatGrid:
 
     @property
     def name(self) -> str:
-        return f"combat/{self.variant}/{self.which}"
+        return f"{combat_grid.GRID_PREFIX[self.blocks.blocks]}{self.variant}/{self.which}"
 
     def qualify(self, record):
         from effects.application.freeze_selection_set import GridQualification
@@ -192,11 +196,11 @@ def iter_stratum_shards(context, stratum: str):
 
 def grid_sources(sidecars, keywords_of) -> list:
     """Every grid the selection set freezes: damage, the combat grid's
-    variants each read at either creature, and evasion."""
-    blocks = _BlockMemo(keywords_of)
-    return [
-        DamageGrid(sidecars, keywords_of),
-        *(CombatGrid(variant, which, blocks)
-          for variant in combat_grid.VARIANTS for which in ("blocker", "attacker")),
-        EvasionGrid(keywords_of),
-    ]
+    variants each read at either creature, over one-on-one blocks and over
+    combats of several blocked attackers, and evasion."""
+    grids: list = [DamageGrid(sidecars, keywords_of)]
+    for kind in combat_grid.BLOCKS:
+        blocks = _BlockMemo(keywords_of, kind)
+        grids += [CombatGrid(variant, which, blocks)
+                  for variant in combat_grid.VARIANTS for which in ("blocker", "attacker")]
+    return [*grids, EvasionGrid(keywords_of)]

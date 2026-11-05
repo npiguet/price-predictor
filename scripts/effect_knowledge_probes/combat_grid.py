@@ -1,7 +1,8 @@
 """Predicted deaths in a one-on-one block, power 1..8 x toughness 1..8, averaged over records.
 
     python scripts/effect_knowledge_probes/combat_grid.py CHECKPOINT [--source SOURCE]
-        [--variant VARIANT ...] [--half HALF] [--records 40] [--shards 200]
+        [--blocks one|several] [--variant VARIANT ...] [--half HALF] [--records 40]
+        [--shards 200]
 
 The combat counterpart of ``damage_grid.py``. A record qualifies when exactly one
 attacker is blocked, by exactly one blocker that blocks nothing else, the record covers
@@ -22,8 +23,13 @@ is read in the regular step, with the blocker already marked with the first. Eac
 is scored against the rule for that step applied to every edited record, so the score is
 right whatever the other creature's real power and toughness are.
 
-The block pairing is unambiguous only with one blocked attacker: a card slot says that a
-creature is blocking, not which attacker it blocks.
+``--blocks several`` reads combats with several blocked attackers instead (FR-074): every
+blocked attacker blocked by one creature blocking it alone, every pair qualifying as the
+one-on-one block does, and the grid edits one pair, the attacker first in id order, with
+the other pairs left as they fought. A gen-3 board states which attacker each creature
+blocks, as a ``blocks`` relation between their slots, so the model can tell the pairs
+apart; the score asks whether it reads the pair the grid edits apart from the rest. Both
+kinds are scored through the same rule, ``rule_outcomes.step_deaths``, on the edited pair.
 
 A combat record's snapshot is taken at the step's first damage event, so the creature
 damaged first already shows that damage as marked. A creature may therefore show marked
@@ -35,8 +41,9 @@ assigns, because the input carries each creature's assignment beside its power.
 
 ``--source validation`` (the default) reads the blocks the corpus's selection set froze
 for the combat grids in ``--half`` (``reporting`` by default, ``selection`` or ``both``) of
-both validation strata, one a game; ``--source training`` scans the first ``--shards``
-training shards for ``--records`` blocks.
+both validation strata, one a game (the several-blocker grids are frozen as
+``combat-several/...``); ``--source training`` scans the first ``--shards`` training shards
+for ``--records`` blocks.
 """
 from __future__ import annotations
 
@@ -62,6 +69,10 @@ COMBAT_KEYWORDS = frozenset({
     "first_strike", "double_strike", "deathtouch", "indestructible", "wither", "infect",
     "trample", "lifelink", "protection", "banding", "shadow",
 })
+#: What a grid reads: combats with one blocked attacker, or with several.
+BLOCKS: tuple[str, ...] = ("one", "several")
+#: The frozen grids' name prefix for each.
+GRID_PREFIX: dict[str, str] = {"one": "combat/", "several": "combat-several/"}
 #: ``variant -> (creature granted the keyword or None, keyword, damage step, blocker
 #: carries the attacker's first-step damage)``. A record covers one damage step, so a
 #: first or double striker is read in the first-strike step, where it deals its damage
@@ -118,7 +129,18 @@ def single_block(record, keywords_of) -> tuple[str, str] | None:
     (``KeywordResolver.keywords_of``), so a printed keyword disqualifies as well as a
     granted one.
     """
-    from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
+    return grid_block(record, keywords_of, "one")
+
+
+def several_blocks(record, keywords_of) -> tuple[str, str] | None:
+    """``(attacker, blocker)`` of the pair a several-blocker grid edits: a combat
+    with two or more blocked attackers, each pair qualifying as a one-on-one
+    block does; the pair is the one whose attacker comes first in id order."""
+    return grid_block(record, keywords_of, "several")
+
+
+def grid_block(record, keywords_of, blocks: str) -> tuple[str, str] | None:
+    """The pair a grid of ``blocks`` (:data:`BLOCKS`) edits, or None."""
     from effects.domain.effect_targets import derive_targets
     from effects.domain.records import CombatPayload, RecordKind
     from effects.domain.state_snapshot import CombatSubstep
@@ -130,34 +152,49 @@ def single_block(record, keywords_of) -> tuple[str, str] | None:
     payload = record.payload
     if not isinstance(payload, CombatPayload) or getattr(payload, "probed_keyword", None):
         return None
-    blocked = [(attacker, blockers) for attacker, blockers in payload.blocks.items()
-               if blockers]
-    if len(blocked) != 1 or len(blocked[0][1]) != 1:
+    blocked = sorted((attacker, tuple(blockers))
+                     for attacker, blockers in payload.blocks.items() if blockers)
+    if not blocked or (len(blocked) == 1) != (blocks == "one"):
+        return None
+    if any(len(blockers) != 1 for _, blockers in blocked):
+        return None
+    targets = derive_targets(record)
+    if not all(_clean_pair(record, attacker, blockers[0], keywords_of, targets)
+               for attacker, blockers in blocked):
         return None
     attacker_id, (blocker_id,) = blocked[0]
+    return attacker_id, blocker_id
+
+
+def _clean_pair(record, attacker_id: str, blocker_id: str, keywords_of, targets) -> bool:
+    """Whether one blocked pair is a block a grid can edit: two creatures on
+    the battlefield, no damage-step keyword on either, the blocker blocking
+    this attacker alone, no damage but this step's own, and the real outcome
+    the rule's."""
+    from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
+
     attacker = record.state.entity(attacker_id)
     blocker = record.state.entity(blocker_id)
     for entity in (attacker, blocker):
         if (entity is None or entity.pt is None or not entity.on_battlefield
                 or not entity.is_creature):
-            return None
+            return False
         if keywords_of(entity) & COMBAT_KEYWORDS:
-            return None
+            return False
     if blocker.combat is None or tuple(blocker.combat.blocking) != (attacker_id,):
-        return None
+        return False
     if attacker.power <= 0 or blocker.power < 0:
-        return None
+        return False
     # Marked damage is either none or this step's own, which the snapshot taken at
     # the first damage event already shows; damage from earlier in the turn would
     # make the cleared board in the grid a different board.
     if attacker.damage not in (0, blocker.power):
-        return None
+        return False
     if blocker.damage not in (0, attacker.power):
-        return None
+        return False
     # The real outcome must obey the rule on the board before the step, so
     # prevention, regeneration or a replacement the board does not show cannot
     # be what the grid reads.
-    targets = derive_targets(record)
     died = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
     before = BoardEdit(record).clear_damage(attacker_id, blocker_id).record
     expected = step_deaths(side_of(before, attacker_id)[0], side_of(before, blocker_id)[0])
@@ -165,8 +202,8 @@ def single_block(record, keywords_of) -> tuple[str, str] | None:
         entry = targets.get(entity_id)
         observed = entry is not None and entry.fields.get(HeadField.ZONE_OUTCOME) == died
         if observed != should_die:
-            return None
-    return attacker_id, blocker_id
+            return False
+    return True
 
 
 # ── the grids ───────────────────────────────────────────────────────────
@@ -216,6 +253,8 @@ def main() -> None:
     def options(parser) -> None:
         parser.add_argument("--source", choices=("validation", "training"),
                             default="validation")
+        parser.add_argument("--blocks", choices=BLOCKS, default="one",
+                            help="one blocked attacker, or several")
         parser.add_argument("--variant", choices=(*VARIANTS, "all"), nargs="+",
                             default=["all"])
         parser.add_argument("--half", choices=("reporting", "selection", "both"),
@@ -231,16 +270,19 @@ def main() -> None:
         # forty blocks by one large attacker would read one board forty times.
         triples = record_walk.qualifying(
             [context.training_dir],
-            record_walk.with_record(lambda r: single_block(r, resolver.keywords_of)),
+            record_walk.with_record(
+                lambda r: grid_block(r, resolver.keywords_of, args.blocks)),
             args.records, shards=args.shards)
     else:
         from effect_knowledge_probes.selection import frozen_grid_records
 
         halves = ("selection", "reporting") if args.half == "both" else (args.half,)
         triples = [(record, *entities) for record, entities in frozen_grid_records(
-            context, "combat/", halves=halves, reports_dir=args.probe_set_dir)]
+            context, GRID_PREFIX[args.blocks], halves=halves,
+            reports_dir=args.probe_set_dir)]
     probe_model = context.model([r for r, _, _ in triples])
-    common.heading(args, context, f"{len(triples)} {args.source} one-on-one blocks")
+    kind = "one-on-one blocks" if args.blocks == "one" else "combats of several blocks"
+    common.heading(args, context, f"{len(triples)} {args.source} {kind}")
     for variant in variants:
         for which in ("blocker", "attacker"):
             grid = np.zeros((8, 8))

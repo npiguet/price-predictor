@@ -16,6 +16,7 @@ from effects.domain.probe_readouts import (  # noqa: F401  (re-exported for the 
     READOUTS,
     Readout,
     card_slots,
+    entity_slots,
     read,
 )
 
@@ -42,6 +43,17 @@ def at_every_card(target: str):
     def read_all(outputs, verdict, surface, row) -> dict[str, float]:
         return {entity: read(target, outputs, verdict, row, slot)
                 for entity, slot in card_slots(surface).items()}
+
+    return read_all
+
+
+def at_every_entity(target: str):
+    """A ``common.predict`` read: ``{entity or player: answer}`` over every
+    card and every player of the board."""
+
+    def read_all(outputs, verdict, surface, row) -> dict[str, float]:
+        return {entity: read(target, outputs, verdict, row, slot)
+                for entity, slot in entity_slots(surface).items()}
 
     return read_all
 

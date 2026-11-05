@@ -78,10 +78,41 @@ def _affordable(outputs, verdict, row: int, slot: int):
     return torch.sigmoid(verdict[row, VERDICT_BITS.index("affordable")])
 
 
-def _fires(outputs, verdict, row: int, slot: int):
-    import torch
+def _verdict_column(field: str, member: str | None = None) -> Readout:
+    """A binary verdict output at ``[ACT]``: ``field``'s column, or one
+    member's column of a field with members (``failed_checks``)."""
 
-    return torch.sigmoid(verdict[row, -1])
+    def read(outputs, verdict, row: int, slot: int):
+        import torch
+
+        from effects.domain.effect_head_layout import VERDICT_LAYOUT
+
+        start, _ = VERDICT_LAYOUT.slices[field]
+        offset = 0 if member is None else VERDICT_LAYOUT.by_name[field].members.index(member)
+        return torch.sigmoid(verdict[row, start + offset])
+
+    return read
+
+
+def _legality_field(field: str) -> Readout:
+    """A legality field at an entity's slot, read alone: the legality fields
+    train wherever present, gate or no gate (``FieldSpec.gated`` false)."""
+
+    def read(outputs, verdict, row: int, slot: int):
+        import torch
+
+        from effects.domain.effect_head_layout import FIELD_SLICES
+
+        return torch.sigmoid(outputs[row, slot, FIELD_SLICES[field][0]])
+
+    return read
+
+
+def _failed_check_readouts() -> dict[str, Readout]:
+    from effects.domain.effect_head_layout import FAILED_CHECKS, VerdictField
+
+    return {f"failed_{check}": _verdict_column(VerdictField.FAILED_CHECKS, check)
+            for check in FAILED_CHECKS}
 
 
 READOUTS: dict[str, Readout] = {
@@ -97,7 +128,15 @@ READOUTS: dict[str, Readout] = {
     "legal_target": _affected,
     "legal_target_protected": _affected,
     "affordable": _affordable,
-    "fires": _fires,
+    "fires": _verdict_column("trigger_fired"),
+    # Gen-3 trains the field itself on every card and player of a decision
+    # whose candidate targets: 1 at a legal target, 0 elsewhere (FR-074).
+    "target_legal": _legality_field("target_legal"),
+    "may_attack": _legality_field("attacker_legal"),
+    "can_play": _verdict_column("can_play"),
+    "timing": _verdict_column("timing"),
+    # One per check a candidate can fail: the probability it fails.
+    **_failed_check_readouts(),
 }
 
 
@@ -114,6 +153,19 @@ def card_slots(surface) -> dict[str, int]:
     for index, slot in enumerate(surface.slots):
         if slot.kind is SlotKind.CARD and slot.entity_id is not None:
             slots.setdefault(slot.entity_id, index)
+    return slots
+
+
+def entity_slots(surface) -> dict[str, int]:
+    """Each card entity's ``[CARD]`` slot and each player's ``[PLAYER]`` slot
+    in one record's surface: what a field scored at players as well as
+    cards, such as ``target_legal``, is read at."""
+    from effects.domain.effect_head_input import SlotKind
+
+    slots = card_slots(surface)
+    for index, slot in enumerate(surface.slots):
+        if slot.kind is SlotKind.PLAYER and slot.player_id is not None:
+            slots.setdefault(slot.player_id, index)
     return slots
 
 

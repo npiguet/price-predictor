@@ -15,7 +15,13 @@ read one statement of the rule rather than three. Rules covered:
   (:func:`may_target`), being enchanted (:func:`may_enchant`) and being dealt
   damage (:func:`damage_prevented`), over the qualities
   :class:`ProtectionQuality` reads: a colour, a card type, a creature type, a
-  condition, everything.
+  condition, everything;
+- 500.1, which phase and step a turn is in, as Forge's scripts name a set of
+  them (:func:`forge_phases`), and 307.1 and 117.1a, when a sorcery-speed
+  play's timing allows it (:func:`sorcery_timing`);
+- 702.61a, split second: while a spell with it is on the stack, no other spell
+  may be cast and no ability but a mana ability activated
+  (:func:`split_second_forbids`).
 
 Torch-free.
 """
@@ -318,3 +324,72 @@ def may_block(attacker_keywords: Iterable[str], attacker_colours: Iterable[str],
     blocker = Characteristics.made(
         blocker_types, blocker_subtypes, blocker_colours, blocker_mana_value)
     return not _covered((*qualities, *attacker_protections), blocker)
+
+
+# ── turn structure (500.1, 307.1, 702.61) ────────────────────────────────
+
+#: A turn's phases and steps in order (500.1), spelled as a record's
+#: ``global.phase`` spells them.
+PHASE_ORDER: tuple[str, ...] = (
+    "untap", "upkeep", "draw", "main1", "combat_begin", "combat_declare_attackers",
+    "combat_declare_blockers", "combat_first_strike_damage", "combat_damage",
+    "combat_end", "main2", "end_of_turn", "cleanup",
+)
+#: Forge's script name of each (``PhaseType.nameForScripts``).
+_SCRIPT_PHASES: dict[str, str] = dict(zip((
+    "untap", "upkeep", "draw", "main1", "begincombat", "declare attackers",
+    "declare blockers", "first strike damage", "combat damage", "endcombat",
+    "main2", "end of turn", "cleanup",
+), PHASE_ORDER))
+MAIN_PHASES: frozenset[str] = frozenset({"main1", "main2"})
+
+
+def _phase(name: str) -> str | None:
+    name = name.strip().lower()
+    if name in _SCRIPT_PHASES:
+        return _SCRIPT_PHASES[name]
+    return name if name in PHASE_ORDER else None
+
+
+def forge_phases(value: str | None) -> frozenset[str] | None:
+    """The phases and steps a script's phase list names (``ActivationPhases$``,
+    ``ConditionPhases$``, a static's ``Phases$``), as Forge's
+    ``PhaseType.parseRange`` reads it: a comma-separated list of names, ``Main``
+    for both main phases, ``A->B`` the steps from A to B inclusive, ``A->`` from
+    A to cleanup. None for a value naming no phase Forge knows, or a range
+    running backwards."""
+    if not value or not value.strip():
+        return None
+    out: set[str] = set()
+    for part in value.split(","):
+        if "->" in part:
+            start, _, end = part.partition("->")
+            first, last = _phase(start), _phase(end) if end.strip() else "cleanup"
+            if first is None or last is None:
+                return None
+            i, j = PHASE_ORDER.index(first), PHASE_ORDER.index(last)
+            if i > j:
+                return None
+            out.update(PHASE_ORDER[i : j + 1])
+        elif part.strip() == "Main":
+            out.update(MAIN_PHASES)
+        else:
+            phase = _phase(part)
+            if phase is None:
+                return None
+            out.add(phase)
+    return frozenset(out)
+
+
+def sorcery_timing(*, own_turn: bool, phase: str, stack_size: int) -> bool:
+    """Whether a sorcery-speed play's timing allows it: during its controller's
+    own main phase while the stack is empty (307.1, 117.1a)."""
+    return own_turn and phase in MAIN_PHASES and stack_size == 0
+
+
+def split_second_forbids(*, split_second_on_stack: bool, land_play: bool) -> bool:
+    """Whether split second forbids a candidate: a spell with split second is
+    on the stack and the candidate is a spell or a non-mana ability, which
+    every candidate but a land play is (702.61a; mana abilities are never
+    candidates)."""
+    return split_second_on_stack and not land_play
