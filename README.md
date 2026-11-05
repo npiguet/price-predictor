@@ -1090,6 +1090,70 @@ A random-seat match writes effect records only, never a row of
 mixes gen-1 and gen-2 shards, because `actor_player` on playability records
 means a different player in each.
 
+### Generation 3
+
+Gen-3 (feature 025, `specs/025-ability-effect-model-gen3/quickstart.md`) ties
+the corpus, the model and checkpoint selection to the rules of the game: every
+scenario of `rules/` declares a detector that finds the records showing its
+rule, curation adds copies per rule, the trunk reads typed relations between
+slots, and the checkpoint is the epoch with the best control score over a
+selection set frozen per corpus. `build-corpus`, `train-effect-model`,
+`evaluate-effect-model` and the knowledge probes read gen-3 records only.
+Stages in order:
+
+```bash
+# 1. detectors, and per-rule counts on gen-2's shards; the counts pick the
+#    rules for directed forks and the coverage round's wording cards
+python scripts/rules_catalogue.py validate
+python -u -m effects rule-counts --records-dir output/effects/records-gen2 --workers 10
+python scripts/rules_catalogue.py directed-rules --counts output/effects/rule-counts.json
+
+# 2. the relation-aware trunk: one step on a curated shard must fit 8 GB
+python -u scripts/measure_trunk_step.py --shard <curated shard> --batch-size 32
+
+# 3. pilot: every record carries generation 3; read the dropped-event table
+python -u -m sealed match-outcomes --effect-records output/effects/records/ \
+    --count-dropped-events --random-seat-share 0.25 --random-seat-probability 0.5 \
+    --directed-fork-rules 704.5f --directed-fork-probability 1 --workers 10
+python -u -m effects validate-corpus --effect-records output/effects/records/
+python -u -m effects field-coverage --effect-records output/effects/records/
+python -u -m effects rule-counts --records-dir output/effects/records/ --workers 10
+
+# 4. after each input or output change: update rules/MODEL-FIELDS.md, rerun
+#    scripts/rules_heads_workflow.js, then print the newly learnable rules
+python scripts/rules_catalogue.py gen3-fields
+
+# 5. full collection: directed forks, the wording-card coverage round, variants
+python -u -m sealed match-outcomes --effect-records output/effects/records/ \
+    --directed-fork-rules "$(paste -sd, rules/directed-fork-rules.txt)" <run flags>
+python -u -m effects collect-coverage --wording-cards rules/coverage-wording-cards.txt \
+    --directed-fork-rules "$(paste -sd, rules/directed-fork-rules.txt)" <run flags>
+python -u -m effects collect-variants <run flags>
+
+# 6. curate with rule budgets and placed halves, then freeze the selection set
+python -u -m effects build-corpus --records-dir output/effects/records/ \
+    --output output/effects/corpus-gen3/ --workers 10
+python -u scripts/effect_knowledge_probes/run.py --freeze-probe-set \
+    --corpus output/effects/corpus-gen3/
+
+# 7. train; each epoch scores the selection halves on the averaged weights
+python -u -m effects train-effect-model --corpus output/effects/corpus-gen3/ --rule-mask hard
+
+# 8. report on the reporting halves
+python -u -m effects encode-abilities
+python -u -m effects evaluate-effect-model
+python -u scripts/effect_knowledge_probes/run.py --checkpoint models/effects/effect-model/latest.pt
+```
+
+`collect-coverage --directed-fork-rules` is a label only: no fork runs, and the
+rules go to every record's `aimed_at`, which keeps those records out of the rule
+tests. `match-outcomes` and `collect-variants` refuse at startup a listed rule
+with no detector, no classified variant or no registered board precondition.
+`build-corpus` exits 1 after writing the corpus when a half's rule tests already
+miss their precision target, and the freeze exits 1 when a half holds fewer
+than 300 games or a component misses its target; `train-effect-model` exits 1
+at startup without the selection set frozen for its corpus.
+
 Collection rides matches that were going to be played anyway, so it costs no
 extra simulation. `--effect-records` has **no default** on `match-outcomes`,
 because a default would quietly turn every self-play run into a collection run;
@@ -1109,7 +1173,8 @@ name at startup, and falls back to bracket attribution when it finds none. Every
 record carries the mode it was collected under, so a corpus gathered after a
 Forge upgrade dropped the patches says so rather than being silently mislabeled.
 
-Three gates guard the result, and two of them block. **Gate 1** compares the
+Three gates guard the result, and two of them pass or fail, reported (the
+command exits 0 either way). **Gate 1** compares the
 model against an identity baseline that cannot read text, on three margins at
 once — whether it knows *that* something happens, *what*, and *how much* — so a
 model that has learned only the marginal effect distribution fails. **Gate 2**
@@ -1122,7 +1187,7 @@ average-case metric.
 Requires the `forge-connector` fat JAR (now also containing
 `KeywordDefinitionMain`, `CastabilityMain` and `VariantSidecarMain`) and a
 converted corpus with sidecars. Records land in
-`output/effects/records/{run_id}.{worker}.jsonl`, the ability cache in
+`output/effects/records/{run_id}.{worker}-{lifetime}.jsonl.gz`, the ability cache in
 `output/effects/abilities/`, and checkpoints under
 `models/effects/effect-model/`. A checkpoint carries the split it trained
 against and the hashes of the vocabulary and keyword file it read, and every
