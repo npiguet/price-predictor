@@ -210,6 +210,7 @@ _TORCH_FREE = (
     "effects.application.corpus_write",
     "effects.application.corpus_report",
     "effects.application.build_corpus",
+    "effects.application.freeze_selection_set",
 )
 
 
