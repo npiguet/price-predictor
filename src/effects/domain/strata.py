@@ -21,6 +21,15 @@ class Stratum(StrEnum):
     DROPPED_HELD_OUT_TEXT = "dropped-held-out-text"
 
 
+class Half(StrEnum):
+    """One half of a validation stratum, split by game (FR-070): the selection
+    half feeds the control score, the reporting half scores the selected
+    checkpoint."""
+
+    SELECTION = "selection"
+    REPORTING = "reporting"
+
+
 #: The strata a build writes a directory for, in report order.
 OUTPUT_STRATA: tuple[Stratum, ...] = (
     Stratum.TRAINING, Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT, Stratum.GATE_ONE,

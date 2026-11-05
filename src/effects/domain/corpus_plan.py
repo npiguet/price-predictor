@@ -38,7 +38,7 @@ from effects.domain.effect_families import (
 from effects.domain.provenance import ProvenanceKey, SidecarLookup
 from effects.domain.records import EffectRecord, LegalityDecision
 from effects.domain.sampling import SamplingClass, sampling_class
-from effects.domain.strata import Stratum
+from effects.domain.strata import Half, Stratum
 
 #: A record's acting keys: the whole tuple, hashable and picklable as it is.
 Keys = tuple[ProvenanceKey, ...]
@@ -483,10 +483,14 @@ class GameRoute(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class GameRouting:
-    """The per-game placement rule, decided once per game by the survey (FR-044-046).
+    """Gen-2's per-game draw, decided once per game by the survey (FR-044-046).
 
-    A pure function of the game, so a rebuild over a grown corpus places every
-    game it placed before.
+    A function of the game alone, but no longer the whole placement:
+    :func:`effects.domain.stratum_placement.place_games` starts from the same
+    draw (``PlacementRule.base_game_disjoint``), then promotes games and
+    splits the strata into halves over the whole corpus, so a rebuild over a
+    grown corpus can move a game it placed before (research R3). Removed once
+    ``build-corpus`` places through it.
     """
 
     game_disjoint_share: float
@@ -515,12 +519,19 @@ class GameRouting:
 
 @dataclass(frozen=True, slots=True)
 class GameStrata:
-    """Every game's stratum, as the write pass applies it."""
+    """Every game's stratum, as the write pass applies it, and each validation
+    game's half (FR-070), as ``stratum_placement.place_games`` decides them."""
 
     card_disjoint: frozenset[str]
     game_disjoint: frozenset[str]
     #: Every game naming a held-out card; those the cap did not admit are dropped.
     held_out: frozenset[str]
+    #: ``stratum -> half -> games``, over the two validation strata.
+    halves: Mapping[Stratum, Mapping[Half, frozenset[str]]] = field(default_factory=dict)
+    #: ``stratum -> half -> rules`` with test records of both polarities in the
+    #: corpus that hold none of one polarity in that half (FR-068a).
+    left_out_of_half: Mapping[Stratum, Mapping[Half, tuple[str, ...]]] = field(
+        default_factory=dict)
 
     def stratum_of(self, game_id: str) -> Stratum:
         if game_id in self.card_disjoint:
@@ -530,6 +541,14 @@ class GameStrata:
         if game_id in self.game_disjoint:
             return Stratum.GAME_DISJOINT
         return Stratum.TRAINING
+
+    def half_of(self, game_id: str) -> Half | None:
+        """The half a validation game was placed in; None outside the halves."""
+        for by_half in self.halves.values():
+            for half, games in by_half.items():
+                if game_id in games:
+                    return half
+        return None
 
 
 def admit_card_disjoint(
