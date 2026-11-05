@@ -65,4 +65,55 @@ class StatDifferTest {
                 event.params());
         assertEquals(List.of("colors", "colors_removed"), List.copyOf(event.params().keySet()));
     }
+    @Test
+    void aPumpMovesThePowerButNotTheBase() {
+        Card bears = TestCards.build("Grizzly Bears");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        bears.addPTBoost(2, 2, 1L, 0L);
+
+        List<EffectEvent> events = differ.diff(bears);
+
+        assertEquals(1, events.size());
+        assertEquals(EventType.PT_CHANGE, events.get(0).type());
+        assertEquals(Map.of("power_delta", 2, "toughness_delta", 2), events.get(0).params());
+    }
+
+    /**
+     * A setting effect (layer 7b) names the base it set, as the snapshot's
+     * {@code base_pt} spells it, beside the change it made to the total.
+     */
+    @Test
+    void aSettingEffectNamesTheBaseItSet() {
+        Card bears = TestCards.build("Grizzly Bears");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        bears.addNewPT(5, 5, 1L, 0L);
+
+        List<EffectEvent> events = differ.diff(bears);
+
+        assertEquals(1, events.size());
+        assertEquals(EventType.PT_CHANGE, events.get(0).type());
+        assertEquals(
+                Map.of("power_delta", 3, "toughness_delta", 3, "set_pt", List.of(5, 5)),
+                events.get(0).params());
+    }
+
+    /** A new base and a boost that cancel out still moved the base. */
+    @Test
+    void aBaseThatMovesUnderAnUnchangedTotalStillReportsTheBase() {
+        Card bears = TestCards.build("Grizzly Bears");
+        bears.addPTBoost(2, 2, 1L, 0L);
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        bears.addNewPT(4, 4, 2L, 0L);
+        bears.removePTBoost(1L, 0L);
+
+        List<EffectEvent> events = differ.diff(bears);
+
+        assertEquals(1, events.size());
+        assertEquals(
+                Map.of("power_delta", 0, "toughness_delta", 0, "set_pt", List.of(4, 4)),
+                events.get(0).params());
+    }
 }

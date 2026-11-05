@@ -10,9 +10,12 @@ import forge.game.event.GameEventDayTimeChanged;
 import forge.game.event.GameEventGameOutcome;
 import forge.game.event.GameEventPlayerCounters;
 import forge.game.event.GameEventPlayerRadiation;
+import forge.game.event.GameEventScry;
 import forge.game.event.GameEventShuffle;
 import forge.game.event.GameEventSpeedChanged;
+import forge.game.event.GameEventSurveil;
 import forge.game.player.Player;
+import forge.game.player.PlayerView;
 import forge.game.zone.Zone;
 import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
@@ -137,6 +140,24 @@ class BusEventsTest {
 
         assertEquals(EventType.LIBRARY_SHUFFLED, event.type());
         assertEquals(List.of("P" + player.getId()), event.subjects());
+    }
+
+    /**
+     * A scry and a surveil that kept every card on top are the same look and
+     * the same reorder; the look's mode tells them apart.
+     */
+    @Test
+    void aScryAndASurveilNameTheirLookApart() {
+        PlayerView view = PlayerView.get(player);
+        EffectEvent scried = BusEvents.scry(new GameEventScry(view, 2, 0)).get(0);
+        EffectEvent surveilled = BusEvents.surveil(new GameEventSurveil(view, 2, 0)).get(0);
+
+        assertEquals(EventType.CARD_LOOKED_AT, scried.type());
+        assertEquals("Scry", scried.params().get("mode"));
+        assertEquals(EventType.CARD_LOOKED_AT, surveilled.type());
+        assertEquals("Surveil", surveilled.params().get("mode"));
+        assertEquals(2, BusEvents.surveil(new GameEventSurveil(view, 2, 0)).size(),
+                "a surveil that milled nothing is a look and a reorder");
     }
 
     // ── player_won: name resolved back to the real Player, not carried as-is ──

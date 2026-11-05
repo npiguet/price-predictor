@@ -42,6 +42,15 @@ final class BusEvents {
     private BusEvents() {
     }
 
+    /**
+     * The {@code mode} of a look at a library, each the engine's own name for
+     * it: the trigger modes Forge runs for a scry and a surveil, and the one
+     * it runs for a search ({@code ApiEvents}' search rule).
+     */
+    static final String SCRY = "Scry";
+    static final String SURVEIL = "Surveil";
+    static final String SEARCHED_LIBRARY = "SearchedLibrary";
+
     // ── what the bus names as the causer ────────────────────────────────
 
     /**
@@ -382,7 +391,10 @@ final class BusEvents {
      * Scry, as the two things it is: cards looked at, and a library reordered.
      *
      * <p>The head's library-event channel is a multi-hot over what happened to
-     * a library, and a scry is both.
+     * a library, and a scry is both. The look carries the engine's name for it
+     * as its {@code mode}, {@value #SCRY}, which is what tells it from a
+     * surveil that kept every card on top: the two are otherwise the same
+     * events.
      */
     static List<EffectEvent> scry(GameEventScry event) {
         int count = event.toTop() + event.toBottom();
@@ -392,12 +404,15 @@ final class BusEvents {
         String player = Refs.of(event.player());
         return List.of(
                 new EffectEvent(EventType.CARD_LOOKED_AT)
-                        .subject(player).param("count", count),
+                        .subject(player).param("count", count).param("mode", SCRY),
                 new EffectEvent(EventType.LIBRARY_REORDERED)
                         .subject(player).param("count", count));
     }
 
-    /** Surveil: cards looked at, and however many went to the graveyard. */
+    /**
+     * Surveil: cards looked at, and however many went to the graveyard. The
+     * look's {@code mode} is {@value #SURVEIL} (see {@link #scry}).
+     */
     static List<EffectEvent> surveil(GameEventSurveil event) {
         int count = event.toLibrary() + event.toGraveyard();
         if (event.player() == null || count <= 0) {
@@ -406,7 +421,7 @@ final class BusEvents {
         String player = Refs.of(event.player());
         List<EffectEvent> events = new ArrayList<>();
         events.add(new EffectEvent(EventType.CARD_LOOKED_AT)
-                .subject(player).param("count", count));
+                .subject(player).param("count", count).param("mode", SURVEIL));
         events.add(new EffectEvent(EventType.LIBRARY_REORDERED)
                 .subject(player).param("count", count));
         if (event.toGraveyard() > 0) {

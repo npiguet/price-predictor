@@ -1,7 +1,9 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.collect.Multiset;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
+import forge.game.card.CounterType;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayDeque;
@@ -11,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Function;
 
 /**
@@ -304,8 +307,13 @@ final class ClauseOutcomeRouter {
 
     /**
      * What a made token is, for a {@code token_created} event: its base
-     * power and toughness, its type line and its keywords — see
-     * {@link #outcomeEvent} for why these are rendered here.
+     * power and toughness, its type line, its keywords, who controls it and
+     * the counters it entered with ({@code counters}, counter name to count
+     * as an entity spells them, empty for none) — see {@link #outcomeEvent}
+     * for why these are rendered here. Read off the token on the
+     * battlefield, which the counters it was made with have already reached;
+     * Forge batches tokens by controller and counters too, so the sample
+     * speaks for its whole batch.
      */
     private static Map<String, Object> tokenCharacteristics(Card token) {
         Map<String, Object> traits = new LinkedHashMap<>();
@@ -313,6 +321,12 @@ final class ClauseOutcomeRouter {
         traits.put("toughness", token.getBaseToughness());
         traits.put("types", token.getType().toString());
         traits.put("keywords", CardSpelling.keywordNames(token.getKeywords()));
+        traits.put("controller", Refs.ofNullable(token.getController()));
+        Map<String, Integer> counters = new TreeMap<>();
+        for (Multiset.Entry<CounterType> entry : token.getCounters().entrySet()) {
+            counters.merge(CardSpelling.counterName(entry.getElement()), entry.getCount(), Integer::sum);
+        }
+        traits.put("counters", counters);
         return traits;
     }
 

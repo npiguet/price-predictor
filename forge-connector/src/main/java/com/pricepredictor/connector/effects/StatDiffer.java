@@ -39,7 +39,7 @@ final class StatDiffer {
 
     /** One card's computed characteristics, as of the last time it was read. */
     private record Stats(
-            int power, int toughness, Set<String> keywords,
+            int power, int toughness, int basePower, int baseToughness, Set<String> keywords,
             Set<String> types, Set<String> colors, String controller) {
     }
 
@@ -64,11 +64,22 @@ final class StatDiffer {
         String subject = Refs.of(card);
         List<EffectEvent> events = new ArrayList<>();
 
-        if (before.power() != now.power() || before.toughness() != now.toughness()) {
-            events.add(new EffectEvent(EventType.PT_CHANGE)
+        boolean baseMoved = before.basePower() != now.basePower()
+                || before.baseToughness() != now.baseToughness();
+        if (before.power() != now.power() || before.toughness() != now.toughness()
+                || (baseMoved && card.isCreature())) {
+            EffectEvent pt = new EffectEvent(EventType.PT_CHANGE)
                     .subject(subject)
                     .param("power_delta", now.power() - before.power())
-                    .param("toughness_delta", now.toughness() - before.toughness()));
+                    .param("toughness_delta", now.toughness() - before.toughness());
+            // The base a setting effect gave it (layer 7b, or a CDA's 7a), as
+            // the snapshot's base_pt spells it: without it a 0/0 artifact
+            // animated into a 5/5 reads the same as a 0/0 creature pumped
+            // +5/+5. Only on a creature, as base_pt is.
+            if (baseMoved && card.isCreature()) {
+                pt.param("set_pt", List.of(now.basePower(), now.baseToughness()));
+            }
+            events.add(pt);
         }
         addKeywordEvents(events, subject, before.keywords(), now.keywords());
         addSetChangeEvent(events, subject, EventType.TYPE_CHANGE,
@@ -165,7 +176,9 @@ final class StatDiffer {
         Set<String> keywords = new LinkedHashSet<>(CardSpelling.keywordNames(card.getKeywords()));
         Set<String> types = new LinkedHashSet<>(TypeLine.names(card.getType()));
         return new Stats(
-                card.getNetPower(), card.getNetToughness(), keywords, types,
+                card.getNetPower(), card.getNetToughness(),
+                card.getNetPowerBreakdown().currentValue,
+                card.getNetToughnessBreakdown().currentValue, keywords, types,
                 new LinkedHashSet<>(CardSpelling.colorLetters(card.getColor())),
                 Refs.ofNullable(card.getController()));
     }

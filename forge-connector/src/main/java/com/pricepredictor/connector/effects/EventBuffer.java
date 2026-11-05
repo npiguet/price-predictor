@@ -99,8 +99,26 @@ final class EventBuffer {
         if (IDEMPOTENT_EVENTS.contains(event.type()) && !seen.add(event.toJson())) {
             return false;
         }
+        if (event.type() == EventType.LIBRARY_SHUFFLED) {
+            forgetLibraryPositions(event.subjects());
+        }
         events.add(event);
         return true;
+    }
+
+    /**
+     * A shuffle of these players' libraries takes the position off every
+     * earlier move into them: a card shuffled in sits nowhere in particular,
+     * and a reader that finds a move into a library with no position and a
+     * shuffle of it reads the card as shuffled in.
+     */
+    private void forgetLibraryPositions(List<String> shuffled) {
+        for (EffectEvent earlier : events) {
+            if (earlier.type() == EventType.ZONE_CHANGE
+                    && shuffled.contains(earlier.intoLibraryOf())) {
+                earlier.params().remove("library_position");
+            }
+        }
     }
 
     /** The events filed so far, in order. */

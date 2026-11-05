@@ -5,6 +5,7 @@ import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
+import forge.game.event.EventValueChangeType;
 import forge.game.event.GameEvent;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardDamaged;
@@ -17,6 +18,8 @@ import forge.game.event.GameEventSpellAbilityCast;
 import forge.game.event.GameEventSpellResolved;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.event.GameEventZone;
+import forge.game.phase.PhaseType;
+import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.Zone;
 import forge.game.zone.ZoneType;
@@ -110,10 +113,23 @@ class ForkEventSinkTest {
         return gap;
     }
 
-    /** And it does not listen to the per-zone notification, which fires three times per move. */
+    /**
+     * And it reads no move off the per-zone notification, which fires three
+     * times per move: that notification is read for a player's command-zone
+     * marks alone (the city's blessing, a completed dungeon), and a
+     * notification of any other zone files nothing.
+     */
     @Test
-    void aForkDoesNotReadThePerZoneNotification() {
-        assertFalse(subscriptions(ForkEventSink.class).contains(GameEventZone.class));
+    void aForkReadsNoMoveOffThePerZoneNotification() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        Card bears = TestBoard.inPlay(game, you, "Grizzly Bears");
+        ForkEventSink sink = ForkEventSink.forCast(game, TestBoard.spellOf(bears, you));
+
+        sink.onZone(new GameEventZone(ZoneType.Battlefield, you, EventValueChangeType.Added, bears));
+        sink.onZone(new GameEventZone(ZoneType.Hand, you, EventValueChangeType.Removed, bears));
+
+        assertTrue(sink.events().isEmpty(), sink.events().toString());
     }
 
     // ── a fork event says where it came from ────────────────────────────

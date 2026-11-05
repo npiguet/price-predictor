@@ -41,6 +41,43 @@ class EventBufferTest {
         assertEquals(2, into.events().size());
     }
 
+    /**
+     * A shuffle of a library takes the position off the moves into it before
+     * it: the card was shuffled in, and sits nowhere in particular. A move
+     * into another player's library keeps its position.
+     */
+    @Test
+    void aShuffleTakesThePositionOffTheMovesIntoThatLibrary() {
+        EventBuffer into = new EventBuffer();
+        EffectEvent shuffledIn = intoLibrary("E7", 0).intoLibraryOf("P0");
+        EffectEvent elsewhere = intoLibrary("E8", -1).intoLibraryOf("P1");
+        into.file(shuffledIn);
+        into.file(elsewhere);
+
+        into.file(new EffectEvent(EventType.LIBRARY_SHUFFLED).subject("P0"));
+
+        assertFalse(shuffledIn.params().containsKey("library_position"));
+        assertEquals(-1, elsewhere.params().get("library_position"));
+    }
+
+    /** A move after the shuffle is where it was put. */
+    @Test
+    void aMoveAfterTheShuffleKeepsItsPosition() {
+        EventBuffer into = new EventBuffer();
+        into.file(new EffectEvent(EventType.LIBRARY_SHUFFLED).subject("P0"));
+        EffectEvent onTop = intoLibrary("E7", 0).intoLibraryOf("P0");
+
+        into.file(onTop);
+
+        assertEquals(0, onTop.params().get("library_position"));
+    }
+
+    private static EffectEvent intoLibrary(String card, int position) {
+        return new EffectEvent(EventType.ZONE_CHANGE)
+                .subject(card).param("from_zone", "hand")
+                .param("to_zone", "library").param("library_position", position);
+    }
+
     private static EffectEvent zoneChange() {
         return new EffectEvent(EventType.ZONE_CHANGE)
                 .subject("E7").param("from_zone", "hand")

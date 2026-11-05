@@ -238,6 +238,48 @@ class PriorityCandidatesTest {
         }
     }
 
+    /** The mana a candidate in A's hand would be charged, as its decision record writes it. */
+    private static String chargedFor(Game game, Player a, Card card) {
+        return PriorityCandidates.candidatesOf(game, a).stream()
+                .filter(c -> c.ability().getHostCard() == card && c.ability().isSpell())
+                .findFirst().orElseThrow()
+                .read().orElseThrow().manaCost();
+    }
+
+    /** A cost increase is in the charged cost: Thalia makes a Bolt {1}{R}. */
+    @Test
+    void aCostIncreaseIsCharged() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        TestBoard.inPlay(game, game.getPlayers().get(1), "Thalia, Guardian of Thraben");
+        game.getAction().checkStaticAbilities();
+        Card bolt = TestBoard.inHand(game, a, "Lightning Bolt");
+
+        assertEquals("{1}{R}", chargedFor(game, a, bolt));
+    }
+
+    /** A reduction is too: Helm of Awakening makes Grizzly Bears {G}. */
+    @Test
+    void aCostReductionIsCharged() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        TestBoard.inPlay(game, a, "Helm of Awakening");
+        game.getAction().checkStaticAbilities();
+        Card bears = TestBoard.inHand(game, a, "Grizzly Bears");
+
+        assertEquals("{G}", chargedFor(game, a, bears));
+    }
+
+    /** Unadjusted, the printed cost, its X still to be chosen. */
+    @Test
+    void anUnadjustedXSpellKeepsItsX() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Card fireball = TestBoard.inHand(game, a, "Fireball");
+
+        assertEquals("{X}{R}", chargedFor(game, a, fireball));
+    }
+
     /** Exploration raises the limit: the same second land is playable. */
     @Test
     void explorationMakesTheSecondLandPlayable() {

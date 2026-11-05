@@ -25,6 +25,7 @@ public final class EffectEvent {
      * event itself — the snapshot carries it as a card slot of its own.
      */
     private forge.game.card.Card lastKnown;
+    private String libraryOwner;
 
     public EffectEvent(EventType type) {
         this.type = type;
@@ -99,6 +100,21 @@ public final class EffectEvent {
     /** The subject's last-known state, or null when the engine handed none over. */
     forge.game.card.Card lastKnown() {
         return lastKnown;
+    }
+
+    /**
+     * The player whose library a move went into, never written: what lets a
+     * later shuffle of that library take the move's position off
+     * ({@link EventBuffer}).
+     */
+    EffectEvent intoLibraryOf(String player) {
+        this.libraryOwner = player;
+        return this;
+    }
+
+    /** The player whose library this move went into, or null. */
+    String intoLibraryOf() {
+        return libraryOwner;
     }
 
     public EventType type() {

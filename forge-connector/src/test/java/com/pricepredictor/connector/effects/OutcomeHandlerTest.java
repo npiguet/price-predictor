@@ -6,6 +6,7 @@ import forge.game.Game;
 import forge.game.ability.AbilityFactory;
 import forge.game.ability.AbilityUtils;
 import forge.game.card.Card;
+import forge.game.card.CounterEnumType;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
@@ -112,11 +113,38 @@ class OutcomeHandlerTest {
         assertEquals("b_1_1_bat_flying", params.get("token_script_id"), written.toString());
         assertEquals(2L, params.get("count"), written.toString());
         assertEquals(List.of("flying"), CardSpelling.keywordNames(bat.getKeywords()));
-        assertEquals(Map.of("power", 1L, "toughness", 1L,
-                        "types", bat.getType().toString(), "keywords", List.of("flying")),
-                params.get("characteristics"), written.toString());
+        Map<String, Object> traits = new java.util.HashMap<>();
+        traits.put("power", 1L);
+        traits.put("toughness", 1L);
+        traits.put("types", bat.getType().toString());
+        traits.put("keywords", List.of("flying"));
+        traits.put("controller", null);
+        traits.put("counters", Map.of());
+        assertEquals(traits, params.get("characteristics"), written.toString());
         assertFalse(written.toString().contains("sample"), written.toString());
         assertEquals(List.of(), written.get("subjects"), written.toString());
+    }
+
+    /**
+     * A token's controller and the counters it entered with ride its
+     * characteristics, so a group made for another player, or made with
+     * counters, reads apart.
+     */
+    @Test
+    void aTokenSampleNamesItsControllerAndCounters() throws Throwable {
+        Card bat = TestCards.token("b_1_1_bat_flying");
+        Player owner = new Player("token owner", TestCards.game(), 93202);
+        bat.setOwner(owner);
+        bat.setCounters(CounterEnumType.P1P1, 2);
+        SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+
+        Map<String, Object> written = onlyEvent(
+                new Object[]{sa, "token_created", Map.of("sample", bat, "count", 1)});
+
+        Map<String, Object> traits = RecordLines.asMap(params(written).get("characteristics"));
+        assertEquals("P93202", traits.get("controller"), written.toString());
+        assertEquals(Map.of(CardSpelling.counterName(CounterEnumType.P1P1), 2L),
+                traits.get("counters"), written.toString());
     }
 
     /**

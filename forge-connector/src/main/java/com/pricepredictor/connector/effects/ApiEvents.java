@@ -1,16 +1,20 @@
 package com.pricepredictor.connector.effects;
 
 import com.google.common.base.Strings;
+import forge.game.Game;
 import forge.game.GameEntity;
 import forge.game.ability.AbilityUtils;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
+import forge.game.card.CardCollection;
 import forge.game.combat.Combat;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
+import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -274,6 +278,8 @@ final class ApiEvents {
         titleRules(rules);
         combatRemovalRules(rules);
         textRules(rules);
+        combatEntryAndSearchRules(rules);
+        permanentStateRules(rules);
         return Map.copyOf(rules);
     }
 
@@ -505,7 +511,8 @@ final class ApiEvents {
         put(rules, Rule.shaped(EventType.DAMAGE_HEALED, ApiEvents::damageBefore,
                         (event, sa, host, memo) -> event.param("amount", memo == null ? 0 : memo)),
                 "HealDamage");
-        put(rules, Rule.shaped(EventType.ABILITY_CHANGE, null, ApiEvents::grantedAbilities),
+        put(rules, Rule.shaped(EventType.ABILITY_CHANGE, ApiEvents::animated,
+                        ApiEvents::grantedAbilities),
                 "Animate", "AnimateAll");
         put(rules, Rule.shaped(EventType.CONTINUOUS_EFFECT_CREATED, null,
                         (event, sa, host, memo) ->
@@ -543,12 +550,72 @@ final class ApiEvents {
         return total;
     }
 
-    /** The abilities an animation grants, and whether it removes all others. */
+    /**
+     * The traits an animation grants, by their script names, and whether it
+     * removes all others, on each card it animated.
+     *
+     * <p>{@code abilities} joins the four lists an animation grants traits
+     * through -- {@code Abilities$}, {@code Triggers$}, {@code
+     * Replacements$} and {@code staticAbilities$}, each a comma-separated
+     * list of SVar names -- because the common animations grant a trigger or
+     * a static rather than an activated ability; keywords are not among
+     * them, being the keyword change's own event.
+     */
     private static EffectEvent grantedAbilities(
-            EffectEvent event, SpellAbility sa, Card host, Object memo) {
+            EffectEvent event, SpellAbility sa, Card host, List<Card> animated) {
+        List<String> granted = new ArrayList<>();
+        for (String list : GRANT_LISTS) {
+            String names = sa.getParamOrDefault(list, "");
+            for (String name : names.split(",")) {
+                if (!name.isBlank()) {
+                    granted.add(name.trim());
+                }
+            }
+        }
+        if (animated != null) {
+            Game game = host.getGame();
+            for (Card card : animated) {
+                Card now = game.getCardState(card, null);
+                if (now != null && now.isInPlay()) {
+                    event.subject(Refs.of(now));
+                }
+            }
+        }
         return event
-                .param("abilities", sa.getParamOrDefault("Abilities", ""))
+                .param("abilities", String.join(",", granted))
                 .param("removed", sa.hasParam("RemoveAllAbilities"));
+    }
+
+    /** The parameters an animation names granted traits in, as {@code AnimateEffectBase} reads them. */
+    private static final List<String> GRANT_LISTS =
+            List.of("Abilities", "Triggers", "Replacements", "staticAbilities");
+
+    /**
+     * The cards an animation is about to animate, read before it resolves.
+     *
+     * <p>{@code Animate} acts on {@code getCardsfromTargets} ({@link
+     * ClauseTargets#cardsFromTargets}); {@code AnimateAll} on every card in
+     * its {@code Zone$} (the battlefield by default) matching {@code
+     * ValidCards$}, of the targeted or defined players where it names any,
+     * as {@code AnimateAllEffect.resolve} filters them.
+     */
+    private static List<Card> animated(SpellAbility sa, Card host) {
+        if (sa.getApi() != ApiType.AnimateAll) {
+            return ClauseTargets.cardsFromTargets(sa);
+        }
+        List<ZoneType> zones = ZoneType.listValueOf(sa.getParamOrDefault("Zone", "Battlefield"));
+        CardCollection cards = new CardCollection();
+        if (sa.usesTargeting() || sa.hasParam("Defined")) {
+            for (Player player : ClauseTargets.affectedPlayers(sa)) {
+                cards.addAll(player.getCardsIn(zones));
+            }
+        } else {
+            cards.addAll(host.getGame().getCardsIn(zones));
+        }
+        List<Card> valid = new ArrayList<>();
+        AbilityUtils.filterListByType(cards, sa.getParamOrDefault("ValidCards", ""), sa)
+                .forEach(valid::add);
+        return valid;
     }
 
     /**
@@ -905,6 +972,250 @@ final class ApiEvents {
             event.subject(Refs.of(c));
         }
         return event.subjects().isEmpty() ? null : event;
+    }
+
+    // ── entering combat, becoming blocked, searching a library ──────────
+
+    /**
+     * Who entered combat as a clause resolved, an attacker that became
+     * blocked, and a library searched.
+     *
+     * <p>A creature put onto the battlefield attacking or blocking (a token
+     * made attacking, a ninja, a card put in "tapped and attacking") joins
+     * combat without being declared, and the bus says only that the combat
+     * changed. Read as the combatants after the clause less those before it,
+     * so the rule needs no list of the parameters ({@code TokenAttacking$},
+     * {@code Attacking$}, {@code Blocking$}, ...) a script asks for it with.
+     *
+     * <p>{@code ChangeZone} also searches libraries. Forge counts a player's
+     * searches of their own library ({@code Player.incLibrarySearched}, in
+     * {@code ChangeZoneEffect} alone), so a count that moved is a search,
+     * which no bus event announces; written as a look at that library named
+     * {@value BusEvents#SEARCHED_LIBRARY}, Forge's trigger mode for it, so a
+     * search reads apart from a scry and a surveil. A search of another
+     * player's library is not counted by Forge and reaches no event. One
+     * event per clause: a clause that both searched and put its card in
+     * attacking reports the attack.
+     */
+    private static void combatEntryAndSearchRules(Map<String, Rule<?>> rules) {
+        put(rules, new Rule<>(EventType.STATE_FLAG_CHANGE, ApiEvents::combatants,
+                        (sa, host, before) -> enteredCombat(host, before)),
+                "Token", "CopyPermanent", "ChangeZoneAll");
+        put(rules, new Rule<>(EventType.STATE_FLAG_CHANGE, ApiEvents::beforeChangeZone,
+                        (sa, host, before) -> changedZone(host, before)),
+                "ChangeZone");
+        put(rules, new Rule<>(EventType.BECAME_BLOCKED, ApiEvents::unblockedAttackers,
+                        (sa, host, before) -> becameBlocked(host, before)),
+                "BecomesBlocked", "Block");
+    }
+
+    /** The ids of every attacker and blocker, empty outside combat. */
+    private static Set<Integer> combatants(SpellAbility sa, Card host) {
+        Set<Integer> ids = new HashSet<>();
+        Combat combat = host.getGame().getCombat();
+        if (combat != null) {
+            combat.getAttackers().forEach(card -> ids.add(card.getId()));
+            combat.getAllBlockers().forEach(card -> ids.add(card.getId()));
+        }
+        return ids;
+    }
+
+    /**
+     * {@code state_flag_change} {@code entered_attacking} on the attackers
+     * not in combat before the clause, else {@code entered_blocking} on such
+     * blockers; null when nobody joined.
+     */
+    private static EffectEvent enteredCombat(Card host, Set<Integer> before) {
+        Combat combat = host.getGame().getCombat();
+        if (before == null || combat == null) {
+            return null;
+        }
+        EffectEvent attacking = joined(combat.getAttackers(), before, "entered_attacking");
+        return attacking != null ? attacking
+                : joined(combat.getAllBlockers(), before, "entered_blocking");
+    }
+
+    private static EffectEvent joined(Iterable<Card> now, Set<Integer> before, String flag) {
+        EffectEvent event = new EffectEvent(EventType.STATE_FLAG_CHANGE)
+                .param("flag", flag).param("value", true);
+        for (Card card : now) {
+            if (!before.contains(card.getId())) {
+                event.subject(Refs.of(card));
+            }
+        }
+        return event.subjects().isEmpty() ? null : event;
+    }
+
+    /** What a zone change is read against: the combatants and every player's searches. */
+    private record BeforeChangeZone(Set<Integer> combatants, Map<Player, Integer> searches) {
+    }
+
+    private static BeforeChangeZone beforeChangeZone(SpellAbility sa, Card host) {
+        Map<Player, Integer> searches = new LinkedHashMap<>();
+        for (Player player : host.getGame().getPlayers()) {
+            searches.put(player, player.getLibrarySearched());
+        }
+        return new BeforeChangeZone(combatants(sa, host), searches);
+    }
+
+    private static EffectEvent changedZone(Card host, BeforeChangeZone before) {
+        if (before == null) {
+            return null;
+        }
+        EffectEvent entered = enteredCombat(host, before.combatants());
+        if (entered != null) {
+            return entered;
+        }
+        EffectEvent searched = new EffectEvent(EventType.CARD_LOOKED_AT)
+                .param("from_zone", CardSpelling.zoneName(ZoneType.Library))
+                .param("mode", BusEvents.SEARCHED_LIBRARY);
+        before.searches().forEach((player, count) -> {
+            if (player.getLibrarySearched() > count) {
+                searched.subject(Refs.of(player));
+            }
+        });
+        return searched.subjects().isEmpty() ? null : searched;
+    }
+
+    /** The attackers not blocked before the clause. */
+    private static List<Card> unblockedAttackers(SpellAbility sa, Card host) {
+        Combat combat = host.getGame().getCombat();
+        List<Card> unblocked = new ArrayList<>();
+        if (combat != null) {
+            for (Card attacker : combat.getAttackers()) {
+                if (!combat.isBlocked(attacker)) {
+                    unblocked.add(attacker);
+                }
+            }
+        }
+        return unblocked;
+    }
+
+    /**
+     * {@code became_blocked} on every attacker the clause blocked, with the
+     * blockers now blocking them ({@code BecomesBlocked} leaves none, a
+     * {@code Block} clause names its blocker); null when none became blocked.
+     */
+    private static EffectEvent becameBlocked(Card host, List<Card> before) {
+        Combat combat = host.getGame().getCombat();
+        if (before == null || combat == null) {
+            return null;
+        }
+        EffectEvent event = new EffectEvent(EventType.BECAME_BLOCKED);
+        List<String> blockers = new ArrayList<>();
+        for (Card attacker : before) {
+            if (combat.isAttacking(attacker) && combat.isBlocked(attacker)) {
+                event.subject(Refs.of(attacker));
+                for (Card blocker : combat.getBlockers(attacker)) {
+                    String ref = Refs.of(blocker);
+                    if (!blockers.contains(ref)) {
+                        blockers.add(ref);
+                    }
+                }
+            }
+        }
+        return event.subjects().isEmpty() ? null : event.param("blockers", blockers);
+    }
+
+    // ── a permanent's own state: Class levels, doors, pairs, merges ─────
+
+    /**
+     * The states of a permanent no bus event announces and no stats change
+     * shows, each a {@code state_flag_change} naming it: a Class gaining a
+     * level ({@code class_level}, {@code value} the level reached), a Room's
+     * door unlocking ({@code door_unlocked}), soulbond pairing two creatures
+     * ({@code paired}, on both), and a mutating spell merging into a
+     * creature ({@code merged}, on the merged permanent). Each read as the
+     * state after the clause against the state before it, so a clause that
+     * changed nothing reports nothing.
+     */
+    private static void permanentStateRules(Map<String, Rule<?>> rules) {
+        put(rules, new Rule<>(EventType.STATE_FLAG_CHANGE,
+                        (sa, host) -> host.getClassLevel(),
+                        (sa, host, before) -> before == null || host.getClassLevel() <= before
+                                ? null
+                                : new EffectEvent(EventType.STATE_FLAG_CHANGE)
+                                        .subject(Refs.of(host))
+                                        .param("flag", "class_level")
+                                        .param("value", host.getClassLevel())),
+                "ClassLevelUp");
+        put(rules, new Rule<>(EventType.STATE_FLAG_CHANGE, ApiEvents::unlockedDoors,
+                        (sa, host, before) -> doorsUnlocked(host, before)),
+                "UnlockDoor");
+        put(rules, new Rule<>(EventType.STATE_FLAG_CHANGE, ApiEvents::pairedCreatures,
+                        (sa, host, before) -> newlyPaired(host, before)),
+                "Bond");
+        put(rules, new Rule<>(EventType.STATE_FLAG_CHANGE, null,
+                        (sa, host, memo) -> merged(host)),
+                "Mutate");
+    }
+
+    /** How many doors each permanent on the battlefield has unlocked, by id. */
+    private static Map<Integer, Integer> unlockedDoors(SpellAbility sa, Card host) {
+        Map<Integer, Integer> unlocked = new HashMap<>();
+        for (Card card : host.getGame().getCardsIn(ZoneType.Battlefield)) {
+            unlocked.put(card.getId(), doors(card));
+        }
+        return unlocked;
+    }
+
+    private static EffectEvent doorsUnlocked(Card host, Map<Integer, Integer> before) {
+        if (before == null) {
+            return null;
+        }
+        EffectEvent event = new EffectEvent(EventType.STATE_FLAG_CHANGE)
+                .param("flag", "door_unlocked").param("value", true);
+        for (Card card : host.getGame().getCardsIn(ZoneType.Battlefield)) {
+            if (doors(card) > before.getOrDefault(card.getId(), 0)) {
+                event.subject(Refs.of(card));
+            }
+        }
+        return event.subjects().isEmpty() ? null : event;
+    }
+
+    private static int doors(Card card) {
+        return card.getUnlockedRooms() == null ? 0 : card.getUnlockedRooms().size();
+    }
+
+    /** The ids of every paired permanent on the battlefield. */
+    private static Set<Integer> pairedCreatures(SpellAbility sa, Card host) {
+        Set<Integer> paired = new HashSet<>();
+        for (Card card : host.getGame().getCardsIn(ZoneType.Battlefield)) {
+            if (card.isPaired()) {
+                paired.add(card.getId());
+            }
+        }
+        return paired;
+    }
+
+    private static EffectEvent newlyPaired(Card host, Set<Integer> before) {
+        if (before == null) {
+            return null;
+        }
+        EffectEvent event = new EffectEvent(EventType.STATE_FLAG_CHANGE)
+                .param("flag", "paired").param("value", true);
+        for (Card card : host.getGame().getCardsIn(ZoneType.Battlefield)) {
+            if (card.isPaired() && !before.contains(card.getId())) {
+                event.subject(Refs.of(card));
+            }
+        }
+        return event.subjects().isEmpty() ? null : event;
+    }
+
+    /**
+     * {@code merged} on the permanent a mutating spell merged into: {@code
+     * MutateEffect} sets the spell's {@code getMergedToCard} to it, the one
+     * permanent the merge leaves, whichever card went on top.
+     */
+    private static EffectEvent merged(Card host) {
+        Card into = host == null ? null : host.getMergedToCard();
+        if (into == null) {
+            return null;
+        }
+        return new EffectEvent(EventType.STATE_FLAG_CHANGE)
+                .subject(Refs.of(into))
+                .param("flag", "merged")
+                .param("value", true);
     }
 
     // ── readings several families share ─────────────────────────────────

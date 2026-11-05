@@ -23,11 +23,16 @@ import forge.game.event.GameEventScry;
 import forge.game.event.GameEventShuffle;
 import forge.game.event.GameEventSpeedChanged;
 import forge.game.event.GameEventSurveil;
+import forge.game.event.GameEventZone;
+import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.CostPaymentStack;
 import forge.game.zone.ZoneType;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The outcome events of the public bus, read once for every collector.
@@ -58,8 +63,28 @@ abstract class BusEventReader {
      */
     private final StatDiffer stats = new StatDiffer();
 
+    /**
+     * Each player's command-zone marks as last read: whether they have the
+     * city's blessing and how many dungeons they have completed, by player
+     * id. Read when the reader starts, so a fork's reader takes the forked
+     * board's marks as its baseline.
+     */
+    private final Map<Integer, CommandMarks> marks = new HashMap<>();
+
+    /** A player's blessing and completed dungeons. */
+    private record CommandMarks(boolean blessed, int dungeonsCompleted) {
+        static CommandMarks of(Player player) {
+            return new CommandMarks(player.hasBlessing(), player.getCompletedDungeons().size());
+        }
+    }
+
     BusEventReader(Game game) {
         this.game = game;
+        if (game != null) {
+            for (Player player : game.getPlayers()) {
+                marks.put(player.getId(), CommandMarks.of(player));
+            }
+        }
     }
 
     /**
@@ -203,6 +228,49 @@ abstract class BusEventReader {
         file(BusEvents.regenerated(event), null);
     }
 
+    /**
+     * A player's command zone changed: the city's blessing arriving, or a
+     * completed dungeon leaving it.
+     *
+     * <p>Neither has an event of its own. {@code Player.setBlessing} puts an
+     * effect card named for the blessing into the command zone, and {@code
+     * GameAction.completeDungeon} counts the dungeon completed and then takes
+     * it out, so the zone's own notification ({@code GameEventZone}) is the
+     * one moment both can be read, as the player's state against the state
+     * last read: a {@code state_flag_change} {@code city_blessing} or {@code
+     * dungeon_completed} (each {@code value} true) on the player. A player
+     * gets the blessing once and keeps it, and a dungeon completed stays
+     * counted, so neither is ever reported lost.
+     */
+    @Subscribe
+    public void onZone(GameEventZone event) {
+        if (game == null || event.zoneType() != ZoneType.Command || event.player() == null) {
+            return;
+        }
+        Player player = game.getPlayer(event.player());
+        if (player == null) {
+            return;
+        }
+        CommandMarks now = CommandMarks.of(player);
+        CommandMarks before = marks.put(player.getId(), now);
+        if (before == null) {
+            return;
+        }
+        if (now.blessed() && !before.blessed()) {
+            fileOutcome(commandMark(player, "city_blessing"), null);
+        }
+        if (now.dungeonsCompleted() > before.dungeonsCompleted()) {
+            fileOutcome(commandMark(player, "dungeon_completed"), null);
+        }
+    }
+
+    private static EffectEvent commandMark(Player player, String flag) {
+        return new EffectEvent(EventType.STATE_FLAG_CHANGE)
+                .subject(Refs.of(player))
+                .param("flag", flag)
+                .param("value", true);
+    }
+
     /** A library shuffled. No named cause: see {@link BusEvents#libraryShuffled}. */
     @Subscribe
     public void onShuffle(GameEventShuffle event) {
@@ -248,6 +316,7 @@ abstract class BusEventReader {
     public void onCardChangeZone(GameEventCardChangeZone event) {
         EffectEvent moved = BusEvents.cardMoved(event);
         if (moved != null) {
+            placeInLibrary(event, moved);
             fileMove(event, moved);
         }
         file(BusEvents.libraryMovement(event), null);
@@ -268,6 +337,42 @@ abstract class BusEventReader {
         }
         if (event.to() != null && event.to().zoneType() == ZoneType.Stack) {
             onStackArrival(event.card().getId());
+        }
+    }
+
+    /**
+     * A move into a library, with where in it the card went
+     * ({@code library_position}): 0 the top, -1 the bottom, else its index
+     * from the top. Read off the library as the bus publishes the move, which
+     * {@code GameAction.changeZone} does after adding the card, so a card put
+     * second from the top reads 1 and the bottom of a library of any size
+     * reads -1. A card alone in its library is its top. Written nowhere when
+     * the card cannot be found there, and taken off again by a shuffle of
+     * that library later in the same record ({@link EventBuffer#file}): a
+     * card shuffled in has no position.
+     *
+     * <p>Into a library only. A move out of one says nothing of where the card
+     * was: by the time the bus publishes it the card has left.
+     */
+    private void placeInLibrary(GameEventCardChangeZone event, EffectEvent moved) {
+        if (game == null || event.to() == null || event.to().zoneType() != ZoneType.Library
+                || event.to().player() == null) {
+            return;
+        }
+        Player owner = game.getPlayer(event.to().player());
+        if (owner == null) {
+            return;
+        }
+        List<Card> library = new ArrayList<>();
+        owner.getCardsIn(ZoneType.Library).forEach(library::add);
+        int id = event.card().getId();
+        for (int index = 0; index < library.size(); index++) {
+            if (library.get(index).getId() == id) {
+                boolean bottom = index > 0 && index == library.size() - 1;
+                moved.param("library_position", bottom ? -1 : index);
+                moved.intoLibraryOf(Refs.of(owner));
+                return;
+            }
         }
     }
 
