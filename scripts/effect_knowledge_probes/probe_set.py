@@ -15,12 +15,10 @@ import json
 from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 
-from effects.domain.canonical_digest import canonical_sha256
-
-
-def canonical_digest(payload: dict) -> str:
-    """sha256 of the canonical JSON (sorted keys, no whitespace), ``digest`` excluded."""
-    return canonical_sha256({k: v for k, v in payload.items() if k != "digest"})
+# The digest rule is the selection set's (``effects.domain.selection_set``),
+# which holds what checkpoint selection reads; this file keeps the line and
+# pair probes' items, which are reported only (research E5).
+from effects.domain.selection_set import canonical_digest  # noqa: F401
 
 
 def probe_set_path(directory: Path, corpus_digest: str) -> Path:

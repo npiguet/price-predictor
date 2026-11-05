@@ -186,6 +186,7 @@ _TORCH_FREE = (
     "effects.domain.stratum_placement",
     "effects.domain.score_scales",
     "effects.domain.probe_readouts",
+    "effects.domain.selection_set",
     "effects.domain.fork_operation",
     "effects.domain.rule_catalogue",
     "effects.domain.rule_outcomes",
