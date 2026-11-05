@@ -62,6 +62,11 @@ from effects.domain.records import (
 from effects.domain.split import HoldoutRule
 from effects.domain.state_snapshot import StateSnapshot
 from effects.domain.strata import Stratum
+from effects.domain.stratum_placement import (
+    MAX_COMPONENT_ERROR,
+    MAX_ITEM_ERROR,
+    MIN_GAMES_PER_HALF,
+)
 from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.shard_io import (
@@ -1577,3 +1582,310 @@ def test_a_variant_printing_a_held_out_text_trains_on_nothing(tmp_path, a_corpus
     assert not [r for r in training if r.ability == (variant_key,)]
     assert any(r.game_id == "g-var" for r in training)
     assert store.load().per_stratum["dropped-held-out-text"] == 1
+
+
+# ── gen-3 curation: rule budgets, curation, turn actions (T140) ──────────
+
+#: One rule the budget tests' own catalogue marks ``trained``: shown by a
+#: resolution holding two damage events, which no a_corpus record holds.
+_BUDGET_RULE = "120.3"
+
+
+def _budget_rules(root: Path) -> Path:
+    """A rules directory of one scenario and its heads line (FR-060a)."""
+    import json
+
+    (root / "scenarios").mkdir(parents=True)
+    (root / "heads").mkdir()
+    (root / "scenarios" / "120.json").write_text(json.dumps({"unit": "120", "scenarios": [{
+        "id": "120.3-1", "rules": [_BUDGET_RULE], "record_kind": "resolution",
+        "variants": [{"label": "base", "polarity": "fires"}],
+        "detector": {"family": "outcome_event", "record_kind": "resolution",
+                     "params": {"event": "damage_dealt", "min_count": 2}, "needs": []},
+    }]}), encoding="utf-8")
+    (root / "heads" / "120.jsonl").write_text(json.dumps({
+        "id": _BUDGET_RULE, "output": "trained", "outputs": ["damage_taken"],
+    }) + "\n", encoding="utf-8")
+    return root
+
+
+def _damaged(record_id: str, game: str, *, hits: int) -> EffectRecord:
+    """A bolt resolution dealing ``hits`` damage events to ``E0``."""
+    return CorpusFixture.resolution(record_id, game=game, events=tuple(
+        Event(type=EventType.DAMAGE_DEALT, subjects=("E0",), params={"amount": 1},
+              attributed_to="root")
+        for _ in range(hits)
+    ))
+
+
+@pytest.fixture
+def budget_build(tmp_path, a_corpus):
+    """``a_corpus`` and one training game of ten bolts, two of them tagged
+    with :data:`_BUDGET_RULE`, built under a catalogue budgeting that rule.
+
+    The game's draw keeps it out of the candidate pool, so it trains; the
+    precision target is off, since no validation game carries the rule.
+    """
+    from effects.domain.corpus_curation import game_disjoint_draw
+
+    game = next(f"g-dmg-{i}" for i in range(100) if game_disjoint_draw(f"g-dmg-{i}") >= 0.1)
+    a_corpus.with_extra_records([
+        *(_damaged(f"{game}.tagged{i}", game, hits=2) for i in range(2)),
+        *(_damaged(f"{game}.plain{i}", game, hits=1) for i in range(8)),
+    ])
+    store = a_corpus.build(
+        tmp_path / "out", rules=_GEN2_RULES, rules_dir=_budget_rules(tmp_path / "rules"),
+        game_disjoint_share=0.01, game_disjoint_keyword_share=0.01,
+        class_mix={"resolution-effect": 1.0}, validation_sample=0,
+    )
+    return store, game
+
+
+def test_added_copies_carry_their_rule_and_natural_copies_none(budget_build):
+    """FR-055, research T1: every copy says how it was written."""
+    store, game = budget_build
+    training = list(read_records(store.training_dir))
+    assert all(record.curation is not None for record in training)
+    added = [r for r in training if r.curation.drawn_rule is not None]
+    natural = [r for r in training if r.curation.drawn_rule is None]
+    assert added and natural
+    assert {r.curation.drawn_rule for r in added} == {_BUDGET_RULE}
+    assert {r.record_id for r in added} <= {f"{game}.tagged0", f"{game}.tagged1"}
+    assert all(r.curation.rule_entities == ("E0",) for r in added)
+    for record_id in {r.record_id for r in added}:
+        copies = [r for r in training if r.record_id == record_id]
+        curation = copies[0].curation
+        assert len(copies) == curation.copies <= 4
+        assert sum(r.curation.drawn_rule is None for r in copies) == curation.natural_share
+        assert all(r.curation.drawn_rules == (_BUDGET_RULE,) for r in copies)
+    assert all(r.curation.drawn_rules == () for r in training
+               if r.record_id.startswith(f"{game}.plain"))
+
+
+def test_the_manifest_reports_the_rule_row_and_its_one_side(budget_build):
+    """FR-054, FR-054a, FR-060: a fires-only rule's half is filled from its
+    records, the other half stays its shortfall and the rule is one-sided."""
+    store, game = budget_build
+    manifest = store.load()
+    row = manifest.rules["resolution-effect"][_BUDGET_RULE]["fires"]
+    tagged = [r for r in read_records(store.training_dir)
+              if r.record_id.startswith(f"{game}.tagged")]
+    assert row.available == {"forge_ai": 2}
+    assert row.written == {"forge_ai": len(tagged)}
+    assert row.added["forge_ai"] == sum(r.curation.drawn_rule is not None for r in tagged)
+    assert row.shortfall == max(0, row.share - len(tagged))
+    assert manifest.rules["resolution-effect"][_BUDGET_RULE]["does_not_fire"].shortfall == (
+        row.share)
+    assert manifest.one_sided_rules == {"resolution-effect": (_BUDGET_RULE,)}
+    assert manifest.budgeted_rules == {_BUDGET_RULE}
+    assert manifest.rule_outputs(_BUDGET_RULE) == ("damage_taken",)
+
+
+def test_a_decision_whose_candidate_key_is_unjoinable_is_refused(tmp_path, a_corpus):
+    """Story 6 acceptance 5 (FR-059): a candidate's key inside a range its
+    sidecar declares and in neither list is ``unjoinable-key``."""
+    from effects.domain.record_quality import QualityDefect
+    from effects.domain.records import Candidate, PlayabilityDecisionPayload, PlayabilitySubkind
+
+    def decision(record_id: str, key: ProvenanceKey) -> EffectRecord:
+        return make_record(
+            RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.DECISION,
+            record_id=record_id, game_id="g-clean-1", timestamp=_TIMESTAMP,
+            payload=PlayabilityDecisionPayload(candidates=(Candidate(
+                ability=(key,), can_play=True, affordable=True, has_legal_target=True),)),
+        )
+
+    unjoinable = ProvenanceKey(_BEAR_FILE, 0, "spell", 1, option=0)
+    # Two joinable decisions beside it, so the class is not mostly refused.
+    store = a_corpus.with_extra_records([
+        decision("g-clean-1.decide", unjoinable),
+        decision("g-clean-1.bolt0", _BOLT_KEY), decision("g-clean-1.bolt1", _BOLT_KEY),
+    ]).build(tmp_path / "out")
+    assert store.load().quality_dropped.get(QualityDefect.UNJOINABLE_KEY) == 1
+    written = {r.record_id for d in (store.training_dir, store.card_disjoint_dir,
+                                     store.game_disjoint_dir) for r in read_records(d)}
+    assert "g-clean-1.decide" not in written
+
+
+# ── the gen-3 fixture under the real catalogue (T140) ────────────────────
+
+
+def _gen3_records(root: Path) -> Path:
+    import shutil
+
+    from tests.unit.effects.builders import GEN3_RECORDS
+
+    records = root / "records"
+    records.mkdir(parents=True)
+    shutil.copy(GEN3_RECORDS, records / GEN3_RECORDS.name)
+    return records
+
+
+def _gen3_config(records: Path, output: Path, **overrides) -> BuildCorpusConfig:
+    """The fixture under the real ``rules/``: a holdout leaving games in both
+    validation strata and in training, two games a half."""
+    from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS
+
+    values = dict(
+        records_dir=records, output=output, cards_folders=GEN3_SIDECAR_FOLDERS,
+        keyword_definitions=None, workers=1, holdout=HoldoutRule(permille=100),
+        game_disjoint_share=0.05, validation_sample=0, min_games_per_half=2,
+        max_item_error=math.inf, max_component_error=math.inf,
+    )
+    return BuildCorpusConfig(**{**values, **overrides})
+
+
+@pytest.fixture(scope="module")
+def gen3_build(tmp_path_factory) -> CorpusStore:
+    """The fixture built once with the precision thresholds lowered (E5)."""
+    root = tmp_path_factory.mktemp("gen3-build")
+    assert build(_gen3_config(_gen3_records(root), root / "out")) == 0
+    return CorpusStore(root / "out")
+
+
+def _written(store: CorpusStore) -> list[EffectRecord]:
+    return [r for d in (store.training_dir, store.card_disjoint_dir, store.game_disjoint_dir,
+                        store.gate_one_dir) for r in read_records(d)]
+
+
+def test_no_turn_action_record_is_written_and_each_is_counted(gen3_build):
+    """Story 6 acceptance 8 (FR-059)."""
+    assert not [r for r in _written(gen3_build) if r.kind is RecordKind.TURN_ACTION]
+    assert gen3_build.load().turn_action_left_out == {
+        "cleanup_discard": 2, "day_night": 2, "draw": 2, "lore_counter": 2,
+        "phasing": 2, "untap": 2}
+
+
+def test_a_permanent_spells_resolution_records_reach_their_strata(gen3_build):
+    """Story 6 acceptance 4: the fixture's creature spells resolve through
+    their implicit cast spell, which no line carries; none is refused, and
+    each one of a placed game is written, keyed to its card."""
+    from effects.domain.record_quality import is_permanent_spell
+    from effects.domain.strata import OUTPUT_STRATA
+    from effects.infrastructure.converted_trees import process_sidecars
+    from tests.unit.effects.builders import GEN3_RECORDS, GEN3_SIDECAR_FOLDERS
+
+    sidecars = process_sidecars({"cardsfolder": GEN3_SIDECAR_FOLDERS[0],
+                                 "tokenscripts": GEN3_SIDECAR_FOLDERS[1]})
+    spells = [r for r in read_shard(GEN3_RECORDS) if r.kind is RecordKind.RESOLUTION
+              and r.ability and all(is_permanent_spell(k, sidecars.resolution_of(k))
+                                    for k in r.ability)]
+    assert spells
+    manifest = gen3_build.load()
+    assert "no-acting-text" not in manifest.quality_dropped
+    placed = {*manifest.card_disjoint_games, *manifest.game_disjoint_games}
+    written = {r.record_id: r for r in _written(gen3_build)}
+    validated = [r for r in spells if r.game_id in placed]
+    assert validated, "the fixture needs a permanent spell in a validation game"
+    for record in validated:
+        assert written[record.record_id].ability == record.ability
+    assert {stratum for stratum in manifest.per_stratum if manifest.per_stratum[stratum]} & set(
+        OUTPUT_STRATA)
+
+
+def test_every_written_copy_carries_its_curation(gen3_build):
+    """Research T1: a natural copy draws no rule, and a record's copies agree."""
+    records = _written(gen3_build)
+    assert records and all(r.curation is not None for r in records)
+    for record in records:
+        curation = record.curation
+        assert 1 <= curation.copies <= 4
+        if curation.drawn_rule is None:
+            assert curation.rule_entities == ()
+        else:
+            assert curation.drawn_rule in curation.drawn_rules
+
+
+def test_the_manifest_holds_every_gen3_field(gen3_build):
+    """SC-007, FR-060, FR-060a. ``one_sided_rules`` is shown by
+    :func:`test_the_manifest_reports_the_rule_row_and_its_one_side`: a corpus
+    this small gives each tagged rule a share of nothing in its class."""
+    import json
+
+    from effects.infrastructure.rules_catalogue_io import heads_digest, load_heads
+
+    data = json.loads(gen3_build.manifest_path.read_text(encoding="utf-8"))
+    for name in ("rule_counts", "rule_map", "rule_map_digest", "rules",
+                 "one_sided_conditions", "unbudgeted_rules", "left_out_of_half",
+                 "turn_action_left_out", "subtypes", "keywords", "halves"):
+        assert data.get(name), name
+    manifest = gen3_build.load()
+    assert manifest.rule_map_digest == heads_digest()
+    heads = load_heads()
+    assert set(manifest.rule_map) == set(manifest.rule_counts["rules"])
+    for rule, entry in manifest.rule_map.items():
+        assert entry.verdict == (heads[rule].verdict if rule in heads else "missing")
+    assert manifest.rule_counts["records"] == 205
+    assert set(manifest.halves) == {"card-disjoint", "game-disjoint"}
+
+
+def test_validation_strata_hold_forge_ai_games_only(gen3_build):
+    """FR-059: a random-seat game enters neither validation stratum."""
+    store = gen3_build
+    for directory in (store.card_disjoint_dir, store.game_disjoint_dir):
+        assert not [r for r in read_records(directory) if r.random_seat]
+
+
+def test_a_gen2_record_stops_the_build_before_any_record_is_read(tmp_path):
+    """Story 6 acceptance 6 (FR-018): the CLI maps the refusal to exit 1."""
+    import shutil
+
+    from tests.unit.effects.builders import EFFECTS_FIXTURES
+
+    records = _gen3_records(tmp_path)
+    shutil.copy(EFFECTS_FIXTURES / "gen2-records.jsonl.gz", records / "old.jsonl.gz")
+    with pytest.raises(BuildCorpusError, match="gen-2"):
+        build(_gen3_config(records, tmp_path / "out"))
+    assert not (tmp_path / "out" / "manifest.json").exists()
+
+
+def test_at_the_default_thresholds_the_exit_1_comes_after_the_manifest(tmp_path, caplog):
+    """Research E5: a corpus this small misses the rule-test target, and the
+    build still writes the corpus and its manifest first."""
+    import logging
+
+    output = tmp_path / "out"
+    config = _gen3_config(
+        _gen3_records(tmp_path), output, min_games_per_half=MIN_GAMES_PER_HALF,
+        max_item_error=MAX_ITEM_ERROR, max_component_error=MAX_COMPONENT_ERROR,
+    )
+    with caplog.at_level(logging.ERROR, logger="effects.application.build_corpus"):
+        assert build(config) == 1
+    store = CorpusStore(output)
+    assert store.load().rule_map
+    assert list(store.training_dir.glob("*.jsonl.gz"))
+    missed = [r.getMessage() for r in caplog.records if "precision target" in r.getMessage()]
+    assert any("card-disjoint selection: rule tests" in message for message in missed)
+    assert any("game-disjoint reporting: rule tests" in message for message in missed)
+
+
+
+def test_protection_copies_are_written_as_their_rules_draw_them(tmp_path):
+    """FR-058, research R5: a record a protection copy can be made of enters
+    the budgets as a record of its own, and each copy the budgets draw is
+    written as a synthetic record carrying its rule."""
+    import json
+
+    from effects.domain.protection_copies import PROTECTION_RULES
+
+    rules = tmp_path / "rules"
+    (rules / "scenarios").mkdir(parents=True)
+    (rules / "heads").mkdir()
+    (rules / "heads" / "702.jsonl").write_text("".join(
+        json.dumps({"id": rule, "output": "trained", "outputs": []}) + "\n"
+        for rule in sorted(PROTECTION_RULES)), encoding="utf-8")
+    assert build(_gen3_config(_gen3_records(tmp_path), tmp_path / "out", rules_dir=rules)) == 0
+    store = CorpusStore(tmp_path / "out")
+
+    copies = [r for r in _written(store) if r.synthetic]
+    assert copies
+    for record in copies:
+        assert "~pc" in record.record_id
+        assert record.curation.natural_share == 0
+        assert record.curation.drawn_rule in PROTECTION_RULES
+        assert record.curation.drawn_rule in record.curation.drawn_rules
+    # The map snapshot names every drawn rule, which no detector tags here:
+    # the trainer reads a drawn rule's outputs off the manifest alone.
+    manifest = store.load()
+    assert {r.curation.drawn_rule for r in copies} <= manifest.budgeted_rules
+    assert manifest.budgeted_rules <= PROTECTION_RULES
