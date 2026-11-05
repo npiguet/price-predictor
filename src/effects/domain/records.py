@@ -10,7 +10,7 @@ their enforcement. Pure dataclasses; serialization lives in
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -872,6 +872,17 @@ def key_sites(record: EffectRecord) -> Iterator[ProvenanceKey]:
     for link in state.links or ():
         yield from link.line_keys()
     yield from record.payload.provenance_keys()
+
+
+def distinct_records(records: Iterable[EffectRecord]) -> Iterator[EffectRecord]:
+    """Each record's first row: a curated stratum repeats a record's row for
+    every copy curation wrote of it, and a reader counting records reads each
+    once (FR-068a)."""
+    seen: set[str] = set()
+    for record in records:
+        if record.record_id not in seen:
+            seen.add(record.record_id)
+            yield record
 
 
 def acting_keys(record: EffectRecord) -> tuple[ProvenanceKey, ...]:

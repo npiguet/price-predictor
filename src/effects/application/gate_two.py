@@ -39,7 +39,7 @@ from effects.domain.evaluation_report import (
     KeywordVerdict,
 )
 from effects.domain.head_decoding import HeadReading
-from effects.domain.records import EffectRecord
+from effects.domain.records import EffectRecord, distinct_records
 
 if TYPE_CHECKING:
     from effects.application.evaluation_context import EvaluationContext
@@ -208,9 +208,11 @@ def _qualifying(
     """Every qualifying observation, read lazily.
 
     A fork never qualifies: it re-runs a real board the population already
-    holds, so it would count that combat twice toward the threshold.
+    holds, so it would count that combat twice toward the threshold. Nor does
+    a record's repeated row: a curated stratum repeats one for every added
+    copy, and each record is observed once (FR-068a).
     """
-    for record in records:
+    for record in distinct_records(records):
         progress.read += 1
         if progress.read % PROGRESS_EVERY_RECORDS == 0:
             progress.log()

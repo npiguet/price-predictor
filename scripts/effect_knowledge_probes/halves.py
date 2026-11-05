@@ -12,7 +12,7 @@ what the run's probes ask of it:
 - the frozen probe items, relabelled where they were frozen
   (``labels.record_items``) so a trigger keeps its cause and an item its fold
   group, the label the frozen one;
-- the frozen grids' and rule tests' records with their entities;
+- the frozen grids' records with their entities;
 - the gen-3 probes' qualifying records (``conditions``, ``anthem``,
   ``target_restrictions``), at most ``per_game`` a game and ``limit`` a
   probe, by smallest ``crc32`` of record id;
@@ -21,6 +21,9 @@ what the run's probes ask of it:
 
 :func:`score_grids` scores each frozen grid as the control score does: each
 cell's mean prediction against the rule's outcome there, ``1 − MAE / B``.
+:func:`score_rule_tests` scores a half's rule tests through the control
+score's own scorer (``effects.application.control_score.score_half``), which
+reads the half's records itself.
 
 Nothing here does work at import time.
 """
@@ -114,9 +117,6 @@ class HalfRead:
     probe_items: dict[str, list] = field(default_factory=dict)
     #: ``grid -> [(record, entities)]``.
     grids: dict[str, list[tuple[object, tuple[str, ...]]]] = field(default_factory=dict)
-    #: ``rule -> polarity -> [(record, entities)]``.
-    rule_tests: dict[str, dict[str, list[tuple[object, tuple[str, ...]]]]] = field(
-        default_factory=dict)
     conditions: list = field(default_factory=list)
     anthem: list = field(default_factory=list)
     targeting: list = field(default_factory=list)
@@ -164,11 +164,6 @@ def read_half(context, selection, stratum: str, half: str, settings: ReadSetting
     for name, grid in selection.grids.get(stratum, {}).get(half, {}).items():
         for row in grid.records:
             grid_rows[row.record_id].append((name, row.entities))
-    rule_rows: dict[str, list[tuple[str, str, tuple[str, ...]]]] = defaultdict(list)
-    for rule, sides in selection.rule_tests.get(stratum, {}).get(half, {}).items():
-        for polarity, rows in sides.items():
-            for row in rows:
-                rule_rows[row.record_id].append((rule, polarity, row.entities))
 
     join = labels.TriggerJoin()
     selector = sweeps.SweepSelector(sidecars) if settings.sweeps else None
@@ -182,13 +177,10 @@ def read_half(context, selection, stratum: str, half: str, settings: ReadSetting
             observe(record)
         if selector is not None:
             selector.observe(record)
-        if rid in frozen_probes or rid in grid_rows or rid in rule_rows:
+        if rid in frozen_probes or rid in grid_rows:
             kept[rid] = record
         for name, entities in grid_rows.get(rid, ()):
             read.grids.setdefault(name, []).append((record, entities))
-        for rule, polarity, entities in rule_rows.get(rid, ()):
-            read.rule_tests.setdefault(rule, {}).setdefault(polarity, []).append(
-                (record, entities))
         if settings.gen3_probes:
             found = conditions.record_items(record, sidecars, keywords_of)
             if found:
@@ -273,6 +265,42 @@ def score_grids(probe_model, selection, read: HalfRead) -> dict[str, dict]:
             "baseline": float(grid_mean_error(outcomes)),
         }
     return out
+
+
+# ── the rule tests ──────────────────────────────────────────────────────
+
+
+#: A stratum's rule tests where the half holds none.
+NO_RULE_TESTS: dict = {"rules": {}, "left_out": [], "component": float("nan")}
+
+
+def score_rule_tests(context, selection, probe_model, half: str) -> dict[str, dict]:
+    """``{stratum: {"rules", "left_out", "component"}}`` for the frozen rule
+    tests of ``half`` of every stratum the selection set halves, scored by the
+    control score's own scorer (FR-073, FR-074): ``rules`` each rule's mean
+    over the map's outputs a head reads of ``2·AUC − 1`` (``fires`` ranked
+    above ``does_not_fire``, the category and direction read off the records'
+    own targets), clipped below at −1; ``left_out`` the rules with no output
+    a head reads or no finite reading of both polarities; ``component`` their
+    mean, NaN with none. Each distinct record is read once, so no rule mask
+    weighs anything here."""
+    from effects.application.control_score import score_half
+    from effects.application.freeze_selection_set import stratum_reader
+    from effects.domain.selection_set import RULE_TESTS
+
+    readers = {stratum: stratum_reader(context.stratum_dir(stratum))
+               for stratum in selection.halves}
+    scored = score_half(
+        selection, readers, half=half, encoder=probe_model.encoder, model=probe_model.model,
+        batcher=probe_model.batcher,
+        rule_outputs={rule: tuple(entry.outputs)
+                      for rule, entry in context.manifest.rule_map.items()},
+        mask=None,
+        stratum_weight=0.5, deviance_floor=0.0, components=(RULE_TESTS,))
+    return {stratum: {"rules": dict(score.items.get(RULE_TESTS, {})),
+                      "left_out": list(score.left_out.get(RULE_TESTS, ())),
+                      "component": score.components[RULE_TESTS]}
+            for stratum, score in scored.strata.items()}
 
 
 # ── the gen-3 probes of FR-074 ──────────────────────────────────────────

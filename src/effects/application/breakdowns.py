@@ -1,22 +1,34 @@
-"""The evaluation report's breakdowns: one scored record set, grouped many ways.
+"""The evaluation report's breakdowns: one scored record set, grouped many ways,
+and a half's control score as report lines.
 
 Pure grouping over :class:`RecordResult` rows, torch-free; scoring is
-``record_scoring.score_records``'s job. The per-text mean weighs every held-out
-text once, where a pooled loss is dominated by the texts with the most records
-(FR-064).
+``record_scoring.score_records``'s job, and a half's score
+``control_score.score_half``'s. The per-text mean weighs every held-out text
+once, where a pooled loss is dominated by the texts with the most records
+(FR-064). The scored records are distinct: a validation stratum repeats a
+record's row for every added copy, and every record is read once (FR-068a).
 """
 
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from effects.domain.evaluation_report import CheckName, CheckResult, CheckStatus
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.rarity import RARITY_BUCKETS, TextGames
 from effects.domain.records import LEGALITY_SUBKINDS, LegalityDecision
+from effects.domain.selection_set import COMPONENTS, RULE_TESTS
 from effects.domain.strata import Stratum
+
+if TYPE_CHECKING:
+    from effects.application.control_score import ControlScore
+
+#: Left-out item names a report line spells out before it counts the rest.
+NAMED_LEFT_OUT = 12
 
 #: The loss key every scored record carries: the per-entity loss summed over
 #: the gate and every supervised field, as the trainer's validation reads it.
@@ -303,3 +315,59 @@ def _group_check(name: str, group: GroupResult, *, detail: str | None = None) ->
         name, CheckStatus.REPORTED,
         detail or f"{group.per_record.records} records, {texts} texts", values,
     )
+
+
+# ── a half's control score ──────────────────────────────────────────────
+
+
+def half_score_checks(
+    score: ControlScore, *, half: str, games: Mapping[str, int],
+    selection_control: float | None = None, note: str = "",
+) -> list[CheckResult]:
+    """One half of every stratum, scored as the control score scores the
+    selection half (FR-070): per stratum its four components and their mean,
+    then each component's items, the rule tests per rule (FR-074), and last
+    the control score the strata mix to beside the selection half's the
+    checkpoint recorded. ``games`` is each stratum's games in the half."""
+    prefix = f"{half}-half"
+    checks: list[CheckResult] = []
+    for stratum, scored in sorted(score.strata.items()):
+        where = f"{prefix} {stratum}"
+        missing = [name for name in COMPONENTS if name in scored.components
+                   and math.isnan(scored.components[name])]
+        detail = f"{games.get(stratum, 0)} games; score = the mean of the four components"
+        if missing:
+            detail += f"; nothing to score in {', '.join(missing)}"
+        checks.append(CheckResult(where, CheckStatus.REPORTED, detail, {
+            **dict(scored.components), "score": scored.score}))
+        for component in COMPONENTS:
+            if component not in scored.components:
+                continue
+            items = dict(scored.items.get(component, {}))
+            left_out = tuple(scored.left_out.get(component, ()))
+            name = (f"{CheckName.RULE_TESTS} {stratum} {half}" if component == RULE_TESTS
+                    else f"{where} {component}")
+            checks.append(CheckResult(name, CheckStatus.REPORTED,
+                                      _items_detail(component, items, left_out), items))
+    values = {"control": score.control} if len(score.strata) == 2 else {}
+    if selection_control is not None:
+        values["selection_control"] = float(selection_control)
+    if values:
+        detail = (f"stratum weight {score.stratum_weight:g} on the card-disjoint score"
+                  + ("; selection_control is the best the checkpoint recorded"
+                     if selection_control is not None else "")
+                  + (f"; {note}" if note else ""))
+        checks.append(CheckResult(f"{prefix} control", CheckStatus.REPORTED, detail, values))
+    return checks
+
+
+def _items_detail(component: str, items: Mapping[str, float], left_out: tuple[str, ...]) -> str:
+    """How many items a component scored, each rescaled and clipped at -1, and
+    which it left out."""
+    unit = "rules" if component == RULE_TESTS else "items"
+    detail = f"{len(items)} {unit} scored, rescaled and clipped below at -1"
+    if left_out:
+        named = ", ".join(left_out[:NAMED_LEFT_OUT])
+        more = len(left_out) - NAMED_LEFT_OUT
+        detail += f"; {len(left_out)} left out: {named}" + (f" and {more} more" if more > 0 else "")
+    return detail

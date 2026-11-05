@@ -303,6 +303,22 @@ class SurfaceSpec:
             baseline_masks(checkpoint.variant),
         )
 
+    @classmethod
+    def for_saved_model(cls, checkpoint) -> SurfaceSpec:
+        """A saved model's, each width the one its trunk was built with."""
+        config = checkpoint.model_config
+        return cls(
+            checkpoint.encoder_config.e_dim,
+            {
+                SlotKind.GLOBAL: config.global_features,
+                SlotKind.ACT: config.act_features,
+                SlotKind.PLAYER: config.player_features,
+                SlotKind.CARD: config.card_features,
+                SlotKind.ABILITY: config.ability_features,
+            },
+            baseline_masks(checkpoint.variant),
+        )
+
 
 class SurfaceBatcher:
     """Turns a list of records into the trunk's inputs.

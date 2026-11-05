@@ -23,7 +23,8 @@ record once, and is reported per stratum and half (FR-070, FR-074):
   type's rung-3 score on the control score's scale;
 * the frozen grids — damage, combat with one and with several blockers,
   evasion with its protection rows — scored as the control score scores them;
-* the frozen rule tests (``rule_tests``);
+* the frozen rule tests, scored through the control score's own scorer
+  (``halves.score_rule_tests``);
 * the turn and step conditions, anthem and target-legality probes;
 * the five board sweeps over the reporting half's records (``sweeps``).
 
@@ -66,7 +67,6 @@ from effect_knowledge_probes import (  # noqa: E402
     labels,
     ladder,
     record_walk,
-    rule_tests,
     sweeps,
 )
 from effect_knowledge_probes import board as board_probe  # noqa: E402
@@ -629,7 +629,7 @@ def _read_halves(args, context: common.ProbeContext, selection, board_targets: s
                                     acting_text=acting_text, keywords_of=keywords_of,
                                     observe=observe)
             progress(f"  {len(read.records)} records kept, {len(read.probe_items)} with "
-                     f"probe items, {len(read.grids)} grids, {len(read.rule_tests)} rules")
+                     f"probe items, {len(read.grids)} grids")
             reads.append(read)
     if not any(read.records for read in reads):
         raise SystemExit("no record the selection set names was found in the corpus's "
@@ -671,14 +671,16 @@ def probe(args, context: common.ProbeContext, selection) -> Scorecard:
         families={family: {"targets": {}} for family in sorted(families)},
     )
     act_hidden = _board_ladder(args, scorecard, probe_model, reads, kinds)
-    rule_outputs = {rule: tuple(entry.outputs)
-                    for rule, entry in context.manifest.rule_map.items()}
+    tests = {}
+    for half in HALF_CHOICES[args.half]:
+        progress(f"rule tests, {half} half")
+        tests[half] = halves.score_rule_tests(context, selection, probe_model, half)
     for read in reads:
         body = scorecard.half(read.stratum, read.half)
         body["games"] = read.games
-        progress(f"{read.name}: {len(read.grids)} grids, {len(read.rule_tests)} rule tests")
+        progress(f"{read.name}: {len(read.grids)} grids")
         body["grids"] = halves.score_grids(probe_model, selection, read)
-        body["rule_tests"] = rule_tests.score(probe_model, read.rule_tests, rule_outputs)
+        body["rule_tests"] = tests[read.half].get(read.stratum, halves.NO_RULE_TESTS)
         if not args.no_gen3_probes:
             body.update(halves.score_gen3_probes(probe_model, read))
 

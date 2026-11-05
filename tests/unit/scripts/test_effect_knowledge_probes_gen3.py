@@ -28,7 +28,6 @@ from effect_knowledge_probes import (
     labels,
     ladder,
     record_walk,
-    rule_tests,
     run,
     selection,
     sweeps,
@@ -719,7 +718,6 @@ class TestReadingAHalf:
                  for rid, items in read.probe_items.items() for item in items}
         assert found and set(found) <= set(labelled)
         assert all(found[key] == labelled[key] for key in found)
-        assert set(read.rule_tests) == set(frozen.rule_tests[GD]["reporting"])
         assert set(read.grids) <= set(frozen.grids[GD]["reporting"])
         assert read.conditions or read.targeting
         for rows in read.sweep_rows.values():
@@ -727,57 +725,51 @@ class TestReadingAHalf:
 
 
 class TestRuleTests:
-    def _trigger_records(self, records):
-        from effects.domain.records import TriggerPayload
+    """A probing run scores a half's rule tests through the control score's
+    own scorer (``control_score.score_half``), one rule per item."""
 
-        triggers = [r for r in records if isinstance(r.payload, TriggerPayload)]
-        fired = [r for r in triggers if r.payload.fired]
-        not_fired = [r for r in triggers if not r.payload.fired]
-        assert fired and not_fired
-        return fired, not_fired
+    @pytest.fixture(scope="class")
+    def scored(self, frozen_corpus, sidecars, probe_model):
+        context = _context(frozen_corpus, sidecars, probe_model)
+        return {half: halves.score_rule_tests(context, frozen_corpus.selection, probe_model,
+                                              half)
+                for half in halves.HALVES}
 
-    def test_a_rule_ranks_its_fires_records_above_its_others(self, records, probe_model):
-        fired, not_fired = self._trigger_records(records)
-        tests = {"603.2": {"fires": [(r, ()) for r in fired],
-                           "does_not_fire": [(r, ()) for r in not_fired]}}
-        result = rule_tests.score(probe_model, tests,
-                                  {"603.2": ("trigger_fired", "new:something")})
-        body = result["rules"]["603.2"]
-        assert body["records"] == {"fires": len(fired), "does_not_fire": len(not_fired)}
-        assert 0.0 <= body["outputs"]["trigger_fired"] <= 1.0
-        assert body["score"] == pytest.approx(2 * body["auc"] - 1)
-        assert body["unread"] == ["new:something"]
-        assert result["component"] == pytest.approx(max(body["score"], -1.0))
+    def test_every_frozen_rule_is_scored_or_left_out(self, scored, frozen_corpus):
+        frozen = frozen_corpus.selection
+        for half, by_stratum in scored.items():
+            assert set(by_stratum) == {GD}
+            tests = by_stratum[GD]
+            assert set(tests["rules"]) | set(tests["left_out"]) == set(
+                frozen.rule_tests[GD][half])
+            assert not set(tests["rules"]) & set(tests["left_out"])
 
-    def test_rules_without_both_polarities_or_a_readable_output_are_left_out(
-        self, records, probe_model,
-    ):
-        fired, not_fired = self._trigger_records(records)
-        tests = {"one": {"fires": [(r, ()) for r in fired]},
-                 "unread": {"fires": [(r, ()) for r in fired],
-                            "does_not_fire": [(r, ()) for r in not_fired]},
-                 "same": {"fires": [(r, ()) for r in fired],
-                          "does_not_fire": [(r, ()) for r in fired]}}
-        result = rule_tests.score(probe_model, tests, {
-            "one": ("trigger_fired",), "unread": ("planned:x",), "same": ("trigger_fired",)})
-        assert result["rules"] == {}
-        assert result["left_out"] == {
-            "one": "one polarity only", "unread": "no output a probe readout answers",
-            "same": "no output whose polarities' outcomes differ"}
-        assert np.isnan(result["component"])
+    def test_a_rule_scores_on_the_control_scores_scale(self, scored):
+        scores = [value for by_stratum in scored.values()
+                  for value in by_stratum[GD]["rules"].values()]
+        assert scores and all(-1.0 <= value <= 1.0 for value in scores)
+        for by_stratum in scored.values():
+            tests = by_stratum[GD]
+            if tests["rules"]:
+                assert tests["component"] == pytest.approx(
+                    np.mean(list(tests["rules"].values())))
+            else:
+                assert np.isnan(tests["component"])
 
-    def test_the_settled_direction_turns_an_absence_round(self):
-        observed = {"fires": [np.array([0.0, 1.0])], "does_not_fire": [np.array([1.0, 0.0])]}
-        assert rule_tests._settle(observed) == (0, -1.0)
-        assert rule_tests._settle({"fires": [np.array([1.0])], "does_not_fire": []}) is None
+    def test_the_scores_are_the_scorers_own(self, scored, frozen_corpus, probe_model):
+        from effects.application.control_score import score_half
+        from effects.application.freeze_selection_set import stratum_reader
+        from effects.domain.selection_set import RULE_TESTS
+        from effects.infrastructure.rules_catalogue_io import load_heads
 
-    def test_every_reader_names_a_readout_or_the_zone_outcome(self):
-        from effects.domain.effect_head_layout import FIELDS_BY_NAME, VERDICT_LAYOUT
-        from effects.domain.rule_mask import GATE_OUTPUT
-
-        for output in rule_tests.readers():
-            assert (output == GATE_OUTPUT or output in FIELDS_BY_NAME
-                    or output in VERDICT_LAYOUT.by_name), output
+        direct = score_half(
+            frozen_corpus.selection, {GD: stratum_reader(frozen_corpus.stratum)},
+            half="reporting", encoder=probe_model.encoder, model=probe_model.model,
+            batcher=probe_model.batcher,
+            rule_outputs={rule: tuple(entry.outputs) for rule, entry in load_heads().items()},
+            mask=None, stratum_weight=0.5, deviance_floor=0.0, components=(RULE_TESTS,))
+        assert dict(direct.strata[GD].items[RULE_TESTS]) == pytest.approx(
+            scored["reporting"][GD]["rules"])
 
 
 class TestGridsOfAHalf:

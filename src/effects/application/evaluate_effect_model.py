@@ -2,7 +2,11 @@
 
 The orchestration only: each gate lives in its own module (``gate_one``,
 ``gate_two``, ``geometry_checks``), the UMAP picture in ``umap_check``, the
-breakdowns in ``breakdowns``.
+breakdowns in ``breakdowns``, and the reporting half's score in
+``control_score`` (:func:`run_reporting_half`): the selected checkpoint scored
+once on the half of each validation stratum its selection never read, through
+the scorer training selected it with (FR-070), its rule tests per rule
+(FR-074).
 """
 
 from __future__ import annotations
@@ -10,7 +14,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from effects.application.breakdowns import breakdown_checks
+from effects.application.breakdowns import breakdown_checks, half_score_checks
 from effects.application.evaluation_context import (
     EvaluateEffectModelConfig,
     EvaluationContext,
@@ -37,7 +41,8 @@ from effects.domain.evaluation_report import (
     CheckStatus,
     EvaluationReport,
 )
-from effects.domain.strata import VALIDATION_STRATA
+from effects.domain.records import distinct_records
+from effects.domain.strata import VALIDATION_STRATA, Half, Stratum
 from effects.infrastructure.ability_cache_store import SidecarIndex
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.shard_io import read_shard
@@ -71,13 +76,14 @@ def not_implemented(name: CheckName) -> CheckResult:
 
 
 def breakdown_records(context: EvaluationContext) -> dict[str, list]:
-    """Both validation strata, as the curated dataset's fixed samples: what
-    best-checkpoint selection scored."""
+    """Both validation strata, as the curated dataset's fixed samples, each
+    distinct record once (a sample repeats a record's row for every added
+    copy, FR-068a)."""
     store = CorpusStore(context.corpus_path)
     out = {}
     for stratum in VALIDATION_STRATA:
         path = store.sample_path(stratum)
-        out[stratum] = list(read_shard(path)) if path.exists() else []
+        out[stratum] = list(distinct_records(read_shard(path))) if path.exists() else []
     return out
 
 
@@ -125,9 +131,67 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
 
     logger.info("breakdowns: scoring both validation strata")
     report.extend(run_breakdowns(context))
+    logger.info("the reporting half: scoring each validation stratum's")
+    report.extend(run_reporting_half(context))
     report.extend(_geometry_checks(context, cached, sidecars))
     report.extend(_unmeasured_checks(context.main))
     return report
+
+
+def run_reporting_half(context: EvaluationContext) -> list[CheckResult]:
+    """The reporting half of both validation strata, scored once through the
+    control score's scorer under the checkpoint's own rule mask, stratum
+    weight and deviance floor (FR-070); its rule tests per rule (FR-074).
+
+    The selection set is the one frozen for the corpus, found by its digest
+    under ``reports_dir``; without one the half is reported as skipped,
+    naming why, since a report reports.
+    """
+    from effects.application.control_score import score_half
+    from effects.application.freeze_selection_set import stratum_reader
+    from effects.domain.selection_set import (
+        SelectionSetError,
+        load_selection_set,
+        selection_set_path,
+    )
+
+    digest = context.manifest.digest()
+    try:
+        selection = load_selection_set(
+            selection_set_path(context.config.reports_dir, digest), digest)
+    except SelectionSetError as error:
+        return [CheckResult(CheckName.REPORTING_HALF, CheckStatus.SKIPPED, str(error))]
+    main = context.main
+    note = ""
+    if main.selection_set_digest and main.selection_set_digest != selection.digest:
+        note = (f"the selection set was frozen again since training "
+                f"({main.selection_set_digest[:12]}… then, {selection.digest[:12]}… now)")
+        logger.warning("reporting half: %s", note)
+    store = CorpusStore(context.corpus_path)
+    readers = {stratum: stratum_reader(store.output_dir(Stratum(stratum)))
+               for stratum in selection.halves}
+    loaded = context.main_model()
+    half = str(Half.REPORTING)
+    score = score_half(
+        selection, readers, half=half, encoder=loaded.encoder, model=loaded.model,
+        batcher=loaded.batcher(),
+        rule_outputs={rule: tuple(entry.outputs)
+                      for rule, entry in context.manifest.rule_map.items()},
+        mask=main.rule_mask or None,
+        stratum_weight=_recorded(main.stratum_weight, "stratum_weight"),
+        deviance_floor=_recorded(main.deviance_floor, "deviance_floor"),
+    )
+    games = {stratum: len(selection.halves[stratum].get(half, ())) for stratum in readers}
+    return half_score_checks(score, half=half, games=games,
+                             selection_control=main.best_control_score, note=note)
+
+
+def _recorded(value: float | None, name: str) -> float:
+    """A flag the checkpoint recorded, else the training default."""
+    from effects.application.train_effect_model import TrainEffectModelConfig
+
+    return float(value) if value is not None else float(
+        getattr(TrainEffectModelConfig, name))
 
 
 def _sidecar_index(context: EvaluationContext):

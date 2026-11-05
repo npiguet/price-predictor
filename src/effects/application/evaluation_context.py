@@ -44,9 +44,13 @@ class EvaluationContext:
 
     def main_runnable(self, records) -> Runnable:
         """The main checkpoint, ready to run over ``records``."""
+        return self.main_model().runnable(records)
+
+    def main_model(self) -> LoadedModel:
+        """The main checkpoint's weights on the device, loaded once."""
         if self._main_model is None:
             self._main_model = self._load(self.main)
-        return self._main_model.runnable(records)
+        return self._main_model
 
     def runnable_of(self, checkpoint, records) -> Runnable:
         """Another checkpoint over ``records``, loaded now and not kept."""
@@ -79,6 +83,9 @@ class EvaluateEffectModelConfig:
     abilities_root: Path = Path(default_paths.DEFAULT_ABILITIES_ROOT)
     #: The per-card win-rate table the decodability battery reads (FR-070).
     win_rates: Path = Path(default_paths.DEFAULT_WIN_RATES)
+    #: Where the selection set frozen for the corpus is found, by its digest;
+    #: no flag (contracts/cli.md), the default training reads it from.
+    reports_dir: Path = Path(default_paths.DEFAULT_REPORTS_DIR)
 
     @property
     def source_trees(self) -> SourceTrees:

@@ -52,6 +52,8 @@ class CheckName(StrEnum):
     BREAKDOWNS = "breakdowns"
     MEMORIZATION_GAP = "memorization-gap"
     ZERO_SHOT_KEYWORD = "zero-shot-keyword"
+    REPORTING_HALF = "reporting-half"
+    RULE_TESTS = "rule-tests"
     MATCHED_REAL_VS_FORK = "matched-real-vs-fork"
     PROBE_DIFF = "probe-diff"
     ROLE_POLARITY = "role-polarity"

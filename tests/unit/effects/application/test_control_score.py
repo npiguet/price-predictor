@@ -408,3 +408,108 @@ def test_the_packed_cache_unpacks_bit_for_bit(run, records):
     assert len(before) == len(after)
     for want, got in zip(before, after):
         assert got.dtype == want.dtype and torch.equal(got, want)
+
+
+# ── either half, and a saved checkpoint (T169) ──────────────────────────
+
+
+class TestTheReportingHalf:
+    @pytest.fixture(scope="class")
+    def reported(self, run, records):
+        selection = _selection(records)
+        scorer, spy, editor = _prepare(run, records, selection, half="reporting", strict=False)
+        return selection, spy, editor, _epoch(run, scorer)
+
+    def test_it_reads_the_reporting_half_alone(self, reported, records):
+        selection, spy, editor, _ = reported
+        halves = selection.halves["card-disjoint"]
+        reporting = {r.record_id for r in records if r.game_id in set(halves["reporting"])}
+        selected = {r.record_id for r in records if r.game_id in set(halves["selection"])}
+        assert spy.seen and set(spy.seen) <= reporting and not selected & set(spy.seen)
+        assert editor.asked and set(editor.asked) <= reporting
+
+    def test_it_scores_every_component_of_both_strata(self, reported):
+        _, _, _, score = reported
+        for stratum in STRATA:
+            assert set(score.strata[stratum].components) == set(COMPONENTS)
+            assert set(score.strata[stratum].items[RULE_TESTS]) == {"r.board"}
+        assert score.strata["card-disjoint"].left_out[RULE_TESTS] == ("r.unread",)
+
+    def test_a_training_run_still_reads_the_selection_half(self, run, records):
+        """The validator names no half: the default is the selection half."""
+        import inspect
+
+        from effects.application.validation_pass import Validator
+
+        assert inspect.signature(ControlScorer.prepare).parameters["half"].default == "selection"
+        assert "half=" not in inspect.getsource(Validator.prepare)
+
+
+class TestALenientScore:
+    def test_an_empty_component_is_nan_and_named_not_an_error(self, run, records):
+        selection = _selection(records)
+        selection = replace(selection, probes={
+            stratum: {**by_half, "reporting": {}} for stratum, by_half in selection.probes.items()})
+        scorer, _, _ = _prepare(run, records, selection, half="reporting", strict=False)
+        score = _epoch(run, scorer)
+        stratum = score.strata["card-disjoint"]
+        assert math.isnan(stratum.components[PROBES]) and math.isnan(stratum.score)
+        assert not math.isnan(stratum.components[RULE_TESTS])
+
+    def test_the_deviance_floor_empties_the_component_without_an_error(self, run, records):
+        scorer, _, _ = _prepare(run, records, _selection(records), half="reporting",
+                                strict=False, deviance_floor=1e9)
+        assert math.isnan(_epoch(run, scorer).strata["game-disjoint"].components[DEVIANCE])
+
+    def test_chosen_components_alone_are_prepared_and_scored(self, run, records):
+        scorer, spy, editor = _prepare(run, records, _selection(records), half="reporting",
+                                       strict=False, components=(RULE_TESTS,))
+        stratum = _epoch(run, scorer).strata["card-disjoint"]
+        assert set(stratum.components) == {RULE_TESTS} and math.isnan(stratum.score)
+        assert not editor.asked
+        assert not scorer.strata["card-disjoint"].steps
+
+
+def _checkpoint_batcher(run):
+    """A saved checkpoint's batcher, as ``LoadedModel.batcher`` gives one: the
+    run's layout and join with its device half."""
+    from effects.application.surface_batching import SurfaceBatcher
+
+    template = run.preparer.scoring_batcher()
+    return SurfaceBatcher(stager=template.stager, resolver=template.resolver,
+                          spec=template.spec, materializer=run.scoring)
+
+
+class TestASavedCheckpoint:
+    def test_its_scoring_step_is_validations(self, run, records):
+        import torch
+
+        from effects.application.control_score import CheckpointPreparer
+        from effects.application.host_cache import map_tensors
+
+        fields = tuple(run.fields[max(run.fields)])
+        preparer = CheckpointPreparer(_checkpoint_batcher(run), mask="hard",
+                                      rule_outputs=run.preparer.rule_outputs)
+        ours = preparer.prepare_scoring_step(records[:16], fields)
+        theirs = run.preparer.prepare_scoring_step(records[:16], fields)
+        got, want = [], []
+        map_tensors(ours.targets, lambda t: got.append(t) or t)
+        map_tensors(theirs.targets, lambda t: want.append(t) or t)
+        assert len(got) == len(want) and all(torch.equal(a, b) for a, b in zip(got, want))
+
+    def test_score_half_scores_the_half_it_names(self, run, records):
+        from effects.application.control_score import score_half
+        from tests.unit.effects.builders import FIXTURE_RULE_OUTPUTS, fixture_selection_set
+
+        selection = fixture_selection_set(records)
+        score = score_half(
+            selection, dict.fromkeys(STRATA, lambda: [records]), half="reporting",
+            encoder=run.encoder, model=run.model, batcher=_checkpoint_batcher(run),
+            rule_outputs=FIXTURE_RULE_OUTPUTS, mask="hard", stratum_weight=0.3,
+            deviance_floor=0.0, config=run.spec.config)
+        assert set(score.strata) == set(STRATA)
+        for stratum in STRATA:
+            assert set(score.strata[stratum].items[RULE_TESTS]) == {"r.board"}
+            assert set(score.strata[stratum].items[GRIDS]) == {"damage"}
+            assert not math.isnan(score.strata[stratum].components[DEVIANCE])
+        assert score.stratum_weight == 0.3

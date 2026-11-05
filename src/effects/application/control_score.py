@@ -1,10 +1,11 @@
 """The control score: each epoch's selection number, from the frozen selection
 set's selection halves (FR-068, FR-068c, FR-069; research E2, E6;
-contracts/selection-set.md).
+contracts/selection-set.md), and the same score of a saved checkpoint on
+either half (FR-070).
 
-Built once, at startup (:meth:`ControlScorer.prepare`): the selection half of
-each validation stratum is read once, and the host half of every item it
-holds is prepared and cached —
+Built once, at startup (:meth:`ControlScorer.prepare`): one half of each
+validation stratum — the selection half in training — is read once, and the
+host half of every item it holds is prepared and cached —
 
 - the probe records, each read at its entity's slot (``[ACT]`` for a verdict
   probe) through :data:`~effects.domain.probe_readouts.READOUTS`;
@@ -66,22 +67,32 @@ run's mask (each output field's standard error at most the freeze's item
 target), the per-entity head's alone: the freeze computes no item for the
 verdict, global and created-objects heads, so neither is an item here.
 
-The reporting half is never read: only the selection half's games and the
-records its items name are taken from a stratum.
+Only the prepared half's games and the records its items name are taken
+from a stratum, each distinct record once (a validation stratum repeats a
+record's row for every added copy, FR-068a), copies only for the deviance
+sample.
 
 In a training run the validator (``validation_pass.Validator.prepare``)
 builds one :class:`ControlScorer` at startup from the run's
-:class:`FrozenSelection`, handing it every field set the run's epochs use
-and ``grid_edits.GridEdits`` as its editor, and scores it at each epoch's
-close inside the averaged weights' swap; the training loop keeps the epoch
-of the best :attr:`ControlScore.control` (FR-069), and the CLI turns a
+:class:`FrozenSelection`, over the selection half — training never reads the
+reporting half — handing it every field set the run's epochs use and
+``grid_edits.GridEdits`` as its editor, and scores it at each epoch's close
+inside the averaged weights' swap; the training loop keeps the epoch of the
+best :attr:`ControlScore.control` (FR-069), and the CLI turns a
 :class:`ControlScoreError` into exit 1.
+
+A saved checkpoint is scored by :func:`score_half`: ``evaluate-effect-model``
+scores the reporting half, every component, and the knowledge probes score
+each half's rule tests alone (``components``). Both read it lenient
+(``strict=False``): a component with nothing to score is NaN and named,
+never an error, since a report reports.
 """
 
 from __future__ import annotations
 
 import logging
 import math
+import random
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -91,6 +102,9 @@ import numpy as np
 import torch
 
 from effects.application.host_cache import host_bytes, pack, unpack
+from effects.application.record_forward import RecordForward
+from effects.application.step_preparation import DeviceStep, scoring_step, stripped
+from effects.application.surface_batching import SurfaceBatcher
 from effects.application.validation_pass import FieldParts, KeptTargets, score_steps
 from effects.domain.aux_head_targets import (
     created_objects_targets,
@@ -109,13 +123,15 @@ from effects.domain.effect_head_layout import (
     CreatedSlot,
     FieldSpec,
     RecordHeadLayout,
+    active_fields,
 )
 from effects.domain.field_types import FieldType
 from effects.domain.grid_edits import CellRead, TextOverride
 from effects.domain.head_decoding import HeadReading, direction_balance, expected_magnitude
 from effects.domain.loss_floor import constant_predictor_floor
 from effects.domain.probe_readouts import READOUTS, item_score
-from effects.domain.rule_mask import CREATED_OBJECTS_OUTPUT, GATE_OUTPUT
+from effects.domain.rule_mask import CREATED_OBJECTS_OUTPUT, GATE_OUTPUT, RuleMask, copy_weights
+from effects.domain.sampling import SamplingClass
 from effects.domain.score_scales import (
     auc,
     clipped,
@@ -137,16 +153,15 @@ from effects.domain.strata import Half, Stratum
 from effects.domain.surface_collation import per_entity_targets
 
 if TYPE_CHECKING:
-    from effects.application.record_forward import ForwardOutputs, RecordForward
+    from effects.application.record_forward import ForwardOutputs
     from effects.application.step_loss import StepLossComputer
-    from effects.application.step_preparation import StepPreparer
     from effects.domain.entity_field_targets import EntityTargetBatch
     from effects.domain.records import EffectRecord
 
 logger = logging.getLogger(__name__)
 
 #: The half selection reads; the reporting half is the selected checkpoint's.
-SELECTION = str(Half.SELECTION)
+SELECTION, REPORTING = str(Half.SELECTION), str(Half.REPORTING)
 #: The polarities a rule test ranks, ``fires`` first.
 FIRES, DOES_NOT_FIRE = "fires", "does_not_fire"
 #: Records per prepared chunk of the probes', grids' and rule tests' forward,
@@ -179,6 +194,46 @@ class GridEditor(Protocol):
               entities: tuple[str, ...]) -> Sequence[CellRead]: ...
 
 
+# ── the preparer port ───────────────────────────────────────────────────
+
+
+class ScoringPreparer(Protocol):
+    """What the scorer asks of a preparer: a training run's ``StepPreparer``,
+    or a saved checkpoint's :class:`CheckpointPreparer`."""
+
+    def scoring_batcher(self) -> SurfaceBatcher: ...
+
+    def prepare_scoring_step(self, records: Sequence[EffectRecord],
+                             fields: tuple[FieldSpec, ...]) -> DeviceStep: ...
+
+
+class CheckpointPreparer:
+    """A saved checkpoint's scoring steps: each batcher a fresh one over the
+    checkpoint's own stager, join and surface layout (``batcher``, a loaded
+    model's), drawing from a seeded stream of its own; each step's records
+    weighed under the checkpoint's ``--rule-mask``, as its validation read its
+    own (FR-068a)."""
+
+    def __init__(self, batcher: SurfaceBatcher, *, mask: str,
+                 rule_outputs: Mapping[str, Sequence[str]], seed: int = 42) -> None:
+        self.template = batcher
+        self.mask = RuleMask(mask)
+        self.rule_outputs = {rule: tuple(outputs) for rule, outputs in rule_outputs.items()}
+        self.seed = seed
+
+    def scoring_batcher(self) -> SurfaceBatcher:
+        template = self.template
+        return SurfaceBatcher(stager=template.stager, resolver=template.resolver,
+                              spec=template.spec, materializer=template.materializer,
+                              rng=random.Random(f"{self.seed}:control"))
+
+    def prepare_scoring_step(self, records: Sequence[EffectRecord],
+                             fields: tuple[FieldSpec, ...]) -> DeviceStep:
+        records = list(records)
+        weights = [copy_weights(record, self.mask, self.rule_outputs) for record in records]
+        return scoring_step(records, weights, fields, self.scoring_batcher())
+
+
 # ── scores ──────────────────────────────────────────────────────────────
 
 
@@ -194,7 +249,10 @@ class StratumScore:
 
     @property
     def score(self) -> float:
-        """The mean of the four components."""
+        """The mean of the four components; NaN when one was not scored (a
+        lenient score, or one of chosen components)."""
+        if any(name not in self.components for name in COMPONENTS):
+            return math.nan
         return float(np.mean([self.components[name] for name in COMPONENTS]))
 
 
@@ -218,11 +276,14 @@ def mixed(card_disjoint: float, game_disjoint: float, weight: float) -> float:
 
 
 def component_score(items: Mapping[str, float], *, stratum: str, component: str,
-                    half: str = SELECTION) -> float:
+                    half: str = SELECTION, strict: bool = True) -> float:
     """The mean of a component's items, each clipped below at −1; raises
-    :class:`ControlScoreError` when no item has a score."""
+    :class:`ControlScoreError` when no item has a score, or is NaN then when
+    not ``strict``."""
     scores = [clipped(value) for value in items.values() if not math.isnan(value)]
     if not scores:
+        if not strict:
+            return math.nan
         raise ControlScoreError(stratum, half, component, "nothing to score this epoch")
     return float(np.mean(scores))
 
@@ -555,12 +616,6 @@ class _Observation:
 # ── the host cache ──────────────────────────────────────────────────────
 
 
-def _stripped(batch):
-    """A prepared batch with the host intermediates no device half reads
-    dropped, as a scoring step's is."""
-    return replace(batch, texts={}, staged=replace(batch.staged, prepared=[]), surfaces=[])
-
-
 @dataclass(frozen=True)
 class _ReadGroup:
     """Every ask of one read in a chunk: rows, gathered columns, and the value
@@ -673,7 +728,7 @@ class _ChunkBuilder:
         for row, (surface, gathered) in enumerate(zip(surfaces, asked)):
             for column, at in gathered.items():
                 index[row, at] = surface.entity_slots[column]
-        self.chunks.append(_Chunk(pack(_stripped(batch), rows=len(records)), index,
+        self.chunks.append(_Chunk(pack(stripped(batch), rows=len(records)), index,
                                   _grouped(reads)))
         self.pending = []
 
@@ -697,9 +752,12 @@ class _GridItem:
 
 @dataclass
 class _StratumCache:
-    """One stratum's selection half, prepared."""
+    """One stratum's half, prepared."""
 
     stratum: str
+    half: str = SELECTION
+    #: The components prepared and scored, in :data:`COMPONENTS` order.
+    components: tuple[str, ...] = COMPONENTS
     values: int = 0
     chunks: list[_Chunk] = field(default_factory=list)
     probes: dict[str, _ProbeItem] = field(default_factory=dict)
@@ -758,41 +816,50 @@ class ControlScorer:
     """The control score's cache and its per-epoch scoring."""
 
     def __init__(self, strata: dict[str, _StratumCache], *, stratum_weight: float,
-                 deviance_floor: float) -> None:
+                 deviance_floor: float, strict: bool = True) -> None:
         self.strata = strata
         self.stratum_weight = stratum_weight
         self.deviance_floor = deviance_floor
+        #: Whether a component with nothing to score raises (training) or is
+        #: NaN and named (a saved checkpoint's report).
+        self.strict = strict
 
     # ── startup ──
 
     @classmethod
     def prepare(
         cls, selection: SelectionSet, readers: Mapping[str, StratumReader], *,
-        preparer: StepPreparer, fields: Sequence[tuple[FieldSpec, ...]],
+        preparer: ScoringPreparer, fields: Sequence[tuple[FieldSpec, ...]],
         rule_outputs: Mapping[str, Sequence[str]], mask: str | None,
         stratum_weight: float, deviance_floor: float, editor: GridEditor | None = None,
         chunk_records: int = CHUNK_RECORDS, batch_size: int | None = None,
+        half: str = SELECTION, components: Sequence[str] = COMPONENTS, strict: bool = True,
     ) -> ControlScorer:
-        """Read each stratum's selection half once and prepare every item's
-        host half (research E2).
+        """Read each stratum's ``half`` once and prepare every item's host
+        half (research E2).
 
         ``fields`` are every field set the run's epochs score (the curriculum's
         before and after its switch): the deviance steps are prepared over
         their union. ``mask`` is the run's ``--rule-mask`` (None reads every
-        copy at full weight). Raises :class:`ControlScoreError` on a component
-        with no item to read.
+        copy at full weight). ``half`` is the selection half for a training
+        run, which never reads the reporting half; ``components`` narrows what
+        is prepared and scored. Raises :class:`ControlScoreError` on a
+        component with no item to read, unless not ``strict``.
         """
         union = _field_union(fields)
+        wanted = tuple(name for name in COMPONENTS if name in set(components))
         strata = {}
         for stratum in sorted(selection.halves):
             strata[stratum] = _prepare_stratum(
                 selection, stratum, readers[stratum], preparer=preparer, union=union,
                 rule_outputs=rule_outputs, mask=mask or "hard", editor=editor,
                 chunk_records=chunk_records, batch_size=batch_size or chunk_records,
+                half=str(half), components=wanted, strict=strict,
             )
-        scorer = cls(strata, stratum_weight=stratum_weight, deviance_floor=deviance_floor)
-        logger.info("Control score: %s, %.1f MB on the host.", scorer.describe(),
-                    scorer.host_bytes() / 2**20)
+        scorer = cls(strata, stratum_weight=stratum_weight, deviance_floor=deviance_floor,
+                     strict=strict)
+        logger.info("Control score (%s half): %s, %.1f MB on the host.", half,
+                    scorer.describe(), scorer.host_bytes() / 2**20)
         return scorer
 
     def describe(self) -> str:
@@ -828,20 +895,24 @@ class ControlScorer:
                  losses: StepLossComputer, fields: tuple[FieldSpec, ...]) -> StratumScore:
         values = self._values(cache, forward)
         items = {
-            PROBES: {name: probe_item(item.kind, item.labels, values[item.positions])
-                     for name, item in sorted(cache.probes.items())},
-            GRIDS: {name: _grid_item(item, values) for name, item in sorted(cache.grids.items())},
-            RULE_TESTS: {rule: rule_item(
+            PROBES: lambda: {name: probe_item(item.kind, item.labels, values[item.positions])
+                             for name, item in sorted(cache.probes.items())},
+            GRIDS: lambda: {name: _grid_item(item, values)
+                            for name, item in sorted(cache.grids.items())},
+            RULE_TESTS: lambda: {rule: rule_item(
                 (_record_values(reading.fires, values), _record_values(reading.does_not, values))
                 for reading in outputs.values()) for rule, outputs in sorted(cache.rules.items())},
-            DEVIANCE: self._deviance(cache, forward, losses, fields),
+            DEVIANCE: lambda: self._deviance(cache, forward, losses, fields),
         }
-        left_out = {component: tuple(sorted(name for name, value in by_item.items()
-                                            if math.isnan(value)))
+        items = {component: items[component]() for component in cache.components}
+        left_out = {component: tuple(sorted(
+            {name for name, value in by_item.items() if math.isnan(value)}
+            | set(cache.left_out.get(component, ()))))
                     for component, by_item in items.items()}
         components = {component: component_score(items[component], stratum=cache.stratum,
-                                                  component=component)
-                      for component in COMPONENTS}
+                                                  component=component, half=cache.half,
+                                                  strict=self.strict)
+                      for component in cache.components}
         return StratumScore(
             components,
             {component: {name: clipped(value) for name, value in by_item.items()
@@ -881,9 +952,9 @@ class ControlScorer:
             cache.floors[key] = constant_predictor_floor(kept.sample, fields=fields)
         explained = explained_deviance(parts.means(), cache.floors[key],
                                        kept=cache.kept_fields, deviance_floor=self.deviance_floor)
-        if not explained:
+        if not explained and self.strict:
             raise ControlScoreError(
-                cache.stratum, SELECTION, DEVIANCE,
+                cache.stratum, cache.half, DEVIANCE,
                 f"every field's constant-prediction loss is at or below the deviance "
                 f"floor {self.deviance_floor}, or no kept field is scored this epoch")
         return explained
@@ -926,17 +997,23 @@ def _field_union(sets: Sequence[tuple[FieldSpec, ...]]) -> tuple[FieldSpec, ...]
 
 
 def _prepare_stratum(
-    selection: SelectionSet, stratum: str, read: StratumReader, *, preparer: StepPreparer,
-    union: tuple[FieldSpec, ...], rule_outputs: Mapping[str, Sequence[str]], mask: str,
-    editor: GridEditor | None, chunk_records: int, batch_size: int,
+    selection: SelectionSet, stratum: str, read: StratumReader, *,
+    preparer: ScoringPreparer, union: tuple[FieldSpec, ...],
+    rule_outputs: Mapping[str, Sequence[str]], mask: str, editor: GridEditor | None,
+    chunk_records: int, batch_size: int, half: str = SELECTION,
+    components: tuple[str, ...] = COMPONENTS, strict: bool = True,
 ) -> _StratumCache:
-    cache = _StratumCache(stratum)
-    probes = selection.probes.get(stratum, {}).get(SELECTION, {})
-    grids = selection.grids.get(stratum, {}).get(SELECTION, {})
-    rule_tests = selection.rule_tests.get(stratum, {}).get(SELECTION, {})
-    samples = selection.deviance_samples.get(stratum, {}).get(SELECTION, ())
+    cache = _StratumCache(stratum, half=half, components=components)
+
+    def frozen(by_stratum, component, empty):
+        return by_stratum.get(stratum, {}).get(half, empty) if component in components else empty
+
+    probes = frozen(selection.probes, PROBES, {})
+    grids = frozen(selection.grids, GRIDS, {})
+    rule_tests = frozen(selection.rule_tests, RULE_TESTS, {})
+    samples = frozen(selection.deviance_samples, DEVIANCE, ())
     if grids and editor is None:
-        raise ControlScoreError(stratum, SELECTION, GRIDS,
+        raise ControlScoreError(stratum, half, GRIDS,
                                 "the selection set holds grids and no grid editor was given")
 
     # What each record is read for.
@@ -972,7 +1049,7 @@ def _prepare_stratum(
     edited = _ChunkBuilder(preparer.scoring_batcher(), chunk_records)
     sampled: list = []
     steps: list = []
-    games = frozenset(selection.halves.get(stratum, {}).get(SELECTION, ()))
+    games = frozenset(selection.halves.get(stratum, {}).get(half, ()))
     wanted = frozenset(requests) | frozenset(grid_records)
     copies = frozenset((row.record_id, row.copy) for row in samples)
     for record, distinct, copy in selection_records(read, games=games, records=wanted,
@@ -1000,7 +1077,7 @@ def _prepare_stratum(
         steps.append(pack(preparer.prepare_scoring_step(sampled, union)))
     cache.chunks = plain.chunks + edited.chunks
     cache.steps = steps
-    cache.kept_fields = _kept_fields(selection, stratum, mask)
+    cache.kept_fields = _kept_fields(selection, stratum, mask, half=half)
     for rule in list(cache.rules):
         settled = {output: reading for output, reading in cache.rules[rule].items()
                    if reading.settle()}
@@ -1009,13 +1086,15 @@ def _prepare_stratum(
         else:
             del cache.rules[rule]
             cache.left_out[RULE_TESTS].append(rule)
-    for component, held in ((PROBES, cache.probes), (GRIDS, cache.grids),
-                            (RULE_TESTS, cache.rules)):
-        if not held:
-            raise ControlScoreError(stratum, SELECTION, component, "no item to read")
-    if not cache.steps or not cache.kept_fields:
-        raise ControlScoreError(stratum, SELECTION, DEVIANCE,
-                                "no deviance sample or no field the freeze kept")
+    empty = [component for component, held in (
+        (PROBES, cache.probes), (GRIDS, cache.grids), (RULE_TESTS, cache.rules),
+        (DEVIANCE, cache.steps and cache.kept_fields)) if component in components and not held]
+    if empty and strict:
+        detail = ("no deviance sample or no field the freeze kept" if empty[0] == DEVIANCE
+                  else "no item to read")
+        raise ControlScoreError(stratum, half, empty[0], detail)
+    for component in empty:
+        logger.info("Control score, %s %s: no %s item to read.", stratum, half, component)
     if cache.left_out[RULE_TESTS]:
         logger.info("Control score, %s: %d rule(s) have no output a head reads: %s", stratum,
                     len(cache.left_out[RULE_TESTS]), ", ".join(cache.left_out[RULE_TESTS][:12]))
@@ -1053,11 +1132,12 @@ def _requests(record: EffectRecord, asked: Iterable[tuple], cache: _StratumCache
     return out
 
 
-def _kept_fields(selection: SelectionSet, stratum: str, mask: str) -> frozenset[str]:
-    """The output fields the freeze kept in this half under ``mask``: those
+def _kept_fields(selection: SelectionSet, stratum: str, mask: str, *,
+                 half: str = SELECTION) -> frozenset[str]:
+    """The output fields the freeze kept in ``half`` under ``mask``: those
     whose standard error is at most the freeze's item target."""
     limit = float(selection.settings.get("max_item_error", 0.1))
-    prefix = item_key(stratum, SELECTION, DEVIANCE, "")
+    prefix = item_key(stratum, half, DEVIANCE, "")
     kept = set()
     for key, error in selection.standard_errors.items():
         if not key.startswith(prefix) or not isinstance(error, dict):
@@ -1067,9 +1147,50 @@ def _kept_fields(selection: SelectionSet, stratum: str, mask: str) -> frozenset[
     return frozenset(kept)
 
 
+# ── a saved checkpoint ──────────────────────────────────────────────────
+
+
+#: The field set a saved checkpoint is scored over: every per-entity field,
+#: the sparse group included, as the gates score a finished model.
+CHECKPOINT_FIELDS: tuple[FieldSpec, ...] = active_fields(
+    frozenset(str(klass) for klass in SamplingClass), sparse=True)
+
+
+def score_half(
+    selection: SelectionSet, readers: Mapping[str, StratumReader], *, half: str,
+    encoder, model, batcher: SurfaceBatcher, rule_outputs: Mapping[str, Sequence[str]],
+    mask: str | None, stratum_weight: float, deviance_floor: float,
+    components: Sequence[str] = COMPONENTS, config=None,
+) -> ControlScore:
+    """A saved checkpoint's control score on ``half`` of every stratum
+    ``selection`` halves, read once through the scorer training selects with
+    (FR-070): ``encoder`` and ``model`` its modules, ``batcher`` a batcher of
+    its own (its stager, join, layout and materializer), ``mask``,
+    ``stratum_weight`` and ``deviance_floor`` the values it trained under.
+    Lenient: a component with nothing to score is NaN and named in the
+    stratum's ``left_out``, never an error. ``config`` builds the device
+    half's loss (the training defaults when None; only the shipped loss and
+    the parts in nats are read)."""
+    from effects.application.step_loss import StepLossComputer
+    from effects.application.train_effect_model import TrainEffectModelConfig
+    from effects.domain.grid_edits import GridEdits
+
+    preparer = CheckpointPreparer(batcher, mask=mask or "hard", rule_outputs=rule_outputs)
+    scorer = ControlScorer.prepare(
+        selection, readers, preparer=preparer, fields=[CHECKPOINT_FIELDS],
+        rule_outputs=rule_outputs, mask=mask, stratum_weight=stratum_weight,
+        deviance_floor=deviance_floor, editor=GridEdits(preparer.scoring_batcher()),
+        half=half, components=components, strict=False,
+    )
+    device = batcher.materializer.device
+    losses = StepLossComputer(config or TrainEffectModelConfig(), device)
+    return scorer.epoch(RecordForward(encoder, model, batcher.materializer), losses,
+                        CHECKPOINT_FIELDS)
+
+
 __all__ = [
-    "CHUNK_RECORDS", "CellRead", "ControlScore", "ControlScoreError", "ControlScorer",
-    "FrozenSelection", "GridEditor", "StratumScore", "TextOverride", "component_score",
-    "decoder_of", "explained_deviance", "host_bytes", "mixed", "probe_item", "rule_item",
-    "selection_records",
+    "CHECKPOINT_FIELDS", "CHUNK_RECORDS", "CellRead", "CheckpointPreparer", "ControlScore",
+    "ControlScoreError", "ControlScorer", "FrozenSelection", "GridEditor", "ScoringPreparer",
+    "StratumScore", "TextOverride", "component_score", "decoder_of", "explained_deviance",
+    "host_bytes", "mixed", "probe_item", "rule_item", "score_half", "selection_records",
 ]

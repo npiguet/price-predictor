@@ -923,7 +923,10 @@ def _baseline_checkpoint(value: str):
     f"{_EFFECT_MODEL_STORE}.SplitMismatchError": 2,
     CorpusMismatchError: 2,
     FileNotFoundError: 2,
+    # A checkpoint of another input layout, a corpus not wholly gen-3 (FR-076).
     _LAYOUT_REFUSED: 1,
+    MixedGenerationsError: 1,
+    UnacceptedGenerationError: 1,
 })
 def run_evaluate_effect_model(args: argparse.Namespace) -> int:
     from effects.application.evaluate_effect_model import run as evaluate

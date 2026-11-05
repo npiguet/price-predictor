@@ -122,9 +122,16 @@ class LoadedModel:
             evaluation_fields(records),
         )
 
+    def batcher(self) -> SurfaceBatcher:
+        """A batcher laid out by the widths the checkpoint's trunk was built
+        with, for a pass whose records are not read yet (the control score's
+        cache reads its own)."""
+        return self._batcher(None)
+
     def _batcher(self, records) -> SurfaceBatcher:
         checkpoint = self.checkpoint
-        spec = SurfaceSpec.for_checkpoint(checkpoint, records)
+        spec = (SurfaceSpec.for_saved_model(checkpoint) if records is None
+                else SurfaceSpec.for_checkpoint(checkpoint, records))
         return SurfaceBatcher(
             stager=TextStager.for_inference(
                 self.tokenizer, self.surface,

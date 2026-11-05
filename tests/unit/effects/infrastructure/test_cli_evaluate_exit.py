@@ -35,3 +35,39 @@ def test_a_checkpoint_that_recorded_no_corpus_exits_two(monkeypatch, caplog) -> 
 
     assert args.func(args) == 2
     assert "records no curated corpus" in caplog.text
+
+
+def test_a_corpus_not_wholly_gen3_or_a_checkpoint_of_another_layout_exits_one(
+    monkeypatch,
+) -> None:
+    """contracts/cli.md: evaluate-effect-model reads gen-3 records and a
+    gen-3 checkpoint only (FR-076)."""
+    from effects.domain.effect_head_input import CheckpointLayoutError
+    from effects.domain.shard_generation import (
+        MixedGenerationsError,
+        UnacceptedGenerationError,
+    )
+
+    for error in (UnacceptedGenerationError("gen-2 shards"),
+                  MixedGenerationsError("gen-2 and gen-3 shards"),
+                  CheckpointLayoutError("gen-2 layout")):
+        def refuse(config, error=error):
+            raise error
+
+        monkeypatch.setattr(evaluate_effect_model, "run", refuse)
+        args = build_parser().parse_args(["evaluate-effect-model"])
+        assert args.func(args) == 1, type(error).__name__
+
+
+def test_the_selection_set_is_found_where_training_finds_it() -> None:
+    """No new flag: the reports directory is training's default."""
+    from pathlib import Path
+
+    from effects.application.evaluation_context import EvaluateEffectModelConfig
+    from effects.domain.default_paths import DEFAULT_REPORTS_DIR
+    from effects.infrastructure.cli import config_from_args
+
+    args = build_parser().parse_args(["evaluate-effect-model"])
+    config = config_from_args(EvaluateEffectModelConfig, args)
+    assert config.reports_dir == Path(DEFAULT_REPORTS_DIR)
+    assert not hasattr(args, "reports_dir")

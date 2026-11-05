@@ -98,10 +98,21 @@ class TestTheStratum:
     def test_the_same_text_appearing_twice_is_still_kept(self, batcher):
         """The rule is "absent from training", not "seen once" — a text held out
         twice is held out twice, and both records score."""
+        import dataclasses
+
         stratum = unique_text_records(
-            [_record(1), _record(1)], batcher.text_of, seen=set(),
+            [_record(1), dataclasses.replace(_record(1), record_id="r.1b")],
+            batcher.text_of, seen=set(),
         )
         assert len(stratum) == 2
+
+    def test_a_records_repeated_row_is_read_once(self, batcher):
+        """A curated stratum repeats a record's row for every added copy;
+        gate 1 reads each distinct record once (FR-068a)."""
+        stratum = unique_text_records(
+            [_record(1), _record(2), _record(1)], batcher.text_of, seen=set(),
+        )
+        assert [r.record_id for r in stratum] == ["r.1", "r.2"]
 
     def test_a_combat_record_is_not_in_the_stratum(self, batcher):
         """The envelope forbids it an acting line, so it could not be

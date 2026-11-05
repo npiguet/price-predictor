@@ -30,7 +30,7 @@ from effects.domain.gate_metrics import (
     MarginAccumulator,
 )
 from effects.domain.provenance import ProvenanceKey, first_text
-from effects.domain.records import RecordKind, acting_keys
+from effects.domain.records import RecordKind, acting_keys, distinct_records
 from effects.infrastructure.corpus_store import (
     CorpusStore,
     card_disjoint_resolutions,
@@ -54,12 +54,14 @@ def training_texts(acting, text_of: TextOf) -> set[str]:
 
 
 def unique_text_records(records, text_of: TextOf, *, seen) -> list:
-    """The unique-text stratum: resolution records whose text is not in ``seen``.
+    """The unique-text stratum: resolution records whose text is not in ``seen``,
+    each distinct record once (a curated stratum repeats a record's row for
+    every added copy, FR-068a).
 
     ``records`` is read once, so it may be a stream.
     """
     stratum = []
-    for record in records:
+    for record in distinct_records(records):
         if record.kind is not RecordKind.RESOLUTION:
             continue
         text = first_text(acting_keys(record), text_of)

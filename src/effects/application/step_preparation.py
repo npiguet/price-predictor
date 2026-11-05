@@ -321,10 +321,7 @@ class StepPreparer:
         reads its own records (FR-068a), so the loss denominators and the
         explained deviance weigh each output as training does."""
         records = list(records)
-        return self._build(
-            records, [derive_targets(record) for record in records],
-            self.rule_mask(records), fields, self.scoring_batcher(), heads=frozenset(),
-        )
+        return scoring_step(records, self.rule_mask(records), fields, self.scoring_batcher())
 
     def rule_mask(self, records: Sequence[EffectRecord]) -> list[CopyWeights]:
         """Each record's weights under ``--rule-mask`` (FR-061)."""
@@ -341,10 +338,7 @@ class StepPreparer:
         record's outputs weighed by ``weights``."""
         batch = batcher.prepare(records)
         return DeviceStep(
-            batch=replace(
-                batch, texts={}, staged=replace(batch.staged, prepared=[]), surfaces=[],
-            ),
-            fields=fields,
+            batch=stripped(batch), fields=fields,
             targets=entity_target_tensors(batch.surfaces, targets, fields, weights),
             heads=self._head_targets(records, weights, batcher, batch, heads=heads),
         )
@@ -384,17 +378,7 @@ class StepPreparer:
         by its rule mask (FR-061), then those of the training-only ``heads``
         (FR-058, FR-060b), which read texts and no mask reaches. The MLM mask
         is the step's last draw from the batcher's generator."""
-        targets = HeadTargets()
-        for head, layout, derive in (
-            (Head.VERDICT, VERDICT_LAYOUT, verdict_targets),
-            (Head.GLOBAL, GLOBAL_LAYOUT, global_targets),
-        ):
-            rows = _record_head_rows(records, weights, layout, derive)
-            if rows is not None:
-                targets[head] = rows
-        made = _created_objects_rows(records, weights)
-        if made is not None:
-            targets[Head.CREATED_OBJECTS] = made
+        targets = shipped_head_targets(records, weights)
         # No text, no matrix for these heads to read.
         if not heads or not batch.staged.rows:
             return targets
@@ -542,6 +526,46 @@ class StepPreparer:
         }
         truncated, self.truncated = tuple(self.truncated), []
         yield ShardClosed(unresolved=unresolved, truncated=truncated)
+
+
+def stripped(batch: PreparedBatch) -> PreparedBatch:
+    """A prepared batch without the host intermediates no device half reads."""
+    return replace(batch, texts={}, staged=replace(batch.staged, prepared=[]), surfaces=[])
+
+
+def shipped_head_targets(records, weights: list[CopyWeights]) -> HeadTargets:
+    """The shipped record heads' targets (FR-060a), each record's fields
+    weighed by its rule mask (FR-061)."""
+    targets = HeadTargets()
+    for head, layout, derive in (
+        (Head.VERDICT, VERDICT_LAYOUT, verdict_targets),
+        (Head.GLOBAL, GLOBAL_LAYOUT, global_targets),
+    ):
+        rows = _record_head_rows(records, weights, layout, derive)
+        if rows is not None:
+            targets[head] = rows
+    made = _created_objects_rows(records, weights)
+    if made is not None:
+        targets[Head.CREATED_OBJECTS] = made
+    return targets
+
+
+def scoring_step(
+    records: Sequence[EffectRecord], weights: list[CopyWeights],
+    fields: tuple[FieldSpec, ...], batcher: SurfaceBatcher,
+) -> DeviceStep:
+    """One scoring step's host half over ``records`` through ``batcher``: no
+    augmentation, no copies, the shipped heads' targets alone, each record's
+    outputs weighed by ``weights``. Validation's steps and a saved
+    checkpoint's (``control_score.CheckpointPreparer``) are both built here."""
+    records = list(records)
+    batch = batcher.prepare(records)
+    return DeviceStep(
+        batch=stripped(batch), fields=fields,
+        targets=entity_target_tensors(
+            batch.surfaces, [derive_targets(record) for record in records], fields, weights),
+        heads=shipped_head_targets(records, weights),
+    )
 
 
 def _record_head_rows(records, weights: list[CopyWeights], layout: RecordHeadLayout, derive):

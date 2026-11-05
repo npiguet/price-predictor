@@ -204,3 +204,47 @@ class TestTheReport:
             ) if c.name == Stratum.CARD_DISJOINT
         )
         assert bd.TOTAL in overall.values and f"text:{bd.TOTAL}" in overall.values
+
+
+# ── a half's control score (T169) ───────────────────────────────────────
+
+
+class TestHalfScoreChecks:
+    def _score(self):
+        import math
+
+        from effects.application.control_score import ControlScore, StratumScore
+
+        card = StratumScore(
+            {"probes": 0.4, "grids": math.nan, "rule_tests": 0.2, "deviance": 0.1},
+            {"probes": {"dies": 0.4}, "grids": {}, "rule_tests": {"704.5f": 0.3, "702.2b": 0.1},
+             "deviance": {"gate": 0.1}},
+            {"grids": ("damage",), "rule_tests": ("701.3a",)})
+        game = StratumScore(dict.fromkeys(("probes", "grids", "rule_tests", "deviance"), 0.5),
+                            {"rule_tests": {"704.5f": 0.5}})
+        return ControlScore({"card-disjoint": card, "game-disjoint": game}, 0.5)
+
+    def test_each_stratum_reports_its_components_and_score(self):
+        checks = {c.name: c for c in bd.half_score_checks(
+            self._score(), half="reporting", games={"card-disjoint": 40})}
+        card = checks["reporting-half card-disjoint"]
+        assert card.values["probes"] == 0.4 and card.values["score"] != card.values["score"]
+        assert "40 games" in card.detail and "nothing to score in grids" in card.detail
+        assert checks["reporting-half game-disjoint"].values["score"] == pytest.approx(0.5)
+
+    def test_the_rule_tests_are_reported_per_rule_with_the_left_out_named(self):
+        checks = {c.name: c for c in bd.half_score_checks(
+            self._score(), half="reporting", games={})}
+        rules = checks["rule-tests card-disjoint reporting"]
+        assert rules.values == {"704.5f": 0.3, "702.2b": 0.1}
+        assert rules.detail.startswith("2 rules scored") and "701.3a" in rules.detail
+        assert checks["reporting-half card-disjoint grids"].detail.endswith(
+            "1 left out: damage")
+
+    def test_the_control_score_sits_beside_the_selection_halfs(self):
+        checks = {c.name: c for c in bd.half_score_checks(
+            self._score(), half="reporting", games={}, selection_control=0.7)}
+        control = checks["reporting-half control"]
+        assert control.values == {"control": control.values["control"],
+                                  "selection_control": 0.7}
+        assert control.status is CheckStatus.REPORTED

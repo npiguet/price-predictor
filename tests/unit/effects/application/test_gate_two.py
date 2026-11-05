@@ -846,6 +846,13 @@ class TestPopulation:
         assert _scores([probe]).qualifying == 0
         assert _scores([_printed_board(game="gd-1"), probe]).qualifying == 1
 
+    def test_a_records_repeated_row_is_observed_once(self):
+        """A curated stratum repeats a record's row for every added copy; its
+        agreement counts the record once (FR-068a)."""
+        board = _printed_board(game="gd-1")
+        score = _scores([board, board, board])
+        assert (score.qualifying, score.observations) == (1, 1)
+
     def test_two_carriers_in_one_record_count_one_qualifying_record(self):
         """FR-119's threshold counts records; agreement averages the carriers."""
         score = _scores([_two_first_strikers()])
