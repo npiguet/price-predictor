@@ -187,6 +187,7 @@ _TORCH_FREE = (
     "effects.domain.fork_operation",
     "effects.domain.rule_catalogue",
     "effects.domain.rule_outcomes",
+    "effects.domain.protection_copies",
     "effects.domain.relation_types",
     "effects.domain.closed_lists",
     "effects.domain.output_vocabularies",

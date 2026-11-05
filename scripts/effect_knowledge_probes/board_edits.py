@@ -89,27 +89,12 @@ class BoardEdit:
         all an edit can change.
 
         ``keyword`` is in the package's spelling (``first_strike``,
-        ``protection_from_red``); an entity that has it already is left alone.
+        ``protection_from_red``); an entity that has it already is left alone
+        (``EntityState.with_granted_keyword``, which protection copies share).
         """
-        from effects.domain.keyword_names import normalize_keyword
-        from effects.domain.state_snapshot import CardLine, LineKind
-
-        def edit(entity):
-            granted = entity.granted_temporary
-            if keyword not in granted.keywords:
-                entity = replace(entity, granted_temporary=replace(
-                    granted, keywords=(*granted.keywords, keyword)))
-            fragment = keyword_fragment(keyword)
-            if entity.lines is None or any(
-                    line.in_force and (line.fragment == fragment
-                                       or line.keyword == normalize_keyword(keyword))
-                    for line in entity.lines):
-                return entity
-            line = CardLine(keys=(), kind=LineKind.KEYWORD.value, granted=True,
-                            fragment=fragment)
-            return replace(entity, lines=(*entity.lines, line))
-
-        return self.edit_entity(entity_id, edit)
+        fragment = keyword_fragment(keyword)
+        return self.edit_entity(
+            entity_id, lambda entity: entity.with_granted_keyword(keyword, fragment))
 
     def set_controller(self, entity_id: str, player_id: str) -> BoardEdit:
         return self.edit_entity(entity_id, lambda e: replace(e, controller=player_id))

@@ -10,16 +10,24 @@ read one statement of the rule rather than three. Rules covered:
 - 510, 702.2, 702.4, 702.7 and 702.12, which creatures die in one damage step of
   a one-on-one block (:func:`step_deaths`);
 - 702.9, 702.13, 702.16, 702.28, 702.31 and 702.36, whether one creature may
-  block another as far as evasion and protection decide (:func:`may_block`).
+  block another as far as evasion and protection decide (:func:`may_block`);
+- 702.16b, c, e and j, what protection from a quality stops: being targeted
+  (:func:`may_target`), being enchanted (:func:`may_enchant`) and being dealt
+  damage (:func:`damage_prevented`), over the qualities
+  :class:`ProtectionQuality` reads: a colour, a card type, a creature type, a
+  condition, everything.
 
 Torch-free.
 """
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterable
+from collections.abc import Callable, Collection, Iterable
+from dataclasses import dataclass
 from enum import StrEnum
+from typing import NamedTuple
 
+from effects.domain.keyword_names import PROTECTION_FROM, normalize_keyword
 from effects.domain.state_snapshot import EntityState
 
 # ── 704.5f-g ─────────────────────────────────────────────────────────────
@@ -97,18 +105,199 @@ def step_deaths(
     return dead["a"], dead["b"]
 
 
-# ── blocking ─────────────────────────────────────────────────────────────
+# ── protection (702.16) ──────────────────────────────────────────────────
 
 COLOUR_WORDS = {"W": "white", "U": "blue", "B": "black", "R": "red", "G": "green"}
+
+#: The card types protection can name, lower-case as a record spells them.
+CARD_TYPES = ("artifact", "battle", "creature", "enchantment", "instant", "kindred",
+              "land", "planeswalker", "sorcery")
+
+
+class Characteristics(NamedTuple):
+    """What a quality is tested against: one object's characteristics, colours
+    as the snapshot spells them (``W``, ``U``, ...), the rest lower-case."""
+
+    types: frozenset[str]
+    subtypes: frozenset[str]
+    colours: frozenset[str]
+    mana_value: int
+
+    @classmethod
+    def of(cls, entity: EntityState) -> Characteristics:
+        return cls.made(entity.types, entity.subtypes, entity.colors, entity.mana_value)
+
+    @classmethod
+    def made(cls, types: Iterable[str] = (), subtypes: Iterable[str] = (),
+             colours: Iterable[str] = (), mana_value: int = 0) -> Characteristics:
+        return cls(
+            frozenset(t.lower() for t in types), frozenset(s.lower() for s in subtypes),
+            frozenset(c for c in colours if c in COLOUR_WORDS), int(mana_value),
+        )
+
+
+class QualityKind(StrEnum):
+    """What a protection quality names (702.16a)."""
+
+    COLOUR = "colour"
+    CARD_TYPE = "card_type"
+    CREATURE_TYPE = "creature_type"
+    CONDITION = "condition"
+    EVERYTHING = "everything"  # 702.16j
+
+
+@dataclass(frozen=True, slots=True)
+class _Condition:
+    """A condition Forge's cards print as a protection quality."""
+
+    #: Forge's keyword fragment for it.
+    fragment: str
+    holds: Callable[[Characteristics], bool]
+
+
+#: Conditions by the description Forge prints after the filter.
+CONDITIONS: dict[str, _Condition] = {
+    "multicolored": _Condition(
+        "Protection:Card.MultiColor:multicolored", lambda c: len(c.colours) >= 2),
+    "monocolored": _Condition(
+        "Protection:Card.MonoColor:monocolored", lambda c: len(c.colours) == 1),
+    "mana value 3 or less": _Condition(
+        "Protection:Card.cmcLE3:mana value 3 or less", lambda c: c.mana_value <= 3),
+    "mana value 3 or greater": _Condition(
+        "Protection:Card.cmcGE3:mana value 3 or greater", lambda c: c.mana_value >= 3),
+    #: 702.16h: one protection per colour, so any coloured object.
+    "each color": _Condition("Protection from each color", lambda c: bool(c.colours)),
+}
+_CONDITION_BY_FRAGMENT = {
+    condition.fragment.lower(): name for name, condition in CONDITIONS.items()
+}
+
+
+@dataclass(frozen=True, slots=True)
+class ProtectionQuality:
+    """One "protection from [quality]" (702.16a), as Forge writes the keyword.
+
+    ``value`` is a colour word (``red``), a card type or a creature type in a
+    record's lower-case spelling (``artifact``, ``goblin``), a
+    :data:`CONDITIONS` name, or empty for everything.
+    """
+
+    kind: QualityKind
+    value: str = ""
+
+    @classmethod
+    def everything(cls) -> ProtectionQuality:
+        return cls(QualityKind.EVERYTHING)
+
+    @property
+    def fragment(self) -> str:
+        """The keyword line's fragment Forge writes for this protection:
+        ``Protection from red``, ``Protection:Artifact``, ``Protection:Goblin``,
+        ``Protection:Card.MultiColor:multicolored``, ``Protection from everything``."""
+        if self.kind is QualityKind.EVERYTHING:
+            return "Protection from everything"
+        if self.kind is QualityKind.COLOUR:
+            return f"Protection from {self.value}"
+        if self.kind is QualityKind.CONDITION:
+            return CONDITIONS[self.value].fragment
+        return "Protection:" + "-".join(part[:1].upper() + part[1:]
+                                        for part in self.value.split("-"))
+
+    @property
+    def keyword(self) -> str:
+        """The keyword in the package's spelling, as a snapshot's keyword list
+        carries it: ``protection_from_red``, ``protection_from_everything``, or
+        bare ``protection`` where Forge writes the quality after a colon."""
+        return normalize_keyword(self.fragment)
+
+    def covers(self, obj: Characteristics) -> bool:
+        """Whether ``obj`` has this quality."""
+        if self.kind is QualityKind.EVERYTHING:
+            return True
+        if self.kind is QualityKind.COLOUR:
+            return any(COLOUR_WORDS[c] == self.value for c in obj.colours)
+        if self.kind is QualityKind.CARD_TYPE:
+            return self.value in obj.types
+        if self.kind is QualityKind.CREATURE_TYPE:
+            return self.value in obj.subtypes
+        return CONDITIONS[self.value].holds(obj)
+
+    @classmethod
+    def parse(cls, fragment: str) -> ProtectionQuality | None:
+        """The quality a protection keyword line's fragment names; None for any
+        other line, and for a quality outside the five kinds (a player, a chosen
+        colour, a filter no :data:`CONDITIONS` entry reads)."""
+        text = fragment.strip()
+        lowered = text.lower()
+        if lowered in _CONDITION_BY_FRAGMENT:
+            return cls(QualityKind.CONDITION, _CONDITION_BY_FRAGMENT[lowered])
+        if lowered.startswith("protection from "):
+            return cls.of_keyword(normalize_keyword(text))
+        if not lowered.startswith("protection:"):
+            return None
+        value = lowered.split(":")[1].strip()
+        if not value or "." in value or value in ("true", "player"):
+            return None
+        if value in COLOUR_WORDS.values():
+            return cls(QualityKind.COLOUR, value)
+        if value in CARD_TYPES:
+            return cls(QualityKind.CARD_TYPE, value)
+        return cls(QualityKind.CREATURE_TYPE, value)
+
+    @classmethod
+    def of_keyword(cls, keyword: str) -> ProtectionQuality | None:
+        """The quality a keyword list's ``protection_from_<x>`` names; None for
+        bare ``protection``, whose quality only its line's fragment states."""
+        if not keyword.startswith(PROTECTION_FROM):
+            return None
+        value = keyword.removeprefix(PROTECTION_FROM).replace("_", " ")
+        if value == "everything":
+            return cls.everything()
+        if value in COLOUR_WORDS.values():
+            return cls(QualityKind.COLOUR, value)
+        if value in CONDITIONS:
+            return cls(QualityKind.CONDITION, value)
+        return None
+
+
+def _covered(qualities: Iterable[ProtectionQuality], obj: Characteristics) -> bool:
+    return any(quality.covers(obj) for quality in qualities)
+
+
+def may_target(qualities: Iterable[ProtectionQuality], source: Characteristics) -> bool:
+    """Whether a spell, or an ability from ``source``, may target what has these
+    protections (702.16b, j)."""
+    return not _covered(qualities, source)
+
+
+def may_enchant(qualities: Iterable[ProtectionQuality], aura: Characteristics) -> bool:
+    """Whether ``aura`` may enchant what has these protections: an Aura spell
+    targeting it is countered on resolution for want of a legal target, and an
+    Aura already attached is put into its owner's graveyard (702.16c, j)."""
+    return not _covered(qualities, aura)
+
+
+def damage_prevented(qualities: Iterable[ProtectionQuality], source: Characteristics) -> bool:
+    """Whether damage ``source`` would deal to what has these protections is
+    prevented (702.16e, j)."""
+    return _covered(qualities, source)
+
+
+# ── blocking ─────────────────────────────────────────────────────────────
 
 
 def may_block(attacker_keywords: Iterable[str], attacker_colours: Iterable[str],
               blocker_keywords: Iterable[str], blocker_colours: Iterable[str],
-              blocker_types: Collection[str]) -> bool:
+              blocker_types: Collection[str], *,
+              attacker_protections: Iterable[ProtectionQuality] = (),
+              blocker_subtypes: Collection[str] = (), blocker_mana_value: int = 0) -> bool:
     """Whether one creature may block another, as far as these keywords decide.
 
     Rules 702.9 (flying, reach), 702.31 (horsemanship), 702.36 (fear), 702.13
-    (intimidate), 702.28 (shadow), 702.16 (protection) and "can't be blocked".
+    (intimidate), 702.28 (shadow), 702.16f and j (protection) and "can't be
+    blocked". The keyword list states a protection from a colour, from each
+    colour or from everything; ``attacker_protections`` adds the ones only a
+    keyword line's fragment states (a card type, a creature type, a condition).
     """
     a, b = set(attacker_keywords), set(blocker_keywords)
     attacker_colours, blocker_colours = set(attacker_colours), set(blocker_colours)
@@ -125,9 +314,7 @@ def may_block(attacker_keywords: Iterable[str], attacker_colours: Iterable[str],
         return False
     if ("shadow" in a) != ("shadow" in b):
         return False
-    for keyword in a:
-        if keyword.startswith("protection_from_"):
-            colour = keyword.removeprefix("protection_from_")
-            if any(COLOUR_WORDS.get(c) == colour for c in blocker_colours):
-                return False
-    return True
+    qualities = [q for q in map(ProtectionQuality.of_keyword, sorted(a)) if q is not None]
+    blocker = Characteristics.made(
+        blocker_types, blocker_subtypes, blocker_colours, blocker_mana_value)
+    return not _covered((*qualities, *attacker_protections), blocker)

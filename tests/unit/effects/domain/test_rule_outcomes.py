@@ -1,14 +1,21 @@
-"""``rule_outcomes``: each rule function on the cases its former home pinned (T012)."""
+"""``rule_outcomes``: each rule function on the cases its former home pinned (T012),
+and protection's rare qualities (702.16, T137)."""
 
 from __future__ import annotations
 
 import pytest
 
 from effects.domain.rule_outcomes import (
+    Characteristics,
     EffectKind,
+    ProtectionQuality,
+    QualityKind,
     damage_lethal,
+    damage_prevented,
     lethal,
     may_block,
+    may_enchant,
+    may_target,
     shrink_lethal,
     step_deaths,
     strikes_in_step,
@@ -89,3 +96,66 @@ class TestMayBlock:
     ])
     def test_the_rule(self, attacker, blocker, colours, types, expected):
         assert may_block(attacker, ("R",), blocker, colours, types) is expected
+
+    @pytest.mark.parametrize("protection, blocker, expected", [
+        (ProtectionQuality(QualityKind.CREATURE_TYPE, "goblin"), {"subtypes": ("goblin",)}, False),
+        (ProtectionQuality(QualityKind.CREATURE_TYPE, "goblin"), {"subtypes": ("elf",)}, True),
+        (ProtectionQuality(QualityKind.CARD_TYPE, "artifact"),
+         {"types": ("artifact", "creature")}, False),
+        (ProtectionQuality(QualityKind.CONDITION, "multicolored"), {"colours": ("W", "U")}, False),
+        (ProtectionQuality(QualityKind.CONDITION, "multicolored"), {"colours": ("W",)}, True),
+        (ProtectionQuality(QualityKind.CONDITION, "mana value 3 or greater"),
+         {"mana_value": 3}, False),
+        (ProtectionQuality.everything(), {}, False),
+    ])
+    def test_a_rare_protection_forbids_the_blockers_with_its_quality(
+            self, protection, blocker, expected):
+        assert may_block(
+            (), ("R",), (), blocker.get("colours", ("G",)), blocker.get("types", ("creature",)),
+            attacker_protections=(protection,), blocker_subtypes=blocker.get("subtypes", ()),
+            blocker_mana_value=blocker.get("mana_value", 2),
+        ) is expected
+
+    @pytest.mark.parametrize("keyword, expected", [
+        ("protection_from_everything", False), ("protection_from_each_color", False),
+        ("protection", True),
+    ])
+    def test_the_keyword_list_states_everything_and_each_colour(self, keyword, expected):
+        assert may_block((keyword,), ("R",), (), ("G",), ("creature",)) is expected
+
+
+class TestProtectionQuality:
+    @pytest.mark.parametrize("fragment, kind, value, keyword", [
+        ("Protection from red", QualityKind.COLOUR, "red", "protection_from_red"),
+        ("Protection from everything", QualityKind.EVERYTHING, "", "protection_from_everything"),
+        ("Protection from each color", QualityKind.CONDITION, "each color",
+         "protection_from_each_color"),
+        ("Protection:Artifact", QualityKind.CARD_TYPE, "artifact", "protection"),
+        ("Protection:Goblin", QualityKind.CREATURE_TYPE, "goblin", "protection"),
+        ("Protection:Assembly-Worker", QualityKind.CREATURE_TYPE, "assembly-worker", "protection"),
+        ("Protection:Card.MultiColor:multicolored", QualityKind.CONDITION, "multicolored",
+         "protection"),
+        ("Protection:Card.cmcLE3:mana value 3 or less", QualityKind.CONDITION,
+         "mana value 3 or less", "protection"),
+    ])
+    def test_forge_s_fragment_round_trips(self, fragment, kind, value, keyword):
+        quality = ProtectionQuality.parse(fragment)
+        assert quality == ProtectionQuality(kind, value)
+        assert quality.fragment == fragment and quality.keyword == keyword
+
+    @pytest.mark.parametrize("fragment", [
+        "Flying", "Protection:Player.Opponent:each of your opponents",
+        "Protection:Card.ChosenColor:chosenColor", "Protection:Creature.Legendary:legendary",
+    ])
+    def test_a_quality_outside_the_five_kinds_is_none(self, fragment):
+        assert ProtectionQuality.parse(fragment) is None
+
+    def test_what_protection_stops(self):
+        goblin = Characteristics.made(("creature",), ("goblin",), ("R",), 1)
+        elf = Characteristics.made(("creature",), ("elf",), ("G",), 1)
+        goblins = (ProtectionQuality(QualityKind.CREATURE_TYPE, "goblin"),)
+        assert not may_target(goblins, goblin) and may_target(goblins, elf)
+        assert damage_prevented(goblins, goblin) and not damage_prevented(goblins, elf)
+        aura = Characteristics.made(("enchantment",), ("aura",), ("B",), 2)
+        assert not may_enchant((ProtectionQuality(QualityKind.CARD_TYPE, "enchantment"),), aura)
+        assert may_enchant(goblins, aura)

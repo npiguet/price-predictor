@@ -610,6 +610,34 @@ class EntityState:
         base = toughness - pt.boosts[1] - pt.counters[1]
         return replace(self, pt=replace(pt, base=(pt.base[0], base)), damage=0)
 
+    def with_granted_keyword(self, keyword: str, fragment: str) -> EntityState:
+        """This entity granted ``keyword`` until end of turn, as a resolved
+        effect grants it (root spec § 9.6): in the keyword list, which sets its
+        kept flag where the keyword keeps one, and as a granted keyword line
+        with no key, which the model reads through the keyword's reminder text
+        filled from ``fragment`` (``Flying``, ``Protection:Goblin``).
+
+        ``keyword`` is in the package's spelling. No line is added where one in
+        force already has the fragment or, for a fragment carrying no value
+        after a colon, the keyword: a creature printing flying gains no second
+        flying line, one with protection from artifacts gains a Goblin one. A
+        gen-1 or gen-2 entity has no lines, so its list is all that changes.
+        """
+        entity = self
+        granted = entity.granted_temporary
+        if keyword not in granted.keywords:
+            entity = replace(entity, granted_temporary=replace(
+                granted, keywords=(*granted.keywords, keyword)))
+        if entity.lines is None:
+            return entity
+        valued = ":" in fragment
+        if any(line.in_force and (line.fragment == fragment
+                                  or (not valued and line.keyword == normalize_keyword(keyword)))
+               for line in entity.lines):
+            return entity
+        line = CardLine(keys=(), kind=LineKind.KEYWORD.value, granted=True, fragment=fragment)
+        return replace(entity, lines=(*entity.lines, line))
+
 
 @dataclass(frozen=True, slots=True)
 class Refs:
