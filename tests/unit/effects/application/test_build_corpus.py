@@ -1815,6 +1815,10 @@ def test_the_manifest_holds_every_gen3_field(gen3_build):
     assert set(manifest.rule_map) == set(manifest.rule_counts["rules"])
     for rule, entry in manifest.rule_map.items():
         assert entry.verdict == (heads[rule].verdict if rule in heads else "missing")
+    # FR-054: every tagged rule but a trained one is named as unbudgeted, a
+    # rule only a validation game or a turn action shows included.
+    assert set(manifest.unbudgeted_rules) == {
+        rule for rule, entry in manifest.rule_map.items() if entry.verdict != "trained"}
     assert manifest.rule_counts["records"] == 205
     assert set(manifest.halves) == {"card-disjoint", "game-disjoint"}
 

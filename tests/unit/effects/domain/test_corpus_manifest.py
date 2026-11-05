@@ -289,7 +289,8 @@ def test_class_targets_round_trip_beside_what_was_delivered():
 # ── gen-3 fields (FR-060, FR-060a; T138) ────────────────────────────────
 
 
-def _gen3_fields() -> dict:
+def _gen3_fields(**extra_map) -> dict:
+    """``extra_map``: further ``rule -> RuleMapEntry`` snapshot entries."""
     from effects.domain.corpus_plan import GameStrata
     from effects.domain.rule_budgets import BudgetedRecord, plan_rule_budgets
     from effects.domain.rule_catalogue import MapVerdict, Polarity, RuleMapEntry
@@ -319,6 +320,7 @@ def _gen3_fields() -> dict:
         rule_map={
             "702.16e": RuleMapEntry("702.16e", MapVerdict.TRAINED, ("damage_taken", "gate")),
             "510.1": RuleMapEntry("510.1", MapVerdict.RECORDED),
+            **extra_map,
         },
         rule_map_digest="abc123",
         rule_counts={"records": 2, "rules": {"702.16e": {"fires": {"forge_ai": 1}}},
@@ -359,6 +361,17 @@ def test_the_gen3_fields_hold_what_the_build_decided():
     assert gen3.budgeted_rules == {"702.16e"}
     assert gen3.rule_outputs("702.16e") == ("damage_taken", "gate")
     assert gen3.rule_outputs("999.9") == ()
+
+
+def test_an_unbudgeted_rule_no_training_record_shows_is_still_named():
+    """FR-054: every tagged rule the map does not mark ``trained`` is named as
+    unbudgeted, a rule tagged only on records that train nowhere (a validation
+    game's, a ``turn_action`` record's) with no counts."""
+    from effects.domain.rule_catalogue import MapVerdict, RuleMapEntry
+
+    fields = _gen3_fields(**{"502.3": RuleMapEntry("502.3", MapVerdict.MISSING)})
+    data = json.loads(json.dumps(manifest(game_disjoint_target=None, **fields).as_dict()))
+    assert data["unbudgeted_rules"] == {"502.3": {}, "510.1": {"fires": {"random_seat": 1}}}
 
 
 def test_a_gen2_manifest_writes_no_gen3_field(manifest_dict):

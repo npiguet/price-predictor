@@ -505,6 +505,19 @@ _GEN1_DEFAULTS = {
 }
 
 
+def _unbudgeted_rules(
+    budgets: RuleBudgets, rule_map: Mapping[str, RuleMapEntry],
+) -> dict[str, dict[str, dict[str, int]]]:
+    """Every tagged rule the map does not mark ``trained`` (FR-054), with the
+    training records the budgets counted for it; a rule tagged only on records
+    no class trains on (a validation game's, a ``turn_action`` record's) is
+    named with none, so the manifest names every unbudgeted rule."""
+    names = set(budgets.unbudgeted) | {
+        rule for rule, entry in rule_map.items() if entry.verdict is not MapVerdict.TRAINED
+    }
+    return {rule: budgets.unbudgeted.get(rule, {}) for rule in sorted(names)}
+
+
 def rule_curation_fields(
     *,
     budgets: RuleBudgets,
@@ -536,7 +549,7 @@ def rule_curation_fields(
         "one_sided_conditions": {
             klass: tuple(carriers) for klass, carriers in sorted(one_sided_conditions.items())
         },
-        "unbudgeted_rules": budgets.unbudgeted,
+        "unbudgeted_rules": _unbudgeted_rules(budgets, rule_map),
         "left_out_of_half": {
             str(stratum): {str(half): tuple(rules) for half, rules in by_half.items()}
             for stratum, by_half in strata.left_out_of_half.items()
