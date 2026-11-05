@@ -925,13 +925,16 @@ class ControlScorer:
         if not cache.chunks:
             return values
         batches = (unpack(chunk.batch) for chunk in cache.chunks)
+        positions, reads = [], []
         for chunk, outputs in zip(cache.chunks, forward.prepared(batches)):
             if not chunk.groups:
                 continue
             heads = _Heads(outputs, chunk.index)
-            read = torch.cat([group.read(heads, group.rows, group.columns).float().reshape(-1)
-                              for group in chunk.groups])
-            values[chunk.positions] = read.cpu().numpy()
+            reads.append(torch.cat([group.read(heads, group.rows, group.columns).float()
+                                    .reshape(-1) for group in chunk.groups]))
+            positions.append(chunk.positions)
+        if reads:  # one copy to the host per stratum, so no chunk waits on the device
+            values[np.concatenate(positions)] = torch.cat(reads).cpu().numpy()
         return values
 
     def _deviance(self, cache: _StratumCache, forward: RecordForward,

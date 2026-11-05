@@ -219,6 +219,29 @@ kind (gen-2 counts its three playability subkinds together):
 Attackers records, one per creature, are now the largest kind by JSON bytes (1.5 MB of 7.1 MB per
 game), ahead of the resolution halves; decision records are 0.34 MB.
 
+**One training epoch, measured (T173, 2026-11-05): a step takes 0.71 s and selection 0.11 of the
+epoch's training time.** `train-effect-model --corpus output/effects/corpus-gen3-pilot3 --epochs 1
+--steps-per-epoch 300 --seed 1 --prefetch-workers 3` at the default sizes, on the 8 GB card, with
+pilot3's lenient selection set (T160's: 20 grids, 181 and 165 rules, 5,220 and 3,321 deviance
+copies).
+
+| | measured |
+|---|---|
+| loss-denominator pre-pass (5 shards, 9,356 records) | 65 s |
+| control-score preparation at startup | 172 s, 198 MB packed on the host |
+| training, 300 steps | 212 s, 0.71 s a step (1.3–1.5 steps/s per shard) |
+| control score, both selection halves | 22.9 s, 0.11 of the epoch's training (E2: at most 0.2) |
+| CUDA peak allocated / reserved | 1.43 GiB / 1.94 GiB |
+
+Each checklist item above holds in the code: `rule-counts` and the survey read each shard once in
+`--workers` processes, each building its detector index once; the catalogue is read once per command
+and handed to the workers; copies reach each write worker with the one source shard it writes
+(`WriteTask(shard, copies)`), so a writer holds only its shard's games; the relation terms are an
+einsum per slot and type scattered onto the relation rows; the average is one `_foreach_lerp_` per
+optimizer step on the training device; the deviance parts and the epoch loss accumulate on the device
+and are read once. The probe, grid and rule-test readings were copied to the host once per chunk of
+128 records; they are now gathered on the device and copied once per stratum.
+
 ## Project Structure
 
 ### Documentation (this feature)
