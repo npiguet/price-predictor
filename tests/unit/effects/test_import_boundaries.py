@@ -166,9 +166,28 @@ def test_the_domain_imports_neither_layer_above_it() -> None:
     )
 
 
+
+def test_no_package_imports_the_scripts() -> None:
+    """``scripts/`` imports the packages and never the reverse (FR-078).
+
+    The probe cores a training run scores through live in ``effects`` itself;
+    a package reaching into ``scripts/`` would make a run depend on a tree
+    that is not installed.
+    """
+    violations = [
+        f"{path.relative_to(_SRC)}:{lineno} imports {module}"
+        for package in ("effects", *_GOVERNED_PACKAGES)
+        for path in _python_files(package)
+        for module, _names, lineno in _imported_modules(path)
+        if module == "scripts" or module.startswith("scripts.")
+    ]
+    assert not violations, "a package imports scripts/:\n  " + "\n  ".join(violations)
+
+
 #: Modules the corpus workers and record readers import, which must not pull in
-#: torch: every build-corpus survey and write worker is a fresh process, and
-#: loading torch in each costs seconds and hundreds of megabytes for nothing.
+#: torch: every build-corpus survey and write worker, and every rule-counts
+#: worker, is a fresh process, and loading torch in each costs seconds and
+#: hundreds of megabytes for nothing.
 _TORCH_FREE = (
     "effects.domain.keyword_names",
     "effects.domain.records",
@@ -208,6 +227,15 @@ _TORCH_FREE = (
     "effects.domain.rule_detectors.outcome_event",
     "effects.domain.rule_detectors.resolution_outcome",
     "effects.domain.rule_detectors.sba_game_loss",
+    "effects.domain.rule_detectors.acting_line",
+    "effects.domain.rule_breadth",
+    "effects.domain.rule_mask",
+    "effects.domain.shard_generation",
+    "effects.domain.kept_keyword_flags",
+    "effects.domain.forge_vocabularies",
+    "effects.infrastructure.rules_catalogue_io",
+    "effects.application.rule_counts",
+    "effects.application.rule_breadth",
     "effects.application.corpus_survey",
     "effects.application.corpus_write",
     "effects.application.corpus_report",
