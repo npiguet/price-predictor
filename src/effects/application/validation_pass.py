@@ -164,8 +164,8 @@ class ProgressMargins:
 
     wants_parts = False
 
-    def __init__(self, fields: tuple[FieldSpec, ...]) -> None:
-        self.margins = MarginAccumulator(fields)
+    def __init__(self, fields: tuple[FieldSpec, ...], log_dispersion: torch.Tensor) -> None:
+        self.margins = MarginAccumulator(fields, log_dispersion)
         self._pending: _HostCopy | None = None
 
     def add(self, prepared: DeviceStep, computed: StepLoss) -> None:
@@ -244,7 +244,8 @@ class Validator:
     ) -> tuple[ValidationPass, ValidationPass]:
         """Both strata's passes: the card-disjoint one by field, with gate 1's
         progress margins, and the floor recomputed when the field set moved."""
-        parts, margins = FieldParts(), ProgressMargins(fields)
+        parts = FieldParts()
+        margins = ProgressMargins(fields, run.model.per_entity_dispersion().detach())
         kept = KeptTargets() if self.floor.stale(fields) else None
         collectors = (parts, margins) if kept is None else (parts, margins, kept)
         card = ValidationPass(

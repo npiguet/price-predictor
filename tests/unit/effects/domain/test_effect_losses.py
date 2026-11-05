@@ -13,9 +13,12 @@ import torch
 import torch.nn.functional as functional
 
 from effects.domain.effect_head_layout import (
+    CREATED_DISPERSED,
     CREATED_OBJECT_SLOTS,
     CREATED_OBJECTS_WIDTH,
     CREATED_SLOT_WIDTH,
+    DISPERSED_FIELDS,
+    DISPERSION_INDEX,
     FIELD_SLICES,
     FIELDS_BY_NAME,
     GATE_INDEX,
@@ -38,6 +41,12 @@ from effects.domain.effect_losses import (
 from effects.domain.loss_floor import constant_predictor_outputs
 from tests.unit.effects.builders import fields_everywhere, make_entity_targets
 
+#: Log-dispersions at zero (a dispersion of one) for every head a test scores.
+DISPERSION = torch.zeros(len(DISPERSED_FIELDS))
+CREATED = torch.zeros(len(CREATED_DISPERSED))
+VERDICT = torch.zeros(len(VERDICT_LAYOUT.dispersed))
+ONE = torch.tensor(0.0)
+
 
 class TestLosses:
     def _outputs(self, batch=2, entities=3):
@@ -51,11 +60,11 @@ class TestLosses:
         fields = (FIELDS_BY_NAME["damage_taken"],)
         off = per_entity_loss(
             outputs, make_entity_targets(torch.zeros(2, 3), targets, entity_mask), fields=fields,
-            report_parts=True,
+            log_dispersion=DISPERSION, report_parts=True,
         )[1]
         on = per_entity_loss(
             outputs, make_entity_targets(torch.ones(2, 3), targets, entity_mask), fields=fields,
-            report_parts=True,
+            log_dispersion=DISPERSION, report_parts=True,
         )[1]
         assert "damage_taken" not in off.names
         assert "damage_taken" in on.names
@@ -78,8 +87,7 @@ class TestLosses:
 
     def test_the_parts_are_each_term_read_back_on_its_own(self):
         """Stacked on the device and read once, each term is still the float a
-        read of that term alone gives, divided by the record count — exactly,
-        since the validation means sum these values over batches."""
+        read of that term alone gives, divided by the record count."""
         torch.manual_seed(4)
         outputs = torch.randn(2, 3, PER_ENTITY_WIDTH)
         fields = tuple(
@@ -100,7 +108,7 @@ class TestLosses:
         }
         _, parts = per_entity_loss(
             outputs, make_entity_targets(torch.ones(2, 3), values),
-            fields=fields, report_parts=True,
+            fields=fields, log_dispersion=DISPERSION, report_parts=True,
         )
 
         flat = outputs.reshape(6, PER_ENTITY_WIDTH)
@@ -112,9 +120,10 @@ class TestLosses:
             target = values[spec.name]
             expected[spec.name] = float(field_loss(
                 spec, flat[:, start:end], target.reshape(6, *target.shape[2:]),
+                log_dispersion=ONE,
             )) / 2
         assert parts.names == ("gate", *(spec.name for spec in fields))
-        assert parts.as_dict() == expected
+        assert parts.as_dict() == pytest.approx(expected, rel=1e-6)
 
     def test_the_total_is_the_same_either_way(self):
         """Reporting must not change what is optimized."""
@@ -159,7 +168,7 @@ class TestLosses:
         fields = (FIELDS_BY_NAME["damage_taken"],)
         total, reported = per_entity_loss(
             outputs, make_entity_targets(torch.ones(2, 3), targets, torch.ones(2, 3)),
-            fields=fields, report_parts=True,
+            fields=fields, log_dispersion=DISPERSION, report_parts=True,
         )
         parts = reported.as_dict()
         assert set(parts) == {"gate", "damage_taken"}
@@ -181,35 +190,41 @@ class TestLosses:
         )[1].as_dict()["gate"]
         assert masked < full
 
-    def test_a_count_field_uses_a_poisson_loss(self):
-        """Poisson on a log-rate: the loss is lowest where exp(pred) == target.
-
-        Compared across *predictions*, not across targets — Poisson NLL drops
-        the constant log(target!) term, so two targets at one prediction are
-        not comparable and only the prediction's fit is.
-        """
+    def test_a_count_field_uses_a_negative_binomial_loss(self):
+        """A negative binomial on a log-rate: whatever the dispersion, the
+        loss is lowest where exp(pred) == target."""
         spec = FIELDS_BY_NAME["damage_taken"]
         target = torch.full((4,), 3.0)
-        right = field_loss(spec, torch.full((4, 1), 1.0986), target)  # log 3
-        too_low = field_loss(spec, torch.zeros(4, 1), target)
-        too_high = field_loss(spec, torch.full((4, 1), 2.5), target)
-        assert right < too_low
-        assert right < too_high
+        for log_dispersion in (torch.tensor(-1.0), ONE, torch.tensor(4.0)):
+            def loss(log_rate, log_dispersion=log_dispersion):
+                return field_loss(
+                    spec, torch.full((4, 1), log_rate), target,
+                    log_dispersion=log_dispersion,
+                )
+
+            right = loss(1.0986)  # log 3
+            assert right < loss(0.0)
+            assert right < loss(2.5)
+
+    def test_a_count_field_needs_its_dispersion(self):
+        with pytest.raises(ValueError, match="log-dispersion"):
+            field_loss(FIELDS_BY_NAME["damage_taken"], torch.zeros(1, 1), torch.ones(1))
 
     def test_the_count_loss_is_nonnegative_at_its_optimum(self):
-        """`full=True` adds the Stirling term, so a perfect prediction scores ~0
-        instead of k - k ln k, which is -306 for a target of 88 (FR-081)."""
-        from effects.domain.field_kinds import poisson as _poisson
+        """The likelihood keeps its log(y!) term, so a perfect prediction
+        scores a small positive number instead of k - k ln k, which is -306
+        for a target of 88 (FR-081)."""
+        from effects.domain.field_kinds import negative_binomial
         target = torch.tensor([88.0, 3.0, 1.0])
-        loss = _poisson(torch.log(target), target)
+        loss = negative_binomial(torch.log(target), target, torch.tensor(8.0)).sum()
         assert loss.item() >= 0.0
-        assert loss.item() < 6.0   # Stirling residual is ~0.5*log(2*pi*k) per element
+        assert loss.item() < 6.0   # about 0.5*log(2*pi*k) per element
 
     def test_a_signed_delta_separates_direction_from_magnitude(self):
         spec = FIELDS_BY_NAME["life_delta"]
         prediction = torch.zeros(4, 4)
-        gain = field_loss(spec, prediction, torch.full((4,), 3.0))
-        loss = field_loss(spec, prediction, torch.full((4,), -3.0))
+        gain = field_loss(spec, prediction, torch.full((4,), 3.0), log_dispersion=ONE)
+        loss = field_loss(spec, prediction, torch.full((4,), -3.0), log_dispersion=ONE)
         # Same magnitude, opposite direction: the magnitude term matches and
         # only the direction term can differ, so both are finite and positive.
         assert gain > 0 and loss > 0
@@ -217,8 +232,8 @@ class TestLosses:
     def test_a_signed_delta_is_cheapest_when_direction_and_size_are_right(self):
         spec = FIELDS_BY_NAME["life_delta"]
         confident_positive = torch.tensor([[-5.0, -5.0, 5.0, 1.0986]])
-        right = field_loss(spec, confident_positive, torch.tensor([3.0]))
-        wrong = field_loss(spec, confident_positive, torch.tensor([-3.0]))
+        right = field_loss(spec, confident_positive, torch.tensor([3.0]), log_dispersion=ONE)
+        wrong = field_loss(spec, confident_positive, torch.tensor([-3.0]), log_dispersion=ONE)
         assert right < wrong
 
     def test_a_categorical_field_uses_cross_entropy(self):
@@ -250,29 +265,35 @@ class TestLosses:
         predicts_overflow[:, -1] = 8.0
         denies_overflow = torch.zeros(2, CREATED_OBJECTS_WIDTH)
         denies_overflow[:, -1] = -8.0
-        assert created_objects_loss(predicts_overflow, target) < (
-            created_objects_loss(denies_overflow, target)
+        assert created_objects_loss(predicts_overflow, target, log_dispersion=CREATED) < (
+            created_objects_loss(denies_overflow, target, log_dispersion=CREATED)
         )
 
     def test_created_objects_loss_scores_every_slot(self):
         """A slot the head gets wrong costs, wherever in the K it sits."""
         target = torch.zeros(2, CREATED_OBJECTS_WIDTH)
-        baseline = created_objects_loss(torch.zeros(2, CREATED_OBJECTS_WIDTH), target)
+        baseline = created_objects_loss(
+            torch.zeros(2, CREATED_OBJECTS_WIDTH), target, log_dispersion=CREATED,
+        )
         for slot in range(CREATED_OBJECT_SLOTS):
             wrong = torch.zeros(2, CREATED_OBJECTS_WIDTH)
             wrong[:, slot * CREATED_SLOT_WIDTH] = 8.0  # claims a group is present
-            assert created_objects_loss(wrong, target) > baseline
+            assert created_objects_loss(wrong, target, log_dispersion=CREATED) > baseline
 
     def test_verdict_loss_skips_records_with_no_verdict(self):
         prediction = torch.zeros(2, VERDICT_WIDTH)
         target = torch.zeros(2, VERDICT_WIDTH)
-        empty = verdict_loss(prediction, target, torch.zeros(2, dtype=torch.bool))
+        empty = verdict_loss(
+            prediction, target, torch.zeros(2, dtype=torch.bool), log_dispersion=VERDICT,
+        )
         assert float(empty) == 0.0
 
     def test_verdict_loss_scores_the_records_that_have_one(self):
         prediction = torch.zeros(2, VERDICT_WIDTH)
         target = torch.ones(2, VERDICT_WIDTH)
-        scored = verdict_loss(prediction, target, torch.ones(2, dtype=torch.bool))
+        scored = verdict_loss(
+            prediction, target, torch.ones(2, dtype=torch.bool), log_dispersion=VERDICT,
+        )
         assert float(scored) > 0.0
 
     def test_mlm_loss_is_low_where_the_logits_name_the_target(self):
@@ -311,20 +332,21 @@ class TestGen2Losses:
         prediction = torch.zeros(2, CREATED_OBJECTS_WIDTH)
         prediction[1, 0] = 9.0  # the unsupervised row is badly wrong
         mask = torch.tensor([True, False])
-        assert created_objects_loss(prediction, target, mask) < (
-            created_objects_loss(prediction, target)
+        assert created_objects_loss(prediction, target, mask, log_dispersion=CREATED) < (
+            created_objects_loss(prediction, target, log_dispersion=CREATED)
         )
 
     def test_the_value_loss_skips_masked_targets(self):
-        from effects.domain.effect_head_layout import VALUE_WIDTH
+        from effects.domain.effect_head_layout import VALUE_DISPERSED, VALUE_WIDTH
         from effects.domain.effect_losses import value_loss
         from effects.domain.value_targets import VALUE_TARGETS
 
         prediction = torch.zeros(2, VALUE_WIDTH)
         target = torch.full((2, len(VALUE_TARGETS)), 3.0)
         none = torch.zeros(2, len(VALUE_TARGETS), dtype=torch.bool)
-        assert float(value_loss(prediction, target, none)) == 0.0
-        assert float(value_loss(prediction, target, ~none)) > 0.0
+        dispersion = torch.zeros(len(VALUE_DISPERSED))
+        assert float(value_loss(prediction, target, none, log_dispersion=dispersion)) == 0.0
+        assert float(value_loss(prediction, target, ~none, log_dispersion=dispersion)) > 0.0
 
     def test_at_least_bits_read_the_magnitude(self):
         from effects.domain.effect_head_layout import AT_LEAST_STEPS
@@ -338,7 +360,11 @@ class TestGen2Losses:
         assert bits[3].sum() == AT_LEAST_STEPS
 
     def test_the_value_loss_scores_the_at_least_bits(self):
-        from effects.domain.effect_head_layout import AT_LEAST_SLICES, VALUE_WIDTH
+        from effects.domain.effect_head_layout import (
+            AT_LEAST_SLICES,
+            VALUE_DISPERSED,
+            VALUE_WIDTH,
+        )
         from effects.domain.effect_losses import at_least_targets, value_loss
         from effects.domain.value_targets import VALUE_TARGET_NAMES
 
@@ -352,8 +378,9 @@ class TestGen2Losses:
         right[0, start:end] = 20.0 * (2 * at_least_targets(torch.tensor([3.0]))[0] - 1)
         wrong = right.clone()
         wrong[0, start:end] = -wrong[0, start:end]
-        assert float(value_loss(right, target, mask)) < float(
-            value_loss(wrong, target, mask)
+        dispersion = torch.zeros(len(VALUE_DISPERSED))
+        assert float(value_loss(right, target, mask, log_dispersion=dispersion)) < float(
+            value_loss(wrong, target, mask, log_dispersion=dispersion)
         )
 
     def test_the_api_loss_skips_a_line_with_no_api_type(self):
@@ -407,10 +434,20 @@ class TestHostPickedRowsMatchBooleanMasks:
                 total = total + field_loss(
                     spec, outputs[..., start:end][where],
                     field_targets.values[spec.name][where],
+                    log_dispersion=(
+                        self.DISPERSION[DISPERSION_INDEX[spec.name]]
+                        if spec.type.has_magnitude else None
+                    ),
                 )
         return total / outputs.shape[0]
 
-    def test_the_per_entity_loss_is_unchanged(self):
+    #: A different log-dispersion per field, so a gather that read the wrong
+    #: one would show.
+    DISPERSION = torch.linspace(-2.0, 4.0, len(DISPERSED_FIELDS))
+
+    def test_the_per_entity_loss_is_the_field_by_field_sum(self):
+        """Same-kind fields are scored together; the loss is still exactly
+        the sum the field-by-field loop takes."""
         generator = torch.Generator().manual_seed(11)
         batch, entities = 6, 9
         outputs = torch.randn(batch, entities, PER_ENTITY_WIDTH, generator=generator)
@@ -420,15 +457,87 @@ class TestHostPickedRowsMatchBooleanMasks:
         expected = self._reference(outputs, gate, targets, entity_mask, fields)
         got, _ = per_entity_loss(
             outputs, make_entity_targets(gate, targets, entity_mask), fields=fields,
+            log_dispersion=self.DISPERSION,
         )
         assert torch.allclose(got, expected, rtol=1e-6, atol=1e-6)
+
+    def test_each_field_s_part_is_its_own_loss_with_presence_varying(self):
+        """Every field present at its own entities, so each group scores the
+        union and weighs each field only where it is present."""
+        from effects.domain.entity_field_targets import EntityFieldTargets
+
+        generator = torch.Generator().manual_seed(21)
+        batch, entities = 5, 7
+        outputs = torch.randn(batch, entities, PER_ENTITY_WIDTH, generator=generator)
+        gate = torch.randint(0, 2, (batch, entities), generator=generator)
+        fields, everywhere = self._targets(generator, batch, entities)
+        present = {
+            name: torch.rand(batch, entities, generator=generator) < 0.4
+            for name in everywhere.values
+        }
+        targets = make_entity_targets(gate, EntityFieldTargets(everywhere.values, present))
+        _, parts = per_entity_loss(
+            outputs, targets, fields=fields, log_dispersion=self.DISPERSION,
+            report_parts=True,
+        )
+        expected = {}
+        for spec in fields:
+            where = targets.scored(spec.name)
+            if not where.any():
+                continue
+            start, end = FIELD_SLICES[spec.name]
+            expected[spec.name] = float(field_loss(
+                spec, outputs[..., start:end][where], everywhere.values[spec.name][where],
+                log_dispersion=(
+                    self.DISPERSION[DISPERSION_INDEX[spec.name]]
+                    if spec.type.has_magnitude else None
+                ),
+            )) / batch
+        got = parts.as_dict()
+        got.pop("gate")
+        assert list(got) == list(expected)
+        assert got == pytest.approx(expected, rel=1e-5, abs=1e-6)
+
+    def test_the_gradient_is_the_field_by_field_gradient(self):
+        generator = torch.Generator().manual_seed(17)
+        batch, entities = 4, 6
+        outputs = torch.randn(batch, entities, PER_ENTITY_WIDTH, generator=generator)
+        gate = torch.randint(0, 2, (batch, entities), generator=generator)
+        fields, targets = self._targets(generator, batch, entities)
+        mask = torch.ones(batch, entities)
+
+        def gradients(loss_of):
+            leaf = outputs.clone().requires_grad_(True)
+            dispersion = self.DISPERSION.clone().requires_grad_(True)
+            loss_of(leaf, dispersion).backward()
+            return leaf.grad, dispersion.grad
+
+        grouped = gradients(lambda leaf, dispersion: per_entity_loss(
+            leaf, make_entity_targets(gate, targets, mask), fields=fields,
+            log_dispersion=dispersion,
+        )[0])
+
+        def looped(leaf, dispersion):
+            saved = self.DISPERSION
+            self.DISPERSION = dispersion
+            try:
+                return self._reference(leaf, gate, targets, mask, fields)
+            finally:
+                self.DISPERSION = saved
+
+        reference = gradients(looped)
+        for got, expected in zip(grouped, reference):
+            assert torch.allclose(got, expected, rtol=1e-5, atol=1e-7)
 
     def test_a_batch_with_nothing_affected_scores_the_gate_alone(self):
         generator = torch.Generator().manual_seed(12)
         outputs = torch.randn(3, 4, PER_ENTITY_WIDTH, generator=generator)
         fields, targets = self._targets(generator, 3, 4)
         gate = torch.zeros(3, 4)
-        got, _ = per_entity_loss(outputs, make_entity_targets(gate, targets), fields=fields)
+        got, _ = per_entity_loss(
+            outputs, make_entity_targets(gate, targets), fields=fields,
+            log_dispersion=self.DISPERSION,
+        )
         expected = self._reference(outputs, gate, targets, torch.ones(3, 4), fields)
         assert torch.allclose(got, expected)
 
@@ -440,9 +549,11 @@ class TestHostPickedRowsMatchBooleanMasks:
         prediction = torch.randn(5, CREATED_OBJECTS_WIDTH, generator=generator)
         target = torch.rand(5, CREATED_OBJECTS_WIDTH, generator=generator).round()
         mask = torch.tensor([True, False, True, True, False])
-        picked = created_objects_loss(prediction, target, mask)
+        picked = created_objects_loss(prediction, target, mask, log_dispersion=CREATED)
         # Selecting the rows first and scoring them unmasked is the same sum.
-        whole = created_objects_loss(prediction[mask], target[mask], None)
+        whole = created_objects_loss(
+            prediction[mask], target[mask], None, log_dispersion=CREATED,
+        )
         assert torch.allclose(picked, whole * mask.sum() / mask.numel())
 
         from effects.domain.effect_head_layout import VERDICT_LAYOUT
@@ -452,10 +563,12 @@ class TestHostPickedRowsMatchBooleanMasks:
         verdict_target = torch.rand(4, VERDICT_LAYOUT.target_width, generator=generator).round()
         per_field = torch.rand(4, fields, generator=generator) > 0.5
         assert torch.allclose(
-            verdict_loss(verdict, verdict_target, per_field),
-            verdict_loss(verdict, verdict_target, per_field.float()),
+            verdict_loss(verdict, verdict_target, per_field, log_dispersion=VERDICT),
+            verdict_loss(verdict, verdict_target, per_field.float(), log_dispersion=VERDICT),
         )
-        assert float(verdict_loss(verdict, verdict_target, torch.zeros(4, fields))) == 0.0
+        assert float(verdict_loss(
+            verdict, verdict_target, torch.zeros(4, fields), log_dispersion=VERDICT,
+        )) == 0.0
 
 
 class TestMagnitudeCap:
@@ -471,16 +584,19 @@ class TestMagnitudeCap:
         from effects.domain.effect_head_input import MAGNITUDE_CAP
         spec = FIELDS_BY_NAME["damage_taken"]
         prediction = torch.zeros(1, 1)
-        assert field_loss(spec, prediction, torch.tensor([2_000_000.0])) == \
-            field_loss(spec, prediction, torch.tensor([MAGNITUDE_CAP]))
+        assert field_loss(spec, prediction, torch.tensor([2_000_000.0]), log_dispersion=ONE) == \
+            field_loss(spec, prediction, torch.tensor([MAGNITUDE_CAP]), log_dispersion=ONE)
 
     def test_a_signed_delta_keeps_its_direction_and_caps_its_size(self):
         from effects.domain.effect_head_input import MAGNITUDE_CAP
         spec = FIELDS_BY_NAME["power_delta"]
         prediction = torch.zeros(1, 4)
         for sign in (1.0, -1.0):
-            assert field_loss(spec, prediction, torch.tensor([sign * 2_098_760.0])) == \
-                field_loss(spec, prediction, torch.tensor([sign * MAGNITUDE_CAP]))
+            assert field_loss(
+                spec, prediction, torch.tensor([sign * 2_098_760.0]), log_dispersion=ONE,
+            ) == field_loss(
+                spec, prediction, torch.tensor([sign * MAGNITUDE_CAP]), log_dispersion=ONE,
+            )
 
     def test_the_floor_is_computed_over_capped_targets(self):
         from effects.domain.effect_head_input import MAGNITUDE_CAP
@@ -503,18 +619,19 @@ class TestMagnitudeCap:
         import numpy as np
 
         from effects.domain.effect_head_input import MAGNITUDE_CAP
-        from effects.domain.gate_metrics import poisson_deviance
+        from effects.domain.gate_metrics import mean_deviance
         predicted = np.array([3.0, 5.0])
-        assert poisson_deviance(predicted, np.array([1.0, 2_000_000.0])) == \
-            poisson_deviance(predicted, np.array([1.0, MAGNITUDE_CAP]))
+        dispersion = np.array(0.0)
+        assert mean_deviance(predicted, np.array([1.0, 2_000_000.0]), dispersion) == \
+            mean_deviance(predicted, np.array([1.0, MAGNITUDE_CAP]), dispersion)
 
 
 class TestCountTargetsAreNonnegative:
-    """A count below zero has no Poisson likelihood (FR-080, FR-081).
+    """A count below zero has no likelihood (FR-080, FR-081).
 
     ``damage_taken`` is decremented by a healing event, so a heal with no
-    damage before it is a negative count, and a negative target makes the
-    Poisson NLL unbounded below: the head could lower the loss without limit by
+    damage before it is a negative count, and a negative target makes a count
+    NLL unbounded below: the head could lower the loss without limit by
     raising its rate.
     """
 
@@ -522,8 +639,8 @@ class TestCountTargetsAreNonnegative:
         spec = FIELDS_BY_NAME["damage_taken"]
         for log_rate in (-2.0, 0.0, 3.0):
             prediction = torch.full((1, 1), log_rate)
-            assert field_loss(spec, prediction, torch.tensor([-3.0])) == \
-                field_loss(spec, prediction, torch.tensor([0.0]))
+            assert field_loss(spec, prediction, torch.tensor([-3.0]), log_dispersion=ONE) == \
+                field_loss(spec, prediction, torch.tensor([0.0]), log_dispersion=ONE)
 
     def test_the_floor_reads_a_negative_count_as_zero(self):
         def floor(value):

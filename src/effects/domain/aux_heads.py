@@ -46,20 +46,32 @@ class HeadInput(StrEnum):
     MASKED_TOKENS = "masked_tokens"
 
 
-def _verdict(model, hidden, target, mask) -> torch.Tensor:
-    return verdict_loss(model.verdict(hidden).float(), target, mask)
+def _verdict(model, hidden, target, mask, *, scale=None) -> torch.Tensor:
+    return verdict_loss(
+        model.verdict(hidden).float(), target, mask,
+        log_dispersion=model.verdict_dispersion(), scale=scale,
+    )
 
 
-def _created_objects(model, hidden, target, mask, known=None) -> torch.Tensor:
-    return created_objects_loss(model.created_objects(hidden).float(), target, mask, known)
+def _created_objects(model, hidden, target, mask, known=None, *, scale=None) -> torch.Tensor:
+    return created_objects_loss(
+        model.created_objects(hidden).float(), target, mask, known,
+        log_dispersion=model.created_objects_dispersion(), scale=scale,
+    )
 
 
-def _global(model, hidden, target, mask) -> torch.Tensor:
-    return global_loss(model.global_outputs(hidden).float(), target, mask)
+def _global(model, hidden, target, mask, *, scale=None) -> torch.Tensor:
+    return global_loss(
+        model.global_outputs(hidden).float(), target, mask,
+        log_dispersion=model.global_dispersion(), scale=scale,
+    )
 
 
 def _value(model, matrix, values, mask) -> torch.Tensor:
-    return value_loss(model.value_head(matrix).float(), values, mask)
+    return value_loss(
+        model.value_head(matrix).float(), values, mask,
+        log_dispersion=model.value_dispersion(),
+    )
 
 
 def _api(model, matrix, types, keys) -> torch.Tensor:
@@ -82,8 +94,9 @@ class HeadSpec:
     #: The ``TrainEffectModelConfig`` field holding a training-only head's
     #: weight; None for a shipped head.
     weight_field: str | None = None
-    #: ``(model, input, *targets) -> loss``; None for the MLM head, whose
-    #: second encoder pass the training loop runs itself.
+    #: ``(model, input, *targets) -> loss``, a shipped head's also taking its
+    #: loss denominators' reciprocals as ``scale`` (FR-062); None for the MLM
+    #: head, whose second encoder pass the training loop runs itself.
     loss: Callable[..., torch.Tensor] | None = None
     #: Which target tensors the loss reads on the device; the rest are masks
     #: and indices it selects rows by on the host.
@@ -114,7 +127,8 @@ AUX_HEADS: tuple[HeadSpec, ...] = (
     ),
     HeadSpec(Head.GLOBAL, HeadInput.TRUNK, ("global_head",), loss=_global),
     HeadSpec(
-        Head.VALUE, HeadInput.ENCODED, ("value_head",), weight_field="value_weight",
+        Head.VALUE, HeadInput.ENCODED, ("value_head", "value_dispersion"),
+        weight_field="value_weight",
         loss=_value,
     ),
     HeadSpec(

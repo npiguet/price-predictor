@@ -13,6 +13,8 @@ import torch
 
 from effects.domain.effect_head_input import MAGNITUDE_CAP
 from effects.domain.effect_head_layout import (
+    DISPERSED_FIELDS,
+    DISPERSION_INDEX,
     FIELD_SLICES,
     GATE_INDEX,
     PER_ENTITY_WIDTH,
@@ -21,7 +23,7 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.effect_losses import LossParts, per_entity_loss
 from effects.domain.entity_field_targets import EntityTargetBatch
-from effects.domain.field_kinds import FIELD_KINDS
+from effects.domain.field_kinds import FIELD_KINDS, LOG_DISPERSION_MAX, fit_log_dispersion
 
 #: A guard on dividing by a floor, not the degenerate-field detector.
 FLOOR_EPSILON = 1e-9
@@ -78,6 +80,28 @@ def constant_predictor_outputs(
     return vector
 
 
+def constant_predictor_dispersion(
+    batches: Sequence[EntityTargetBatch], *, fields: tuple[FieldSpec, ...],
+    supervised: Mapping[str, torch.Tensor | None] | None = None,
+) -> torch.Tensor:
+    """The constant predictor's log-dispersions, in :data:`DISPERSED_FIELDS`
+    order: each count's fitted around its constant mean (FR-063). A field the
+    sample does not score keeps the upper bound, which nothing reads."""
+    if supervised is None:
+        supervised = {spec.name: _supervised(batches, spec.name) for spec in fields}
+    log_dispersion = torch.full((len(DISPERSED_FIELDS),), LOG_DISPERSION_MAX)
+    for spec in fields:
+        target = supervised[spec.name]
+        if target is None or not spec.type.has_magnitude:
+            continue
+        kind = FIELD_KINDS[spec.type]
+        magnitude = kind.magnitude(target, cap=MAGNITUDE_CAP)
+        log_dispersion[DISPERSION_INDEX[spec.name]] = fit_log_dispersion(
+            magnitude, magnitude.mean(),
+        )
+    return log_dispersion
+
+
 def constant_predictor_floor(
     batches: Sequence[EntityTargetBatch], *, fields: tuple[FieldSpec, ...],
 ) -> dict[str, float]:
@@ -90,12 +114,15 @@ def constant_predictor_floor(
     # Selected once: each field's targets are a concatenation over every batch.
     supervised = {spec.name: _supervised(batches, spec.name) for spec in fields}
     vector = constant_predictor_outputs(batches, fields=fields, supervised=supervised)
+    log_dispersion = constant_predictor_dispersion(
+        batches, fields=fields, supervised=supervised,
+    )
     degenerate = {name for name, target in supervised.items() if _degenerate(target)}
     means = PartsMean()
     for batch in batches:
         _, parts = per_entity_loss(
             vector.expand(*batch.gate.shape, PER_ENTITY_WIDTH), batch,
-            fields=fields, report_parts=True,
+            fields=fields, log_dispersion=log_dispersion, report_parts=True,
         )
         means.add(parts)
     return {

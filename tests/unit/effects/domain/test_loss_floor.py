@@ -6,12 +6,13 @@ import math
 
 import pytest
 import torch
-import torch.nn.functional as functional
 
 from effects.domain.effect_head_layout import FIELD_SLICES, FIELDS_BY_NAME, PER_ENTITY_WIDTH
 from effects.domain.effect_losses import LossParts, per_entity_loss
+from effects.domain.field_kinds import fit_log_dispersion, negative_binomial
 from effects.domain.loss_floor import (
     PartsMean,
+    constant_predictor_dispersion,
     constant_predictor_floor,
     constant_predictor_outputs,
 )
@@ -52,8 +53,8 @@ class TestConstantPredictorFloor:
         entropy = -(rate * math.log(rate) + (1 - rate) * math.log(1 - rate))
         assert floor["tap_state"] == pytest.approx(8 * entropy / 2, abs=1e-5)
 
-    def test_a_count_fields_floor_is_the_poisson_nll_of_its_mean(self):
-        values = [[0.0, 1.0, 2.0, 3.0], [4.0, 0.0, 1.0, 2.0]]
+    def test_a_count_fields_floor_is_the_negative_binomial_nll_of_its_fit(self):
+        values = [[0.0, 1.0, 2.0, 9.0], [4.0, 0.0, 1.0, 7.0]]
         batch = self._batch(gate=[[1.0] * 4] * 2, fields={"damage_taken": values})
 
         floor = constant_predictor_floor(
@@ -61,10 +62,11 @@ class TestConstantPredictorFloor:
         )
 
         target = torch.tensor(values).reshape(-1)
-        expected = functional.poisson_nll_loss(
-            torch.full_like(target, math.log(float(target.mean()))), target,
-            log_input=True, full=True, reduction="sum",
-        ) / 2
+        mean = target.mean()
+        expected = negative_binomial(
+            torch.full_like(target, math.log(float(mean))), target,
+            fit_log_dispersion(target, mean),
+        ).sum() / 2
         assert floor["damage_taken"] == pytest.approx(float(expected), abs=1e-5)
 
     def test_the_constant_prediction_scores_exactly_the_floor(self):
@@ -84,7 +86,9 @@ class TestConstantPredictorFloor:
         floor = constant_predictor_floor([batch], fields=fields)
         constant = constant_predictor_outputs([batch], fields=fields)
         _, reported = per_entity_loss(
-            constant.expand(2, 3, PER_ENTITY_WIDTH), batch, fields=fields, report_parts=True,
+            constant.expand(2, 3, PER_ENTITY_WIDTH), batch, fields=fields,
+            log_dispersion=constant_predictor_dispersion([batch], fields=fields),
+            report_parts=True,
         )
         parts = reported.as_dict()
 

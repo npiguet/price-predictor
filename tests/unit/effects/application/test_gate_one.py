@@ -137,13 +137,13 @@ class TestGateOne:
         return GateOneMetrics(
             affected_gate_f1=0.60,
             zone_outcome_accuracy=0.50,
-            mean_poisson_deviance=1.00,
+            mean_deviance=1.00,
         )
 
     def _passing(self) -> GateOneMetrics:
         return GateOneMetrics(
             affected_gate_f1=0.70, zone_outcome_accuracy=0.60,
-            mean_poisson_deviance=0.90,
+            mean_deviance=0.90,
         )
 
     def test_all_three_margins_holding_passes(self):

@@ -16,6 +16,7 @@ import torch
 
 from effects.domain.effect_head_input import Slot, SlotKind
 from effects.domain.effect_head_layout import (
+    DISPERSED_FIELDS,
     FIELD_SLICES,
     FIELDS_BY_NAME,
     PER_ENTITY_WIDTH,
@@ -69,7 +70,10 @@ def _resolution(*events):
 def _losses(record, names, outputs):
     fields = tuple(FIELDS_BY_NAME[name] for name in names)
     targets = entity_target_tensors([_SURFACE], [derive_targets(record)], fields)
-    return per_entity_loss(outputs, targets, fields=fields, report_parts=True)
+    return per_entity_loss(
+        outputs, targets, fields=fields,
+        log_dispersion=torch.zeros(len(DISPERSED_FIELDS)), report_parts=True,
+    )
 
 
 def _moves(record, scored: str, perturbed: str | None = None) -> bool:

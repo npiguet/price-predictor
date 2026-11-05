@@ -88,6 +88,33 @@ class TestGen2Heads:
         assert model.value_head(torch.randn(3, _CONFIG.e_dim)).shape == (3, VALUE_WIDTH)
         assert "value_head" in TRAINING_ONLY_MODULES
 
+    def test_each_head_learns_one_log_dispersion_per_count_field(self, model):
+        """FR-063: one learned scalar per field a negative binomial scores,
+        in the model's own parameters (the ``head`` group); the value head's
+        is training-only, like the head."""
+        from effects.domain.effect_head_layout import (
+            CREATED_DISPERSED,
+            DISPERSED_FIELDS,
+            GLOBAL_LAYOUT,
+            VALUE_DISPERSED,
+            VERDICT_LAYOUT,
+        )
+        from effects.domain.field_kinds import INITIAL_LOG_DISPERSION
+
+        for module, count in (
+            (model.per_entity_dispersion, len(DISPERSED_FIELDS)),
+            (model.created_objects_dispersion, len(CREATED_DISPERSED)),
+            (model.verdict_dispersion, len(VERDICT_LAYOUT.dispersed)),
+            (model.global_dispersion, len(GLOBAL_LAYOUT.dispersed)),
+            (model.value_dispersion, len(VALUE_DISPERSED)),
+        ):
+            assert module().shape == (count,)
+            assert torch.allclose(module(), torch.full((count,), INITIAL_LOG_DISPERSION))
+        names = {name for name, _ in model.named_parameters()}
+        assert "per_entity_dispersion.log_dispersion" in names
+        assert "value_dispersion" in TRAINING_ONLY_MODULES
+        assert "per_entity_dispersion" not in TRAINING_ONLY_MODULES
+
     def test_the_mlm_head_is_sized_from_the_encoders_width(self):
         model = EffectModel(EffectModelConfig(
             global_features=8, act_features=6, player_features=10, card_features=12,

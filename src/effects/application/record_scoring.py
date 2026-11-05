@@ -37,11 +37,12 @@ def score_records(
     # One resolver for the whole pass: it memoizes each key's keyword.
     resolver = runnable.keyword_resolver()
     results: list[RecordResult] = []
+    dispersion = runnable.model.per_entity_dispersion().detach().cpu()
     for chunk, gathered, targets in forward_chunks(records, runnable):
         for row, record in enumerate(chunk):
             results.append(_record_result(
                 record, runnable.batcher, resolver,
-                _record_losses(row, gathered, targets, runnable.fields),
+                _record_losses(row, gathered, targets, runnable.fields, dispersion),
                 legality_mode_counts,
             ))
     return results
@@ -49,13 +50,15 @@ def score_records(
 
 def _record_losses(
     row: int, gathered: torch.Tensor, targets: EntityTargetBatch, fields,
+    log_dispersion: torch.Tensor,
 ) -> dict[str, float]:
     """One record's per-entity loss by field: ``per_entity_loss`` on it alone,
     so the breakdowns cannot drift from what training minimized. A field with
     no supervised entity is left out rather than reported as zero."""
     rows = slice(row, row + 1)
     _total, parts = per_entity_loss(
-        gathered[rows], targets.select(rows), fields=fields, report_parts=True,
+        gathered[rows], targets.select(rows), fields=fields,
+        log_dispersion=log_dispersion, report_parts=True,
     )
     losses = parts.as_dict()
     losses[TOTAL] = sum(losses.values())

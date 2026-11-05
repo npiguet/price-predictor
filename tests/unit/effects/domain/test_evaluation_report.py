@@ -111,7 +111,7 @@ class TestReport:
         rendered = report.render()
         assert "affected_gate_f1_gain=+0.1000" in rendered
         assert "zone_outcome_accuracy_gain=+0.1000" in rendered
-        assert "poisson_deviance_reduction=+0.1000" in rendered
+        assert "deviance_reduction=+0.1000" in rendered
 
     def test_a_failing_gate_prints_the_figure_that_held_too(self):
         report = EvaluationReport()

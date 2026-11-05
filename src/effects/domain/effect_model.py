@@ -23,12 +23,18 @@ from effects.domain.effect_head_input import (
     SlotKind,
 )
 from effects.domain.effect_head_layout import (
+    CREATED_DISPERSED,
     CREATED_OBJECTS_WIDTH,
+    DISPERSED_FIELDS,
+    GLOBAL_LAYOUT,
     GLOBAL_WIDTH,
     PER_ENTITY_WIDTH,
+    VALUE_DISPERSED,
     VALUE_WIDTH,
+    VERDICT_LAYOUT,
     VERDICT_WIDTH,
 )
+from effects.domain.field_kinds import INITIAL_LOG_DISPERSION, bounded_log_dispersion
 from effects.domain.relation_attention import RelationEncoderLayer
 from effects.domain.relation_types import RELATION_TYPES
 from effects.domain.surface_collation import TrunkInputs, gather_entities
@@ -86,6 +92,21 @@ def _mlp(width_in: int, hidden: int, width_out: int) -> nn.Sequential:
     return nn.Sequential(
         nn.Linear(width_in, hidden), nn.GELU(), nn.Linear(hidden, width_out),
     )
+
+
+class LogDispersion(nn.Module):
+    """One head's learned log-dispersions, one per field a negative binomial
+    scores (FR-063), in the head's own order of those fields. A module rather
+    than a bare parameter, so its state key carries a prefix the save filter
+    can name."""
+
+    def __init__(self, fields: int) -> None:
+        super().__init__()
+        self.log_dispersion = nn.Parameter(torch.full((fields,), INITIAL_LOG_DISPERSION))
+
+    def forward(self) -> torch.Tensor:
+        """The log-dispersions as every loss reads them, bounded."""
+        return bounded_log_dispersion(self.log_dispersion)
 
 
 class RelationTrunk(nn.Module):
@@ -157,6 +178,11 @@ class EffectModel(nn.Module):
         self.created_objects_head = _mlp(d, d, CREATED_OBJECTS_WIDTH)
         self.verdict_head = _mlp(d, d, VERDICT_WIDTH)
         self.global_head = _mlp(d, d, GLOBAL_WIDTH)
+        # Each head's negative-binomial dispersions, in the ``head`` group.
+        self.per_entity_dispersion = LogDispersion(len(DISPERSED_FIELDS))
+        self.created_objects_dispersion = LogDispersion(len(CREATED_DISPERSED))
+        self.verdict_dispersion = LogDispersion(len(VERDICT_LAYOUT.dispersed))
+        self.global_dispersion = LogDispersion(len(GLOBAL_LAYOUT.dispersed))
 
         # ── training-only auxiliaries (FR-063), filtered at save time by
         # ``aux_heads.TRAINING_ONLY_MODULES`` ──
@@ -174,6 +200,7 @@ class EffectModel(nn.Module):
         )
         # Amounts and costs the script states, read from e alone (FR-058).
         self.value_head = _mlp(config.e_dim, d, VALUE_WIDTH)
+        self.value_dispersion = LogDispersion(len(VALUE_DISPERSED))
 
     def forward(self, inputs: TrunkInputs) -> torch.Tensor:
         """Run the trunk. Returns ``(batch, slots, d_model)``.

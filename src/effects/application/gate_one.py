@@ -86,7 +86,9 @@ def unique_text_stratum(corpus_path, card_disjoint_games, text_of: TextOf) -> li
 
 def measure(records, runnable: Runnable) -> GateOneMetrics:
     """Run the model over ``records`` and score the three margins."""
-    margins = MarginAccumulator(runnable.fields)
+    margins = MarginAccumulator(
+        runnable.fields, runnable.model.per_entity_dispersion().detach(),
+    )
     for _chunk, gathered, targets in forward_chunks(records, runnable):
         margins.add(gathered, targets)
     return margins.metrics()
@@ -152,10 +154,8 @@ def evaluate_gate_one(
                 GATE1_MIN_ZONE_ACCURACY_GAIN, Bound.FLOOR, value_format="+.3f",
             ),
             Margin(
-                "poisson_deviance_reduction", "Poisson deviance reduction",
-                _relative_reduction(
-                    identity.mean_poisson_deviance, model.mean_poisson_deviance,
-                ),
+                "deviance_reduction", "negative binomial deviance reduction",
+                _relative_reduction(identity.mean_deviance, model.mean_deviance),
                 GATE1_MIN_DEVIANCE_REDUCTION, Bound.FLOOR,
                 value_format="+.1%", limit_format=".0%",
             ),

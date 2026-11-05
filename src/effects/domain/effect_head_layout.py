@@ -446,6 +446,18 @@ GATE_INDEX = 0
 
 FIELDS_BY_NAME: dict[str, FieldSpec] = {s.name: s for s in PER_ENTITY_FIELDS}
 
+#: The gate's name among the per-entity head's loss terms.
+GATE_TERM = "gate"
+#: The per-entity head's loss terms in the order a per-term vector holds them:
+#: the gate, then every field in head order.
+PER_ENTITY_TERMS: tuple[str, ...] = (GATE_TERM, *(str(s.name) for s in PER_ENTITY_FIELDS))
+#: The per-entity fields a negative binomial scores, each with a learned
+#: log-dispersion, in head order (FR-063).
+DISPERSED_FIELDS: tuple[str, ...] = tuple(
+    str(s.name) for s in PER_ENTITY_FIELDS if s.type.has_magnitude
+)
+DISPERSION_INDEX: dict[str, int] = {name: i for i, name in enumerate(DISPERSED_FIELDS)}
+
 #: Created-objects head (FR-078): K group slots plus one overflow flag.
 CREATED_OBJECT_SLOTS = 4
 
@@ -484,6 +496,28 @@ class CreatedSlot:
 
 CREATED_SLOT_WIDTH = CreatedSlot.KEYWORDS + len(KEYWORDS_CHANGED)
 CREATED_OBJECTS_WIDTH = CREATED_OBJECT_SLOTS * CREATED_SLOT_WIDTH + 1
+
+#: A slot's columns by name, in :class:`CreatedSlot` order. A column is one
+#: field of the created-objects head, the same over every slot.
+CREATED_SLOT_COLUMNS: tuple[str, ...] = (
+    "present", "scripted", "count", "power", "toughness",
+    *(f"counters_{name.lower()}" for name in COUNTER_TYPES), "counters_other",
+    "other_controller",
+    *(f"kind_{kind}" for kind in CREATED_KINDS),
+    *(f"type_{name}" for name in CARD_TYPES),
+    *(f"subtype_{name}" for name in SUBTYPES_CHANGED),
+    *(f"keyword_{name}" for name in KEYWORDS_CHANGED),
+)
+#: The overflow flag after the slots: more groups than slots were created.
+CREATED_OVERFLOW = "overflow"
+#: The created-objects head's loss terms, in the order a per-term vector holds
+#: them: each slot column, then the overflow flag.
+CREATED_TERMS: tuple[str, ...] = (*CREATED_SLOT_COLUMNS, CREATED_OVERFLOW)
+#: A slot's magnitude columns, scored by a negative binomial: count, power,
+#: toughness and the counters.
+CREATED_MAGNITUDES = slice(CreatedSlot.COUNT, CreatedSlot.OTHER_CONTROLLER)
+#: Their names, one learned log-dispersion each, shared over the slots.
+CREATED_DISPERSED: tuple[str, ...] = CREATED_SLOT_COLUMNS[CREATED_MAGNITUDES]
 
 
 @dataclass(frozen=True, slots=True)
@@ -537,6 +571,16 @@ class RecordHeadLayout:
         self.width = output
         self.target_width = target
         self.by_name: dict[str, RecordField] = {spec.name: spec for spec in fields}
+        #: The fields a negative binomial scores, one learned log-dispersion
+        #: each, shared by its members.
+        self.dispersed: tuple[str, ...] = tuple(
+            str(spec.name) for spec in fields if spec.type.has_magnitude
+        )
+        self.dispersion_index: dict[str, int] = {
+            name: i for i, name in enumerate(self.dispersed)
+        }
+        #: Field names in head order: a per-term vector's order.
+        self.terms: tuple[str, ...] = tuple(str(spec.name) for spec in fields)
 
     def blank(self) -> tuple[list[float], list[bool]]:
         """An all-unsupervised target row and its per-field mask."""
@@ -646,6 +690,11 @@ for _name, _type in VALUE_TARGETS:
         AT_LEAST_SLICES[_name] = (_value_offset, _value_offset + AT_LEAST_STEPS)
         _value_offset += AT_LEAST_STEPS
 VALUE_WIDTH = _value_offset
+#: The value head's targets a negative binomial scores, one learned
+#: log-dispersion each.
+VALUE_DISPERSED: tuple[str, ...] = tuple(
+    name for name, field_type in VALUE_TARGETS if field_type.has_magnitude
+)
 
 
 def active_fields(

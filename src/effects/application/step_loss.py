@@ -150,7 +150,9 @@ class StepLossComputer:
             )
             loss, parts = per_entity_loss(
                 gathered, targets.fields_on(self.device, non_blocking=True),
-                fields=prepared.fields, report_parts=report_parts,
+                fields=prepared.fields,
+                log_dispersion=modules.model.per_entity_dispersion(),
+                report_parts=report_parts,
             )
             terms = self.head_terms(prepared.heads, encoded, modules.model, hidden)
         total, shipped = combine_terms(loss, terms, self.weights)

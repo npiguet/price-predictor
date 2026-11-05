@@ -34,7 +34,8 @@ def magnitude_log_rate(spec: FieldSpec, slice_: torch.Tensor) -> torch.Tensor:
 
 
 def expected_magnitude(spec: FieldSpec, slice_: torch.Tensor) -> torch.Tensor:
-    """The predicted magnitude itself: the Poisson rate, ``exp`` of its log."""
+    """The predicted magnitude itself: the negative binomial mean, ``exp`` of
+    its log."""
     return torch.exp(magnitude_log_rate(spec, slice_))
 
 

@@ -211,7 +211,7 @@ class RunReporter:
             "deviance %.3f%s",
             epoch, tally.train_loss, card.loss, game.loss,
             metrics.affected_gate_f1, metrics.zone_outcome_accuracy,
-            metrics.mean_poisson_deviance, format_parts(card.parts, floor),
+            metrics.mean_deviance, format_parts(card.parts, floor),
         )
         logger.info(
             "epoch %d | trained records by rarity bucket: %s%s\n"

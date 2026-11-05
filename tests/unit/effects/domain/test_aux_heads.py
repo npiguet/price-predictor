@@ -297,12 +297,17 @@ class TestRecordHeadLosses:
         mask[:, VERDICT_LAYOUT.index["cost_adjustment"]] = True
         out_start, _ = VERDICT_LAYOUT.slices["cost_adjustment"]
         kind = FIELD_KINDS[FieldType.SIGNED_DELTA]
+        dispersion = torch.linspace(-1.0, 2.0, len(VERDICT_LAYOUT.dispersed))
+        shared = dispersion[VERDICT_LAYOUT.dispersion_index["cost_adjustment"]]
         expected = sum(
             kind.loss(prediction[:, out_start + 4 * m:out_start + 4 * m + 4],
-                      target[:, start + m], arity=1, cap=40.0)
+                      target[:, start + m], arity=1, cap=40.0, log_dispersion=shared)
             for m in range(end - start)
         ) / 3
-        assert torch.allclose(verdict_loss(prediction, target, mask), expected, rtol=1e-5)
+        assert torch.allclose(
+            verdict_loss(prediction, target, mask, log_dispersion=dispersion),
+            expected, rtol=1e-5,
+        )
 
     def test_an_unsupervised_batch_scores_nothing(self):
         prediction = torch.randn(2, GLOBAL_WIDTH)

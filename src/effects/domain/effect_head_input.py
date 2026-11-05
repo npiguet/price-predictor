@@ -229,7 +229,7 @@ def require_input_layout(training_settings) -> None:
 
 #: The largest magnitude a count or a signed delta is scored at, by the field
 #: losses, the floor and the evaluation's deviance alike. Above it an amount is
-#: the game state compounding, and one such target would dominate the Poisson
+#: the game state compounding, and one such target would dominate the count
 #: loss.
 MAGNITUDE_CAP = 40.0
 

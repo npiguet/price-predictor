@@ -19,10 +19,16 @@ class TestPerRecordLosses:
 
         from effects.application.breakdowns import TOTAL
         from effects.application.record_scoring import _record_losses
-        from effects.domain.effect_head_layout import PER_ENTITY_FIELDS, PER_ENTITY_WIDTH, FieldType
+        from effects.domain.effect_head_layout import (
+            DISPERSED_FIELDS,
+            PER_ENTITY_FIELDS,
+            PER_ENTITY_WIDTH,
+            FieldType,
+        )
         from effects.domain.effect_losses import per_entity_loss
 
         torch.manual_seed(0)
+        dispersion = torch.zeros(len(DISPERSED_FIELDS))
         fields = PER_ENTITY_FIELDS
         outputs = torch.randn(2, 3, PER_ENTITY_WIDTH)
         gate = torch.tensor([[1.0, 0.0, 1.0], [0.0, 0.0, 0.0]])
@@ -38,8 +44,10 @@ class TestPerRecordLosses:
                 gate[row : row + 1], targets.fields.select(slice(row, row + 1)),
                 mask[row : row + 1],
             )
-            expected, _ = per_entity_loss(outputs[row : row + 1], alone, fields=fields)
-            losses = _record_losses(row, outputs, targets, fields)
+            expected, _ = per_entity_loss(
+                outputs[row : row + 1], alone, fields=fields, log_dispersion=dispersion,
+            )
+            losses = _record_losses(row, outputs, targets, fields, dispersion)
             assert losses[TOTAL] == pytest.approx(float(expected), rel=1e-5)
 
     def test_a_record_with_nothing_affected_supervises_only_the_gate(self):
@@ -47,11 +55,16 @@ class TestPerRecordLosses:
 
         from effects.application.breakdowns import TOTAL
         from effects.application.record_scoring import _record_losses
-        from effects.domain.effect_head_layout import PER_ENTITY_FIELDS, PER_ENTITY_WIDTH
+        from effects.domain.effect_head_layout import (
+            DISPERSED_FIELDS,
+            PER_ENTITY_FIELDS,
+            PER_ENTITY_WIDTH,
+        )
 
         outputs = torch.zeros(1, 2, PER_ENTITY_WIDTH)
         losses = _record_losses(
             0, outputs, make_entity_targets(torch.zeros(1, 2)), PER_ENTITY_FIELDS,
+            torch.zeros(len(DISPERSED_FIELDS)),
         )
         assert set(losses) == {"gate", TOTAL}
 
@@ -66,6 +79,8 @@ class TestPerRecordLosses:
         from effects.application.breakdowns import TOTAL
         from effects.application.record_scoring import _record_losses
         from effects.domain.effect_head_layout import (
+            DISPERSED_FIELDS,
+            DISPERSION_INDEX,
             FIELD_SLICES,
             GATE_INDEX,
             PER_ENTITY_FIELDS,
@@ -75,6 +90,7 @@ class TestPerRecordLosses:
         from effects.domain.effect_losses import field_loss
 
         generator = torch.Generator().manual_seed(3)
+        dispersion = torch.linspace(-1.0, 3.0, len(DISPERSED_FIELDS))
         fields = PER_ENTITY_FIELDS
         outputs = torch.randn(3, 4, PER_ENTITY_WIDTH, generator=generator)
         gate = torch.tensor([
@@ -113,8 +129,12 @@ class TestPerRecordLosses:
                 expected[spec.name] = float(field_loss(
                     spec, outputs[row, :, start:end][where],
                     values[spec.name][row][where],
+                    log_dispersion=(
+                        dispersion[DISPERSION_INDEX[spec.name]]
+                        if spec.type.has_magnitude else None
+                    ),
                 ))
-            losses = _record_losses(row, outputs, targets, fields)
+            losses = _record_losses(row, outputs, targets, fields, dispersion)
             assert set(losses) == {*expected, TOTAL}
             for name, value in expected.items():
                 assert losses[name] == pytest.approx(value, rel=1e-6, abs=1e-6), name

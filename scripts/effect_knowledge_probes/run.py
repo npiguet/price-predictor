@@ -513,7 +513,10 @@ def method_c(args, probe_model, corpus: Path, eval_records: list) -> dict:
         hidden = shallow(batch)
         device = hidden.device
         gathered = shallow.per_entity_at(hidden, targets.index.to(device))
-        loss, _ = per_entity_loss(gathered, targets.fields_on(device), fields=fields)
+        loss, _ = per_entity_loss(
+            gathered, targets.fields_on(device), fields=fields,
+            log_dispersion=shallow.per_entity_dispersion(),
+        )
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()

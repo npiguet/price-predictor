@@ -17,9 +17,15 @@ import numpy as np
 import torch
 
 from effects.domain.effect_head_input import MAGNITUDE_CAP
-from effects.domain.effect_head_layout import FIELDS_BY_NAME, GATE_INDEX, HeadField
+from effects.domain.effect_head_layout import (
+    DISPERSION_INDEX,
+    FIELDS_BY_NAME,
+    GATE_INDEX,
+    HeadField,
+)
 from effects.domain.effect_losses import magnitude_target
 from effects.domain.entity_field_targets import EntityTargetBatch
+from effects.domain.field_kinds import negative_binomial_deviance
 from effects.domain.head_decoding import (
     expected_magnitude,
     field_outputs,
@@ -61,17 +67,25 @@ def balanced_accuracy(predicted: np.ndarray, observed: np.ndarray) -> float:
     ]))
 
 
-def poisson_deviance(predicted: np.ndarray, observed: np.ndarray) -> float:
-    """Mean Poisson deviance, the count analogue of squared error."""
+def mean_deviance(
+    predicted: np.ndarray, observed: np.ndarray, log_dispersion: np.ndarray,
+) -> float:
+    """Mean negative binomial deviance (FR-063), the count analogue of squared
+    error: each observation under its predicted mean and its field's
+    dispersion, the run's own. Tends to the Poisson deviance as the
+    dispersion grows."""
     predicted = np.asarray(predicted, dtype=np.float64)
-    # Capped as the training loss caps it.
-    observed = np.minimum(np.asarray(observed, dtype=np.float64), MAGNITUDE_CAP)
     if predicted.size == 0:
         return float("nan")
-    safe_predicted = np.clip(predicted, 1e-9, None)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        ratio = np.where(observed > 0, observed * np.log(observed / safe_predicted), 0.0)
-    return float(2.0 * np.mean(ratio - (observed - safe_predicted)))
+    # Capped as the training loss caps it.
+    observed = np.minimum(np.asarray(observed, dtype=np.float64), MAGNITUDE_CAP)
+    deviance = negative_binomial_deviance(
+        torch.from_numpy(predicted), torch.from_numpy(observed),
+        torch.from_numpy(np.broadcast_to(
+            np.asarray(log_dispersion, dtype=np.float64), predicted.shape,
+        ).copy()),
+    )
+    return float(deviance.mean())
 
 
 def mean_pairwise_cosine(
@@ -121,7 +135,8 @@ class GateOneMetrics:
 
     affected_gate_f1: float
     zone_outcome_accuracy: float
-    mean_poisson_deviance: float
+    #: The negative binomial deviance under the model's own dispersions.
+    mean_deviance: float
 
 
 class MarginAccumulator:
@@ -131,10 +146,22 @@ class MarginAccumulator:
     one affected entity weighs what that one entity does.
     """
 
-    def __init__(self, fields) -> None:
+    def __init__(self, fields, log_dispersion: torch.Tensor | None = None) -> None:
+        """``log_dispersion`` is the model's per-entity log-dispersions, in
+        ``DISPERSED_FIELDS`` order: each run's deviance reads its own."""
         self._magnitude_specs = [
             spec for spec in fields if spec.type.has_magnitude
         ]
+        if self._magnitude_specs and log_dispersion is None:
+            raise ValueError(
+                "the deviance margin reads the model's own log-dispersions; "
+                "pass them beside a count or signed-delta field"
+            )
+        self._log_dispersion = (
+            None if log_dispersion is None
+            else log_dispersion.detach().double().cpu().numpy()
+        )
+        self._count_dispersion: list[np.ndarray] = []
         self._gate_pred: list[np.ndarray] = []
         self._gate_true: list[np.ndarray] = []
         self._zone_pred: list[np.ndarray] = []
@@ -169,6 +196,9 @@ class MarginAccumulator:
                 continue
             self._count_pred.append(expected_magnitude(spec, slice_).numpy())
             self._count_true.append(magnitude_target(spec, target[scored]).numpy())
+            self._count_dispersion.append(np.full(
+                int(slice_.shape[0]), self._log_dispersion[DISPERSION_INDEX[spec.name]],
+            ))
 
     def metrics(self) -> GateOneMetrics:
         """The three margins over everything added; NaN where nothing was."""
@@ -177,8 +207,9 @@ class MarginAccumulator:
             zone_outcome_accuracy=balanced_accuracy(
                 _cat(self._zone_pred), _cat(self._zone_true),
             ),
-            mean_poisson_deviance=poisson_deviance(
+            mean_deviance=mean_deviance(
                 _cat(self._count_pred), _cat(self._count_true),
+                _cat(self._count_dispersion),
             ),
         )
 
