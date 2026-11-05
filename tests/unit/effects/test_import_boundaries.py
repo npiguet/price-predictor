@@ -182,6 +182,7 @@ _TORCH_FREE = (
     "effects.domain.strata",
     "effects.domain.corpus_plan",
     "effects.domain.seeded_draw",
+    "effects.domain.rule_budgets",
     "effects.domain.fork_operation",
     "effects.domain.rule_catalogue",
     "effects.domain.rule_outcomes",

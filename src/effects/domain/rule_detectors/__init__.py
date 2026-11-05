@@ -25,6 +25,7 @@ from __future__ import annotations
 import importlib
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any, Protocol
 
 from effects.domain.provenance import SidecarLookup
@@ -58,6 +59,24 @@ class RuleTag:
     def needs_review(self) -> bool:
         return (self.polarity is not Polarity.OTHER and self.observed is not None
                 and self.observed != (self.polarity is Polarity.FIRES))
+
+
+class RuleSource(StrEnum):
+    """Where a tagged record came from, which decides what it can be trusted
+    for (FR-008): aimed collection, or a natural record of a game with or
+    without a random seat. A gen-2 record carries no ``aimed_at``, so it is
+    natural."""
+
+    RANDOM_SEAT = "random_seat"
+    FORGE_AI = "forge_ai"
+    AIMED = "aimed"
+
+    @classmethod
+    def of(cls, *, aimed: bool, random_seat_game: bool) -> RuleSource:
+        """``aimed`` whatever the game; else by whether the game had a random seat."""
+        if aimed:
+            return cls.AIMED
+        return cls.RANDOM_SEAT if random_seat_game else cls.FORGE_AI
 
 
 @dataclass(frozen=True, slots=True)

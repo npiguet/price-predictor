@@ -25,12 +25,11 @@ import json
 import logging
 from collections import Counter
 from dataclasses import dataclass, field
-from enum import StrEnum
 from pathlib import Path
 
 from effects.application.parallel_map import run_parallel
 from effects.domain.rule_catalogue import NoDetector, Polarity
-from effects.domain.rule_detectors import DetectorIndex, tag_record
+from effects.domain.rule_detectors import DetectorIndex, RuleSource, tag_record
 from effects.domain.shard_generation import ShardGeneration
 from effects.domain.tally_merge import merge_into
 
@@ -39,12 +38,6 @@ logger = logging.getLogger(__name__)
 #: The generations ``rule-counts`` reads: gen-2's corpus before any gen-3
 #: collection, and gen-3's; never a mix (FR-008).
 COUNTED_GENERATIONS = (ShardGeneration.GEN_2, ShardGeneration.GEN_3)
-
-
-class RuleSource(StrEnum):
-    RANDOM_SEAT = "random_seat"
-    FORGE_AI = "forge_ai"
-    AIMED = "aimed"
 
 
 @dataclass
@@ -105,8 +98,7 @@ def count_shard(built, shard: Path) -> RuleCounts:
         if result.tags:
             pending.append((record.game_id, record.aimed_at is not None, result.tags))
     for game_id, aimed, tags in pending:
-        source = (RuleSource.AIMED if aimed else RuleSource.RANDOM_SEAT
-                  if game_id in seat_games else RuleSource.FORGE_AI)
+        source = RuleSource.of(aimed=aimed, random_seat_game=game_id in seat_games)
         for tag in tags:
             out.counts[(tag.rule, str(tag.polarity), str(source))] += 1
     return out
