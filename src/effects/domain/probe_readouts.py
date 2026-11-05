@@ -121,12 +121,12 @@ READOUTS: dict[str, Readout] = {
     "damage_taken": _damage_taken,
     "pt_until_end_of_turn": _pt_until_end_of_turn,
     "may_block": _may_block,
-    # The gate, not the `target_legal` field: training sets that field only on
-    # legal targets, always to 1, so on an illegal entity its output was never
-    # supervised and ranks nothing. Legality is learned through the gate, which
-    # a decision record raises exactly on its legal targets.
-    "legal_target": _affected,
-    "legal_target_protected": _affected,
+    # The `target_legal` field, not the gate (FR-074): gen-3 trains the field
+    # on every card and player of a decision whose candidate targets, 1 at a
+    # legal target and 0 elsewhere, and trains no gate on a decision record,
+    # which observes what could be chosen rather than what changed.
+    "legal_target": _legality_field("target_legal"),
+    "legal_target_protected": _legality_field("target_legal"),
     "affordable": _affordable,
     "fires": _verdict_column("trigger_fired"),
     # Gen-3 trains the field itself on every card and player of a decision

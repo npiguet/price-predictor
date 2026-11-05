@@ -156,17 +156,9 @@ def frozen_grid_records(context, prefix: str, *, halves: Sequence[str] = REPORTI
     named halves of both validation strata, each record once, read from the
     selection set frozen for the checkpoint's corpus rather than by scanning
     shards. Refuses a corpus without one."""
-    from effects.domain.selection_set import (
-        SelectionSetError,
-        load_selection_set,
-        selection_set_path,
-    )
+    from effect_knowledge_probes.halves import load_selection
 
-    path = selection_set_path(reports_dir or common.REPORTS, context.corpus_digest)
-    try:
-        frozen = load_selection_set(path, context.corpus_digest)
-    except SelectionSetError as error:
-        raise SystemExit(str(error)) from None
+    frozen = load_selection(context, reports_dir)
     out: list[tuple[object, tuple[str, ...]]] = []
     for stratum, by_half in sorted(frozen.grids.items()):
         wanted: dict[str, tuple[str, ...]] = {}

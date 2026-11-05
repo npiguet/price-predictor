@@ -9,6 +9,7 @@ package its entry scripts make it.
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -20,8 +21,15 @@ from effect_knowledge_probes import (
     board,
     combat_grid,
     common,
+    compare,
     conditions,
     evasion_grid,
+    halves,
+    labels,
+    ladder,
+    record_walk,
+    rule_tests,
+    run,
     selection,
     sweeps,
     target_restrictions,
@@ -34,7 +42,11 @@ from effects.domain.records import (
     PlayabilityDecisionPayload,
     RecordKind,
 )
-from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS, curated_fixture_records
+from tests.unit.effects.builders import (
+    EFFECTS_FIXTURES,
+    GEN3_SIDECAR_FOLDERS,
+    curated_fixture_records,
+)
 
 E_DIM = 8
 
@@ -591,3 +603,454 @@ def test_decisions_in_the_fixture_name_players_as_legal_targets(records):
     assert any(set(r.payload.candidates[0].legal_targets) & {p.id for p in r.state.players}
                for r in records if isinstance(r.payload, PlayabilityDecisionPayload)
                and r.payload.candidates and r.payload.candidates[0].legal_targets)
+
+
+# ── T168: the probing run over the selection set's halves ───────────────
+
+GD = "game-disjoint"
+
+
+class _NoDeviance:
+    """The deviance sample's losses: one field at a loss of one, both masks."""
+
+    def losses(self, records):
+        records = list(records)
+        return {"damage_taken": {"hard": [1.0] * len(records), "soft": [1.0] * len(records)}}
+
+
+@pytest.fixture(scope="module")
+def frozen_corpus(tmp_path_factory, records, sidecars, keywords_of):
+    """The fixture's games as a curated corpus's game-disjoint stratum, every
+    third record repeated as an added copy is, and a selection set frozen over
+    it by the probe suite's own ports at thresholds a fixture can meet."""
+    from effects.application.freeze_selection_set import (
+        RuleTestRules,
+        SelectionSetRefused,
+        freeze_selection_set,
+        stratum_reader,
+    )
+    from effects.domain.corpus_manifest import ClassCounts, CorpusManifest, SourceShard
+    from effects.infrastructure.rules_catalogue_io import load_scenarios
+    from effects.infrastructure.shard_io import write_shard
+
+    root = tmp_path_factory.mktemp("frozen-corpus")
+    stratum = root / "validation" / GD
+    stratum.mkdir(parents=True)
+    write_shard(stratum / "shard-00000.jsonl.gz", [*records, *records[::3]])
+    (root / "training").mkdir()
+    write_shard(root / "training" / "shard-00000.jsonl.gz", [*records[:40], *records[:40]])
+    games = sorted({r.game_id for r in records})
+    halves_of = {GD: {"selection": tuple(games[0::2]), "reporting": tuple(games[1::2])}}
+    manifest = CorpusManifest(
+        seed=42, surface="script", vocab_path="vocab-script.txt", variant_scripts="",
+        holdout_permille=20, holdout_max_carriers=8, text_cap=200,
+        card_disjoint_text_cap=50, training_records=0, class_mix={"rewrite": 1.0},
+        delivered_mix={"rewrite": 1.0}, held_out_cards=(), held_out_texts=(),
+        card_disjoint_games=(), game_disjoint_games=tuple(games),
+        rarity={}, sources=(SourceShard("a.jsonl.gz", 1),),
+        per_class={"rewrite": ClassCounts(1, 1, 0, 1)}, per_stratum={}, unique_texts={},
+        shortfall={}, halves=halves_of,
+    )
+    rules = RuleTestRules.of(load_scenarios(), manifest, sidecars)
+    rules = RuleTestRules(rules.tag, rules.declared, rules.declared, rules.blocked)
+    try:
+        frozen = freeze_selection_set(
+            manifest, {GD: stratum_reader(stratum)}, rules=rules,
+            probes=selection.ProbeItems(
+                sidecars, common.acting_text_function(sidecars, "script")),
+            grids=selection.grid_sources(sidecars, keywords_of), deviance=_NoDeviance(),
+            min_games_per_half=1, max_item_error=10.0, max_component_error=10.0)
+    except SelectionSetRefused as refused:
+        frozen = refused.selection
+    return SimpleNamespace(root=root, stratum=stratum, manifest=manifest,
+                           selection=frozen.sealed())
+
+
+def _context(frozen_corpus, sidecars, probe_model):
+    """What a probing run reads of one checkpoint, the model the fixture's."""
+    from effects.infrastructure.rules_catalogue_io import load_heads
+
+    root = frozen_corpus.root
+    return SimpleNamespace(
+        corpus=root, corpus_digest=frozen_corpus.selection.corpus_digest,
+        manifest=SimpleNamespace(surface="script", rule_map=load_heads()),
+        cards_folders=tuple(GEN3_SIDECAR_FOLDERS), variant_scripts=None,
+        checkpoint=SimpleNamespace(
+            provenance=SimpleNamespace(held_out_cards=()), training_settings={"seed": 1},
+            model_config=probe_model.model.config),
+        sidecars=lambda: sidecars, stratum_dir=lambda name: root / "validation" / name,
+        training_dir=root / "training", model=lambda records, **_: probe_model,
+    )
+
+
+class TestReadingAHalf:
+    def test_repeated_rows_of_one_record_are_read_once(self, records):
+        doubled = [*records[:5], *records[:5], records[0]]
+        assert [r.record_id for r in halves.distinct(doubled)] == [
+            r.record_id for r in records[:5]]
+
+    def test_a_capped_probe_keeps_the_smallest_hashes_per_game_and_in_all(self):
+        cap = halves.Capped(limit=3, per_game=2)
+        rows = [SimpleNamespace(record_id=f"r{i}", game_id=f"g{i % 2}") for i in range(8)]
+        for row in rows:
+            cap.add(row, row.record_id)
+        order = sorted(rows, key=lambda r: common.stable_hash(r.record_id))
+        kept = {r.record_id for g in ("g0", "g1")
+                for r in [r for r in order if r.game_id == g][:2]}
+        assert cap.values() == [r.record_id for r in order if r.record_id in kept][:3]
+
+    def test_a_half_keeps_its_frozen_items_and_qualifiers(self, frozen_corpus, sidecars,
+                                                         keywords_of, probe_model):
+        frozen = frozen_corpus.selection
+        context = _context(frozen_corpus, sidecars, probe_model)
+        seen: list[str] = []
+        settings = halves.ReadSettings(probe_types=frozenset(frozen.probe_kinds))
+        read = halves.read_half(
+            context, frozen, GD, "reporting", settings,
+            acting_text=common.acting_text_function(sidecars, "script"),
+            keywords_of=keywords_of, observe=lambda r: seen.append(r.record_id))
+        assert seen and len(seen) == len(set(seen))
+        games = set(frozen.halves[GD]["reporting"])
+        assert all(r.game_id in games for r in read.records.values())
+        labelled = {(row.record_id, probe_type, row.entity): row.label
+                    for probe_type, rows in frozen.probes[GD]["reporting"].items()
+                    for row in rows}
+        found = {(rid, item.target, item.entity): item.label
+                 for rid, items in read.probe_items.items() for item in items}
+        assert found and set(found) <= set(labelled)
+        assert all(found[key] == labelled[key] for key in found)
+        assert set(read.rule_tests) == set(frozen.rule_tests[GD]["reporting"])
+        assert set(read.grids) <= set(frozen.grids[GD]["reporting"])
+        assert read.conditions or read.targeting
+        for rows in read.sweep_rows.values():
+            assert all(row["record_id"] in read.records for row in rows)
+
+
+class TestRuleTests:
+    def _trigger_records(self, records):
+        from effects.domain.records import TriggerPayload
+
+        triggers = [r for r in records if isinstance(r.payload, TriggerPayload)]
+        fired = [r for r in triggers if r.payload.fired]
+        not_fired = [r for r in triggers if not r.payload.fired]
+        assert fired and not_fired
+        return fired, not_fired
+
+    def test_a_rule_ranks_its_fires_records_above_its_others(self, records, probe_model):
+        fired, not_fired = self._trigger_records(records)
+        tests = {"603.2": {"fires": [(r, ()) for r in fired],
+                           "does_not_fire": [(r, ()) for r in not_fired]}}
+        result = rule_tests.score(probe_model, tests,
+                                  {"603.2": ("trigger_fired", "new:something")})
+        body = result["rules"]["603.2"]
+        assert body["records"] == {"fires": len(fired), "does_not_fire": len(not_fired)}
+        assert 0.0 <= body["outputs"]["trigger_fired"] <= 1.0
+        assert body["score"] == pytest.approx(2 * body["auc"] - 1)
+        assert body["unread"] == ["new:something"]
+        assert result["component"] == pytest.approx(max(body["score"], -1.0))
+
+    def test_rules_without_both_polarities_or_a_readable_output_are_left_out(
+        self, records, probe_model,
+    ):
+        fired, not_fired = self._trigger_records(records)
+        tests = {"one": {"fires": [(r, ()) for r in fired]},
+                 "unread": {"fires": [(r, ()) for r in fired],
+                            "does_not_fire": [(r, ()) for r in not_fired]},
+                 "same": {"fires": [(r, ()) for r in fired],
+                          "does_not_fire": [(r, ()) for r in fired]}}
+        result = rule_tests.score(probe_model, tests, {
+            "one": ("trigger_fired",), "unread": ("planned:x",), "same": ("trigger_fired",)})
+        assert result["rules"] == {}
+        assert result["left_out"] == {
+            "one": "one polarity only", "unread": "no output a probe readout answers",
+            "same": "no output whose polarities' outcomes differ"}
+        assert np.isnan(result["component"])
+
+    def test_the_settled_direction_turns_an_absence_round(self):
+        observed = {"fires": [np.array([0.0, 1.0])], "does_not_fire": [np.array([1.0, 0.0])]}
+        assert rule_tests._settle(observed) == (0, -1.0)
+        assert rule_tests._settle({"fires": [np.array([1.0])], "does_not_fire": []}) is None
+
+    def test_every_reader_names_a_readout_or_the_zone_outcome(self):
+        from effects.domain.effect_head_layout import FIELDS_BY_NAME, VERDICT_LAYOUT
+        from effects.domain.rule_mask import GATE_OUTPUT
+
+        for output in rule_tests.readers():
+            assert (output == GATE_OUTPUT or output in FIELDS_BY_NAME
+                    or output in VERDICT_LAYOUT.by_name), output
+
+
+class TestGridsOfAHalf:
+    def test_every_frozen_grid_is_read_in_its_cells_order(
+        self, frozen_corpus, sidecars, keywords_of, probe_model,
+    ):
+        frozen = frozen_corpus.selection
+        context = _context(frozen_corpus, sidecars, probe_model)
+        settings = halves.ReadSettings(probe_types=frozenset(), gen3_probes=False,
+                                       sweeps=False)
+        reads = [halves.read_half(context, frozen, GD, half, settings,
+                                  acting_text=lambda key: None, keywords_of=keywords_of)
+                 for half in halves.HALVES]
+        scored = [(read, halves.score_grids(probe_model, frozen, read)) for read in reads]
+        assert any(found for _, found in scored)
+        for read, found in scored:
+            for name, body in found.items():
+                cells = frozen.grids[GD][read.half][name].cells
+                record, entities = read.grids[name][0]
+                values = halves.grid_predictions(probe_model, name, record, entities)
+                assert len(values) == len(cells)
+                _probabilities(values)
+                assert body["records"] == len(read.grids[name])
+                assert 0.0 <= body["mae"] <= 1.0
+
+
+class TestTheProbingRun:
+    @pytest.fixture(scope="class")
+    def scorecard(self, frozen_corpus, sidecars, probe_model, tmp_path_factory):
+        args = run.parse_args(["--checkpoint", "latest.pt", "--no-ablation", "--no-board",
+                               "--abilities-root", str(tmp_path_factory.mktemp("cache"))])
+        return run.probe(args, _context(frozen_corpus, sidecars, probe_model),
+                         frozen_corpus.selection)
+
+    def test_probes_and_rule_tests_are_reported_per_half(self, scorecard, frozen_corpus):
+        frozen = frozen_corpus.selection
+        assert set(scorecard.halves) == {GD}
+        assert set(scorecard.halves[GD]) == set(halves.HALVES)
+        for half, body in scorecard.halves[GD].items():
+            assert body["games"] == len(frozen.halves[GD][half])
+            assert body["probes"] and set(body["probes"]) <= set(frozen.probe_kinds)
+            for item in body["probes"].values():
+                assert item["kind"] in ("binary", "amount") and item["n"] > 0
+            tests = body["rule_tests"]
+            assert set(tests["rules"]) | set(tests["left_out"]) == set(
+                frozen.rule_tests[GD][half])
+            assert "grids" in body
+        assert scorecard.selection_set_digest == frozen.digest
+
+    def test_the_ladders_are_filed_per_stratum_and_half(self, scorecard):
+        names = {stratum for body in scorecard.families.values()
+                 for entry in body["targets"].values() for stratum in entry["strata"]
+                 if entry["scope"] in ("act", "entity")}
+        assert names <= {f"{GD}/{half}" for half in halves.HALVES}
+
+    def test_the_gen3_probes_are_reported(self, scorecard):
+        reported = {name for body in scorecard.halves[GD].values() for name in body}
+        assert reported & {"conditions", "anthem", "target_legality"}
+
+    def test_the_scorecard_round_trips_and_writes_its_tables(self, scorecard, tmp_path):
+        from effect_knowledge_probes.scorecard import Scorecard
+
+        data = json.loads(json.dumps(scorecard.to_json()))
+        again = Scorecard.from_json(data)
+        assert again.halves == data["halves"]
+        run.write_tables(tmp_path, again)
+        text = (tmp_path / "halves.md").read_text(encoding="utf-8")
+        assert "## Rule tests" in text and f"{GD}/reporting" in text
+
+    def test_compare_ranks_each_half_s_scores_apart(self, scorecard):
+        ranked = compare.half_ranking([scorecard, scorecard])
+        assert ranked
+        wheres = {f"{GD}/{half}" for half in halves.HALVES}
+        for name in ranked:
+            where, score = name.split(" ", 1)
+            assert where in wheres
+            assert score in ("probes AUC", "probes R²", "grids", "rule tests")
+
+
+class TestLineProbesReadEachRecordOnce:
+    def test_observed_outcomes_drop_repeated_rows(self, records, sidecars):
+        from effects.domain.records import Moment, RecordKind
+
+        acting = common.acting_text_function(sidecars, "script")
+        record = next(r for r in records if r.kind is RecordKind.RESOLUTION
+                      and r.moment is Moment.RESOLUTION and r.ability
+                      and acting(r.ability[0]) and labels.effect_profile(r) is not None)
+        outcomes = run.ObservedOutcomes(acting)
+        for _ in range(3):
+            outcomes.observe(record)
+        assert sum(len(v) for v in outcomes.profiles.values()) == 1
+
+    def test_the_training_walk_drops_repeats_unless_told_not_to(self, frozen_corpus):
+        directory = frozen_corpus.root / "training"
+        ids = [r.record_id for r in record_walk.records([directory])]
+        assert len(ids) == len(set(ids)) == 40
+        assert len(list(record_walk.records([directory], distinct=False))) == 80
+
+
+# ── T168: a tiny gen-3 checkpoint on disk, read as a probing run reads it ─
+
+
+@pytest.fixture(scope="module")
+def checkpoint_path(tmp_path_factory, records, sidecars):
+    """A gen-3 checkpoint at random weights, saved by the store as a training
+    run saves one, with a vocabulary over the fixture's texts."""
+    import torch
+
+    from effects.application.run_context import training_settings
+    from effects.application.train_effect_model import (
+        CorpusFacts,
+        RunSpec,
+        TrainEffectModelConfig,
+    )
+    from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
+    from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
+    from effects.domain.baselines import baseline_masks
+    from effects.domain.effect_head_input import SlotKind, feature_widths
+    from effects.domain.effect_model import EffectModel, EffectModelConfig
+    from effects.domain.split_provenance import SplitProvenance
+    from effects.infrastructure.effect_model_store import EffectCheckpoint, EffectModelStore
+    from effects.infrastructure.tokenizer_loading import load_keyword_definitions
+    from price_predictor.infrastructure.tokenizer_store import save_vocabulary
+    from tests.unit.effects.builders import FIXTURE_KEYWORD_DEFINITIONS, make_batcher
+
+    root = tmp_path_factory.mktemp("checkpoint")
+    definitions = load_keyword_definitions(FIXTURE_KEYWORD_DEFINITIONS)
+    base = {token: index for index, token in enumerate(SPECIAL_TOKENS)}
+    bare = AbilityTokenizer(base, definitions, surface="script")
+    widths = feature_widths(records)
+    probe = make_batcher(tokenizer=bare, sidecars=sidecars, masks=baseline_masks("full"),
+                         surface="script", e_dim=E_DIM, widths=widths,
+                         device=torch.device("cpu"))
+    vocab = dict(base)
+    texts = [*probe.batch_texts(records)]
+    texts += [d.reminder_template for d in definitions.values() if d.reminder_template]
+    for text in texts:
+        for token in bare.tokenize(text):
+            vocab.setdefault(token.text, len(vocab))
+    vocab_path = root / "vocab-script.txt"
+    save_vocabulary(vocab, vocab_path)
+    encoder_config = AbilityEncoderConfig(vocab_size=len(vocab), e_dim=E_DIM, d_model=16,
+                                          n_layers=1, n_heads=2)
+    model_config = EffectModelConfig(
+        global_features=widths[SlotKind.GLOBAL], act_features=widths[SlotKind.ACT],
+        player_features=widths[SlotKind.PLAYER], card_features=widths[SlotKind.CARD],
+        ability_features=widths[SlotKind.ABILITY], e_dim=E_DIM, vocab_size=len(vocab),
+        encoder_d_model=16, d_model=16, n_layers=2, n_heads=2, ff_dim=32,
+    )
+    torch.manual_seed(0)
+    store = EffectModelStore(root / "effect-model")
+    store.save(EffectCheckpoint(
+        encoder_config=encoder_config, model_config=model_config,
+        encoder_state=AbilityEncoder(encoder_config).state_dict(),
+        model_state=EffectModel(model_config).state_dict(),
+        provenance=SplitProvenance(
+            vocab_path=str(vocab_path), keyword_definitions_path=str(FIXTURE_KEYWORD_DEFINITIONS),
+            vocab_hash=content_hash(vocab_path),
+            keyword_definitions_hash=content_hash(FIXTURE_KEYWORD_DEFINITIONS),
+        ),
+        training_settings=training_settings(
+            RunSpec(TrainEffectModelConfig(corpus="unused"), CorpusFacts(), seed=1),
+            api_types=[], param_keys=[]),
+    ))
+    return store.latest_path()
+
+
+def content_hash(path):
+    from effects.infrastructure.effect_model_store import content_hash as digest
+
+    return digest(path)
+
+
+@pytest.fixture(scope="module")
+def loaded(checkpoint_path, records):
+    """The checkpoint loaded as a probing run loads it, on the CPU."""
+    import torch
+
+    from effects.application import model_loading
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(model_loading, "default_device", lambda: torch.device("cpu"))
+        return common.load_probe_model(checkpoint_path, list(GEN3_SIDECAR_FOLDERS), records)
+
+
+@pytest.fixture(scope="module")
+def items_by_record(records, sidecars):
+    join = labels.TriggerJoin()
+    for record in records:
+        join.observe(record)
+    joined = join.result()
+    acting = common.acting_text_function(sidecars, "script")
+    return {r.record_id: found for r in records
+            if (found := labels.record_items(r, sidecars, joined, acting))}
+
+
+class TestExtraction:
+    """``ladder.extract_features`` on a gen-3 checkpoint loaded from disk."""
+
+    def test_every_rung_has_one_width_per_target(self, loaded, records, items_by_record):
+        chosen = [r for r in records if r.record_id in items_by_record]
+        act_hidden: dict = {}
+        extracted = ladder.extract_features(loaded, chosen, items_by_record, batch_size=8,
+                                            act_hidden=act_hidden)
+        assert extracted and act_hidden
+        assert loaded.device.type == "cpu"
+        assert ladder.verdict_head_trained(loaded.checkpoint)
+        for target in {i.target for i in extracted}:
+            rows = [i for i in extracted if i.target == target]
+            for rung in ladder.PROBED_RUNGS:
+                assert len({r.features[rung].shape for r in rows}) == 1
+            zero = rows[0].features["0"].shape[0]
+            assert rows[0].features["1"].shape[0] == zero + 3 * E_DIM
+            assert rows[0].features["1w"].shape == rows[0].features["1"].shape
+            assert all(np.isfinite(r.rung3) for r in rows)
+
+    def test_the_per_layer_view_reads_every_trunk_layer(self, loaded, records, items_by_record):
+        record = next(r for r in records if r.record_id in items_by_record)
+        extracted = ladder.extract_features(
+            loaded, [record], {record.record_id: items_by_record[record.record_id]},
+            per_layer=True)
+        depth = len(loaded.model.trunk.layers)
+        assert depth == 2
+        assert all(len(item.layers) == depth for item in extracted)
+        assert extracted[0].layers[0].shape == extracted[0].features["2"].shape
+
+    def test_a_toughness_sweep_reads_one_prediction_per_value(self, loaded, records, sidecars):
+        selector = sweeps.SweepSelector(sidecars)
+        for record in records:
+            selector.observe(record)
+        rows = selector.result()["toughness"]
+        assert rows
+        record = next(r for r in records if r.record_id == rows[0]["record_id"])
+        curve = sweeps.run_sweep("toughness", loaded, record, rows[0])
+        assert [p["value"] for p in curve] == list(sweeps.TOUGHNESS_VALUES)
+        _probabilities([p["prediction"] for p in curve])
+
+    @pytest.mark.parametrize("layers", [0, 1])
+    def test_method_c_trains_a_shallow_trunk_beside_the_full_model(
+        self, loaded, records, tmp_path, layers,
+    ):
+        from effects.infrastructure.shard_io import write_shard
+
+        (tmp_path / "training").mkdir()
+        write_shard(tmp_path / "training" / "shard-00001.jsonl.gz", records[:24])
+        args = SimpleNamespace(method_c_layers=layers, method_c_steps=2)
+        result = run.method_c(args, loaded, tmp_path, records[:16])
+        assert result["steps"] == 2 and result["layers"] == layers
+        assert set(result["shallow"]) == set(result["full"])
+        assert all(np.isfinite(v) for v in result["shallow"].values())
+
+
+class TestGen3Only:
+    def test_a_checkpoint_of_another_layout_is_refused(self, checkpoint_path, tmp_path):
+        import torch
+
+        payload = torch.load(checkpoint_path, weights_only=False)
+        payload["training_settings"] = {**payload["training_settings"], "input_layout": "gen-2"}
+        path = tmp_path / "gen2.pt"
+        torch.save(payload, path)
+        with pytest.raises(SystemExit, match="gen-2"):
+            common.load_checkpoint(path)
+        assert common.load_checkpoint(checkpoint_path).training_settings
+
+    def test_gen2_records_are_refused(self, tmp_path):
+        import shutil
+
+        from effects.domain.shard_generation import UnacceptedGenerationError
+
+        directory = tmp_path / "game-disjoint"
+        directory.mkdir()
+        shutil.copy(EFFECTS_FIXTURES / "gen2-records.jsonl.gz", directory / "shard-00000.jsonl.gz")
+        with pytest.raises(UnacceptedGenerationError):
+            next(record_walk.records([directory]))
+        with pytest.raises(UnacceptedGenerationError):
+            next(common.read_games(sorted(directory.iterdir()), {"any"}))

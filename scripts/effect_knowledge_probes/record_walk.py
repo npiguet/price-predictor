@@ -17,13 +17,28 @@ from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 
 
-def records(directories: Iterable[Path], *, shards: int | None = None) -> Iterator:
-    """Every record of the first ``shards`` shards of each directory, in path order."""
-    from effects.infrastructure.shard_io import iter_shards, read_shard
+def records(directories: Iterable[Path], *, shards: int | None = None,
+            distinct: bool = True) -> Iterator:
+    """Every record of the first ``shards`` shards of each directory, in path order.
 
+    Gen-3 shards only. A curated stratum repeats a record's row for each copy
+    curation wrote of it; ``distinct`` (the default) yields each record once,
+    as every probe reads it (FR-070), and False every row, as training does.
+    """
+    from effects.domain.shard_generation import ACCEPTED_GENERATIONS
+    from effects.infrastructure.shard_io import iter_shards, read_shard, require_generation
+
+    seen: set[str] = set()
     for directory in directories:
-        for shard in iter_shards(Path(directory))[:shards]:
-            yield from read_shard(shard)
+        chosen = iter_shards(Path(directory))[:shards]
+        require_generation(chosen, *ACCEPTED_GENERATIONS)
+        for shard in chosen:
+            for record in read_shard(shard):
+                if distinct:
+                    if record.record_id in seen:
+                        continue
+                    seen.add(record.record_id)
+                yield record
 
 
 def qualifying(

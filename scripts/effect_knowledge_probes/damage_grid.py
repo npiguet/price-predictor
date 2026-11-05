@@ -4,9 +4,11 @@
 
 Each cell edits the acting text's ``NumDmg$`` through the batcher's text memo, as the
 damage sweep does, and the target's toughness, as the toughness sweep does, and reads
-the target's predicted death.
+the target's predicted death (``halves.grid_predictions``, the cells the probing run
+scores).
 
-``--source probe`` (the default) uses the frozen probe set's damage-sweep records.
+``--source validation`` (the default) reads the records the selection set froze for the
+damage grid, in ``--half`` (reporting by default) of both validation strata.
 ``--source training`` uses training records that qualify for lethality copies (FR-063e)
 with a literal amount: the grid then reads the model on the very records its copies were
 drawn from, so a soft diagonal there is a fault of fit rather than of generalization.
@@ -24,19 +26,9 @@ if __package__ in (None, ""):
 
 from _lib.markdown import print_table  # noqa: E402
 
-from effect_knowledge_probes import common, readout, record_walk, sweeps  # noqa: E402
-from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
+from effect_knowledge_probes import common, record_walk  # noqa: E402
 
 VALUES = range(1, 9)
-
-
-def probe_records(context, probe_set, host: str) -> list[tuple[object, str]]:
-    """The frozen probe set's damage-sweep records on ``host``, with their targets."""
-    rows = [r for r in probe_set.sweeps["damage"] if r["host"] == host]
-    ids = {r["record_id"] for r in rows}
-    found = {record.record_id: record for stratum in probe_set.games
-             for record in context.probe_records(probe_set, stratum, ids)}
-    return [(found[r["record_id"]], r["entity"]) for r in rows]
 
 
 def damage_target(sidecars, keywords_of):
@@ -61,19 +53,24 @@ def damage_target(sidecars, keywords_of):
 
 
 def _options(parser) -> None:
-    parser.add_argument("--source", choices=("probe", "training", "card-disjoint"),
-                        default="probe")
-    parser.add_argument("--host", default="spell", help="probe source: spell or triggered")
+    parser.add_argument("--source", choices=("validation", "training", "card-disjoint"),
+                        default="validation")
+    parser.add_argument("--half", choices=("reporting", "selection", "both"),
+                        default="reporting")
     parser.add_argument("--probe-set-dir", type=Path, default=common.REPORTS,
-                        help="where the corpus's frozen probe set is (probe source)")
+                        help="where the corpus's selection set is (validation source)")
 
 
 def main() -> None:
+    from effect_knowledge_probes import halves
+    from effect_knowledge_probes.selection import frozen_grid_records
     from effects.domain.damage_step_keywords import KeywordResolver
 
     args, context = common.grid_run(__doc__, records=40, options=_options)
-    if args.source == "probe":
-        pairs = probe_records(context, context.load_probe_set(args.probe_set_dir), args.host)
+    if args.source == "validation":
+        chosen = ("selection", "reporting") if args.half == "both" else (args.half,)
+        pairs = [(record, entities[0]) for record, entities in frozen_grid_records(
+            context, "damage", halves=chosen, reports_dir=args.probe_set_dir)]
     else:
         directory = (context.training_dir if args.source == "training"
                      else context.stratum_dir("card-disjoint"))
@@ -85,15 +82,9 @@ def main() -> None:
     probe_model = context.model(records)
     common.heading(args, context, f"{len(pairs)} {args.source} records")
     grid = np.zeros((8, 8))
-    batcher = probe_model.batcher
     for record, entity in pairs:
-        key = record.ability[0]
-        original = batcher.text_of(key)
-        edited = [BoardEdit(record).set_toughness(entity, t).record for t in VALUES]
-        dies = readout.at_card("dies", entity)
-        for i, amount in enumerate(VALUES):
-            with batcher.reading_as(key, sweeps.set_amount(original, "NumDmg", amount)):
-                grid[i] += common.predict(probe_model, edited, dies)
+        grid += np.reshape(halves.grid_predictions(probe_model, "damage", record, (entity,)),
+                           grid.shape)
     grid /= max(len(pairs), 1)
     print_table(["damage \\ toughness", *VALUES],
                 [[amount, *(f"{v:.2f}" for v in row)] for amount, row in zip(VALUES, grid)],

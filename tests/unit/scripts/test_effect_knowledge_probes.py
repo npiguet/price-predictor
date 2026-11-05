@@ -28,7 +28,6 @@ from effect_knowledge_probes import (
     evasion_grid,
     labels,
     ladder,
-    probe_set,
     run,
     sweeps,
     target_restrictions,
@@ -68,7 +67,7 @@ def _join_triggers(records):
 
 @pytest.fixture(scope="module")
 def acting(sidecars):
-    return run._acting_text_function(sidecars, "script")
+    return common.acting_text_function(sidecars, "script")
 
 
 @pytest.fixture(scope="module")
@@ -648,52 +647,60 @@ class TestAffordabilityEdit:
         assert not sweeps.affordability_ready(on_land, sidecars)
 
 
-# ── the probe set's digest ──────────────────────────────────────────────
+# ── the selection set a probing run reads ───────────────────────────────
 
 
-def _probe_set(corpus_digest: str):
-    """A small sealed set, every field filled the way a freeze fills it."""
-    return probe_set.ProbeSet(
-        corpus="corpus", corpus_digest=corpus_digest, surface="script",
-        games={"card-disjoint": ["g1"]}, sources={"card-disjoint": ["s.jsonl.gz"]},
-        items=[probe_set.FrozenLineItem({"script_file": "cardsfolder/s/shock.txt"},
-                                        {"amount": 2.0}, {"spread": 0.5})],
-        pairs=[{"a": {}, "b": {}, "label": 1.0, "source": "mined"}],
-        record_items=[probe_set.FrozenRecordItem(
-            record_id="g1.1", stratum="card-disjoint", family="magnitudes",
-            target="dies", label=1.0, entity="E1", group="cardsfolder/s/shock.txt")],
-        sweeps={"toughness": [{"record_id": "g1.1", "entity": "E1"}]},
-        join_rate=0.25, join={"fired": 4, "fired_joined": 1},
-        settings={"games_per_stratum": 300},
+def _selection(corpus_digest: str):
+    from effects.domain.selection_set import SelectionSet
+
+    return SelectionSet(
+        corpus_digest=corpus_digest, r=4, halves={}, probes={}, probe_kinds={}, grids={},
+        rule_tests={}, deviance_samples={}, standard_errors={}, left_out={},
     ).sealed()
 
 
-class TestDigest:
-    def test_a_probing_run_refuses_a_set_frozen_for_another_corpus(self, tmp_path):
-        frozen = _probe_set(corpus_digest="aaa")
-        path = tmp_path / "set.json"
-        path.write_text(json.dumps(frozen.to_json()), encoding="utf-8")
-        with pytest.raises(SystemExit, match="frozen against corpus digest"):
-            probe_set.load_probe_set(path, "bbb")
-        assert probe_set.load_probe_set(path, "aaa").digest == frozen.digest
+class TestTheSelectionSet:
+    """A probing run reads the selection set frozen for its checkpoint's
+    corpus, and refuses any other (FR-071)."""
+
+    def _write(self, directory, selection, name_digest=None):
+        from effects.domain.selection_set import selection_set_path, write_selection_set
+
+        return write_selection_set(
+            selection_set_path(directory, name_digest or selection.corpus_digest), selection)
+
+    def test_the_set_frozen_for_the_corpus_is_read(self, tmp_path):
+        from effect_knowledge_probes import halves
+
+        frozen = _selection("aaa")
+        self._write(tmp_path, frozen)
+        found = halves.load_selection(SimpleNamespace(corpus_digest="aaa"), tmp_path)
+        assert found.digest == frozen.digest
+
+    def test_a_set_frozen_for_another_corpus_is_refused(self, tmp_path):
+        from effect_knowledge_probes import halves
+
+        self._write(tmp_path, _selection("bbb"), name_digest="aaa")
+        with pytest.raises(SystemExit, match="frozen against corpus digest bbb"):
+            halves.load_selection(SimpleNamespace(corpus_digest="aaa"), tmp_path)
 
     def test_an_edited_set_is_refused(self, tmp_path):
-        payload = _probe_set(corpus_digest="aaa").to_json()
-        payload["join_rate"] = 0.5
-        path = tmp_path / "set.json"
+        from effect_knowledge_probes import halves
+
+        path = self._write(tmp_path, _selection("aaa"))
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["r"] = 2
         path.write_text(json.dumps(payload), encoding="utf-8")
         with pytest.raises(SystemExit, match="does not match its own digest"):
-            probe_set.load_probe_set(path, "aaa")
+            halves.load_selection(SimpleNamespace(corpus_digest="aaa"), tmp_path)
 
-    def test_the_json_round_trips_to_the_same_digest(self):
-        frozen = _probe_set(corpus_digest="aaa")
-        again = probe_set.ProbeSet.from_json(json.loads(json.dumps(frozen.to_json())))
-        assert again.sealed().digest == frozen.digest
-        assert again.record_items == frozen.record_items
-
-    def test_a_probing_run_refuses_without_a_set(self, tmp_path):
+    def test_a_probing_run_refuses_without_a_set(self, tmp_path, monkeypatch):
+        context = SimpleNamespace(corpus_digest="aaa")
+        monkeypatch.setattr(common, "probe_context", lambda *a, **k: context)
         with pytest.raises(SystemExit, match="--freeze-probe-set"):
-            probe_set.load_probe_set(tmp_path / "missing.json", "aaa")
+            run.main(["--checkpoint", str(tmp_path / "latest.pt"),
+                      "--reports-dir", str(tmp_path)])
+
 
 # ── compare ─────────────────────────────────────────────────────────────
 
@@ -701,7 +708,7 @@ class TestDigest:
 def _card(name: str, one: float, width: float, digest: str = "d"):
     return _scorecard({
         "checkpoint": f"models/effects/runs/{name}/latest.pt",
-        "probe_set_digest": digest,
+        "selection_set_digest": digest,
         "families": {"magnitudes": {"targets": {"dies": {
             "scope": "entity", "kind": "binary",
             "strata": {"card-disjoint": {"n": 100, "rungs": {
@@ -899,15 +906,16 @@ class TestRung3ReadsTheRightOutput:
         vector[0, 0, FIELD_SLICES["target_legal"][0]] = legal_logit
         return vector
 
-    def test_target_legality_reads_the_gate_not_the_field(self):
-        """Training sets `target_legal` only on legal targets, always to 1, so
-        its output on an illegal entity was never supervised; the gate is what
-        a decision record raises on its legal targets."""
+    @pytest.mark.parametrize("target", ["legal_target", "legal_target_protected"])
+    def test_target_legality_reads_the_field_not_the_gate(self, target):
+        """Gen-3 trains `target_legal` on every card and player of a targeting
+        decision, 1 at a legal target and 0 elsewhere, and no gate on a
+        decision record (FR-074): the field is what learned legality."""
         import torch
 
         outputs = self._outputs(gate_logit=-3.0, legal_logit=5.0)
-        value = ladder._readout("legal_target", outputs, None, 0, 0)
-        assert value == pytest.approx(float(torch.sigmoid(torch.tensor(-3.0))))
+        value = ladder._readout(target, outputs, None, 0, 0)
+        assert value == pytest.approx(float(torch.sigmoid(torch.tensor(5.0))))
 
     def test_damage_taken_reads_the_amount_alone(self):
         """Every damage_taken item took damage, so the gate's doubt about
@@ -1443,15 +1451,6 @@ class TestProbeContext:
     def test_a_corpus_rebuilt_since_training_is_refused(self, tmp_path, monkeypatch):
         with pytest.raises(SystemExit, match="rebuilt"):
             self._context(tmp_path, monkeypatch, recorded_digest="an-older-build")
-
-    def test_a_probe_set_frozen_on_another_corpus_is_refused(self, tmp_path, monkeypatch):
-        context, *_ = self._context(tmp_path, monkeypatch)
-        path = probe_set.probe_set_path(tmp_path, context.corpus_digest)
-        payload = {"corpus_digest": "another-corpus", "items": []}
-        payload["digest"] = probe_set.canonical_digest(payload)
-        path.write_text(json.dumps(payload), encoding="utf-8")
-        with pytest.raises(SystemExit, match="another-corpus"):
-            context.load_probe_set(tmp_path)
 
 
 # ── the line ladder's held-out split ────────────────────────────────────

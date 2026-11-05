@@ -141,7 +141,7 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--from-step", choices=STEPS[1:], default="train",
                         help="skip the steps before this one, e.g. after a crash")
     parser.add_argument("--probe-set-dir", type=Path, default=SHARED_REPORTS,
-                        help="where the shared knowledge-probe set lives")
+                        help="where the shared selection set lives")
     parser.add_argument("--freeze-probe-set", action="store_true",
                         help="freeze the corpus's selection set before training "
                              "(first arm on a corpus)")

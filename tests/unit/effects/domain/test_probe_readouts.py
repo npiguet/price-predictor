@@ -82,6 +82,9 @@ class TestReadouts:
         outputs[0, 2, FIELD_SLICES["target_legal"][0]] = 0.0
         assert read("target_legal", outputs, None, 0, 2) == pytest.approx(0.5)
         assert read("target_legal", outputs, None, 0, 1) < 0.001
+        # The ladder's target-legality probe types read the same field.
+        for probe_type in ("legal_target", "legal_target_protected"):
+            assert read(probe_type, outputs, None, 0, 2) == pytest.approx(0.5)
 
 
 class TestEntitySlots:

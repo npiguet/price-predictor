@@ -6,9 +6,10 @@ through these functions, so the suite runs on any checkpoint — gen-1 included 
 without assuming gen-1's paths or its width of ``e`` (FR-075).
 
 The probe records come from the curated corpus's two validation strata, which
-hold whole games: a probe game is read from the shard the frozen probe set
-recorded for it, not from the raw corpus, which would mean decompressing
-thousands of shards to find a few hundred games.
+hold whole games: a probing run reads the games of the selection set's halves
+from them (``halves``), not from the raw corpus, which would mean
+decompressing thousands of shards to find a few hundred games. Every reader
+here takes gen-3 shards only.
 
 Nothing here does work at import time.
 """
@@ -55,9 +56,15 @@ def stable_hash(value: str) -> int:
 
 
 def load_checkpoint(path: Path):
+    """The checkpoint at ``path``; exits on one written under another input
+    layout than this code builds (``gen-3``), which no probe can read."""
+    from effects.domain.effect_head_input import CheckpointLayoutError
     from effects.infrastructure.effect_model_store import load_effect_checkpoint
 
-    return load_effect_checkpoint(path)
+    try:
+        return load_effect_checkpoint(path)
+    except CheckpointLayoutError as error:
+        raise SystemExit(f"{path}: {error}") from None
 
 
 def sidecar_cache(cards_folders: Iterable[Path], variant_scripts: Path | None = None):
@@ -141,6 +148,28 @@ def line_items(
                 for key in line.provenance:
                     text_by_key[key] = text
     return list(items.values())
+
+
+def acting_text_function(sidecars, surface: Surface):
+    """``key -> text or None``: a key's encoding text on ``surface``, the
+    checkpoint-independent text the probes' fold groups and line labels key on."""
+    from effects.domain.ability_encoder import encoding_text
+
+    memo: dict = {}
+
+    def acting_text(key):
+        if key not in memo:
+            line = sidecars.line_or_none(key)
+            memo[key] = (None if line is None
+                         else encoding_text(line, sidecars.prose_for(key), surface))
+        return memo[key]
+
+    return acting_text
+
+
+def manifest_surface(manifest) -> Surface:
+    """The encoding surface a corpus's manifest records (script when none)."""
+    return getattr(manifest, "surface", None) or Surface.SCRIPT
 
 
 # ── records ─────────────────────────────────────────────────────────────
@@ -301,7 +330,7 @@ class ProbeContext:
     The curated corpus it trained on, verified against the digest the
     checkpoint pinned; the sidecar trees it resolved keys against; and the
     variant-script tree that corpus records, without which a variant card's
-    ability keys resolve to no text. No probe names a corpus, a probe set or a
+    ability keys resolve to no text. No probe names a corpus, a selection set or a
     tree of its own, so every one runs unchanged on any checkpoint.
     """
 
@@ -331,24 +360,6 @@ class ProbeContext:
     def training_dir(self) -> Path:
         return Path(self.corpus) / "training"
 
-    def source_shards(self, names) -> list[Path]:
-        """A probe set's recorded shard names, read under this corpus."""
-        return [Path(n) if Path(n).is_absolute() else Path(self.corpus) / n for n in names]
-
-    def load_probe_set(self, directory: Path) -> dict:
-        """The probe set frozen for this corpus under ``directory``; refuses another's."""
-        from effect_knowledge_probes.probe_set import load_probe_set, probe_set_path
-
-        return load_probe_set(
-            probe_set_path(directory, self.corpus_digest), self.corpus_digest,
-        )
-
-    def probe_records(self, probe_set, stratum: str, record_ids=None) -> list:
-        """The records of the probe set's ``stratum`` games, narrowed to ``record_ids``."""
-        shards = self.source_shards(probe_set.sources.get(stratum, []))
-        return [record for _, record in
-                read_games(shards, set(probe_set.games[stratum]), record_ids)]
-
     def model(self, records: list, *, vocab_path: Path | None = None,
               keyword_path: Path | None = None) -> ProbeModel:
         """The checkpoint ready to run over ``records``, on this context's trees."""
@@ -369,7 +380,7 @@ def probe_context(
     """Resolve one checkpoint's probing inputs; an explicit argument overrides.
 
     Refuses a checkpoint that names no curated corpus, and a corpus rebuilt
-    since the checkpoint trained on it: a probe set frozen against the rebuild
+    since the checkpoint trained on it: a selection set frozen against the rebuild
     describes different games.
     """
     from effects.infrastructure.corpus_store import CorpusStore

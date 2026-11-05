@@ -54,7 +54,7 @@ BOARD_SIZES = tuple(range(0, 9))
 DAMAGE_VALUES = tuple(range(1, 9))
 #: The damage sweep's fixed target toughness: Lightning Bolt's step is 3 → 4.
 DAMAGE_TARGET_TOUGHNESS = 4
-#: Records per sweep in a frozen probe set.
+#: Records per sweep a probing run reads, chosen in ``crc32`` order.
 RECORDS_PER_SWEEP = 20
 #: The activated-damage sweep's two readings of the acting text.
 AS_WRITTEN = "any target"

@@ -2,13 +2,16 @@
 
     python scripts/effect_knowledge_probes/compare.py SCORECARD [SCORECARD ...] [--output PATH]
 
-One table per family: a row per target, stratum and rung, a column per
-checkpoint and probe type. Below it, the arms ranked on rung 1 minus rung 1w per
-probe type and per score — AUC for yes/no targets, R² for amounts, never
+One table per family: a row per target, stratum (and half) and rung, a column
+per checkpoint and probe type. Below it, the arms ranked on rung 1 minus rung
+1w per probe type and per score — AUC for yes/no targets, R² for amounts, never
 averaged together — the comparison that does not depend on each arm's own
-rung 3, so a weaker head cannot buy a larger share. Scorecards frozen against different
-probe sets are compared anyway, with a warning: their numbers describe
-different items.
+rung 3, so a weaker head cannot buy a larger share. Then, per stratum and half
+of the selection set, the arms ranked on what the scorecard reports there:
+the rung-3 AUC of the yes/no probe types and the R² of the amount ones, each
+averaged apart, the grids' and the rule tests' mean scores. Scorecards read
+against different selection sets are compared anyway, with a warning: their
+numbers describe different items.
 
 Nothing here does work at import time.
 """
@@ -41,9 +44,9 @@ def load(paths: list[Path]) -> list[Scorecard]:
 
 
 def digest_warning(cards: list[Scorecard]) -> str | None:
-    digests = {card.probe_set_digest for card in cards}
+    digests = {card.selection_set_digest for card in cards}
     if len(digests) > 1:
-        return ("WARNING: the scorecards record different probe-set digests "
+        return ("WARNING: the scorecards record different selection-set digests "
                 f"({', '.join(sorted(str(d)[:12] for d in digests))}); their "
                 "numbers are over different items and compare by direction only.")
     return None
@@ -92,6 +95,41 @@ def ranking(cards: list[Scorecard]) -> dict[str, list[tuple[str, float]]]:
     return out
 
 
+def half_scores(card: Scorecard) -> dict[str, float]:
+    """``"<stratum>/<half> <score>" -> value`` of one card: the mean rung-3
+    AUC of its yes/no probe types and the mean R² of its amount ones, apart,
+    and the grids' and rule tests' mean scores."""
+    out: dict[str, float] = {}
+    for stratum, by_half in card.halves.items():
+        for half, body in by_half.items():
+            where = f"{stratum}/{half}"
+            for kind, metric in METRICS.items():
+                values = [item["score"] for item in body.get("probes", {}).values()
+                          if item.get("kind") == kind and item.get("score") is not None
+                          and not math.isnan(item["score"])]
+                if values:
+                    out[f"{where} probes {metric}"] = sum(values) / len(values)
+            grids = [item["score"] for item in body.get("grids", {}).values()
+                     if not math.isnan(item["score"])]
+            if grids:
+                out[f"{where} grids"] = sum(grids) / len(grids)
+            component = (body.get("rule_tests") or {}).get("component")
+            if component is not None and not math.isnan(component):
+                out[f"{where} rule tests"] = component
+    return out
+
+
+def half_ranking(cards: list[Scorecard]) -> dict[str, list[tuple[str, float]]]:
+    """Per stratum, half and score, the checkpoints from best to worst."""
+    scores = [half_scores(card) for card in cards]
+    out = {}
+    for name in sorted({key for found in scores for key in found}):
+        scored = [(card.checkpoint or f"#{i}", found.get(name, math.nan))
+                  for i, (card, found) in enumerate(zip(cards, scores))]
+        out[name] = sorted(scored, key=lambda kv: -kv[1] if not math.isnan(kv[1]) else math.inf)
+    return out
+
+
 def render(cards: list[Scorecard]) -> str:
     names = [Path(card.checkpoint or f"#{i}").parent.name or card.checkpoint
              for i, card in enumerate(cards)]
@@ -119,6 +157,12 @@ def render(cards: list[Scorecard]) -> str:
     for probe_type, ranked in ranking(cards).items():
         lines.append(f"- {probe_type}: " + ", ".join(
             f"{Path(name).parent.name or name} ({fmt(gain)})" for name, gain in ranked))
+    by_half = half_ranking(cards)
+    if by_half:
+        lines += ["", "## Ranking per stratum and half", ""]
+        for name, ranked in by_half.items():
+            lines.append(f"- {name}: " + ", ".join(
+                f"{Path(card).parent.name or card} ({fmt(value)})" for card, value in ranked))
     return "\n".join(lines) + "\n"
 
 

@@ -1,7 +1,7 @@
 """Why a probe on the trunk's vector can beat the model's own answer: three checks.
 
     python scripts/effect_knowledge_probes/ladder_check.py CHECKPOINT
-        [--targets damage_taken,may_block,dies] [--probe-set PATH]
+        [--targets damage_taken,may_block,dies] [--half reporting] [--probe-set-dir DIR]
 
 The read-out ladder scores rung 2, a probe fitted on the trunk's vector at an item's
 slot, against rung 3, the model's own output head. On some targets rung 2 scores far
@@ -27,7 +27,6 @@ from __future__ import annotations
 import argparse
 import sys
 from collections import Counter, defaultdict
-from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -39,7 +38,7 @@ if __package__ in (None, ""):
 from _lib.markdown import print_table  # noqa: E402
 from _lib.stats import spearman  # noqa: E402
 
-from effect_knowledge_probes import common, labels, ladder  # noqa: E402
+from effect_knowledge_probes import common, halves, labels, ladder  # noqa: E402
 
 
 def recalibrated(prediction, y, folds, kind) -> np.ndarray:
@@ -102,33 +101,35 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("checkpoint", type=Path)
     parser.add_argument("--targets", default="damage_taken,may_block,dies")
+    parser.add_argument("--half", choices=("reporting", "selection", "both"),
+                        default="reporting")
     parser.add_argument("--probe-set-dir", type=Path, default=common.REPORTS,
-                        help="where the corpus's frozen probe set is")
+                        help="where the corpus's selection set is")
     args = parser.parse_args()
     context = common.probe_context(args.checkpoint)
 
-    targets = set(args.targets.split(","))
-    probe_set = context.load_probe_set(args.probe_set_dir)
+    targets = frozenset(args.targets.split(","))
+    selection = halves.load_selection(context, args.probe_set_dir)
     kinds = {s.name: s.kind for s in labels.TARGETS}
-    items_by_stratum: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
-    for frozen in probe_set.record_items:
-        if frozen.target not in targets:
-            continue
-        # No partner: none of the targets checked here reads one.
-        items_by_stratum[frozen.stratum][frozen.record_id].append(
-            replace(frozen, partner=None).record_item())
-    records_by_stratum = {}
-    for stratum in probe_set.games:
-        records_by_stratum[stratum] = context.probe_records(
-            probe_set, stratum, set(items_by_stratum[stratum]))
-        print(f"{stratum}: {len(records_by_stratum[stratum])} records", flush=True)
-    every = [r for rows in records_by_stratum.values() for r in rows]
+    settings = halves.ReadSettings(probe_types=targets, gen3_probes=False, sweeps=False)
+    acting_text = common.acting_text_function(context.sidecars(),
+                                             common.manifest_surface(context.manifest))
+    chosen = halves.HALVES if args.half == "both" else (args.half,)
+    reads = []
+    for stratum in sorted(selection.halves):
+        for half in chosen:
+            read = halves.read_half(context, selection, stratum, half, settings,
+                                    acting_text=acting_text, keywords_of=None)
+            print(f"{read.name}: {len(read.probe_items)} records", flush=True)
+            reads.append(read)
+    every = [r for read in reads for r in read.probe_records()]
     probe_model = context.model(every)
-    common.heading(args, context, f"{len(every)} probe-set records")
+    common.heading(args, context, f"{len(every)} selection-set records")
 
-    for stratum, records in records_by_stratum.items():
+    for read in reads:
+        records = read.probe_records()
         game_of = {r.record_id: r.game_id for r in records}
-        extracted = ladder.extract_features(probe_model, records, items_by_stratum[stratum])
+        extracted = ladder.extract_features(probe_model, records, read.probe_items)
         by_target = defaultdict(list)
         for item in extracted:
             by_target[item.target].append(item)
@@ -142,8 +143,8 @@ def main() -> None:
             rows = check(data, record_ids, games, kind)
             per_record = Counter(record_ids)
             singles = sum(1 for r in record_ids if per_record[r] == 1)
-            print(f"\n{target}, {stratum}: {len(items)} items, {len(set(record_ids))} records, "
-                  f"{len(set(games))} games, {singles} items alone in their record "
+            print(f"\n{target}, {read.name}: {len(items)} items, {len(set(record_ids))} "
+                  f"records, {len(set(games))} games, {singles} items alone in their record "
                   f"({'AUC' if kind == 'binary' else 'R²'})")
             columns = list(rows[0][1])
             print_table(["read-out", *columns],
