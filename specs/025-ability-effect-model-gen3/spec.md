@@ -573,9 +573,9 @@ and that the reporting half never enters the control score.
   record's generation lacks MUST report the rule as not countable on that generation, never as
   zero.
 - **FR-008**: `python -m effects rule-counts --records-dir DIR [--output PATH] [--cards-folder DIR …]
-  [--variant-scripts DIR] [--rules-dir DIR]` (the last three for the sidecars and catalogue the
-  detectors read, defaulting as `build-corpus` does and to `rules`; `--cards-folder` repeatable,
-  as on `build-corpus`) MUST count, per
+  [--variant-scripts DIR] [--rules-dir DIR] [--workers N]` (the middle three for the sidecars and
+  catalogue the detectors read, defaulting as `build-corpus` does and to `rules`; `--cards-folder`
+  repeatable, as on `build-corpus`; `--workers` the parallel shard readers) MUST count, per
   rule, the records of each polarity, split into three sources: natural records of random-seat
   games, natural records of games between two Forge AIs, and aimed records (those carrying
   `aimed_at`, FR-009a, whatever their game). It MUST write them to `--output` (default
@@ -787,8 +787,10 @@ and that the reporting half never enters the control score.
   `--playability-rate`, and draws nothing for a special one. Every collecting command MUST refuse,
   before any game, a rate outside [0, 1] or a candidate rate above `--playability-rate`. The
   random seat MUST draw from every enumerated candidate, whether written or not.
-- **FR-034**: The resolution payload MUST carry `conditions_met`: for each chain segment with a
-  `Condition$`, `{segment, met}`, keyed by the chain index `attributed_to` uses.
+- **FR-034**: Every resolution effect half MUST carry `conditions_met`: for each conditional clause
+  that resolved in it, a clause carrying any parameter Forge's `SpellAbilityCondition` reads
+  (`Condition$`, `ConditionPresent$`, `ConditionPlayerTurn$`, …), `{segment, met}`, keyed as
+  `attributed_to` spells the segment; `[]` where none resolved.
 - **FR-035**: A prevention that prevented nothing MUST write no note. A probe fork's damage events
   MUST carry their source, recovered from the payload's `assignment_choices`.
 - **FR-036**: Turn-based actions MUST get a record of kind `turn_action` with `subkind` one of
@@ -1072,10 +1074,12 @@ and that the reporting half never enters the control score.
 
 - **FR-077**: A checkpoint MUST add the relation tables, the relation type names in table order
   (every loader refusing a checkpoint whose list differs), the averaged weights, `--rule-mask`,
-  `--deviance-floor`, `--ema-epochs`, `--stratum-weight`, `--relation-values` and the manifest's
-  map content hash (FR-060a). The frozen rule
+  `--deviance-floor`, `--ema-epochs`, `--stratum-weight`, `--relation-values`, the manifest's
+  map content hash (FR-060a), the best control score, the loss denominators and the digest of the
+  selection set it was selected on. The frozen rule
   tests MUST be written with the knowledge-probe set, holding the rule tests' records and their
-  halves with a content digest.
+  halves with a content digest: one selection set per curated corpus,
+  `output/effects/reports/selection-set-<corpus digest>.json`.
 
 #### Boundaries
 

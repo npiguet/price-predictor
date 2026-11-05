@@ -59,13 +59,19 @@ Accepting rewrites every variant's `expected` to Forge's behaviour in the same e
 "rule_map_digest": "…"
 ```
 
-`outputs` keeps only names in the head-output list derived from `HeadField` and the verdict-head
-columns. A rule with no heads line is `missing`.
+`outputs` keeps only names in the head-output list `rule_catalogue.head_outputs()` derives from
+`HeadField`, the verdict and global heads' layouts, `gate` and `created_objects`. A rule with
+no heads line is `missing`. The snapshot holds every tagged rule and every rule a copy can be drawn
+for.
 
 ## Directed-rule registry (Java)
 
-`FE/directed/DirectedRules.java` maps rule id → `DirectedRule` with
-`Optional<Binding> precondition(Game)` and `Map<String variantLabel, Application>`, each `Application`
-naming its `ForkOperation`. A JUnit contract test reads `rules/scenarios/*.json` and fails when a
-registered variant is missing or its operation differs. `DirectedRulesMain` prints the registered rule
-ids, one per line.
+`FE/directed/DirectedRules.java` lists the registered rules (`DirectedRules.REGISTERED`), one class
+per rule in `FE/directed/rules/`. A `DirectedRule` names its rule id, the scenario whose base variant
+its precondition waits for (two scenarios of a rule may share a variant label), a `BoardPrecondition`
+(`bind(Game)`, returning the `Binding` of live objects by role, one that throws read as not met) and
+`Map<String variantLabel, Application>`, each `Application` naming its `ForkOperation` and building the
+`BoardEdit` from the fork's binding (an edit of another operation is refused). A JUnit contract test
+reads `rules/scenarios/*.json` and fails when a registered scenario does not exist or does not list the
+rule, a registered variant is missing, is the base variant, or its operation differs.
+`DirectedRulesMain` prints the registered rule ids, one per line.

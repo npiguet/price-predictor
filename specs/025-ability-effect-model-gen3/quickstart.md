@@ -18,14 +18,16 @@ Commands below are the ones this feature adds or changes. Paths are the defaults
 
 ```bash
 python scripts/rules_catalogue.py validate
-python -u -m effects rule-counts --records-dir output/effects/records-gen2
+python -u -m effects rule-counts --records-dir output/effects/records-gen2 --workers 10
+python scripts/rules_catalogue.py directed-rules --counts output/effects/rule-counts.json
 ```
 
 Check: `validate` passes with every scenario declaring a detector or `none` and every non-base
 variant classified. The printed table and `output/effects/rule-counts.json` agree. Review the listed
 records against Forge, starting with `rules/FINDINGS.md`'s suspected departures, and record outcomes
-on the scenarios. The counts decide which rules to enable for directed forks and coverage rounds;
-record that choice in the gen-3 record.
+on the scenarios. The counts decide which rules to enable for directed forks and coverage rounds:
+`directed-rules` writes `rules/directed-fork-rules.txt` and `rules/coverage-wording-cards.txt` from
+them; record that choice in the gen-3 record.
 
 ## Stage 2 — the relation-aware trunk (story 4, no gen-3 data)
 
@@ -54,8 +56,9 @@ death of the state-based loop its trigger arrived in; directed-fork records carr
 `directed`, `fork = true`. Record gzipped bytes per game and games per hour against a gen-2 run with
 the same flags; if bytes per game more than double, raise it before stage 5.
 
-A pilot corpus built from these records cannot meet the precision target: `build-corpus` writes the
-corpus and manifest, then exits 1. Read the manifest anyway; the freeze is not run on a pilot.
+`build-corpus` over a pilot judges the rule-test component alone, which a few dozen frequent rules
+already pass, so it exits 0; the freeze exits 1 on a pilot, whose halves hold fewer than 300 games.
+Read the manifest anyway; the freeze is not run on a pilot.
 
 ## Stage 4 — the map rerun after each layout change (story 5)
 
@@ -74,7 +77,7 @@ Check: the rules newly learnable are printed and committed with the change.
 python -u -m sealed match-outcomes --effect-records --directed-fork-rules "$(paste -sd, rules/directed-fork-rules.txt)" <run flags>
 python -u -m effects collect-coverage --wording-cards <any-target cards> <run flags>
 python -u -m effects collect-coverage --wording-cards rules/coverage-wording-cards.txt --directed-fork-rules "$(paste -sd, rules/directed-fork-rules.txt)" <run flags>
-python -u -m effects collect-variants --directed-fork-rules 702.16 <run flags>
+python -u -m effects collect-variants <run flags>
 ```
 
 ## Stage 6 — curate and freeze (story 6, story 8)
@@ -109,9 +112,9 @@ the anthem probe and the combat grids beside the default.
 ## Stage 8 — report
 
 ```bash
-python -u -m effects encode-abilities --checkpoint models/effects/latest.pt
-python -u -m effects evaluate-effect-model --checkpoint models/effects/latest.pt
-python -u scripts/effect_knowledge_probes/run.py --checkpoint models/effects/latest.pt
+python -u -m effects encode-abilities --checkpoint models/effects/effect-model/latest.pt
+python -u -m effects evaluate-effect-model --checkpoint models/effects/effect-model/latest.pt
+python -u scripts/effect_knowledge_probes/run.py --checkpoint models/effects/effect-model/latest.pt
 ```
 
 Check: the scorecard reports every probe and the rule tests on the reporting half. Results go into the

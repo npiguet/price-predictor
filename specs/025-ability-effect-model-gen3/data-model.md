@@ -98,8 +98,10 @@ carries `aimed_at`). A gen-2 record is natural.
 ### RuleCounts (new; `rule-counts.json` and the manifest)
 
 ```
-rule → { polarity → { source → count } }  plus  not_countable: [rule], none: {rule → reason}, review: [{record_id, scenario}]
+records: n, rules: rule → { polarity → { source → count } }, not_countable: [rule], none: {rule → reason}, review: [{record_id, scenario}]
 ```
+
+A rule no record tags is absent from `rules`; absent is not "not countable".
 
 ## Records
 
@@ -115,21 +117,29 @@ rule → { polarity → { source → count } }  plus  not_countable: [rule], non
 `generation`, `aimed_at`, `directed` are collection metadata; `test_schema_compatibility.py` checks that
 flipping them leaves `SurfaceBuilder.build` unchanged.
 
-Flag signature added: directed fork = any kind, `interventional = false`, `fork = true`, `directed` set.
+Flag signatures added: directed fork = any kind, `interventional = false`, `fork = true`, `directed`
+set; protection fork (FR-058) = any kind, `interventional = true`, `fork = true`, its cost halves
+carrying `link_id` as live halves do. A forced resolution stays the only interventional record
+without a partner.
 
 ### Snapshot (extended)
 
-Per entity: `owner`. Per card: `lines` (spell, activated, trigger, static, replacement and keyword
-lines, each `{keys, kind, granted, active?, cast_with?, chosen?}`), `face_state`, `base_pt`
-(set base) and `pt_boosts`, `designations`, `x_paid`, `chosen`, `costs_paid`, `history`, `order_rank`,
+Per entity: `owner`, `role` (null on tier entities). Per card: `lines` (spell, activated, trigger,
+static, replacement and keyword lines, each `{keys, kind, granted, active?, cast_with?, chosen?,
+fragment?, affected?}`; a keyword line's `fragment` is the instance as Forge spells it, `affected` a
+static's cards then players), `face_state`, `base_pt` (set base) and `pt_boosts`, `designations`, `x_paid`, `chosen`, `costs_paid`, `history`, `order_rank`,
 `real_face` (face-down only), `printed_loyalty`, `printed_defense`, `mana_cost`, `counters` (every
 named type). Per player: `speed`, `city_blessing`, `rad`, `monarch`, `initiative`, `turn_counts`,
 `max_land_plays` (int, null when unlimited; beside `this_turn.lands_played`).
 Global: `day_night` (`day` | `night` | null). Command zone: `floating_effects` and `delayed_triggers`
 (`{source_lines, affected, remembered, duration, shield_left}`), `dungeons` (`{player, dungeon,
-room}`). Extra card entities: `library_cards` (top card plus every one the events name, with
-position), `exiled_with`, `mutate_components`, `last_known` (the pending event's subject). Relations:
-`links: [{from, to, type}]` with the § 10.3 family names and target index; an `affects` link ends at
+room}`). Extra card entities are appended to `entities` after the tiers, each with its `role`:
+`library_card` (top card plus every one the events name, with position), `exiled_with`,
+`mutate_component`, `last_known` (the pending event's subject, under id `L<card id>`). `refs.random`
+holds the half's dice and coin flips. Gen-2's `printed`, `granted_attached` and `pt` are gone.
+Relations: `links: [{from, to, type, index?}]` with the § 10.3 family names, each link written once in
+its forward direction, `index` on `targets` only; the four families the reader builds (`line_of`,
+`line_of_the_same_card`, `mode_of`, `has_the_same_name`) are not collected; an `affects` link ends at
 a card or a player (FR-026a), and a static line's or floating effect's `affected` lists cards, then
 players. Shapes as
 `rules/gen3-fields.json` gives them; wire form in [contracts/record-schema-delta.md](contracts/record-schema-delta.md).
@@ -138,13 +148,15 @@ players. Shapes as
 
 | Payload | Field | Rule |
 |---|---|---|
-| resolution | `conditions_met: [{segment, met}]` | one entry per chain segment with `Condition$` |
+| resolution | `conditions_met: [{segment, met}]` | on every effect half: one entry per conditional clause that resolved (any parameter `SpellAbilityCondition` reads), `segment` spelled as `attributed_to`; `[]` when none |
 | playability `decision` candidate | `verdict.timing`, `failed_checks: [{check, responsible_static}]`, `legal_targets` (all clauses, no cap), `land_play` | `timing = false` ⇒ a `casting_speed` entry; a land-play candidate (`land_play = true`, FR-033a) fails only `whose_turn`, `casting_speed`, `zone`, `static_prohibition` or `land_play_limit` |
-| `attackers` | `anchor_attacker`, `legal_defenders`, `must_attack`, `tapped_by_attack?` | one record per attacker; `tapped_by_attack` only when the anchor was declared |
-| `blockers` | `must_block` per listed creature | |
+| `attackers` | `anchor_attacker`, `legal_defenders`, `must_attack`, `tapped_by_attack?` | one record per creature the attacking player controls, a tapped one included; `tapped_by_attack` only when the anchor was declared; gen-2's `legal_attackers` and `forbidden` kept; no `what_if` |
+| `blockers` | `must_block` | the refs of the listed creatures a requirement makes block the anchor |
 | `turn_action` | `events` | |
 | `combat` | snapshot at the start of the damage step | shape at the first damage event |
-| probe `combat` | damage events carry `source` | from `assignment_choices` |
+| `combat`, observed and probe | damage events carry `source` | the bus's `cause`, else from `assignment_choices` |
+| decision candidate | `cost_after_adjustment` | the cost after Forge's cost adjustment |
+| events | `pt_change.set_pt`, zone changes' `library_position`, `card_looked_at.mode`, `token_created` controller and counters, `ability_change` subjects, new `state_flag_change` flags | wire shapes in [contracts/record-schema-delta.md](contracts/record-schema-delta.md) |
 
 ## Curation
 
@@ -161,7 +173,9 @@ Member `curation` on every record `build-corpus` writes (T1):
 | `rule_entities` | list of entity refs | the drawn rule's tag entities, on an added copy |
 
 Invariants: `copies ≤ reuse cap`; `drawn_rule ∈ drawn_rules`; a natural copy has `drawn_rule = null`.
-A protection copy (FR-058) carries `synthetic = true` and its `drawn_rule`.
+A protection copy (FR-058) is a synthetic record `<record_id>~pc<i>` with `natural_share = 0` and its
+`drawn_rule`. A validation stratum holds a record once per copy, so a reader of distinct records
+dedupes by `record_id` (FR-068a).
 
 ### RuleRow (new, manifest)
 
@@ -170,9 +184,10 @@ Per class, rule and polarity, each count split by `RuleSource`:
 | Field | Rule |
 |---|---|
 | `available` | distinct tagged records |
-| `share` | the half (or, for `other`, none) |
+| `share` | the half (or, for `other` and unbudgeted rules, none), per polarity |
 | `written` | natural plus added copies |
-| `shortfall` | `max(0, share − written)` |
+| `added` | the copies rule budgets added |
+| `shortfall` | `max(0, share − written)`, per polarity |
 
 ### CorpusManifest (extended)
 
@@ -183,15 +198,32 @@ closed lists), `halves` (stratum → half → [game_id]). Gen-3 manifests only; 
 
 ### Placement (new, `stratum_placement.py`)
 
-Input: per-game inventories `game → {(rule, polarity): n}` and the game-disjoint draws. Output:
-`GameStrata` gains `halves`. Deterministic for a given corpus; not stable across corpus growth (R3).
+Input: `GameCensus` (games, held-out games, random-seat games, keyword-combat games, held-out text
+games, per-game inventories `game → {(rule, polarity): n}` of rule-test-eligible records) and a
+`PlacementRule` (gen-2's draws, the pool factor, the half minimum, the item error). Only Forge-AI
+games enter a validation stratum. Output: `GameStrata` gains `halves` and `left_out_of_half`.
+Deterministic for a given corpus; not stable across corpus growth (R3).
 
 ## Model
 
 ### Relation (new)
 
-`(from_slot, to_slot, type)`, `type` an index into the frozen `RelationType` list (M4). Collated as a
-`(N, 4)` long tensor `[batch, from, to, type]`. Built after context dropout and gate-2 stripping.
+`(from_slot, to_slot, type)`, `type` an index into the frozen `RELATION_TYPES` list (M4: 31 families,
+each forward and reverse, `targets` per index 0, 1, 2 and 3+; 68 types). Collated as a `(N, 4)` long
+tensor `[batch, from, to, type]`. Built after context dropout and gate-2 stripping, from the record's
+`links`, the four reader-built families and `[ACT]`'s `targets` and `source_of`; a line end with no
+slot reads its card's, and a link to an object with no slot is dropped.
+
+### Card slot (extended)
+
+A sequence of named parts (`card_segments`). Subtypes and chosen creature types are id lists into one
+learned embedding; each named counter is a row of a counter embedding scaled by its count and its
+log1p; the subtype and counter lists are Forge's, checked in (`forge_vocabularies.py`). Keyword flags
+are a multi-hot over `KEPT_KEYWORD_FLAGS` (85). Floating effects and delayed triggers the snapshot
+gives no entity are card slots in the command zone, with a duration one-hot and the shield left. A
+dungeon is a card slot holding the one keyword line `convert` renders for all its rooms. Every line is
+an ability slot with seven flags (active, granted, granted temporarily, cast-with flag and count raw
+and log1p, chosen).
 
 ### RelationEncoderLayer (new)
 
@@ -201,10 +233,14 @@ Parameters: stock `TransformerEncoderLayer` names plus `rel_k`, `rel_v` of shape
 
 ### Output layout (extended)
 
-The 22 outputs of root § 11.2 and the § 11.3 extensions as `FieldSpec` rows; legality fields scored
-on a gate-free path; a new `global` aux head; the verdict head gains `timing` and 11 failed-check
-columns, a cost-adjustment delta per mana symbol kind, `resolution_outcome`, `effects_created` and
-`replacement_result`. Each count field gains a learned log-dispersion.
+The 22 outputs of root § 11.2 and the § 11.3 extensions as `FieldSpec` rows (300 per-entity fields,
+1,386 columns); legality fields scored on a gate-free path; a new shipped `global` head (turn-structure
+changes, day/night change); the verdict head (170 columns) gains `timing`, one failed-check column per
+`PlayabilityCheck`, a cost-adjustment delta per mana symbol kind (on casts only),
+`resolution_outcome`, `effects_created` and `replacement_result`, each a `RecordField` with its own
+mask column; created-objects slots gain counters, an other-controller bit, a kind, subtypes and
+keywords. The subtype and keyword output lists are `output_vocabularies.py`, recorded in
+`layout_settings`. Each count field gains a learned log-dispersion.
 
 ### WeightAverage (new)
 
@@ -218,13 +254,16 @@ columns, a cost-adjustment delta per mana symbol kind, `resolution_outcome`, `ef
 
 Adds the relation tables (inside the model state), the averaged weights (as the saved state),
 `best_control_score`, `rule_mask`, `deviance_floor`, `ema_epochs`, `stratum_weight`,
-`relation_values`, `relation_types`, `relation_target_indices`, `rule_map_digest`,
-`loss_denominators`, `selection_set_digest`. Removes `best_val_loss`. `training_settings["input_layout"]
-= "gen-3"`; any other value is refused (M1).
+`relation_values`, `rule_map_digest`, `loss_denominators`, `selection_set_digest`, each under its
+own key. Removes `best_val_loss`. `training_settings` holds `input_layout = "gen-3"` and, from
+`layout_settings()`, the relation types, the relation target indices, the subtypes and named counters
+and the closed output lists; any other layout or list is refused (M1).
 
 ### resume.pt (extended)
 
-Adds `weight_average` (`state`, `start_step`), `loss_denominators`, `best_control_score`.
+Adds `weight_average` (`state`, None while warmup lasts, and `start_step`), `loss_denominators`,
+`best_control_score`; the stopper's state names its measure (`control_score`), and a resume file whose
+stopper kept the loss is refused.
 
 ## Selection and evaluation
 
@@ -237,13 +276,19 @@ File `output/effects/reports/selection-set-<corpus digest>.json`, written by the
 | `corpus_digest` | the curated corpus it was frozen against |
 | `r` | 4 |
 | `halves` | stratum → `selection` \| `reporting` → [game_id] |
-| `probes` | stratum → half → probe type → [record ref] |
-| `grids` | stratum → half → grid → {cells, records} |
-| `rule_tests` | stratum → half → rule → {fires: [record ref + entities], does_not_fire: [...]} |
-| `deviance_samples` | stratum → half → [record ref] |
-| `standard_errors` | item → {hard, soft} or a scalar |
-| `left_out` | stratum → half → component → [{item, reason}] |
+| `probes` | stratum → half → probe type → [{record_id, game_id, entity, label}] |
+| `probe_kinds` | probe type → `binary` \| `amount` |
+| `grids` | stratum → half → grid → {cells: [{cell, outcome}], records: [{record_id, game_id, entities}]} |
+| `rule_tests` | stratum → half → rule → {fires: [{record_id, game_id, entities}], does_not_fire: [...]} |
+| `deviance_samples` | stratum → half → [{record_id, game_id, copy}] |
+| `standard_errors` | `stratum/half/component/item` → {hard, soft} for an output field, else a scalar; infinite written as null |
+| `left_out` | stratum → half → component → [{item, reason}]; an untested rule's reason is `untested` |
+| `settings` | the thresholds the freeze ran under, the grid target error and record cap included |
 | `digest` | sha256 over the canonical JSON |
+
+A grid keeps the fewest records, smallest keyed hash first, that bring its worst-case standard error
+to 0.09, at most 512; the deviance sample holds every copy up to 16,384 a half. The deviance
+component's items are the per-entity head's fields, the gate included.
 
 Invariants checked at the freeze (exit 1 naming stratum, half, component): every component's
 standard error ≤ 0.05; every polarity, probe type and record-drawn grid cell within r; every grid cell
@@ -257,4 +302,5 @@ StratumScore = mean of the four components
 ControlScore = W · card_disjoint + (1 − W) · game_disjoint
 ```
 
-An empty component in an epoch is exit 1 (FR-068c).
+An empty component in an epoch is exit 1 (FR-068c). Scoring the reporting half of a saved
+checkpoint (`evaluate-effect-model`, the probes) is lenient: an empty component is NaN and named.

@@ -500,9 +500,10 @@ bracket they follow.
 
 ## 8.9 Resolution branches
 
-The resolution payload carries `conditions_met`: for each chain segment with a
-`Condition$`, whether the condition held, keyed by the segment index `attributed_to`
-uses.
+Every resolution effect half carries `conditions_met`: for each conditional clause that
+resolved in it, a clause carrying any parameter Forge's `SpellAbilityCondition` reads
+(`Condition$`, `ConditionPresent$`, `ConditionPlayerTurn$`, …), whether the condition held,
+keyed as `attributed_to` spells the segment; `[]` where none resolved.
 
 ## 8.10 Event notes
 
@@ -1117,12 +1118,17 @@ beside a run with the value tables on.
 ```
 python scripts/rules_catalogue.py split | packets | premark | validate | status | gen3-fields
 
+python scripts/rules_catalogue.py directed-rules
+    --counts PATH                        gen-2's per-rule counts, as rule-counts writes them
+    [--cards-folder DIR]                 default output/cardsfolder; names of the wording cards
+
 python -m effects rule-counts
     --records-dir DIR                    records to count; gen-2 or gen-3
     [--output PATH]                      default output/effects/rule-counts.json
     [--cards-folder DIR]                 repeatable; default as build-corpus; sidecars the detectors read
     [--variant-scripts DIR]              default as build-corpus
     [--rules-dir DIR]                    default rules; scenarios and their detectors
+    [--workers N]                        default the CPU count; parallel shard readers
 
 python -m sealed match-outcomes
     [--playability-rate P]               default 0.01; stage 1: share of decision candidates evaluated (§ 8.8)
@@ -1136,7 +1142,16 @@ python -m sealed match-outcomes
 python -m effects collect-coverage
     [--wording-cards PATH]               cards for the "any target" coverage round (§ 8.11)
 
+python scripts/effect_knowledge_probes/run.py --freeze-probe-set
+    --corpus DIR                         the curated corpus the selection set is frozen for
+    [--probe-set-dir DIR]                default output/effects/reports/
+
+python scripts/effect_knowledge_probes/run.py --checkpoint PATH
+    [--half both|selection|reporting]    default both; the selection set's halves read
+
 python -m effects train-effect-model
+    [--reports-dir DIR]                  default output/effects/reports/; where the selection set is found
+    [--e-dim D]                          default 256
     [--rule-mask hard|soft]              default hard
     [--deviance-floor F]                 default 0.04; constant-prediction loss, in nats
     [--ema-epochs E]                     default 1; span of the averaged weights
@@ -1153,14 +1168,22 @@ python -m effects train-effect-model
 `--directed-fork-probability` as `match-outcomes` does.
 
 `collect-coverage` takes `--directed-fork-rules` as a label only: it runs no directed fork,
-and the listed rules go to every record's `aimed_at` (§ 8.1).
+and the listed rules go to every record's `aimed_at` (§ 8.1). It refuses `--wording-cards`
+beside `--only-cards`.
+
+`combat_grid.py`, `evasion_grid.py`, `damage_grid.py` and `ladder_check.py` take `--half
+reporting|selection|both` (default reporting) and `--probe-set-dir`; `combat_grid.py` takes
+`--blocks one|several` (default one).
 
 Startup validation
 
 - `build-corpus`, `train-effect-model`, `evaluate-effect-model` and the knowledge probes
   check that every record carries `generation: 3`.
 - `train-effect-model` checks that the corpus manifest carries per-rule counts, and that
-  the knowledge-probe set and rule tests are frozen for the corpus.
+  the selection set frozen for the corpus exists under `--reports-dir`, frozen against that
+  corpus and unedited. A resume refuses a change to `--rule-mask`, `--deviance-floor`,
+  `--ema-epochs`, `--stratum-weight` or `--relation-values`.
+- The freeze checks that each half of each validation stratum holds at least 300 games.
 - Every collecting command checks that `--playability-rate`, `--zone-candidate-rate` and
   `--plain-candidate-rate` lie in [0, 1], and that neither candidate rate exceeds
   `--playability-rate`.
@@ -1173,7 +1196,8 @@ Exit codes
 | code | meaning |
 |---|---|
 | 0 | success |
-| 1 | a startup check failed; or, at `build-corpus` or the freeze of the probe set and rule tests, a validation component missed its precision target; or, in training, a validation component had nothing to score (§ 14.2) |
+| 1 | a startup check failed; or, at `build-corpus` (the rule tests) or the freeze of the selection set, a validation component missed its precision target or a grid cell is empty; or, in training, a validation component had nothing to score (§ 14.2) |
+| 2 | `match-outcomes` only: a sampling rate outside [0, 1], or a candidate rate above `--playability-rate` (the sealed CLI's code for a refused flag, as for the random-seat flags) |
 
 Printed output
 
@@ -1182,7 +1206,11 @@ Printed output
 - `rule-counts` prints, per rule, the records in which its effect happens and does not,
   split by the three sources of § 5.2.
 - Each training epoch line carries each stratum's score and its components, and the
-  control score.
+  control score; the line after it gives the control score's seconds against the epoch's
+  training seconds.
+- `evaluate-effect-model` prints, per stratum, the reporting half's components and score,
+  each component's items and the rule tests per rule, then the reporting half's control
+  score beside the checkpoint's best.
 - Each training shard's line carries the pre-clip gradient norm of the key tables and of
   the value tables, beside the parameter groups' norms, read on the shard's last step as
   they are. The `head` group's norm still includes the tables.
@@ -1195,11 +1223,13 @@ Printed output
 | `rules/heads/<unit>.jsonl` | by the map | per-rule verdict, missing facts, gen-3 fields, learnable after gen-3 |
 | `rules/gen3-fields.json`, `rules/GEN3-FIELDS.md` | by the map's merge | gen-3's inputs, outputs, extensions and fixes |
 | effect-record shards | by collection | gen-3 records, `generation: 3`, aimed records marked by `aimed_at` (§ 8.1) |
-| `manifest.json` | by `build-corpus` | adds per-rule counts by source (§ 5.2), the map snapshot: each tagged rule's verdict and outputs, with the map's content hash (§ 12.1), per-rule budgets per polarity, one-sided rules and unbudgeted rules (§ 12.1), one-sided conditions (§ 12.2), rules left out of a validation half and `turn_action` records left out by subkind (§ 12.4), and the closed subtype and keyword lists (§ 11.2, § 11.3) |
+| `rules/directed-fork-rules.txt`, `rules/coverage-wording-cards.txt` | by `rules_catalogue.py directed-rules` | the rules the full collection's directed forks run for (§ 6), and the cards of the wording-card coverage round (§ 8.11) |
+| curated shards | by `build-corpus` | every record carries `curation` (natural share, copies, drawn rule, drawn rules, rule entities); a protection copy is the synthetic record `<record_id>~pc<i>` (§ 12.1, § 12.3) |
+| `manifest.json` | by `build-corpus` | adds per-rule counts by source (§ 5.2), the map snapshot: each tagged rule's verdict and outputs, with the map's content hash (§ 12.1), per-rule budgets per polarity, one-sided rules and unbudgeted rules (§ 12.1), one-sided conditions (§ 12.2), rules left out of a validation half and `turn_action` records left out by subkind (§ 12.4), the closed subtype and keyword lists (§ 11.2, § 11.3), and each validation stratum's selection and reporting halves (§ 14.2) |
 | `output/effects/rule-counts.json` | by `rule-counts` | per-rule counts by source over a records set (§ 5.2) |
-| frozen rule tests | with the knowledge-probe set | the rule tests' records and their selection and reporting halves, with a content digest; the balance ratio r and the items left out by the precision target (§ 14.2) |
-| checkpoints | by `train-effect-model` | add the relation tables, the relation type names in table order (§ 10.3), the averaged weights, `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight`, `--relation-values` and the manifest's map content hash; record the input layout `gen-3`, and every loader refuses a checkpoint of any other layout, gen-1 and gen-2 included, or with a different list of relation type names |
-| `resume.pt` | every epoch | adds the averaged weights |
-| knowledge-probe scorecards | per checkpoint | add the probes of § 14.5 and the rule tests, per half |
+| `output/effects/reports/selection-set-<corpus digest>.json` | by the freeze | per validation stratum and half: the probe items, the grid records, the rule tests and the deviance sample; the balance ratio r, each item's standard error, the items left out by the precision target and the thresholds; a content digest (§ 14.2) |
+| checkpoints | by `train-effect-model` | add the relation tables, the relation type names in table order (§ 10.3), the averaged weights, the best control score, the loss denominators, `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight`, `--relation-values`, the manifest's map content hash and the selection set's digest; record the input layout `gen-3` with the subtype, named-counter and closed output lists, and every loader refuses a checkpoint of any other layout, gen-1 and gen-2 included, or with a different list |
+| `resume.pt` | every epoch | adds the averaged weights, the loss denominators and the best control score |
+| knowledge-probe scorecards | per checkpoint | add the selection set's digest and, per stratum and half, the probes of § 14.5 and the rule tests |
 
 Run results land in the gen-3 record's Result section, never in this spec.
