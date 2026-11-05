@@ -184,6 +184,7 @@ _TORCH_FREE = (
     "effects.domain.seeded_draw",
     "effects.domain.rule_budgets",
     "effects.domain.stratum_placement",
+    "effects.domain.score_scales",
     "effects.domain.fork_operation",
     "effects.domain.rule_catalogue",
     "effects.domain.rule_outcomes",

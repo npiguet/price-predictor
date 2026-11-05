@@ -39,7 +39,6 @@ Torch-free: ``build-corpus`` places in its main process.
 
 from __future__ import annotations
 
-import math
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
@@ -49,6 +48,7 @@ from effects.domain.corpus_plan import GameStrata
 from effects.domain.records import EffectRecord
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import RuleTag
+from effects.domain.score_scales import auc_standard_error, component_standard_error
 from effects.domain.seeded_draw import stable_order
 from effects.domain.strata import Half, Stratum
 
@@ -68,25 +68,13 @@ MAX_COMPONENT_ERROR = 0.05
 POOL_FACTOR = 10.0
 
 
-def rule_test_standard_error(fires: int, does_not_fire: int) -> float:
-    """A rule test's worst-case standard error on the rescaled scale:
-    Hanley–McNeil at an AUC of 0.5, times two (research E4),
-    ``2·√((n₊ + n₋ + 1) / (12·n₊·n₋))``; infinite without both polarities.
-
-    The freeze's estimator (``score_scales``, T150) is to replace this copy.
-    """
-    if fires <= 0 or does_not_fire <= 0:
-        return math.inf
-    return 2 * math.sqrt((fires + does_not_fire + 1) / (12 * fires * does_not_fire))
-
-
 def rule_test_records_needed(max_item_error: float = MAX_ITEM_ERROR) -> int:
     """Records of each polarity a rule test needs in a half: the smallest n
     whose worst-case rescaled standard error with n records each side,
     ``2·√((2n + 1) / (12n²))``, is at most ``max_item_error`` (FR-068b): 68
     at 0.1."""
     n = 1
-    while rule_test_standard_error(n, n) > max_item_error:
+    while auc_standard_error(n, n) > max_item_error:
         n += 1
     return n
 
@@ -400,8 +388,9 @@ def rule_test_misses(
     """Every half whose rule-test component misses its precision target.
 
     A rule enters a half's component when its test's standard error
-    (:func:`rule_test_standard_error`) is at most ``max_item_error``; the
-    component's, ``√(Σ SEᵢ²) / m`` over its m rules, must be at most
+    (``score_scales.auc_standard_error``) is at most ``max_item_error``; the
+    component's (``score_scales.component_standard_error``),
+    ``√(Σ SEᵢ²) / m`` over its m rules, must be at most
     ``max_component_error``, and a half where no rule enters misses it. The
     counts are every rule-test-eligible record, before the freeze subsamples
     a polarity: the freeze can only raise a standard error, so a half missing
@@ -416,13 +405,12 @@ def rule_test_misses(
             rules = sorted({rule_id for rule_id, _ in counts})
             errors = [
                 error for error in (
-                    rule_test_standard_error(counts[rule_id, Polarity.FIRES],
-                                             counts[rule_id, Polarity.DOES_NOT_FIRE])
+                    auc_standard_error(counts[rule_id, Polarity.FIRES],
+                                       counts[rule_id, Polarity.DOES_NOT_FIRE])
                     for rule_id in rules)
                 if error <= rule.max_item_error
             ]
-            component = (math.sqrt(sum(e * e for e in errors)) / len(errors)
-                         if errors else math.inf)
+            component = component_standard_error(errors)
             if component > rule.max_component_error:
                 misses.append(PrecisionMiss(stratum, half, len(errors), component))
     return misses

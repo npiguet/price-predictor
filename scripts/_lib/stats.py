@@ -11,6 +11,12 @@ from dataclasses import dataclass
 import numpy as np
 from scipy import stats as _scipy_stats
 
+# AUC and R² are the package's, so a probe and the control score compute one
+# number one way (research E1); ``auc`` ranks with ties counted half and drops
+# non-finite scores, NaN without both labels.
+from effects.domain.score_scales import auc  # noqa: F401  (re-exported)
+from effects.domain.score_scales import r_squared as weighted_r2
+
 
 def finite_pair(x, y) -> tuple[np.ndarray, np.ndarray]:
     """``x`` and ``y`` as float arrays, restricted to the rows finite in both."""
@@ -44,18 +50,6 @@ def spearman(x, y, min_n: int = 3) -> float:
     if _degenerate(x, y, min_n):
         return float("nan")
     return float(_scipy_stats.spearmanr(x, y).statistic)
-
-
-def auc(labels, scores) -> float:
-    """ROC AUC of ``scores`` against yes/no ``labels``, ties counted half; NaN
-    without both labels."""
-    from sklearn.metrics import roc_auc_score
-
-    labels = np.asarray(labels, dtype=bool)
-    scores = np.asarray(scores, dtype=np.float64)
-    if labels.all() or not labels.any():
-        return float("nan")
-    return float(roc_auc_score(labels, scores))
 
 
 def bootstrap_ci(values, stat=np.mean, n_boot: int = 4000, seed: int = 0,
@@ -93,16 +87,6 @@ def wcorr(x, y, w=None) -> float:
     cxx = np.average((x - mx) ** 2, weights=w)
     cyy = np.average((y - my) ** 2, weights=w)
     return float(cxy / np.sqrt(cxx * cyy)) if cxx > 0 and cyy > 0 else float("nan")
-
-
-def weighted_r2(y, pred, w=None) -> float:
-    y = np.asarray(y, dtype=float)
-    pred = np.asarray(pred, dtype=float)
-    w = np.ones_like(y) if w is None else np.asarray(w, dtype=float)
-    mean = float((w * y).sum() / w.sum())
-    ss_res = float((w * (y - pred) ** 2).sum())
-    ss_tot = float((w * (y - mean) ** 2).sum())
-    return 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
 
 
 @dataclass(frozen=True)

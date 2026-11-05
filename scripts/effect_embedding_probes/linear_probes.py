@@ -49,12 +49,11 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from _lib.stats import oof_predict, weighted_r2
+from _lib.stats import auc, oof_predict, weighted_r2
 from joblib import Parallel, delayed
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression, Ridge
-from sklearn.metrics import roc_auc_score
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
 
@@ -119,7 +118,7 @@ def probe_binary(X, y, groups) -> float:
     except ValueError:
         # A training fold holding one class only: scikit-learn refuses to fit it.
         return float("nan")
-    return float(roc_auc_score(y, pred))
+    return auc(y, pred)
 
 
 def probe_multiclass(X, y, groups) -> float:

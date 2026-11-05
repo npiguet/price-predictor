@@ -31,9 +31,9 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 import numpy as np
-from _lib.stats import weighted_r2
 
 from effect_knowledge_probes import readout
+from effects.domain.score_scales import auc, r_squared
 
 # ── constants fixed in code (research.md § Constants fixed in code) ─────
 
@@ -89,8 +89,6 @@ def width_vector(text: str, width: int, seed: int = SEED) -> np.ndarray:
 def score(kind: str, y: np.ndarray, prediction: np.ndarray,
           weight: np.ndarray | None = None) -> float:
     """AUC for a yes/no target, R² for an amount; NaN where undefined."""
-    from sklearn.metrics import roc_auc_score
-
     y = np.asarray(y, dtype=np.float64)
     prediction = np.asarray(prediction, dtype=np.float64)
     ok = np.isfinite(y) & np.isfinite(prediction)
@@ -101,8 +99,8 @@ def score(kind: str, y: np.ndarray, prediction: np.ndarray,
     if kind == "binary":
         if len(np.unique(y)) < 2:
             return float("nan")
-        return float(roc_auc_score(y, prediction, sample_weight=weight))
-    return weighted_r2(y, prediction, weight)
+        return auc(y, prediction, weight)
+    return r_squared(y, prediction, weight)
 
 
 #: Standardized features are clipped here, as the embedding probes clip theirs:

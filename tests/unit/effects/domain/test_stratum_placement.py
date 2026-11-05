@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import math
-
 import pytest
 
 from effects.domain.corpus_curation import game_disjoint_draw
@@ -19,7 +17,6 @@ from effects.domain.stratum_placement import (
     rule_test_eligible,
     rule_test_misses,
     rule_test_records_needed,
-    rule_test_standard_error,
 )
 from tests.unit.effects.builders import make_record
 
@@ -180,13 +177,6 @@ def test_rule_test_records_are_natural_observed_tags():
 
 
 # ── what build-corpus can already tell of the precision target (E5) ─────
-
-
-def test_the_rule_test_standard_error_is_the_specs():
-    """``2·√((n₊ + n₋ + 1) / (12·n₊·n₋))``: n = 68 a side is the first under 0.1."""
-    assert rule_test_standard_error(68, 68) < 0.1 < rule_test_standard_error(67, 67)
-    assert rule_test_standard_error(68, 68) == pytest.approx(0.0994, abs=1e-4)
-    assert rule_test_standard_error(5, 0) == math.inf
 
 
 def _two_halves(selection: dict, reporting: dict):
