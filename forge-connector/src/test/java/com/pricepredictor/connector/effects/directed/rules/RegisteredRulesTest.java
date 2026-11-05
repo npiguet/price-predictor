@@ -1377,8 +1377,11 @@ class RegisteredRulesTest {
     /**
      * A's {@code host} beside A's {@code partner}, a card or a token copy of
      * one (built as a game copy builds a token: the card's copiable values,
-     * its front face alone); the partner is the subject.
+     * its front face alone); the partner is the subject. The copy calls the
+     * deprecated {@code copyCopiableCharacteristics} because the game copy does,
+     * and Forge offers nothing in its place.
      */
+    @SuppressWarnings("deprecation")
     private static Board meldBoard(String host, String partner, boolean token, int mountains) {
         Board board = new Board(PhaseType.MAIN1);
         for (int i = 0; i < mountains; i++) {

@@ -287,7 +287,7 @@ public class DeckBuilder {
     private String findBasicLandSet(List<PaperCard> cards) {
         for (PaperCard card : cards) {
             CardEdition ed = StaticData.instance().getEditions().get(card.getEdition());
-            if (ed != null && CardEdition.Predicates.hasBasicLands.test(ed)) {
+            if (ed != null && ed.hasBasicLands()) {
                 return card.getEdition();
             }
         }
