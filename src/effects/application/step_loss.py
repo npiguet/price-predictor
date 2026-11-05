@@ -27,6 +27,7 @@ from effects.domain.aux_heads import (
 )
 from effects.domain.effect_losses import LossParts, mlm_loss, per_entity_loss
 from effects.domain.effect_model import EffectModel
+from effects.domain.loss_denominators import HeadScales, LossDenominators
 
 
 def autocast_enabled(device: torch.device) -> bool:
@@ -119,6 +120,16 @@ class StepLossComputer:
         self.weights: dict[Head, float] = {
             spec.head: spec.weight(config) for spec in TRAINING_HEADS
         }
+        #: Each shipped term's reciprocal loss denominator (FR-062); None
+        #: scores every term in nats, as before the startup pre-pass sets them.
+        self.scales: HeadScales | None = None
+
+    def use_denominators(self, denominators: LossDenominators | None) -> None:
+        """Divide every shipped term by its denominator from now on, for
+        training and validation alike; None stops dividing."""
+        self.scales = (
+            None if denominators is None else HeadScales.of(denominators, self.device)
+        )
 
     def _autocast(self):
         """bf16 autocast on CUDA (FR-095); a no-op context elsewhere."""
@@ -152,6 +163,7 @@ class StepLossComputer:
                 gathered, targets.fields_on(self.device, non_blocking=True),
                 fields=prepared.fields,
                 log_dispersion=modules.model.per_entity_dispersion(),
+                scale=None if self.scales is None else self.scales.per_entity,
                 report_parts=report_parts,
             )
             terms = self.head_terms(prepared.heads, encoded, modules.model, hidden)
@@ -173,8 +185,11 @@ class StepLossComputer:
             source = inputs.get(spec.reads)
             if spec.loss is None or given is None or source is None:
                 continue
+            scale = {} if self.scales is None or not spec.shipped else {
+                "scale": self.scales.heads.get(spec.head),
+            }
             terms[spec.head] = spec.loss(
-                model, source, *spec.to_device(given, self.device),
+                model, source, *spec.to_device(given, self.device), **scale,
             )
         return terms
 

@@ -418,6 +418,10 @@ class StubLosses:
 
     def __init__(self, loss) -> None:
         self.loss = loss
+        self.denominators = None
+
+    def use_denominators(self, denominators) -> None:
+        self.denominators = denominators
 
     def device_loss(self, prepared, modules, materializer, **kwargs):
         from effects.application.step_loss import StepLoss
@@ -459,11 +463,16 @@ def stub_below_the_loop(monkeypatch):
 
     Returns the ``(model, encoder)`` stand-ins, from :func:`one_parameter_module`.
     """
+    import torch
+
     from effects.application import run_context, step_preparation
     from effects.application import training_loop as loop_module
     from effects.domain.effect_head_input import SlotKind
+    from effects.domain.effect_head_layout import DISPERSED_FIELDS
 
     model, encoder = one_parameter_module(), one_parameter_module()
+    # What validation reads off the model for gate 1's deviance margin.
+    model.per_entity_dispersion = lambda: torch.zeros(len(DISPERSED_FIELDS))
     monkeypatch.setattr(run_context, "AbilityEncoder", lambda config: encoder)
     monkeypatch.setattr(run_context, "EffectModel", lambda config: model)
     monkeypatch.setattr(
@@ -475,6 +484,13 @@ def stub_below_the_loop(monkeypatch):
     monkeypatch.setattr(
         loop_module, "feature_widths",
         lambda records: dict.fromkeys(SlotKind, 4),
+    )
+    # No record here is a real one to prepare, so no pre-pass reads them.
+    from effects.domain.loss_denominators import LossDenominators
+
+    monkeypatch.setattr(
+        loop_module, "loss_denominators",
+        lambda *a, floor, **k: LossDenominators.of({}, floor=floor),
     )
     return model, encoder
 

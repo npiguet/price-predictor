@@ -20,9 +20,8 @@ from effects.application.step_preparation import DeviceStep
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_log import format_floor
 from effects.domain.effect_head_layout import FieldSpec
-from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.gate_metrics import GateOneMetrics, MarginAccumulator
-from effects.domain.loss_floor import PartsMean, constant_predictor_floor
+from effects.domain.loss_floor import PartsMean, TargetSample, constant_predictor_floor
 from effects.domain.sampling import sampling_class
 from effects.domain.strata import VALIDATION_STRATA, Stratum
 from effects.infrastructure.shard_io import load_shard
@@ -142,17 +141,16 @@ class FieldParts:
 
 
 class KeptTargets:
-    """Each batch's host targets, for the constant-predictor floor: a copy of
-    the whole sample's targets, so kept only on an epoch with a floor to
-    compute."""
+    """The sample's supervised targets, for the constant-predictor floor:
+    kept only on an epoch with a floor to compute."""
 
     wants_parts = False
 
     def __init__(self) -> None:
-        self.batches: list[EntityTargetBatch] = []
+        self.sample = TargetSample()
 
     def add(self, prepared: DeviceStep, computed: StepLoss) -> None:
-        self.batches.append(prepared.targets)
+        self.sample.add(prepared.targets, prepared.heads)
 
     def finish(self) -> None:
         pass
@@ -255,7 +253,7 @@ class Validator:
         game = ValidationPass(self.score(samples.game_disjoint, run, fields), {}, None)
         if kept is not None:
             self.floor.update(
-                fields, constant_predictor_floor(kept.batches, fields=fields),
+                fields, constant_predictor_floor(kept.sample, fields=fields),
             )
             logger.info(
                 "Constant-predictor floor (card-disjoint): %s",

@@ -276,6 +276,28 @@ def test_a_run_resumed_after_an_epoch_is_the_uninterrupted_run(
     assert not multiprocessing.active_children()
 
 
+def test_a_resume_reuses_the_loss_denominators_the_run_started_with(
+    monkeypatch, corpus, tmp_path, caplog,
+):
+    """FR-062: computed once at startup from the training shards, floored,
+    kept in ``resume.pt`` and the checkpoint, and read back on resume rather
+    than recomputed."""
+    from effects.infrastructure.effect_model_store import EffectModelStore, load_resume_state
+
+    out = tmp_path / "denominators"
+    _run(monkeypatch, corpus, out, caplog, workers=0, interrupt_after=1)
+    assert any("Loss denominators from" in m for m in caplog.messages)
+    stored = load_resume_state(out)["loss_denominators"]
+    values = [v for terms in stored["values"].values() for v in terms.values()]
+    assert values and min(values) >= stored["floor"] == 0.04
+    assert "gate" in stored["values"]["per_entity"]
+
+    _run(monkeypatch, corpus, out, caplog, workers=0, resume=True)
+    assert not any("Loss denominators from" in m for m in caplog.messages)
+    assert load_resume_state(out)["loss_denominators"] == stored
+    assert EffectModelStore(out).load().loss_denominators == stored
+
+
 def test_a_resume_file_holding_keys_no_longer_written_resumes_the_same_run(
     monkeypatch, corpus, tmp_path, caplog, in_process,
 ):
@@ -488,7 +510,15 @@ def test_a_worker_exception_surfaces_with_its_traceback_and_no_process_survives(
     """An unreadable shard: raised at its own shard, in the training process,
     as the exception the in-process path raises, the worker's traceback
     attached."""
+    from effects.application import training_loop as loop_module
+    from effects.domain.loss_denominators import LossDenominators
+
     missing = tmp_path / "missing.jsonl.gz"
+    # The startup pre-pass would read the shard first, in this process.
+    monkeypatch.setattr(
+        loop_module, "loss_denominators",
+        lambda *a, floor, **k: LossDenominators.of({}, floor=floor),
+    )
     with pytest.raises(FileNotFoundError) as raised:
         _run(monkeypatch, _with_shards(corpus, [missing]), tmp_path / "out", caplog, workers=2)
     notes = "".join(getattr(raised.value, "__notes__", ()))

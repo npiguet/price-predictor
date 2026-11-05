@@ -19,6 +19,7 @@ from typing import NamedTuple
 
 import torch
 
+from effects.application.denominator_pass import denominator_shards, loss_denominators
 from effects.application.resume_state import restore_resume, save_resume
 from effects.application.run_context import (
     RunContext,
@@ -54,6 +55,7 @@ from effects.application.training_schedule import (
 )
 from effects.application.validation_pass import ValidationSamples, Validator
 from effects.domain.effect_head_input import feature_widths
+from effects.domain.effect_head_layout import PER_ENTITY_FIELDS
 from effects.infrastructure.effect_model_store import (
     EPOCHS_DIR,
     EffectCheckpoint,
@@ -214,6 +216,13 @@ class TrainingLoop:
             first_epoch = restore_resume(run)
             if first_epoch is None:
                 return 0
+        if run.loss_denominators is None:
+            run.loss_denominators = loss_denominators(
+                run.preparer, denominator_shards(self.training_shards, seed=self.spec.seed),
+                fields=PER_ENTITY_FIELDS, batch_size=self.config.batch_size,
+                floor=self.config.deviance_floor, read=load_shard,
+            )
+        self.losses.use_denominators(run.loss_denominators)
 
         run.pool = self._start_workers(settings, run, first_epoch=first_epoch)
         try:
@@ -293,6 +302,9 @@ class TrainingLoop:
             ),
             cards_folders=tuple(str(folder) for folder in self.config.cards_folders),
             training_settings=dict(run.training_settings),
+            loss_denominators=(
+                {} if run.loss_denominators is None else run.loss_denominators.as_dict()
+            ),
         )
 
     def _epoch_plan(self, epoch: int, run: RunContext) -> EpochPlan:

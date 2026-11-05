@@ -19,6 +19,7 @@ from effects.application.train_effect_model import (
     RunSpec,
     TrainEffectModelConfig,
 )
+from effects.domain.loss_denominators import LossDenominators
 from effects.infrastructure.effect_model_store import (
     RESUME_BEST_NAME,
     RESUME_NAME,
@@ -89,6 +90,9 @@ def save_resume(run: RunContext, epoch: int, *, best: bool = False) -> None:
         "optimizer": run.optimizer.state_dict(),
         "stopper": run.stopper.state_dict(),
         "noise": run.noise.state_dict(),
+        "loss_denominators": (
+            None if run.loss_denominators is None else run.loss_denominators.as_dict()
+        ),
         "rng": {
             "cpu": torch.get_rng_state(),
             "cuda": (
@@ -121,6 +125,11 @@ def restore_resume(run: RunContext) -> int | None:
     run.optimizer.load_state_dict(state["optimizer"])
     run.stopper.load_state_dict(state["stopper"])
     run.noise.load_state_dict(state["noise"], run.device)
+    # Reused, never recomputed: the run divides by one set of numbers (FR-062).
+    denominators = state.get("loss_denominators")
+    run.loss_denominators = (
+        None if denominators is None else LossDenominators.from_dict(denominators)
+    )
     torch.set_rng_state(state["rng"]["cpu"])
     if state["rng"]["cuda"] is not None and torch.cuda.is_available():
         torch.cuda.set_rng_state_all(state["rng"]["cuda"])

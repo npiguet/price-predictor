@@ -20,7 +20,6 @@ weight flags set, and have no floor.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
 
 import torch
 
@@ -37,6 +36,7 @@ from effects.domain.effect_head_layout import (
     DISPERSION_INDEX,
     FIELD_SLICES,
     GATE_INDEX,
+    GATE_TERM,
     GLOBAL_LAYOUT,
     PER_ENTITY_WIDTH,
     VERDICT_LAYOUT,
@@ -47,7 +47,6 @@ from effects.domain.effect_head_layout import (
 from effects.domain.effect_losses import (
     LossParts,
     created_objects_terms,
-    per_entity_loss,
     record_head_terms,
 )
 from effects.domain.entity_field_targets import EntityTargetBatch
@@ -77,19 +76,34 @@ RECORD_LAYOUTS: dict[str, RecordHeadLayout] = {
 HeadLosses = dict[str, dict[str, float]]
 
 
-@dataclass
 class TargetSample:
-    """A sample's host targets, batch by batch: each batch's per-entity
-    targets and its shipped heads' ``(target, mask[, known])``, the tuples the
-    step preparation builds; a head no record of a batch supervises is absent
-    from that batch."""
+    """A sample's supervised targets, gathered batch by batch and kept
+    compact: the gate's targets where it trains, each per-entity field's where
+    it is scored, and each shipped head's ``(target, mask[, known])`` rows that
+    supervise anything. Compact because the floor needs nothing else (the
+    constant is the same at every entity) and a loss-denominator sample holds
+    thousands of records."""
 
-    entity: list[EntityTargetBatch] = field(default_factory=list)
-    heads: list[Mapping[str, tuple]] = field(default_factory=list)
+    def __init__(self) -> None:
+        self.records = 0
+        self._gate: list[torch.Tensor] = []
+        self._fields: dict[str, list[torch.Tensor]] = {}
+        self._heads: dict[str, list[tuple]] = {}
 
-    def add(self, entity: EntityTargetBatch, heads: Mapping[str, tuple] | None = None) -> None:
-        self.entity.append(entity)
-        self.heads.append({str(head): value for head, value in (heads or {}).items()})
+    def add(self, entity: EntityTargetBatch, heads: Mapping | None = None) -> None:
+        """Fold in one batch: its per-entity targets and its shipped heads'
+        tuples, keyed by :class:`Head` or its value; a head a batch lacks
+        supervises nothing there."""
+        self.records += int(entity.gate.shape[0])
+        self._gate.append(entity.gate.detach().cpu()[entity.gate_scored])
+        for name, values in entity.fields.values.items():
+            selected = values.detach().cpu()[entity.scored(name)]
+            if selected.numel():
+                self._fields.setdefault(name, []).append(selected)
+        for head, targets in (heads or {}).items():
+            compact = _supervising_rows(str(head), targets)
+            if compact is not None:
+                self._heads.setdefault(str(head), []).append(compact)
 
     @classmethod
     def of(cls, batches: Sequence[EntityTargetBatch]) -> TargetSample:
@@ -99,15 +113,35 @@ class TargetSample:
         return sample
 
     @property
-    def records(self) -> int:
-        return sum(int(batch.gate.shape[0]) for batch in self.entity)
+    def gate(self) -> torch.Tensor:
+        """The gate's targets over every entity it trains on."""
+        return torch.cat(self._gate) if self._gate else torch.zeros(0)
 
-    def head_batches(self, head: str) -> list[tuple[int, tuple]]:
-        """``(records, targets)`` of every batch carrying ``head``."""
-        return [
-            (int(entity.gate.shape[0]), heads[head])
-            for entity, heads in zip(self.entity, self.heads) if head in heads
-        ]
+    def supervised(self, name: str) -> torch.Tensor | None:
+        """One per-entity field's targets over every entity it is scored at,
+        the selection :func:`per_entity_loss` scores; None where it is never
+        scored."""
+        parts = self._fields.get(name)
+        return torch.cat(parts) if parts else None
+
+    def head_batches(self, head: str) -> list[tuple]:
+        """The supervising rows of each batch carrying ``head``."""
+        return self._heads.get(head, [])
+
+
+def _supervising_rows(head: str, targets: tuple) -> tuple | None:
+    """A head's ``(target, mask[, known])`` cut to the records that supervise
+    any of its terms; None for none."""
+    mask = targets[1].detach().bool().cpu()
+    rows = mask if mask.dim() == 1 else mask.any(-1)
+    if not rows.any():
+        return None
+    cut = tuple(
+        None if part is None else part.detach().cpu()[rows] for part in targets
+    )
+    if head == Head.CREATED_OBJECTS.value and (len(cut) < 3 or cut[2] is None):
+        cut = (cut[0], cut[1], torch.ones_like(cut[0]))
+    return cut
 
 
 def constant_predictor_losses(
@@ -116,10 +150,11 @@ def constant_predictor_losses(
     """The loss the best constant prediction reaches on ``sample``, by head
     and term, in nats per record over all its records.
 
-    Scored through the heads' own loss functions, so each floor carries the
-    loss's masking and normalization. A term whose supervised targets never
-    vary reports exactly zero: it has no floor. A term the sample never
-    supervises is absent. ``fields`` are the per-entity fields to cover.
+    Scored through the heads' own loss terms over the entities and records
+    they supervise, so each floor carries the loss's masking. A term whose
+    supervised targets never vary reports exactly zero: it has no floor. A
+    term the sample never supervises is absent, but for the per-entity gate.
+    ``fields`` are the per-entity fields to cover.
     """
     losses: HeadLosses = {PER_ENTITY: _per_entity_losses(sample, fields)}
     for head, layout in RECORD_LAYOUTS.items():
@@ -135,21 +170,6 @@ def constant_predictor_losses(
 # ── the per-entity head ──
 
 
-def _supervised(
-    batches: Sequence[EntityTargetBatch], name: str,
-) -> torch.Tensor | None:
-    """One field's targets over every supervised entity of every batch, the
-    selection :func:`per_entity_loss` scores."""
-    parts = [
-        batch.fields.values[name][batch.scored(name)]
-        for batch in batches if name in batch.fields
-    ]
-    if not parts:
-        return None
-    selected = torch.cat(parts)
-    return selected if selected.numel() else None
-
-
 def _degenerate(target: torch.Tensor | None) -> bool:
     """Whether a term's supervised targets never vary, whole rows compared.
 
@@ -159,25 +179,24 @@ def _degenerate(target: torch.Tensor | None) -> bool:
     return target is None or target.numel() == 0 or bool((target == target[0]).all())
 
 
+def _as_sample(batches: Sequence[EntityTargetBatch] | TargetSample) -> TargetSample:
+    return batches if isinstance(batches, TargetSample) else TargetSample.of(batches)
+
+
 def constant_predictor_outputs(
-    batches: Sequence[EntityTargetBatch], *, fields: tuple[FieldSpec, ...],
-    supervised: Mapping[str, torch.Tensor | None] | None = None,
+    batches: Sequence[EntityTargetBatch] | TargetSample, *, fields: tuple[FieldSpec, ...],
 ) -> torch.Tensor:
     """The best constant prediction for the gate and each active field: one
     ``(PER_ENTITY_WIDTH,)`` vector, each slice the maximum-likelihood constant
-    under that field's own loss. ``supervised`` holds each field's
-    :func:`_supervised` targets where the caller selected them already."""
-    if supervised is None:
-        supervised = {spec.name: _supervised(batches, spec.name) for spec in fields}
+    under that field's own loss."""
+    sample = _as_sample(batches)
     vector = torch.zeros(PER_ENTITY_WIDTH)
     # The gate is one binary column over every entity it trains on.
-    real = [batch.gate[batch.gate_scored] for batch in batches]
     vector[GATE_INDEX] = FIELD_KINDS[FieldType.BINARY].best_constant(
-        torch.cat(real or [torch.zeros(0)]), arity=1, cap=MAGNITUDE_CAP,
+        sample.gate, arity=1, cap=MAGNITUDE_CAP,
     )
-
     for spec in fields:
-        target = supervised[spec.name]
+        target = sample.supervised(spec.name)
         if target is None:
             continue
         start, end = FIELD_SLICES[spec.name]
@@ -188,17 +207,15 @@ def constant_predictor_outputs(
 
 
 def constant_predictor_dispersion(
-    batches: Sequence[EntityTargetBatch], *, fields: tuple[FieldSpec, ...],
-    supervised: Mapping[str, torch.Tensor | None] | None = None,
+    batches: Sequence[EntityTargetBatch] | TargetSample, *, fields: tuple[FieldSpec, ...],
 ) -> torch.Tensor:
     """The constant predictor's log-dispersions, in :data:`DISPERSED_FIELDS`
     order: each count's fitted around its constant mean (FR-063). A field the
     sample does not score keeps the upper bound, which nothing reads."""
-    if supervised is None:
-        supervised = {spec.name: _supervised(batches, spec.name) for spec in fields}
+    sample = _as_sample(batches)
     log_dispersion = torch.full((len(DISPERSED_FIELDS),), LOG_DISPERSION_MAX)
     for spec in fields:
-        target = supervised[spec.name]
+        target = sample.supervised(spec.name)
         if target is None or not spec.type.has_magnitude:
             continue
         magnitude = FIELD_KINDS[spec.type].magnitude(target, cap=MAGNITUDE_CAP)
@@ -209,33 +226,37 @@ def constant_predictor_dispersion(
 
 
 def _per_entity_losses(sample: TargetSample, fields: tuple[FieldSpec, ...]) -> dict[str, float]:
-    batches = sample.entity
-    # Selected once: each field's targets are a concatenation over every batch.
-    supervised = {spec.name: _supervised(batches, spec.name) for spec in fields}
-    vector = constant_predictor_outputs(batches, fields=fields, supervised=supervised)
-    log_dispersion = constant_predictor_dispersion(
-        batches, fields=fields, supervised=supervised,
-    )
-    degenerate = {name for name, target in supervised.items() if _degenerate(target)}
-    means = PartsMean()
-    for batch in batches:
-        _, parts = per_entity_loss(
-            vector.expand(*batch.gate.shape, PER_ENTITY_WIDTH), batch,
-            fields=fields, log_dispersion=log_dispersion, report_parts=True,
+    vector = constant_predictor_outputs(sample, fields=fields)
+    log_dispersion = constant_predictor_dispersion(sample, fields=fields)
+    records = max(sample.records, 1)
+    gate = sample.gate
+    losses = {GATE_TERM: float(FIELD_KINDS[FieldType.BINARY].loss(
+        vector[GATE_INDEX].expand(gate.shape[0], 1), gate, arity=1, cap=MAGNITUDE_CAP,
+    )) / records}
+    for spec in fields:
+        target = sample.supervised(spec.name)
+        if target is None:
+            continue
+        if _degenerate(target):
+            losses[spec.name] = 0.0
+            continue
+        start, end = FIELD_SLICES[spec.name]
+        dispersion = (
+            log_dispersion[DISPERSION_INDEX[spec.name]] if spec.type.has_magnitude else None
         )
-        means.add(parts, rows=int(batch.gate.shape[0]))
-    return {
-        name: 0.0 if name in degenerate else mean
-        for name, mean in means.means().items()
-    }
+        losses[spec.name] = float(FIELD_KINDS[spec.type].loss(
+            vector[start:end].expand(target.shape[0], end - start), target,
+            arity=spec.arity, cap=MAGNITUDE_CAP, log_dispersion=dispersion,
+        )) / records
+    return losses
 
 
 def constant_predictor_floor(
-    batches: Sequence[EntityTargetBatch], *, fields: tuple[FieldSpec, ...],
+    batches: Sequence[EntityTargetBatch] | TargetSample, *, fields: tuple[FieldSpec, ...],
 ) -> dict[str, float]:
     """The per-entity head's floor by term: :func:`constant_predictor_losses`
     over per-entity targets alone."""
-    return constant_predictor_losses(TargetSample.of(batches), fields=fields)[PER_ENTITY]
+    return constant_predictor_losses(_as_sample(batches), fields=fields)[PER_ENTITY]
 
 
 # ── the per-record heads ──
@@ -247,7 +268,7 @@ def _record_head_losses(
     batches = sample.head_batches(head)
     if not batches:
         return {}
-    masks = [_field_mask(targets[1], layout) for _, targets in batches]
+    masks = [_field_mask(targets[1], layout) for targets in batches]
     outputs = torch.zeros(layout.width)
     log_dispersion = torch.full((len(layout.dispersed),), LOG_DISPERSION_MAX)
     degenerate: set[str] = set()
@@ -256,7 +277,7 @@ def _record_head_losses(
         first, last = layout.target_slices[spec.name]
         rows = [
             targets[0][mask[:, position]][:, first:last].float()
-            for (_, targets), mask in zip(batches, masks)
+            for targets, mask in zip(batches, masks)
         ]
         wanted = torch.cat(rows) if rows else torch.zeros(0, last - first)
         if wanted.shape[0] == 0:
@@ -278,7 +299,7 @@ def _record_head_losses(
                 magnitude, magnitude.mean(0),
             )
     summed = torch.zeros(len(layout.fields), dtype=torch.float64)
-    for (_, targets), mask in zip(batches, masks):
+    for targets, mask in zip(batches, masks):
         summed += record_head_terms(
             outputs.expand(int(targets[0].shape[0]), layout.width), targets[0], mask,
             layout, log_dispersion=log_dispersion,
@@ -304,17 +325,16 @@ def _field_mask(mask: torch.Tensor, layout: RecordHeadLayout) -> torch.Tensor:
 
 def _created_objects_losses(sample: TargetSample) -> dict[str, float]:
     batches = [
-        (records, _created_rows(targets))
-        for records, targets in sample.head_batches(Head.CREATED_OBJECTS.value)
+        _created_rows(targets) for targets in sample.head_batches(Head.CREATED_OBJECTS.value)
     ]
-    batches = [(records, rows) for records, rows in batches if rows is not None]
+    batches = [rows for rows in batches if rows is not None]
     if not batches:
         return {}
-    target = torch.cat([rows[0] for _, rows in batches])
-    known = torch.cat([rows[1] for _, rows in batches])
+    target = torch.cat([rows[0] for rows in batches])
+    known = torch.cat([rows[1] for rows in batches])
     outputs, log_dispersion = _created_constant(target, known)
     summed = torch.zeros(len(CREATED_TERMS), dtype=torch.float64)
-    for _, (wanted, said) in batches:
+    for wanted, said in batches:
         summed += created_objects_terms(
             outputs.expand(int(wanted.shape[0]), CREATED_OBJECTS_WIDTH), wanted,
             known=said, log_dispersion=log_dispersion,

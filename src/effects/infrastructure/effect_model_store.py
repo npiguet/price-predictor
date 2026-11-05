@@ -107,6 +107,9 @@ class EffectCheckpoint:
     #: ``run_context.training_settings`` (FR-063); empty or partial on a
     #: checkpoint that predates the field or a key.
     training_settings: dict[str, Any] = field(default_factory=dict)
+    #: ``LossDenominators.as_dict()`` of the run (FR-062); empty on a
+    #: checkpoint that predates the field.
+    loss_denominators: dict[str, Any] = field(default_factory=dict)
 
 
 def filter_training_only(state: dict[str, Any]) -> dict[str, Any]:
@@ -143,7 +146,7 @@ def load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
 _RESERVED_PAYLOAD_KEYS = frozenset({
     "encoder_state_dict", "model_state_dict", "encoder_config", "model_config",
     "provenance", "variant", "best_val_loss", "epoch", "config",
-    "cards_folders", "training_settings",
+    "cards_folders", "training_settings", "loss_denominators",
 })
 
 def encoder_config_from(data: dict[str, Any]) -> AbilityEncoderConfig:
@@ -174,6 +177,7 @@ class EffectModelStore:
             "epoch": checkpoint.epoch,
             "cards_folders": list(checkpoint.cards_folders),
             "training_settings": dict(checkpoint.training_settings),
+            "loss_denominators": dict(checkpoint.loss_denominators),
             **checkpoint.extra,
         }
         path = self._unused_path(datetime.now(UTC).strftime("%Y%m%d-%H%M%S"))
@@ -222,6 +226,7 @@ class EffectModelStore:
             },
             cards_folders=tuple(payload.get("cards_folders", ())),
             training_settings=dict(payload.get("training_settings", {})),
+            loss_denominators=dict(payload.get("loss_denominators", {})),
         )
 
 

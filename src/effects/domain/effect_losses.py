@@ -6,6 +6,9 @@ a record, or an encoded text for the value, script-API and MLM heads.
 
 Every mask is tested and indexed on the host, where it was built, and rows are
 gathered by index: a device mask would stall the step until the GPU drains.
+
+A shipped head's loss takes ``scale``, each term's reciprocal loss denominator
+(FR-062), and sums its terms scaled; its reported parts stay in nats.
 """
 
 from __future__ import annotations

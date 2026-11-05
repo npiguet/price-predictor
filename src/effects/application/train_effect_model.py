@@ -123,6 +123,11 @@ class TrainEffectModelConfig:
         "much it attends; off: the value tables stay at zero and untrained "
         "(default: %(default)s)"
     )})
+    deviance_floor: float = field(default=0.04, metadata={"help": (
+        "Floor on each output term's loss denominator, its constant-prediction "
+        "loss on a sample of training shards, in nats per record "
+        "(default: %(default)s)"
+    )})
     e_noise: float = field(default=0.1, metadata={"help": (
         "Noise ratio on e relative to e's running covariance (FR-056), ramped "
         "in over the first --steps-per-epoch steps (default: %(default)s)"
@@ -200,6 +205,11 @@ class TrainEffectModelConfig:
         if self.encoder_layers <= 0:
             raise ValueError(
                 f"--encoder-layers must be at least 1, got {self.encoder_layers}."
+            )
+        if not self.deviance_floor > 0:
+            raise ValueError(
+                f"--deviance-floor must be above zero, got {self.deviance_floor}: "
+                "it is what a loss denominator is never below."
             )
 
     @property
