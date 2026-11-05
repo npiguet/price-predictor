@@ -7,15 +7,21 @@ can refuse a dataset rebuilt since (FR-147).
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.canonical_digest import canonical_digest
+from effects.domain.rule_budgets import RuleBudgets, RuleRow
+from effects.domain.rule_catalogue import MapVerdict, RuleMapEntry
 from effects.domain.split import HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
 from price_predictor.domain.dataclass_defaults import field_default
+
+if TYPE_CHECKING:
+    from effects.domain.corpus_plan import GameStrata
 
 
 class ManifestDrift(NamedTuple):
@@ -140,6 +146,30 @@ def _family_rows(values: dict) -> dict[str, dict[str, FamilyRow]]:
     return {
         klass: {family: FamilyRow.from_dict(row) for family, row in rows.items()}
         for klass, rows in values.items()
+    }
+
+
+def _tuple_map(values: dict) -> dict[str, tuple[str, ...]]:
+    return {k: tuple(inner) for k, inner in values.items()}
+
+
+def _nested_tuple_map(values: dict) -> dict[str, dict[str, tuple[str, ...]]]:
+    return {k: _tuple_map(inner) for k, inner in values.items()}
+
+
+def _rule_rows(values: dict) -> dict[str, dict[str, dict[str, RuleRow]]]:
+    return {
+        klass: {rule: {polarity: RuleRow.from_dict(row) for polarity, row in rows.items()}
+                for rule, rows in by_rule.items()}
+        for klass, by_rule in values.items()
+    }
+
+
+def _rule_map(values: dict) -> dict[str, RuleMapEntry]:
+    return {
+        rule: RuleMapEntry(rule=rule, verdict=MapVerdict(entry["verdict"]),
+                           outputs=tuple(entry["outputs"]))
+        for rule, entry in values.items()
     }
 
 
@@ -322,6 +352,73 @@ class CorpusManifest:
         default_factory=dict, metadata=_gen1_implied(_int_map),
     )
 
+    # Gen-3 (feature 025, FR-060, FR-060a): written by every gen-3 build and
+    # omitted from ``as_dict`` at their defaults like the gen-2 fields, so an
+    # older manifest keeps its digest; no gen-3 reader accepts one.
+
+    #: The survey's per-rule counts in ``rule-counts.json``'s shape (FR-008):
+    #: ``records``, ``rules`` (rule -> polarity -> source -> records),
+    #: ``not_countable``, ``none`` and ``review``.
+    rule_counts: dict[str, Any] = field(
+        default_factory=dict, metadata=_gen1_implied(dict),
+    )
+    #: The rules-to-fields map as the build read it (research R4): every
+    #: tagged rule's verdict and outputs. Budgets, the rule mask, the freeze
+    #: and evaluation read verdicts and outputs here, never ``rules/heads/``.
+    rule_map: dict[str, RuleMapEntry] = field(
+        default_factory=dict, metadata=_gen1_implied(_rule_map),
+    )
+    #: The map's content hash, which a checkpoint records.
+    rule_map_digest: str = field(default="", metadata=_gen1_implied(str))
+    #: ``class -> rule -> polarity -> RuleRow`` (FR-060).
+    rules: dict[str, dict[str, dict[str, RuleRow]]] = field(
+        default_factory=dict, metadata=_gen1_implied(_rule_rows),
+    )
+    #: ``class -> budgeted rules whose polarity halves stay unequal`` (FR-054a).
+    one_sided_rules: dict[str, tuple[str, ...]] = field(
+        default_factory=dict, metadata=_gen1_implied(_tuple_map),
+    )
+    #: ``class -> condition carriers seen on one side only`` (FR-056).
+    one_sided_conditions: dict[str, tuple[str, ...]] = field(
+        default_factory=dict, metadata=_gen1_implied(_tuple_map),
+    )
+    #: ``rule -> polarity -> source -> records`` for every tagged rule the map
+    #: does not mark ``trained`` (FR-054).
+    unbudgeted_rules: dict[str, dict[str, dict[str, int]]] = field(
+        default_factory=dict, metadata=_gen1_implied(_doubly_nested_int_map),
+    )
+    #: ``stratum -> half -> rules`` with both polarities in the inventories
+    #: and one missing from that half (research R3).
+    left_out_of_half: dict[str, dict[str, tuple[str, ...]]] = field(
+        default_factory=dict, metadata=_gen1_implied(_nested_tuple_map),
+    )
+    #: ``turn_action`` records written to no stratum, by subkind (FR-059).
+    turn_action_left_out: dict[str, int] = field(
+        default_factory=dict, metadata=_gen1_implied(_int_map),
+    )
+    #: The closed subtype and keyword lists (FR-052, FR-053), in the head's
+    #: column order: ``closed_lists.ordered_subtypes`` and ``ordered_keywords``,
+    #: which is what ``output_vocabularies`` holds, so
+    #: ``scripts/scan_output_vocabularies.py --manifest`` copies them verbatim.
+    subtypes: tuple[str, ...] = field(default=(), metadata=_gen1_implied(tuple))
+    keywords: tuple[str, ...] = field(default=(), metadata=_gen1_implied(tuple))
+    #: ``stratum -> half -> game ids``, sorted (FR-070).
+    halves: dict[str, dict[str, tuple[str, ...]]] = field(
+        default_factory=dict, metadata=_gen1_implied(_nested_tuple_map),
+    )
+
+    @property
+    def budgeted_rules(self) -> frozenset[str]:
+        """The rules the recorded map marks ``trained`` (FR-054)."""
+        return frozenset(
+            rule for rule, entry in self.rule_map.items() if entry.verdict is MapVerdict.TRAINED)
+
+    def rule_outputs(self, rule: str) -> tuple[str, ...]:
+        """The outputs the recorded map names for ``rule``; empty for a rule
+        it does not hold (FR-060a)."""
+        entry = self.rule_map.get(rule)
+        return () if entry is None else entry.outputs
+
     @property
     def holdout(self) -> HoldoutRule:
         """The rule the held-out texts were chosen by; stored as three fields,
@@ -345,6 +442,15 @@ class CorpusManifest:
         data["families"] = {
             klass: {family: row.as_dict() for family, row in rows.items()}
             for klass, rows in self.families.items()
+        }
+        data["rules"] = {
+            klass: {rule: {polarity: row.as_dict() for polarity, row in rows.items()}
+                    for rule, rows in by_rule.items()}
+            for klass, by_rule in self.rules.items()
+        }
+        data["rule_map"] = {
+            rule: {"verdict": str(entry.verdict), "outputs": list(entry.outputs)}
+            for rule, entry in self.rule_map.items()
         }
         for name, default in _GEN1_DEFAULTS.items():
             if getattr(self, name) == default:
@@ -397,3 +503,49 @@ _GEN1_DEFAULTS = {
     name: _default_of(spec) for name, spec in _FIELDS.items()
     if spec.metadata.get(_OMITTED_AT_DEFAULT)
 }
+
+
+def rule_curation_fields(
+    *,
+    budgets: RuleBudgets,
+    strata: GameStrata,
+    rule_map: Mapping[str, RuleMapEntry],
+    rule_map_digest: str,
+    rule_counts: Mapping[str, Any],
+    one_sided_conditions: Mapping[str, Iterable[str]],
+    turn_action_left_out: Mapping[str, int],
+    subtypes: Iterable[str],
+    keywords: Iterable[str],
+) -> dict[str, Any]:
+    """The gen-3 fields of :class:`CorpusManifest`, as keyword arguments.
+
+    Built from what the build already holds: the rule budgets, the placed
+    strata, the map snapshot, the survey's rule counts (the ``rule-counts.json``
+    object), its one-sided conditions (``corpus_curation.one_sided_conditions``)
+    and turn-action tally, and the subtype and keyword names it read, which are
+    put in the head's column order here.
+    """
+    from effects.domain.closed_lists import ordered_keywords, ordered_subtypes
+
+    return {
+        "rule_counts": dict(rule_counts),
+        "rule_map": dict(sorted(rule_map.items())),
+        "rule_map_digest": rule_map_digest,
+        "rules": budgets.rows,
+        "one_sided_rules": dict(budgets.one_sided),
+        "one_sided_conditions": {
+            klass: tuple(carriers) for klass, carriers in sorted(one_sided_conditions.items())
+        },
+        "unbudgeted_rules": budgets.unbudgeted,
+        "left_out_of_half": {
+            str(stratum): {str(half): tuple(rules) for half, rules in by_half.items()}
+            for stratum, by_half in strata.left_out_of_half.items()
+        },
+        "turn_action_left_out": dict(sorted(turn_action_left_out.items())),
+        "subtypes": ordered_subtypes(subtypes),
+        "keywords": ordered_keywords(keywords),
+        "halves": {
+            str(stratum): {str(half): tuple(sorted(games)) for half, games in by_half.items()}
+            for stratum, by_half in strata.halves.items()
+        },
+    }

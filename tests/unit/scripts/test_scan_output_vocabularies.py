@@ -105,3 +105,33 @@ class TestTheCheckedInLists:
     def test_they_are_ordered_as_the_scan_writes_them(self):
         assert KEYWORDS_CHANGED == ordered_keywords(KEYWORDS_CHANGED)
         assert list(SUBTYPES_CHANGED) == sorted(SUBTYPES_CHANGED, key=SUBTYPES.index)
+
+
+class TestFromAManifest:
+    def test_the_lists_a_gen3_manifest_recorded_are_copied(self, tmp_path):
+        manifest = {"subtypes": ["goblin"], "keywords": ["flying", "toxic"]}
+        path = tmp_path / "manifest.json"
+        path.write_text(json.dumps(_minimal_manifest() | manifest), encoding="utf-8")
+        assert sov.from_manifest(path) == {
+            "SUBTYPES_CHANGED": ("goblin",), "KEYWORDS_CHANGED": ("flying", "toxic")}
+
+    def test_a_manifest_without_the_lists_is_refused(self, tmp_path):
+        import pytest
+
+        path = tmp_path / "manifest.json"
+        path.write_text(json.dumps(_minimal_manifest()), encoding="utf-8")
+        with pytest.raises(SystemExit):
+            sov.from_manifest(path)
+
+
+def _minimal_manifest() -> dict:
+    from effects.domain.corpus_manifest import CorpusManifest
+
+    return CorpusManifest(
+        seed=1, surface="script", vocab_path="v", variant_scripts="", holdout_permille=20,
+        holdout_max_carriers=8,
+        text_cap=200, card_disjoint_text_cap=50, training_records=0, class_mix={},
+        delivered_mix={}, held_out_cards=(), held_out_texts=(), card_disjoint_games=(),
+        game_disjoint_games=(), rarity={}, sources=(), per_class={}, per_stratum={},
+        unique_texts={}, shortfall={},
+    ).as_dict()

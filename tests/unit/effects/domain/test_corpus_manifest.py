@@ -12,6 +12,7 @@ from effects.domain.corpus_manifest import (
     CorpusManifest,
     FamilyRow,
     SourceShard,
+    rule_curation_fields,
 )
 
 
@@ -239,7 +240,7 @@ def test_the_gen1_corpus_still_matches_the_digest_its_checkpoint_recorded():
 
 
 def test_gen2_fields_are_left_out_at_their_gen1_values(manifest_dict):
-    assert len(_GEN1_DEFAULTS) == 15
+    assert len(_GEN1_DEFAULTS) == 27
     for name in _GEN1_DEFAULTS:
         if name != "game_disjoint_target":
             assert name not in manifest_dict
@@ -283,3 +284,84 @@ def test_class_targets_round_trip_beside_what_was_delivered():
     assert data["class_targets"] == {"rewrite": 5}
     assert CorpusManifest.from_dict(data) == original
     assert original.digest() != manifest().digest()
+
+
+# ── gen-3 fields (FR-060, FR-060a; T138) ────────────────────────────────
+
+
+def _gen3_fields() -> dict:
+    from effects.domain.corpus_plan import GameStrata
+    from effects.domain.rule_budgets import BudgetedRecord, plan_rule_budgets
+    from effects.domain.rule_catalogue import MapVerdict, Polarity, RuleMapEntry
+    from effects.domain.rule_detectors import RuleSource
+    from effects.domain.strata import Half, Stratum
+
+    records = [
+        BudgetedRecord(game="g1", record_hash=1, klass="effects", text="t1", natural=1,
+                       source=RuleSource.FORGE_AI, tags=(("702.16e", Polarity.FIRES),)),
+        BudgetedRecord(game="g6", record_hash=6, klass="effects", text="t6", natural=1,
+                       source=RuleSource.FORGE_AI, tags=(("702.16e", Polarity.FIRES),)),
+        BudgetedRecord(game="g2", record_hash=2, klass="effects", text="t2", natural=1,
+                       source=RuleSource.RANDOM_SEAT,
+                       tags=(("702.16e", Polarity.DOES_NOT_FIRE), ("510.1", Polarity.FIRES))),
+    ]
+    budgets = plan_rule_budgets(records, class_targets={"effects": 8}, budgeted={"702.16e"},
+                                reuse_cap=2, text_cap=0)
+    strata = GameStrata(
+        card_disjoint=frozenset({"g3"}), game_disjoint=frozenset({"g4", "g5"}),
+        held_out=frozenset({"g3"}),
+        halves={Stratum.GAME_DISJOINT: {Half.SELECTION: frozenset({"g5", "g4"}),
+                                        Half.REPORTING: frozenset()}},
+        left_out_of_half={Stratum.GAME_DISJOINT: {Half.REPORTING: ("702.16e",)}},
+    )
+    return rule_curation_fields(
+        budgets=budgets, strata=strata,
+        rule_map={
+            "702.16e": RuleMapEntry("702.16e", MapVerdict.TRAINED, ("damage_taken", "gate")),
+            "510.1": RuleMapEntry("510.1", MapVerdict.RECORDED),
+        },
+        rule_map_digest="abc123",
+        rule_counts={"records": 2, "rules": {"702.16e": {"fires": {"forge_ai": 1}}},
+                     "not_countable": [], "none": {}, "review": []},
+        one_sided_conditions={"decision": ["Berserk"]},
+        turn_action_left_out={"untap": 3, "draw": 2},
+        subtypes={"zombie", "plains", "not-a-subtype"},
+        keywords={"toxic", "flying"},
+    )
+
+
+def test_the_gen3_fields_round_trip_through_json():
+    gen3 = manifest(game_disjoint_target=None, **_gen3_fields())
+    restored = CorpusManifest.from_dict(json.loads(json.dumps(gen3.as_dict())))
+    assert restored == gen3
+    assert gen3.digest() != manifest(game_disjoint_target=None).digest()
+
+
+def test_the_gen3_fields_hold_what_the_build_decided():
+    from effects.domain.closed_lists import ordered_keywords
+    from effects.domain.forge_vocabularies import SUBTYPES
+
+    gen3 = manifest(game_disjoint_target=None, **_gen3_fields())
+    data = json.loads(json.dumps(gen3.as_dict()))
+    row = data["rules"]["effects"]["702.16e"]["fires"]
+    assert row == {"available": {"forge_ai": 2}, "share": 4, "written": {"forge_ai": 4},
+                   "added": {"forge_ai": 2}, "shortfall": 0}
+    assert data["rules"]["effects"]["702.16e"]["does_not_fire"]["shortfall"] == 2
+    assert data["rules"]["effects"]["510.1"]["fires"]["share"] is None
+    assert data["unbudgeted_rules"] == {"510.1": {"fires": {"random_seat": 1}}}
+    assert data["one_sided_rules"] == {"effects": ["702.16e"]}
+    assert data["rule_map"]["702.16e"] == {"verdict": "trained",
+                                           "outputs": ["damage_taken", "gate"]}
+    assert data["halves"] == {"game-disjoint": {"selection": ["g4", "g5"], "reporting": []}}
+    assert data["left_out_of_half"] == {"game-disjoint": {"reporting": ["702.16e"]}}
+    assert gen3.subtypes == tuple(sorted(("zombie", "plains"), key=SUBTYPES.index))
+    assert gen3.keywords == ordered_keywords({"toxic", "flying"})
+    assert gen3.budgeted_rules == {"702.16e"}
+    assert gen3.rule_outputs("702.16e") == ("damage_taken", "gate")
+    assert gen3.rule_outputs("999.9") == ()
+
+
+def test_a_gen2_manifest_writes_no_gen3_field(manifest_dict):
+    gen3 = set(_gen3_fields())
+    assert gen3 <= set(_GEN1_DEFAULTS)
+    assert not gen3 & set(manifest_dict)
