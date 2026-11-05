@@ -4,8 +4,10 @@ The schedule is ``training_schedule``'s pure functions and corpus reading
 ``train_effect_model``'s; each step's host half is a ``StepPreparer``'s and its device half a
 ``StepLossComputer``'s, validation is a ``Validator``'s and every line between
 steps a ``RunReporter``'s. An epoch is a step count, not a pass over the
-corpus, and walks ``--shards-per-epoch`` shards one at a time. The best
-checkpoint is chosen by the card-disjoint validation loss.
+corpus, and walks ``--shards-per-epoch`` shards one at a time. Validation,
+stopping and the saved checkpoints read the averaged weights
+(``weight_average``) once warmup has ended; until US8's control score replaces
+it, the best checkpoint is chosen by the card-disjoint validation loss on them.
 """
 
 from __future__ import annotations
@@ -247,13 +249,21 @@ class TrainingLoop:
         run.optimizer.zero_grad(set_to_none=True)
         tally = EpochTally(running=torch.zeros((), device=self.device))
         if self.curriculum.resets_at(epoch):
+            # The field set changes here, so no earlier score compares (T5).
             run.stopper.reset()
             self.reporter.curriculum(epoch, len(run.fields[epoch]))
         self._train_epoch(epoch, run, tally)
-        card, game = self.validator.epoch(run, samples, run.fields[epoch])
-        self.reporter.epoch(epoch, tally, card, game, self.validator.floor.floor)
-        self.reporter.unresolved(run.preparer)
-        return self._close_epoch(epoch, run, card.loss)
+        # An epoch ending before warmup does has no average yet: it is
+        # validated on the current weights and is no best candidate.
+        with run.average.applied() as averaged:
+            card, game = self.validator.epoch(run, samples, run.fields[epoch])
+            self.reporter.epoch(epoch, tally, card, game, self.validator.floor.floor)
+            self.reporter.unresolved(run.preparer)
+            best = self._save_epoch(epoch, run, card.loss, candidate=averaged)
+        save_resume(run, epoch, best=best)
+        if run.stopper.should_stop:
+            self.reporter.early_stop()
+        return run.stopper.should_stop
 
     def _train_epoch(self, epoch: int, run: RunContext, tally: EpochTally) -> None:
         plan = self._epoch_plan(epoch, run)
@@ -270,10 +280,13 @@ class TrainingLoop:
             for task in self._epoch_plan(epoch + 1, run).tasks:
                 run.pool.submit(task)
 
-    def _close_epoch(self, epoch: int, run: RunContext, card_disjoint_loss: float) -> bool:
-        """Save what the epoch earned and its resume state; True to stop early."""
-        stopper = run.stopper
-        best = stopper.update(card_disjoint_loss)
+    def _save_epoch(
+        self, epoch: int, run: RunContext, card_disjoint_loss: float, *, candidate: bool,
+    ) -> bool:
+        """Save what the epoch earned, with the weights it was validated on;
+        True when it set a new best. An epoch that is no best ``candidate``
+        leaves the stopper alone, so it counts toward no patience."""
+        best = candidate and run.stopper.update(card_disjoint_loss)
         if best or self.config.save_every_epoch:
             checkpoint = self._checkpoint(epoch, run)
             output = self.config.resolved_model_output()
@@ -281,10 +294,7 @@ class TrainingLoop:
                 EffectModelStore(output).save(checkpoint)
             if self.config.save_every_epoch:
                 EffectModelStore(output / EPOCHS_DIR).save(checkpoint)
-        save_resume(run, epoch, best=best)
-        if stopper.should_stop:
-            self.reporter.early_stop()
-        return stopper.should_stop
+        return best
 
     def _checkpoint(self, epoch: int, run: RunContext) -> EffectCheckpoint:
         return EffectCheckpoint(
@@ -305,6 +315,13 @@ class TrainingLoop:
             loss_denominators=(
                 {} if run.loss_denominators is None else run.loss_denominators.as_dict()
             ),
+            best_control_score=run.best_control_score,
+            rule_mask=str(self.config.rule_mask),
+            deviance_floor=self.config.deviance_floor,
+            ema_epochs=self.config.ema_epochs,
+            stratum_weight=self.config.stratum_weight,
+            relation_values=self.config.relation_values,
+            rule_map_digest=self.spec.facts.rule_map_digest,
         )
 
     def _epoch_plan(self, epoch: int, run: RunContext) -> EpochPlan:
@@ -421,6 +438,7 @@ class TrainingLoop:
             if self._relation_tables is None:
                 self._relation_tables = relation_tables(run.model)
             stats.unread_norms = _optimizer_step(run.optimizer, self._relation_tables)
+            run.average.after_optimizer_step(run.step + 1)
         if due:
             stats.norms = read_back(stats.unread_norms)
         tally.add_step(computed)

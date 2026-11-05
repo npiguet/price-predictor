@@ -38,6 +38,9 @@ logger = logging.getLogger(__name__)
 #: Flags a resumed run may set differently from the run it continues. The
 #: corpus is compared by its digest instead, the vocabulary and keyword
 #: definitions by their bytes, and the holdout unit is the corpus's own.
+#: Every other flag is compared, ``--rule-mask``, ``--deviance-floor``,
+#: ``--ema-epochs``, ``--stratum-weight`` and ``--relation-values`` included
+#: (story 7 acceptance 5).
 RESUME_MAY_CHANGE: frozenset[str] = frozenset({
     "epochs", "patience", "lr_scale", "save_every_epoch", "model_output",
     "prefetch_workers", "resume", "corpus", "cards_folders", "variant_scripts",
@@ -93,6 +96,11 @@ def save_resume(run: RunContext, epoch: int, *, best: bool = False) -> None:
         "loss_denominators": (
             None if run.loss_denominators is None else run.loss_denominators.as_dict()
         ),
+        # ``state`` None while warmup lasts: the resumed run starts the
+        # average at warmup's end, as this one would have.
+        "weight_average": run.average.state_dict(),
+        # None until US8's control score exists (T157-T159).
+        "best_control_score": run.best_control_score,
         "rng": {
             "cpu": torch.get_rng_state(),
             "cuda": (
@@ -130,13 +138,15 @@ def restore_resume(run: RunContext) -> int | None:
     run.loss_denominators = (
         None if denominators is None else LossDenominators.from_dict(denominators)
     )
+    run.average.load_state_dict(state.get("weight_average"))
+    run.best_control_score = state.get("best_control_score")
     torch.set_rng_state(state["rng"]["cpu"])
     if state["rng"]["cuda"] is not None and torch.cuda.is_available():
         torch.cuda.set_rng_state_all(state["rng"]["cuda"])
     epoch, run.step = state["epoch"], state["step"]
     # The run that started fixed its warmup from its own --epochs, which a
     # resume may change.
-    run.warmup = state["warmup"]
+    run.warmup = run.average.warmup = state["warmup"]
     # Recomputed under this run's patience rather than read from the file, so
     # a run that stopped early continues when given more patience, or none
     # (FR-063f).

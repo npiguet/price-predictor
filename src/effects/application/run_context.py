@@ -36,6 +36,7 @@ from effects.application.training_schedule import (
     EarlyStopper,
     warmup_steps,
 )
+from effects.application.weight_average import WeightAverage, average_rate
 from effects.domain.ability_encoder import (
     AbilityEncoder,
     AbilityEncoderConfig,
@@ -94,6 +95,8 @@ class RunContext:
     #: before an epoch began read the same one.
     fields: Mapping[int, tuple[FieldSpec, ...]]
     stopper: EarlyStopper
+    #: The averaged weights validation, stopping and checkpoints read (T4).
+    average: WeightAverage
     #: The processes preparing the run's steps; None prepares them here.
     pool: StepWorkerPool | None = None
     #: Training steps taken over the whole run.
@@ -101,6 +104,10 @@ class RunContext:
     #: Each shipped term's loss denominator (FR-062): the startup pre-pass's,
     #: or the resumed run's; None until either sets it.
     loss_denominators: LossDenominators | None = None
+    #: The best control score so far (FR-068c). The control score is US8's
+    #: (T157-T159), not built yet: carried as None through ``resume.pt`` and
+    #: every checkpoint until it is.
+    best_control_score: float | None = None
 
 
 def api_vocabularies(config: TrainEffectModelConfig) -> tuple[list[str], list[str]]:
@@ -180,6 +187,19 @@ def build_run(
         _identity_table(config, device) if masks.identity_embedding else None
     )
     noise = NoiseState(config.e_noise, config.steps_per_epoch)
+    warmup = warmup_steps(epochs=config.epochs, steps_per_epoch=config.steps_per_epoch)
+    average = WeightAverage(
+        {"encoder": encoder, "model": model, "identity_table": identity_table},
+        rate=average_rate(
+            grad_accum=config.grad_accum, steps_per_epoch=config.steps_per_epoch,
+            ema_epochs=config.ema_epochs,
+        ),
+        warmup=warmup,
+    )
+    logger.info(
+        "Averaged weights: %.1f MB on %s, rate %.3g per optimizer step from step %d.",
+        average.nbytes() / 2**20, device, average.rate, warmup,
+    )
     return RunContext(
         spec=spec, device=device,
         encoder_config=encoder_config, model_config=model_config,
@@ -188,9 +208,7 @@ def build_run(
             parameter_groups(encoder, model, identity_table),
             lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY,
         ),
-        warmup=warmup_steps(
-            epochs=config.epochs, steps_per_epoch=config.steps_per_epoch,
-        ),
+        warmup=warmup,
         preparer=preparer,
         training=Materializer(device, masks, identity_table, noise=noise),
         scoring=Materializer(device, masks, identity_table),
@@ -204,6 +222,7 @@ def build_run(
             for epoch in range(1, config.epochs + 1)
         },
         stopper=EarlyStopper(config.patience),
+        average=average,
     )
 
 

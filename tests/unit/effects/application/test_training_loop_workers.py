@@ -149,7 +149,14 @@ def _run(
             code = None
     monkeypatch.undo()
     assert code in (0, None)
+    from effects.infrastructure.effect_model_store import load_resume_state
+
     return {
+        # The averaged weights the last resume file holds, None without one.
+        "average": (
+            load_resume_state(out)["weight_average"]
+            if (out / "resume.pt").exists() else None
+        ),
         "losses": losses,
         "parameters": {
             f"{owner}.{name}": value.detach().clone()
@@ -168,6 +175,16 @@ def _assert_same(first: dict, second: dict) -> None:
     assert first["parameters"].keys() == second["parameters"].keys()
     for name, value in first["parameters"].items():
         assert torch.equal(value, second["parameters"][name]), name
+    _assert_same_average(first["average"], second["average"])
+
+
+def _assert_same_average(first: dict, second: dict) -> None:
+    assert first["start_step"] == second["start_step"]
+    assert first["state"].keys() == second["state"].keys()
+    for owner, tensors in first["state"].items():
+        assert tensors.keys() == second["state"][owner].keys()
+        for name, value in tensors.items():
+            assert torch.equal(value, second["state"][owner][name]), f"{owner}.{name}"
 
 
 @pytest.fixture(scope="module")
@@ -273,6 +290,9 @@ def test_a_run_resumed_after_an_epoch_is_the_uninterrupted_run(
     assert first["shares"] + second["shares"] == in_process["shares"]
     for name, value in in_process["parameters"].items():
         assert torch.equal(value, second["parameters"][name]), name
+    # The averaged weights too, which validation read: the losses above
+    # include both epochs' validation passes.
+    _assert_same_average(in_process["average"], second["average"])
     assert not multiprocessing.active_children()
 
 
@@ -337,6 +357,92 @@ def test_a_run_resumed_for_more_epochs_warms_up_as_the_run_it_continues(
     assert first["losses"] + second["losses"] == in_process["losses"]
     for name, value in in_process["parameters"].items():
         assert torch.equal(value, second["parameters"][name]), name
+
+
+# ── the averaged weights (T4, story 7 acceptance 4) ─────────────────────
+
+
+def test_the_average_starts_at_warmups_end_and_moves_every_optimizer_step(in_process):
+    """The fixture's warmup is one step, so both epochs end past it."""
+    average = in_process["average"]
+    assert average["start_step"] == 1
+    assert set(average["state"]) == {"encoder", "model"}
+    assert any(
+        not torch.equal(value, in_process["parameters"][f"{owner}.{name}"])
+        for owner, tensors in average["state"].items()
+        for name, value in tensors.items()
+    )
+
+
+def test_a_saved_checkpoint_holds_the_averaged_weights(monkeypatch, corpus, tmp_path, caplog):
+    from effects.infrastructure.effect_model_store import EffectModelStore
+
+    out = tmp_path / "averaged"
+    run = _run(monkeypatch, corpus, out, caplog, workers=0, save_every_epoch=True)
+    saved = EffectModelStore(out / "epochs").load()
+    averaged = run["average"]["state"]
+    for name, value in saved.model_state.items():
+        assert torch.equal(value, averaged["model"][name]), name
+    for name, value in saved.encoder_state.items():
+        assert torch.equal(value, averaged["encoder"][name]), name
+    assert saved.ema_epochs == 1.0 and saved.rule_mask == "hard"
+    assert saved.best_control_score is None and saved.selection_set_digest is None
+
+
+def test_an_epoch_ending_before_warmup_is_no_best_candidate(
+    monkeypatch, corpus, tmp_path, caplog,
+):
+    """Story 7 acceptance 4: at 40 epochs of 7 steps warmup lasts 14 steps,
+    so epoch 1 is validated on the current weights, saves no best checkpoint
+    and leaves the stopper's patience untouched."""
+    from effects.infrastructure.effect_model_store import load_resume_state
+
+    out = tmp_path / "warming"
+    run = _run(monkeypatch, corpus, out, caplog, workers=0, epochs=40, interrupt_after=1)
+    assert run["losses"]
+    state = load_resume_state(out)
+    assert state["warmup"] == 14
+    assert state["weight_average"] == {"state": None, "start_step": None}
+    assert state["stopper"] == {"best": float("inf"), "since_best": 0}
+    assert not (out / "latest.pt").exists() and not (out / "resume-best.pt").exists()
+
+
+def test_a_resume_across_warmup_starts_the_average_at_warmups_end(
+    monkeypatch, corpus, tmp_path, caplog,
+):
+    """Interrupted while warming up, the resumed run starts the average where
+    the uninterrupted run does."""
+    whole = _run(
+        monkeypatch, corpus, tmp_path / "whole", caplog, workers=0, epochs=40,
+        interrupt_after=3,
+    )
+    out = tmp_path / "split"
+    _run(monkeypatch, corpus, out, caplog, workers=0, epochs=40, interrupt_after=1)
+    resumed = _run(
+        monkeypatch, corpus, out, caplog, workers=0, epochs=40, resume=True,
+        interrupt_after=3,
+    )
+    assert whole["average"]["start_step"] == resumed["average"]["start_step"] == 14
+    _assert_same_average(whole["average"], resumed["average"])
+
+
+@pytest.mark.parametrize("flag, value", [
+    ("rule_mask", "soft"), ("deviance_floor", 0.05), ("ema_epochs", 2.0),
+    ("stratum_weight", 0.25), ("relation_values", "off"),
+])
+def test_a_resume_changing_a_training_objective_flag_is_refused(
+    monkeypatch, corpus, tmp_path, caplog, flag, value,
+):
+    """Story 7 acceptance 5, for each flag contracts/cli.md lists."""
+    from effects.domain.rule_mask import RuleMask
+    from effects.infrastructure.effect_model_store import ResumeMismatchError
+
+    if flag == "rule_mask":
+        value = RuleMask(value)
+    out = tmp_path / "interrupted"
+    _run(monkeypatch, corpus, out, caplog, workers=0, interrupt_after=1)
+    with pytest.raises(ResumeMismatchError, match=flag):
+        _run(monkeypatch, corpus, out, caplog, workers=0, resume=True, **{flag: value})
 
 
 def test_a_resume_under_another_seed_is_refused(monkeypatch, corpus, tmp_path, caplog):

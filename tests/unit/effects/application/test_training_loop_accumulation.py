@@ -14,6 +14,7 @@ import torch
 
 from effects.application import training_loop as loop_module
 from effects.application.run_reporter import EpochTally, ShardStats
+from effects.application.weight_average import WeightAverage
 from tests.unit.effects.builders import StubLosses, make_cpu_training_loop
 
 
@@ -28,6 +29,8 @@ def test_every_epoch_steps_the_optimizer_on_its_own_accumulation_boundary(monkey
     )
     run = SimpleNamespace(
         step=0, encoder=None, model=torch.nn.Module(), optimizer=None, training=None,
+        # Averages nothing: these tests read the optimizer step alone.
+        average=WeightAverage({}, rate=1.0, warmup=1),
     )
     for epoch in (1, 2):
         tally = EpochTally(running=torch.zeros(()))
@@ -47,6 +50,8 @@ def test_a_shard_ending_between_boundaries_still_reports_its_last_norms(monkeypa
     loop.losses = StubLosses(lambda prepared: weight * 2.0)
     run = SimpleNamespace(
         step=0, encoder=None, model=torch.nn.Module(), training=None,
+        # Averages nothing: these tests read the optimizer step alone.
+        average=WeightAverage({}, rate=1.0, warmup=1),
         optimizer=torch.optim.SGD([{"params": [weight], "name": "head"}], lr=0.1),
     )
     tally = EpochTally(running=torch.zeros(()))
