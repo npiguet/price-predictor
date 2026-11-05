@@ -20,6 +20,14 @@ final class ForkBudget {
     /** At most this many forks may target one real resolution (FR-040). */
     static final int MAX_FORKS_PER_RESOLUTION = 2;
 
+    /**
+     * At most this many protection forks a game (FR-058), on a run taking
+     * interventions: a budget of their own rather than a share of
+     * {@code --interventions-per-game}, which the forced resolutions spend
+     * from the game's first boundary on, before any creature is out.
+     */
+    static final int MAX_PROTECTION_FORKS_PER_GAME = 1;
+
     private final int interventionsPerGame;
     private final int probesPerGame;
     private final List<String> probeKeywords;
@@ -28,6 +36,7 @@ final class ForkBudget {
     private int interventionsUsed;
     private int probesUsed;
     private int directedUsed;
+    private int protectionUsed;
     private final Map<Integer, Integer> forksPerResolution = new HashMap<>();
 
     ForkBudget(CollectionCaps caps) {
@@ -97,5 +106,18 @@ final class ForkBudget {
     /** Spend one directed fork, kept or discarded. */
     void spendDirected() {
         directedUsed++;
+    }
+
+    /**
+     * Whether a protection fork may be taken: never on a run taking no
+     * interventions, and at most {@value #MAX_PROTECTION_FORKS_PER_GAME} a game.
+     */
+    boolean mayProtect() {
+        return interventionsPerGame > 0 && protectionUsed < MAX_PROTECTION_FORKS_PER_GAME;
+    }
+
+    /** Spend one protection fork, kept or discarded. */
+    void spendProtection() {
+        protectionUsed++;
     }
 }

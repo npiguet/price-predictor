@@ -33,7 +33,7 @@ public final class GameRecording implements AutoCloseable {
     private final Game game;
     private final BusBracketCollector bracket;
     private final PatchedCollectors patched;
-    /** Stage three's forced resolutions, when the run takes any. */
+    /** Stage three's forced resolutions and protection forks, when the run takes any. */
     private final Optional<InterventionScheduler> interventions;
     /** Stage three's damage-step probes, when the run takes any. */
     private final Optional<ProbeScheduler> probes;
@@ -113,9 +113,14 @@ public final class GameRecording implements AutoCloseable {
                 && (caps.interventionsPerGame() > 0 || caps.probesEnabled());
         CollectorContext forkContext = forking ? context.get() : null;
         ForkBudget budget = new ForkBudget(caps);
+        this.playForward = new ForkPlayForward(this, forkSeats, seed);
+        // A protection fork (FR-058) is an intervention played on, so it is
+        // taken on a run taking interventions, and only there.
         this.interventions = forking
                 ? Optional.of(new InterventionScheduler(
-                        game, new InterventionFork(game, forkContext, budget, seed)))
+                        game, new InterventionFork(game, forkContext, budget, seed),
+                        caps.interventionsPerGame() > 0
+                                ? new ProtectionFork(game, budget, playForward, seed) : null))
                 : Optional.empty();
         this.probes = forking
                 ? Optional.of(new ProbeScheduler(
@@ -127,7 +132,6 @@ public final class GameRecording implements AutoCloseable {
                 recordId -> probes.ifPresent(probe -> probe.writeHeldProbes(recordId)));
         this.patched = new PatchedCollectors(game, context.get(), caps, seed, bracket);
         this.droppedEventsFile = caps.countDroppedEvents() ? droppedEventsFile(writer) : null;
-        this.playForward = new ForkPlayForward(this, forkSeats, seed);
         // Directed forks, on a patched checkout as the other two kinds: the
         // fork plays on through the live game's hooks.
         boolean directing = mode == AttributionMode.PATCHED && caps.directedForksEnabled();
@@ -308,7 +312,7 @@ public final class GameRecording implements AutoCloseable {
         @Subscribe
         public void onPhase(GameEventTurnPhase event) {
             patched.continuous().collect();
-            interventions.ifPresent(InterventionScheduler::collect);
+            interventions.ifPresent(scheduler -> scheduler.collect(event.phase()));
             // Before the turn-based action that deals the damage: the phase
             // event fires ahead of it, which is the only moment a probe can
             // fork from a board where nothing has been dealt yet.

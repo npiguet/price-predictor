@@ -11,6 +11,7 @@ import forge.game.spellability.SpellAbility;
 import java.util.List;
 import java.util.Random;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * An <b>interventional resolution</b>: a fork that forces an ability Forge's
@@ -56,15 +57,25 @@ final class InterventionFork {
      * @return whether a record was written
      */
     boolean intervene(SpellAbility ability, int realResolutionId) {
+        return intervene(ability, realResolutionId, () -> ability.getActivatingPlayer() != null
+                ? ability.getActivatingPlayer()
+                : game.getPhaseHandler().getPlayerTurn());
+    }
+
+    /**
+     * The same, the ability resolved for {@code holder}: the player whose hand
+     * holds it, who need not be the player whose turn it is (FR-057).
+     */
+    boolean intervene(SpellAbility ability, int realResolutionId, Player holder) {
+        return intervene(ability, realResolutionId, () -> holder);
+    }
+
+    private boolean intervene(SpellAbility ability, int realResolutionId, Supplier<Player> perspective) {
         if (!budget.mayIntervene(realResolutionId)) {
             return false;
         }
         Forks.ForkRun run = new Forks.ForkRun(
-                game,
-                () -> budget.spendIntervention(realResolutionId),
-                () -> ability.getActivatingPlayer() != null
-                        ? ability.getActivatingPlayer()
-                        : game.getPhaseHandler().getPlayerTurn());
+                game, () -> budget.spendIntervention(realResolutionId), perspective);
         Boolean written = run.take((verified, snapshots) -> {
             SpellAbility forked = Forks.findInFork(verified.copier(), ability);
             Player actor = forked == null
