@@ -264,6 +264,22 @@ def test_the_subcommand_is_wired(catalogue, monkeypatch):
         encoding="utf-8").splitlines()[0] == "121.4"
 
 
+def test_a_rule_left_out_is_never_listed_and_its_reason_is_printed(
+        catalogue, capsys, monkeypatch):
+    monkeypatch.setattr(rc, "NOT_DIRECTED", {"400.6": "no detector tells its fork apart"})
+    listed, cards, out = _run(catalogue, capsys)
+    # 400.6 is one-sided with a forkable variant, so its counts alone would list it.
+    assert listed == ["121.4", "500.3", "702.9a", "702.10b", "704.5f"]
+    assert "rest in peace" not in cards
+    assert "left out 400.6: no detector tells its fork apart" in out
+    assert out.splitlines()[-1].startswith("5 rules")
+
+
+def test_the_rules_left_out_are_the_four_the_user_dropped_each_with_a_reason():
+    assert sorted(rc.NOT_DIRECTED) == ["104.2a", "500.11", "701.12d", "702.62d"]
+    assert all(reason.strip() for reason in rc.NOT_DIRECTED.values())
+
+
 # --- gen3-fields (T108): newly learnable rules and the turn_action verdict -------------------
 
 

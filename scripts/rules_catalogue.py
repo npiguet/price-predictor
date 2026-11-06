@@ -817,6 +817,19 @@ def cmd_status(_args):
 RARE_FIRES = 100
 #: Enabled for directed forks whatever its counts (FR-014b).
 ALWAYS_DIRECTED = ("704.5f",)
+#: Left out whatever their counts, each for its reason: no detector can tell
+#: their fork from its live game, so a directed fork of theirs would add no
+#: record of the side it is for (the user's decision of 2026-11-06, T096).
+NOT_DIRECTED = {
+    "104.2a": "the AI never concedes, the only forkable variant (add Platinum Angel) stops "
+              "any other loss, and the lacking polarity is no event",
+    "500.11": "500.11-1 (Eon Hub) has no detector, a static skip filing no event, and "
+              "500.11-2's contrast is a choice",
+    "701.12d": "701.12d-1 has no detector and its only forkable variant is polarity other; "
+               "701.12d-2's contrast is ownership, not a board edit",
+    "702.62d": "the suspend cast happens inside a resolution, never at a priority stop, so "
+               "no playability record exists for it",
+}
 FIRES, DOES_NOT_FIRE = "fires", "does_not_fire"
 
 
@@ -882,9 +895,11 @@ def forkable_variants(scenarios, lacking):
 def directed_rules(counts, by_rule):
     """The rules FR-014b enables, in unit order: ``rule -> {counts, lacking,
     variants, by_counts}``; ``by_counts`` is False for a rule listed only as
-    one of ``ALWAYS_DIRECTED``."""
+    one of ``ALWAYS_DIRECTED``. A rule of ``NOT_DIRECTED`` is never listed."""
     out = {}
     for rule, scenarios in by_rule.items():
+        if rule in NOT_DIRECTED:
+            continue
         found = rule_counts(counts, rule, scenarios)
         lacking = lacking_polarities(*found) if found is not None else set()
         by_counts = bool(lacking)
@@ -947,6 +962,8 @@ def cmd_directed_rules(args):
             print(f"    {mark} {scenario_id} {label} ({polarity}): {operation}")
     rare = sum(FIRES in row["lacking"] for row in chosen.values())
     one_sided = sum(DOES_NOT_FIRE in row["lacking"] for row in chosen.values())
+    for rule, reason in NOT_DIRECTED.items():
+        print(f"left out {rule}: {reason}")
     print(f"{len(chosen)} rules ({rare} rare, {one_sided} one-sided, "
           f"{sum(not row['by_counts'] for row in chosen.values())} always), {len(cards)} wording "
           f"cards; * marks a variant of a polarity the counts lack")

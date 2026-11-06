@@ -19,7 +19,6 @@ changeling hero
 clone
 cloudpiercer
 concerted effort
-confiscate
 cosi's trickster
 counterspell
 craw wurm
@@ -60,7 +59,6 @@ hakbal of the surging soul
 hanweir battlements
 hanweir garrison
 hanweir watchkeep
-harness infinity
 hill giant
 history of benalia
 holy strength
@@ -69,13 +67,11 @@ ichor rats
 invasion of zendikar
 island
 ixidron
-juzám djinn
 karn liberated
 leyline of punishment
 lich's mirror
 lightning bolt
 marchesa, the black rose
-meditate
 merfolk branchwalker
 midnight scavengers
 mountain
@@ -88,14 +84,12 @@ pacifism
 phyrexian arena
 pir, imaginative rascal
 plains
-platinum angel
 platinum emperion
 radiate
 radical idea
 rakdos cackler
 rest in peace
 reverse engineer
-rift bolt
 runeclaw bear
 savannah lions
 seal of fire
@@ -112,7 +106,6 @@ steel golem
 stifle
 swamp
 swords to plowshares
-thalia, guardian of thraben
 toothy, imaginary friend
 tormenting voice
 tree of perdition

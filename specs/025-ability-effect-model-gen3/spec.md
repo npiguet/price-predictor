@@ -655,7 +655,9 @@ and that the reporting half never enters the control score.
 - **FR-014b**: Board preconditions MUST be registered for 704.5f and for every rule that gen-2's
   per-rule counts (`output/effects/rule-counts-gen2.json`) show with fewer than 100 `fires` records
   over all sources, or with no `does_not_fire` record, and that has a non-base variant classified
-  into an operation after the rerun of FR-003. The list is checked in as
+  into an operation after the rerun of FR-003, except 104.2a, 500.11, 701.12d and 702.62d, whose
+  forks no detector can tell from their live games (`directed-rules` names each with its reason,
+  decided 2026-11-06). The list is checked in as
   `rules/directed-fork-rules.txt`, one rule id per line, and is what the full collection passes to
   `--directed-fork-rules`.
 
