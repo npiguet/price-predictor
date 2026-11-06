@@ -82,7 +82,20 @@
         "Plains",
         "Secrets of the Golden City"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution of a spell whose card has ascend gives its controller the city's blessing (a state_flag_change on the player).",
+        "near_miss": "A resolution of a spell whose card has ascend gives no player the city's blessing.",
+        "params": {
+          "event": "state_flag_change",
+          "flag": "city_blessing",
+          "value": true,
+          "source_keyword": "Ascend"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.131b-1",

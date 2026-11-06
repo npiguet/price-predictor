@@ -12,7 +12,7 @@
         "702.39a"
       ],
       "title": "A provoked creature untaps and must block the provoking attacker if able",
-      "record_kind": "combat",
+      "record_kind": "playability",
       "setup": {
         "active": "A",
         "step": "declare_attackers",
@@ -67,7 +67,20 @@
         "Grizzly Bears",
         "Ironclaw Orcs"
       ],
-      "forge_notes": "Provoke is a may-trigger; the harness fixes the choice to use it."
+      "forge_notes": "Provoke is a may-trigger; the harness fixes the choice to use it.",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A blockers legality record lists a creature a requirement (provoke's) makes block the anchored attacker if able.",
+        "near_miss": "A blockers legality record lists a creature that no requirement binds to block the anchor.",
+        "params": {
+          "list": "must_block",
+          "fires_when": "inside"
+        },
+        "needs": [
+          "must_block"
+        ]
+      }
     },
     {
       "id": "702.39b-1",

@@ -534,7 +534,21 @@
         "Ajani Goldmane",
         "Jace Beleren"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A planeswalker is among the defenders an attacking creature may attack.",
+        "near_miss": "A permanent that is not a legal defender for the anchored attacker is outside the list.",
+        "params": {
+          "list": "legal_defenders",
+          "fires_when": "inside",
+          "universe": "battlefield"
+        },
+        "needs": [
+          "legal_defenders"
+        ]
+      }
     },
     {
       "id": "306.8-1",

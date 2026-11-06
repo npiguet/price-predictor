@@ -248,7 +248,18 @@
         "Grizzly Bears",
         "Ornithopter"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "combat",
+        "outcome": "A creature deals combat damage equal to its power: the combat record holds a combat damage_dealt event from it.",
+        "near_miss": "A creature in combat with power 0 or less deals no combat damage (no near miss is counted without an api).",
+        "params": {
+          "event": "damage_dealt",
+          "combat": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "302.4b-1",
@@ -780,7 +791,23 @@
         "Grizzly Bears",
         "Llanowar Elves"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "combat",
+        "outcome": "Combat damage dealt to a creature by a source without infect or wither is marked on it: a combat damage_dealt to a creature in combat with no -1/-1 counter_change in the record.",
+        "near_miss": "Combat damage to a creature in combat comes with -1/-1 counters (infect or wither), so it is not marked as damage.",
+        "params": {
+          "event": "damage_dealt",
+          "combat": true,
+          "subject_in_combat": true,
+          "without_event": {
+            "event": "counter_change",
+            "counter_type": "M1M1"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "302.7-3",

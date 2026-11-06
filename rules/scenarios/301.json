@@ -325,7 +325,20 @@
         "Plains",
         "Stonehewer Giant"
       ],
-      "forge_notes": "No does_not_fire variant: every Equipment spell enters unattached, and the only Equipment that enters attached is one an effect puts onto the battlefield attached, which 301.5e-1 covers (its ordinary_creature variant)."
+      "forge_notes": "No does_not_fire variant: every Equipment spell enters unattached, and the only Equipment that enters attached is one an effect puts onto the battlefield attached, which 301.5e-1 covers (its ordinary_creature variant).",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An Equipment permanent spell resolves and the Equipment enters the battlefield with no attach event: it enters unattached.",
+        "near_miss": "An Equipment enters the battlefield and is attached in the same resolution.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "battlefield",
+          "source_keyword": "Equip",
+          "without_event": "attached"
+        },
+        "needs": []
+      }
     },
     {
       "id": "301.5b-2",

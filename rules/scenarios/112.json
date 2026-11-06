@@ -261,7 +261,20 @@
         "Twincast",
         "Negate"
       ],
-      "forge_notes": "Twincast's copy is created on the stack by CopySpellAbility; Negate's ValidTgts is Card.nonCreature, so the copy must count as a noncreature spell on the stack."
+      "forge_notes": "Twincast's copy is created on the stack by CopySpellAbility; Negate's ValidTgts is Card.nonCreature, so the copy must count as a noncreature spell on the stack.",
+      "detector": {
+        "family": "resolution_outcome",
+        "record_kind": "resolution",
+        "outcome": "A spell, including a copy of one, is countered and leaves the stack without resolving.",
+        "near_miss": "A spell resolves instead of being countered.",
+        "params": {
+          "outcome": "countered",
+          "near": [
+            "resolved"
+          ]
+        },
+        "needs": []
+      }
     },
     {
       "id": "112.1b-1",
@@ -344,7 +357,20 @@
         "Shock",
         "Negate"
       ],
-      "forge_notes": "The Scepter's imprint is normally set by its enters trigger; the setup needs the exiled card remembered as imprinted and exiled with the Scepter."
+      "forge_notes": "The Scepter's imprint is normally set by its enters trigger; the setup needs the exiled card remembered as imprinted and exiled with the Scepter.",
+      "detector": {
+        "family": "resolution_outcome",
+        "record_kind": "resolution",
+        "outcome": "A spell, including a copy of a card a player cast, is countered and leaves the stack without resolving.",
+        "near_miss": "A spell resolves instead of being countered.",
+        "params": {
+          "outcome": "countered",
+          "near": [
+            "resolved"
+          ]
+        },
+        "needs": []
+      }
     },
     {
       "id": "112.2-1",

@@ -551,7 +551,7 @@
         "702.26g"
       ],
       "title": "Equipment phases out and in along with the permanent it is attached to",
-      "record_kind": "continuous",
+      "record_kind": "turn_action",
       "setup": {
         "active": "B",
         "step": "end",
@@ -612,7 +612,19 @@
         "Sandbar Crocodile",
         "Bonesplitter"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "In a player's untap step a permanent phases out or in, and the Auras and Equipment attached to it phase indirectly with it: the phasing turn_action record holds phased events for them.",
+        "near_miss": "No near miss is counted: outcome_event counts one only with an api or keyword.",
+        "params": {
+          "event": "phased"
+        },
+        "needs": [
+          "turn_action"
+        ]
+      }
     },
     {
       "id": "702.26i-1",
@@ -620,7 +632,7 @@
         "702.26i"
       ],
       "title": "A directly phased-out Equipment phases in attached to its host if the host is still there",
-      "record_kind": "continuous",
+      "record_kind": "turn_action",
       "setup": {
         "active": "B",
         "step": "end",
@@ -671,7 +683,20 @@
         "Grizzly Bears",
         "Bonesplitter"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "In a player's untap step a phased-out permanent phases in: the phasing turn_action record holds a phased event with out false.",
+        "near_miss": "No near miss is counted: outcome_event counts one only with an api or keyword.",
+        "params": {
+          "event": "phased",
+          "out": false
+        },
+        "needs": [
+          "turn_action"
+        ]
+      }
     },
     {
       "id": "702.26j-1",
@@ -819,7 +844,7 @@
         "702.26p"
       ],
       "title": "Multiple instances of phasing on one permanent are redundant",
-      "record_kind": "continuous",
+      "record_kind": "turn_action",
       "setup": {
         "active": "B",
         "step": "end",
@@ -869,7 +894,19 @@
         "Sandbar Crocodile",
         "Teferi's Curse"
       ],
-      "forge_notes": "Teferi's Curse phases out indirectly with the host, so the attached aura is part of the observed state. A redundancy rule has no does_not_fire branch: no board state lets a second instance change the outcome, so the one-instance variant is the identical-outcome control."
+      "forge_notes": "Teferi's Curse phases out indirectly with the host, so the attached aura is part of the observed state. A redundancy rule has no does_not_fire branch: no board state lets a second instance change the outcome, so the one-instance variant is the identical-outcome control.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "In a player's untap step a permanent phases once however many instances of phasing it has: the phasing turn_action record holds a single phased event for it.",
+        "near_miss": "No near miss is counted: outcome_event counts one only with an api or keyword.",
+        "params": {
+          "event": "phased"
+        },
+        "needs": [
+          "turn_action"
+        ]
+      }
     }
   ]
 }

@@ -1587,7 +1587,18 @@
         "Burnout Bashtronaut",
         "Goblin Piker"
       ],
-      "forge_notes": "Speed is not part of any existing record field."
+      "forge_notes": "Speed is not part of any existing record field.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution of a permanent whose card has start your engines! is followed by its controller's speed rising from none to 1 in the state-based check (a speed_changed event).",
+        "near_miss": "A resolution of such a permanent leaves its controller's speed unchanged, the player having speed already.",
+        "params": {
+          "event": "speed_changed",
+          "source_keyword": "Start your engines"
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.7-1",
@@ -1788,7 +1799,19 @@
         "Grizzly Bears",
         "Kick in the Door"
       ],
-      "forge_notes": "Lost Mine of Phandelver is a Forge token script (tokenscripts/lost_mine_of_phandelver.txt). Dungeon completion is not a field of any record."
+      "forge_notes": "Lost Mine of Phandelver is a Forge token script (tokenscripts/lost_mine_of_phandelver.txt). Dungeon completion is not a field of any record.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A dungeon is completed and removed from the command zone in the state-based check after a resolution (a state_flag_change dungeon_completed on its owner).",
+        "near_miss": "No near miss is tagged: no api singles out the room abilities that leave a dungeon uncompleted.",
+        "params": {
+          "event": "state_flag_change",
+          "flag": "dungeon_completed",
+          "value": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.5v-1",

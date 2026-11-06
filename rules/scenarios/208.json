@@ -80,7 +80,18 @@
         "Nightmare",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A characteristic-defining static sets a permanent's power and toughness outright from a stated condition.",
+        "near_miss": "The static applies to the board and contributes no set power or toughness.",
+        "params": {
+          "field": "pt",
+          "value": "="
+        },
+        "needs": []
+      }
     },
     {
       "id": "208.2b-1",

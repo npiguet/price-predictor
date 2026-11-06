@@ -78,7 +78,21 @@
         "Plains",
         "Tifa's Limit Break"
       ],
-      "forge_notes": "Forge implements the tiers as a Charm with ModeCost."
+      "forge_notes": "Forge implements the tiers as a Charm with ModeCost.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Pump that triples power and toughness changes them by a modifier (a pt_change event) instead of setting them.",
+        "near_miss": "A tripling Pump resolution that produces no pt_change.",
+        "params": {
+          "event": "pt_change",
+          "api": "Pump",
+          "script_param": {
+            "NumAtt": "Triple"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.11b-1",
@@ -244,7 +258,21 @@
         "Tifa's Limit Break",
         "Wall of Wood"
       ],
-      "forge_notes": "Forge's Triple may compute the modifier as twice the value without special handling of negatives; the expected values follow the rule text."
+      "forge_notes": "Forge's Triple may compute the modifier as twice the value without special handling of negatives; the expected values follow the rule text.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A Pump that triples power and toughness changes them by a modifier (a pt_change event) of twice the current value, negative values included.",
+        "near_miss": "A tripling Pump resolution that produces no pt_change.",
+        "params": {
+          "event": "pt_change",
+          "api": "Pump",
+          "script_param": {
+            "NumAtt": "Triple"
+          }
+        },
+        "needs": []
+      }
     }
   ]
 }

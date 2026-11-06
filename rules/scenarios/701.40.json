@@ -208,7 +208,19 @@
         "Exalted Angel",
         "Serra Angel"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A turn-face-up candidate acting through the morph keyword's line is playable (can_play true).",
+        "near_miss": "A morph turn-face-up candidate that is not playable.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Morph"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.40d-1",
@@ -267,7 +279,19 @@
         "Bolrac-Clan Basher",
         "Craw Wurm"
       ],
-      "forge_notes": "A manifested disguise card has no ward {2}: ward comes only from casting it face down with disguise."
+      "forge_notes": "A manifested disguise card has no ward {2}: ward comes only from casting it face down with disguise.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A turn-face-up candidate acting through the disguise keyword's line is playable (can_play true).",
+        "near_miss": "A disguise turn-face-up candidate that is not playable.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "keyword": "Disguise"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.40e-1",

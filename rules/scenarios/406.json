@@ -403,7 +403,19 @@
         "Disenchant",
         "Unsummon"
       ],
-      "forge_notes": "Forge links the two Journey abilities by the remembered cards of each Journey object."
+      "forge_notes": "Forge links the two Journey abilities by the remembered cards of each Journey object.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A linked leaves-the-battlefield ability returns an exiled card from exile to the battlefield.",
+        "near_miss": "A resolution that returns nothing from exile because its linked ability exiled nothing.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "exile",
+          "to_zone": "battlefield"
+        },
+        "needs": []
+      }
     }
   ]
 }

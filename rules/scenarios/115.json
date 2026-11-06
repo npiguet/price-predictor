@@ -445,7 +445,18 @@
         "Doom Blade",
         "Swerve"
       ],
-      "forge_notes": "A's own creature is a legal retarget for A's Doom Blade; B (the Swerve controller) chooses the new target."
+      "forge_notes": "A's own creature is a legal retarget for A's Doom Blade; B (the Swerve controller) chooses the new target.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A change-targets ability resolves and the targets of the spell it acts on differ afterwards.",
+        "near_miss": "A change-targets ability resolves and the spell keeps the targets it had.",
+        "params": {
+          "event": "targets_changed",
+          "api": "ChangeTargets"
+        },
+        "needs": []
+      }
     },
     {
       "id": "115.7b-1",
@@ -523,7 +534,18 @@
         "Llanowar Elves",
         "Arc Trail"
       ],
-      "forge_notes": "In the already-target variant Llanowar Elves stays on B's battlefield as in the base setup."
+      "forge_notes": "In the already-target variant Llanowar Elves stays on B's battlefield as in the base setup.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A change-targets ability resolves and the targets of the spell it acts on differ afterwards.",
+        "near_miss": "A change-targets ability resolves and the spell keeps the targets it had.",
+        "params": {
+          "event": "targets_changed",
+          "api": "ChangeTargets"
+        },
+        "needs": []
+      }
     },
     {
       "id": "115.7c-1",
@@ -607,7 +629,18 @@
         "Toils of Night and Day",
         "Sideswipe"
       ],
-      "forge_notes": "Toils of Night and Day is an Arcane instant, the only kind of spell Sideswipe can target."
+      "forge_notes": "Toils of Night and Day is an Arcane instant, the only kind of spell Sideswipe can target.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A change-targets ability resolves and the targets of the spell it acts on differ afterwards.",
+        "near_miss": "A change-targets ability resolves and the spell keeps the targets it had.",
+        "params": {
+          "event": "targets_changed",
+          "api": "ChangeTargets"
+        },
+        "needs": []
+      }
     },
     {
       "id": "115.7d-1",
@@ -686,7 +719,18 @@
         "Vines of Vastwood",
         "Redirect"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A change-targets ability resolves and the targets of the spell it acts on differ afterwards.",
+        "near_miss": "A change-targets ability resolves and the spell keeps the targets it had.",
+        "params": {
+          "event": "targets_changed",
+          "api": "ChangeTargets"
+        },
+        "needs": []
+      }
     },
     {
       "id": "115.7e-1",
@@ -758,7 +802,18 @@
         "Arc Trail",
         "Redirect"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A change-targets ability resolves and the targets of the spell it acts on differ afterwards.",
+        "near_miss": "A change-targets ability resolves and the spell keeps the targets it had.",
+        "params": {
+          "event": "targets_changed",
+          "api": "ChangeTargets"
+        },
+        "needs": []
+      }
     },
     {
       "id": "115.7f-1",
@@ -840,7 +895,18 @@
         "Arc Lightning",
         "Redirect"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A change-targets ability resolves and the targets of the spell it acts on differ afterwards.",
+        "near_miss": "A change-targets ability resolves and the spell keeps the targets it had.",
+        "params": {
+          "event": "targets_changed",
+          "api": "ChangeTargets"
+        },
+        "needs": []
+      }
     },
     {
       "id": "115.8-1",
@@ -918,7 +984,18 @@
         "Rakdos Charm",
         "Redirect"
       ],
-      "forge_notes": "Rakdos Charm's chosen Smash mode targets Artifact; its Exile mode targets Player."
+      "forge_notes": "Rakdos Charm's chosen Smash mode targets Artifact; its Exile mode targets Player.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A change-targets ability resolves and the targets of the spell it acts on differ afterwards.",
+        "near_miss": "A change-targets ability resolves and the spell keeps the targets it had.",
+        "params": {
+          "event": "targets_changed",
+          "api": "ChangeTargets"
+        },
+        "needs": []
+      }
     },
     {
       "id": "115.9a-1",

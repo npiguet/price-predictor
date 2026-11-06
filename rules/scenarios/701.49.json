@@ -72,7 +72,18 @@
         "Island",
         "Forest"
       ],
-      "forge_notes": "Dungeon cards come from the venture effect (VentureEffect), not from a deck; the dungeon choice is a decision fixed in the scenario."
+      "forge_notes": "Dungeon cards come from the venture effect (VentureEffect), not from a deck; the dungeon choice is a decision fixed in the scenario.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A venture resolution holds a dungeon_ventured event: the player enters a room (the topmost of a dungeon taken into the command zone when none was there).",
+        "near_miss": "A Venture resolution whose effect half holds no dungeon_ventured event.",
+        "params": {
+          "event": "dungeon_ventured",
+          "api": "Venture"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.49b-1",
@@ -147,7 +158,18 @@
         "Island",
         "Forest"
       ],
-      "forge_notes": "The bottom-room variant overlaps 701.49c; it is here as the case where 'adjacent room' does not apply. Forge allows re-choosing a completed dungeon; the scenario chooses a different one to stay within the rules."
+      "forge_notes": "The bottom-room variant overlaps 701.49c; it is here as the case where 'adjacent room' does not apply. Forge allows re-choosing a completed dungeon; the scenario chooses a different one to stay within the rules.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A venture resolution holds a dungeon_ventured event: the player's marker moves to a room of the dungeon.",
+        "near_miss": "A Venture resolution whose effect half holds no dungeon_ventured event.",
+        "params": {
+          "event": "dungeon_ventured",
+          "api": "Venture"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.49c-1",
@@ -213,7 +235,18 @@
         "Island",
         "Forest"
       ],
-      "forge_notes": "Forge's VentureEffect completes the dungeon and then offers every enterable dungeon, including the one just completed; the scenario picks Tomb of Annihilation."
+      "forge_notes": "Forge's VentureEffect completes the dungeon and then offers every enterable dungeon, including the one just completed; the scenario picks Tomb of Annihilation.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A venture resolution holds a dungeon_ventured event: from the bottommost room the dungeon is completed and a new one entered.",
+        "near_miss": "A Venture resolution whose effect half holds no dungeon_ventured event.",
+        "params": {
+          "event": "dungeon_ventured",
+          "api": "Venture"
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.49d-1",

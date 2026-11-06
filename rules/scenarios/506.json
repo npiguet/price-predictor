@@ -430,7 +430,21 @@
         "Jace Beleren",
         "Lightning Bolt"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "An attackers legality record's anchored attacker may not attack a permanent that is not a player, planeswalker or battle: such a permanent is outside its legal_defenders.",
+        "near_miss": "A planeswalker or battle on the battlefield is inside the anchored attacker's legal_defenders.",
+        "params": {
+          "list": "legal_defenders",
+          "fires_when": "outside",
+          "universe": "battlefield"
+        },
+        "needs": [
+          "legal_defenders"
+        ]
+      }
     },
     {
       "id": "506.3a-1",

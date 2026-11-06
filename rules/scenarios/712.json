@@ -215,7 +215,22 @@
         "Moonmist",
         "Delver of Secrets"
       ],
-      "forge_notes": "Forge's SetState transform path goes through Card.canTransform, which should refuse a meld card; confirm that Midnight Scavengers is left untouched."
+      "forge_notes": "Forge's SetState transform path goes through Card.canTransform, which should refuse a meld card; confirm that Midnight Scavengers is left untouched.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A transform instruction resolves on a permanent that cannot transform (a meld card, a face-down permanent, a permanent whose other face is an instant or sorcery) and the permanent does not change faces.",
+        "near_miss": "A transform instruction resolves and the permanent changes faces.",
+        "params": {
+          "event": "face_change",
+          "api": "SetState",
+          "script_param": {
+            "Mode": "Transform"
+          },
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "712.8a-1",
@@ -1203,7 +1218,22 @@
         "Delver of Secrets",
         "Insectile Aberration"
       ],
-      "forge_notes": "No Forge transform effect selects a creature regardless of creature type: Moonmist selects Humans, and a face-down 2/2 has no creature types, so it is also not selected. The scenario shows the outcome, not which of the two reasons Forge applies."
+      "forge_notes": "No Forge transform effect selects a creature regardless of creature type: Moonmist selects Humans, and a face-down 2/2 has no creature types, so it is also not selected. The scenario shows the outcome, not which of the two reasons Forge applies.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A transform instruction resolves on a permanent that cannot transform (a meld card, a face-down permanent, a permanent whose other face is an instant or sorcery) and the permanent does not change faces.",
+        "near_miss": "A transform instruction resolves and the permanent changes faces.",
+        "params": {
+          "event": "face_change",
+          "api": "SetState",
+          "script_param": {
+            "Mode": "Transform"
+          },
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "712.16-1",
@@ -1268,7 +1298,22 @@
         "Hill Giant",
         "Ixidron"
       ],
-      "forge_notes": "Forge's SetState TurnFaceDown may or may not refuse a double-faced permanent; check Delver of Secrets stays face up."
+      "forge_notes": "Forge's SetState TurnFaceDown may or may not refuse a double-faced permanent; check Delver of Secrets stays face up.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An instruction to turn permanents face down resolves and a double-faced permanent stays face up (no face_change event).",
+        "near_miss": "The instruction resolves and a permanent changes face.",
+        "params": {
+          "event": "face_change",
+          "api": "SetState",
+          "script_param": {
+            "Mode": "TurnFaceDown"
+          },
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "712.18-1",
@@ -1812,7 +1857,22 @@
         "Hanweir Watchkeep",
         "Bane of Hanweir"
       ],
-      "forge_notes": "Forge's SetState transform may not check for an instant or sorcery destination face; confirm Invasion of Alara keeps its front face."
+      "forge_notes": "Forge's SetState transform may not check for an instant or sorcery destination face; confirm Invasion of Alara keeps its front face.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A transform instruction resolves on a permanent that cannot transform (a meld card, a face-down permanent, a permanent whose other face is an instant or sorcery) and the permanent does not change faces.",
+        "near_miss": "A transform instruction resolves and the permanent changes faces.",
+        "params": {
+          "event": "face_change",
+          "api": "SetState",
+          "script_param": {
+            "Mode": "Transform"
+          },
+          "absent": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "712.14b-1",

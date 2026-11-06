@@ -65,7 +65,19 @@
         "Mons's Goblin Raiders",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature with haste is among the legal attackers.",
+        "near_miss": "A creature with haste is outside the legal attackers.",
+        "params": {
+          "list": "legal_attackers",
+          "fires_when": "inside",
+          "keyword": "haste"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.10c-1",
@@ -134,7 +146,20 @@
         "Fervor",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate with a {T} in its cost whose source has haste can be played.",
+        "near_miss": "Such a candidate cannot be played.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "cost_symbol": "T",
+          "source_keyword": "haste"
+        },
+        "needs": []
+      }
     }
   ]
 }

@@ -290,7 +290,18 @@
         "Swamp",
         "Divination"
       ],
-      "forge_notes": "The enough_cards variant adds a Swamp below the Mountain in A's library."
+      "forge_notes": "The enough_cards variant adds a Swamp below the Mountain in A's library.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A player who attempted to draw from an empty library loses the game at the next state-based check: a player_lost event whose reason is Milled.",
+        "near_miss": "A player who loses the game for another reason (life, poison, an effect); not counted, since no API scopes the near miss.",
+        "params": {
+          "event": "player_lost",
+          "reason": "Milled"
+        },
+        "needs": []
+      }
     },
     {
       "id": "104.3d-1",
@@ -504,7 +515,17 @@
         "Forest",
         "Flame Rift"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "All remaining players lose at once, so the game ends as a draw (a game_drawn event).",
+        "near_miss": "A state-based check in which one player loses and the other remains, so the game ends with a winner, not a draw.",
+        "params": {
+          "event": "game_drawn"
+        },
+        "needs": []
+      }
     },
     {
       "id": "104.4b-1",
@@ -637,7 +658,19 @@
         "Divine Intervention",
         "Plains"
       ],
-      "forge_notes": "Divine Intervention's counter type is INTERVENTION in Forge. Forge folds the draw into the upkeep trigger as a conditional sub-ability (GameDrawn when no INTERVENTION counters remain) rather than a separate triggered ability, so Forge records one resolution where the rules have two."
+      "forge_notes": "Divine Intervention's counter type is INTERVENTION in Forge. Forge folds the draw into the upkeep trigger as a conditional sub-ability (GameDrawn when no INTERVENTION counters remain) rather than a separate triggered ability, so Forge records one resolution where the rules have two.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolving effect whose script API is GameDrawn ends the game as a draw (game_drawn event).",
+        "near_miss": "A GameDrawn resolution whose condition was not met, so the game continues.",
+        "params": {
+          "event": "game_drawn",
+          "api": "GameDrawn",
+          "api_in_chain": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "104.6-1",

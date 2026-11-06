@@ -229,7 +229,20 @@
         "Sol Ring",
         "Lightning Bolt"
       ],
-      "forge_notes": "The nonactive_player variant moves the whole setup to B (B's battlefield and hand hold the lands and spells above)."
+      "forge_notes": "The nonactive_player variant moves the whole setup to B (B's battlefield and hand hold the lands and spells above).",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A sorcery-speed spell candidate of the active player has its timing allowed: a main phase with an empty stack.",
+        "near_miss": "The same kind of candidate has its timing refused: another step, a non-empty stack or another player's turn.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "505.6b-1",
@@ -317,7 +330,21 @@
         "Forest",
         "Lightning Bolt"
       ],
-      "forge_notes": "The tapped Mountain was not played this turn in the base variant, so the played-land counter is 0 there; in land_already_played the counter is 1."
+      "forge_notes": "The tapped Mountain was not played this turn in the base variant, so the played-land counter is 0 there; in land_already_played the counter is 1.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A land-play candidate of the active player can be played: a main phase, an empty stack and no land played yet.",
+        "near_miss": "A land-play candidate cannot be played: a land already played, a non-empty stack or another step.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "land_play": true
+        },
+        "needs": [
+          "land_play"
+        ]
+      }
     },
     {
       "id": "505.6b-2",
@@ -376,7 +403,23 @@
         "Forest",
         "Exploration"
       ],
-      "forge_notes": "The played-land counter is 1 in both variants."
+      "forge_notes": "The played-land counter is 1 in both variants.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A land-play candidate does not fail the land-play limit check, because the player has a land play left.",
+        "near_miss": "A land-play candidate fails the land-play limit: a land was played and no effect allows another.",
+        "params": {
+          "bit": "failed_check",
+          "check": "land_play_limit",
+          "fires_when": true,
+          "land_play": true
+        },
+        "needs": [
+          "failed_checks",
+          "land_play"
+        ]
+      }
     },
     {
       "id": "505.6b-3",

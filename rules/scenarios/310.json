@@ -556,7 +556,17 @@
         "Lightning Bolt",
         "Stifle"
       ],
-      "forge_notes": "Forge may implement the Siege's defeat trigger engine-side rather than in the card script."
+      "forge_notes": "Forge may implement the Siege's defeat trigger engine-side rather than in the card script.",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "A battle with no defense counters left is put into its owner's graveyard in the state-based check.",
+        "near_miss": "A battle that lost defense counters and still has some.",
+        "params": {
+          "check": "defense_zero"
+        },
+        "needs": []
+      }
     },
     {
       "id": "310.12b-1",

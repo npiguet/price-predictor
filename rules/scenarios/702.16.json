@@ -226,7 +226,17 @@
         "Gods Willing",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "An Aura whose enchanted permanent left the battlefield or gained protection from one of the Aura's colours is put into its owner's graveyard in the state-based check.",
+        "near_miss": "An Aura whose host the record touched and which stayed legal stays attached.",
+        "params": {
+          "check": "aura_illegal"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.16d-1",
@@ -1009,7 +1019,17 @@
         "Plains",
         "Pledge of Loyalty"
       ],
-      "forge_notes": "Pledge of Loyalty gives protection from the colors of permanents its controller controls; with Pledge (white), Grizzly Bears (green) and the colorless Sword and Plains that is white and green."
+      "forge_notes": "Pledge of Loyalty gives protection from the colors of permanents its controller controls; with Pledge (white), Grizzly Bears (green) and the colorless Sword and Plains that is white and green.",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "An Aura whose enchanted permanent left the battlefield or gained protection from one of the Aura's colours is put into its owner's graveyard in the state-based check.",
+        "near_miss": "An Aura whose host the record touched and which stayed legal stays attached.",
+        "params": {
+          "check": "aura_illegal"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.16p-1",
@@ -1080,7 +1100,17 @@
         "Pacifism",
         "Benevolent Blessing"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "An Aura whose enchanted permanent left the battlefield or gained protection from one of the Aura's colours is put into its owner's graveyard in the state-based check.",
+        "near_miss": "An Aura whose host the record touched and which stayed legal stays attached.",
+        "params": {
+          "check": "aura_illegal"
+        },
+        "needs": []
+      }
     }
   ]
 }

@@ -359,7 +359,20 @@
         "Grizzly Bears",
         "Razorgrass Screen"
       ],
-      "forge_notes": "The requirement check against the maximum obeyable set is implemented by Forge's blocking-requirement validation; the tapped state of a non-active creature is a puzzle starting condition."
+      "forge_notes": "The requirement check against the maximum obeyable set is implemented by Forge's blocking-requirement validation; the tapped state of a non-active creature is a puzzle starting condition.",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A blockers legality record lists a creature a requirement makes block the anchored attacker if able.",
+        "near_miss": "A blockers legality record lists a creature that no requirement binds to block the anchor.",
+        "params": {
+          "list": "must_block",
+          "fires_when": "inside"
+        },
+        "needs": [
+          "must_block"
+        ]
+      }
     },
     {
       "id": "509.1c-2",
@@ -429,7 +442,20 @@
         "Razorgrass Screen",
         "Dune Beetle"
       ],
-      "forge_notes": "Forge's handling of must-block requirements that conflict with menace should be confirmed."
+      "forge_notes": "Forge's handling of must-block requirements that conflict with menace should be confirmed.",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A blockers legality record lists a creature a requirement makes block the anchored attacker if able, the requirement obeyed as far as restrictions allow.",
+        "near_miss": "A blockers legality record lists a creature that no requirement binds to block the anchor.",
+        "params": {
+          "list": "must_block",
+          "fires_when": "inside"
+        },
+        "needs": [
+          "must_block"
+        ]
+      }
     },
     {
       "id": "509.1g-1",

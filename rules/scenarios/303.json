@@ -483,7 +483,17 @@
         "Pacifism",
         "Gods Willing"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "An Aura whose host left the battlefield or gained protection from one of the Aura's colours moves to its owner's graveyard in the state-based check after the resolution.",
+        "near_miss": "An Aura whose host the resolution touched stays legal and stays on the battlefield.",
+        "params": {
+          "check": "aura_illegal"
+        },
+        "needs": []
+      }
     },
     {
       "id": "303.4d-1",

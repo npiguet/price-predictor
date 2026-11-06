@@ -82,7 +82,18 @@
         "Grizzly Bears",
         "Glistener Elf"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "combat",
+        "outcome": "A combat damage step in which a creature deals combat damage to a player and the player loses that much life: a life_change beside the damage_dealt.",
+        "near_miss": "A combat damage step holding a life_change with no damage_dealt beside it; damage that gives no life loss (to a creature only, or from an infect source) holds no life_change and is not tagged.",
+        "params": {
+          "event": "life_change",
+          "with_event": "damage_dealt"
+        },
+        "needs": []
+      }
     },
     {
       "id": "119.3-1",

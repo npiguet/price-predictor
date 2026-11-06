@@ -272,9 +272,97 @@
       }
     },
     {
+      "id": "309.5a-1",
+      "rules": [
+        "309.5a"
+      ],
+      "title": "Venturing from a room other than the bottommost moves the venture marker along an arrow",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Mountain",
+            "Island",
+            "Grizzly Bears",
+            {
+              "card": "Immovable Rod",
+              "tapped": true
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Kick in the Door",
+            "Twiddle"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ]
+        },
+        "exile": {},
+        "notes": "Dungeon cards and venture markers are not zones the scenario format lists, so they are described here. Lost Mine of Phandelver and Tomb of Annihilation are Forge token scripts (tokenscripts/). A's library holds enough Forests that no draw empties it. A owns Lost Mine of Phandelver, Tomb of Annihilation and Dungeon of the Mad Mage outside the game, except any in the command zone. A's command zone holds Lost Mine of Phandelver with the venture marker on Storeroom. Immovable Rod stayed tapped through A's untap step by A's choice; it ventures whenever it becomes untapped. A marker can sit on the bottommost room only while that room's ability is on the stack, since 309.6 otherwise removes the dungeon, so the second venture is made in response to that ability. Tomb of Annihilation: Trapped Entry (each player loses 1 life) is its topmost room. Lost Mine of Phandelver rooms: Cave Entrance (scry 1) leads to Goblin Lair and Mine Tunnels; Goblin Lair (1/1 red Goblin token) leads to Storeroom and Dark Pool; Mine Tunnels (Treasure token) leads to Dark Pool and Fungi Cavern; Storeroom (+1/+1 counter on target creature), Dark Pool (each opponent loses 1 life and you gain 1 life) and Fungi Cavern lead to Temple of Dumathoin (draw a card), the bottommost room."
+      },
+      "decisions": [
+        "A casts Kick in the Door targeting Grizzly Bears, tapping Mountain; both players pass and it resolves: Grizzly Bears gets a +1/+1 counter and haste, then A ventures from Storeroom to Temple of Dumathoin (from Goblin Lair, A chooses Dark Pool).",
+        "The room ability of the room entered goes on the stack. A holds priority and casts Twiddle targeting Immovable Rod, choosing untap, tapping Island; both players pass and Twiddle resolves.",
+        "Immovable Rod's untap trigger goes on the stack above the room ability; both players pass and it resolves: A ventures. If Lost Mine of Phandelver is removed, A chooses Tomb of Annihilation as the new dungeon.",
+        "Each room ability that triggers goes on the stack; players pass until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "bottommost_room",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Rod's venture removes Lost Mine of Phandelver from the game and puts Tomb of Annihilation into A's command zone with the marker on Trapped Entry. Trapped Entry's room ability resolves first: each player loses 1 life (A 19, B 19). Then Temple of Dumathoin's room ability resolves: A draws a card."
+        },
+        {
+          "label": "middle_room",
+          "polarity": "fires",
+          "delta": "The venture marker starts on Goblin Lair instead of Storeroom.",
+          "expected": "Kick in the Door moves the marker to Dark Pool. Rod's venture moves it along the arrow from Dark Pool to Temple of Dumathoin; no dungeon is removed or brought in by it. Temple's room ability resolves first (A draws a card), then Dark Pool's (B 19, A 21). With the stack empty, Lost Mine of Phandelver is removed in the state-based check and no Tomb of Annihilation enters; no player loses life to Trapped Entry.",
+          "operation": {
+            "unclassifiable": "not a board edit: the venture marker's room, a dungeon state no operation sets"
+          }
+        }
+      ],
+      "cards": [
+        "Mountain",
+        "Island",
+        "Grizzly Bears",
+        "Immovable Rod",
+        "Kick in the Door",
+        "Twiddle"
+      ],
+      "forge_notes": "Dungeon state is not a field of any record today; the room abilities' effects and the life totals are the observables.",
+      "detector": {
+        "none": "309.5a's outcome is a venture that does not complete the dungeon: outcome_event matches dungeon_ventured with a companion event but cannot require the companion dungeon_completed flag to be absent, and no other family reads the marker's room"
+      }
+    },
+    {
       "id": "309.5b-1",
       "rules": [
-        "309.5a",
         "309.5b"
       ],
       "title": "Venturing while the marker is on the bottommost room removes the dungeon and starts a new one; from any other room the marker follows an arrow",
@@ -356,7 +444,21 @@
         "Kick in the Door",
         "Twiddle"
       ],
-      "forge_notes": "Dungeon state is not a field of any record today; the room abilities' effects and the life totals are the observables."
+      "forge_notes": "Dungeon state is not a field of any record today; the room abilities' effects and the life totals are the observables.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A venture resolution that also completes the player's dungeon (marker on the bottommost room) so a new dungeon begins.",
+        "near_miss": "A venture that moves the marker to another room without completing a dungeon.",
+        "params": {
+          "event": "dungeon_ventured",
+          "with_event": {
+            "event": "state_flag_change",
+            "flag": "dungeon_completed"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "309.6-1",
@@ -449,7 +551,18 @@
         "Cloister Gargoyle",
         "Lightning Bolt"
       ],
-      "forge_notes": "Dungeon removal is not a field of any record today; the card draw and Cloister Gargoyle's power and flying (it gets +3/+0 and flying once A has completed a dungeon) are the observables."
+      "forge_notes": "Dungeon removal is not a field of any record today; the card draw and Cloister Gargoyle's power and flying (it gets +3/+0 and flying once A has completed a dungeon) are the observables.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution in which a dungeon is completed (removed from the command zone) after its bottommost room ability.",
+        "near_miss": "No clean near miss: a resolution without the completion event is not distinguished.",
+        "params": {
+          "event": "state_flag_change",
+          "flag": "dungeon_completed"
+        },
+        "needs": []
+      }
     },
     {
       "id": "309.7-1",

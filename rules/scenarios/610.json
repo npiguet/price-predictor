@@ -379,7 +379,22 @@
         "Terror",
         "Grizzly Bears"
       ],
-      "forge_notes": "The exiled card is in A's exile zone in the base and in B's in the variant."
+      "forge_notes": "The exiled card is in A's exile zone in the base and in B's in the variant.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An object returned to the battlefield from exile enters under its owner's control.",
+        "near_miss": "An object returned from exile that enters under the control of a player who does not own it.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "exile",
+          "to_zone": "battlefield",
+          "controller_is_owner": true
+        },
+        "needs": [
+          "owner"
+        ]
+      }
     },
     {
       "id": "610.3d-1",

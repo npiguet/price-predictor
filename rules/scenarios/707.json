@@ -2179,7 +2179,20 @@
         "Grizzly Bears",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A copy of a permanent spell resolves and the permanent that enters from the stack is a token.",
+        "near_miss": "A permanent spell that is a card, not a copy, enters from the stack as a card.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "battlefield",
+          "subject_is_token": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "707.10g-1",

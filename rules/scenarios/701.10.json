@@ -75,7 +75,21 @@
         "Plains",
         "Unleash Fury"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution that doubles a creature's power is a Pump whose effect half holds a pt_change giving it a power modifier equal to its current power.",
+        "near_miss": "A Pump resolution that does not double power (a fixed bonus).",
+        "params": {
+          "event": "pt_change",
+          "api": "Pump",
+          "script_param": {
+            "NumAtt": "Double"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.10b-1",
@@ -348,7 +362,21 @@
         "Unleash Fury",
         "Wall of Wood"
       ],
-      "forge_notes": "A power below zero is only reachable with an effect that lowers power while leaving toughness positive; the toughness-below-zero branch of 701.10c cannot be reached because the creature dies first."
+      "forge_notes": "A power below zero is only reachable with an effect that lowers power while leaving toughness positive; the toughness-below-zero branch of 701.10c cannot be reached because the creature dies first.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution that doubles a creature's power (a negative power gives a further negative modifier) is a Pump whose effect half holds a pt_change of the doubling.",
+        "near_miss": "A Pump resolution that does not double power.",
+        "params": {
+          "event": "pt_change",
+          "api": "Pump",
+          "script_param": {
+            "NumAtt": "Double"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "701.10d-1",

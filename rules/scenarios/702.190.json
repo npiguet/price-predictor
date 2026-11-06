@@ -169,7 +169,19 @@
         "Hill Giant",
         "Jace Beleren"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent spell whose card prints sneak resolves and its permanent enters attacking.",
+        "near_miss": "A sneak card cast normally enters without attacking.",
+        "params": {
+          "event": "state_flag_change",
+          "flag": "entered_attacking",
+          "source_keyword": "Sneak"
+        },
+        "needs": []
+      }
     }
   ]
 }

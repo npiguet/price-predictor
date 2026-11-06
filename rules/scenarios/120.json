@@ -310,7 +310,22 @@
         "Glistener Elf",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "combat",
+        "outcome": "Combat damage dealt to a player by a source without infect makes the player lose that much life, with no poison counters.",
+        "near_miss": "A combat damage step that changes a player's life total also gives poison counters, an infect source's damage being dealt as poison counters rather than life loss.",
+        "params": {
+          "event": "life_change",
+          "with_event": {
+            "event": "damage_dealt",
+            "combat": true
+          },
+          "without_event": "poison_change"
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.3b-1",
