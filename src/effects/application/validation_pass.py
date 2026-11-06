@@ -120,15 +120,21 @@ class PassCollector(Protocol):
 
 
 class FieldParts:
-    """The loss by field, per record over the pass's records."""
+    """The loss by field, per record over the pass's records; with
+    ``heads``, every shipped record head's terms too, named
+    ``<head>.<term>`` (the control score's deviance items)."""
 
     wants_parts = True
 
-    def __init__(self) -> None:
+    def __init__(self, *, heads: bool = False) -> None:
         self._means = PartsMean()
+        self.wants_head_parts = heads
 
     def add(self, prepared: DeviceStep, computed: StepLoss) -> None:
-        self._means.add(computed.parts, rows=int(prepared.targets.gate.shape[0]))
+        parts = computed.parts
+        if self.wants_head_parts and computed.head_parts:
+            parts = parts.joined(computed.head_parts)
+        self._means.add(parts, rows=int(prepared.targets.gate.shape[0]))
 
     def finish(self) -> None:
         pass
@@ -347,9 +353,11 @@ def score_steps(
     cache prepared once, as the control score's deviance sample does.
     """
     report_parts = any(collector.wants_parts for collector in collectors)
+    head_parts = any(getattr(collector, "wants_head_parts", False) for collector in collectors)
     total = torch.zeros((), device=device)
     batches = 0
-    for prepared, computed in forward.steps(steps, losses, report_parts=report_parts):
+    for prepared, computed in forward.steps(steps, losses, report_parts=report_parts,
+                                            head_parts=head_parts):
         total += computed.shipped
         batches += 1
         for collector in collectors:

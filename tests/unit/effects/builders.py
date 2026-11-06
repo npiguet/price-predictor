@@ -401,7 +401,8 @@ def fixture_selection_set(records, *, corpus_digest: str = "fixture"):
     game, each half's items over its own games' records: two probe types, the
     real damage grid (its 64 cells, edited by ``grid_edits.GridEdits``) over
     records with an acting line and a creature, a rule test, and a deviance
-    sample whose gate and three fields the freeze kept."""
+    sample whose gate, three per-entity fields, a verdict field and two
+    created-objects terms the freeze kept."""
     from effects.domain.effect_head_layout import GATE_TERM
     from effects.domain.grid_edits import VALUES
     from effects.domain.selection_set import (
@@ -445,7 +446,8 @@ def fixture_selection_set(records, *, corpus_digest: str = "fixture"):
             }
             samples[stratum][half] = tuple(SampleRecord(r.record_id, r.game_id, 0)
                                            for r in held[:20])
-            for name in (GATE_TERM, "zone_outcome", "damage_taken", "pt_change"):
+            for name in (GATE_TERM, "zone_outcome", "damage_taken", "pt_change",
+                         "verdict.can_play", "created_objects.present", "created_objects.count"):
                 errors[item_key(stratum, half, DEVIANCE, name)] = {"hard": 0.05, "soft": 0.05}
     return SelectionSet(
         corpus_digest=corpus_digest, r=4,

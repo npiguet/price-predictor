@@ -24,6 +24,24 @@ def test_the_relation_tables_norms_are_reported_beside_the_groups():
     assert "rel_k_norm" in line and "rel_v_norm" in line
 
 
+def test_the_deviance_line_sums_up_each_stratums_items_by_head():
+    """contracts/cli.md: per stratum, each head's mean explained deviance over
+    the items it scored, and how many; a head with none is not shown."""
+    from effects.application.control_score import ControlScore, StratumScore
+    from effects.application.run_reporter import format_deviance
+
+    card = StratumScore({}, {"deviance": {"gate": 0.2, "damage_taken": 0.4,
+                                          "verdict.can_play": 0.5,
+                                          "global.turn_structure_change": 0.1,
+                                          "created_objects.present": -0.3,
+                                          "created_objects.count": 0.1}})
+    game = StratumScore({}, {"deviance": {}})
+    line = format_deviance(ControlScore({"card-disjoint": card, "game-disjoint": game}, 0.5))
+    assert line == (
+        "deviance by head: card-disjoint per_entity 0.300 (2) verdict 0.500 (1) "
+        "created_objects -0.100 (2) global 0.100 (1) | game-disjoint none")
+
+
 def test_the_control_line_prints_each_stratums_components_then_control_and_best():
     """FR-075, contracts/cli.md: per stratum probes, grids, rule_tests,
     deviance and score, then the control score and the run's best."""

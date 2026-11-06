@@ -36,8 +36,11 @@ their labels alone:
 4. Each item's worst-case standard error (E4, ``score_scales``); an item
    above ``max_item_error`` is left out and named, and every trained rule
    whose detector finds no test record in a half is named untested (FR-073).
-   An output field's standard error is computed under both rule-mask modes,
-   from a :class:`DevianceLosses` reader.
+   A deviance item is an output term of any shipped head — a per-entity
+   field or the gate, a verdict or global field, a created-objects slot
+   column or the overflow flag (``selection_set.deviance_item``), the terms
+   the loss denominators divide by — and its standard error is computed
+   under both rule-mask modes, from a :class:`DevianceLosses` reader.
 5. Every component's ``√(Σ SEᵢ²) / m`` at most ``max_component_error`` (both
    modes for the deviance component), and every grid cell holding records;
    otherwise the freeze refuses, naming stratum, half and component.
@@ -149,10 +152,11 @@ class GridSource(Protocol):
 class DevianceLosses(Protocol):
     """The constant prediction's loss on each record of a deviance sample.
 
-    Returns ``field -> mode -> losses``, one loss per record in the order
-    given, each the field's constant-prediction loss on the record weighted as
-    the run's ``--rule-mask`` mode weighs that copy (research E4); a field
-    the sample never supervises may be absent.
+    Returns ``item -> mode -> losses``, one loss per record in the order
+    given, each the item's constant-prediction loss on the record weighted as
+    the run's ``--rule-mask`` mode weighs that copy (research E4); an item is
+    any shipped head's output term, named by ``selection_set.deviance_item``,
+    and one the sample never supervises may be absent.
     """
 
     def losses(

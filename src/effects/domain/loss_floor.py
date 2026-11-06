@@ -27,6 +27,7 @@ weight flags set, and have no floor.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 
 import torch
 
@@ -53,7 +54,9 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.effect_losses import (
     LossParts,
+    created_objects_row_terms,
     created_objects_terms,
+    record_head_row_terms,
     record_head_terms,
 )
 from effects.domain.entity_field_targets import EntityTargetBatch
@@ -63,13 +66,14 @@ from effects.domain.field_kinds import (
     counted,
     fit_log_dispersion,
 )
+from effects.domain.selection_set import PER_ENTITY_HEAD
 
 #: A guard on dividing by a floor, not the degenerate-field detector.
 FLOOR_EPSILON = 1e-9
 
 #: The per-entity head's key among the heads a floor is reported for; the
 #: others are :class:`Head` values.
-PER_ENTITY = "per_entity"
+PER_ENTITY = PER_ENTITY_HEAD
 #: Every head with a floor, in the order a run reports them.
 FLOOR_HEADS: tuple[str, ...] = (
     PER_ENTITY, Head.VERDICT.value, Head.CREATED_OBJECTS.value, Head.GLOBAL.value,
@@ -312,12 +316,23 @@ def constant_predictor_floor(
 # ── the per-record heads ──
 
 
-def _record_head_losses(
-    sample: TargetSample, head: str, layout: RecordHeadLayout,
-) -> dict[str, float]:
-    batches = sample.head_batches(head)
-    if not batches:
-        return {}
+@dataclass(frozen=True)
+class RecordHeadConstant:
+    """A per-record head's best constant over a sample: its outputs and
+    log-dispersions, the fields the sample supervises and those of them whose
+    targets never vary."""
+
+    outputs: torch.Tensor
+    log_dispersion: torch.Tensor
+    supervised: frozenset[str]
+    degenerate: frozenset[str]
+
+
+def record_head_constant(batches: Sequence[tuple], layout: RecordHeadLayout) -> RecordHeadConstant:
+    """The maximum-likelihood constant of a per-record head over ``batches``,
+    each a ``(target, mask[, …])`` of the head's: each member's rate, class
+    frequencies or mean over the records setting its field, and each count's
+    dispersion fitted around that mean."""
     masks = [_field_mask(targets[1], layout) for targets in batches]
     outputs = torch.zeros(layout.width)
     log_dispersion = torch.full((len(layout.dispersed),), LOG_DISPERSION_MAX)
@@ -348,18 +363,52 @@ def _record_head_losses(
             log_dispersion[layout.dispersion_index[str(spec.name)]] = fit_log_dispersion(
                 magnitude, magnitude.mean(0),
             )
+    return RecordHeadConstant(outputs, log_dispersion, frozenset(supervised),
+                              frozenset(degenerate))
+
+
+def _record_head_losses(
+    sample: TargetSample, head: str, layout: RecordHeadLayout,
+) -> dict[str, float]:
+    batches = sample.head_batches(head)
+    if not batches:
+        return {}
+    constant = record_head_constant(batches, layout)
     summed = torch.zeros(len(layout.fields), dtype=torch.float64)
     for targets in batches:
         # The head's own mask, a weight per record under the rule mask.
         summed += record_head_terms(
-            outputs.expand(int(targets[0].shape[0]), layout.width), targets[0], targets[1],
-            layout, log_dispersion=log_dispersion,
+            constant.outputs.expand(int(targets[0].shape[0]), layout.width), targets[0],
+            targets[1], layout, log_dispersion=constant.log_dispersion,
         ).double()
     records = max(sample.records, 1)
     return {
-        name: 0.0 if name in degenerate else float(value) / records
+        name: 0.0 if name in constant.degenerate else float(value) / records
         for name, value in zip(layout.terms, summed.tolist())
-        if name in supervised
+        if name in constant.supervised
+    }
+
+
+def record_head_record_losses(
+    target: torch.Tensor, mask: torch.Tensor, layout: RecordHeadLayout,
+) -> dict[str, torch.Tensor]:
+    """Each field's constant-prediction loss on each record, unweighted: the
+    head's best constant over these records (:func:`record_head_constant`),
+    scored on every record that sets the field and zero elsewhere. A field
+    no record sets is absent; one whose targets never vary is all zero, as
+    its floor is (research E4's ``ℓ_i``)."""
+    flags = _field_mask(mask, layout)
+    if not flags.any():
+        return {}
+    constant = record_head_constant([(target, flags)], layout)
+    rows = record_head_row_terms(
+        constant.outputs.expand(int(target.shape[0]), layout.width), target, flags, layout,
+        log_dispersion=constant.log_dispersion,
+    ).double()
+    return {
+        name: torch.zeros_like(rows[:, position]) if name in constant.degenerate
+        else rows[:, position]
+        for position, name in enumerate(layout.terms) if name in constant.supervised
     }
 
 
@@ -405,6 +454,41 @@ def _created_objects_losses(sample: TargetSample) -> dict[str, float]:
             continue
         losses[name] = 0.0 if _degenerate(values) else float(summed[column]) / records
     return losses
+
+
+def created_objects_record_losses(
+    target: torch.Tensor, mask: torch.Tensor, known: torch.Tensor | None = None,
+) -> dict[str, torch.Tensor]:
+    """Each created-objects term's constant-prediction loss on each record,
+    unweighted: the head's best constant over the records ``mask`` selects,
+    scored on each of them and zero elsewhere, a term summed over the slots
+    as the head's loss sums it. A term no record says is absent; one whose
+    targets never vary is all zero, as its floor is (research E4's ``ℓ_i``)."""
+    rows = _created_rows((target, mask, known))
+    if rows is None:
+        return {}
+    wanted, said = rows
+    outputs, log_dispersion = _created_constant(wanted, said)
+    terms = created_objects_row_terms(
+        outputs.expand(int(wanted.shape[0]), CREATED_OBJECTS_WIDTH), wanted,
+        known=said, log_dispersion=log_dispersion,
+    ).double()
+    selected = mask.detach().bool().cpu().nonzero()[:, 0]
+    slot_known = said[:, :-1].reshape(-1, CREATED_OBJECT_SLOTS, CREATED_SLOT_WIDTH)
+    slot_target = wanted[:, :-1].reshape(-1, CREATED_OBJECT_SLOTS, CREATED_SLOT_WIDTH)
+    out = {}
+    for column, name in enumerate(CREATED_TERMS):
+        if column < CREATED_SLOT_WIDTH:
+            values = slot_target[..., column][slot_known[..., column] > 0]
+        else:
+            values = wanted[:, -1][said[:, -1] > 0]
+        if values.numel() == 0:
+            continue
+        per_record = torch.zeros(int(target.shape[0]), dtype=torch.float64)
+        if not _degenerate(values):
+            per_record.index_copy_(0, selected, terms[:, column])
+        out[name] = per_record
+    return out
 
 
 def _created_rows(targets: tuple) -> tuple[torch.Tensor, torch.Tensor] | None:

@@ -61,6 +61,15 @@ class LossParts:
             return {}
         return dict(zip(self.names, self.values.tolist()))
 
+    def joined(self, other: LossParts) -> LossParts:
+        """These parts followed by ``other``'s, one tensor still on the device."""
+        if other.values is None:
+            return self
+        if self.values is None:
+            return other
+        return LossParts((*self.names, *other.names),
+                         torch.cat([self.values, other.values.to(self.values.device)]))
+
 
 @dataclass(frozen=True, slots=True)
 class _Rows:
@@ -321,6 +330,28 @@ def created_objects_terms(
         target = rows.select(target)
         if known is not None:
             known = rows.select(known)
+    elementwise, overflow = _created_elementwise(prediction, target, known, log_dispersion)
+    columns = elementwise.sum((0, 1))
+    return torch.cat([columns, overflow.sum().reshape(1)])
+
+
+def created_objects_row_terms(
+    prediction: torch.Tensor, target: torch.Tensor, known: torch.Tensor | None = None,
+    *, log_dispersion: torch.Tensor,
+) -> torch.Tensor:
+    """:func:`created_objects_terms` before the sum over records: ``(records,
+    len(CREATED_TERMS))``, each slot column summed over the slots, every
+    record scored (the deviance sample's per-record losses, research E4)."""
+    elementwise, overflow = _created_elementwise(prediction, target, known, log_dispersion)
+    return torch.cat([elementwise.sum(1), overflow.reshape(-1, 1)], dim=-1)
+
+
+def _created_elementwise(
+    prediction: torch.Tensor, target: torch.Tensor, known: torch.Tensor | None,
+    log_dispersion: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Each slot column's loss ``(records, slots, slot width)`` and the
+    overflow flag's ``(records,)``, each at the weight ``known`` gives it."""
     prediction = prediction.float()
     target = target.to(prediction.device).float()
     weights = (
@@ -347,11 +378,10 @@ def created_objects_terms(
             predicted[..., binaries], wanted[..., binaries], reduction="none",
         ),
     ], dim=-1)
-    columns = (elementwise * weight).sum((0, 1))
-    overflow = (functional.binary_cross_entropy_with_logits(
+    overflow = functional.binary_cross_entropy_with_logits(
         prediction[:, -1], target[:, -1], reduction="none",
-    ) * weights[:, -1]).sum()
-    return torch.cat([columns, overflow.reshape(1)])
+    ) * weights[:, -1]
+    return elementwise * weight, overflow
 
 
 def created_objects_loss(
@@ -426,6 +456,46 @@ def record_head_terms(
         weight = rows.select(weights[:, position]).to(prediction.device, non_blocking=True)
         sums[position] = (terms * weight.reshape(-1, *([1] * (terms.dim() - 1)))).sum()
     return torch.stack(sums)
+
+
+def record_head_row_terms(
+    prediction: torch.Tensor, target: torch.Tensor, mask: torch.Tensor,
+    layout: RecordHeadLayout, *, log_dispersion: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """:func:`record_head_terms` before the sum over records, unweighted:
+    ``(records, fields)``, each field's loss on each record that sets it and
+    zero on the others (the deviance sample's per-record losses, research
+    E4). ``mask`` is ``(records, fields)`` or ``(records,)``; any non-zero
+    entry sets the field."""
+    flags = mask.detach().cpu() != 0
+    if flags.dim() == 1:
+        flags = flags.unsqueeze(-1).expand(-1, len(layout.fields))
+    out = torch.zeros(int(prediction.shape[0]), len(layout.fields), dtype=torch.float32,
+                      device=prediction.device)
+    target = target.to(prediction.device, non_blocking=True)
+    for position, spec in enumerate(layout.fields):
+        rows = _Rows.of(flags[:, position], prediction.device)
+        if rows.empty:
+            continue
+        start, end = layout.slices[spec.name]
+        first, last = layout.target_slices[spec.name]
+        predicted = rows.select(prediction)[:, start:end].float().reshape(
+            -1, spec.count, spec.type.width(spec.arity),
+        )
+        wanted = rows.select(target)[:, first:last]
+        dispersion = None
+        if spec.type.has_magnitude:
+            if log_dispersion is None:
+                raise ValueError(
+                    f"{spec.name} is scored by a negative binomial and needs "
+                    "its head's log-dispersions"
+                )
+            dispersion = log_dispersion[layout.dispersion_index[spec.name]]
+        terms = FIELD_KINDS[spec.type].terms(
+            predicted, wanted, arity=spec.arity, cap=MAGNITUDE_CAP, log_dispersion=dispersion,
+        )
+        out[rows.device, position] = terms.reshape(terms.shape[0], -1).sum(-1).float()
+    return out
 
 
 def record_head_loss(

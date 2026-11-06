@@ -34,7 +34,7 @@ probes        rung-3 AUC (binary) or R² (amount), per type     2·AUC − 1; R�
 grids         MAE of the cell means against the rule's cells   1 − MAE / B
 rule tests    per rule, mean over its outputs of the AUC        2·AUC − 1
               ranking ``fires`` above ``does_not_fire``
-deviance      per field, 1 − loss / constant loss              as is
+deviance      per output term, 1 − loss / constant loss        as is
 ============  ===============================================  ===============
 
 Every item is clipped below at −1, a component is the mean of its items, a
@@ -62,10 +62,17 @@ carries (``new:…``, ``planned:…``) and a per-entity output on a record whose
 tag names no entity on the board are not read; a rule with no output left is
 left out of its component.
 
-**The deviance component** reads the fields the frozen set kept under the
-run's mask (each output field's standard error at most the freeze's item
-target), the per-entity head's alone: the freeze computes no item for the
-verdict, global and created-objects heads, so neither is an item here.
+**The deviance component** reads the items the frozen set kept under the
+run's mask (each one's standard error at most the freeze's item target):
+every shipped head's terms, the ones the loss denominators divide by — the
+per-entity head's fields and gate (by their names), the verdict head's fields
+at ``[ACT]``, the global head's at ``[GLOBAL]`` and the created-objects
+head's slot columns and overflow flag (``<head>.<term>``,
+``selection_set.deviance_item``). The model's loss on each is the deviance
+steps' own, weighed by the run's ``--rule-mask`` as training weighs it, and
+its constant-prediction loss the floor's over the same steps
+(``loss_floor.constant_predictor_losses``); a term whose constant loss is at
+or below ``--deviance-floor`` is left out.
 
 Only the prepared half's games and the records its items name are taken
 from a stratum, each distinct record once (a validation stratum repeats a
@@ -128,7 +135,7 @@ from effects.domain.effect_head_layout import (
 from effects.domain.field_types import FieldType
 from effects.domain.grid_edits import CellRead, TextOverride
 from effects.domain.head_decoding import HeadReading, direction_balance, expected_magnitude
-from effects.domain.loss_floor import constant_predictor_floor
+from effects.domain.loss_floor import constant_predictor_losses
 from effects.domain.probe_readouts import READOUTS, item_score
 from effects.domain.rule_mask import CREATED_OBJECTS_OUTPUT, GATE_OUTPUT, RuleMask, copy_weights
 from effects.domain.sampling import SamplingClass
@@ -146,6 +153,7 @@ from effects.domain.selection_set import (
     PROBES,
     RULE_TESTS,
     SelectionSet,
+    deviance_items,
     error_of,
     item_key,
 )
@@ -310,9 +318,10 @@ def rule_item(outputs: Iterable[tuple[Sequence[float], Sequence[float]]]) -> flo
 
 def explained_deviance(parts: Mapping[str, float], floor: Mapping[str, float], *,
                        kept: Iterable[str], deviance_floor: float) -> dict[str, float]:
-    """``1 − loss / constant loss`` per field of ``kept`` the pass scored,
-    leaving out each field whose constant-prediction loss is at or below
-    ``deviance_floor`` (FR-068)."""
+    """``1 − loss / constant loss`` per item of ``kept`` the pass scored (an
+    output term of any shipped head, ``selection_set.deviance_item``), leaving
+    out each whose constant-prediction loss is at or below ``deviance_floor``
+    (FR-068)."""
     out = {}
     for name in kept:
         loss, constant = parts.get(name), floor.get(name)
@@ -764,7 +773,7 @@ class _StratumCache:
     grids: dict[str, _GridItem] = field(default_factory=dict)
     rules: dict[str, dict[str, _OutputReading]] = field(default_factory=dict)
     steps: list = field(default_factory=list)
-    kept_fields: frozenset[str] = frozenset()
+    kept_items: frozenset[str] = frozenset()
     left_out: dict[str, list[str]] = field(default_factory=lambda: defaultdict(list))
     floors: dict[tuple, dict[str, float]] = field(default_factory=dict)
 
@@ -867,7 +876,7 @@ class ControlScorer:
         for name, cache in sorted(self.strata.items()):
             parts.append(
                 f"{name} {len(cache.probes)} probe type(s), {len(cache.grids)} grid(s), "
-                f"{len(cache.rules)} rule(s), {len(cache.kept_fields)} field(s) over "
+                f"{len(cache.rules)} rule(s), {len(cache.kept_items)} deviance item(s) over "
                 f"{sum(c.reads for c in cache.chunks)} read(s) and "
                 f"{sum(int(s.targets.gate.shape[0]) for s in cache.steps)} deviance copies")
         return "; ".join(parts)
@@ -946,20 +955,23 @@ class ControlScorer:
         if not names <= prepared:
             raise ValueError(f"the deviance sample was prepared without {sorted(names - prepared)}")
         key = tuple(spec.name for spec in fields)
-        parts = FieldParts()
+        # Every shipped head's terms, the per-entity fields' and the record
+        # heads' alike, in nats per record over the sample's copies.
+        parts = FieldParts(heads=True)
         kept = KeptTargets() if key not in cache.floors else None
         collectors = (parts,) if kept is None else (parts, kept)
         score_steps((unpack(replace(step, fields=fields)) for step in cache.steps),
                     forward, losses, collectors, device=_device_of(forward))
         if kept is not None:
-            cache.floors[key] = constant_predictor_floor(kept.sample, fields=fields)
+            cache.floors[key] = deviance_items(
+                constant_predictor_losses(kept.sample, fields=fields))
         explained = explained_deviance(parts.means(), cache.floors[key],
-                                       kept=cache.kept_fields, deviance_floor=self.deviance_floor)
+                                       kept=cache.kept_items, deviance_floor=self.deviance_floor)
         if not explained and self.strict:
             raise ControlScoreError(
                 cache.stratum, cache.half, DEVIANCE,
-                f"every field's constant-prediction loss is at or below the deviance "
-                f"floor {self.deviance_floor}, or no kept field is scored this epoch")
+                f"every term's constant-prediction loss is at or below the deviance "
+                f"floor {self.deviance_floor}, or no kept term is scored this epoch")
         return explained
 
 
@@ -1080,7 +1092,7 @@ def _prepare_stratum(
         steps.append(pack(preparer.prepare_scoring_step(sampled, union)))
     cache.chunks = plain.chunks + edited.chunks
     cache.steps = steps
-    cache.kept_fields = _kept_fields(selection, stratum, mask, half=half)
+    cache.kept_items = _kept_items(selection, stratum, mask, half=half)
     for rule in list(cache.rules):
         settled = {output: reading for output, reading in cache.rules[rule].items()
                    if reading.settle()}
@@ -1091,9 +1103,9 @@ def _prepare_stratum(
             cache.left_out[RULE_TESTS].append(rule)
     empty = [component for component, held in (
         (PROBES, cache.probes), (GRIDS, cache.grids), (RULE_TESTS, cache.rules),
-        (DEVIANCE, cache.steps and cache.kept_fields)) if component in components and not held]
+        (DEVIANCE, cache.steps and cache.kept_items)) if component in components and not held]
     if empty and strict:
-        detail = ("no deviance sample or no field the freeze kept" if empty[0] == DEVIANCE
+        detail = ("no deviance sample or no item the freeze kept" if empty[0] == DEVIANCE
                   else "no item to read")
         raise ControlScoreError(stratum, half, empty[0], detail)
     for component in empty:
@@ -1135,10 +1147,11 @@ def _requests(record: EffectRecord, asked: Iterable[tuple], cache: _StratumCache
     return out
 
 
-def _kept_fields(selection: SelectionSet, stratum: str, mask: str, *,
+def _kept_items(selection: SelectionSet, stratum: str, mask: str, *,
                  half: str = SELECTION) -> frozenset[str]:
-    """The output fields the freeze kept in ``half`` under ``mask``: those
-    whose standard error is at most the freeze's item target."""
+    """The deviance items (every shipped head's output terms) the freeze
+    kept in ``half`` under ``mask``: those whose standard error is at most
+    the freeze's item target."""
     limit = float(selection.settings.get("max_item_error", 0.1))
     prefix = item_key(stratum, half, DEVIANCE, "")
     kept = set()

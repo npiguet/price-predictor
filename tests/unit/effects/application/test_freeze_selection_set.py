@@ -419,6 +419,49 @@ def test_deviance_errors_are_recorded_under_both_masks() -> None:
         "hard rule mask", "soft rule mask"}
 
 
+def test_every_heads_terms_are_deviance_items_judged_together() -> None:
+    """The verdict, global and created-objects heads' terms are items beside
+    the per-entity fields (``selection_set.deviance_item``): each gets its
+    standard error under both masks, one too rare to bound is left out and
+    named, and the component's check reads every head's kept items."""
+    halves = _two_halves(150)
+    records, tags = _balanced_records(halves, per_game=2)
+    rare_game = halves[GD]["selection"][0]
+
+    class _EveryHead(_Losses):
+        def losses(self, records):
+            records = list(records)
+            ones = [1.0] * len(records)
+            rare = [1.0 if r.game_id == rare_game else 0.0 for r in records]
+            return {name: {"hard": values, "soft": values} for name, values in (
+                ("gate", ones), ("verdict.can_play", ones), ("created_objects.count", ones),
+                ("global.day_night_change", rare))}
+
+    def frozen_with(max_component_error):
+        # The toy rule tests, probes and grids miss the strict targets; only
+        # the deviance component is looked at, on the set as assembled.
+        try:
+            return _freeze(halves, records, tags, deviance=_EveryHead(), min_games_per_half=1,
+                           max_item_error=0.1, max_component_error=max_component_error), set()
+        except SelectionSetRefused as refused:
+            return refused.selection, {m for m in refused.misses if m.component == "deviance"}
+
+    frozen, misses = frozen_with(0.05)
+    errors = frozen.standard_errors
+    for name in ("gate", "verdict.can_play", "created_objects.count"):
+        error = errors[item_key(GD, "selection", "deviance", name)]
+        assert error["hard"] == pytest.approx(1 / math.sqrt(150))
+    rare = errors[item_key(GD, "selection", "deviance", "global.day_night_change")]
+    assert rare == {"hard": 1.0, "soft": 1.0}
+    left = frozen.left_out[GD]["selection"]["deviance"]
+    assert [item.item for item in left] == ["global.day_night_change"] * 2
+    # Three kept items at 0.0816 each: the component is √3·0.0816 / 3 = 0.047.
+    assert not misses
+    _, misses = frozen_with(0.045)
+    assert {(m.half, m.detail.split(" over ")[1].split(" under ")[0]) for m in misses} == {
+        ("selection", "3 item(s)"), ("reporting", "3 item(s)")}
+
+
 def test_a_missing_component_refuses_naming_it() -> None:
     halves = _two_halves(2)
     records, tags = _balanced_records(halves)

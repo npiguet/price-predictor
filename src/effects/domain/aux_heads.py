@@ -14,10 +14,13 @@ from enum import StrEnum
 
 import torch
 
+from effects.domain.effect_head_layout import GLOBAL_LAYOUT, VERDICT_LAYOUT
 from effects.domain.effect_losses import (
     api_loss,
     created_objects_loss,
+    created_objects_terms,
     global_loss,
+    record_head_terms,
     value_loss,
     verdict_loss,
 )
@@ -67,6 +70,27 @@ def _global(model, hidden, target, mask, *, scale=None) -> torch.Tensor:
     )
 
 
+def _verdict_terms(model, hidden, target, mask) -> torch.Tensor:
+    return record_head_terms(
+        model.verdict(hidden).float(), target, mask, VERDICT_LAYOUT,
+        log_dispersion=model.verdict_dispersion(),
+    )
+
+
+def _created_objects_terms(model, hidden, target, mask, known=None) -> torch.Tensor:
+    return created_objects_terms(
+        model.created_objects(hidden).float(), target, mask, known,
+        log_dispersion=model.created_objects_dispersion(),
+    )
+
+
+def _global_terms(model, hidden, target, mask) -> torch.Tensor:
+    return record_head_terms(
+        model.global_outputs(hidden).float(), target, mask, GLOBAL_LAYOUT,
+        log_dispersion=model.global_dispersion(),
+    )
+
+
 def _value(model, matrix, values, mask) -> torch.Tensor:
     return value_loss(
         model.value_head(matrix).float(), values, mask,
@@ -98,6 +122,11 @@ class HeadSpec:
     #: loss denominators' reciprocals as ``scale`` (FR-062); None for the MLM
     #: head, whose second encoder pass the training loop runs itself.
     loss: Callable[..., torch.Tensor] | None = None
+    #: A shipped head's ``(model, input, *targets) -> per-term sums``, in
+    #: nats over the batch's records and unscaled, in its loss-denominator
+    #: term order (``loss_denominators.HEAD_TERMS``): what the control
+    #: score's explained deviance reads term by term.
+    terms: Callable[..., torch.Tensor] | None = None
     #: Which target tensors the loss reads on the device; the rest are masks
     #: and indices it selects rows by on the host.
     on_device: tuple[int, ...] = (0,)
@@ -120,12 +149,14 @@ class HeadSpec:
 #: Every auxiliary head, shipped ones first, in the order the terms are summed:
 #: reordered, a run would no longer repeat bit for bit.
 AUX_HEADS: tuple[HeadSpec, ...] = (
-    HeadSpec(Head.VERDICT, HeadInput.TRUNK, ("verdict_head",), loss=_verdict),
+    HeadSpec(Head.VERDICT, HeadInput.TRUNK, ("verdict_head",), loss=_verdict,
+             terms=_verdict_terms),
     HeadSpec(
         Head.CREATED_OBJECTS, HeadInput.TRUNK, ("created_objects_head",),
-        loss=_created_objects, on_device=(0, 2),
+        loss=_created_objects, terms=_created_objects_terms, on_device=(0, 2),
     ),
-    HeadSpec(Head.GLOBAL, HeadInput.TRUNK, ("global_head",), loss=_global),
+    HeadSpec(Head.GLOBAL, HeadInput.TRUNK, ("global_head",), loss=_global,
+             terms=_global_terms),
     HeadSpec(
         Head.VALUE, HeadInput.ENCODED, ("value_head", "value_dispersion"),
         weight_field="value_weight",

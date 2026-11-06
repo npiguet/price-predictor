@@ -218,7 +218,8 @@ class TestHalfScoreChecks:
         card = StratumScore(
             {"probes": 0.4, "grids": math.nan, "rule_tests": 0.2, "deviance": 0.1},
             {"probes": {"dies": 0.4}, "grids": {}, "rule_tests": {"704.5f": 0.3, "702.2b": 0.1},
-             "deviance": {"gate": 0.1}},
+             "deviance": {"gate": 0.1, "zone_outcome": 0.3, "verdict.can_play": 0.5,
+                          "created_objects.count": -0.2}},
             {"grids": ("damage",), "rule_tests": ("701.3a",)})
         game = StratumScore(dict.fromkeys(("probes", "grids", "rule_tests", "deviance"), 0.5),
                             {"rule_tests": {"704.5f": 0.5}})
@@ -240,6 +241,16 @@ class TestHalfScoreChecks:
         assert rules.detail.startswith("2 rules scored") and "701.3a" in rules.detail
         assert checks["reporting-half card-disjoint grids"].detail.endswith(
             "1 left out: damage")
+
+    def test_the_deviance_items_of_every_head_are_listed_and_summed_up_by_head(self):
+        checks = {c.name: c for c in bd.half_score_checks(
+            self._score(), half="reporting", games={})}
+        deviance = checks["reporting-half card-disjoint deviance"]
+        assert set(deviance.values) == {"gate", "zone_outcome", "verdict.can_play",
+                                        "created_objects.count"}
+        assert deviance.detail.startswith("4 items scored")
+        assert ("by head: per_entity 0.200 (2), verdict 0.500 (1), "
+                "created_objects -0.200 (1)") in deviance.detail
 
     def test_the_control_score_sits_beside_the_selection_halfs(self):
         checks = {c.name: c for c in bd.half_score_checks(

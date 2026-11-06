@@ -165,7 +165,7 @@ class RecordForward:
 
     def steps(
         self, steps: Iterable[DeviceStep], losses: StepLossComputer, *,
-        report_parts: bool = False,
+        report_parts: bool = False, head_parts: bool = False,
     ) -> Iterator[tuple[DeviceStep, StepLoss]]:
         """Each scoring step and its losses, as validation scores them: the
         loss computer's own device half (which carries the autocast) under
@@ -174,6 +174,7 @@ class RecordForward:
             for step in steps:
                 yield step, losses.device_loss(
                     step, self, self.materializer, report_parts=report_parts,
+                    head_parts=head_parts,
                 )
 
 

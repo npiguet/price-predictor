@@ -182,11 +182,11 @@ def _selection(records) -> SelectionSet:
                 "r.unread": {"fires": tuple(tagged[:2]), "does_not_fire": tuple(tagged[2:4])},
             }
             samples[stratum][half] = tuple(SampleRecord(r.record_id, r.game_id, 0)
-                                           for r in held[:20])
-            for name in (GATE_TERM, "zone_outcome", "damage_taken", "pt_change"):
+                                           for r in held[:70])
+            for name in KEPT_ITEMS:
                 errors[item_key(stratum, half, DEVIANCE, name)] = {"hard": 0.05, "soft": 0.05}
-            errors[item_key(stratum, half, DEVIANCE, "affected_unkept")] = {
-                "hard": 0.5, "soft": 0.5}
+            for name in ("affected_unkept", "verdict.affordable"):
+                errors[item_key(stratum, half, DEVIANCE, name)] = {"hard": 0.5, "soft": 0.5}
     return SelectionSet(
         corpus_digest="fixture", r=4,
         halves={s: {h: tuple(g) for h, g in halves.items()} for s in STRATA},
@@ -194,6 +194,12 @@ def _selection(records) -> SelectionSet:
         grids=grids, rule_tests=rules, deviance_samples=samples,
         standard_errors=errors, left_out={}, settings={"max_item_error": 0.1},
     )
+
+
+#: The deviance items :func:`_selection` keeps: per-entity fields, the gate,
+#: a verdict field and two created-objects terms (``selection_set.deviance_item``).
+KEPT_ITEMS = (GATE_TERM, "zone_outcome", "damage_taken", "pt_change", "verdict.can_play",
+              "verdict.trigger_fired", "created_objects.present", "created_objects.count")
 
 
 RULE_OUTPUTS = {
@@ -294,7 +300,7 @@ class TestTheScorer:
         assert set(items[PROBES]) <= {"dies", "affordable"}
         assert set(items[GRIDS]) == {"grid"}
         assert set(items[RULE_TESTS]) == {"r.board"}
-        assert set(items[DEVIANCE]) <= {GATE_TERM, "zone_outcome", "damage_taken", "pt_change"}
+        assert set(items[DEVIANCE]) <= set(KEPT_ITEMS)
         assert GATE_TERM in items[DEVIANCE]
 
     def test_the_reporting_half_is_never_read(self, scored, records):
@@ -322,6 +328,81 @@ class TestTheScorer:
         chunk = scorer.strata["card-disjoint"].chunks[0]
         features = chunk.batch.inputs.slot_features
         assert all(not hasattr(value, "device") for value in features.values())
+
+
+class TestEveryHeadsTermsAreDevianceItems:
+    """FR-068's deviance over every shipped head's terms: the verdict head's
+    fields at ``[ACT]`` and the created-objects head's slot columns beside the
+    per-entity fields, each kept by the freeze, scored against the floor."""
+
+    def test_a_verdict_field_and_created_objects_terms_enter(self, scored):
+        _, scorer, _, _, score = scored
+        for stratum in STRATA:
+            items = score.strata[stratum].items[DEVIANCE]
+            assert {"verdict.can_play", "created_objects.present"} <= set(items)
+            assert all(-1.0 <= value <= 1.0 for value in items.values())
+            # An item the freeze left out (standard error above 0.1) is not read.
+            assert "verdict.affordable" not in items
+            assert "verdict.affordable" not in scorer.strata[stratum].kept_items
+
+    def test_each_items_floor_is_the_constant_predictors_over_the_sample(self, scored):
+        from effects.domain.loss_floor import TargetSample, constant_predictor_losses
+        from effects.domain.selection_set import deviance_items
+
+        _, scorer, _, _, _ = scored
+        cache = scorer.strata["card-disjoint"]
+        (floors,) = cache.floors.values()
+        assert {"verdict.can_play", "created_objects.present", GATE_TERM} <= set(floors)
+        assert all(not name.startswith("per_entity.") for name in floors)
+        sample = TargetSample()
+        for step in cache.steps:
+            from effects.application.host_cache import unpack
+
+            step = unpack(step)
+            sample.add(step.targets, step.heads)
+        fields = tuple(spec for spec in cache.steps[0].fields)
+        want = deviance_items(constant_predictor_losses(sample, fields=fields))
+        assert floors["verdict.can_play"] == pytest.approx(want["verdict.can_play"])
+
+    def test_a_term_at_or_below_the_deviance_floor_is_left_out(self, run, scored):
+        _, scorer, _, _, score = scored
+        (floors,) = scorer.strata["card-disjoint"].floors.values()
+        verdict, created = floors["verdict.can_play"], floors["created_objects.present"]
+        assert verdict > 0 and created > 0 and verdict != created
+        lower, higher = sorted((("verdict.can_play", verdict),
+                                ("created_objects.present", created)), key=lambda kv: kv[1])
+        floored = ControlScorer(scorer.strata, stratum_weight=scorer.stratum_weight,
+                                deviance_floor=lower[1])
+        items = _epoch(run, floored).strata["card-disjoint"].items[DEVIANCE]
+        assert lower[0] not in items and higher[0] in items
+        # Unfloored, both are scored, at the same values as before.
+        before = score.strata["card-disjoint"].items[DEVIANCE]
+        assert before[higher[0]] == pytest.approx(items[higher[0]])
+
+    def test_a_record_heads_terms_sum_to_its_loss(self, run, records):
+        import torch
+
+        from effects.application.step_loss import StepLossComputer
+        from effects.domain.aux_heads import Head
+        from effects.domain.selection_set import deviance_head
+
+        fields = tuple(run.fields[max(run.fields)])
+        step = run.preparer.prepare_scoring_step(records[:32], fields)
+        losses = StepLossComputer(run.spec.config, run.device)
+        forward = RecordForward(run.encoder, run.model, run.scoring)
+        ((_, computed),) = list(forward.steps([step], losses, report_parts=True,
+                                              head_parts=True))
+        parts = computed.head_parts.as_dict()
+        for head in (Head.VERDICT, Head.CREATED_OBJECTS, Head.GLOBAL):
+            if head not in computed.terms:
+                continue
+            mine = sum(value for name, value in parts.items() if deviance_head(name) == head.value)
+            assert mine == pytest.approx(float(computed.terms[head]), rel=1e-4)
+        assert {deviance_head(name) for name in parts} >= {"verdict", "created_objects"}
+        assert not any(deviance_head(name) == "per_entity" for name in parts)
+        # Asked for no head parts, a step carries none.
+        ((_, plain),) = list(forward.steps([step], losses, report_parts=True))
+        assert not plain.head_parts and isinstance(plain.parts.values, torch.Tensor)
 
 
 class TestAnEmptyComponentExitsOne:

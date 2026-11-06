@@ -21,7 +21,7 @@ from effects.domain.evaluation_report import CheckName, CheckResult, CheckStatus
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.rarity import RARITY_BUCKETS, TextGames
 from effects.domain.records import LEGALITY_SUBKINDS, LegalityDecision
-from effects.domain.selection_set import COMPONENTS, RULE_TESTS
+from effects.domain.selection_set import COMPONENTS, DEVIANCE, RULE_TESTS, deviance_by_head
 from effects.domain.strata import Stratum
 
 if TYPE_CHECKING:
@@ -366,6 +366,10 @@ def _items_detail(component: str, items: Mapping[str, float], left_out: tuple[st
     which it left out."""
     unit = "rules" if component == RULE_TESTS else "items"
     detail = f"{len(items)} {unit} scored, rescaled and clipped below at -1"
+    if component == DEVIANCE and items:
+        heads = deviance_by_head(items)
+        detail += "; by head: " + ", ".join(
+            f"{head} {mean:.3f} ({count})" for head, (mean, count) in heads.items())
     if left_out:
         named = ", ".join(left_out[:NAMED_LEFT_OUT])
         more = len(left_out) - NAMED_LEFT_OUT

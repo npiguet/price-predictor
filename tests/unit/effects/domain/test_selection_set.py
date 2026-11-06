@@ -18,6 +18,10 @@ from effects.domain.selection_set import (
     SelectionSetError,
     TaggedRecord,
     balanced,
+    deviance_by_head,
+    deviance_head,
+    deviance_item,
+    deviance_items,
     error_of,
     error_value,
     item_key,
@@ -126,3 +130,39 @@ def test_balance_keeps_r_times_the_smaller_side_by_a_seeded_draw() -> None:
 def test_balance_ignores_an_empty_group() -> None:
     out = balanced({"a": [1, 2, 3], "b": []}, 1, seed=0, salt="", key=str)
     assert out == {"a": [1, 2, 3], "b": []}
+
+
+# ── deviance items ──────────────────────────────────────────────────────
+
+
+def test_a_deviance_item_is_a_per_entity_field_or_a_heads_qualified_term() -> None:
+    assert deviance_item("per_entity", "damage_taken") == "damage_taken"
+    assert deviance_item("per_entity", "gate") == "gate"
+    assert deviance_item("verdict", "can_play") == "verdict.can_play"
+    assert deviance_item("created_objects", "subtype_urza's") == "created_objects.subtype_urza's"
+    for item in ("damage_taken", "verdict.can_play", "global.day_night_change",
+                 "created_objects.count"):
+        head = deviance_head(item)
+        assert deviance_item(head, item.removeprefix(f"{head}.")) == item
+
+
+def test_deviance_items_flatten_the_floors_heads() -> None:
+    from effects.domain.loss_floor import FLOOR_HEADS, PER_ENTITY
+    from effects.domain.selection_set import DEVIANCE_HEADS, PER_ENTITY_HEAD
+
+    assert DEVIANCE_HEADS == FLOOR_HEADS and PER_ENTITY == PER_ENTITY_HEAD
+    flat = deviance_items({"per_entity": {"gate": 1.0}, "global": {"day_night_change": 0.5}})
+    assert flat == {"gate": 1.0, "global.day_night_change": 0.5}
+
+
+def test_no_per_entity_term_reads_as_another_heads() -> None:
+    from effects.domain.effect_head_layout import PER_ENTITY_TERMS
+
+    assert {deviance_head(term) for term in PER_ENTITY_TERMS} == {"per_entity"}
+
+
+def test_deviance_by_head_averages_each_heads_items_in_floor_order() -> None:
+    got = deviance_by_head({"global.turn_structure_change": 0.1, "gate": 0.2,
+                            "verdict.timing": 0.6, "zone_outcome": 0.4})
+    assert list(got) == ["per_entity", "verdict", "global"]
+    assert got["per_entity"] == pytest.approx((0.3, 2))

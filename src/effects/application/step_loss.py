@@ -7,7 +7,7 @@ training descends.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 import torch
@@ -27,7 +27,8 @@ from effects.domain.aux_heads import (
 )
 from effects.domain.effect_losses import LossParts, mlm_loss, per_entity_loss
 from effects.domain.effect_model import EffectModel
-from effects.domain.loss_denominators import HeadScales, LossDenominators
+from effects.domain.loss_denominators import HEAD_TERMS, HeadScales, LossDenominators
+from effects.domain.selection_set import deviance_item
 
 
 def autocast_enabled(device: torch.device) -> bool:
@@ -77,6 +78,9 @@ class StepLoss:
     pending_mlm: MaskedTokens | None = None
     #: The per-entity head's output at each target entity, detached.
     gathered: torch.Tensor | None = None
+    #: Every shipped record head's terms in nats per record, unscaled,
+    #: named by ``selection_set.deviance_item``; empty unless asked for.
+    head_parts: LossParts = field(default_factory=LossParts)
 
 
 def combine_terms(
@@ -140,12 +144,14 @@ class StepLossComputer:
     def device_loss(
         self, prepared: DeviceStep, modules: TrainedModules,
         materializer: Materializer, *, step: int | None = None,
-        report_parts: bool = False,
+        report_parts: bool = False, head_parts: bool = False,
     ) -> StepLoss:
         """One prepared step's losses: the device half.
 
         ``step`` is a training step's place in the run, for the noise on ``e``;
-        ``report_parts`` keeps each field's term, stacked on the device.
+        ``report_parts`` keeps each per-entity field's term, stacked on the
+        device; ``head_parts`` each shipped record head's term too
+        (:meth:`record_head_parts`), which the control score's deviance reads.
         Autocast encloses ``materialize`` too, because the encoder's forward
         runs there; backward and the optimizer step stay outside it (bf16
         needs no grad scaler).
@@ -167,11 +173,34 @@ class StepLossComputer:
                 report_parts=report_parts,
             )
             terms = self.head_terms(prepared.heads, encoded, modules.model, hidden)
+            extra = (self.record_head_parts(prepared.heads, modules.model, hidden,
+                                            records=int(targets.gate.shape[0]))
+                     if head_parts else LossParts())
         total, shipped = combine_terms(loss, terms, self.weights)
         return StepLoss(
             total=total, shipped=shipped, parts=parts, terms=terms,
             pending_mlm=prepared.heads.get(Head.MLM), gathered=gathered.detach(),
+            head_parts=extra,
         )
+
+    def record_head_parts(self, targets: HeadTargets, model, hidden, *,
+                          records: int) -> LossParts:
+        """Each shipped record head's terms in nats per record over the
+        batch's ``records``, unscaled and weighed as the step's targets weigh
+        them (the run's rule mask), named ``<head>.<term>``; a head the step
+        has no targets for has no terms."""
+        names: list[str] = []
+        values: list[torch.Tensor] = []
+        for spec in SHIPPED_HEADS:
+            given = targets.get(spec.head)
+            if spec.terms is None or given is None:
+                continue
+            sums = spec.terms(model, hidden, *spec.to_device(given, self.device))
+            names += [deviance_item(spec.head.value, term) for term in HEAD_TERMS[spec.head.value]]
+            values.append(sums.detach().double())
+        if not names:
+            return LossParts()
+        return LossParts(tuple(names), torch.cat(values) / max(records, 1))
 
     def head_terms(
         self, targets: HeadTargets, encoded: EncodedBatch, model, hidden,

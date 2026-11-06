@@ -36,7 +36,7 @@ from effects.application.validation_pass import EpochScores, ValidationSamples
 from effects.domain.ability_encoder import TruncationLog, log_truncation
 from effects.domain.rarity import RARITY_BUCKETS
 from effects.domain.sampling import SAMPLING_CLASSES
-from effects.domain.selection_set import COMPONENTS
+from effects.domain.selection_set import COMPONENTS, DEVIANCE, deviance_by_head
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +219,7 @@ class RunReporter:
             metrics.mean_deviance, format_parts(card.parts, floor),
         )
         logger.info("epoch %d | %s", epoch, format_control(scores.control, best))
+        logger.info("epoch %d | %s", epoch, format_deviance(scores.control))
         logger.info(
             "epoch %d | control score scored in %.1fs, %.2f of the epoch's %.0fs of "
             "training (research E2 targets at most 0.2)", epoch, scores.control_seconds,
@@ -270,3 +271,17 @@ def format_control(control, best: float | None) -> str:
         parts.append(f"{stratum} {values} score {score.score:.3f}")
     shown = "none" if best is None else f"{best:.3f}"
     return " | ".join([*parts, f"control {control.control:.3f}", f"best {shown}"])
+
+
+def format_deviance(control) -> str:
+    """The deviance component's items by head, per stratum: each head's mean
+    explained deviance over the items it scored and how many
+    (contracts/cli.md): ``deviance by head: card-disjoint per_entity 0.312 (38)
+    verdict 0.120 (7) created_objects 0.201 (14) | game-disjoint …``; a head
+    with no item scored is not shown."""
+    parts = []
+    for stratum, score in sorted(control.strata.items()):
+        shown = " ".join(f"{head} {mean:.3f} ({count})" for head, (mean, count)
+                         in deviance_by_head(score.items.get(DEVIANCE, {})).items())
+        parts.append(f"{stratum} {shown or 'none'}")
+    return "deviance by head: " + " | ".join(parts)

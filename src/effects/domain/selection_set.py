@@ -198,6 +198,48 @@ def item_key(stratum: str, half: str, component: str, item: str) -> str:
     return f"{stratum}/{half}/{component}/{item}"
 
 
+#: The per-entity head, as ``loss_floor`` and the loss denominators key it.
+PER_ENTITY_HEAD = "per_entity"
+
+
+def deviance_item(head: str, term: str) -> str:
+    """A deviance item's name: a per-entity field (the gate included) by its
+    own name, any other head's term as ``<head>.<term>`` (``verdict.can_play``,
+    ``global.day_night_change``, ``created_objects.count``), the terms the loss
+    denominators divide by (``loss_floor.constant_predictor_losses``)."""
+    return str(term) if head == PER_ENTITY_HEAD else f"{head}.{term}"
+
+
+def deviance_head(item: str) -> str:
+    """The head a deviance item belongs to: the part before its first ``.``,
+    or the per-entity head for a bare field name (no per-entity field's name
+    holds a ``.``)."""
+    head, dot, _ = item.partition(".")
+    return head if dot else PER_ENTITY_HEAD
+
+
+def deviance_by_head(items: Mapping[str, float]) -> dict[str, tuple[float, int]]:
+    """Scored deviance items grouped by head: ``head -> (mean, items)``, the
+    heads in loss-denominator order (per-entity, verdict, created-objects,
+    global), a head with no item absent."""
+    grouped: dict[str, list[float]] = {}
+    for item, value in items.items():
+        grouped.setdefault(deviance_head(item), []).append(float(value))
+    order = {head: i for i, head in enumerate(DEVIANCE_HEADS)}
+    return {head: (sum(values) / len(values), len(values))
+            for head, values in sorted(grouped.items(), key=lambda kv: order.get(kv[0], 9))}
+
+
+#: Every head whose terms are deviance items, in ``loss_floor.FLOOR_HEADS``'s order.
+DEVIANCE_HEADS: tuple[str, ...] = (PER_ENTITY_HEAD, "verdict", "created_objects", "global")
+
+
+def deviance_items(losses: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    """``head -> term -> X`` flattened to ``item -> X`` by :func:`deviance_item`."""
+    return {deviance_item(head, term): value
+            for head, terms in losses.items() for term, value in terms.items()}
+
+
 #: A standard error as written: a number, None for an infinite one (no JSON
 #: number is), or ``{mode: ...}`` for an output field under each rule mask.
 StandardError = float | None | dict[str, float | None]
