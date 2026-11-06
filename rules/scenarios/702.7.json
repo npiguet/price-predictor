@@ -180,7 +180,17 @@
         "Ambush",
         "Mountain"
       ],
-      "forge_notes": "Ambush's PumpAll affects creatures that are blocking at resolution, so Hill Giant must still be a blocker when it resolves."
+      "forge_notes": "Ambush's PumpAll affects creatures that are blocking at resolution, so Hill Giant must still be a blocker when it resolves.",
+      "detector": {
+        "family": "combat_keyword_effect",
+        "record_kind": "combat",
+        "outcome": "A creature that has first strike (without double strike) only by the regular combat damage step, having had none in the first-strike step, deals combat damage in the regular step.",
+        "near_miss": "The same creature dealing no combat damage in the regular step.",
+        "params": {
+          "keyword": "first_strike"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.7c-2",

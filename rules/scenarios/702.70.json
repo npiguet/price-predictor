@@ -61,7 +61,17 @@
         "Virulent Sliver",
         "Grizzly Bears"
       ],
-      "forge_notes": "Virulent Sliver grants Poisonous:1 to every Sliver, itself included."
+      "forge_notes": "Virulent Sliver grants Poisonous:1 to every Sliver, itself included.",
+      "detector": {
+        "family": "combat_keyword_effect",
+        "record_kind": "combat",
+        "outcome": "A creature with poisonous deals combat damage to a player, so its trigger gives that player poison counters.",
+        "near_miss": "A creature with poisonous attacks a player but deals that player no combat damage.",
+        "params": {
+          "keyword": "poisonous"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.70b-1",

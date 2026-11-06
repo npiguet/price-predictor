@@ -154,7 +154,17 @@
         "Grizzly Bears",
         "Rumbling Baloth"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "combat_keyword_effect",
+        "record_kind": "combat",
+        "outcome": "Combat damage dealt to a creature with absorb is reduced by its absorb value (damage prevented at it).",
+        "near_miss": "No near miss is counted: no probe strips absorb.",
+        "params": {
+          "keyword": "absorb"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.64b-2",
@@ -218,7 +228,17 @@
         "Mirran Crusader",
         "Rumbling Baloth"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "combat_keyword_effect",
+        "record_kind": "combat",
+        "outcome": "Combat damage dealt to a creature with absorb is reduced by its absorb value (damage prevented at it).",
+        "near_miss": "No near miss is counted: no probe strips absorb.",
+        "params": {
+          "keyword": "absorb"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.64c-1",

@@ -245,7 +245,17 @@
         "Jace Beleren",
         "Grizzly Bears"
       ],
-      "forge_notes": "Thrasta carries both Trample and Trample:Planeswalker in Forge, matching the Oracle text. The damage assignment must be fixed by the harness."
+      "forge_notes": "Thrasta carries both Trample and Trample:Planeswalker in Forge, matching the Oracle text. The damage assignment must be fixed by the harness.",
+      "detector": {
+        "family": "combat_keyword_effect",
+        "record_kind": "combat",
+        "outcome": "An unblocked attacker with trample over planeswalkers whose power exceeds the attacked planeswalker's loyalty assigns the excess to that planeswalker's controller.",
+        "near_miss": "The same attack by a creature without trample over planeswalkers, whose damage stays on the planeswalker.",
+        "params": {
+          "keyword": "trample_over_planeswalkers"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.19d-1",
@@ -405,7 +415,18 @@
         "Mountain",
         "Lightning Bolt"
       ],
-      "forge_notes": "Forge keeps the attacker in combat attacking a placeholder defender when the planeswalker leaves; a Trample:Planeswalker attacker then assigns past that placeholder, which needs no lethal damage, to the defending player, while plain trample assigns to the placeholder alone: Forge follows the rule."
+      "forge_notes": "Forge keeps the attacker in combat attacking a placeholder defender when the planeswalker leaves; a Trample:Planeswalker attacker then assigns past that placeholder, which needs no lethal damage, to the defending player, while plain trample assigns to the placeholder alone: Forge follows the rule.",
+      "detector": {
+        "family": "combat_keyword_effect",
+        "record_kind": "combat",
+        "outcome": "An attacker with trample over planeswalkers whose attacked planeswalker has left combat assigns its damage to that planeswalker's controller.",
+        "near_miss": "The same situation for an attacker without the keyword, which deals no combat damage.",
+        "params": {
+          "keyword": "trample_over_planeswalkers",
+          "defender": "gone"
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.19f-1",
@@ -494,7 +515,19 @@
         "Mountain",
         "Lightning Bolt"
       ],
-      "forge_notes": "Forge may treat an attacker whose planeswalker has left the battlefield as removed from combat; either way it deals no damage to B. In the trample_over_planeswalkers variant Thrasta has been on the battlefield since an earlier turn."
+      "forge_notes": "Forge may treat an attacker whose planeswalker has left the battlefield as removed from combat; either way it deals no damage to B. In the trample_over_planeswalkers variant Thrasta has been on the battlefield since an earlier turn.",
+      "detector": {
+        "family": "combat_keyword_effect",
+        "record_kind": "combat",
+        "outcome": "An attacker without trample over planeswalkers whose attacked planeswalker has left combat deals no combat damage.",
+        "near_miss": "The same situation for an attacker with the keyword, which assigns its damage to the controller.",
+        "params": {
+          "keyword": "trample_over_planeswalkers",
+          "defender": "gone",
+          "fires_when": "absent"
+        },
+        "needs": []
+      }
     }
   ]
 }

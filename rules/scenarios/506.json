@@ -1372,7 +1372,18 @@
         "Island",
         "Icy Blast"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "combat_keyword_effect",
+        "record_kind": "combat",
+        "outcome": "A tapped attacking creature with vigilance still deals its combat damage.",
+        "near_miss": "No near miss is counted: no record shows the same creature untapped in the same combat.",
+        "params": {
+          "keyword": "vigilance",
+          "tapped": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "506.4c-1",

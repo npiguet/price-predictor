@@ -602,7 +602,18 @@
         "Grizzly Bears",
         "Serra Angel"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "combat_keyword_effect",
+        "record_kind": "combat",
+        "outcome": "An attacking creature without vigilance becomes tapped as it is declared as an attacker.",
+        "near_miss": "An attacking creature with vigilance, which stays untapped.",
+        "params": {
+          "keyword": "vigilance",
+          "fires_when": "absent"
+        },
+        "needs": []
+      }
     },
     {
       "id": "508.1k-1",

@@ -61,7 +61,17 @@
         "Alpine Watchdog",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "combat_keyword_effect",
+        "record_kind": "combat",
+        "outcome": "An attacking creature with vigilance does not tap as it is declared as an attacker.",
+        "near_miss": "An attacking creature without vigilance, which taps as it attacks.",
+        "params": {
+          "keyword": "vigilance"
+        },
+        "needs": []
+      }
     }
   ]
 }
