@@ -987,7 +987,10 @@ and that the reporting half never enters the control score.
   and 1 is perfect and clipped below at −1: the knowledge probes at rung 3, each probe type one
   score, averaged; the damage, combat and evasion grids, each scored against the rule's outcome in
   every cell, averaged; the rule tests, each rule counting equally; the mean explained deviance over
-  fields, leaving out any field whose constant-prediction loss is at or below `--deviance-floor`.
+  fields, leaving out any field whose constant-prediction loss is at or below `--deviance-floor`. The
+  fields are every shipped head's output terms, the ones FR-062's denominators divide: the per-entity
+  head's fields and gate, the verdict head's fields at `[ACT]`, the global head's at `[GLOBAL]`, and
+  the created-objects head's slot columns and overflow flag.
   Rescaling: AUC as 2 × AUC − 1; R² and explained deviance as is; a grid as one minus the ratio of
   its mean absolute error to the error of predicting the grid's mean outcome in every cell.
 - **FR-068a**: The validation strata MUST be curated balanced, by four rules:

@@ -289,7 +289,12 @@ File `output/effects/reports/selection-set-<corpus digest>.json`, written by the
 
 A grid keeps the fewest records, smallest keyed hash first, that bring its worst-case standard error
 to 0.09, at most 512; the deviance sample holds every copy up to 16,384 a half. The deviance
-component's items are the per-entity head's fields, the gate included.
+component's items are every shipped head's output terms, the terms the loss denominators divide by:
+the per-entity head's fields and the gate, keyed by the field's name (`gate`, `damage_taken`); the
+verdict head's fields, the global head's fields and the created-objects head's slot columns (each
+summed over the slots) and overflow flag, keyed `<head>.<term>` (`verdict.can_play`,
+`global.day_night_change`, `created_objects.count`). Their standard errors are keyed
+`stratum/half/deviance/<item>`, e.g. `game-disjoint/selection/deviance/verdict.can_play`.
 
 Invariants checked at the freeze (exit 1 naming stratum, half, component): every component's
 standard error ≤ 0.05; every polarity, probe type and record-drawn grid cell within r; every grid cell

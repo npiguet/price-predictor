@@ -163,8 +163,10 @@ During training, exit 1 when an epoch meets a component with nothing to score, n
 and component.
 
 Epoch line adds, per stratum: `probes`, `grids`, `rule_tests`, `deviance`, `score`; then `control`
-and `best`, then a line of its own giving the control score's seconds against the epoch's training
-seconds. Shard line adds `rel_k_norm` and `rel_v_norm` (pre-clip, last step of the shard).
+and `best`; then a line `deviance by head:` giving per stratum each head's mean explained deviance
+over the items it scored and their count (`per_entity`, `verdict`, `created_objects`, `global`; a
+head with none not shown); then a line of its own giving the control score's seconds against the
+epoch's training seconds. Shard line adds `rel_k_norm` and `rel_v_norm` (pre-clip, last step of the shard).
 
 ## `python -m effects evaluate-effect-model` and the knowledge probes (existing)
 
@@ -172,8 +174,8 @@ seconds. Shard line adds `rel_k_norm` and `rel_v_norm` (pre-clip, last step of t
 the checkpoint's `input_layout` is not `gen-3`. It scores the reporting halves of the selection set
 found by the corpus digest under `output/effects/reports/` (the config's `reports_dir`), under the
 checkpoint's recorded `--rule-mask`, `--stratum-weight` and `--deviance-floor`, and prints per stratum
-`reporting-half <stratum>` (components and score) with each component's items, `rule-tests <stratum>
-reporting` per rule, and `reporting-half control` beside the checkpoint's `best_control_score`;
+`reporting-half <stratum>` (components and score) with each component's items (the deviance items
+also summed up by head), `rule-tests <stratum> reporting` per rule, and `reporting-half control` beside the checkpoint's `best_control_score`;
 without a set it prints that the reporting half is skipped.
 
 `scripts/effect_knowledge_probes/run.py --checkpoint PATH`:

@@ -1011,9 +1011,11 @@ and the gen-2 spec's patience and `resume-best.pt` rules, which read that loss.
   - the damage grid, the combat grid and the evasion grid, each scored against the rule's
     outcome in every cell, averaged into one component;
   - the rule tests (§ 14.4), each rule counting equally;
-  - the mean of every output field's explained deviance, each field counting equally. A
-    field whose constant-prediction loss is at or below `--deviance-floor` is left out of
-    the mean.
+  - the mean of every output field's explained deviance, each field counting equally. The
+    output fields are the ones § 13.2 divides, in every shipped head: the per-entity
+    fields and gate, the verdict and global fields, and the created-objects head's slot
+    columns. A field whose constant-prediction loss is at or below `--deviance-floor` is
+    left out of the mean.
 - Each score is rescaled so that 0 is no better than its baseline and 1 is perfect, then
   clipped below at −1:
   - an AUC as 2 × AUC − 1;
