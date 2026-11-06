@@ -20,8 +20,15 @@ def _entering(by_kind):
 
 def test_an_updated_zone_change_fires_an_enters_replacement_rule(by_kind):
     params = {"event": "zone_change", "result": "updated", "to_zone": "battlefield"}
-    found = FAMILY.match(_entering(by_kind), None, params)
+    record = _entering(by_kind)
+    found = FAMILY.match(record, None, params)
     assert found.polarity is Polarity.FIRES and found.observed
+    # The entering object is both what the replacement reads and where its
+    # result falls, as proposed and as it went out.
+    incoming = record.payload.incoming.subjects
+    assert set(incoming) <= set(found.condition)
+    outgoing = record.payload.outgoing.subjects if record.payload.outgoing else ()
+    assert found.outcome == tuple(dict.fromkeys((*incoming, *outgoing)))
 
 
 def test_the_same_record_edited_to_not_replaced_is_the_near_miss(by_kind):

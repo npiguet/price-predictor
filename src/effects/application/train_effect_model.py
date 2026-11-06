@@ -329,9 +329,7 @@ class CorpusFacts:
             gate_one_records=manifest.per_stratum.get(Stratum.GATE_ONE, 0),
             rarity=manifest.rarity,
             legality_mode_counts=manifest.legality_mode_counts,
-            rule_outputs={
-                rule: tuple(entry.outputs) for rule, entry in manifest.rule_map.items()
-            },
+            rule_outputs=manifest.effective_rule_outputs,
             digest=manifest.digest(),
             rule_map_digest=manifest.rule_map_digest,
         )

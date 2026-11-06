@@ -370,6 +370,14 @@ class CorpusManifest:
     )
     #: The map's content hash, which a checkpoint records.
     rule_map_digest: str = field(default="", metadata=_gen1_implied(str))
+    #: ``rule -> outputs``: of each mapped rule's outputs, in the map's
+    #: order, those at least one of its tagged records carries
+    #: (``rule_output_carriage``; FR-060a). The rule mask and the rule tests
+    #: read these, never the map's own list; a rule its records carry no
+    #: output of maps to an empty tuple.
+    effective_outputs: dict[str, tuple[str, ...]] = field(
+        default_factory=dict, metadata=_gen1_implied(_tuple_map),
+    )
     #: ``class -> rule -> polarity -> RuleRow`` (FR-060).
     rules: dict[str, dict[str, dict[str, RuleRow]]] = field(
         default_factory=dict, metadata=_gen1_implied(_rule_rows),
@@ -418,6 +426,12 @@ class CorpusManifest:
         it does not hold (FR-060a)."""
         entry = self.rule_map.get(rule)
         return () if entry is None else entry.outputs
+
+    @property
+    def effective_rule_outputs(self) -> dict[str, tuple[str, ...]]:
+        """``rule -> effective outputs`` for every mapped rule: what the rule
+        mask and the rule tests read (FR-060a)."""
+        return {rule: self.effective_outputs.get(rule, ()) for rule in self.rule_map}
 
     @property
     def holdout(self) -> HoldoutRule:
@@ -525,6 +539,7 @@ def rule_curation_fields(
     rule_map: Mapping[str, RuleMapEntry],
     rule_map_digest: str,
     rule_counts: Mapping[str, Any],
+    carried: Mapping[tuple[str, str], int],
     one_sided_conditions: Mapping[str, Iterable[str]],
     turn_action_left_out: Mapping[str, int],
     subtypes: Iterable[str],
@@ -534,9 +549,11 @@ def rule_curation_fields(
 
     Built from what the build already holds: the rule budgets, the placed
     strata, the map snapshot, the survey's rule counts (the ``rule-counts.json``
-    object), its one-sided conditions (``corpus_curation.one_sided_conditions``)
-    and turn-action tally, and the subtype and keyword names it read, which are
-    put in the head's column order here.
+    object), its ``(rule, output) -> records carrying it`` tally, which
+    decides each rule's effective outputs, its one-sided conditions
+    (``corpus_curation.one_sided_conditions``) and turn-action tally, and the
+    subtype and keyword names it read, which are put in the head's column
+    order here.
     """
     from effects.domain.closed_lists import ordered_keywords, ordered_subtypes
 
@@ -544,6 +561,10 @@ def rule_curation_fields(
         "rule_counts": dict(rule_counts),
         "rule_map": dict(sorted(rule_map.items())),
         "rule_map_digest": rule_map_digest,
+        "effective_outputs": {
+            rule: tuple(o for o in entry.outputs if carried.get((rule, o), 0) > 0)
+            for rule, entry in sorted(rule_map.items())
+        },
         "rules": budgets.rows,
         "one_sided_rules": dict(budgets.one_sided),
         "one_sided_conditions": {

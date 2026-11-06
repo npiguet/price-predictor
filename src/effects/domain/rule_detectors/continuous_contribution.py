@@ -21,6 +21,12 @@ Parameters:
   ``Condition…$``, ``CheckSVar$``), never its ``Affected$`` selector; counter
   types in ``normalize_counter_type``'s spelling.
 
+The condition entity is the static's host (``acting_line.source_ids``: a
+``continuous`` record names no source, so the battlefield entity printed by
+or made from the static's script file); the outcome entities are the
+contributions' entities, those carrying the contribution on the ``fires``
+side, every one the static applies to on the near miss.
+
 Prior art: ``effect_targets`` derives the P/T, keyword, type and colour
 targets of a ``continuous`` record from the same contributions.
 """
@@ -37,7 +43,11 @@ from effects.domain.provenance import SidecarLookup
 from effects.domain.records import Contribution, EffectRecord, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
-from effects.domain.rule_detectors.acting_line import acting_line, source_is_token_of_kind
+from effects.domain.rule_detectors.acting_line import (
+    acting_line,
+    source_ids,
+    source_is_token_of_kind,
+)
 from effects.domain.script_text import params, root
 from effects.domain.state_snapshot import normalize_counter_type
 
@@ -113,9 +123,10 @@ class ContinuousContribution:
             return None
         carrying = tuple(dict.fromkeys(
             c.entity for c in contributions if _carries(c, field, params.get("value"))))
+        host = source_ids(record)
         if carrying:
-            return FamilyMatch(Polarity.FIRES, True, carrying)
-        return FamilyMatch(Polarity.DOES_NOT_FIRE, False,
+            return FamilyMatch(Polarity.FIRES, True, host, carrying)
+        return FamilyMatch(Polarity.DOES_NOT_FIRE, False, host,
                            tuple(dict.fromkeys(c.entity for c in contributions)))
 
 

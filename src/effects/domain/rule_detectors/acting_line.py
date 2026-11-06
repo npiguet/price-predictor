@@ -144,6 +144,12 @@ def source_entities(state: StateSnapshot,
         or (e.token_script_id is not None and e.token_script_id in stems)))
 
 
+def source_ids(record: EffectRecord) -> tuple[str, ...]:
+    """The ids of the acting ability's source (:func:`source_entities`): the
+    condition entity a rule about the acting object names."""
+    return tuple(e.id for e in source_entities(record.state, record.ability or ()))
+
+
 def _stem(script_file: str) -> str:
     """``tokenscripts/role_monster.txt`` -> ``role_monster``: a token's
     ``token_script_id``, which a host printing no other line is found by."""

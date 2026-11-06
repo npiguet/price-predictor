@@ -79,6 +79,17 @@ leaving the battlefield that was not in combat):
 
 A qualifier cannot be combined with ``absent``.
 
+Entities. The condition entities are the acting ability's source, its
+targets and its controller (``actor_player``): what the rule's condition
+reads. The outcome entities are where the matching events' outcomes are
+placed (``effect_targets.placed_subjects``: an event's subjects, or for a
+spell copy, a permanent copy, a retarget or a venture, which Forge names no
+subject for, the object it happened to), and for a card a ``zone_change``
+moves out of a hand or a library, its owner too, whose cards discarded,
+drawn or milled and library events count the move. A tag whose outcome is an
+absence — an ``absent`` declaration's ``fires`` side, a scoped near miss
+holding no such event — names condition entities only.
+
 Prior art: ``event_schema.EVENT_PARAMS``, the per-type parameter table every
 reader of events already trusts.
 """
@@ -89,6 +100,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from effects.domain.effect_targets import placed_subjects
 from effects.domain.event_schema import EVENT_PARAMS, Event, EventType
 from effects.domain.provenance import SidecarLine, SidecarLookup
 from effects.domain.records import EffectRecord, Moment, RecordKind
@@ -100,6 +112,7 @@ from effects.domain.rule_detectors.acting_line import (
     is_keyword_line,
     root_params_of,
     script_params_match,
+    source_ids,
     source_is_token_of_kind,
 )
 from effects.domain.script_text import api_of, segments
@@ -299,17 +312,18 @@ class OutcomeEvent:
         if qualified:
             return self._qualified(record, params, wanted, listed, scoped)
         happened = len(wanted) >= int(params.get("min_count", 1))
-        subjects = _subjects(wanted)
+        condition = _condition(record)
+        outcome = _outcome(record, wanted)
         if absent:
             # The rule's outcome is the event's absence, so that is what is observed.
             if happened:
-                return FamilyMatch(Polarity.DOES_NOT_FIRE, False, subjects)
-            return FamilyMatch(Polarity.FIRES, True, ())
+                return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition, outcome)
+            return FamilyMatch(Polarity.FIRES, True, condition)
         if happened:
-            return FamilyMatch(Polarity.FIRES, True, subjects)
+            return FamilyMatch(Polarity.FIRES, True, condition, outcome)
         if not scoped:
             return None
-        return FamilyMatch(Polarity.DOES_NOT_FIRE, False, ())
+        return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition)
 
     @staticmethod
     def _qualified(record: EffectRecord, params: Mapping[str, Any], wanted: list[Event],
@@ -322,18 +336,40 @@ class OutcomeEvent:
         read = [(e, _subject_verdict(e, record.state, params)) for e in wanted]
         read = [(e, verdict) for e, verdict in read if verdict is not None]
         meeting = [e for e, verdict in read if verdict and record_ok]
+        condition = _condition(record)
         if len(meeting) >= int(params.get("min_count", 1)):
-            return FamilyMatch(Polarity.FIRES, True, _subjects(meeting))
+            return FamilyMatch(Polarity.FIRES, True, condition, _outcome(record, meeting))
         if read:
-            return FamilyMatch(Polarity.DOES_NOT_FIRE, False,
-                               _subjects(e for e, _ in read if e not in meeting))
+            return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition,
+                               _outcome(record, [e for e, _ in read if e not in meeting]))
         if scoped:
-            return FamilyMatch(Polarity.DOES_NOT_FIRE, False, ())
+            return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition)
         return None
 
 
-def _subjects(events) -> tuple[str, ...]:
-    return tuple(dict.fromkeys(s for e in events for s in e.subjects))
+def _condition(record: EffectRecord) -> tuple[str, ...]:
+    """The acting ability's source, its targets and its controller."""
+    actor = (record.actor_player,) if record.actor_player else ()
+    return tuple(dict.fromkeys((*source_ids(record), *record.state.refs.targets, *actor)))
+
+
+_OWNED_ZONES = frozenset({"hand", "library"})
+
+
+def _outcome(record: EffectRecord, events) -> tuple[str, ...]:
+    """Where ``events``' outcomes are placed, and the owner of a card a
+    ``zone_change`` moves out of a hand or a library."""
+    found: list[str] = []
+    for event in events:
+        placed = placed_subjects(record, event)
+        found += placed
+        if (event.type is EventType.ZONE_CHANGE
+                and str(event.params.get("from_zone", "")).lower() in _OWNED_ZONES):
+            for subject in placed:
+                entity = record.state.entity(subject)
+                if entity is not None and (entity.owner or entity.controller):
+                    found.append(entity.owner or entity.controller)
+    return tuple(dict.fromkeys(found))
 
 
 FAMILY = register(OutcomeEvent())

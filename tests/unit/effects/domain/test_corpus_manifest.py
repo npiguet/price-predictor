@@ -240,7 +240,7 @@ def test_the_gen1_corpus_still_matches_the_digest_its_checkpoint_recorded():
 
 
 def test_gen2_fields_are_left_out_at_their_gen1_values(manifest_dict):
-    assert len(_GEN1_DEFAULTS) == 27
+    assert len(_GEN1_DEFAULTS) == 28
     for name in _GEN1_DEFAULTS:
         if name != "game_disjoint_target":
             assert name not in manifest_dict
@@ -325,6 +325,7 @@ def _gen3_fields(**extra_map) -> dict:
         rule_map_digest="abc123",
         rule_counts={"records": 2, "rules": {"702.16e": {"fires": {"forge_ai": 1}}},
                      "not_countable": [], "none": {}, "review": []},
+        carried={("702.16e", "damage_taken"): 3},
         one_sided_conditions={"decision": ["Berserk"]},
         turn_action_left_out={"untap": 3, "draw": 2},
         subtypes={"zombie", "plains", "not-a-subtype"},
@@ -361,6 +362,9 @@ def test_the_gen3_fields_hold_what_the_build_decided():
     assert gen3.budgeted_rules == {"702.16e"}
     assert gen3.rule_outputs("702.16e") == ("damage_taken", "gate")
     assert gen3.rule_outputs("999.9") == ()
+    # Only the outputs a tagged record carried are effective, in the map's order.
+    assert data["effective_outputs"] == {"510.1": [], "702.16e": ["damage_taken"]}
+    assert gen3.effective_rule_outputs == {"510.1": (), "702.16e": ("damage_taken",)}
 
 
 def test_an_unbudgeted_rule_no_training_record_shows_is_still_named():

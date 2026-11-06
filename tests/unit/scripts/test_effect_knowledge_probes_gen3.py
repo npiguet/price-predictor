@@ -670,9 +670,12 @@ def _context(frozen_corpus, sidecars, probe_model):
     from effects.infrastructure.rules_catalogue_io import load_heads
 
     root = frozen_corpus.root
+    heads = load_heads()
     return SimpleNamespace(
         corpus=root, corpus_digest=frozen_corpus.selection.corpus_digest,
-        manifest=SimpleNamespace(surface="script", rule_map=load_heads()),
+        manifest=SimpleNamespace(
+            surface="script", rule_map=heads,
+            effective_rule_outputs={rule: tuple(e.outputs) for rule, e in heads.items()}),
         cards_folders=tuple(GEN3_SIDECAR_FOLDERS), variant_scripts=None,
         checkpoint=SimpleNamespace(
             provenance=SimpleNamespace(held_out_cards=()), training_settings={"seed": 1},

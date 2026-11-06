@@ -367,12 +367,25 @@ class SbaZoneMove:
                 record, touched, KeywordResolver(lines).keywords_of)
         else:
             fires, spared, observed = _uniqueness_checks(record, touched, check)
-        if fires:
-            return FamilyMatch(Polarity.FIRES, any(e in observed for e in fires), tuple(fires))
-        if spared:
-            return FamilyMatch(Polarity.DOES_NOT_FIRE, any(e in observed for e in spared),
-                               tuple(spared))
+        for polarity, judged in ((Polarity.FIRES, fires), (Polarity.DOES_NOT_FIRE, spared)):
+            if judged:
+                return FamilyMatch(polarity, any(e in observed for e in judged),
+                                   _condition(record, judged, check), tuple(judged))
         return None
+
+
+def _condition(record: EffectRecord, judged: list[str], check: str) -> tuple[str, ...]:
+    """What the check reads: the permanent it judges, and for an Aura the
+    host whose departure or protection makes it illegal. The outcome, the
+    move to the graveyard or its absence, falls on the judged permanent."""
+    if check != "aura_illegal":
+        return tuple(judged)
+    hosts = []
+    for aura_id in judged:
+        aura = record.state.entity(aura_id)
+        if aura is not None and aura.attached_to:
+            hosts.append(aura.attached_to)
+    return tuple(dict.fromkeys((*judged, *hosts)))
 
 
 FAMILY = register(SbaZoneMove())

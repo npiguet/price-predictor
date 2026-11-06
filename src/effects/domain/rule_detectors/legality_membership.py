@@ -44,6 +44,16 @@ Parameters:
   counts only holding one and an entity on the near-miss side only holding
   none, in ``normalize_counter_type``'s spelling.
 
+Both roles name the judged entities, each one's own characteristics being
+what the restriction reads and its legality bit where the outcome falls; a
+blockers or defenders record's anchor attacker is a condition entity too
+(menace, a "can't be blocked by" ability, live on it), and on a blockers
+record an outcome entity, ``min_blockers`` being written there. An outcome
+entity is one the record writes the list's legality field at
+(``effect_targets``): a universe entity no list names, such as a
+noncreature permanent no attackers record lists, has no ``attacker_legal``
+target and is a condition entity only.
+
 Without ``universe`` only an entity the record lists counts: the legal list's
 members are inside, the forbidden entities outside, and a decision record,
 which lists no outside, speaks for its ``legal_targets``' inside alone. With
@@ -58,6 +68,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from effects.domain.effect_head_layout import HeadField
+from effects.domain.effect_targets import derive_targets
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, PlayabilitySubkind, RecordKind
 from effects.domain.rule_catalogue import Polarity
@@ -78,6 +90,14 @@ _SUBKIND_OF = {
 }
 #: The lists only a gen-3 record carries, each the field it reads.
 GEN3_LISTS = frozenset({"legal_defenders", "must_block"})
+#: The legality field each list's verdict is written to.
+_FIELD_OF = {
+    "legal_attackers": HeadField.ATTACKER_LEGAL,
+    "legal_blockers": HeadField.BLOCKER_LEGAL,
+    "legal_targets": HeadField.TARGET_LEGAL,
+    "legal_defenders": HeadField.ATTACK_TARGET_LEGAL,
+    "must_block": HeadField.COMBAT_REQUIREMENT,
+}
 
 
 def _universe(record: EffectRecord, listed: str, universe: str) -> tuple[str, ...]:
@@ -200,11 +220,29 @@ class LegalityMembership:
             counter = None if counter is None else normalize_counter_type(counter)
             fires = _carriers(record, fires, lines, keyword, counter, holding=True)
             near = _carriers(record, near, lines, keyword, counter, holding=False)
-        if fires:
-            return FamilyMatch(Polarity.FIRES, True, fires)
-        if near:
-            return FamilyMatch(Polarity.DOES_NOT_FIRE, False, near)
+        for polarity, judged in ((Polarity.FIRES, fires), (Polarity.DOES_NOT_FIRE, near)):
+            if judged:
+                condition, outcome = _roles(record, listed, judged)
+                return FamilyMatch(polarity, polarity is Polarity.FIRES, condition, outcome)
         return None
+
+
+def _roles(record: EffectRecord, listed: str, judged: tuple[str, ...]):
+    """The judged entities as condition entities, and those the record
+    writes the list's field at as outcome entities, each beside the anchor
+    attacker where the record has one."""
+    payload = record.payload
+    anchor = getattr(payload, "anchor_attacker", None)
+    targets = derive_targets(record)
+    name = _FIELD_OF[listed]
+    outcome = [e for e in judged if (entry := targets.get(e)) is not None
+               and name in entry.fields]
+    condition = list(judged)
+    if anchor:
+        condition.append(anchor)
+        if record.subkind is PlayabilitySubkind.BLOCKERS:
+            outcome.append(anchor)
+    return tuple(dict.fromkeys(condition)), tuple(dict.fromkeys(outcome))
 
 
 FAMILY = register(LegalityMembership())

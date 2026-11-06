@@ -1610,12 +1610,13 @@ def _budget_rules(root: Path) -> Path:
 
 
 def _damaged(record_id: str, game: str, *, hits: int) -> EffectRecord:
-    """A bolt resolution dealing ``hits`` damage events to ``E0``."""
-    return CorpusFixture.resolution(record_id, game=game, events=tuple(
+    """A bolt resolution dealing ``hits`` damage events to ``E0``, a creature on its board."""
+    record = CorpusFixture.resolution(record_id, game=game, events=tuple(
         Event(type=EventType.DAMAGE_DEALT, subjects=("E0",), params={"amount": 1},
               attributed_to="root")
         for _ in range(hits)
     ))
+    return replace(record, state=_snapshot(("grizzly bears",)))
 
 
 @pytest.fixture
@@ -1651,7 +1652,9 @@ def test_added_copies_carry_their_rule_and_natural_copies_none(budget_build):
     assert added and natural
     assert {r.curation.drawn_rule for r in added} == {_BUDGET_RULE}
     assert {r.record_id for r in added} <= {f"{game}.tagged0", f"{game}.tagged1"}
-    assert all(r.curation.rule_entities == ("E0",) for r in added)
+    # The damaged creature is the outcome; the bolt's controller is read by its condition.
+    assert all(r.curation.outcome_entities == ("E0",) for r in added)
+    assert all(r.actor_player in r.curation.condition_entities for r in added)
     for record_id in {r.record_id for r in added}:
         copies = [r for r in training if r.record_id == record_id]
         curation = copies[0].curation
@@ -1679,6 +1682,8 @@ def test_the_manifest_reports_the_rule_row_and_its_one_side(budget_build):
     assert manifest.one_sided_rules == {"resolution-effect": (_BUDGET_RULE,)}
     assert manifest.budgeted_rules == {_BUDGET_RULE}
     assert manifest.rule_outputs(_BUDGET_RULE) == ("damage_taken",)
+    # The damaged creature carries damage_taken, so the output is effective.
+    assert manifest.effective_rule_outputs[_BUDGET_RULE] == ("damage_taken",)
 
 
 def test_a_decision_whose_candidate_key_is_unjoinable_is_refused(tmp_path, a_corpus):

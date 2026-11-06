@@ -293,8 +293,7 @@ def score_rule_tests(context, selection, probe_model, half: str) -> dict[str, di
     scored = score_half(
         selection, readers, half=half, encoder=probe_model.encoder, model=probe_model.model,
         batcher=probe_model.batcher,
-        rule_outputs={rule: tuple(entry.outputs)
-                      for rule, entry in context.manifest.rule_map.items()},
+        rule_outputs=context.manifest.effective_rule_outputs,
         mask=None,
         stratum_weight=0.5, deviance_floor=0.0, components=(RULE_TESTS,))
     return {stratum: {"rules": dict(score.items.get(RULE_TESTS, {})),

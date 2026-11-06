@@ -20,8 +20,14 @@ def _trample_grant(by_kind):
 
 
 def test_a_static_granting_the_keyword_fires(by_kind):
-    found = FAMILY.match(_trample_grant(by_kind), None, {"field": "keywords", "value": "trample"})
-    assert found.polarity is Polarity.FIRES and found.entities
+    record = _trample_grant(by_kind)
+    found = FAMILY.match(record, None, {"field": "keywords", "value": "trample"})
+    assert found.polarity is Polarity.FIRES
+    # The contributions carrying trample are the outcome; the host the condition.
+    assert found.outcome == tuple(dict.fromkeys(
+        c.entity for c in record.payload.contributions if "trample" in c.keywords))
+    assert found.condition == tuple(
+        e.id for e in source_entities(record.state, record.ability))
 
 
 def test_the_same_static_edited_to_grant_nothing_is_the_near_miss(by_kind):

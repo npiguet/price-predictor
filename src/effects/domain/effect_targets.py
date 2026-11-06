@@ -619,39 +619,20 @@ class _RecordPass:
         record; a spell copy or a retarget on the stack objects the acting
         ability targets, else on its cause when that is a stack object. An
         event placed nowhere leaves its field unknown in the record."""
-        entered = {
-            subject for event in self.by_type[EventType.ZONE_CHANGE]
-            if str(event.params.get("from_zone", "")).lower() == Zone.STACK
-            and str(event.params.get("to_zone", "")).lower() == Zone.BATTLEFIELD
-            for subject in event.subjects
-        }
         for event in self.by_type[EventType.PERMANENT_COPIED]:
-            cause = event.params.get("cause")
-            placed = event.subjects or ((cause,) if cause in entered else ())
-            self._place(placed, HeadField.COPIED, lambda entry: entry.set(HeadField.COPIED, 1))
+            self._place(placed_subjects(self.record, event, self.events), HeadField.COPIED,
+                        lambda entry: entry.set(HeadField.COPIED, 1))
         for event in self.by_type[EventType.SPELL_COPIED]:
             count = float(event.params.get("count", 1) or 1)
             self._place(
-                event.subjects or self._stack_objects(event), HeadField.SPELL_COPIES,
+                placed_subjects(self.record, event, self.events), HeadField.SPELL_COPIES,
                 lambda entry, count=count: entry.add(HeadField.SPELL_COPIES, count),
             )
         for event in self.by_type[EventType.TARGETS_CHANGED]:
             self._place(
-                event.subjects or self._stack_objects(event), HeadField.TARGETS_CHANGED,
+                placed_subjects(self.record, event, self.events), HeadField.TARGETS_CHANGED,
                 lambda entry: entry.set(HeadField.TARGETS_CHANGED, 1),
             )
-
-    def _stack_objects(self, event: Event) -> tuple[str, ...]:
-        on_stack = tuple(
-            ref for ref in self.record.state.refs.targets
-            if ref in self.entities and self.entities[ref].zone == Zone.STACK
-        )
-        if on_stack:
-            return on_stack
-        cause = event.params.get("cause")
-        if cause in self.entities and self.entities[cause].zone == Zone.STACK:
-            return (cause,)
-        return ()
 
     def _place(self, subjects, name: str, write) -> None:
         if not subjects:
@@ -683,16 +664,51 @@ class _RecordPass:
                 entry.set(HeadField.GAME_LOST, 1 if lost else 0)
 
     def _venture(self) -> None:
-        """Venturing names no player: it is the venturing ability's
-        controller's, the cause's controller where the snapshot holds it."""
         for event in self.by_type[EventType.DUNGEON_VENTURED]:
-            subjects = event.subjects
-            if not subjects:
-                cause = self.entities.get(event.params.get("cause"))
-                player = cause.controller if cause is not None else self.record.actor_player
-                subjects = (player,) if player in self.players else ()
-            self._place(subjects, HeadField.VENTURED,
+            self._place(placed_subjects(self.record, event, self.events), HeadField.VENTURED,
                         lambda entry: entry.set(HeadField.VENTURED, 1))
+
+
+def placed_subjects(record: EffectRecord, event: Event,
+                    events: tuple[Event, ...] | None = None) -> tuple[str, ...]:
+    """Where an event's outcome is placed: its subjects, or, for the events
+    Forge names no subject for, the object they happened to.
+
+    A Clone's copy is placed on the Clone, which is the cause and enters
+    from the stack in the same record; a spell copy or a retarget on the
+    stack objects the acting ability targets, else on its cause when that is
+    a stack object; venturing on the venturing ability's controller, the
+    cause's where the snapshot holds it. Empty where none is found.
+    ``events`` are the record's target events (``events_of``), read for a
+    copy's entry."""
+    if event.subjects:
+        return tuple(event.subjects)
+    entities = {entity.id: entity for entity in record.state.entities}
+    cause = event.params.get("cause")
+    if event.type is EventType.PERMANENT_COPIED:
+        entered = {
+            subject for other in (events if events is not None else events_of(record))
+            if other.type is EventType.ZONE_CHANGE
+            and str(other.params.get("from_zone", "")).lower() == Zone.STACK
+            and str(other.params.get("to_zone", "")).lower() == Zone.BATTLEFIELD
+            for subject in other.subjects
+        }
+        return (cause,) if cause in entered else ()
+    if event.type in (EventType.SPELL_COPIED, EventType.TARGETS_CHANGED):
+        on_stack = tuple(
+            ref for ref in record.state.refs.targets
+            if ref in entities and entities[ref].zone == Zone.STACK
+        )
+        if on_stack:
+            return on_stack
+        if cause in entities and entities[cause].zone == Zone.STACK:
+            return (cause,)
+        return ()
+    if event.type is EventType.DUNGEON_VENTURED:
+        found = entities.get(cause)
+        player = found.controller if found is not None else record.actor_player
+        return (player,) if player in {p.id for p in record.state.players} else ()
+    return ()
 
 
 def _apply_playability(record: EffectRecord, slot) -> None:
@@ -713,21 +729,32 @@ def _apply_playability(record: EffectRecord, slot) -> None:
                 slot(listed).set(HeadField.COMBAT_REQUIREMENT, 1 if listed in must else 0)
 
 
-def _decision_legality(record, payload: PlayabilityDecisionPayload, slot) -> None:
-    """``target_legal`` on every card and player: 1 in the candidate's
-    ``legal_targets`` (the union over its targeting clauses), 0 elsewhere,
-    and nowhere for a candidate with no targeting clause. A clause shows as a
-    legal target, or as ``has_legal_target`` false for want of one."""
-    if not payload.candidates:
-        return
+def target_legality_subjects(record: EffectRecord) -> tuple[str, ...]:
+    """Every card and player a decision record writes ``target_legal`` at:
+    each of the snapshot's, and each of the candidate's ``legal_targets``,
+    when the candidate has a targeting clause (a legal target, or
+    ``has_legal_target`` false for want of one); none otherwise."""
+    payload = record.payload
+    if not isinstance(payload, PlayabilityDecisionPayload) or not payload.candidates:
+        return ()
     candidate = payload.candidates[0]
     if not candidate.legal_targets and candidate.has_legal_target:
+        return ()
+    return tuple(dict.fromkeys((
+        *(e.id for e in record.state.entities), *(p.id for p in record.state.players),
+        *candidate.legal_targets)))
+
+
+def _decision_legality(record, payload: PlayabilityDecisionPayload, slot) -> None:
+    """``target_legal`` at :func:`target_legality_subjects`: 1 in the
+    candidate's ``legal_targets`` (the union over its targeting clauses), 0
+    elsewhere."""
+    subjects = target_legality_subjects(record)
+    if not subjects:
         return
-    legal = set(candidate.legal_targets)
-    for ref in (*(e.id for e in record.state.entities), *(p.id for p in record.state.players)):
+    legal = set(payload.candidates[0].legal_targets)
+    for ref in subjects:
         slot(ref).set(HeadField.TARGET_LEGAL, 1 if ref in legal else 0)
-    for ref in candidate.legal_targets:
-        slot(ref).set(HeadField.TARGET_LEGAL, 1)
 
 
 def _attackers_legality(record, payload: PlayabilityAttackersPayload, slot) -> None:

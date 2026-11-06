@@ -839,8 +839,7 @@ def freeze_selection(args: argparse.Namespace) -> int:
                 sample += [r for _, r in zip(range(256), read_shard(path))]
         prepare = scoring_targets(corpus, manifest, cards_folders=cards_folders,
                                   sample=sample)
-        return TargetDevianceLosses(prepare, {
-            rule: tuple(entry.outputs) for rule, entry in manifest.rule_map.items()})
+        return TargetDevianceLosses(prepare, manifest.effective_rule_outputs)
 
     progress(f"freezing the selection set of {corpus}")
     return freeze_selection_set.run(

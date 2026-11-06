@@ -34,6 +34,13 @@ Parameters:
   result, and its ``fires`` side is any of the three results that prevented
   something; ``not_replaced`` (damage that can't be prevented) is its near
   miss. A ``result`` given beside it still names the ``fires`` side.
+
+The condition entities are the incoming event's subjects and the replacing
+effect's source; the outcome entities are the subjects of the event as
+proposed and as it went out, where the replacement's result falls (the
+creature the damage was prevented on, the player whose draw was replaced).
+A rewrite that ran another ability carries no per-entity target, its
+outcome arriving as that ability's resolution record.
 """
 
 from __future__ import annotations
@@ -48,7 +55,7 @@ from effects.domain.provenance import SidecarLine, SidecarLookup
 from effects.domain.records import EffectRecord, RecordKind, RewriteResult
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
-from effects.domain.rule_detectors.acting_line import acting_line, is_keyword_line
+from effects.domain.rule_detectors.acting_line import acting_line, is_keyword_line, source_ids
 from effects.domain.rule_detectors.outcome_event import (
     EVENT_FILTERS,
     event_filters,
@@ -114,8 +121,12 @@ class RewriteEvent:
                                    or is_prevention_line(line)):
                 return None
         fires = result in wanted
+        outgoing = record.payload.outgoing
+        outcome = tuple(dict.fromkeys((
+            *incoming.subjects, *(outgoing.subjects if outgoing is not None else ()))))
+        condition = tuple(dict.fromkeys((*incoming.subjects, *source_ids(record))))
         return FamilyMatch(Polarity.FIRES if fires else Polarity.DOES_NOT_FIRE, fires,
-                           tuple(incoming.subjects))
+                           condition, outcome)
 
 
 FAMILY = register(RewriteEvent())

@@ -1069,7 +1069,8 @@ def _curation_to_json(curation: Curation) -> dict:
         "copies": curation.copies,
         "drawn_rule": curation.drawn_rule,
         "drawn_rules": list(curation.drawn_rules),
-        "rule_entities": list(curation.rule_entities),
+        "condition_entities": list(curation.condition_entities),
+        "outcome_entities": list(curation.outcome_entities),
     }
 
 
@@ -1079,7 +1080,8 @@ def _curation_from_json(data: dict) -> Curation:
         copies=int(data["copies"]),
         drawn_rule=data.get("drawn_rule"),
         drawn_rules=tuple(data.get("drawn_rules") or ()),
-        rule_entities=tuple(data.get("rule_entities") or ()),
+        condition_entities=tuple(data.get("condition_entities") or ()),
+        outcome_entities=tuple(data.get("outcome_entities") or ()),
     )
 
 

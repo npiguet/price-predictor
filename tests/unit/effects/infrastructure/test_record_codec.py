@@ -740,11 +740,13 @@ class TestGen3EnvelopeFields:
         assert "curation" not in record_to_dict(_record(generation=3))
         record = _record(generation=3, curation=Curation(
             natural_share=1, copies=3, drawn_rule="704.5f",
-            drawn_rules=("704.5f", "704.5g"), rule_entities=("E2",)))
+            drawn_rules=("704.5f", "704.5g"), condition_entities=("E1",),
+            outcome_entities=("E2",)))
         data = record_to_dict(record)
         assert data["curation"] == {
             "natural_share": 1, "copies": 3, "drawn_rule": "704.5f",
-            "drawn_rules": ["704.5f", "704.5g"], "rule_entities": ["E2"]}
+            "drawn_rules": ["704.5f", "704.5g"], "condition_entities": ["E1"],
+            "outcome_entities": ["E2"]}
         assert record_from_dict(json.loads(json.dumps(data))) == record
 
     def test_an_empty_aimed_at_is_kept_apart_from_none(self):

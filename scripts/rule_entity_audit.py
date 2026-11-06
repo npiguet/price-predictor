@@ -1,14 +1,13 @@
 """Audit where rule tags' entities fall against where their rules' outputs train (feature 025).
 
-A rule tag (``RuleTag``) names entities, and two consumers read outputs at
-them: the hard rule mask trains an added copy's affected gate only at its
-drawn rule's ``rule_entities``, and the control score's rule tests read each
-of the rule's map outputs (``rule_map[rule].outputs``) at the tag's entities.
-Each detector family chooses those entities its own way: the keyword's
-carrier, the creature that died, an event's subjects, ``[ACT]``. This script
-measures, before any fix, how often a rule's outputs are actually trained at
-the entities its tags name, against the record's other entities and its
-affected set.
+A rule tag (``RuleTag``) names entities in two roles (research R1):
+condition entities, what the rule's condition reads, and outcome entities,
+where its outcome falls. The hard rule mask trains an added copy's affected
+gate at both; the control score's rule tests read each of the rule's
+effective outputs at the outcome entities. This script measures how often a
+rule's map outputs are actually trained at the outcome entities its tags
+name, against its condition entities, the record's other entities and its
+affected set, and marks which outputs the manifest found effective.
 
 Tagging is ``tag_record`` over the catalogue's detectors, run once per
 detector family (one ``DetectorIndex`` per family, cut from the catalogue's)
@@ -68,8 +67,8 @@ CORPUS_STRATA = ("training", "validation/card-disjoint", "validation/game-disjoi
 
 ACT = "[ACT]"
 #: The three entity sets each per-entity output is measured over.
-TAGGED, OTHER, AFFECTED = "tagged", "other", "affected"
-SETS = (TAGGED, OTHER, AFFECTED)
+TAGGED, CONDITION, OTHER, AFFECTED = "outcome", "condition", "other", "affected"
+SETS = (TAGGED, CONDITION, OTHER, AFFECTED)
 
 #: How an output is read: at entities (a per-entity field or the gate), at
 #: the record (verdict, global, created objects), or by no shipped head.
@@ -207,11 +206,14 @@ class RuleTally:
     """One (rule, family, polarity)."""
 
     records: int = 0
+    #: Tags naming no outcome entity, and no entity in either role.
     empty: int = 0
+    empty_both: int = 0
     forks: int = 0
     eligible: int = 0
     eligible_empty: int = 0
     kinds: Counter = field(default_factory=Counter)
+    condition_kinds: Counter = field(default_factory=Counter)
     outputs: dict[str, OutputTally] = field(default_factory=lambda: defaultdict(OutputTally))
 
 
@@ -225,6 +227,9 @@ class Audit:
     #: Added copies per drawn rule, and those carrying no ``rule_entities``.
     added_copies: Counter = field(default_factory=Counter)
     added_empty: Counter = field(default_factory=Counter)
+    added_empty_both: Counter = field(default_factory=Counter)
+    #: ``rule -> effective outputs`` from the manifest, where it records them.
+    effective: Mapping[str, tuple[str, ...]] | None = None
     records: int = 0
 
     def note_copy(self, record: EffectRecord) -> None:
@@ -232,8 +237,10 @@ class Audit:
         if curation is None or not curation.is_added:
             return
         self.added_copies[curation.drawn_rule] += 1
-        if not curation.rule_entities:
+        if not curation.outcome_entities:
             self.added_empty[curation.drawn_rule] += 1
+        if not curation.rule_entities:
+            self.added_empty_both[curation.drawn_rule] += 1
 
     def add(self, record: EffectRecord, tags: Iterable[tuple[str, RuleTag]]) -> None:
         """One distinct record and its ``(family, tag)`` pairs."""
@@ -248,15 +255,18 @@ class Audit:
             if targets is None:
                 targets = derive_targets(record)
             tally = self.tallies[(tag.rule, family, str(tag.polarity))]
-            tagged = tuple(dict.fromkeys(tag.entities))
+            tagged = tuple(dict.fromkeys(tag.outcome))
+            condition = tuple(dict.fromkeys(tag.condition))
             eligible = rule_test_eligible(record, tag)
             tally.records += 1
             tally.empty += not tagged
+            tally.empty_both += not tagged and not condition
             tally.forks += bool(record.fork)
             tally.eligible += eligible
             tally.eligible_empty += eligible and not tagged
             tally.kinds.update(entity_kind(record, ref) for ref in tagged)
-            tagged_set = frozenset(tagged)
+            tally.condition_kinds.update(entity_kind(record, ref) for ref in condition)
+            tagged_set = frozenset(tagged) | frozenset(condition)
             others = [ref for ref in board if ref not in tagged_set]
             affected = [ref for ref in board
                         if (entry := targets.get(ref)) is not None and entry.affected]
@@ -275,6 +285,9 @@ class Audit:
                     reading = entity_reading(targets, output, ref, ref in on_board)
                     counted.sets[TAGGED].add(reading)
                     hit |= reading.changed
+                for ref in condition:
+                    counted.sets[CONDITION].add(
+                        entity_reading(targets, output, ref, ref in on_board))
                 elsewhere = False
                 for ref in others:
                     reading = entity_reading(targets, output, ref, True)
@@ -342,9 +355,11 @@ def _share(n: int, d: int) -> str:
 
 
 CSV_COLUMNS = (
-    "rule", "family", "polarity", "output", "level", "need", "records", "empty_entity_share",
+    "rule", "family", "polarity", "output", "effective", "level", "need", "records",
+    "empty_outcome_share", "empty_both_share",
     "fork_records", "eligible_records", "eligible_empty_share",
-    "tagged_pairs", "tagged_supervised", "tagged_changed", "tagged_gate_zero",
+    "outcome_pairs", "outcome_supervised", "outcome_changed", "outcome_gate_zero",
+    "condition_pairs", "condition_supervised", "condition_changed",
     "other_pairs", "other_supervised", "other_changed",
     "affected_pairs", "affected_supervised", "affected_changed",
     "records_changed_anywhere", "hit_rate", "other_hit_rate", "record_supervised",
@@ -359,8 +374,10 @@ def csv_rows(audit: Audit) -> Iterator[dict]:
             row = {"rule": rule, "family": family, "polarity": polarity, "output": output,
                    "level": output_level(output) if output else "",
                    "need": output_need(output) if output else "",
+                   "effective": _effective_mark(audit, rule, output),
                    "records": tally.records,
-                   "empty_entity_share": _share(tally.empty, tally.records),
+                   "empty_outcome_share": _share(tally.empty, tally.records),
+                   "empty_both_share": _share(tally.empty_both, tally.records),
                    "fork_records": tally.forks, "eligible_records": tally.eligible,
                    "eligible_empty_share": _share(tally.eligible_empty, tally.eligible)}
             if counted is not None:
@@ -369,7 +386,7 @@ def csv_rows(audit: Audit) -> Iterator[dict]:
                     row[f"{name}_pairs"] = held.pairs
                     row[f"{name}_supervised"] = _share(held.supervised, held.pairs)
                     row[f"{name}_changed"] = _share(held.changed, held.pairs)
-                row["tagged_gate_zero"] = _share(counted.sets[TAGGED].gate_zero,
+                row["outcome_gate_zero"] = _share(counted.sets[TAGGED].gate_zero,
                                                  counted.sets[TAGGED].pairs)
                 row["records_changed_anywhere"] = counted.changed_anywhere
                 row["hit_rate"] = _share(counted.changed_at_tagged, counted.changed_anywhere)
@@ -378,6 +395,13 @@ def csv_rows(audit: Audit) -> Iterator[dict]:
                     row["record_supervised"] = _share(counted.record_supervised, tally.records)
                     row["record_changed"] = _share(counted.record_changed, tally.records)
             yield row
+
+
+def _effective_mark(audit: Audit, rule: str, output: str) -> str:
+    """``yes``/``no`` where the manifest records effective outputs, else blank."""
+    if audit.effective is None or not output:
+        return ""
+    return "yes" if output in audit.effective.get(rule, ()) else "no"
 
 
 def write_csv(path: Path, rows: Iterable[dict], columns: tuple[str, ...]) -> None:
@@ -423,28 +447,34 @@ def misses(audit: Audit) -> list[Miss]:
             rule, family, polarity, tally.records, tally.empty / tally.records, tally.eligible,
             mean(TAGGED), mean(OTHER), mean(AFFECTED),
             sum(hits) / len(hits) if hits else None,
-            "  ".join(_output_detail(o, tally) for o in audit.rule_outputs[rule])))
+            "  ".join(_output_detail(o, tally, _effective_mark(audit, rule, o))
+                      for o in audit.rule_outputs[rule])))
     return found
 
 
-def _output_detail(output: str, tally: RuleTally) -> str:
-    """One output of one row: ``t`` supervised/changed at the tagged entities
-    (``z`` the share a rule test reads as the gated field's off-gate zero),
-    ``a`` the same over the affected set, ``h`` the share of records whose
-    output moved that moved at a tagged entity and ``o`` at an untagged one;
-    a record-level output's ``r`` supervised/non-zero per record."""
+def _output_detail(output: str, tally: RuleTally, effective: str = "") -> str:
+    """One output of one row: ``t`` supervised/changed at the outcome
+    entities (``z`` the share a rule test reads as the gated field's
+    off-gate zero), ``c`` supervised at the condition entities, ``a`` the
+    same over the affected set, ``h`` the share of records whose output
+    moved that moved at an outcome entity and ``o`` at another; a
+    record-level output's ``r`` supervised/non-zero per record. A name
+    prefixed ``~`` is not among the rule's effective outputs."""
     level = output_level(output)
     counted = tally.outputs.get(output)
+    name = f"~{output}" if effective == "no" else output
     if level == UNREAD or counted is None:
-        return f"{output}[unread]"
+        return f"{name}[unread]"
     if level == RECORD:
-        return (f"{output}[r{_pct(_ratio(counted.record_supervised, tally.records)).strip()}/"
+        return (f"{name}[r{_pct(_ratio(counted.record_supervised, tally.records)).strip()}/"
                 f"{_pct(_ratio(counted.record_changed, tally.records)).strip()}]")
     tagged, affected = counted.sets[TAGGED], counted.sets[AFFECTED]
+    condition = counted.sets[CONDITION]
     moved = counted.changed_anywhere
-    return (f"{output}[t{_pct(_ratio(tagged.supervised, tagged.pairs)).strip()}/"
+    return (f"{name}[t{_pct(_ratio(tagged.supervised, tagged.pairs)).strip()}/"
             f"{_pct(_ratio(tagged.changed, tagged.pairs)).strip()}"
             f" z{_pct(_ratio(tagged.gate_zero, tagged.pairs)).strip()}"
+            f" c{_pct(_ratio(condition.supervised, condition.pairs)).strip()}"
             f" a{_pct(_ratio(affected.supervised, affected.pairs)).strip()}/"
             f"{_pct(_ratio(affected.changed, affected.pairs)).strip()}"
             f" h{_pct(_ratio(counted.changed_at_tagged, moved)).strip()}"
@@ -464,24 +494,31 @@ def _pct(value: float | None) -> str:
 def summary_lines(audit: Audit, verdicts: Mapping[str, str]) -> list[str]:
     lines = [f"{audit.records} distinct records; {len(audit.tallies)} (rule, family, polarity) "
              "rows over trained rules.",
-             "Shares in percent. tag/oth/aff = mean over the rule's per-entity outputs (gate "
-             "excluded) of the share of (record, entity) pairs supervised in that set; hit = "
-             "mean over those outputs of the share of records whose output changed somewhere "
-             "that changed at a tagged entity. Ranked by hit, then tag, ascending (worst first).",
-             "Per output: t supervised/changed at tagged pairs, z share of tagged pairs a rule "
-             "test reads as the gated field's off-gate zero (gate trained, entity unaffected), "
-             "a supervised/changed over the affected set, h/o share of the n records where the "
-             "output changed that changed at a tagged / an untagged entity; record-level "
-             "outputs r supervised/non-zero per record."]
+             "Shares in percent. empty = tags naming no outcome entity. tag/oth/aff = mean "
+             "over the rule's per-entity outputs (gate excluded) of the share of (record, "
+             "entity) pairs supervised at the outcome entities / the entities in neither role "
+             "/ the affected set; hit = mean over those outputs of the share of records whose "
+             "output changed somewhere that changed at an outcome entity. Ranked by hit, then "
+             "tag, ascending (worst first).",
+             "Per output: t supervised/changed at outcome pairs, z share of outcome pairs a "
+             "rule test reads as the gated field's off-gate zero (gate trained, entity "
+             "unaffected), c supervised at condition pairs, a supervised/changed over the "
+             "affected set, h/o share of the n records where the output changed that changed "
+             "at an outcome / another entity; record-level outputs r supervised/non-zero per "
+             "record; ~ marks an output the manifest does not count effective."]
     by_family: dict[str, list[Miss]] = defaultdict(list)
     for miss in misses(audit):
         by_family[miss.family].append(miss)
     kinds_by_family: dict[str, Counter] = defaultdict(Counter)
+    condition_kinds: dict[str, Counter] = defaultdict(Counter)
     needs_by_family: dict[str, Counter] = defaultdict(Counter)
     for (rule, family, _), tally in audit.tallies.items():
         kinds_by_family[family].update(tally.kinds)
+        condition_kinds[family].update(tally.condition_kinds)
         if tally.empty:
-            kinds_by_family[family]["(empty tag)"] += tally.empty
+            kinds_by_family[family]["(none)"] += tally.empty
+        if tally.empty_both:
+            condition_kinds[family]["(neither role)"] += tally.empty_both
         needs_by_family[family].update(output_need(o) for o in audit.rule_outputs[rule])
     families_of: dict[str, set] = defaultdict(set)
     for rule, family, _ in audit.tallies:
@@ -490,8 +527,10 @@ def summary_lines(audit: Audit, verdicts: Mapping[str, str]) -> list[str]:
         rows = by_family[family]
         lines += ["", f"== {family}: {len({m.rule for m in rows})} rules, "
                       f"{sum(m.records for m in rows)} tags"]
-        lines.append("  tagged kinds: " + ", ".join(
+        lines.append("  outcome kinds: " + ", ".join(
             f"{k} {n}" for k, n in kinds_by_family[family].most_common()))
+        lines.append("  condition kinds: " + ", ".join(
+            f"{k} {n}" for k, n in condition_kinds[family].most_common()))
         lines.append("  outputs need: " + ", ".join(
             f"{k} {n}" for k, n in needs_by_family[family].most_common()))
         lines.append(f"  {'rule':12s} {'pol':13s} {'recs':>6s} {'elig':>6s} {'empty':>5s} "
@@ -505,13 +544,23 @@ def summary_lines(audit: Audit, verdicts: Mapping[str, str]) -> list[str]:
     several = sorted(rule for rule, found in families_of.items() if len(found) > 1)
     lines += ["", f"Rules tagged by several families ({len(several)}): "
               + ", ".join(f"{r} [{'/'.join(sorted(families_of[r]))}]" for r in several)]
-    lines += ["", "Added copies with empty rule_entities, by drawn rule (as built):"]
+    lines += ["", "Added copies naming no outcome entity, by drawn rule (as built; "
+              "the second count names no entity in either role):"]
     total = sum(audit.added_copies.values())
     empty = sum(audit.added_empty.values())
-    lines.append(f"  {empty} of {total} added copies")
+    both = sum(audit.added_empty_both.values())
+    lines.append(f"  {empty} of {total} added copies; {both} in neither role")
     for rule, n in audit.added_empty.most_common():
-        lines.append(f"  {rule:12s} {n:5d} of {audit.added_copies[rule]:5d}  "
-                     f"[{verdicts.get(rule, '?')}] {','.join(audit.rule_outputs.get(rule, ()))}")
+        lines.append(f"  {rule:12s} {n:5d} {audit.added_empty_both[rule]:5d} of "
+                     f"{audit.added_copies[rule]:5d}  [{verdicts.get(rule, '?')}] "
+                     f"{','.join(audit.rule_outputs.get(rule, ()))}")
+    if audit.effective is not None:
+        trained = [rule for rule in audit.rule_outputs]
+        full = sum(1 for r in trained if audit.effective.get(r, ()) == audit.rule_outputs[r])
+        none = sorted(r for r in trained if not audit.effective.get(r, ()))
+        lines += ["", f"Effective outputs over {len(trained)} trained rules: {full} full, "
+                  f"{len(trained) - full - len(none)} partial, {len(none)} none:",
+                  "  " + ", ".join(none)]
     return lines
 
 
@@ -551,7 +600,9 @@ def main(argv: list[str] | None = None) -> int:
                            variant).sidecar_roots()
     indexes = family_indexes(DetectorIndex.of(load_scenarios(args.rules_dir)))
     tag = family_tagger(indexes, process_sidecars(roots))
-    audit = Audit(trained)
+    effective = manifest.get("effective_outputs")
+    audit = Audit(trained, effective={rule: tuple(outputs) for rule, outputs in
+                                      effective.items()} if effective is not None else None)
     dirs = [args.records_dir] if args.records_dir else corpus_dirs(args.corpus)
     for n, record in enumerate(distinct_records(dirs, audit.note_copy), 1):
         audit.add(record, tag(record))

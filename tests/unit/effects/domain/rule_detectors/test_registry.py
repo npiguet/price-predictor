@@ -45,14 +45,17 @@ def _index(*entries):
                          frozenset(r for _, rules, _ in entries for r in rules))
 
 
-def test_two_scenarios_of_one_rule_merge_to_fires_with_every_entity():
+def test_two_scenarios_of_one_rule_merge_to_fires_with_each_role_unioned():
     index = _index(
-        ("704.5f-1", ("704.5f",), _Fixed(FamilyMatch(Polarity.DOES_NOT_FIRE, False, ("E1",)))),
-        ("704.5f-2", ("704.5f",), _Fixed(FamilyMatch(Polarity.FIRES, True, ("E2",)))),
+        ("704.5f-1", ("704.5f",),
+         _Fixed(FamilyMatch(Polarity.DOES_NOT_FIRE, False, ("E1",), ("E3",)))),
+        ("704.5f-2", ("704.5f",), _Fixed(FamilyMatch(Polarity.FIRES, True, ("E2",), ("E1",)))),
     )
     (tag,) = tag_record(make_record(), index).tags
     assert (tag.rule, tag.polarity, tag.observed) == ("704.5f", Polarity.FIRES, True)
-    assert tag.entities == ("E1", "E2")
+    assert tag.condition == ("E1", "E2")
+    assert tag.outcome == ("E3", "E1")
+    assert tag.entities == ("E1", "E2", "E3")
     assert tag.scenario == "704.5f-2"
 
 
@@ -95,9 +98,9 @@ def test_a_record_whose_outcome_disagrees_with_its_side_goes_on_the_review_list(
     index = _index(("704.5f-1", ("704.5f",), _Fixed(FamilyMatch(Polarity.DOES_NOT_FIRE, True))))
     result = tag_record(make_record(), index)
     assert [t.scenario for t in result.review] == ["704.5f-1"]
-    assert RuleTag("r", Polarity.FIRES, True, (), "s").needs_review is False
-    assert RuleTag("r", Polarity.FIRES, False, (), "s").needs_review is True
-    assert RuleTag("r", Polarity.OTHER, True, (), "s").needs_review is False
+    assert RuleTag("r", Polarity.FIRES, True, (), (), "s").needs_review is False
+    assert RuleTag("r", Polarity.FIRES, False, (), (), "s").needs_review is True
+    assert RuleTag("r", Polarity.OTHER, True, (), (), "s").needs_review is False
 
 
 def test_an_outcome_the_record_cannot_show_goes_on_no_review_list():

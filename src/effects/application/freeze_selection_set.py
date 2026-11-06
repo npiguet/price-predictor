@@ -35,7 +35,9 @@ their labels alone:
    the same records, so no cell needs balancing.
 4. Each item's worst-case standard error (E4, ``score_scales``); an item
    above ``max_item_error`` is left out and named, and every trained rule
-   whose detector finds no test record in a half is named untested (FR-073).
+   whose detector finds no test record in a half is named untested (FR-073),
+   as is, in every half, one whose tagged records carry none of the outputs
+   its map entry names (the manifest's ``effective_outputs`` empty, FR-060a).
    A deviance item is an output term of any shipped head — a per-entity
    field or the gate, a verdict or global field, a created-objects slot
    column or the overflow flag (``selection_set.deviance_item``), the terms
@@ -84,9 +86,11 @@ from effects.domain.selection_set import (
     GRID_RECORD_CAP,
     GRID_TARGET_ERROR,
     GRIDS,
+    NO_READABLE_OUTPUT,
     PROBES,
     RULE_TESTS,
     UNTESTED,
+    UNTESTED_REASONS,
     FrozenGrid,
     GridCell,
     LeftOut,
@@ -176,6 +180,9 @@ class RuleTestRules:
     trained: frozenset[str]
     #: Rules a scenario of which carries a confirmed, unpatched departure.
     blocked: frozenset[str] = frozenset()
+    #: Trained rules whose tagged records carry no output of their map
+    #: entry (the manifest's ``effective_outputs`` empty): nothing to read.
+    unreadable: frozenset[str] = frozenset()
 
     @classmethod
     def of(cls, catalogue: ScenarioCatalogue, manifest: CorpusManifest,
@@ -186,18 +193,29 @@ class RuleTestRules:
             declared=index.declared_rules,
             trained=manifest.budgeted_rules,
             blocked=blocked_rules(catalogue),
+            unreadable=frozenset(
+                rule for rule, outputs in manifest.effective_rule_outputs.items()
+                if not outputs),
         )
 
     @property
     def testable(self) -> frozenset[str]:
-        """Rules a detector can find tests for: declared, trained, not blocked."""
-        return (self.declared & self.trained) - self.blocked
+        """Rules a detector can find tests for: declared, trained, not
+        blocked, with an output left to read."""
+        return (self.declared & self.trained) - self.blocked - self.unreadable
+
+    @property
+    def unreadable_testable(self) -> frozenset[str]:
+        """Rules testable but for having no output left to read."""
+        return ((self.declared & self.trained) - self.blocked) & self.unreadable
 
     def tests_of(self, record: EffectRecord) -> list[tuple[str, Polarity, tuple[str, ...]]]:
-        """``(rule, polarity, entities)`` for each rule-test tag of ``record``."""
+        """``(rule, polarity, outcome entities)`` for each rule-test tag of
+        ``record``: a rule test reads its per-entity outputs where the rule's
+        outcome falls (research R1)."""
         testable = self.testable
         return [
-            (tag.rule, tag.polarity, tag.entities) for tag in self.tag(record)
+            (tag.rule, tag.polarity, tag.outcome) for tag in self.tag(record)
             if tag.rule in testable and rule_test_eligible(record, tag)
         ]
 
@@ -250,9 +268,9 @@ def left_out_lines(selection: SelectionSet, *, limit: int = 12) -> list[str]:
     for stratum, by_half in sorted(selection.left_out.items()):
         for half, by_component in sorted(by_half.items()):
             for component, items in sorted(by_component.items()):
-                untested = sum(1 for item in items if item.reason == UNTESTED)
+                untested = sum(1 for item in items if item.reason in UNTESTED_REASONS)
                 named = [f"{item.item} ({item.reason})" for item in items
-                         if item.reason != UNTESTED]
+                         if item.reason not in UNTESTED_REASONS]
                 if len(named) > limit:
                     named = [*named[:limit], f"{len(named) - limit} more"]
                 parts = named + ([f"{untested} rule(s) untested"] if untested else [])
@@ -433,6 +451,7 @@ class _Assembly:
         self.seed = seed
         self.probe_kinds = dict(probe_kinds)
         self.testable = sorted(rules.testable)
+        self.unreadable = sorted(rules.unreadable_testable)
         self.misses: list[FreezeMiss] = []
         self.errors: dict[str, StandardError] = {}
         self.left_out: dict[str, dict[str, dict[str, list[LeftOut]]]] = defaultdict(
@@ -471,6 +490,8 @@ class _Assembly:
 
     def rule_tests(self, stratum: str, half: str, found: _Half) -> None:
         errors, kept = [], {}
+        for rule in self.unreadable:
+            self._leave_out(stratum, half, RULE_TESTS, rule, NO_READABLE_OUTPUT)
         for rule in self.testable:
             sides = found.rule_tests.get(rule)
             if not sides or not any(sides.values()):

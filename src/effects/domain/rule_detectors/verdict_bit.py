@@ -40,7 +40,12 @@ The candidates a rule speaks for, each filter narrowing both sides:
 
 A candidate a filter cannot read is on neither side.
 
-The entity is the verdict head's ``[ACT]``: the candidate is the acting line.
+The verdict bits are the verdict head's, read at ``[ACT]`` (the candidate is
+the acting line), which is no entity. The condition entity is the
+candidate's card (``refs.source``); the outcome entities are where the
+verdict's per-entity part, target legality, is written
+(``effect_targets.target_legality_subjects``): every card and player of a
+decision whose candidate has a targeting clause, none otherwise.
 """
 
 from __future__ import annotations
@@ -50,6 +55,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from effects.domain.effect_targets import target_legality_subjects
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import (
     Candidate,
@@ -70,7 +76,6 @@ from effects.domain.rule_detectors.acting_line import (
 
 GEN2_BITS = frozenset({"can_play", "affordable", "has_legal_target"})
 GEN3_BITS = frozenset({"timing", "failed_check"})
-ACT = "[ACT]"
 FILTERS = frozenset({"keyword", "source_keyword", "cost_symbol", "cost_part", "script_param",
                      "land_play"})
 CHECKS = frozenset(check.value for check in PlayabilityCheck)
@@ -194,7 +199,9 @@ class VerdictBit:
             return None
         fires = any(v is fires_when for v in values)
         polarity = Polarity.FIRES if fires else Polarity.DOES_NOT_FIRE
-        return FamilyMatch(polarity, fires, (ACT,))
+        source = record.state.refs.source
+        return FamilyMatch(polarity, fires, (source,) if source else (),
+                           target_legality_subjects(record))
 
 
 FAMILY = register(VerdictBit())

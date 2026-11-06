@@ -164,7 +164,7 @@ def test_placement_is_a_function_of_the_corpus():
 
 
 def _tag(polarity=FIRES, observed=True):
-    return RuleTag("704.5f", polarity, observed, ("E1",), "704.5f-a")
+    return RuleTag("704.5f", polarity, observed, ("E1",), ("E1",), "704.5f-a")
 
 
 def test_rule_test_records_are_natural_observed_tags():

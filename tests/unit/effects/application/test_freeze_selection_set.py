@@ -4,7 +4,7 @@ story 3 acceptance 5, story 1 acceptance 6-7, SC-010)."""
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pytest
 
@@ -30,6 +30,7 @@ from effects.domain.rule_catalogue import (
 from effects.domain.rule_detectors import RuleTag
 from effects.domain.score_scales import component_standard_error
 from effects.domain.selection_set import (
+    NO_READABLE_OUTPUT,
     UNTESTED,
     error_of,
     item_key,
@@ -78,18 +79,20 @@ def _reader(records):
     return lambda: [list(rows) for rows in by_game.values()]
 
 
-def _rules(tags: dict[str, list[RuleTag]], *, trained=None, declared=None, blocked=()):
+def _rules(tags: dict[str, list[RuleTag]], *, trained=None, declared=None, blocked=(),
+           unreadable=()):
     every = {tag.rule for found in tags.values() for tag in found}
     return RuleTestRules(
         tag=lambda record: tags.get(record.record_id, []),
         declared=frozenset(declared if declared is not None else every),
         trained=frozenset(trained if trained is not None else every),
         blocked=frozenset(blocked),
+        unreadable=frozenset(unreadable),
     )
 
 
 def _tag(rule: str, polarity: Polarity, *entities: str) -> RuleTag:
-    return RuleTag(rule, polarity, observed=polarity is FIRES, entities=entities,
+    return RuleTag(rule, polarity, observed=polarity is FIRES, condition=(), outcome=entities,
                    scenario="s")
 
 
@@ -266,7 +269,7 @@ def test_directed_fork_and_other_ineligible_records_are_never_rule_tests() -> No
         tags[record.record_id] = [_tag("R", FIRES)]
     records += [_Record("other", game), _Record("review", game)]
     tags["other"] = [_tag("R", Polarity.OTHER)]
-    tags["review"] = [RuleTag("R", FIRES, observed=False, entities=(), scenario="s")]
+    tags["review"] = [RuleTag("R", FIRES, observed=False, condition=(), outcome=(), scenario="s")]
     frozen = _freeze(halves, records, tags)
     ids = {r.record_id for half in frozen.rule_tests[GD].values()
            for sides in half.values() for rows in sides.values() for r in rows}
@@ -321,6 +324,29 @@ def test_rule_test_entities_come_from_the_tag() -> None:
     frozen = _freeze(halves, records, tags)
     rows = frozen.rule_tests[GD]["selection"]["R"]["fires"]
     assert {row.entities for row in rows} == {("E1",)}
+
+
+def test_rule_test_entities_are_the_tag_s_outcome_entities() -> None:
+    """Research R1: a rule test reads where the outcome falls, never the condition."""
+    halves = _two_halves(1)
+    records, tags = _balanced_records(halves)
+    tags = {record_id: [replace(tag, condition=("E9",)) for tag in found]
+            for record_id, found in tags.items()}
+    frozen = _freeze(halves, records, tags)
+    rows = frozen.rule_tests[GD]["selection"]["R"]["fires"]
+    assert {row.entities for row in rows} == {("E1",)}
+
+
+def test_a_rule_with_no_effective_output_is_named_untested_in_every_half() -> None:
+    halves = _two_halves(2)
+    records, tags = _balanced_records(halves)
+    with pytest.raises(SelectionSetRefused) as refused:
+        _freeze(halves, records, tags, rules=_rules(tags, unreadable={"R"}))
+    frozen = refused.value.selection
+    for half in ("selection", "reporting"):
+        assert frozen.rule_tests[GD].get(half, {}) == {}
+        left = frozen.left_out[GD][half]["rule_tests"]
+        assert [(item.item, item.reason) for item in left] == [("R", NO_READABLE_OUTPUT)]
 
 
 # ── copies ──────────────────────────────────────────────────────────────

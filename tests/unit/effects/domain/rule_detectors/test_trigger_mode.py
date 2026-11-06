@@ -20,6 +20,12 @@ def test_a_fired_trigger_of_the_named_mode_fires(by_kind, gen2_sidecars):
                   if r.payload.fired and _mode_of(r, gen2_sidecars) == "ChangesZone")
     found = FAMILY.match(record, gen2_sidecars, {"mode": "ChangesZone"})
     assert found.polarity is Polarity.FIRES and found.observed
+    # A trigger record carries no outcome: the triggering event's subjects
+    # and the trigger's source are its condition.
+    assert found.outcome == ()
+    assert set(record.payload.event.subjects) <= set(found.condition)
+    if record.state.refs.source and record.state.entity(record.state.refs.source):
+        assert record.state.refs.source in found.condition
 
 
 def test_the_same_trigger_edited_to_unfired_is_the_near_miss(by_kind, gen2_sidecars):

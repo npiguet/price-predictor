@@ -21,6 +21,11 @@ Parameters, each a condition of the rule rather than of a card:
   (``Creature.Other+YouCtrl``); one that names a card (``Card.namedX``) is
   refused, since it would match one scenario's board and nothing else.
 
+The condition entities are the triggering event's subjects and the
+trigger's source; a ``trigger`` record carries no outcome (what the trigger
+does arrives as its resolution's record), so its tags name no outcome
+entity and the rule's per-entity outputs are read nowhere on it.
+
 Prior art: ``effect_families`` keys a trigger record by the same root
 ``Mode$``, read the same way.
 """
@@ -39,6 +44,7 @@ from effects.domain.rule_detectors.acting_line import (
     acting_line,
     acting_root_params,
     is_keyword_line,
+    source_ids,
 )
 
 __all__ = ["FAMILY", "acting_root_params"]
@@ -83,7 +89,8 @@ class TriggerMode:
     def _side(record: EffectRecord) -> FamilyMatch:
         fired = record.payload.fired
         return FamilyMatch(Polarity.FIRES if fired else Polarity.DOES_NOT_FIRE, fired,
-                           tuple(record.payload.event.subjects))
+                           tuple(dict.fromkeys((*record.payload.event.subjects,
+                                                *source_ids(record)))))
 
 
 FAMILY = register(TriggerMode())

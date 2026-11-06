@@ -47,13 +47,28 @@ class RuleTag:
     cannot show it (the collector files it in another record). A tag whose
     two disagree goes on the review list (FR-004); an unreadable outcome
     disagrees with nothing.
+
+    The tag names entities in two roles (research R1): ``condition``, what
+    the rule's condition reads (the keyword's carrier, the acting source,
+    the object a check judges), and ``outcome``, where the rule's outcome
+    falls (the creature destroyed, the player gaining life, the entities a
+    target legality is written at). One entity can hold both roles. A tag
+    whose outcome is an absence (an ``absent`` scenario, a scoped
+    ``does_not_fire`` with no event) names condition entities only.
     """
 
     rule: str
     polarity: Polarity
     observed: bool | None
-    entities: tuple[str, ...]
+    condition: tuple[str, ...]
+    outcome: tuple[str, ...]
     scenario: str
+
+    @property
+    def entities(self) -> tuple[str, ...]:
+        """Both roles, condition first, each entity once: where the hard
+        rule mask trains the affected gate."""
+        return tuple(dict.fromkeys((*self.condition, *self.outcome)))
 
     @property
     def needs_review(self) -> bool:
@@ -89,7 +104,15 @@ class FamilyMatch:
 
     polarity: Polarity
     observed: bool | None
-    entities: tuple[str, ...] = ()
+    #: What the rule's condition reads (:class:`RuleTag`'s two roles).
+    condition: tuple[str, ...] = ()
+    #: Where the rule's outcome falls.
+    outcome: tuple[str, ...] = ()
+
+    @property
+    def entities(self) -> tuple[str, ...]:
+        """Both roles, condition first, each entity once."""
+        return tuple(dict.fromkeys((*self.condition, *self.outcome)))
 
 
 class DetectorFamily(Protocol):
@@ -193,16 +216,17 @@ _ORDER = {Polarity.FIRES: 0, Polarity.DOES_NOT_FIRE: 1, Polarity.OTHER: 2}
 
 def _merge(rule: str, found: Iterable[RuleTag]) -> RuleTag:
     """Several scenarios of one rule on one record: ``fires`` if any says so,
-    else ``does_not_fire``, else ``other``; entities the union (research R1);
-    observed where any readable one of the chosen side says so, None where
-    none of them is readable."""
+    else ``does_not_fire``, else ``other``; each role the union of that role
+    over the scenarios (research R1); observed where any readable one of the
+    chosen side says so, None where none of them is readable."""
     found = list(found)
     best = min(found, key=lambda tag: _ORDER[tag.polarity])
-    entities = tuple(dict.fromkeys(e for tag in found for e in tag.entities))
+    condition = tuple(dict.fromkeys(e for tag in found for e in tag.condition))
+    outcome = tuple(dict.fromkeys(e for tag in found for e in tag.outcome))
     readable = [tag.observed for tag in found
                 if tag.polarity is best.polarity and tag.observed is not None]
     observed = any(readable) if readable else None
-    return RuleTag(rule, best.polarity, observed, entities, best.scenario)
+    return RuleTag(rule, best.polarity, observed, condition, outcome, best.scenario)
 
 
 def tag_record(record: EffectRecord, index: DetectorIndex,
@@ -220,7 +244,8 @@ def tag_record(record: EffectRecord, index: DetectorIndex,
             continue
         for rule in scenario.rules:
             per_rule.setdefault(rule, []).append(RuleTag(
-                rule, found.polarity, found.observed, found.entities, scenario.id))
+                rule, found.polarity, found.observed, found.condition, found.outcome,
+                scenario.id))
     tags = tuple(_merge(rule, found) for rule, found in sorted(per_rule.items()))
     review = tuple(tag for found in per_rule.values() for tag in found if tag.needs_review)
     return TagResult(tags, frozenset(not_countable - set(per_rule)), review)

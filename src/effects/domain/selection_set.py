@@ -82,6 +82,12 @@ BINARY, AMOUNT = "binary", "amount"
 
 #: Why a rule names no test in a half (FR-073).
 UNTESTED = "untested: its detector finds no test record in this half"
+#: Why a rule names no test in any half: its tagged records carry none of
+#: the outputs its map entry names, so no output is left to read
+#: (``CorpusManifest.effective_outputs``, FR-060a).
+NO_READABLE_OUTPUT = "untested: its tagged records carry no output its map entry names"
+#: Every reason a trained rule is left out untested.
+UNTESTED_REASONS = frozenset({UNTESTED, NO_READABLE_OUTPUT})
 
 T = TypeVar("T")
 

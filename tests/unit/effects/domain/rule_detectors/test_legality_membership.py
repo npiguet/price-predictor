@@ -15,11 +15,21 @@ def _forbidden_block(by_kind):
     return next(r for r in by_kind("playability", "blockers") if r.payload.forbidden)
 
 
+def _judged(found, record) -> tuple[str, ...]:
+    """The judged entities: the condition entities but the anchor attacker."""
+    anchor = getattr(record.payload, "anchor_attacker", None)
+    return tuple(e for e in found.condition if e != anchor)
+
+
 def test_a_creature_forbidden_to_block_fires_a_cant_block_rule(by_kind):
     record = _forbidden_block(by_kind)
     found = FAMILY.match(record, None, {"list": "legal_blockers"})
     assert found.polarity is Polarity.FIRES
-    assert found.entities == tuple(f.entity for f in record.payload.forbidden)
+    forbidden = tuple(f.entity for f in record.payload.forbidden)
+    assert _judged(found, record) == forbidden
+    # Each forbidden blocker's blocker_legal is written, and min_blockers at the anchor.
+    assert found.outcome == (*forbidden, record.payload.anchor_attacker)
+    assert record.payload.anchor_attacker in found.condition
 
 
 def test_the_same_creature_edited_into_the_legal_list_is_the_near_miss(by_kind):
@@ -28,7 +38,7 @@ def test_the_same_creature_edited_into_the_legal_list_is_the_near_miss(by_kind):
     edited = replace(record, payload=replace(record.payload, forbidden=(),
                                              legal_blockers=moved))
     found = FAMILY.match(edited, None, {"list": "legal_blockers"})
-    assert found.polarity is Polarity.DOES_NOT_FIRE and found.entities == moved
+    assert found.polarity is Polarity.DOES_NOT_FIRE and _judged(found, edited) == moved
 
 
 def test_responsible_static_counts_only_what_a_static_forbids(by_kind):
@@ -43,7 +53,8 @@ def test_responsible_static_counts_only_what_a_static_forbids(by_kind):
 def test_inside_reads_the_legal_list(by_kind):
     record = next(r for r in by_kind("playability", "attackers") if r.payload.legal_attackers)
     found = FAMILY.match(record, None, {"list": "legal_attackers", "fires_when": "inside"})
-    assert found.polarity is Polarity.FIRES and found.entities == record.payload.legal_attackers
+    assert found.polarity is Polarity.FIRES
+    assert found.condition == found.outcome == record.payload.legal_attackers
 
 
 class TestUniverse:
@@ -54,17 +65,21 @@ class TestUniverse:
         found = FAMILY.match(record, None, {"list": "legal_attackers",
                                             "universe": "battlefield"})
         assert found.polarity is Polarity.FIRES
-        outside = [record.state.entity(e) for e in found.entities]
+        outside = [record.state.entity(e) for e in found.condition]
         assert any(not e.is_creature for e in outside)
         assert all(e.controller == record.state.global_.active for e in outside)
         assert not set(found.entities) & set(record.payload.legal_attackers)
+        # A permanent no attackers record lists has no attacker_legal target:
+        # the outside is the condition alone, the forbidden ones its outcome.
+        forbidden = {f.entity for f in record.payload.forbidden}
+        assert set(found.outcome) == set(found.condition) & forbidden
 
     def test_the_blockers_universe_is_the_defending_players(self, by_kind):
         record = by_kind("playability", "blockers")[0]
         found = FAMILY.match(record, None, {"list": "legal_blockers",
                                             "universe": "battlefield"})
         active = record.state.global_.active
-        assert all(record.state.entity(e).controller != active for e in found.entities)
+        assert all(record.state.entity(e).controller != active for e in _judged(found, record))
 
     def _targeting(self, by_kind):
         return next(r for r in by_kind("playability", "decision")
@@ -78,6 +93,8 @@ class TestUniverse:
         assert found.polarity is Polarity.FIRES and not set(found.entities) & legal
         players = {p.id for p in record.state.players}
         assert players - legal <= set(found.entities)
+        # target_legal is written at every card and player of the decision.
+        assert found.outcome == found.condition
         inside = FAMILY.match(record, None, {"list": "legal_targets", "fires_when": "inside",
                                              "universe": "battlefield"})
         assert inside.polarity is Polarity.FIRES and set(inside.entities) == legal
@@ -120,7 +137,8 @@ class TestTheGen3Lists:
     def test_a_defender_the_anchor_may_attack_is_inside(self):
         found = FAMILY.match(self._anchor("E2"), None,
                              {"list": "legal_defenders", "fires_when": "inside"})
-        assert found.polarity is Polarity.FIRES and found.entities == ("P1",)
+        assert found.polarity is Polarity.FIRES and found.condition == ("P1", "E2")
+        assert found.outcome == ("P1",)
 
     def test_a_creature_that_may_attack_nothing_lists_no_inside(self):
         assert FAMILY.match(self._anchor("E3"), None,
@@ -131,23 +149,25 @@ class TestTheGen3Lists:
         found = FAMILY.match(record, None, {"list": "legal_defenders",
                                             "universe": "battlefield_and_players"})
         assert found.polarity is Polarity.FIRES
-        assert "E2" not in found.entities and not {"P0", "P1"} & set(found.entities)
-        assert set(found.entities) == {e.id for e in record.state.entities
-                                       if e.on_battlefield and e.id != "E2"}
+        judged = _judged(found, record)
+        assert "E2" not in judged and not {"P0", "P1"} & set(judged)
+        assert set(judged) == {e.id for e in record.state.entities
+                               if e.on_battlefield and e.id != "E2"}
 
     def test_a_creature_no_requirement_binds_is_outside_must_block(self):
         record = self._golden("blockers")[0]
         found = FAMILY.match(record, None, {"list": "must_block", "fires_when": "inside"})
         assert found.polarity is Polarity.DOES_NOT_FIRE
-        assert found.entities == (*record.payload.legal_blockers,
-                                  *(f.entity for f in record.payload.forbidden))
+        assert _judged(found, record) == (*record.payload.legal_blockers,
+                                          *(f.entity for f in record.payload.forbidden))
 
     def test_a_creature_that_must_block_is_inside(self):
         record = self._golden("blockers")[0]
         bound = record.payload.legal_blockers[:1]
         edited = replace(record, payload=replace(record.payload, must_block=bound))
         found = FAMILY.match(edited, None, {"list": "must_block", "fires_when": "inside"})
-        assert found.polarity is Polarity.FIRES and found.entities == bound
+        assert found.polarity is Polarity.FIRES and _judged(found, edited) == bound
+        assert found.outcome == (*bound, record.payload.anchor_attacker)
 
     def test_a_gen2_record_shows_neither_list(self, by_kind):
         assert FAMILY.match(by_kind("playability", "attackers")[0], None,

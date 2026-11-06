@@ -217,14 +217,16 @@ class Curation:
     ``natural_share`` (n) is the copies gen-2's budgets give the record and
     ``copies`` (d) every copy written, natural and added. ``drawn_rule`` is set
     on an added copy only, ``drawn_rules`` lists the rule of every added copy
-    of the record, and ``rule_entities`` holds the drawn rule's tag entities.
+    of the record, and ``condition_entities`` and ``outcome_entities`` hold
+    the drawn rule's tag entities in their two roles (research R1).
     """
 
     natural_share: int
     copies: int
     drawn_rule: str | None = None
     drawn_rules: tuple[str, ...] = ()
-    rule_entities: tuple[str, ...] = ()
+    condition_entities: tuple[str, ...] = ()
+    outcome_entities: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.drawn_rule is not None and self.drawn_rule not in self.drawn_rules:
@@ -236,6 +238,12 @@ class Curation:
     @property
     def is_added(self) -> bool:
         return self.drawn_rule is not None
+
+    @property
+    def rule_entities(self) -> tuple[str, ...]:
+        """Both roles, condition first, each entity once: where the hard
+        rule mask trains the affected gate (FR-061)."""
+        return tuple(dict.fromkeys((*self.condition_entities, *self.outcome_entities)))
 
 
 class _PayloadQueries:

@@ -30,11 +30,11 @@ def _deathtouch_combat():
         )))
 
 
-def _tag(rule, entities, polarity=Polarity.FIRES):
-    return RuleTag(rule, polarity, True, tuple(entities), f"{rule}-1")
+def _tag(rule, outcome, polarity=Polarity.FIRES, condition=()):
+    return RuleTag(rule, polarity, True, tuple(condition), tuple(outcome), f"{rule}-1")
 
 
-def test_a_carrier_tag_misses_the_outputs_its_victim_carries():
+def test_an_outcome_on_the_carrier_misses_the_outputs_its_victim_carries():
     audit = audit_script.Audit({"702.2b": ("zone_outcome", "damage_taken", "gate")})
     audit.add(_deathtouch_combat(), [("keyword_combat", _tag("702.2b", ["E1"]))])
 
@@ -42,19 +42,32 @@ def test_a_carrier_tag_misses_the_outputs_its_victim_carries():
     assert tally.records == 1 and tally.empty == 0
     assert tally.kinds == {"card:battlefield": 1}
     zone = tally.outputs["zone_outcome"]
-    assert (zone.sets["tagged"].pairs, zone.sets["tagged"].supervised) == (1, 0)
+    assert (zone.sets["outcome"].pairs, zone.sets["outcome"].supervised) == (1, 0)
     # The carrier is unaffected, so a rule test reads the gated field's zero there.
-    assert zone.sets["tagged"].gate_zero == 1
-    # Other entities: E2, E3, P0, P1; only E2 moved.
+    assert zone.sets["outcome"].gate_zero == 1
+    # Other entities (in neither role): E2, E3, P0, P1; only E2 moved.
     assert (zone.sets["other"].pairs, zone.sets["other"].changed) == (4, 1)
     assert (zone.sets["affected"].pairs, zone.sets["affected"].changed) == (1, 1)
     assert (zone.changed_anywhere, zone.changed_at_tagged, zone.changed_at_other) == (1, 0, 1)
     gate = tally.outputs["gate"]
-    assert (gate.sets["tagged"].supervised, gate.sets["tagged"].changed) == (1, 0)
+    assert (gate.sets["outcome"].supervised, gate.sets["outcome"].changed) == (1, 0)
 
     [miss] = audit_script.misses(audit)
     assert miss.hit == 0.0 and miss.tagged == 0.0 and miss.affected == 1.0
-    assert "zone_outcome[t0/0 z100 a100/100 h0 o100 n1]" in miss.outputs
+    assert "zone_outcome[t0/0 z100 c- a100/100 h0 o100 n1]" in miss.outputs
+
+
+def test_a_condition_entity_is_measured_apart_from_the_outcome():
+    audit = audit_script.Audit({"702.2b": ("zone_outcome",)}, effective={"702.2b": ()})
+    audit.add(_deathtouch_combat(),
+              [("keyword_combat", _tag("702.2b", ["E2"], condition=["E1"]))])
+    zone = audit.tallies[("702.2b", "keyword_combat", "fires")].outputs["zone_outcome"]
+    assert (zone.sets["outcome"].supervised, zone.sets["outcome"].changed) == (1, 1)
+    assert (zone.sets["condition"].pairs, zone.sets["condition"].supervised) == (1, 0)
+    # Neither role: E3, P0, P1.
+    assert zone.sets["other"].pairs == 3
+    [miss] = audit_script.misses(audit)
+    assert miss.outputs.startswith("~zone_outcome[t100/100")
 
 
 def test_an_outcome_tag_hits_and_record_level_outputs_are_read_per_record():
@@ -64,7 +77,7 @@ def test_an_outcome_tag_hits_and_record_level_outputs_are_read_per_record():
                        ("outcome_event", _tag("111.10a", []))])
 
     zone = audit.tallies[("704.5g", "sba_zone_move", "fires")].outputs["zone_outcome"]
-    assert (zone.sets["tagged"].supervised, zone.sets["tagged"].changed) == (1, 1)
+    assert (zone.sets["outcome"].supervised, zone.sets["outcome"].changed) == (1, 1)
     assert (zone.changed_anywhere, zone.changed_at_tagged) == (1, 1)
     created = audit.tallies[("111.10a", "outcome_event", "fires")]
     assert created.empty == 1

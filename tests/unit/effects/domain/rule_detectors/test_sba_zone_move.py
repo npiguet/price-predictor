@@ -130,18 +130,22 @@ def test_the_same_legend_entering_under_another_controller_is_the_near_miss(gen2
 
 
 def test_an_aura_whose_host_left_fires(gen2_records):
-    found = FAMILY.match(_fires(gen2_records, "aura_illegal"), None, {"check": "aura_illegal"})
+    record = _fires(gen2_records, "aura_illegal")
+    found = FAMILY.match(record, None, {"check": "aura_illegal"})
     assert found.observed
+    # The Aura is judged and goes to the graveyard; its host is read too.
+    hosts = {record.state.entity(a).attached_to for a in found.outcome}
+    assert set(found.condition) == set(found.outcome) | hosts
 
 
 def test_an_aura_whose_host_stays_is_the_near_miss(gen2_records):
     record = _fires(gen2_records, "aura_illegal")
     found = FAMILY.match(record, None, {"check": "aura_illegal"})
-    hosts = {record.state.entity(a).attached_to for a in found.entities}
+    hosts = {record.state.entity(a).attached_to for a in found.outcome}
     events = tuple(e for e in record.payload.events
                    if not (e.type is EventType.ZONE_CHANGE
                            and e.params.get("from_zone") == "battlefield"
-                           and (set(e.subjects) & (hosts | set(found.entities)))))
+                           and (set(e.subjects) & (hosts | set(found.outcome)))))
     stayed = FAMILY.match(replace(record, payload=ResolutionPayload(events=events)), None,
                           {"check": "aura_illegal"})
     assert stayed.polarity is Polarity.DOES_NOT_FIRE and not stayed.observed

@@ -4,12 +4,15 @@ trains each output.
 Rule budgets add copies of a record for one rule (FR-054). Unmasked, an added
 copy repeats every other output the record carries and distorts them; the
 mask decides, per copy, which outputs train and at what weight, from the
-copy's ``curation`` and the outputs the manifest's rule map names per rule
-(FR-060a).
+copy's ``curation`` and each rule's effective outputs, those of the outputs
+the manifest's rule map names per rule that its tagged records carry
+(FR-060a, ``rule_output_carriage``).
 
 ``hard`` (the default): an added copy trains the outputs of every rule its
-record was drawn for, and the affected gate on its drawn rule's own entities
-only; every other output is masked. ``soft``: every copy trains every output,
+record was drawn for, and the affected gate only on its drawn rule's tag
+entities, both roles (research R1: the condition entities its condition
+reads and the outcome entities its outcome falls on); every other output is
+masked. ``soft``: every copy trains every output,
 outputs other than the drawn rules' weighing ``natural_share / copies``.
 Under both a natural copy of a record no copy was drawn for trains everything
 at full weight. A natural copy of an aimed record (a directed fork's, or one
@@ -85,11 +88,11 @@ def copy_weights(
     """How ``record``'s copy trains each output under ``mode`` (FR-061);
     None trains every record at full weight, as evaluation reads them.
 
-    ``rule_outputs`` is the manifest's ``rule -> outputs`` (FR-060a). An
-    added copy whose drawn rule names no output the record carries trains
-    nothing but the gate on its rule's entities, since a masked-in output
-    with no target trains nothing; one whose rule names no entity (an
-    outcome on a created token, a ``does_not_fire`` tag) trains no gate.
+    ``rule_outputs`` is the manifest's ``rule -> effective outputs``
+    (FR-060a). An added copy whose drawn rule names no output the record
+    carries trains nothing but the gate on its rule's entities, since a
+    masked-in output with no target trains nothing; one whose rule names no
+    entity in either role trains no gate.
     """
     curation = getattr(record, "curation", None)
     if mode is None or curation is None:

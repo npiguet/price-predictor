@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import random
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
@@ -56,7 +57,13 @@ from effects.domain.corpus_plan import (
     TrainingSupply,
 )
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME, qualifying_observations
-from effects.domain.protection_copies import PROTECTION_RULES, qualify, rules_offered
+from effects.domain.effect_targets import derive_targets
+from effects.domain.protection_copies import (
+    PROTECTION_RULES,
+    protection_copy,
+    qualify,
+    rules_offered,
+)
 from effects.domain.record_quality import QualityDefect, record_refusal
 from effects.domain.records import (
     EffectRecord,
@@ -65,6 +72,7 @@ from effects.domain.records import (
 )
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import RuleSource, RuleTag, TagResult
+from effects.domain.rule_output_carriage import carried_outputs
 from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.split import HeldOutCards, record_names_held_out_card
 from effects.domain.stratum_placement import PlacementRule, RuleCell, rule_test_eligible
@@ -96,6 +104,9 @@ class ReadConfig:
     #: ``rules/scenarios/`` as the build read it once (FR-060a); None tags
     #: nothing, as a catalogue declaring no detector would.
     catalogue: ScenarioCatalogue | None = None
+    #: ``rule -> outputs`` the map names (FR-060a): what the survey checks
+    #: each tagged record carries (``rule_output_carriage``).
+    rule_outputs: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 def protection_hash(record_id: str, *, seed: int) -> int:
@@ -300,6 +311,9 @@ class ShardSurvey:
     inventories: list[tuple[str, dict[RuleCell, int]]] = field(default_factory=list)
     #: Every record read, tagged as ``rule-counts`` tags it (FR-008).
     rule_counts: RuleCounts = field(default_factory=RuleCounts)
+    #: ``(rule, output) -> tagged records carrying it`` over the map's
+    #: outputs (``rule_output_carriage``): what makes an output effective.
+    carried: Counter[tuple[str, str]] = field(default_factory=Counter)
     #: ``turn_action`` records by subkind, written to no stratum (FR-059).
     turn_actions: Counter[str] = field(default_factory=Counter)
     #: ``corpus_curation.condition_key`` -> kept records (FR-056).
@@ -454,7 +468,23 @@ class _ShardSurveyor:
         counts.review |= {(record.record_id, tag.scenario) for tag in found.review}
         if found.tags:
             self.counted.append((record.game_id, record.aimed_at is not None, found.tags))
+            self._note_carried(record, found.tags)
         return found
+
+    def _note_carried(self, record: EffectRecord, tags: tuple[RuleTag, ...]) -> None:
+        """Which of each tagged rule's map outputs ``record`` carries."""
+        if record.kind is RecordKind.TURN_ACTION:
+            return
+        outputs = self.config.read.rule_outputs
+        targets = None
+        for tag in tags:
+            wanted = outputs.get(tag.rule)
+            if not wanted:
+                continue
+            if targets is None:
+                targets = derive_targets(record)
+            for output in carried_outputs(record, tag.outcome, wanted, targets=targets):
+                self.out.carried[tag.rule, output] += 1
 
     def _kept(
         self, record: EffectRecord, klass: SamplingClass, found: TagResult,
@@ -497,11 +527,29 @@ class _ShardSurveyor:
         out.keywords |= keywords_named(record, self.config.known_keywords)
 
     def _protection(self, record: EffectRecord) -> tuple[str, ...]:
-        """The budgeted protection rules ``record``'s copies can be drawn for."""
+        """The budgeted protection rules ``record``'s copies can be drawn for,
+        each counted toward the outputs a copy drawn for it carries."""
         if not self.protection_rules:
             return ()
-        offered = rules_offered(qualify(record))
-        return tuple(rule for rule in offered if rule in self.protection_rules)
+        opportunities = qualify(record)
+        offered = tuple(rule for rule in rules_offered(opportunities)
+                        if rule in self.protection_rules)
+        for rule in offered:
+            self._note_protection_carried(record, opportunities, rule)
+        return offered
+
+    def _note_protection_carried(self, record: EffectRecord, opportunities, rule: str) -> None:
+        """The outputs one protection copy of ``record`` drawn for ``rule``
+        carries: the copies are synthetic, so no detector tags them, and
+        their rule's effective outputs come from here."""
+        wanted = self.config.read.rule_outputs.get(rule)
+        if not wanted:
+            return
+        made = protection_copy(record, opportunities, rule=rule, rng=random.Random(0), index=0)
+        if made is None:
+            return
+        for output in carried_outputs(made.record, made.outcome_entities, wanted):
+            self.out.carried[rule, output] += 1
 
     def finish(self) -> ShardSurvey:
         seat_games = self.out.games.random_seat

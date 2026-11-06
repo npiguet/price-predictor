@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from effects.domain.event_schema import EventType
+from effects.domain.event_schema import Event, EventType
 from effects.domain.records import ResolutionPayload
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors.acting_line import acting_line, acting_root_params
@@ -98,6 +98,8 @@ class TestAbsent:
             e for e in record.payload.events if e.type is not EventType.TOKEN_CREATED)))
         found = FAMILY.match(edited, gen2_sidecars, declared)
         assert found.polarity is Polarity.FIRES and found.observed
+        # The outcome is an absence: the tag names its condition alone.
+        assert found.outcome == () and record.actor_player in found.condition
 
     def test_absent_needs_an_api(self, gen2_records):
         with pytest.raises(ValueError, match="needs api"):
@@ -363,3 +365,42 @@ class TestApiInChain:
             assert FAMILY.match(record, gen2_sidecars, declared).polarity is Polarity.FIRES
         assert FAMILY.match(record, gen2_sidecars, {"event": event, "api": "NoSuchApi",
                                                     "api_in_chain": True}) is None
+
+
+class TestEntityRoles:
+    """Condition: the acting source, its targets and controller; outcome:
+    where the events are placed, and a hand's or a library's owner."""
+
+    @staticmethod
+    def _resolution(*events, entities=(), targets=()):
+        from effects.domain.state_snapshot import PlayerState, Refs
+        from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+
+        players = tuple(PlayerState(id=p, life=20, hand=3, library=30, graveyard=0)
+                        for p in ("P0", "P1"))
+        board = (make_entity("E1", "source"), *entities)
+        state = make_snapshot(entities=board, players=players,
+                              refs=Refs(source="E1", targets=tuple(targets)))
+        return make_record(state=state, payload=ResolutionPayload(events=events))
+
+    def test_a_discard_names_the_card_and_the_player_who_discarded_it(self):
+        from tests.unit.effects.builders import make_entity
+
+        card = make_entity("E5", "discarded", zone="hand", controller="P1", owner="P1")
+        record = self._resolution(
+            Event(EventType.ZONE_CHANGE, ("E5",), {"from_zone": "hand", "to_zone": "graveyard"}),
+            entities=(card,), targets=("P1",))
+        found = FAMILY.match(record, None, {"event": "zone_change", "from_zone": "hand",
+                                            "to_zone": "graveyard"})
+        assert found.polarity is Polarity.FIRES
+        assert found.condition == ("E1", "P1", "P0")
+        assert found.outcome == ("E5", "P1")
+
+    def test_a_spell_copy_is_placed_on_the_targeted_stack_object(self):
+        from tests.unit.effects.builders import make_entity
+
+        spell = make_entity("E7", "spell", zone="stack")
+        record = self._resolution(Event(EventType.SPELL_COPIED, (), {"count": 1}),
+                                  entities=(spell,), targets=("E7",))
+        found = FAMILY.match(record, None, {"event": "spell_copied"})
+        assert found.polarity is Polarity.FIRES and found.outcome == ("E7",)

@@ -255,10 +255,10 @@ class _ShardWriter:
         drawn = tuple(sorted(set(added)))
         copies = [replace(record, curation=Curation(natural, total, None, drawn))] * natural
         if added:
-            entities = {tag.rule: tag.entities for tag in self.context.tags(record).tags}
+            tags = {tag.rule: tag for tag in self.context.tags(record).tags}
             copies += [
                 replace(record, curation=Curation(
-                    natural, total, rule, drawn, entities.get(rule, ())))
+                    natural, total, rule, drawn, *_roles(tags.get(rule))))
                 for rule in added
             ]
             self.out.added[stratum] += len(added)
@@ -285,7 +285,7 @@ class _ShardWriter:
             if made is None:
                 continue
             self.outputs[stratum].append(replace(made.record, curation=Curation(
-                0, len(rules), rule, drawn, made.rule_entities)))
+                0, len(rules), rule, drawn, made.condition_entities, made.outcome_entities)))
             self.out.protection[rule] += 1
             written += 1
         self.out.strata.note(stratum, keys, written)
@@ -314,3 +314,9 @@ def run_write_pass(
     ):
         merge_into(total, part)
     return total
+
+
+def _roles(tag) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """A drawn rule's tag entities as the curation carries them: condition,
+    then outcome; none where the record no longer shows the rule."""
+    return (tag.condition, tag.outcome) if tag is not None else ((), ())

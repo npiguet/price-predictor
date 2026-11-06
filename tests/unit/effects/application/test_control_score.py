@@ -594,3 +594,19 @@ class TestASavedCheckpoint:
             assert set(score.strata[stratum].items[GRIDS]) == {"damage"}
             assert not math.isnan(score.strata[stratum].components[DEVIANCE])
         assert score.stratum_weight == 0.3
+
+
+def test_a_rule_test_read_at_an_entity_with_no_slot_is_logged(run, records, caplog):
+    """FR-073: a read the record cannot place is counted and logged, never
+    dropped silently."""
+    selection = _selection(records)
+    rules = {
+        stratum: {half: {rule: {side: tuple(replace(row, entities=("E-nowhere",))
+                                            for row in rows) for side, rows in sides.items()}
+                         for rule, sides in by_rule.items()}
+                  for half, by_rule in by_half.items()}
+        for stratum, by_half in selection.rule_tests.items()}
+    with caplog.at_level("INFO", logger="effects.application.control_score"):
+        _prepare(run, records, replace(selection, rule_tests=rules))
+    assert any("no slot" in message and "E-nowhere" in message
+               for message in caplog.messages)

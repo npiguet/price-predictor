@@ -329,7 +329,7 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
         {"aimed_at": ("704.5f",)},
         {"curation": Curation(
             natural_share=1, copies=2, drawn_rule="704.5f",
-            drawn_rules=("704.5f",), rule_entities=("E2",))},
+            drawn_rules=("704.5f",), condition_entities=("E1",), outcome_entities=("E2",))},
     ])
     def test_a_resolution_s_surface_ignores_the_flag(self, flip):
         base = make_record(state=_board(), ability=(_ACTING,), generation=3)

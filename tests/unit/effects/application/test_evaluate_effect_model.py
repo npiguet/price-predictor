@@ -45,7 +45,8 @@ def _context(tmp_path, *, rule_mask="soft", stratum_weight=0.25, deviance_floor=
         config=EvaluateEffectModelConfig(reports_dir=tmp_path),
         manifest=SimpleNamespace(
             digest=lambda: "corpus-digest",
-            rule_map={"r.board": SimpleNamespace(outputs=["gate", "zone_outcome"])}),
+            rule_map={"r.board": SimpleNamespace(outputs=["gate", "zone_outcome"])},
+            effective_rule_outputs={"r.board": ("zone_outcome",)}),
         main=SimpleNamespace(rule_mask=rule_mask, stratum_weight=stratum_weight,
                              deviance_floor=deviance_floor, best_control_score=best,
                              selection_set_digest=selection_digest),
@@ -87,7 +88,8 @@ class TestTheReportingHalf:
             "soft", 0.25, 0.1)
         assert (asked["encoder"], asked["model"], asked["batcher"]) == (
             "encoder", "model", "batcher")
-        assert asked["rule_outputs"] == {"r.board": ("gate", "zone_outcome")}
+        # The effective outputs, never the map's own list (FR-060a).
+        assert asked["rule_outputs"] == {"r.board": ("zone_outcome",)}
         assert set(asked["readers"]) == set(selection.halves)
         names = [check.name for check in checks]
         assert "reporting-half card-disjoint" in names

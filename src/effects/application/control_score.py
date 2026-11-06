@@ -11,9 +11,10 @@ host half of every item it holds is prepared and cached —
   probe) through :data:`~effects.domain.probe_readouts.READOUTS`;
 - the grid edits, each grid record edited into every cell by a
   :class:`GridEditor` and read at the cell's entity;
-- the rule-test records, read for each output the manifest's map names for the
-  rule (E6): at the tag's entities (their mean), or at the record for a
-  verdict, global or created-objects output;
+- the rule-test records, read for each of the rule's effective outputs (the
+  outputs the manifest's map names that its tagged records carry, E6): at
+  the tag's outcome entities (their mean; research R1), or at the record for
+  a verdict, global or created-objects output;
 - the deviance sample's copies, as scoring steps under the run's
   ``--rule-mask``, the way validation scores its own records.
 
@@ -58,9 +59,10 @@ direction of that difference, which turns the reading into its complement
 where the scenario's outcome is an absence (a creature that does not die). A
 count or delta takes the sign of the difference of the two polarities' mean
 targets. An output no ``fires`` record observes, an output name no head
-carries (``new:…``, ``planned:…``) and a per-entity output on a record whose
-tag names no entity on the board are not read; a rule with no output left is
-left out of its component.
+carries (``new:…``, ``planned:…``), an output at an entity or a record whose
+targets do not define it, and an output at an entity the record gives no
+slot are not read, the last two counted and logged once per stratum and
+half; a rule with no output left is left out of its component.
 
 **The deviance component** reads the items the frozen set kept under the
 run's mask (each one's standard error at most the freeze's item target):
@@ -394,7 +396,7 @@ class _Decoder:
     """One rule-test output's candidate readings and the matching target
     indicators: a candidate per category (or member), or one expected value."""
 
-    #: Whether the output is read at the tag's entities rather than the record.
+    #: Whether the output is read at the tag's outcome entities rather than the record.
     per_entity = False
     #: Whether the candidates are probabilities of categories (else amounts).
     categorical = True
@@ -689,6 +691,13 @@ class _ChunkBuilder:
         self.size = size
         self.pending: list[tuple[EffectRecord, list[_Request]]] = []
         self.chunks: list[_Chunk] = []
+        #: Requests at an entity the record's surface gives no slot, each
+        #: read nowhere: their count and a few of their refs.
+        self.unplaced = 0
+        self.unplaced_refs: list[str] = []
+        #: Rule-test requests at an entity where the record defines no target
+        #: for the output, each read nowhere.
+        self.untargeted = 0
 
     def add(self, record: EffectRecord, requests: list[_Request],
             texts: Sequence[TextOverride] = ()) -> None:
@@ -722,14 +731,22 @@ class _ChunkBuilder:
                     continue
                 column = columns[row].get(request.subject)
                 if column is None:
+                    self.unplaced += 1
+                    if len(self.unplaced_refs) < 5:
+                        self.unplaced_refs.append(str(request.subject))
                     continue
+                if request.observation is not None:
+                    # A rule test reads an output only where the record says
+                    # what it is: elsewhere the reading compares nothing.
+                    indicators = request.observation.reading.decoder.entity_indicators(
+                        targets, row, column)
+                    if indicators is None:
+                        self.untargeted += 1
+                        continue
+                    request.observation.add(indicators)
+                    observations.append(request.observation)
                 gather = asked[row].setdefault(column, len(asked[row]))
                 reads.append((row, gather, request.read, request.position))
-                if request.observation is not None:
-                    request.observation.add(
-                        request.observation.reading.decoder.entity_indicators(
-                            targets, row, column))
-                    observations.append(request.observation)
             for observation in {id(o): o for o in observations}.values():
                 observation.close()
         width = max([len(a) for a in asked] + [1])
@@ -1090,6 +1107,15 @@ def _prepare_stratum(
     edited.flush()
     if sampled:
         steps.append(pack(preparer.prepare_scoring_step(sampled, union)))
+    unplaced = plain.unplaced + edited.unplaced
+    if unplaced:
+        logger.info("Control score, %s %s: %d read(s) at an entity the record gives no slot, "
+                    "read nowhere (e.g. %s).", stratum, half, unplaced,
+                    ", ".join((plain.unplaced_refs + edited.unplaced_refs)[:5]))
+    if plain.untargeted:
+        logger.info("Control score, %s %s: %d rule-test read(s) at an entity where the record "
+                    "defines no target for the output, read nowhere.", stratum, half,
+                    plain.untargeted)
     cache.chunks = plain.chunks + edited.chunks
     cache.steps = steps
     cache.kept_items = _kept_items(selection, stratum, mask, half=half)
@@ -1118,8 +1144,10 @@ def _prepare_stratum(
 
 def _requests(record: EffectRecord, asked: Iterable[tuple], cache: _StratumCache) -> list:
     """One record's reads: each probe item at its entity, each rule-test
-    output at the tag's entities or at the record, with the target
-    observations the rule's category is settled from."""
+    output at the tag's outcome entities or at the record, with the target
+    observations the rule's category is settled from; a record-level output
+    the record supervises no target for is not read (a per-entity one is
+    dropped the same way once its targets are built, ``_ChunkBuilder``)."""
     out: list[_Request] = []
     for ask in asked:
         if ask[0] == "probe":
@@ -1129,12 +1157,13 @@ def _requests(record: EffectRecord, asked: Iterable[tuple], cache: _StratumCache
         _, reading, polarity, row, held = ask
         decoder = reading.decoder
         if not decoder.per_entity:
+            indicators = decoder.record_indicators(record)
+            if indicators is None:
+                continue
             position = cache.position()
             held.append([position])
             out.append(_Request(None, reading, position))
-            indicators = decoder.record_indicators(record)
-            if indicators is not None:
-                reading.observe(polarity, indicators)
+            reading.observe(polarity, indicators)
             continue
         positions = []
         observation = _Observation(reading, polarity)

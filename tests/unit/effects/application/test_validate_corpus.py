@@ -2101,7 +2101,8 @@ class TestGen3FieldPresence:
     def test_a_curation_member_is_refused(self, tmp_path):
         rows = self._golden()
         rows[3]["curation"] = {"natural_share": 1, "copies": 1, "drawn_rule": None,
-                               "drawn_rules": [], "rule_entities": []}
+                               "drawn_rules": [], "condition_entities": [],
+                               "outcome_entities": []}
         finding = _named(self._findings(tmp_path, rows), "curation")
         assert not finding.ok and finding.measured.startswith("1 record(s) in 1 of 1")
 

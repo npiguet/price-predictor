@@ -230,6 +230,7 @@ _TORCH_FREE = (
     "effects.domain.rule_detectors.acting_line",
     "effects.domain.rule_breadth",
     "effects.domain.rule_mask",
+    "effects.domain.rule_output_carriage",
     "effects.domain.shard_generation",
     "effects.domain.kept_keyword_flags",
     "effects.domain.forge_vocabularies",

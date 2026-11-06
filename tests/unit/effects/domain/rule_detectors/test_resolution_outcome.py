@@ -25,6 +25,9 @@ def test_the_same_spell_edited_to_fizzle_fires(by_kind):
                       payload=replace(record.payload, outcome=ResolutionOutcome.FIZZLED))
     found = FAMILY.match(fizzled, None, {"outcome": "fizzled"})
     assert found.polarity is Polarity.FIRES and found.observed
+    refs = record.state.refs
+    assert found.outcome == (refs.source,)
+    assert found.condition == tuple(dict.fromkeys((refs.source, *refs.targets)))
 
 
 def test_targeted_counts_only_stack_objects_that_had_a_target(by_kind):

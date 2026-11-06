@@ -9,7 +9,7 @@ import pytest
 from effects.domain.records import FailedCheck, PlayabilityDecisionPayload
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors.acting_line import line_of, root_params_of
-from effects.domain.rule_detectors.verdict_bit import ACT, FAMILY, cost_of
+from effects.domain.rule_detectors.verdict_bit import FAMILY, cost_of
 
 
 def _unaffordable(by_kind):
@@ -19,7 +19,23 @@ def _unaffordable(by_kind):
 
 def test_an_unaffordable_candidate_fires_the_cost_rule(by_kind):
     found = FAMILY.match(_unaffordable(by_kind), None, {"bit": "affordable"})
-    assert found.polarity is Polarity.FIRES and found.observed and found.entities == (ACT,)
+    record = _unaffordable(by_kind)
+    assert found.polarity is Polarity.FIRES and found.observed
+    # The candidate's card is the condition; target legality, the verdict's
+    # per-entity part, is written nowhere for a candidate without a target.
+    assert found.condition == (record.state.refs.source,)
+    candidate = record.payload.candidates[0]
+    targets = bool(candidate.legal_targets or not candidate.has_legal_target)
+    assert bool(found.outcome) is targets
+
+
+def test_a_targeting_candidate_names_every_card_and_player_as_its_outcome(by_kind):
+    record = next(r for r in by_kind("playability", "decision")
+                  if r.payload.candidates[0].legal_targets)
+    found = FAMILY.match(record, None, {"bit": "has_legal_target", "fires_when": True})
+    assert found is not None
+    assert set(found.outcome) >= {e.id for e in record.state.entities} | {
+        p.id for p in record.state.players}
 
 
 def test_the_same_candidate_edited_affordable_is_the_near_miss(by_kind):

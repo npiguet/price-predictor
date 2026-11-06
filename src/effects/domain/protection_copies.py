@@ -133,11 +133,16 @@ class ProtectionCopy:
     quality: ProtectionQuality
     outcome: ProtectionOutcome
     protected: str
-    #: The curation's ``rule_entities``: the entities whose outputs the rule
-    #: changed. The protected permanent for prevented damage and an illegal
-    #: target, the blockers made illegal for a block, the Aura and its target
-    #: for an Aura put into the graveyard.
-    rule_entities: tuple[str, ...]
+    #: The curation's ``outcome_entities``: the entities whose outputs the
+    #: rule changed. The protected permanent for prevented damage and an
+    #: illegal target, the blockers made illegal for a block, the Aura and its
+    #: target for an Aura put into the graveyard. The condition entity is the
+    #: protected permanent, which carries the protection.
+    outcome_entities: tuple[str, ...]
+
+    @property
+    def condition_entities(self) -> tuple[str, ...]:
+        return (self.protected,)
 
 
 def rare_qualities(entity: EntityState) -> tuple[ProtectionQuality, ...]:
@@ -332,10 +337,10 @@ def protection_copy(record: EffectRecord, opportunities: tuple[Opportunity, ...]
     quality = (ProtectionQuality.everything() if rule == EVERYTHING_RULE
                else rng.choice(opportunity.qualities))
 
-    record, rule_entities = copied(record, opportunity, quality, index)
+    record, outcome_entities = copied(record, opportunity, quality, index)
     return ProtectionCopy(
         record=record, rule=rule, quality=quality, outcome=opportunity.outcome,
-        protected=opportunity.protected, rule_entities=rule_entities,
+        protected=opportunity.protected, outcome_entities=outcome_entities,
     )
 
 

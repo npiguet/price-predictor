@@ -12,6 +12,12 @@ Parameters:
 - ``near``: the outcomes of the near miss, ``["resolved"]`` by default;
 - ``targeted``: true to count only stack objects that had a target, so a
   fizzle rule's near miss is a targeted spell that resolved.
+
+The condition entities are the stack object (``refs.source``) and its
+targets, whose legality a fizzle reads; the outcome entity is the stack
+object, which is what leaves the stack resolved, fizzled or countered. The
+record is the cost half, which carries no per-entity target, so the outcome
+is read at the record, through the verdict head's ``resolution_outcome``.
 """
 
 from __future__ import annotations
@@ -45,10 +51,11 @@ class ResolutionOutcomeFamily:
             return None
         outcome = record.payload.outcome
         source = (record.state.refs.source,) if record.state.refs.source else ()
+        condition = tuple(dict.fromkeys((*source, *record.state.refs.targets)))
         if outcome is fires:
-            return FamilyMatch(Polarity.FIRES, True, source)
+            return FamilyMatch(Polarity.FIRES, True, condition, source)
         if outcome in near:
-            return FamilyMatch(Polarity.DOES_NOT_FIRE, False, source)
+            return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition, source)
         return None
 
 

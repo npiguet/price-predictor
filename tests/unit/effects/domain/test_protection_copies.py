@@ -165,7 +165,7 @@ class TestDamagePrevented:
         copy = protection_copy(record, qualify(record)[:1], rule="702.16e",
                                rng=random.Random(3), index=2)
         assert copy.record.record_id == "g.0-0.1~pc2" and copy.record.synthetic
-        assert copy.rule == "702.16e" and copy.rule_entities == ("E1",)
+        assert copy.rule == "702.16e" and copy.outcome_entities == ("E1",)
         assert copy.quality in qualify(record)[0].qualities
         targets = derive_targets(copy.record)
         assert targets["E1"].fields == {HeadField.DAMAGE_PREVENTED: 2.0}
@@ -298,7 +298,7 @@ class TestBlockIllegal:
         only_goblins = tuple(
             replace(o, qualities=(goblins,)) for o in found if o.covered == ("B1",))
         copy = protection_copy(record, only_goblins, rule="702.16f", rng=random.Random(0), index=0)
-        assert copy.rule_entities == ("B1", "B3")
+        assert copy.outcome_entities == ("B1", "B3")
         payload = copy.record.payload
         assert payload.legal_blockers == ("B2",) and payload.must_block == ()
         targets = derive_targets(copy.record)
@@ -345,7 +345,7 @@ class TestAuraToGraveyard:
         targets = derive_targets(copy.record)
         assert targets["S1"].fields[HeadField.ZONE_OUTCOME] == DIED
         assert "E1" not in targets or not targets["E1"].affected
-        assert copy.rule_entities == ("S1", "E1")
+        assert copy.outcome_entities == ("S1", "E1")
 
     def test_an_aura_record_touching_anything_else_is_not_copied(self):
         other = Event(type=EventType.LIFE_CHANGE, subjects=("P0",), params={"delta": 1})

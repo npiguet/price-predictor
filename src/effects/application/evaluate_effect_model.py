@@ -175,8 +175,7 @@ def run_reporting_half(context: EvaluationContext) -> list[CheckResult]:
     score = score_half(
         selection, readers, half=half, encoder=loaded.encoder, model=loaded.model,
         batcher=loaded.batcher(),
-        rule_outputs={rule: tuple(entry.outputs)
-                      for rule, entry in context.manifest.rule_map.items()},
+        rule_outputs=context.manifest.effective_rule_outputs,
         mask=main.rule_mask or None,
         stratum_weight=_recorded(main.stratum_weight, "stratum_weight"),
         deviance_floor=_recorded(main.deviance_floor, "deviance_floor"),

@@ -111,14 +111,13 @@ class SbaGameLoss:
             if lost:
                 observed.append(player.id)
         readable = _outcome_readable(record)
-        if fires:
-            return FamilyMatch(Polarity.FIRES,
-                               any(p in observed for p in fires) if readable else None,
-                               tuple(fires))
-        if spared:
-            return FamilyMatch(Polarity.DOES_NOT_FIRE,
-                               any(p in observed for p in spared) if readable else None,
-                               tuple(spared))
+        # The player's life or poison is both what the check reads and
+        # where the game loss falls.
+        for polarity, judged in ((Polarity.FIRES, fires), (Polarity.DOES_NOT_FIRE, spared)):
+            if judged:
+                return FamilyMatch(polarity,
+                                   any(p in observed for p in judged) if readable else None,
+                                   tuple(judged), tuple(judged))
         return None
 
 

@@ -482,6 +482,7 @@ def decide(
             budgets=budgets, strata=strata,
             rule_map=rules.snapshot(_rules_named(rule_counts, budgets, validation)),
             rule_map_digest=rules.digest, rule_counts=rule_counts,
+            carried=totals.carried,
             one_sided_conditions=one_sided_conditions(totals.condition_counts),
             turn_action_left_out=dict(totals.turn_actions),
             subtypes=totals.subtypes, keywords=totals.keywords,
@@ -651,6 +652,7 @@ def build(config: BuildCorpusConfig) -> int:
         records_dir=config.records_dir, sidecar_roots=roots,
         max_events=config.max_events_per_record, held_out=held_out, seed=config.seed,
         catalogue=rules.scenarios,
+        rule_outputs={rule: tuple(entry.outputs) for rule, entry in rules.heads.items()},
     )
     survey = _survey(config, read, rules)
     decisions = _decide_or_refuse(config, survey, trees, surface, held_out, rules)
