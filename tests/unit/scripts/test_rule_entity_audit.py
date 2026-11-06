@@ -110,3 +110,15 @@ def test_the_index_is_cut_per_family():
     assert sorted(cut) == ["a", "b"]
     assert {kind: len(v) for kind, v in cut["a"].by_kind.items()} == {"combat": 1, "trigger": 1}
     assert set(cut["b"].by_kind) == {"combat"}
+
+
+def test_the_unsupported_list_names_each_map_output_no_record_carries():
+    audit = audit_script.Audit(
+        {"508.4": ("trigger_fired", "life_delta"), "704.5g": ("zone_outcome",)},
+        effective={"508.4": ("trigger_fired",), "704.5g": ("zone_outcome",)})
+    audit.add(_deathtouch_combat(), [("trigger_mode", _tag("508.4", [])),
+                                     ("sba_zone_move", _tag("704.5g", ["E2"]))])
+    lines = audit_script.unsupported_lines(audit, "corpus")
+    rows = [line for line in lines if line.startswith("| 5") or line.startswith("| 7")]
+    assert len(rows) == 1
+    assert rows[0].startswith("| 508.4 | life_delta | trigger_fired | trigger_mode |")

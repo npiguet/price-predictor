@@ -564,6 +564,68 @@ def summary_lines(audit: Audit, verdicts: Mapping[str, str]) -> list[str]:
     return lines
 
 
+#: Why a family's records carry no output of a kind, for the unsupported list.
+_FAMILY_REASONS = {
+    "trigger_mode": "a trigger record supervises `trigger_fired` alone; what the trigger "
+                    "does arrives as its resolution's record",
+    "resolution_outcome": "the tagged record is the cost half, which holds no events",
+    "verdict_bit": "a decision record supervises its verdict and target legality alone",
+    "legality_membership": "a playability record supervises the legality fields alone",
+    "continuous_contribution": "a continuous record supervises P/T, keyword, type and colour "
+                               "changes alone",
+    "rewrite_event": "a rewrite that ran another ability carries no per-entity target",
+}
+
+
+def unsupported_lines(audit: Audit, corpus: str) -> list[str]:
+    """``rules/UNSUPPORTED-OUTPUTS.md``: per trained rule, the map outputs no
+    tagged record carries (the manifest's effective outputs lack them), with
+    the families that tag the rule and why their records cannot carry it."""
+    families: dict[str, set[str]] = defaultdict(set)
+    records: Counter = Counter()
+    for (rule, family, _), tally in audit.tallies.items():
+        families[rule].add(family)
+        records[rule] += tally.records
+    effective = audit.effective or {}
+    rows = []
+    for rule in sorted(audit.rule_outputs, key=_rule_order):
+        missing = [o for o in audit.rule_outputs[rule] if o not in effective.get(rule, ())]
+        if not missing:
+            continue
+        found = sorted(families.get(rule, ()))
+        reasons = "; ".join(_FAMILY_REASONS[f] for f in found if f in _FAMILY_REASONS) or (
+            "its tagged records never supervise it at the tag's outcome entities"
+            if found else "no record of the curated corpus is tagged with it (tagged only on "
+                          "`turn_action` records, which no stratum holds, or a protection rule "
+                          "drawn for copies alone)")
+        rows.append(f"| {rule} | {', '.join(missing)} | "
+                    f"{', '.join(effective.get(rule, ())) or '(none)'} | "
+                    f"{', '.join(found) or '(untagged)'} | {records[rule]} | {reasons} |")
+    return [
+        "# Map outputs no tagged record carries",
+        "",
+        "Input for the T124 map rerun. For each trained rule of `rules/heads/`, the outputs its "
+        "map entry names that none of its tagged records carries, so `build-corpus` leaves them "
+        "out of the rule's effective outputs and neither the rule mask nor the rule tests read "
+        "them (research R1, FR-060a). A rule whose every output is listed has no effective "
+        "output and is named untested by the selection-set freeze.",
+        "",
+        f"Measured on `{corpus}` with `scripts/rule_entity_audit.py --unsupported`; the "
+        "tagged-record count is summed over the families that tag the rule.",
+        "",
+        "| rule | outputs not carried | effective outputs | tagged by | tagged records | why |",
+        "|---|---|---|---|---|---|",
+        *rows,
+    ]
+
+
+def _rule_order(rule: str):
+    import re
+
+    m = re.match(r"(\d+)\.(\d+)([a-z]*)", rule)
+    return (int(m.group(1)), int(m.group(2)), m.group(3)) if m else (0, 0, rule)
+
+
 # ── entry point ─────────────────────────────────────────────────────────
 
 
@@ -580,6 +642,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cards-folder", dest="cards_folders", type=Path, action="append")
     parser.add_argument("--output", type=Path,
                         default=Path("output/effects/reports/rule-entity-audit"))
+    parser.add_argument("--unsupported", type=Path, default=None,
+                        help="Also write the list of map outputs no tagged record carries "
+                             "(needs a manifest recording effective outputs)")
     return parser
 
 
@@ -614,6 +679,11 @@ def main(argv: list[str] | None = None) -> int:
     lines.append(f"\nRun time {time.monotonic() - started:.0f} s.")
     (args.output / "summary.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
+    if args.unsupported is not None and audit.effective is not None:
+        args.unsupported.write_text(
+            "\n".join(unsupported_lines(audit, args.corpus.as_posix())) + "\n",
+            encoding="utf-8", newline="\n")
+        print(f"Unsupported outputs written to {args.unsupported}")
     print(f"Written to {args.output}")
     return 0
 
