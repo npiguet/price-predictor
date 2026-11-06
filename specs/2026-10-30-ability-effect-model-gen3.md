@@ -214,7 +214,14 @@ minimal pair of boards on which changing one fact flips the rule's outcome.
   | 613, layer order | the `continuous` record's result only | none |
 
 - A detector tags each record with the rules it shows. The same tags feed the per-rule
-  counts, the rule budgets (§ 12.1) and the rule mask (§ 13.1).
+  counts, the rule budgets (§ 12.1), the rule mask (§ 13.1) and the rule tests (§ 14.4).
+- A tag names entities in two roles, defined in
+  [research R1](025-ability-effect-model-gen3/research.md):
+  - condition entities: what the rule's condition reads (the keyword's carrier, the acting
+    source, the object a check judges);
+  - outcome entities: where the rule's outcome falls (the creature destroyed, the player
+    gaining life, the cards and players a target legality is written at).
+- A tag whose outcome is an absence names condition entities only.
 
 ## 5.2 Per-rule counts
 
@@ -888,6 +895,11 @@ The verdict head gains a column for `timing` and one for each identifier of
   with the map's content hash. Rule budgets, the rule mask (§ 13.1), the freeze of the rule
   tests (§ 14.4) and `evaluate-effect-model` take a rule's verdict and outputs from the
   manifest only.
+- The manifest also records each rule's effective outputs: the outputs of its map entry that
+  at least one of its tagged records carries. A record carries a per-entity output it
+  supervises at one of the tag's outcome entities, the affected gate where it trains the
+  gate, and a verdict, global or created-objects output it supervises. The rule mask and
+  the rule tests read the effective outputs only.
 - A budgeted rule is one the manifest's map snapshot marks `trained` (§ 7). A tagged rule with
   any other verdict gets no share and no added copy. Its records are still counted per
   polarity and keep their natural share, and the manifest names it as unbudgeted.
@@ -902,8 +914,8 @@ The verdict head gains a column for `timing` and one for each identifier of
   their own.
 - A record tagged with several rules counts toward each. Each added copy is drawn for the
   rule furthest below its share. A record with no tag keeps its natural share.
-- An added copy carries the rule it was drawn for, its drawn rule. A copy within the natural
-  share carries none. A rule tag is a detector's output on a record; a drawn rule is the rule
+- An added copy carries the rule it was drawn for, its drawn rule, and that rule's tag
+  entities in both roles (§ 5.1). A copy within the natural share carries none. A rule tag is a detector's output on a record; a drawn rule is the rule
   one added copy was drawn for.
 - The manifest records, per class, rule and polarity, the records available, the share,
   the records written and the shortfall, each split by the three sources of § 5.2, and
@@ -957,9 +969,9 @@ get examples from three sources, in amounts per-rule rebalancing sets:
 For a record, n is its natural share and d the number of its copies written, natural and
 added.
 
-- Under `--rule-mask hard`, an added copy trains the outputs the manifest's map snapshot
-  (§ 12.1) names for the rule it was drawn for, and the affected gate on the rule's own entities where the
-  record supervises the gate. Every other output is masked. A copy within the natural share
+- Under `--rule-mask hard`, an added copy trains the effective outputs (§ 12.1) of the
+  rule it was drawn for, and the affected gate on that rule's tag entities, condition and
+  outcome alike (§ 5.1), where the record supervises the gate. Every other output is masked. A copy within the natural share
   trains every output.
 - Under `--rule-mask soft`, every copy trains every output. Outputs other than those of a
   rule an added copy was drawn for weigh n / d on each copy.
@@ -1088,16 +1100,18 @@ Gate 1 reads the negative binomial deviance (§ 13.3). Its other margins are unc
 - Records matching a variant of polarity `other` are not rule-test records.
 - Records whose outcome differs from their scenario's expected outcome, the records that
   send a scenario to review (§ 4.4), are not rule-test records.
-- For each output the manifest's map snapshot (§ 12.1) names for the rule, a rule test reads the model's prediction at
-  the entity the scenario's outcome names, or at the record for an output on the acting
-  ability: the probability of the scenario's outcome for a binary or categorical output,
-  the expected value for a count or a delta.
+- For each of the rule's effective outputs (§ 12.1), a rule test reads the model's
+  prediction at the tag's outcome entities (§ 5.1), or at the record for an output on the
+  acting ability: the probability of the scenario's outcome for a binary or categorical
+  output, the expected value for a count or a delta. An output is read only where the
+  record's targets define it.
 - A rule test's score is the AUC with which that prediction ranks the records where the
   outcome happens above those where it does not, averaged over the rule's outputs.
 - A rule whose test records in a stratum hold one polarity only is left out of that
   stratum's rule-test component.
 - A rule whose detector finds no test record in a half is named in the frozen set as
-  untested.
+  untested. A rule with no effective output is named untested in every half, with that
+  reason.
 
 ## 14.5 New probes and measures
 
@@ -1226,8 +1240,8 @@ Printed output
 | `rules/gen3-fields.json`, `rules/GEN3-FIELDS.md` | by the map's merge | gen-3's inputs, outputs, extensions and fixes |
 | effect-record shards | by collection | gen-3 records, `generation: 3`, aimed records marked by `aimed_at` (§ 8.1) |
 | `rules/directed-fork-rules.txt`, `rules/coverage-wording-cards.txt` | by `rules_catalogue.py directed-rules` | the rules the full collection's directed forks run for (§ 6), and the cards of the wording-card coverage round (§ 8.11) |
-| curated shards | by `build-corpus` | every record carries `curation` (natural share, copies, drawn rule, drawn rules, rule entities); a protection copy is the synthetic record `<record_id>~pc<i>` (§ 12.1, § 12.3) |
-| `manifest.json` | by `build-corpus` | adds per-rule counts by source (§ 5.2), the map snapshot: each tagged rule's verdict and outputs, with the map's content hash (§ 12.1), per-rule budgets per polarity, one-sided rules and unbudgeted rules (§ 12.1), one-sided conditions (§ 12.2), rules left out of a validation half and `turn_action` records left out by subkind (§ 12.4), the closed subtype and keyword lists (§ 11.2, § 11.3), and each validation stratum's selection and reporting halves (§ 14.2) |
+| curated shards | by `build-corpus` | every record carries `curation` (natural share, copies, drawn rule, drawn rules, condition and outcome entities); a protection copy is the synthetic record `<record_id>~pc<i>` (§ 12.1, § 12.3) |
+| `manifest.json` | by `build-corpus` | adds per-rule counts by source (§ 5.2), the map snapshot: each tagged rule's verdict and outputs, with the map's content hash, and each rule's effective outputs (§ 12.1), per-rule budgets per polarity, one-sided rules and unbudgeted rules (§ 12.1), one-sided conditions (§ 12.2), rules left out of a validation half and `turn_action` records left out by subkind (§ 12.4), the closed subtype and keyword lists (§ 11.2, § 11.3), and each validation stratum's selection and reporting halves (§ 14.2) |
 | `output/effects/rule-counts.json` | by `rule-counts` | per-rule counts by source over a records set (§ 5.2) |
 | `output/effects/reports/selection-set-<corpus digest>.json` | by the freeze | per validation stratum and half: the probe items, the grid records, the rule tests and the deviance sample; the balance ratio r, each item's standard error, the items left out by the precision target and the thresholds; a content digest (§ 14.2) |
 | checkpoints | by `train-effect-model` | add the relation tables, the relation type names in table order (§ 10.3), the averaged weights, the best control score, the loss denominators, `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight`, `--relation-values`, the manifest's map content hash and the selection set's digest; record the input layout `gen-3` with the subtype, named-counter and closed output lists, and every loader refuses a checkpoint of any other layout, gen-1 and gen-2 included, or with a different list |

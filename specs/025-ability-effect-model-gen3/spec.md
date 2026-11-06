@@ -521,8 +521,11 @@ and that the reporting half never enters the control score.
 - A banding combat. `in band with` exists as a relation type, but no banding output is trained
   (banding is out of scope).
 - An added copy whose rule names an output the record does not carry. Under the hard mask that
-  copy trains only the affected gate on the rule's entities where the record supervises it, and
-  nothing else.
+  copy trains only the affected gate on the rule's tag entities, both roles, where the record
+  supervises it, and nothing else.
+- A rule whose tagged records carry none of its map outputs (a trigger rule naming a per-entity
+  output, which only the trigger's resolution record carries). Its effective outputs are empty: the
+  hard mask trains its added copies' gate alone, and the freeze names it untested in every half.
 - A resume across the warmup boundary. The averaged weights start at the warmup's end, and
   `resume.pt` carries the step they started from.
 - A tagged rule whose map verdict is `recorded`, `missing` or `planned`. It gets no share and no
@@ -567,8 +570,12 @@ and that the reporting half never enters the control score.
 #### Detectors and per-rule counts (root § 5)
 
 - **FR-006**: A detector MUST take one record and return the rules it shows, each with a polarity
-  (`fires`, `does_not_fire`, `other`) and the entities the rule's outcome names. The same tags MUST
-  feed the per-rule counts, the rule budgets (FR-054) and the rule mask (FR-061).
+  (`fires`, `does_not_fire`, `other`) and its entities in two roles, as research R1 defines them:
+  condition entities, what the rule's condition reads, and outcome entities, where its outcome
+  falls. A tag whose outcome is an absence (an `absent` declaration's `fires` side, a scoped
+  `does_not_fire` with no such event) MUST name condition entities only. Merging a rule's scenarios
+  MUST union each role separately. The same tags MUST feed the per-rule counts, the rule budgets
+  (FR-054), the rule mask (FR-061) and the rule tests (FR-073).
 - **FR-007**: Detectors MUST run over gen-2 and gen-3 records. A detector that needs a field the
   record's generation lacks MUST report the rule as not countable on that generation, never as
   zero.
@@ -943,16 +950,20 @@ and that the reporting half never enters the control score.
   and keyword lists of FR-052/FR-053.
 - **FR-060a**: `build-corpus` MUST read the rules-to-fields map (`rules/heads/`) once, and write
   into the manifest, for every tagged rule, its map verdict and the outputs the map names for it,
-  with the map's content hash. Rule budgets (FR-054), the rule mask (FR-061), the rule-test freeze
-  (FR-071, FR-073) and `evaluate-effect-model` MUST take a rule's verdict and outputs from the
-  manifest only and never read `rules/heads/`. A checkpoint MUST record the manifest's map hash. A
+  with the map's content hash, and each rule's effective outputs: the outputs of its map entry at
+  least one of its tagged records carries (a per-entity output supervised at an outcome entity of
+  the tag, the affected gate on a record that trains it, a verdict, global or created-objects output
+  the record supervises; research R1). Rule budgets (FR-054), the rule mask (FR-061), the rule-test
+  freeze (FR-071, FR-073) and `evaluate-effect-model` MUST take a rule's verdict and outputs from the
+  manifest only and never read `rules/heads/`; the mask and the rule tests MUST read the effective
+  outputs only. A checkpoint MUST record the manifest's map hash. A
   rerun of the map (FR-016) reaches training only through a new `build-corpus`.
 #### Training (root § 13)
 
 - **FR-061**: With n a record's natural share and d its copies written: under `--rule-mask hard`
-  (default) an added copy MUST train only the outputs the map names for its drawn rule, as the
-  manifest records them (FR-060a), and the
-  affected gate on the rule's own entities where the record supervises the gate, every other output
+  (default) an added copy MUST train only its drawn rule's effective outputs (FR-060a), and the
+  affected gate on the rule's tag entities, condition and outcome alike (FR-006), carried in the
+  copy's `curation`, where the record supervises the gate, every other output
   masked, while a natural copy trains every output; under `--rule-mask soft` every copy trains every
   output, outputs other than those of the record's drawn rules weighing n / d on each copy. Under
   both, the outputs of every rule an added copy of the record was drawn for MUST train at full
@@ -1050,13 +1061,16 @@ and that the reporting half never enters the control score.
   aimed at a rule (every record carrying `aimed_at`, FR-009a), records matching a variant of
   polarity `other`, and records on the review list (FR-004), whose observed outcome differs from
   the expected outcome of their polarity, MUST NOT be rule-test records.
-- **FR-073**: For each output the map names for a rule, a rule test MUST read the model's prediction
-  at the entity the scenario's outcome names, or at the record for an acting-ability output: the
+- **FR-073**: For each of a rule's effective outputs (FR-060a), a rule test MUST read the model's
+  prediction at the tag's outcome entities (FR-006), only where the record's targets define the
+  output, or at the record for an acting-ability output the record supervises: the
   probability of the scenario's outcome for a binary or categorical output, the expected value for a
   count or delta. Its score MUST be the AUC ranking `fires` records above `does_not_fire` records,
   averaged over the rule's outputs. A rule whose test records in a stratum hold one polarity only
   MUST be left out of that stratum's component. A rule whose detector finds no test record in a
-  half MUST be named in the frozen set as untested.
+  half MUST be named in the frozen set as untested, and a rule with no effective output MUST be
+  named untested in every half with that reason. A read at an entity the record gives no slot MUST
+  be counted and logged, never dropped silently.
 - **FR-074**: The knowledge-probe suite MUST gain the probes of root § 14.5: turn and step
   conditions (with casting-speed and split-second subsets), anthem, the combat grid with several
   blockers, the evasion grid's protection rows over every protection quality, the toughness sweep on
@@ -1110,8 +1124,8 @@ and that the reporting half never enters the control score.
   unit (a three-digit section, or one keyword in 701/702).
 - **Scenario**: a minimal pair of boards for one or more rules, with decisions, at least two
   variants each with a polarity, its detector declaration, and any recorded Forge departure.
-- **Detector**: a function from one record to the rules it shows, each with polarity and the
-  entities the outcome names. Its tags drive counts, budgets, the mask and rule tests.
+- **Detector**: a function from one record to the rules it shows, each with polarity and its
+  condition and outcome entities. Its tags drive counts, budgets, the mask and rule tests.
 - **Fork operation**: one of ten one-fact changes a directed fork applies to a live board.
 - **Board precondition**: a Java predicate per directed-fork rule, judging on the live game
   whether the board meets the scenario's base variant; it decides when to fork and tags nothing.
@@ -1119,8 +1133,9 @@ and that the reporting half never enters the control score.
   variant's change; its records carry `aimed_at` and `directed` and never become rule-test records.
 - **Aimed record**: a record carrying `aimed_at`, from a directed fork or a `collect-coverage` or
   `collect-variants` run; natural in training, excluded from the rule tests.
-- **Rule tag**: a detector's output on one record: a rule, its polarity and the entities its
-  outcome names. Any record may carry several.
+- **Rule tag**: a detector's output on one record: a rule, its polarity, its condition entities
+  (what the rule's condition reads) and its outcome entities (where its outcome falls; research
+  R1). Any record may carry several.
 - **Drawn rule**: the rule an added copy was drawn for, carried in the copy's `curation` member;
   absent on natural copies.
 - **Natural share / added copy**: the copies gen-2's budgets give a record, and the copies beyond

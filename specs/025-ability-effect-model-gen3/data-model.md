@@ -69,7 +69,10 @@ Read from `rules/heads/<unit>.jsonl` by `build-corpus` only (R4).
 | `verdict` | `trained` \| `recorded` \| `missing` \| `planned` | |
 | `outputs` | list of head output names | filtered to outputs the model has |
 
-The manifest stores `{rule → RuleMapEntry}` and `rule_map_digest`.
+The manifest stores `{rule → RuleMapEntry}` and `rule_map_digest`, and `effective_outputs`
+(rule → the outputs of its entry at least one of its tagged records carries, in the entry's order;
+`rule_output_carriage.carried_outputs`, R1). The rule mask and the rule tests read
+`effective_outputs`, never `outputs`.
 
 ## Detection
 
@@ -80,11 +83,14 @@ The manifest stores `{rule → RuleMapEntry}` and `rule_map_digest`.
 | `rule` | rule id | |
 | `polarity` | `fires` \| `does_not_fire` \| `other` | from the variant situation the record matches |
 | `observed` | bool | whether the scenario's outcome happened in the record |
-| `entities` | list of entity refs | the entities the outcome names; a verdict-head rule names `[ACT]` |
+| `condition` | list of entity refs | what the rule's condition reads: the carrier, the acting source and targets, the judged object (R1) |
+| `outcome` | list of entity refs | where the rule's outcome falls, as the record's targets place it; empty where the outcome is an absence (R1) |
 | `scenario` | scenario id | |
 
 - A record's tags hold one `RuleTag` per rule. When several scenarios of a rule tag it, polarity is
-  `fires` if any says so, else `does_not_fire`, else `other`; entities are the union (R1).
+  `fires` if any says so, else `does_not_fire`, else `other`; each role is the union of that role
+  over the scenarios (R1). `entities`, both roles condition first, is where the hard mask trains
+  the gate.
 - `observed ≠ (polarity == fires)` puts the record on the review list. Such a record is not a rule-test
   record.
 - Tags are computed, never stored in collected shards. `build-corpus` stores them only through
@@ -171,7 +177,8 @@ Member `curation` on every record `build-corpus` writes (T1):
 | `copies` | int ≥ 1 | d: the record's copies written, natural and added |
 | `drawn_rule` | rule id or null | set on an added copy only |
 | `drawn_rules` | list of rule ids | every rule any added copy of this record was drawn for |
-| `rule_entities` | list of entity refs | the drawn rule's tag entities, on an added copy |
+| `condition_entities` | list of entity refs | the drawn rule's tag condition entities, on an added copy |
+| `outcome_entities` | list of entity refs | the drawn rule's tag outcome entities, on an added copy; the hard mask trains the gate at both lists |
 
 Invariants: `copies ≤ reuse cap`; `drawn_rule ∈ drawn_rules`; a natural copy has `drawn_rule = null`.
 A protection copy (FR-058) is a synthetic record `<record_id>~pc<i>` with `natural_share = 0` and its
@@ -192,7 +199,7 @@ Per class, rule and polarity, each count split by `RuleSource`:
 
 ### CorpusManifest (extended)
 
-Adds `rule_counts`, `rule_map`, `rule_map_digest`, `rules` (class → rule → polarity → `RuleRow`),
+Adds `rule_counts`, `rule_map`, `rule_map_digest`, `effective_outputs`, `rules` (class → rule → polarity → `RuleRow`),
 `one_sided_rules`, `one_sided_conditions`, `unbudgeted_rules` (rule → counts), `left_out_of_half`
 (stratum → half → [rule]), `turn_action_left_out` (subkind → count), `subtypes` and `keywords` (the
 closed lists), `halves` (stratum → half → [game_id]). Gen-3 manifests only; no gen-2 compatibility.
@@ -280,10 +287,10 @@ File `output/effects/reports/selection-set-<corpus digest>.json`, written by the
 | `probes` | stratum → half → probe type → [{record_id, game_id, entity, label}] |
 | `probe_kinds` | probe type → `binary` \| `amount` |
 | `grids` | stratum → half → grid → {cells: [{cell, outcome}], records: [{record_id, game_id, entities}]} |
-| `rule_tests` | stratum → half → rule → {fires: [{record_id, game_id, entities}], does_not_fire: [...]} |
+| `rule_tests` | stratum → half → rule → {fires: [{record_id, game_id, entities}], does_not_fire: [...]}; `entities` are the tag's outcome entities |
 | `deviance_samples` | stratum → half → [{record_id, game_id, copy}] |
 | `standard_errors` | `stratum/half/component/item` → {hard, soft} for an output field, else a scalar; infinite written as null |
-| `left_out` | stratum → half → component → [{item, reason}]; an untested rule's reason is `untested` |
+| `left_out` | stratum → half → component → [{item, reason}]; an untested rule's reason starts `untested`, and names a rule with no effective output as such |
 | `settings` | the thresholds the freeze ran under, the grid target error and record cap included |
 | `digest` | sha256 over the canonical JSON |
 

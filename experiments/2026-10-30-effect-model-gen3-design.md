@@ -824,10 +824,30 @@ with the map's content hash. Budgets, the mask, the rule tests and evaluation re
 manifest, and the checkpoint records the hash. A new map reaches training only through a new
 corpus build.
 
-**The gate stays on for the rule's own entities.** When a rule's effect does not happen, the model
-usually learns it as an entity left unaffected. A creature that survives Shock has no event, and
-its only label is the gate at zero. Masking the gate would remove the negative half of every
-minimal pair.
+**A rule tag names its entities in two roles: what the rule's condition reads, and where its
+outcome falls.** Deathtouch reads the creature that has it, and its outcome is the death of the
+creature that creature fights. Lifelink reads the creature that has it, and its outcome is its
+controller's life. A detector that named only one of the two would point the mask and the rule
+tests at the wrong creature for one of them. The condition entities are the keyword's carrier, the
+acting source and its targets, or the object a state-based check judges. The outcome entities are
+where the record's targets place the outcome: the creature destroyed, the player who gains life,
+the player who discards. One entity can hold both roles, as a creature dying to its own toughness
+does. A tag whose outcome is an absence, such as a token the battlefield forbids, names condition
+entities only.
+
+**The gate stays on for the rule's entities in both roles.** When a rule's effect does not happen,
+the model usually learns it as an entity left unaffected. A creature that survives Shock has no
+event, and its only label is the gate at zero. Masking the gate would remove the negative half of
+every minimal pair. The gate trains at the condition entities too. At the deathtouch creature it
+says whether that creature was itself damaged or destroyed in the same combat.
+
+**A rule test reads the rule's outputs at its outcome entities, and only outputs its records
+carry.** A trigger record holds whether the trigger fired, and what the trigger then does arrives as
+its resolution's record. A rule test reading a trigger rule's life change on the trigger record
+would compare predictions with no target behind them. The corpus build therefore records, per rule,
+the outputs at least one of its tagged records carries, and calls them its effective outputs. The
+mask and the rule tests read those alone. A rule left with none is named untested rather than
+scored on outputs nothing supervises.
 
 **The mask removes the bias in the labels, not in the boards.** The trunk still reads the boards a
 rule's copies bring, such as many infect boards when infect is rebalanced. That skews what the

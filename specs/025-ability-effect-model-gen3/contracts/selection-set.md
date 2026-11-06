@@ -27,7 +27,8 @@ A reader refuses a missing file, one frozen for another corpus, or one edited si
    that meets the item target), record-drawn grid cells.
 4. Compute each item's worst-case standard error (research Decision E4; a deviance item's under both
    rule masks, for every shipped head's output terms). Leave out items above 0.1 and name them, a rule with one polarity only as such. Name
-   every rule whose detector finds no test record in a half as `untested`.
+   every rule whose detector finds no test record in a half as `untested`, and in every half every
+   rule whose manifest `effective_outputs` is empty as untested for having no output to read.
 5. Check every component's `√(Σ SEᵢ²) / m ≤ 0.05` and every grid cell non-empty; otherwise exit 1
    naming stratum, half and component.
 6. Write the file.
@@ -44,7 +45,10 @@ no operator flag overrides them (research Decision E5).
 | rule tests | per rule, mean over its outputs of the AUC ranking `fires` above `does_not_fire` | 2·AUC − 1 |
 | deviance | per output term of every shipped head, 1 − loss / constant loss, weighted under the run's `--rule-mask` | as is |
 
-A rule test reads each output at the tag's entities (averaged) or at the record. The selection set
+A rule test reads each of the rule's effective outputs (the manifest's `effective_outputs`) at the
+tag's outcome entities (averaged; research R1), the entities a rule-test record row holds, or at the
+record. An output is read only where the record's targets define it, and a read at an entity the
+record gives no slot is counted and logged. The selection set
 records no scenario category, so an output's category, or member, is the one whose observed share in
 the frozen records' own targets differs most between `fires` and `does_not_fire`, read as its
 complement where the difference is negative; a count or delta takes the sign of the mean difference;

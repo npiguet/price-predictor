@@ -191,7 +191,8 @@ attackers hold) differ enough that no generic class is extracted.
 `E/domain/rule_detectors/`, one module per family: zone move inside the state-based loop, trigger
 fired by `Mode$`, playability verdict bit, keyword in combat, continuous contribution, rewrite by
 `Event$`, legality list membership, and a few others as the catalogue needs them. A family takes one
-record plus its sidecar lines and returns `RuleTag(rule, polarity, entities, scenario, observed)`.
+record plus its sidecar lines and returns `RuleTag(rule, polarity, observed, condition, outcome,
+scenario)`.
 
 - Polarity comes from the board: which variant's situation the record matches.
 - `observed` is whether the scenario's outcome happened in the record.
@@ -200,8 +201,45 @@ record plus its sidecar lines and returns `RuleTag(rule, polarity, entities, sce
 - A detector lists in `needs` the gen-3 fields it reads; on a gen-2 record such a detector reports
   "not countable on gen-2" (FR-007).
 - Several scenarios of one rule may tag one record. The rule's tag takes `fires` if any scenario says
-  so, else `does_not_fire`, else `other`. Entities are the union.
+  so, else `does_not_fire`, else `other`. Each role below is the union of that role over the
+  scenarios.
 - Tags are per rule id (702.2b), not per unit (702.2). `rule-counts` prints a unit's rules together.
+
+A tag names entities in two roles. This is the one definition every reader of tag entities uses:
+curation, the rule mask, the selection-set freeze and the rule tests.
+
+- Condition entities are what the rule's condition reads: the keyword's carrier, the acting
+  ability's source and targets, the object a check judges, the anchor attacker of a declaration.
+- Outcome entities are where the rule's outcome falls, as the record's targets place it: the
+  creature destroyed, the player who gains life or is dealt the trampled-over damage, the player who
+  discarded, drew or searched, the cards and players a target legality is written at.
+- One entity may hold both roles: a creature dying to its own toughness, a legality list's member,
+  a player losing to life zero.
+- A tag whose outcome is an absence names condition entities only: an `absent` scenario's `fires`
+  side, and a scoped `does_not_fire` whose record holds no event of the kind.
+- A record that carries no per-entity target (a `trigger` record, a cost half, a rewrite that ran
+  another ability) gives its tags no outcome entity a per-entity output can be read at.
+
+Per family:
+
+| Family | Condition entities | Outcome entities |
+|---|---|---|
+| `keyword_combat` | the carrier | the subjects of the keyword's effects in gate 2's table: the creature fought, the defending player, the carrier's controller (lifelink), the carrier (indestructible) |
+| `sba_zone_move` | the judged permanent; an Aura's host too | the judged permanent |
+| `sba_game_loss` | the player | the player |
+| `outcome_event` | the acting source, its targets and controller | where the matching events are placed (subjects, or the object a subject-less copy, retarget or venture happened to), and the owner of a card moved out of a hand or a library |
+| `trigger_mode` | the triggering event's subjects and the trigger's source | none |
+| `verdict_bit` | the candidate's card | every card and player a target legality is written at, when the candidate targets |
+| `legality_membership` | the judged entities, and the anchor attacker | the judged entities the record writes the list's legality field at, and on a blockers record the anchor (`min_blockers`) |
+| `continuous_contribution` | the static's host | the contributions' entities |
+| `rewrite_event` | the incoming event's subjects and the replacing effect's source | the subjects of the event as proposed and as it went out |
+| `resolution_outcome` | the stack object and its targets | the stack object |
+
+The hard rule mask trains the affected gate at both roles; a rule test reads its outputs at the
+outcome entities. A rule's effective outputs are those of its map entry that at least one of its
+tagged records carries: a per-entity output supervised at an outcome entity, the gate on a record
+that trains it, a verdict, global or created-objects output the record supervises. The manifest
+records them beside the map's outputs, and the mask and the rule tests read them alone.
 
 **Rationale**: 1763 scenarios over 1561 rules cannot each get a bespoke function, and most share a
 handful of shapes (the survey counted `record_kind` resolution 636, playability 414, trigger 312,
@@ -617,7 +655,8 @@ keywords through that channel.
 #### T1. Each copy carries its curation, written by `build-corpus`
 
 **Decision**: each written record gains a `curation` member, curated-only, never in collected shards:
-`{natural_share: n, copies: d, drawn_rule: rule | null, drawn_rules: [...], rule_entities: [...]}`.
+`{natural_share: n, copies: d, drawn_rule: rule | null, drawn_rules: [...], condition_entities:
+[...], outcome_entities: [...]}`, the drawn rule's tag entities in their two roles (R1).
 `drawn_rule` is set on added copies only; `drawn_rules` lists every rule any added copy of the record
 was drawn for. The surface batcher turns it into per-entity, per-field loss weights in
 `entity_target_tensors`, and into the gate's per-row mask.
@@ -743,9 +782,10 @@ is still read (user decision).
 
 #### E6. Rule-test entity and output readout
 
-**Decision**: a rule test reads, for each output the manifest's map snapshot names, the readout of
-`probe_readouts` at the tag's entities (the mean over entities when the outcome names several), or at
-`[ACT]` for a verdict-head output. A categorical output reads the probability of the scenario's
+**Decision**: a rule test reads, for each of the rule's effective outputs (R1), the readout of
+`probe_readouts` at the tag's outcome entities (the mean over entities when the outcome names
+several), or at `[ACT]` for a verdict-head output. An output is read only where the record's targets
+define it; a read at an entity with no slot is logged. A categorical output reads the probability of the scenario's
 category, a count or delta its expected value under the negative binomial.
 
 ### Spec corrections
