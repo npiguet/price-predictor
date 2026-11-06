@@ -3,15 +3,15 @@
   "verified": true,
   "review": [
     "701.3a-1: resolution decision named a choice that does not exist in the protected_host variant; reworded to choose Hill Giant only when it is a legal host.",
-    "701.3b-1: other_host expects Grafted Wargear's trigger to resolve but no decision passed priority for it; added the pass to the decisions."
+    "701.3b-1: other_host expects Grafted Wargear's trigger to resolve but no decision passed priority for it; added the pass to the decisions.",
+    "701.3a-1 listed 701.3b under 701.3a's polarities (attached = fires); 701.3b moved to its own scenario 701.3b-2 with the Aura staying put as its fires side."
   ],
   "skipped": [],
   "scenarios": [
     {
       "id": "701.3a-1",
       "rules": [
-        "701.3a",
-        "701.3b"
+        "701.3a"
       ],
       "title": "An Aura moved by an effect attaches only to a permanent it could enchant",
       "record_kind": "resolution",
@@ -147,11 +147,92 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "An attach effect resolves and attaches nothing (no attached event): the object is already attached to the chosen object or cannot be attached to it, so it does not move.",
+        "outcome": "An attach effect or an equip resolves and attaches nothing (no attached event): the object is already attached to the chosen object or cannot be attached to it, so it does not move.",
+        "near_miss": "An attach effect or an equip resolves and attaches the object (an attached event).",
+        "params": {
+          "event": "attached",
+          "api": "Attach",
+          "keyword": "Equip",
+          "absent": true
+        },
+        "needs": []
+      }
+    },
+    {
+      "id": "701.3b-2",
+      "rules": [
+        "701.3b"
+      ],
+      "title": "An Aura moved by an effect onto a permanent it can't enchant does not move",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island",
+            "Black Knight"
+          ],
+          "B": [
+            "Grizzly Bears",
+            {
+              "card": "Pacifism",
+              "attached_to": "Grizzly Bears"
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Aura Graft"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Pacifism is attached to Grizzly Bears and controlled by B. Both libraries are non-empty and irrelevant."
+      },
+      "decisions": [
+        "A casts Aura Graft targeting Pacifism, tapping both Islands.",
+        "Both players pass; Aura Graft resolves: A gains control of Pacifism, then tries to attach it to another permanent it can enchant; Black Knight (protection from white) is none, so no choice is made (in the variant, A attaches it to Hill Giant)."
+      ],
+      "variants": [
+        {
+          "label": "protected_host",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A gains control of Pacifism, but a white Aura can't be attached to Black Knight, so Pacifism does not move: it stays attached to Grizzly Bears, which still can't attack or block. Black Knight is unaffected. Aura Graft resolved and is in A's graveyard."
+        },
+        {
+          "label": "legal_host",
+          "polarity": "does_not_fire",
+          "delta": "A's other creature is Hill Giant instead of Black Knight.",
+          "expected": "A gains control of Pacifism. Pacifism moves from Grizzly Bears to Hill Giant: Hill Giant can't attack or block, Grizzly Bears can. Aura Graft resolved and is in A's graveyard.",
+          "operation": "replace_card"
+        }
+      ],
+      "cards": [
+        "Island",
+        "Hill Giant",
+        "Black Knight",
+        "Grizzly Bears",
+        "Pacifism",
+        "Aura Graft"
+      ],
+      "forge_notes": "Split from 701.3a-1, whose polarities are 701.3a's: for 701.3b the Aura staying put is the rule's outcome. Aura Graft's Attach sub-ability uses Choices$ Permanent; confirm Forge filters the choice by what the Aura can enchant (including protection) so no illegal host is offered.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An attach effect resolves, as a sub-ability too, and attaches nothing (no attached event): the object cannot be attached to the chosen object, so it does not move.",
         "near_miss": "An attach effect resolves and attaches the object (an attached event).",
         "params": {
           "event": "attached",
           "api": "Attach",
+          "api_in_chain": true,
           "absent": true
         },
         "needs": []
