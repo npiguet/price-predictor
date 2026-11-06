@@ -9,8 +9,7 @@
     {
       "id": "701.64a-1",
       "rules": [
-        "701.64a",
-        "701.64b"
+        "701.64a"
       ],
       "title": "Harnessing a permanent marks it so abilities that check for it apply",
       "record_kind": "trigger",
@@ -73,7 +72,23 @@
         "Grizzly Bears",
         "Plains"
       ],
-      "forge_notes": "Forge implements harness as an AlterAttribute effect with Attributes$ Harnessed, and the end-step trigger has IsPresent$ Card.Self+harnessed."
+      "forge_notes": "Forge implements harness as an AlterAttribute effect with Attributes$ Harnessed, and the end-step trigger has IsPresent$ Card.Self+harnessed.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger conditioned on its source holding the harnessed designation fires with its source harnessed.",
+        "near_miss": "The same trigger is evaluated with its source not harnessed and does not fire.",
+        "params": {
+          "mode": "Phase",
+          "script_param": {
+            "IsPresent": "Card.Self+harnessed"
+          },
+          "source_designation": "harnessed"
+        },
+        "needs": [
+          "designations"
+        ]
+      }
     },
     {
       "id": "701.64b-1",
@@ -143,7 +158,23 @@
         "Plains",
         "Into the Roil"
       ],
-      "forge_notes": "The harnessed designation of the base setup cannot be written in the card state; it is reached by a harness activation on an earlier turn."
+      "forge_notes": "The harnessed designation of the base setup cannot be written in the card state; it is reached by a harness activation on an earlier turn.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger conditioned on its source holding the harnessed designation fires while the source has stayed harnessed since it was harnessed.",
+        "near_miss": "The same trigger is evaluated with its source no longer harnessed (a new object) and does not fire.",
+        "params": {
+          "mode": "Phase",
+          "script_param": {
+            "IsPresent": "Card.Self+harnessed"
+          },
+          "source_designation": "harnessed"
+        },
+        "needs": [
+          "designations"
+        ]
+      }
     }
   ]
 }

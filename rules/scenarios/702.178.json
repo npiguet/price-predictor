@@ -61,7 +61,20 @@
       "cards": [
         "Gastal Raider",
         "Grizzly Bears"
-      ]
+      ],
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A max speed static contributes its power/toughness boost while its controller's speed is 4.",
+        "near_miss": "The max speed static applies to the board and contributes nothing (speed below 4).",
+        "params": {
+          "field": "pt",
+          "script_param": {
+            "Condition": "MaxSpeed"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.178a-2",
@@ -125,7 +138,20 @@
         "Grizzly Bears",
         "Shock",
         "Mountain"
-      ]
+      ],
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A max speed static starts contributing once its controller's speed reaches 4.",
+        "near_miss": "The max speed static applies to the board and contributes nothing (speed below 4).",
+        "params": {
+          "field": "pt",
+          "script_param": {
+            "Condition": "MaxSpeed"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.178b-1",

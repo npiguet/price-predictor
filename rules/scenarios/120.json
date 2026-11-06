@@ -69,7 +69,10 @@
         "Forest",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The outcome is an absence: damage never reaches a noncreature permanent. A damage effect that does not affect it emits no damage_dealt event for it, and no event or field marks a permanent as not dealt damage. Looked in damage_dealt subjects (EVENT_PARAMS) and the resolution payload; a damage_dealt naming a noncreature permanent is the opposite case, and a permanent animated into a creature is one that is dealt damage."
+      }
     },
     {
       "id": "120.2a-1",
@@ -827,7 +830,21 @@
         "Savannah Lions",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "combat",
+        "outcome": "Combat damage dealt to a player by a source with toxic also gives that player poison counters: the damage step holds a poison_change beside the combat damage_dealt.",
+        "near_miss": "Poison counters changing with no combat damage in the record.",
+        "params": {
+          "event": "poison_change",
+          "with_event": {
+            "event": "damage_dealt",
+            "combat": true
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.3h-1",
@@ -915,8 +932,7 @@
     {
       "id": "120.4-1",
       "rules": [
-        "120.4",
-        "120.4d"
+        "120.4"
       ],
       "title": "Damage is modified by prevention, processed into results, modified again, and then occurs",
       "record_kind": "combat",
@@ -983,7 +999,93 @@
         "Child of Night",
         "Samite Healer"
       ],
-      "forge_notes": "Samite Healer's prevention shield on a player must apply to combat damage before lifelink computes the life gain."
+      "forge_notes": "Samite Healer's prevention shield on a player must apply to combat damage before lifelink computes the life gain.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "combat",
+        "outcome": "Damage is reduced by a prevention effect first and the damaged player's life change is processed from the reduced amount: the damage step holds a damage_prevented beside the life_change.",
+        "near_miss": "A life change in a damage step with no prevention.",
+        "params": {
+          "event": "life_change",
+          "with_event": "damage_prevented"
+        },
+        "needs": []
+      }
+    },
+    {
+      "id": "120.4d-1",
+      "rules": [
+        "120.4d"
+      ],
+      "title": "The damage event occurs after prevention and result processing",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Boon Reflection",
+            {
+              "card": "Child of Night",
+              "summoning_sick": false
+            }
+          ],
+          "B": [
+            {
+              "card": "Samite Healer",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "All creatures have been under their controllers' control since the start of the turn."
+      },
+      "decisions": [
+        "A declares Child of Night (2/1 lifelink) as an attacker, attacking B.",
+        "B declares no blockers.",
+        "In the declare blockers step, B activates Samite Healer, tapping it, targeting B (prevent the next 1 damage to B this turn); it resolves.",
+        "Both players pass priority into the combat damage step."
+      ],
+      "variants": [
+        {
+          "label": "prevent_and_double",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The damage event starts as 2 damage to B. Samite Healer's prevention makes it 1 damage. It is processed into B losing 1 life and A gaining 1 life; Boon Reflection doubles the gain to 2. B is at 19 and A is at 22."
+        },
+        {
+          "label": "no_prevention",
+          "polarity": "other",
+          "delta": "B does not activate Samite Healer.",
+          "expected": "The 2 damage is dealt. B loses 2 life (18). A gains 2 life from lifelink, doubled by Boon Reflection to 4 (24).",
+          "operation": {
+            "unclassifiable": "choice: B does not activate Samite Healer"
+          }
+        },
+        {
+          "label": "no_boon",
+          "polarity": "other",
+          "delta": "A does not control Boon Reflection (the card is not on the battlefield).",
+          "expected": "The prevention makes the damage 1. B loses 1 life (19) and A gains 1 life (21), with no doubling.",
+          "operation": "remove_permanent"
+        }
+      ],
+      "cards": [
+        "Boon Reflection",
+        "Child of Night",
+        "Samite Healer"
+      ],
+      "forge_notes": "Samite Healer's prevention shield on a player must apply to combat damage before lifelink computes the life gain.",
+      "detector": {
+        "none": "The scenario's detector tags a different rule's polarity; no family yet expresses this rule's own contrast."
+      }
     },
     {
       "id": "120.4a-1",
@@ -1134,7 +1236,21 @@
         "Grizzly Bears",
         "Ram Through"
       ],
-      "forge_notes": "The deathtouch clause of 120.4a is illustrated separately by 120.4a-3."
+      "forge_notes": "The deathtouch clause of 120.4a is illustrated separately by 120.4a-3.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A damage effect with an excess-damage redirection deals damage to two recipients: the lethal part and the excess.",
+        "near_miss": "The same kind of effect deals its damage to one recipient.",
+        "params": {
+          "event": "damage_dealt",
+          "api": "DealDamage",
+          "api_in_chain": true,
+          "chain_param": "ExcessDamage",
+          "min_count": 2
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.4a-3",
@@ -1205,7 +1321,21 @@
         "Hill Giant",
         "Ram Through"
       ],
-      "forge_notes": "Requires Forge's ExcessDamage computation to treat 1 damage as lethal from a deathtouch source."
+      "forge_notes": "Requires Forge's ExcessDamage computation to treat 1 damage as lethal from a deathtouch source.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A damage effect with an excess-damage redirection deals damage to two recipients: the lethal part and the excess, any damage beyond lethal (1 from a deathtouch source) counting as excess.",
+        "near_miss": "The same kind of effect deals its damage to one recipient.",
+        "params": {
+          "event": "damage_dealt",
+          "api": "DealDamage",
+          "api_in_chain": true,
+          "chain_param": "ExcessDamage",
+          "min_count": 2
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.4b-1",
@@ -1574,7 +1704,17 @@
         "Shock",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "resolution",
+        "outcome": "A creature whose damage already marked plus the damage the resolution dealt reaches its toughness is put into the graveyard by the state-based check.",
+        "near_miss": "A creature dealt damage that, with the damage still marked on it, stays below its toughness and stays on the battlefield.",
+        "params": {
+          "check": "lethal_damage"
+        },
+        "needs": []
+      }
     },
     {
       "id": "120.6-3",
@@ -1713,7 +1853,10 @@
         "Grizzly Bears",
         "Jackal Pup"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The outcome is an absence: a source that would deal 0 damage deals none. The combat record then holds no damage_dealt event from it and no damage trigger is evaluated for it, so no trigger record exists either; the snapshot shows power 0 but no field marks the damage as not dealt. Looked in the combat payload (attackers, blocks, assignment_choices, events), trigger records and EVENT_PARAMS."
+      }
     },
     {
       "id": "120.9-1",

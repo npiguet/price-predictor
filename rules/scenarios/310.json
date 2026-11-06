@@ -324,7 +324,22 @@
         "Grizzly Bears",
         "Invasion of Mercadia"
       ],
-      "forge_notes": "Which player protects a Siege is not a record field; it shows in the legal attack targets."
+      "forge_notes": "Which player protects a Siege is not a record field; it shows in the legal attack targets.",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A battle is among the defenders the anchored attacker may attack: its attacking player is not the battle's protector.",
+        "near_miss": "A battle is outside the anchored attacker's legal defenders because the attacking player protects it.",
+        "params": {
+          "list": "legal_defenders",
+          "fires_when": "inside",
+          "universe": "battlefield",
+          "judged_type": "battle"
+        },
+        "needs": [
+          "legal_defenders"
+        ]
+      }
     },
     {
       "id": "310.6-1",
@@ -850,7 +865,22 @@
         "Grizzly Bears",
         "Confiscate"
       ],
-      "forge_notes": "Protector is not a record field; the reassignment shows in the legal attack targets. The graveyard branch of 310.11 (no player can be chosen) cannot arise in a two-player game."
+      "forge_notes": "Protector is not a record field; the reassignment shows in the legal attack targets. The graveyard branch of 310.11 (no player can be chosen) cannot arise in a two-player game.",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A battle is among the defenders the anchored attacker may attack: its attacking player is not the battle's protector.",
+        "near_miss": "A battle is outside the anchored attacker's legal defenders because the attacking player protects it.",
+        "params": {
+          "list": "legal_defenders",
+          "fires_when": "inside",
+          "universe": "battlefield",
+          "judged_type": "battle"
+        },
+        "needs": [
+          "legal_defenders"
+        ]
+      }
     }
   ]
 }

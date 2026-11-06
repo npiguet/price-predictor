@@ -73,7 +73,19 @@
         "Mountain",
         "Bonecrusher Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate acting through a card's second face (an Adventure) is playable on that face's own cost and timing: can_play true for the alternative-face candidate.",
+        "near_miss": "The alternative-face candidate cannot be played.",
+        "params": {
+          "bit": "can_play",
+          "candidate_face": "alternative",
+          "fires_when": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "715.3b-1",

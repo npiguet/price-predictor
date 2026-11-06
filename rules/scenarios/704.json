@@ -86,7 +86,10 @@
         "Goblin King",
         "Goblin Piker"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "Repetition of the state-based check is no field: a resolution's effect half lists the deaths of the check as zone_change events attributed unresolved without the pass that produced each (sba_zone_move cannot tell the passes apart), and no event or snapshot field marks that one death caused a later one."
+      }
     },
     {
       "id": "704.3-2",
@@ -345,7 +348,18 @@
         "Island",
         "Divination"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A player who attempted to draw from an empty library loses the game: a player_lost event whose reason is Milled.",
+        "near_miss": "A player loses the game for another reason; not counted, since no API scopes the near miss.",
+        "params": {
+          "event": "player_lost",
+          "reason": "Milled"
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.5c-1",
@@ -1345,7 +1359,10 @@
         "Grizzly Bears",
         "Black Sun's Zenith"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The cancellation of a +1/+1 and a -1/-1 counter pair is a state-based action (704.5q) and no counter_change event records the removal: a resolution's effect half files only what leaves the battlefield in the state-based check, and the snapshot is taken before the resolution. Searched counter_change events and gen-3 snapshot counters; the same finding as scenario 122's counter-cancellation scenario."
+      }
     },
     {
       "id": "704.5r-1",
@@ -1400,7 +1417,10 @@
       "cards": [
         "Rasputin Dreamweaver"
       ],
-      "forge_notes": "Forge scripts the cap as a MaxCounter static, which may stop the eighth counter from being placed rather than removing it in a state-based check; the end count (7) is the same either way."
+      "forge_notes": "Forge scripts the cap as a MaxCounter static, which may stop the eighth counter from being placed rather than removing it in a state-based check; the end count (7) is the same either way.",
+      "detector": {
+        "none": "The removal of counters above a stated maximum is a state-based action and no counter_change event records it (the effect half files only the check's moves from the battlefield, and the snapshot precedes the resolution); Forge scripts the cap as a MaxCounter static, so the counter may never be placed at all."
+      }
     },
     {
       "id": "704.5s-1",
@@ -1455,7 +1475,21 @@
       "cards": [
         "History of Benalia"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A chapter ability resolves and its Saga, its lore count at or past its final chapter number and no chapter ability of it left on the stack, is sacrificed in the state-based check after the resolution (a move from the battlefield to the graveyard of the chapter's source).",
+        "near_miss": "A chapter ability resolves and nothing is sacrificed after it: the Saga is below its final chapter number, or another of its chapter abilities is still on the stack.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "graveyard",
+          "keyword": "Chapter",
+          "subject_is_source": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.5z-1",
@@ -1740,7 +1774,17 @@
         "Young Wolf",
         "Black Sun's Zenith"
       ],
-      "forge_notes": "Polarity refers to the undying trigger. Black Sun's Zenith also puts three -1/-1 counters on any other creature; none is present."
+      "forge_notes": "Polarity refers to the undying trigger. Black Sun's Zenith also puts three -1/-1 counters on any other creature; none is present.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A leaves-the-battlefield keyword trigger (undying) is evaluated against a state-based death and fires because the permanent's last known information, from before the whole check, satisfies its condition.",
+        "near_miss": "The same keyword trigger is evaluated against the death and does not fire, because the last known information fails its condition.",
+        "params": {
+          "keyword": "Undying"
+        },
+        "needs": []
+      }
     },
     {
       "id": "704.5t-1",

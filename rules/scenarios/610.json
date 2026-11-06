@@ -313,7 +313,23 @@
         "Banisher Priest",
         "Terror"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A zone-change ability with an until-duration, whose specified event happened after it triggered, moves nothing to exile.",
+        "near_miss": "A zone-change-to-exile ability with an until-duration resolves and exiles its object.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "Exile",
+          "api": "ChangeZone",
+          "absent": true,
+          "chain_param": {
+            "Duration": "UntilHostLeavesPlay"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "610.3c-1",
@@ -628,7 +644,21 @@
         "Plains",
         "Oubliette"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An effect phases a permanent out with the until-effect flag (it does not phase in during its controller's untap step).",
+        "near_miss": "A phasing ability phases a permanent out normally, with no until-effect flag.",
+        "params": {
+          "event": "phased",
+          "out": true,
+          "chain_param": {
+            "WontPhaseInNormal": "True"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "610.4b-1",
@@ -698,7 +728,24 @@
         "Plains",
         "Disenchant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An ability that phases a permanent out until its source leaves the battlefield, resolving after the source left, phases nothing out.",
+        "near_miss": "Such an ability resolves with its source still on the battlefield and phases a permanent out.",
+        "params": {
+          "event": "phased",
+          "out": true,
+          "absent": true,
+          "api": "Phases",
+          "api_in_chain": true,
+          "chain_param": {
+            "WontPhaseInNormal": "True"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "610.4c-1",
@@ -770,7 +817,24 @@
         "Oubliette",
         "Disenchant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A triggered phase-out lasting until its source leaves, resolving after the source left, phases nothing out.",
+        "near_miss": "The same trigger resolves with its source still present and phases a permanent out.",
+        "params": {
+          "event": "phased",
+          "out": true,
+          "absent": true,
+          "api": "Phases",
+          "api_in_chain": true,
+          "chain_param": {
+            "WontPhaseInNormal": "True"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "610.4d-1",

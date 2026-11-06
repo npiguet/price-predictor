@@ -67,7 +67,23 @@
         "Grizzly Bears",
         "Forest"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A triggered ability that follows the infinity symbol is evaluated and fires with its source harnessed.",
+        "near_miss": "The same kind of trigger, conditioned on its source being harnessed, evaluated with its source not harnessed and not fired.",
+        "params": {
+          "mode": "Phase",
+          "script_param": {
+            "IsPresent": "Card.Self+harnessed"
+          },
+          "source_designation": "harnessed"
+        },
+        "needs": [
+          "designations"
+        ]
+      }
     }
   ]
 }

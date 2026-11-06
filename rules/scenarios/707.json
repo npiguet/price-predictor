@@ -660,7 +660,20 @@
         "Runeclaw Bear",
         "Clone"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A permanent entering as a copy has an enters replacement it copied (enters tapped, with counters) replace its move onto the battlefield.",
+        "near_miss": "A permanent entering as a copy meets an enters replacement and it is not replaced.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "Battlefield",
+          "result": "replaced",
+          "subject_is_copy": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "707.5-2",
@@ -731,7 +744,20 @@
         "Runeclaw Bear",
         "Clone"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A permanent entering the battlefield as a copy has its copied 'when this enters' trigger evaluated and fired.",
+        "near_miss": "A copy's copied 'when this enters' trigger is evaluated and does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "destination": "Battlefield",
+          "selector": "Card.Self",
+          "source_is_copy": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "707.6-1",

@@ -239,7 +239,23 @@
         "Grizzly Bears",
         "Hill Giant"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A spell or ability moves a card to exile and makes it plotted.",
+        "near_miss": "A resolution of an ability that would make an exiled card plotted moves no card to exile, so nothing becomes plotted.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "Exile",
+          "api": "AlterAttribute",
+          "api_in_chain": true,
+          "chain_param": {
+            "Attributes": "Plotted"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.170d-1",

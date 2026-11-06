@@ -71,7 +71,19 @@
         "Grizzly Bears",
         "Hill Giant"
       ],
-      "forge_notes": "Forge enforces menace when validating the whole block declaration, so each blocker alone looks like a legal blocker individually while the combined declaration is rejected."
+      "forge_notes": "Forge enforces menace when validating the whole block declaration, so each blocker alone looks like a legal blocker individually while the combined declaration is rejected.",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature with menace can be blocked only by two or more creatures: its blockers record writes min_blockers of 2 or more.",
+        "near_miss": "An attacker that one creature suffices to block (min_blockers below 2).",
+        "params": {
+          "list": "min_blockers",
+          "fires_when": "inside",
+          "at_least": 2
+        },
+        "needs": []
+      }
     }
   ]
 }

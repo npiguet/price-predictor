@@ -890,7 +890,6 @@
     {
       "id": "712.11-1",
       "rules": [
-        "712.11",
         "712.11c"
       ],
       "title": "A modal double-faced card is cast with its front face by default, and only the face to be cast is evaluated",
@@ -944,7 +943,80 @@
         "Valki, God of Lies",
         "Tibalt, Cosmic Impostor"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A double-faced card in hand yields a separate candidate for its second face, judged on that face's own mana cost: the alternative-face candidate is unaffordable where that cost exceeds the mana available.",
+        "near_miss": "The second face's candidate is affordable.",
+        "params": {
+          "bit": "affordable",
+          "candidate_face": "alternative",
+          "fires_when": false
+        },
+        "needs": []
+      }
+    },
+    {
+      "id": "712.11-2",
+      "rules": [
+        "712.11"
+      ],
+      "title": "A double-faced card is cast with its front face up by default",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Valki, God of Lies"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A considers casting Valki, God of Lies from hand as its front face, then as its back face, Tibalt, Cosmic Impostor."
+      ],
+      "variants": [
+        {
+          "label": "two_lands",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Casting the front face is legal: Valki goes on the stack front face up as a creature spell with mana value 2. Casting the back face is not legal, because Tibalt's cost {5}{B}{R} cannot be paid with two Swamps."
+        },
+        {
+          "label": "seven_lands",
+          "polarity": "other",
+          "delta": "A controls five Swamps and two Mountains instead of two Swamps.",
+          "expected": "Casting either face is legal. Cast as the front face, Valki goes on the stack as a creature spell with mana value 2; cast as the back face, Tibalt goes on the stack as a planeswalker spell with mana value 7.",
+          "operation": {
+            "unclassifiable": "more than one fact: five lands are added"
+          }
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Mountain",
+        "Valki, God of Lies",
+        "Tibalt, Cosmic Impostor"
+      ],
+      "forge_notes": "",
+      "detector": {
+        "none": "The scenario's detector tags a different rule's polarity; no family yet expresses this rule's own contrast."
+      }
     },
     {
       "id": "712.11d-1",
@@ -1078,13 +1150,27 @@
         "Beloved Beggar",
         "Generous Soul"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A double-faced spell resolves and enters the battlefield with the face that was up on the stack: a zone_change from the stack to the battlefield whose subject is in its back-face state in the snapshot.",
+        "near_miss": "A spell resolves and enters from the stack with its front face up.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "battlefield",
+          "subject_face_state": "back"
+        },
+        "needs": [
+          "face_state"
+        ]
+      }
     },
     {
       "id": "712.14-1",
       "rules": [
-        "712.14",
-        "712.14a"
+        "712.14"
       ],
       "title": "A double-faced card put onto the battlefield enters front face up unless the effect says transformed",
       "record_kind": "resolution",
@@ -1147,7 +1233,90 @@
         "Biolume Serpent",
         "Diabolic Edict"
       ],
-      "forge_notes": "No Forge effect puts a card that is not double-faced onto the battlefield transformed (every such effect uses the card itself), so the second sentence of 712.14a cannot be shown."
+      "forge_notes": "No Forge effect puts a card that is not double-faced onto the battlefield transformed (every such effect uses the card itself), so the second sentence of 712.14a cannot be shown.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A card put onto the battlefield from a graveyard by an effect (not cast) enters front face up, unless the effect says transformed: a zone_change from the graveyard to the battlefield.",
+        "near_miss": "A card put onto the battlefield transformed because the effect says so; not counted, since no API scopes the near miss and the snapshot, read before the move, shows a graveyard card front face up either way.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "graveyard",
+          "to_zone": "battlefield"
+        },
+        "needs": []
+      }
+    },
+    {
+      "id": "712.14a-1",
+      "rules": [
+        "712.14a"
+      ],
+      "title": "A double-faced card put onto the battlefield transformed enters with its back face up",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Swamp",
+            "Swamp",
+            "Swamp",
+            "Swamp"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Zombify"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Biolume Egg"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "During A's upkeep this turn B cast Diabolic Edict targeting A and A sacrificed Biolume Egg, A's only creature. Biolume Egg's sacrifice trigger resolved, so a delayed trigger will return that card from A's graveyard to the battlefield transformed at the beginning of the next end step."
+      },
+      "decisions": [
+        "A casts Zombify targeting Biolume Egg in A's graveyard, tapping all four Swamps.",
+        "Both players pass; Zombify resolves.",
+        "If Biolume Egg's enters trigger fires, A scries 2 and keeps both cards on top.",
+        "The turn moves to the end step; the delayed trigger resolves."
+      ],
+      "variants": [
+        {
+          "label": "zombify",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Biolume Egg enters the battlefield front face up as a blue 0/4 Serpent Egg with defender, and its enters trigger fires (A scries 2). At the end step the delayed trigger does nothing, because the card it refers to left the graveyard; Biolume Egg stays front face up."
+        },
+        {
+          "label": "delayed_trigger_returns_it",
+          "polarity": "fires",
+          "delta": "A does not cast Zombify.",
+          "expected": "At the beginning of the end step Biolume Egg returns to the battlefield transformed, back face up as Biolume Serpent, a blue 4/4 Serpent. No enters trigger fires and A does not scry.",
+          "operation": {
+            "unclassifiable": "choice: A does not cast Zombify"
+          }
+        }
+      ],
+      "cards": [
+        "Swamp",
+        "Zombify",
+        "Biolume Egg",
+        "Biolume Serpent",
+        "Diabolic Edict"
+      ],
+      "forge_notes": "No Forge effect puts a card that is not double-faced onto the battlefield transformed (every such effect uses the card itself), so the second sentence of 712.14a cannot be shown.",
+      "detector": {
+        "none": "The scenario's detector tags a different rule's polarity; no family yet expresses this rule's own contrast."
+      }
     },
     {
       "id": "712.15a-1",
@@ -1522,7 +1691,22 @@
         "Swamp",
         "Terror"
       ],
-      "forge_notes": "Terror cannot target Blood Artist (black), which is why it is a safe bystander. Whether Forge fires the card-moved trigger once per card for a melded permanent needs checking."
+      "forge_notes": "Terror cannot target Blood Artist (black), which is why it is a safe bystander. Whether Forge fires the card-moved trigger once per card for a melded permanent needs checking.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A melded permanent leaves the battlefield for the graveyard as one permanent: a zone_change from the battlefield whose subject is in the melded face state.",
+        "near_miss": "A permanent that is not melded leaves the battlefield for the graveyard.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "graveyard",
+          "subject_face_state": "melded"
+        },
+        "needs": [
+          "face_state"
+        ]
+      }
     },
     {
       "id": "712.21c-1",
@@ -1586,7 +1770,22 @@
         "Hill Giant",
         "Otherworldly Journey"
       ],
-      "forge_notes": "Forge's delayed trigger remembers the exiled object by last-known information; check that it returns both halves of a melded permanent."
+      "forge_notes": "Forge's delayed trigger remembers the exiled object by last-known information; check that it returns both halves of a melded permanent.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A melded permanent is exiled by a resolution: a zone_change from the battlefield to exile whose subject is in the melded face state.",
+        "near_miss": "A permanent that is not melded is exiled from the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "exile",
+          "subject_face_state": "melded"
+        },
+        "needs": [
+          "face_state"
+        ]
+      }
     },
     {
       "id": "712.21d-1",
@@ -1649,7 +1848,23 @@
         "Swamp",
         "Terror"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A replacement effect meets a melded permanent's move from the battlefield to the graveyard and replaces it, once for the one permanent.",
+        "near_miss": "A replacement effect meets that move and does not replace it.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "graveyard",
+          "subject_face_state": "melded",
+          "result": "replaced"
+        },
+        "needs": [
+          "face_state"
+        ]
+      }
     },
     {
       "id": "712.21d-2",
@@ -1728,7 +1943,23 @@
         "Swamp",
         "Damnation"
       ],
-      "forge_notes": "Whether Forge lets the owner order the two replacement effects for a melded permanent is untested."
+      "forge_notes": "Whether Forge lets the owner order the two replacement effects for a melded permanent is untested.",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A replacement effect meets a melded permanent's move from the battlefield to the graveyard and replaces it, once for the one permanent.",
+        "near_miss": "A replacement effect meets that move and does not replace it.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "graveyard",
+          "subject_face_state": "melded",
+          "result": "replaced"
+        },
+        "needs": [
+          "face_state"
+        ]
+      }
     },
     {
       "id": "712.21e-1",
@@ -1794,7 +2025,20 @@
         "Graf Rats",
         "Midnight Scavengers"
       ],
-      "forge_notes": "Fumigate counts the remembered destroyed objects; whether Forge remembers a melded permanent as one object or as its two cards needs checking. The card-count half of 712.21e is shown by Quest for Ancient Secrets in 712.21-1."
+      "forge_notes": "Fumigate counts the remembered destroyed objects; whether Forge remembers a melded permanent as one object or as its two cards needs checking. The card-count half of 712.21e is shown by Quest for Ancient Secrets in 712.21-1.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A melded permanent is destroyed as one object: a destroyed event whose subject is in the melded face state.",
+        "near_miss": "A permanent that is not melded is destroyed.",
+        "params": {
+          "event": "destroyed",
+          "subject_face_state": "melded"
+        },
+        "needs": [
+          "face_state"
+        ]
+      }
     },
     {
       "id": "712.10-1",

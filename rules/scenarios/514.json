@@ -319,7 +319,17 @@
         "Ancestral Recall",
         "Island"
       ],
-      "forge_notes": "Cleanup priority is an exception in Forge; confirm the repeated cleanup step is reached."
+      "forge_notes": "Cleanup priority is an exception in Forge; confirm the repeated cleanup step is reached.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A trigger evaluated in the cleanup step fires and is put on the stack there, players getting priority.",
+        "near_miss": "A trigger evaluated in the cleanup step that does not fire.",
+        "params": {
+          "step": "cleanup"
+        },
+        "needs": []
+      }
     }
   ]
 }

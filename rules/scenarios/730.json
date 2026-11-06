@@ -458,7 +458,17 @@
         "Battering Craghorn",
         "Aven Farseer"
       ],
-      "forge_notes": "Setup needs a face-down permanent on the battlefield. Forge's MutateEffect runs face-up commands rather than a TurnFaceUp trigger when the merged permanent stops being face down."
+      "forge_notes": "Setup needs a face-down permanent on the battlefield. Forge's MutateEffect runs face-up commands rather than a TurnFaceUp trigger when the merged permanent stops being face down.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A turned-face-up trigger fires only when a permanent is actually turned face up; merging an object onto a face-down permanent does not turn it face up.",
+        "near_miss": "A turned-face-up trigger is evaluated on an event that turned no permanent face up and does not fire.",
+        "params": {
+          "mode": "TurnFaceUp"
+        },
+        "needs": []
+      }
     },
     {
       "id": "730.2f-1",
@@ -532,7 +542,17 @@
         "Battering Craghorn",
         "Aven Farseer"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A turned-face-up trigger fires when a face-down permanent, a merged one included, is turned face up.",
+        "near_miss": "A turned-face-up trigger is evaluated and does not fire.",
+        "params": {
+          "mode": "TurnFaceUp"
+        },
+        "needs": []
+      }
     },
     {
       "id": "730.2f-2",
@@ -1031,7 +1051,21 @@
         "Doom Blade",
         "Unsummon"
       ],
-      "forge_notes": "In the bounce variant B's hand holds Unsummon in place of Doom Blade. Doom Blade can legally target the merged permanent because it is red or green, not black."
+      "forge_notes": "In the bounce variant B's hand holds Unsummon in place of Doom Blade. Doom Blade can legally target the merged permanent because it is red or green, not black.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A merged permanent leaves the battlefield: a zone_change from the battlefield whose subject is a merged permanent.",
+        "near_miss": "A permanent that is not merged leaves the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "subject_merged": true
+        },
+        "needs": [
+          "links"
+        ]
+      }
     },
     {
       "id": "730.3c-1",
@@ -1103,7 +1137,22 @@
         "Grizzly Bears",
         "Restoration Angel"
       ],
-      "forge_notes": "Restoration Angel remembers the targeted card; Forge must return all merged components, not just the card that represented the permanent."
+      "forge_notes": "Restoration Angel remembers the targeted card; Forge must return all merged components, not just the card that represented the permanent.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An effect that returns the object a merged permanent became acts on every component: a zone_change from exile to the battlefield whose subject was a merged permanent in the snapshot.",
+        "near_miss": "A permanent that is not merged returns from exile to the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "exile",
+          "to_zone": "battlefield",
+          "subject_merged": true
+        },
+        "needs": [
+          "links"
+        ]
+      }
     },
     {
       "id": "730.3d-1",
@@ -1176,7 +1225,22 @@
         "Rest in Peace",
         "Doom Blade"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A replacement effect meets a merged permanent's move to the graveyard and replaces it, for every component.",
+        "near_miss": "A replacement effect meets that move and does not replace it.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "graveyard",
+          "subject_merged": true,
+          "result": "replaced"
+        },
+        "needs": [
+          "links"
+        ]
+      }
     },
     {
       "id": "730.3e-1",
@@ -1269,7 +1333,22 @@
         "Leyline of the Void",
         "Doom Blade"
       ],
-      "forge_notes": "Leyline's ValidCard is Card.!token+OppOwn, so Forge must evaluate each component separately for a merged token."
+      "forge_notes": "Leyline's ValidCard is Card.!token+OppOwn, so Forge must evaluate each component separately for a merged token.",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A replacement effect meets a merged permanent's move to the graveyard and replaces it, for every component.",
+        "near_miss": "A replacement effect meets that move and does not replace it.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "graveyard",
+          "subject_merged": true,
+          "result": "replaced"
+        },
+        "needs": [
+          "links"
+        ]
+      }
     }
   ]
 }

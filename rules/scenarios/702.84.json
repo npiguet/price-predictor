@@ -151,7 +151,22 @@
         "Mountain",
         "Shock"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent holding the unearthed designation moves from the battlefield to exile, in the resolution or the state-based check after it that makes it leave.",
+        "near_miss": "A permanent without the unearthed designation moves from the battlefield to exile, which the rule does not explain.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "exile",
+          "subject_designation": "unearthed"
+        },
+        "needs": [
+          "designations"
+        ]
+      }
     },
     {
       "id": "702.84a-3",

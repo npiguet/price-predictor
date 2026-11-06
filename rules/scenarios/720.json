@@ -77,7 +77,19 @@
         "Grizzly Bears",
         "Craw Wurm"
       ],
-      "forge_notes": "Forge lists the Omen as a separate alternate spell ability of the card; the playability record should report it as its own candidate."
+      "forge_notes": "Forge lists the Omen as a separate alternate spell ability of the card; the playability record should report it as its own candidate.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A card cast as its Omen (an alternative face) is judged on the Omen's own cost and targets: the candidate's can_play is true when they are met.",
+        "near_miss": "The Omen candidate's can_play is false because its cost cannot be paid or it has no legal target.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": true,
+          "candidate_face": "alternative"
+        },
+        "needs": []
+      }
     },
     {
       "id": "720.3a-2",
@@ -136,7 +148,21 @@
         "Island",
         "Plains"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A card cast as its Omen (an alternative face) is judged by the Omen's own timing: an instant Omen passes the timing check outside its controller's main phase.",
+        "near_miss": "A sorcery Omen fails the timing check outside its controller's main phase with an empty stack.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true,
+          "candidate_face": "alternative"
+        },
+        "needs": [
+          "timing"
+        ]
+      }
     },
     {
       "id": "720.3b-1",

@@ -54,7 +54,20 @@
         "Case of the Gateway Express",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "continuous_contribution",
+        "record_kind": "continuous",
+        "outcome": "A static ability that works only while its Case is solved contributes a P/T boost to the permanents it affects.",
+        "near_miss": "A static ability gated on its Case being solved that applies to the board and contributes nothing.",
+        "params": {
+          "field": "pt",
+          "script_param": {
+            "IsPresent": "Card.Self+IsSolved"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "702.169c-1",
@@ -117,7 +130,23 @@
         "Shock",
         "Mountain"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A triggered ability that triggers only while its Case is solved is evaluated and fires with its source solved.",
+        "near_miss": "The same kind of trigger evaluated with its source unsolved, not fired.",
+        "params": {
+          "mode": "Phase",
+          "script_param": {
+            "IsPresent": "Card.Self+IsSolved"
+          },
+          "source_designation": "solved"
+        },
+        "needs": [
+          "designations"
+        ]
+      }
     },
     {
       "id": "702.169d-1",

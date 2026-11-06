@@ -695,7 +695,28 @@
         "Grizzly Bears",
         "Plains"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A token exiled by an effect that would return what it exiled to the battlefield (a flicker) does not return: the effect half holds the token's move to exile and no zone_change back to the battlefield.",
+        "near_miss": "A card, not a token, exiled by the same kind of effect, which returns to the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "battlefield",
+          "to_zone": "exile",
+          "subject_is_token": true,
+          "api": "ChangeZone",
+          "without_event": {
+            "event": "zone_change",
+            "to_zone": "battlefield"
+          },
+          "chain_param": {
+            "Destination": "Battlefield"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "111.10a-1",
@@ -2527,7 +2548,21 @@
         "Mountain",
         "Parallel Lives"
       ],
-      "forge_notes": "Forge treats a copied permanent spell as a token created on resolution; whether it consults the CreateToken replacement for a copy is unverified."
+      "forge_notes": "Forge treats a copied permanent spell as a token created on resolution; whether it consults the CreateToken replacement for a copy is unverified.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A copy of a permanent spell resolves and enters the battlefield from the stack (as a token) with no token_created event, because it was not created by an effect.",
+        "near_miss": "A permanent spell that is a card, not a copy, enters from the stack as a card.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "stack",
+          "to_zone": "battlefield",
+          "subject_is_copy": true,
+          "without_event": "token_created"
+        },
+        "needs": []
+      }
     }
   ]
 }

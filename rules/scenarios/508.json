@@ -363,7 +363,20 @@
         "Juggernaut",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "An attackers legality record's anchored attacker is held by an attack requirement (it must attack if able).",
+        "near_miss": "The anchored attacker has no attack requirement applying to it.",
+        "params": {
+          "list": "must_attack",
+          "fires_when": "inside"
+        },
+        "needs": [
+          "must_attack"
+        ]
+      }
     },
     {
       "id": "508.1d-2",
@@ -446,7 +459,10 @@
         "Grizzly Bears",
         "Silent Arbiter"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The outcome is a property of the whole declaration: the number of requirements it obeys is the most possible without breaking a restriction. The legality records list creatures individually (legal_attackers, forbidden, must_attack) and a declaration that fails the rule is never made, so no record field shows the maximum; searched the attackers playability payload and attackers_declared events."
+      }
     },
     {
       "id": "508.1d-3",
@@ -1290,8 +1306,7 @@
     {
       "id": "508.4a-1",
       "rules": [
-        "508.4a",
-        "508.4"
+        "508.4a"
       ],
       "title": "A creature that would enter attacking a planeswalker that has left the battlefield enters but is not attacking",
       "record_kind": "combat",
@@ -1359,7 +1374,86 @@
         "Ninja of the Deep Hours",
         "Lightning Bolt"
       ],
-      "forge_notes": "Ninjutsu enters attacking the defender of the returned creature (702.49c). Check that Forge leaves the Ninja non-attacking rather than redirecting it to B when that planeswalker is gone."
+      "forge_notes": "Ninjutsu enters attacking the defender of the returned creature (702.49c). Check that Forge leaves the Ninja non-attacking rather than redirecting it to B when that planeswalker is gone.",
+      "detector": {
+        "none": "The outcome is an absence or a join of two records: a permanent put onto the battlefield attacking is never declared, so no attackers_declared event names it, and the damage-step combat record shows it only as one more attacker or as no attacker, like any other. Its entering resolution's zone_change or token_created event carries no attacking flag, and the restriction or the attacked permanent it ignores is in a different record. Looked in the combat payload (attackers, blocks, events), EVENT_PARAMS and the gen-3 attackers record; no single record field shows it."
+      }
+    },
+    {
+      "id": "508.4-1",
+      "rules": [
+        "508.4"
+      ],
+      "title": "A creature put onto the battlefield attacking enters attacking whatever it is attacking, if the permanent is still there",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            },
+            "Island",
+            "Island",
+            "Mountain"
+          ],
+          "B": [
+            "Jace Beleren"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Ninja of the Deep Hours",
+            "Lightning Bolt"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A declares Grizzly Bears as the only attacker against Jace Beleren.",
+        "B declares no blockers.",
+        "In the declare blockers step A activates ninjutsu of Ninja of the Deep Hours, tapping both Islands and returning Grizzly Bears to hand.",
+        "Holding priority, A casts Lightning Bolt targeting Jace Beleren, tapping Mountain. Both players pass; Lightning Bolt resolves.",
+        "Both players pass; the ninjutsu ability resolves. Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "planeswalker_gone",
+          "polarity": "does_not_fire",
+          "delta": "",
+          "expected": "Jace Beleren (loyalty 3) is dealt 3 damage and goes to B's graveyard. Ninja of the Deep Hours enters the battlefield tapped but is not an attacking creature and deals no combat damage. B's life stays 20."
+        },
+        {
+          "label": "planeswalker_present",
+          "polarity": "fires",
+          "delta": "A does not cast Lightning Bolt.",
+          "expected": "Ninja of the Deep Hours enters tapped and attacking Jace Beleren and deals 2 combat damage to it; Jace Beleren has loyalty 1. B's life stays 20.",
+          "operation": {
+            "unclassifiable": "choice: A casts no Lightning Bolt, a different spell choice."
+          }
+        }
+      ],
+      "cards": [
+        "Grizzly Bears",
+        "Island",
+        "Mountain",
+        "Jace Beleren",
+        "Ninja of the Deep Hours",
+        "Lightning Bolt"
+      ],
+      "forge_notes": "Ninjutsu enters attacking the defender of the returned creature (702.49c). Check that Forge leaves the Ninja non-attacking rather than redirecting it to B when that planeswalker is gone.",
+      "detector": {
+        "none": "The scenario's detector tags a different rule's polarity; no family yet expresses this rule's own contrast."
+      }
     },
     {
       "id": "508.4c-1",
@@ -1426,7 +1520,10 @@
         "Grizzly Bears",
         "Silent Arbiter"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The outcome is an absence or a join of two records: a permanent put onto the battlefield attacking is never declared, so no attackers_declared event names it, and the damage-step combat record shows it only as one more attacker or as no attacker, like any other. Its entering resolution's zone_change or token_created event carries no attacking flag, and the restriction or the attacked permanent it ignores is in a different record. Looked in the combat payload (attackers, blocks, events), EVENT_PARAMS and the gen-3 attackers record; no single record field shows it."
+      }
     },
     {
       "id": "508.4d-1",
@@ -1506,7 +1603,10 @@
         "Hill Giant",
         "Ninja of the Deep Hours"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "none": "The outcome is an absence or a join of two records: a permanent put onto the battlefield attacking is never declared, so no attackers_declared event names it, and the damage-step combat record shows it only as one more attacker or as no attacker, like any other. Its entering resolution's zone_change or token_created event carries no attacking flag, and the restriction or the attacked permanent it ignores is in a different record. Looked in the combat payload (attackers, blocks, events), EVENT_PARAMS and the gen-3 attackers record; no single record field shows it."
+      }
     },
     {
       "id": "508.4d-2",
@@ -1569,7 +1669,10 @@
         "Brimaz, King of Oreskos",
         "Hill Giant"
       ],
-      "forge_notes": "Pairs with 508.4d-1, where a creature entering attacking in the declare blockers step is unblocked and cannot be blocked."
+      "forge_notes": "Pairs with 508.4d-1, where a creature entering attacking in the declare blockers step is unblocked and cannot be blocked.",
+      "detector": {
+        "none": "The outcome is an absence or a join of two records: a permanent put onto the battlefield attacking is never declared, so no attackers_declared event names it, and the damage-step combat record shows it only as one more attacker or as no attacker, like any other. Its entering resolution's zone_change or token_created event carries no attacking flag, and the restriction or the attacked permanent it ignores is in a different record. Looked in the combat payload (attackers, blocks, events), EVENT_PARAMS and the gen-3 attackers record; no single record field shows it."
+      }
     },
     {
       "id": "508.5-1",
@@ -1811,7 +1914,10 @@
         "Blazing Archon",
         "Portal Mage"
       ],
-      "forge_notes": "Portal Mage's trigger is optional (OptionalDecider$ You); the scenario takes it as accepted. Check that Forge's ChangeCombatants does not filter the new defender by attack restrictions."
+      "forge_notes": "Portal Mage's trigger is optional (OptionalDecider$ You); the scenario takes it as accepted. Check that Forge's ChangeCombatants does not filter the new defender by attack restrictions.",
+      "detector": {
+        "none": "The outcome is that a reselected defender is exempt from attack restrictions: the ChangeCombatants resolution holds a removed_from_combat event and the later damage-step combat record shows the creature still attacking. The restriction it ignores is in neither record, so no single record shows the exemption; looked in the combat payload, removed_from_combat and restriction_change (EVENT_PARAMS) and the gen-3 attackers record, which is written before the reselection."
+      }
     },
     {
       "id": "508.7c-1",

@@ -66,7 +66,19 @@
         "Island",
         "Hill Giant"
       ],
-      "forge_notes": "Forge models the prepare spell as an alternate face (AlternateMode:Prepare, CopyFaceFrom:Jump); the exiled copy exists only while the permanent is prepared."
+      "forge_notes": "Forge models the prepare spell as an alternate face (AlternateMode:Prepare, CopyFaceFrom:Jump); the exiled copy exists only while the permanent is prepared.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A prepare spell (an alternative face of a card) cannot be cast from the card where it is: the candidate's can_play is false.",
+        "near_miss": "A prepare-spell candidate whose copy is castable: can_play is true.",
+        "params": {
+          "bit": "can_play",
+          "fires_when": false,
+          "candidate_face": "alternative"
+        },
+        "needs": []
+      }
     },
     {
       "id": "722.3a-1",

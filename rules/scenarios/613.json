@@ -1855,7 +1855,20 @@
         "Juggernaut",
         "Turn to Frog"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "An attackers legality record's anchored attacker is held by an attack requirement (it must attack if able).",
+        "near_miss": "The anchored attacker has no attack requirement applying to it.",
+        "params": {
+          "list": "must_attack",
+          "fires_when": "inside"
+        },
+        "needs": [
+          "must_attack"
+        ]
+      }
     }
   ]
 }

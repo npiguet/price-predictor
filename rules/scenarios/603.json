@@ -1621,7 +1621,23 @@
         "Doom Blade",
         "Unsummon"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An Aura's leaves-the-battlefield trigger on its enchanted permanent resolves and moves the Aura itself out of the graveyard, finding its new object there.",
+        "near_miss": "Such a trigger's resolution moves something other than the Aura itself, or nothing.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "Graveyard",
+          "api": "ChangeZone",
+          "subject_is_source": true,
+          "script_param": {
+            "ValidCard": "Card.EnchantedBy"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.7-1",
@@ -1702,7 +1718,17 @@
         "Flare",
         "Counterspell"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A delayed triggered ability created by a resolving spell or ability is evaluated when its event occurs and fires.",
+        "near_miss": "A delayed triggered ability is evaluated and does not fire.",
+        "params": {
+          "spawned_by": "DelayedTrigger"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.7a-1",
@@ -1768,7 +1794,17 @@
         "Mountain",
         "Grizzly Bears"
       ],
-      "forge_notes": "Check how Forge schedules AtEOT when it is applied during the end step itself."
+      "forge_notes": "Check how Forge schedules AtEOT when it is applied during the end step itself.",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A delayed triggered ability fires on the first matching event after it was created.",
+        "near_miss": "A delayed triggered ability is evaluated against an event and does not fire.",
+        "params": {
+          "spawned_by": "DelayedTrigger"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.7c-1",
@@ -2391,7 +2427,17 @@
         "Savannah Lions",
         "Heart-Piercer Manticore"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A reflexive 'when you do' triggered ability created during a resolution is evaluated and fires.",
+        "near_miss": "A reflexive triggered ability is evaluated and does not fire.",
+        "params": {
+          "spawned_by": "ImmediateTrigger"
+        },
+        "needs": []
+      }
     },
     {
       "id": "603.12a-1",
@@ -2461,7 +2507,17 @@
         "Mishra's Bauble",
         "Grizzly Bears"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A reflexive triggered ability fires once for its creating resolution.",
+        "near_miss": "A reflexive triggered ability is evaluated and does not fire.",
+        "params": {
+          "spawned_by": "ImmediateTrigger"
+        },
+        "needs": []
+      }
     }
   ]
 }

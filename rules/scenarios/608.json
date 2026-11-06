@@ -795,7 +795,20 @@
         "Centaur Courser",
         "Mardu Heart-Piercer"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A raid trigger, whose condition looks back at whether its controller attacked this turn, is evaluated and fires because an attack was declared earlier in the turn, whether or not the attacking creatures still exist or are still creatures.",
+        "near_miss": "A raid trigger is evaluated in a turn in which its controller declared no attack and does not fire.",
+        "params": {
+          "mode": "ChangesZone",
+          "script_param": {
+            "CheckSVar": "RaidTest"
+          }
+        },
+        "needs": []
+      }
     },
     {
       "id": "608.2j-1",
@@ -1458,7 +1471,6 @@
     {
       "id": "608.3d-1",
       "rules": [
-        "608.3b",
         "608.3d"
       ],
       "title": "A mutating creature spell merges with its target, or enters alone if the target is illegal",
@@ -1522,7 +1534,22 @@
         "Gemrazer",
         "Unsummon"
       ],
-      "forge_notes": "Mutate onto a creature then bouncing the target in response may be hard to reach in Forge's puzzle mode; use an interventional fork if needed."
+      "forge_notes": "Mutate onto a creature then bouncing the target in response may be hard to reach in Forge's puzzle mode; use an interventional fork if needed.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A spell cast for its mutate cost resolves by merging with its target: the effect half holds the merged flag on the permanent it merged into.",
+        "near_miss": "A spell cast for its mutate cost resolves without merging (its target illegal) and enters as an ordinary creature: no merged flag.",
+        "params": {
+          "event": "state_flag_change",
+          "flag": "merged",
+          "value": true,
+          "keyword": "Mutate"
+        },
+        "needs": [
+          "state_flag_change.merged"
+        ]
+      }
     },
     {
       "id": "608.3e-1",
@@ -1666,7 +1693,20 @@
         "Lithoform Engine",
         "Grizzly Bears"
       ],
-      "forge_notes": "Only the token-ness of the copy is hard to see in current records (needs_new_fields)."
+      "forge_notes": "Only the token-ness of the copy is hard to see in current records (needs_new_fields).",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A copy of a permanent spell resolves and enters the battlefield from the stack, becoming a token.",
+        "near_miss": "A permanent spell that is not a copy enters the battlefield from the stack as a card.",
+        "params": {
+          "event": "zone_change",
+          "from_zone": "Stack",
+          "to_zone": "Battlefield",
+          "subject_is_copy": true
+        },
+        "needs": []
+      }
     },
     {
       "id": "608.3g-1",
@@ -1725,7 +1765,17 @@
         "Mountain",
         "Mardu Scout"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "The delayed triggered ability a dash spell's static ability creates as the permanent enters is evaluated at its stated time and fires.",
+        "near_miss": "Such a delayed triggered ability is evaluated and does not fire.",
+        "params": {
+          "keyword": "Dash"
+        },
+        "needs": []
+      }
     }
   ]
 }

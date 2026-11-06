@@ -262,7 +262,9 @@
           "polarity": "other",
           "delta": "B's creature is a suspected Frantic Scapegoat instead of a suspected Grizzly Bears.",
           "expected": "Clone enters as a Frantic Scapegoat and its copied enters trigger resolves, suspecting the Clone: it ends suspected because of its own ability, not because the designation was copied. B's original Frantic Scapegoat is still suspected.",
-          "operation": "replace_card"
+          "operation": {
+            "unclassifiable": "not a board edit: the Frantic Scapegoat put in the Grizzly Bears' place must also hold the suspected designation, which no operation sets"
+          }
         }
       ],
       "cards": [

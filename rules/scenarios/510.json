@@ -537,7 +537,20 @@
         "Hill Giant",
         "Wall of Wood"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "A creature-dies trigger is evaluated and fires in the combat damage step, after the state-based check put a creature into the graveyard.",
+        "near_miss": "The same kind of trigger is evaluated in the combat damage step and does not fire (no creature died).",
+        "params": {
+          "mode": "ChangesZone",
+          "origin": "Battlefield",
+          "destination": "Graveyard",
+          "step": "combat_damage"
+        },
+        "needs": []
+      }
     },
     {
       "id": "510.4-1",

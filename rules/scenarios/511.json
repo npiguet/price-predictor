@@ -60,7 +60,18 @@
         "Grizzly Bears",
         "Cinder Wall"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "trigger_mode",
+        "record_kind": "trigger",
+        "outcome": "An 'at end of combat' trigger (Mode Phase, Phase EndCombat) is evaluated and fires as the end of combat step begins.",
+        "near_miss": "An end-of-combat trigger is evaluated and does not fire (its condition is unmet).",
+        "params": {
+          "mode": "Phase",
+          "phase": "EndCombat"
+        },
+        "needs": []
+      }
     },
     {
       "id": "511.2-2",
