@@ -834,6 +834,14 @@ NOT_DIRECTED = {
     "702.62d": "the suspend cast happens inside a resolution, never at a priority stop, so "
                "no playability record exists for it",
 }
+#: Left out of this collection only: they qualified on the recount after the T030
+#: detectors (2026-11-06), when the list of 70 was fixed for production; by the user's
+#: rule, more than five newcomers wait for a later collection rather than delay this one
+#: by a registration each.
+DEFERRED_DIRECTED = dict.fromkeys((
+    "104.4a", "104.4c", "115.7a", "701.10c", "701.11c", "701.40c", "701.40d",
+    "702.19c", "702.19e", "702.19f", "702.131a", "702.170c", "712.4c", "712.16",
+), "qualified after the production list was fixed; registered for a later collection")
 FIRES, DOES_NOT_FIRE = "fires", "does_not_fire"
 
 
@@ -899,10 +907,11 @@ def forkable_variants(scenarios, lacking):
 def directed_rules(counts, by_rule):
     """The rules FR-014b enables, in unit order: ``rule -> {counts, lacking,
     variants, by_counts}``; ``by_counts`` is False for a rule listed only as
-    one of ``ALWAYS_DIRECTED``. A rule of ``NOT_DIRECTED`` is never listed."""
+    one of ``ALWAYS_DIRECTED``. A rule of ``NOT_DIRECTED`` or ``DEFERRED_DIRECTED`` is
+    never listed."""
     out = {}
     for rule, scenarios in by_rule.items():
-        if rule in NOT_DIRECTED:
+        if rule in NOT_DIRECTED or rule in DEFERRED_DIRECTED:
             continue
         found = rule_counts(counts, rule, scenarios)
         lacking = lacking_polarities(*found) if found is not None else set()
@@ -968,7 +977,7 @@ def cmd_directed_rules(args):
     one_sided = sum(DOES_NOT_FIRE in row["lacking"] for row in chosen.values())
     for rule, reason in ALWAYS_DIRECTED.items():
         print(f"always listed {rule}: {reason}")
-    for rule, reason in NOT_DIRECTED.items():
+    for rule, reason in {**NOT_DIRECTED, **DEFERRED_DIRECTED}.items():
         print(f"left out {rule}: {reason}")
     print(f"{len(chosen)} rules ({rare} rare, {one_sided} one-sided, "
           f"{sum(not row['by_counts'] for row in chosen.values())} always), {len(cards)} wording "

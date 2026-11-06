@@ -41,7 +41,7 @@ Writes `rules/directed-fork-rules.txt` (FR-014b: the rules of `ALWAYS_DIRECTED`,
 each printed with its reason, and every rule with fewer than 100 `fires`
 records or no `does_not_fire` record that has a forkable variant; a rule the counts omit counts as
 zero when one of its scenarios declares a detector that tags gen-2 records; never a rule of
-`NOT_DIRECTED`, 104.2a, 500.11, 701.12d and 702.62d, each printed with its reason) and
+`NOT_DIRECTED`, 104.2a, 500.11, 701.12d and 702.62d, or of `DEFERRED_DIRECTED`, rules that qualified after the list was fixed for the production collection, each printed with its reason) and
 `rules/coverage-wording-cards.txt` (FR-038a: every card those rules' scenarios name, a back face or
 meld result under its front card's converted name). Prints, per rule, its forkable variants, those of
 the polarity its counts lack first and starred.
