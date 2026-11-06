@@ -275,6 +275,21 @@ def test_a_rule_left_out_is_never_listed_and_its_reason_is_printed(
     assert out.splitlines()[-1].startswith("5 rules")
 
 
+def test_a_rule_always_listed_is_listed_whatever_its_counts_without_its_cards(
+        catalogue, capsys, monkeypatch):
+    monkeypatch.setattr(rc, "ALWAYS_DIRECTED", {"704.5f": "always", "500.1": "kept by hand"})
+    listed, cards, out = _run(catalogue, capsys)
+    # 500.1 is common and two-sided; its card joins no wording list, as 704.5f's does not.
+    assert listed == ["121.4", "400.6", "500.1", "500.3", "702.9a", "702.10b", "704.5f"]
+    assert "common card" not in cards
+    assert "always listed 500.1: kept by hand" in out
+
+
+def test_the_rules_always_listed_are_704_5f_and_702_98a_each_with_a_reason():
+    assert sorted(rc.ALWAYS_DIRECTED) == ["702.98a", "704.5f"]
+    assert all(reason.strip() for reason in rc.ALWAYS_DIRECTED.values())
+
+
 def test_the_rules_left_out_are_the_four_the_user_dropped_each_with_a_reason():
     assert sorted(rc.NOT_DIRECTED) == ["104.2a", "500.11", "701.12d", "702.62d"]
     assert all(reason.strip() for reason in rc.NOT_DIRECTED.values())

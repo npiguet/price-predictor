@@ -652,7 +652,8 @@ and that the reporting half never enters the control score.
   exists only for rules enabled for directed forks. It decides only when to fork: the fork's
   records are tagged afterwards by the Python detectors like any other record, so counts, budgets,
   the mask and rule tests read detector tags alone. The JVM makes no call to Python during a game.
-- **FR-014b**: Board preconditions MUST be registered for 704.5f and for every rule that gen-2's
+- **FR-014b**: Board preconditions MUST be registered for 704.5f and 702.98a, listed whatever their
+  counts (702.98a's few `does_not_fire` records being one creature in one game), and for every rule that gen-2's
   per-rule counts (`output/effects/rule-counts-gen2.json`) show with fewer than 100 `fires` records
   over all sources, or with no `does_not_fire` record, and that has a non-base variant classified
   into an operation after the rerun of FR-003, except 104.2a, 500.11, 701.12d and 702.62d, whose

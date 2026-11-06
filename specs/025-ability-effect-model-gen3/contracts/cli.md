@@ -37,7 +37,8 @@ records the baseline.
 | `--counts PATH` | required | gen-2's per-rule counts, as `rule-counts` writes them |
 | `--cards-folder DIR` | `output/cardsfolder` | the converted tree whose card names the wording list uses |
 
-Writes `rules/directed-fork-rules.txt` (FR-014b: 704.5f, and every rule with fewer than 100 `fires`
+Writes `rules/directed-fork-rules.txt` (FR-014b: the rules of `ALWAYS_DIRECTED`, 704.5f and 702.98a,
+each printed with its reason, and every rule with fewer than 100 `fires`
 records or no `does_not_fire` record that has a forkable variant; a rule the counts omit counts as
 zero when one of its scenarios declares a detector that tags gen-2 records; never a rule of
 `NOT_DIRECTED`, 104.2a, 500.11, 701.12d and 702.62d, each printed with its reason) and

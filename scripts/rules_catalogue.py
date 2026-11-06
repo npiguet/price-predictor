@@ -815,8 +815,12 @@ def cmd_status(_args):
 
 #: Fewer `fires` records than this over all sources makes a rule rare (FR-014b).
 RARE_FIRES = 100
-#: Enabled for directed forks whatever its counts (FR-014b).
-ALWAYS_DIRECTED = ("704.5f",)
+#: Enabled for directed forks whatever their counts, each for its reason (FR-014b).
+ALWAYS_DIRECTED = {
+    "704.5f": "the user's T038 decision of 2026-11-02, whatever its counts",
+    "702.98a": "its 8 does_not_fire records on gen-2 are one Dead Reveler in one game, far "
+               "below the 68 per polarity a rule test needs (the user's decision of 2026-11-06)",
+}
 #: Left out whatever their counts, each for its reason: no detector can tell
 #: their fork from its live game, so a directed fork of theirs would add no
 #: record of the side it is for (the user's decision of 2026-11-06, T096).
@@ -962,6 +966,8 @@ def cmd_directed_rules(args):
             print(f"    {mark} {scenario_id} {label} ({polarity}): {operation}")
     rare = sum(FIRES in row["lacking"] for row in chosen.values())
     one_sided = sum(DOES_NOT_FIRE in row["lacking"] for row in chosen.values())
+    for rule, reason in ALWAYS_DIRECTED.items():
+        print(f"always listed {rule}: {reason}")
     for rule, reason in NOT_DIRECTED.items():
         print(f"left out {rule}: {reason}")
     print(f"{len(chosen)} rules ({rare} rare, {one_sided} one-sided, "
