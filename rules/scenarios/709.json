@@ -15,7 +15,8 @@
     "709.5d-2: cast_instead's delta named several changes loosely; restated it as the one fact varied (how the Room reaches the battlefield) with the mana it uses.",
     "709.5f-1: in nothing_locked Locker Room is unlocked, so its combat-damage draw trigger fires and A would draw from an empty library; added Island to A's library and the draw to the expected.",
     "709.5g-1: nothing_unlocked changed two facts (the Room's state and A's choice, switching to unlock); now changes only the starting state and A still chooses to lock, so no designation changes.",
-    "709.5h-1: other_door's delta reworded as the single varied fact (which door is locked) with its payment."
+    "709.5h-1: other_door's delta reworded as the single varied fact (which door is locked) with its payment.",
+    "709.5d-1 listed 709.5d, which right_half applies as much as the base; 709.5d removed (709.5d-2 covers it) and the scenario renamed 709.5h-2."
   ],
   "skipped": [
     {
@@ -789,9 +790,8 @@
       "forge_notes": "Rooms are split cards in Forge (AlternateMode:Split) whose halves each carry Types:Enchantment Room."
     },
     {
-      "id": "709.5d-1",
+      "id": "709.5h-2",
       "rules": [
-        "709.5d",
         "709.5h"
       ],
       "title": "A Room enters with the unlocked designation of the half cast",

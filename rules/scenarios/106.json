@@ -4,7 +4,8 @@
   "review": [
     "106.6-1: the creature_spell variant changed two facts (color chosen and spell cast); replaced Elite Vanguard with Raging Goblin ({R} creature) so the variant changes only the spell, with red chosen in both.",
     "106.6a-1: Healing Salve's mode was not fixed; added the gain-life mode to the decisions.",
-    "106.6a-1: the second_creature variant still applies the restriction (only the spell differs), so its polarity changed from does_not_fire to other; unrestricted_source stays the does_not_fire variant."
+    "106.6a-1: the second_creature variant still applies the restriction (only the spell differs), so its polarity changed from does_not_fire to other; unrestricted_source stays the does_not_fire variant.",
+    "106.12a-1 listed 106.12, a definition no scenario needs; tapped_for_green taps for mana, so its does_not_fire label held for 106.12a only. 106.12 removed."
   ],
   "skipped": [
     {
@@ -561,7 +562,6 @@
     {
       "id": "106.12a-1",
       "rules": [
-        "106.12",
         "106.12a"
       ],
       "title": "A trigger for permanents tapped for a type of mana fires only when that mana is produced by tapping",

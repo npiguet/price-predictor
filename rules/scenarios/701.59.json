@@ -3,15 +3,15 @@
   "verified": true,
   "review": [
     "701.59a-1: Cryptex's ability is a mana ability, which does not use the stack, yet the decisions had both players pass for it to resolve; rewrote that decision so it resolves at once and fixed the mana color.",
-    "triage: rules/triage/701.59.jsonl was missing, so validate never checked this file; wrote it."
+    "triage: rules/triage/701.59.jsonl was missing, so validate never checked this file; wrote it.",
+    "701.59a-1 listed 701.59b, for which the graveyard totalling too little (its does_not_fire variant) is the rule's outcome; 701.59b moved to 701.59b-1 with that base."
   ],
   "skipped": [],
   "scenarios": [
     {
       "id": "701.59a-1",
       "rules": [
-        "701.59a",
-        "701.59b"
+        "701.59a"
       ],
       "title": "Collect evidence needs graveyard cards of total mana value N or greater",
       "record_kind": "playability",
@@ -81,6 +81,83 @@
         "params": {
           "bit": "affordable",
           "fires_when": true,
+          "cost_part": "CollectEvidence"
+        },
+        "needs": []
+      }
+    },
+    {
+      "id": "701.59b-1",
+      "rules": [
+        "701.59b"
+      ],
+      "title": "A graveyard totalling less than N mana value cannot collect evidence N",
+      "record_kind": "playability",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Cryptex"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {
+          "A": [
+            "Grizzly Bears",
+            "Mountain"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "Cryptex is untapped. Grizzly Bears has mana value 2 and Mountain 0, so the graveyard totals 2, below 3."
+      },
+      "decisions": [
+        "A tries to activate Cryptex ({T}, collect evidence 3)."
+      ],
+      "variants": [
+        {
+          "label": "total_too_low",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The activation is not legal: the cards in A's graveyard have total mana value 2, below 3, so A cannot choose to collect evidence. Cryptex stays untapped with no counter and the graveyard is unchanged."
+        },
+        {
+          "label": "total_enough",
+          "polarity": "does_not_fire",
+          "delta": "A's graveyard holds Grizzly Bears and Shock (total mana value 3) instead of Grizzly Bears and Mountain.",
+          "expected": "The activation is legal: exiling Grizzly Bears and Shock (total mana value 3) pays the collect evidence 3 cost. Both cards move from A's graveyard to exile, Cryptex taps, A adds one mana of any color and Cryptex gets one unlock counter.",
+          "operation": "move_card"
+        },
+        {
+          "label": "total_exceeds",
+          "polarity": "does_not_fire",
+          "delta": "A's graveyard holds Grizzly Bears and Hill Giant (total mana value 6) instead of Grizzly Bears and Mountain.",
+          "expected": "The activation is legal: the exiled cards have total mana value 6, which is 3 or greater, so exceeding N is allowed. Grizzly Bears and Hill Giant move to exile, Cryptex taps and gets one unlock counter.",
+          "operation": "move_card"
+        }
+      ],
+      "cards": [
+        "Cryptex",
+        "Grizzly Bears",
+        "Shock",
+        "Mountain",
+        "Hill Giant"
+      ],
+      "forge_notes": "Cryptex's cost is the CollectEvidence<3> cost part. Hill Giant appears only in the total_exceeds variant's graveyard.",
+      "detector": {
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A candidate whose cost has a collect evidence part is unaffordable because the controller's graveyard totals too little mana value.",
+        "near_miss": "A candidate whose cost has a collect evidence part is affordable.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": false,
           "cost_part": "CollectEvidence"
         },
         "needs": []

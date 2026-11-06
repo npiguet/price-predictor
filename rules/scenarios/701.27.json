@@ -2,7 +2,8 @@
   "unit": "701.27",
   "verified": true,
   "review": [
-    "skipped 701.27d: the reason claimed every non-self transform selects Humans; Waxing Moon, the Incubator transformers and The Golden-Gear Colossus also exist, reworded the reason to name them (none reaches an instant or sorcery back face)"
+    "skipped 701.27d: the reason claimed every non-self transform selects Humans; Waxing Moon, the Incubator transformers and The Golden-Gear Colossus also exist, reworded the reason to name them (none reaches an instant or sorcery back face)",
+    "701.27a-1 listed 701.27c, whose outcome (nothing happens to a permanent that is not double-faced) is its does_not_fire variant; 701.27c moved to 701.27c-1 with Elite Vanguard as the base."
   ],
   "skipped": [
     {
@@ -14,8 +15,7 @@
     {
       "id": "701.27a-1",
       "rules": [
-        "701.27a",
-        "701.27c"
+        "701.27a"
       ],
       "title": "Transforming turns a double-faced permanent over; a permanent that is not double-faced is unchanged",
       "record_kind": "resolution",
@@ -84,6 +84,79 @@
         "needs": [
           "face_change"
         ]
+      }
+    },
+    {
+      "id": "701.27c-1",
+      "rules": [
+        "701.27c"
+      ],
+      "title": "Transforming a permanent that is not double-faced does nothing",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            {
+              "card": "Elite Vanguard",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Moonmist"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Elite Vanguard is a 2/1 white Human Soldier with no other face. Delver of Secrets appears only in the double_faced variant."
+      },
+      "decisions": [
+        "A casts Moonmist, tapping both Forests.",
+        "Both players pass; Moonmist resolves, transforming all Humans."
+      ],
+      "variants": [
+        {
+          "label": "not_double_faced",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Elite Vanguard stays a 2/1 white Human Soldier; it has no other face to show. Moonmist is in A's graveyard."
+        },
+        {
+          "label": "double_faced",
+          "polarity": "does_not_fire",
+          "delta": "A controls Delver of Secrets (a Human Wizard, double-faced) instead of Elite Vanguard.",
+          "expected": "Delver of Secrets turns over and is Insectile Aberration, a blue 3/2 Human Insect with flying. Moonmist is in A's graveyard.",
+          "operation": "replace_card"
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Delver of Secrets",
+        "Moonmist",
+        "Elite Vanguard"
+      ],
+      "forge_notes": "Moonmist selects Humans with Defined$ Valid Creature.Human; the non-double-faced Human is simply skipped by SetState.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A transform resolution turns nothing over (no face_change event): the Human it would transform is not double-faced.",
+        "near_miss": "A transform resolution that turns a double-faced permanent over (a face_change event).",
+        "params": {
+          "event": "face_change",
+          "api": "SetState",
+          "absent": true
+        },
+        "needs": []
       }
     },
     {

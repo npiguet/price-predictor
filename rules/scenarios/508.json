@@ -11,7 +11,8 @@
     "508.7c-1: notes said Portal Mage was already cast while it sat in hand with the Islands untapped; the declaration and cast are now decisions and the notes are empty.",
     "508.8-1: one_attacker also added a block by Hill Giant, two facts and not needed for False Orders' target; delta is now only the declaration.",
     "skipped 508.4a: the skip claimed no reachable case, but ninjutsu enters attacking the returned creature's planeswalker (702.49c), so removing that planeswalker in response reaches it. Added scenario 508.4a-1, dropped the skip, and reworded the 508.4b skip reason.",
-    "triage 508.1f: record_kinds was resolution, but tapping on declaration happens in no resolution; changed to combat. triage 508.8: added playability, which 508.8-1 uses."
+    "triage 508.1f: record_kinds was resolution, but tapping on declaration happens in no resolution; changed to combat. triage 508.8: added playability, which 508.8-1 uses.",
+    "508.3a-1 listed 508.4, whose outcome (the token entering attacking never attacked) is its does_not_fire base; 508.4 removed, 508.4a-1 covers it."
   ],
   "skipped": [
     {
@@ -817,8 +818,7 @@
     {
       "id": "508.3a-1",
       "rules": [
-        "508.3a",
-        "508.4"
+        "508.3a"
       ],
       "title": "A creature put onto the battlefield attacking never attacked, so attack triggers do not fire for it",
       "record_kind": "trigger",

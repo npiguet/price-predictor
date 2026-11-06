@@ -2,7 +2,8 @@
   "unit": "702.26",
   "verified": true,
   "review": [
-    "702.26p-1: one_instance was labelled fires although it is the identical-outcome control for a redundancy rule; relabelled it other and noted in forge_notes that 702.26p genuinely has no does_not_fire branch."
+    "702.26p-1: one_instance was labelled fires although it is the identical-outcome control for a redundancy rule; relabelled it other and noted in forge_notes that 702.26p genuinely has no does_not_fire branch.",
+    "702.26a-1 listed 702.26c, which concerns only a permanent phasing in, so the phases_out base was no fires side of it; 702.26c moved to 702.26c-1."
   ],
   "skipped": [
     {
@@ -14,8 +15,7 @@
     {
       "id": "702.26a-1",
       "rules": [
-        "702.26a",
-        "702.26c"
+        "702.26a"
       ],
       "title": "Phasing happens in the controller's untap step: phased-in permanents with phasing phase out and phased-out ones phase in",
       "record_kind": "turn_action",
@@ -94,6 +94,73 @@
         "needs": [
           "turn_action"
         ]
+      }
+    },
+    {
+      "id": "702.26c-1",
+      "rules": [
+        "702.26c"
+      ],
+      "title": "A permanent that phases in is treated as existing again",
+      "record_kind": "turn_action",
+      "setup": {
+        "active": "B",
+        "step": "end",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            {
+              "card": "Sandbar Crocodile",
+              "summoning_sick": false
+            }
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Sandbar Crocodile (6/5, phasing) is phased out: it phased out under A's control in A's previous untap step. B's end step; the next turn is A's."
+      },
+      "decisions": [
+        "Both players pass in B's end step; the turn passes to A.",
+        "A's untap step begins: A's phasing permanents phase out and A's phased-out permanents phase in simultaneously, before untapping. No player receives priority during the untap step."
+      ],
+      "variants": [
+        {
+          "label": "phases_in",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Sandbar Crocodile phases in and is treated as existing again: A controls a 6/5 creature and it does not phase out again this untap step."
+        },
+        {
+          "label": "phases_out",
+          "polarity": "other",
+          "delta": "Sandbar Crocodile starts phased in.",
+          "expected": "Nothing phases in: Sandbar Crocodile phases out. It stays on the battlefield (no zone change) but is treated as not existing; A controls no creatures this turn.",
+          "operation": {
+            "unclassifiable": "not a board edit: phased-out status of a permanent, which no operation sets."
+          }
+        }
+      ],
+      "cards": [
+        "Sandbar Crocodile",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "Phasing in has no near miss: a phased-out permanent with phasing always phases in during its controller's untap step.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "turn_action",
+        "outcome": "In a player's untap step a phased-out permanent phases in: the phasing turn_action record holds a phased event with out false.",
+        "near_miss": "None counted: outcome_event counts one only with an api or keyword.",
+        "params": {
+          "event": "phased",
+          "out": false
+        },
+        "needs": []
       }
     },
     {

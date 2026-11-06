@@ -2,15 +2,15 @@
   "unit": "702.155",
   "verified": true,
   "review": [
-    "702.155a-1: choose_three said chapter III 'exiles nothing'; under 603.3d a chapter ability with no legal target is removed from the stack, expected rewritten and Forge's up-to-one targeting noted in forge_notes."
+    "702.155a-1: choose_three said chapter III 'exiles nothing'; under 603.3d a chapter ability with no legal target is removed from the stack, expected rewritten and Forge's up-to-one targeting noted in forge_notes.",
+    "702.155a-1 listed 702.155b, which applies in every variant (the Saga enters with the chosen number), so choose_one was no near miss of it; 702.155b moved to 702.155b-1."
   ],
   "skipped": [],
   "scenarios": [
     {
       "id": "702.155a-1",
       "rules": [
-        "702.155a",
-        "702.155b"
+        "702.155a"
       ],
       "title": "A read ahead Saga enters with the chosen number of lore counters and only that chapter triggers",
       "record_kind": "trigger",
@@ -93,6 +93,90 @@
         "near_miss": "A chapter ability evaluated and not fired: its chapter number is not the one the lore counters reached, as with a skipped chapter.",
         "params": {
           "keyword": "Chapter"
+        },
+        "needs": []
+      }
+    },
+    {
+      "id": "702.155b-1",
+      "rules": [
+        "702.155b"
+      ],
+      "title": "A read ahead Saga enters with the chosen number of lore counters",
+      "record_kind": "rewrite",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Island",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Founding the Third Path"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "B": [
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island",
+            "Island"
+          ]
+        },
+        "exile": {},
+        "notes": "Founding the Third Path has read ahead and three chapters: I casts a free instant or sorcery with mana value 1 or 2 from hand, II makes target player mill four cards, III exiles and copies an instant or sorcery from A's graveyard. A's hand is empty besides the Saga and A's graveyard is empty. B's library holds 10 cards."
+      },
+      "decisions": [
+        "A casts Founding the Third Path, tapping two Islands. It resolves.",
+        "As it enters, A chooses 2 for read ahead; the Saga enters with 2 lore counters.",
+        "If chapter II triggers, A targets player B with it. Both players pass priority until the stack is empty."
+      ],
+      "variants": [
+        {
+          "label": "choose_two",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The Saga enters with 2 lore counters. The Saga enters with 2 lore counters. Chapter II triggers; chapter I does not. Chapter II resolves and B mills four cards: B's library holds 6 cards. The Saga stays on the battlefield."
+        },
+        {
+          "label": "choose_one",
+          "polarity": "other",
+          "delta": "A chooses 1 for read ahead.",
+          "expected": "The Saga enters with the 1 lore counter A chose. The Saga enters with 1 lore counter. Only chapter I triggers (nothing to cast, A's hand is empty). Chapter II does not trigger and B's library holds 10 cards. The Saga stays on the battlefield.",
+          "operation": {
+            "unclassifiable": "choice: read ahead chapter chosen as 1"
+          }
+        }
+      ],
+      "cards": [
+        "Island",
+        "Founding the Third Path"
+      ],
+      "forge_notes": "Read ahead is a Moved replacement (ReplacementResult$ Updated) whose PutCounter puts the chosen number of lore counters; every read ahead Saga enters through it, so the contrast is other and no near miss is expected.",
+      "detector": {
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "The read ahead replacement meets the Saga entering the battlefield and is applied, so it enters with the chosen number of lore counters.",
+        "near_miss": "The read ahead replacement meets the Saga entering and is not applied.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "battlefield",
+          "result": "updated",
+          "keyword": "Read ahead"
         },
         "needs": []
       }

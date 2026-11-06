@@ -2,17 +2,93 @@
   "unit": "701.51",
   "verified": true,
   "review": [
-    "701.51a: triage classed it legality/playability, but the instruction resolving and doing nothing without an Attraction deck is a resolution outcome; reclassified as mechanical/resolution, matching 701.51a-1."
+    "701.51a: triage classed it legality/playability, but the instruction resolving and doing nothing without an Attraction deck is a resolution outcome; reclassified as mechanical/resolution, matching 701.51a-1.",
+    "701.51a-1 listed 701.51a and 701.51b under 701.51b's polarities; for 701.51a the player without an Attraction deck is the fires side. 701.51a-1 now holds 701.51a with that base, and 701.51b-1 the original scenario."
   ],
   "skipped": [],
   "scenarios": [
     {
       "id": "701.51a-1",
       "rules": [
-        "701.51a",
+        "701.51a"
+      ],
+      "title": "A player without an Attraction deck cannot open an Attraction",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains",
+            "Plains",
+            "Plains"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Complaints Clerk"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "A plays without an Attraction deck. In the has_attraction_deck variant A's Attraction deck, top first, is Kiddie Coaster (variant A, lit 2, 3, 6), Balloon Stand (variant A, lit 2, 6); the Attraction deck is not a zone the scenario format lists."
+      },
+      "decisions": [
+        "A casts Complaints Clerk, tapping four Plains.",
+        "Both players pass; Complaints Clerk resolves and its enters trigger goes on the stack.",
+        "Both players pass; the trigger resolves: A opens an Attraction."
+      ],
+      "variants": [
+        {
+          "label": "no_attraction_deck",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A cannot open an Attraction: nothing enters the battlefield other than Complaints Clerk, which still resolves and enters."
+        },
+        {
+          "label": "has_attraction_deck",
+          "polarity": "does_not_fire",
+          "delta": "A plays with an Attraction deck: Kiddie Coaster on top, then Balloon Stand.",
+          "expected": "Kiddie Coaster, the top card of A's Attraction deck, moves to the battlefield face up under A's control. Balloon Stand stays in the Attraction deck. Complaints Clerk is on the battlefield.",
+          "operation": {
+            "unclassifiable": "not a board edit: the Attraction deck is not a zone any operation edits"
+          }
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Complaints Clerk",
+        "Kiddie Coaster",
+        "Balloon Stand"
+      ],
+      "forge_notes": "Attraction decks need a deck file with an Attractions section; the Attraction variant (lit numbers) is chosen by the deck list.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An OpenAttraction resolution puts nothing onto the battlefield: the player has no Attraction deck.",
+        "near_miss": "An OpenAttraction resolution puts an Attraction onto the battlefield.",
+        "params": {
+          "event": "zone_change",
+          "to_zone": "battlefield",
+          "api": "OpenAttraction",
+          "absent": true
+        },
+        "needs": []
+      }
+    },
+    {
+      "id": "701.51b-1",
+      "rules": [
         "701.51b"
       ],
-      "title": "Opening an Attraction puts the top Attraction card face up onto the battlefield, only with an Attraction deck",
+      "title": "Opening an Attraction puts the top Attraction card face up onto the battlefield",
       "record_kind": "resolution",
       "setup": {
         "active": "A",

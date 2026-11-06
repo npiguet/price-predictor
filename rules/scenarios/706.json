@@ -4,14 +4,93 @@
   "review": [
     "706.3c-1: the roll-again choice was fixed only after the first roll, leaving the 16, 16, 3 variant's second choice open; the decision now fixes rolling again after every 15-20 result.",
     "706.3a-1: the roll 1 variant's delta also named 'A does not search', a consequence rather than a second fact; removed it.",
-    "706.6-1: with Berserker's Frenzy the lower roll is always the ignored one, so the 'kept roll too low' variant flipped Steel Squirrel's 5-or-higher condition rather than 706.6, and no single-fact change could stop the ignoring; rebuilt it around Wyll, Blade of Frontiers (its presence toggles the ignore) with Complaints Clerk's roll-a-1 trigger as observer, so ignoring the 1 is what suppresses the token."
+    "706.6-1: with Berserker's Frenzy the lower roll is always the ignored one, so the 'kept roll too low' variant flipped Steel Squirrel's 5-or-higher condition rather than 706.6, and no single-fact change could stop the ignoring; rebuilt it around Wyll, Blade of Frontiers (its presence toggles the ignore) with Complaints Clerk's roll-a-1 trigger as observer, so ignoring the 1 is what suppresses the token.",
+    "706.2-1 listed 706.2 and 706.3a under 706.3a's labels (whether the final result reaches 15+), which 706.2 applies in every variant; that scenario is now 706.3a-2 and 706.2-1 holds 706.2 alone."
   ],
   "skipped": [],
   "scenarios": [
     {
       "id": "706.2-1",
       "rules": [
-        "706.2",
+        "706.2"
+      ],
+      "title": "The final die result is the natural result plus modifiers",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest",
+            "Forest"
+          ],
+          "B": []
+        },
+        "hand": {
+          "A": [
+            "Song of Inspiration"
+          ]
+        },
+        "graveyard": {
+          "A": [
+            "Grizzly Bears",
+            "Centaur Courser"
+          ]
+        },
+        "library": {},
+        "exile": {},
+        "notes": "The natural d20 result is fixed by the scenario, not random."
+      },
+      "decisions": [
+        "A casts Song of Inspiration targeting Grizzly Bears in A's graveyard, tapping five Forests.",
+        "Both players pass; Song of Inspiration resolves.",
+        "A rolls a d20; the natural result is 12."
+      ],
+      "variants": [
+        {
+          "label": "total 14",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "The modifier is added: Final result is 12 + 2 (Grizzly Bears' mana value) = 14, in the 1-14 range. Grizzly Bears moves to A's hand. A gains no life (20). Song of Inspiration moves to A's graveyard."
+        },
+        {
+          "label": "natural 13",
+          "polarity": "other",
+          "delta": "The natural result is 13 instead of 12.",
+          "expected": "The modifier is still added: Final result is 13 + 2 = 15, in the 15+ range. Grizzly Bears moves to A's hand and A gains 2 life (22).",
+          "operation": {
+            "unclassifiable": "not a board edit: a coin or die result is a game outcome no operation sets"
+          }
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Song of Inspiration",
+        "Grizzly Bears",
+        "Centaur Courser"
+      ],
+      "forge_notes": "Every die roll's final result is computed this way, so the contrast is other and the detector counts the fires side only. Modifier$ X is applied after the natural result; the dice_rolled note records natural and final values per die.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A resolution rolls a die (a dice_rolled event), whose final result is the natural result plus every modifier.",
+        "near_miss": "None counted: every roll has a final result, and outcome_event counts a near miss only with an api or keyword.",
+        "params": {
+          "event": "dice_rolled"
+        },
+        "needs": []
+      }
+    },
+    {
+      "id": "706.3a-2",
+      "rules": [
         "706.3a"
       ],
       "title": "The final die result is the natural result plus modifiers, and the range containing it picks the effect",

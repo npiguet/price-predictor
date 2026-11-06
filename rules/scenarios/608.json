@@ -7,7 +7,8 @@
     "608.2h-1: target-leaves was labelled does_not_fire, but it is a 608.2b fizzle in which 608.2h never applies; relabelled it other and noted in forge_notes that 608.2h has no does_not_fire branch.",
     "608.2j-2: was a Doom Blade targeting-legality check (601.2c/115, not an effect, so not 608.2j); rewrote it as a Hellfire resolution, the rule's own 'destroy all nonblack creatures' case, with Edgewalker spared versus Grizzly Bears destroyed.",
     "608.2k: the skip claimed only exotic cards reach it and that it adds nothing beyond 608.2h; both false (a Theros god losing devotion while blocked by Wall of Tears is the rule's own example). Removed the skip and added 608.2k-1.",
-    "608.2p: the skip claimed Forge has no 'when an ability resolves' trigger; Forge has Mode$ AbilityResolves (Narci, Fable Singer; Tom Bombadil; Tyvar the Bellicose). Removed the skip and added 608.2p-1 with Narci and History of Benalia."
+    "608.2p: the skip claimed Forge has no 'when an ability resolves' trigger; Forge has Mode$ AbilityResolves (Narci, Fable Singer; Tom Bombadil; Tyvar the Bellicose). Removed the skip and added 608.2p-1 with Narci and History of Benalia.",
+    "608.3b-1 listed 608.3c, for which the Aura entering attached (its does_not_fire base) is the rule's outcome; 608.3c moved to 608.3c-1 with the polarities flipped."
   ],
   "skipped": [
     {
@@ -1228,8 +1229,7 @@
     {
       "id": "608.3b-1",
       "rules": [
-        "608.3b",
-        "608.3c"
+        "608.3b"
       ],
       "title": "An Aura spell enters attached to its target, or goes to the graveyard if the target is illegal",
       "record_kind": "resolution",
@@ -1303,6 +1303,85 @@
             "resolved"
           ],
           "targeted": true
+        },
+        "needs": []
+      }
+    },
+    {
+      "id": "608.3c-1",
+      "rules": [
+        "608.3c"
+      ],
+      "title": "An Aura spell enters the battlefield attached to the object it targeted",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Plains",
+            "Plains"
+          ],
+          "B": [
+            "Grizzly Bears",
+            "Island"
+          ]
+        },
+        "hand": {
+          "A": [
+            "Pacifism"
+          ],
+          "B": [
+            "Unsummon"
+          ]
+        },
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A casts Pacifism targeting Grizzly Bears, tapping both Plains.",
+        "B passes priority; A passes priority; Pacifism resolves."
+      ],
+      "variants": [
+        {
+          "label": "base",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Pacifism enters the battlefield under A's control attached to Grizzly Bears; Grizzly Bears can't attack or block."
+        },
+        {
+          "label": "target-leaves",
+          "polarity": "does_not_fire",
+          "delta": "B responds by casting Unsummon on Grizzly Bears, tapping Island.",
+          "expected": "Grizzly Bears is in B's hand; Pacifism has an illegal target, does not resolve and is put into A's graveyard; it never enters the battlefield.",
+          "operation": {
+            "unclassifiable": "choice: B responds with Unsummon, a different spell cast."
+          }
+        }
+      ],
+      "cards": [
+        "Plains",
+        "Island",
+        "Grizzly Bears",
+        "Pacifism",
+        "Unsummon"
+      ],
+      "forge_notes": "",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "An Aura spell resolves and the Aura enters attached: an attached event whose subject is the resolving Aura, on a card printing enchant.",
+        "near_miss": "A resolution acting through an Aura card that attaches the Aura to nothing; an Aura spell whose target is gone fizzles and writes no effect half.",
+        "params": {
+          "event": "attached",
+          "source_keyword": "Enchant",
+          "subject_is_source": true
         },
         "needs": []
       }

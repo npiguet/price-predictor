@@ -2,15 +2,15 @@
   "unit": "701.30",
   "verified": true,
   "review": [
-    "triage 701.30b: reclassified from decision to mechanical (clashing with an opponent makes that opponent clash too, observable as B's reveal and library move); added it to 701.30a-1, whose b_bottom variant shows it"
+    "triage 701.30b: reclassified from decision to mechanical (clashing with an opponent makes that opponent clash too, observable as B's reveal and library move); added it to 701.30a-1, whose b_bottom variant shows it",
+    "701.30a-1 listed 701.30b, which applies in every variant (both players clash), so a_top was no near miss of it; 701.30b moved to 701.30b-1."
   ],
   "skipped": [],
   "scenarios": [
     {
       "id": "701.30a-1",
       "rules": [
-        "701.30a",
-        "701.30b"
+        "701.30a"
       ],
       "title": "A clashing player reveals the top card of their library and may put it on the bottom",
       "record_kind": "resolution",
@@ -104,6 +104,95 @@
           "from_zone": "library",
           "to_zone": "library",
           "api": "Clash"
+        },
+        "needs": []
+      }
+    },
+    {
+      "id": "701.30b-1",
+      "rules": [
+        "701.30b"
+      ],
+      "title": "Clashing with an opponent makes both players clash",
+      "record_kind": "resolution",
+      "setup": {
+        "active": "A",
+        "step": "main1",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Forest",
+            "Forest",
+            {
+              "card": "Grizzly Bears",
+              "summoning_sick": false
+            }
+          ]
+        },
+        "hand": {
+          "A": [
+            "Fistful of Force"
+          ]
+        },
+        "graveyard": {},
+        "library": {
+          "A": [
+            "Hill Giant",
+            "Plains",
+            "Forest"
+          ],
+          "B": [
+            "Island",
+            "Mountain",
+            "Swamp"
+          ]
+        },
+        "exile": {},
+        "notes": "Library lists are ordered top first."
+      },
+      "decisions": [
+        "A casts Fistful of Force targeting Grizzly Bears, tapping both Forests.",
+        "Both players pass; Fistful of Force resolves and A clashes with B.",
+        "Both players reveal their top card (A reveals Hill Giant, B reveals Island). A decides first: A puts Hill Giant on the bottom. B leaves Island on top."
+      ],
+      "variants": [
+        {
+          "label": "both_clash",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "A and B both reveal their top card and choose: A's library from the top is Plains, Forest, Hill Giant. B's library from the top is Island, Mountain, Swamp."
+        },
+        {
+          "label": "b_bottom",
+          "polarity": "other",
+          "delta": "B also puts Island on the bottom.",
+          "expected": "Both players still clash; only B's choice differs. A's library from the top is Plains, Forest, Hill Giant. B's library from the top is Mountain, Swamp, Island.",
+          "operation": {
+            "unclassifiable": "choice: B bottoms its revealed card"
+          }
+        }
+      ],
+      "cards": [
+        "Forest",
+        "Grizzly Bears",
+        "Fistful of Force",
+        "Hill Giant",
+        "Plains",
+        "Island",
+        "Mountain",
+        "Swamp"
+      ],
+      "forge_notes": "Every clash card clashes with an opponent, so no board shows the rule not applying: the contrast is other, and the detector counts the fires side only.",
+      "detector": {
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A clash with an opponent resolves (a clash_resolved event): both players revealed and chose.",
+        "near_miss": "None counted: a clash is always with an opponent, and outcome_event counts a near miss only with an api or keyword.",
+        "params": {
+          "event": "clash_resolved"
         },
         "needs": []
       }

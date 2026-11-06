@@ -2,7 +2,8 @@
   "unit": "715",
   "verified": true,
   "review": [
-    "715.3a-1: the does_not_fire variant was the one-Mountain Stomp, which tests mana rather than the rule; the contrast 715.3a decides is the normal creature cast, so normal_cast is now does_not_fire and stomp_one_mana is other."
+    "715.3a-1: the does_not_fire variant was the one-Mountain Stomp, which tests mana rather than the rule; the contrast 715.3a decides is the normal creature cast, so normal_cast is now does_not_fire and stomp_one_mana is other.",
+    "715.3b-1 listed 715.4, whose case (cast as a creature) is its does_not_fire variant; 715.4 removed, 715.4-1 covers it."
   ],
   "skipped": [
     {
@@ -77,8 +78,7 @@
     {
       "id": "715.3b-1",
       "rules": [
-        "715.3b",
-        "715.4"
+        "715.3b"
       ],
       "title": "On the stack an Adventure has only Adventure characteristics; otherwise the card is a creature",
       "record_kind": "playability",
