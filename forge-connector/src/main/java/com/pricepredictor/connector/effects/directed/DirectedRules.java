@@ -66,6 +66,7 @@ import com.pricepredictor.connector.effects.directed.rules.Transfigure;
 import com.pricepredictor.connector.effects.directed.rules.Transmute;
 import com.pricepredictor.connector.effects.directed.rules.TypeSettingAura;
 import com.pricepredictor.connector.effects.directed.rules.Unearth;
+import com.pricepredictor.connector.effects.directed.rules.UnleashCantBlock;
 import com.pricepredictor.connector.effects.directed.rules.UnmeldableStay;
 import com.pricepredictor.connector.effects.directed.rules.UnturnableFaceDown;
 import com.pricepredictor.connector.effects.directed.rules.VanishingInstances;
@@ -150,6 +151,7 @@ public final class DirectedRules {
             Transfigure.rule(),
             Unearth.rule(),
             Cascade.rule(),
+            UnleashCantBlock.rule(),
             FusedCost.rule(),
             BestowIllegalTarget.rule(),
             Dethrone.rule(),

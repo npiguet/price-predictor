@@ -17,6 +17,7 @@ import forge.game.card.CardFactory;
 import forge.game.card.CounterEnumType;
 import forge.game.card.token.TokenInfo;
 import forge.game.combat.Combat;
+import forge.game.combat.CombatUtil;
 import forge.game.keyword.Keyword;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
@@ -1930,6 +1931,48 @@ class RegisteredRulesTest {
         List<Card> library = List.copyOf(twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Library));
         assertEquals(List.of("Mountain", Cascade.WURM, "Hill Giant"), library.stream().map(Card::getName).toList());
         assertOnlyChanged(twin, board.subject, library.get(1));
+    }
+
+    // ── 702.98a, unleash can't block: counters ──────────────────────────
+
+    /** Grizzly Bears attacks B, who controls {@code blocker} with {@code counters} +1/+1 counters; no blocker declared yet. */
+    private static Board unleashBoard(String blocker, int counters) {
+        Board board = new Board(PhaseType.COMBAT_DECLARE_BLOCKERS);
+        board.other = board.card(board.you, "Grizzly Bears");
+        board.subject = board.card(board.opponent, blocker);
+        board.subject.setCounters(CounterEnumType.P1P1, counters);
+        Combat combat = new Combat(board.you);
+        combat.addAttacker(board.other, board.opponent);
+        board.game.getPhaseHandler().setCombat(combat);
+        return board;
+    }
+
+    @Test
+    void unleashBindsTheAttackerAndAnUnleashedCreatureWithACounter() {
+        Board board = unleashBoard("Rakdos Cackler", 1);
+        Binding binding = UnleashCantBlock.bind(board.game).orElseThrow();
+        assertEquals(board.other, binding.card("attacker"));
+        assertEquals(board.subject, binding.card("blocker"));
+    }
+
+    @Test
+    void unleashBindsNothingWithoutTheCounterOrTheKeyword() {
+        assertTrue(UnleashCantBlock.bind(unleashBoard("Rakdos Cackler", 0).game).isEmpty());
+        assertTrue(UnleashCantBlock.bind(unleashBoard("Runeclaw Bear", 1).game).isEmpty());
+    }
+
+    @Test
+    void unleashForksTheCreatureWithoutItsCounter() {
+        Board board = unleashBoard("Rakdos Cackler", 1);
+        Twin twin = board.twin(UnleashCantBlock.rule());
+        String cackler = id(board.subject);
+        assertTrue(twin.changes().contains(cackler + ".counters"), twin.changes().toString());
+        assertTrue(Set.of(cackler + ".counters", cackler + ".pt_boosts").containsAll(twin.changes()),
+                twin.changes().toString());
+        Card forked = twin.fork().card("blocker");
+        assertEquals(0, forked.getCounters(CounterEnumType.P1P1));
+        assertFalse(CombatUtil.canBlock(board.subject), "the live creature may not block");
+        assertTrue(CombatUtil.canBlock(forked), "with no counter it may");
     }
 
     // ── 702.102c, a fused split spell's total cost: remove_permanent ────
