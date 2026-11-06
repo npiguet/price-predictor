@@ -16,10 +16,20 @@ creatures a requirement makes block the anchor, and its outside the listed
 creatures, legal or forbidden, no requirement binds. Both read nothing on an
 earlier record.
 
+Two lists judge the anchor attacker alone. ``must_attack`` holds it where an
+attack requirement applies to it (gen-3's anchored attackers record: goad,
+"attacks each combat if able"), and leaves it outside where none does.
+``min_blockers`` holds it where it can be blocked only by ``at_least``
+creatures or more (menace, 702.111b), and leaves it outside where fewer
+suffice; a blockers record of any generation writes it.
+
 Parameters:
 
 - ``list`` (required): ``legal_attackers``, ``legal_blockers``,
-  ``legal_targets``, or gen-3's ``legal_defenders`` and ``must_block``;
+  ``legal_targets``, ``min_blockers``, or gen-3's ``legal_defenders``,
+  ``must_block`` and ``must_attack``;
+- ``at_least``: with ``list = min_blockers``, the fewest blockers the anchor
+  must need to be inside, 2 by default;
 - ``fires_when``: ``outside`` (default) or ``inside``;
 - ``responsible_static``: true to count, on the outside, only entities a
   static forbids (``attackers`` and ``blockers`` record who forbids them);
@@ -42,7 +52,11 @@ Parameters:
 - ``counter_type``: the restriction holds while the entity has a counter of
   this type (unleash's +1/+1 counter), so an entity on the ``fires`` side
   counts only holding one and an entity on the near-miss side only holding
-  none, in ``normalize_counter_type``'s spelling.
+  none, in ``normalize_counter_type``'s spelling;
+- ``judged_type``: only a judged entity of this card type counts, on either
+  side (a battle among an attacker's defenders), compared without case;
+- ``min_types``: only a judged entity with at least this many card types
+  counts, on either side (an artifact creature, 205.2b).
 
 Both roles name the judged entities, each one's own characteristics being
 what the restriction reads and its legality bit where the outcome falls; a
@@ -75,6 +89,7 @@ from effects.domain.records import EffectRecord, PlayabilitySubkind, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
 from effects.domain.rule_detectors.acting_line import card_has_keyword
+from effects.domain.rule_detectors.entity_facts import card_type_count, has_card_type
 from effects.domain.state_snapshot import normalize_counter_type
 
 UNIVERSES = frozenset({"battlefield", "battlefield_and_players"})
@@ -87,9 +102,13 @@ _SUBKIND_OF = {
     "legal_targets": PlayabilitySubkind.DECISION,
     "legal_defenders": PlayabilitySubkind.ATTACKERS,
     "must_block": PlayabilitySubkind.BLOCKERS,
+    "must_attack": PlayabilitySubkind.ATTACKERS,
+    "min_blockers": PlayabilitySubkind.BLOCKERS,
 }
 #: The lists only a gen-3 record carries, each the field it reads.
-GEN3_LISTS = frozenset({"legal_defenders", "must_block"})
+GEN3_LISTS = frozenset({"legal_defenders", "must_block", "must_attack"})
+#: The lists that judge the anchor attacker alone.
+_ANCHOR_LISTS = frozenset({"must_attack", "min_blockers"})
 #: The legality field each list's verdict is written to.
 _FIELD_OF = {
     "legal_attackers": HeadField.ATTACKER_LEGAL,
@@ -97,6 +116,8 @@ _FIELD_OF = {
     "legal_targets": HeadField.TARGET_LEGAL,
     "legal_defenders": HeadField.ATTACK_TARGET_LEGAL,
     "must_block": HeadField.COMBAT_REQUIREMENT,
+    "must_attack": HeadField.COMBAT_REQUIREMENT,
+    "min_blockers": HeadField.MIN_BLOCKERS,
 }
 
 
@@ -127,6 +148,17 @@ def _defender_universe(record: EffectRecord, universe: str) -> tuple[str, ...]:
     return tuple(found)
 
 
+def _anchor_sides(record: EffectRecord, listed: str, at_least: int):
+    """The anchor attacker inside or outside an anchor list."""
+    payload = record.payload
+    anchor = payload.anchor_attacker
+    if anchor is None or (listed == "must_attack" and record.generation != 3):
+        return (), ()
+    inside = (payload.must_attack if listed == "must_attack"
+              else payload.min_blockers >= at_least)
+    return ((anchor,), ()) if inside else ((), (anchor,))
+
+
 def _gen3_sides(record: EffectRecord, listed: str, universe: str | None):
     payload = record.payload
     if listed == "must_block":
@@ -145,8 +177,11 @@ def _gen3_sides(record: EffectRecord, listed: str, universe: str | None):
     return inside, outside
 
 
-def _sides(record: EffectRecord, listed: str, statics_only: bool, universe: str | None):
+def _sides(record: EffectRecord, listed: str, statics_only: bool, universe: str | None,
+           at_least: int = 2):
     payload = record.payload
+    if listed in _ANCHOR_LISTS:
+        return _anchor_sides(record, listed, at_least)
     if listed in GEN3_LISTS:
         return _gen3_sides(record, listed, universe) or ((), ())
     if listed == "legal_targets":
@@ -167,6 +202,20 @@ def _sides(record: EffectRecord, listed: str, statics_only: bool, universe: str 
         listed_ids = set(inside) | set(outside)
         outside += tuple(e for e in _universe(record, listed, universe) if e not in listed_ids)
     return inside, outside
+
+
+def _of_kind(record: EffectRecord, ids: tuple[str, ...], entity_type: str | None,
+             min_types: int | None) -> tuple[str, ...]:
+    """The entities of ``ids`` of the card type ``entity_type`` and with at
+    least ``min_types`` card types, each filter applying where given."""
+    def kept(entity_id: str) -> bool:
+        entity = record.state.entity(entity_id)
+        if entity is None:
+            return False
+        if entity_type is not None and not has_card_type(entity, entity_type):
+            return False
+        return min_types is None or card_type_count(entity) >= min_types
+    return tuple(e for e in ids if kept(e))
 
 
 def _carriers(record: EffectRecord, ids: tuple[str, ...], lines: SidecarLookup | None,
@@ -191,9 +240,10 @@ def _carriers(record: EffectRecord, ids: tuple[str, ...], lines: SidecarLookup |
 class LegalityMembership:
     id: str = "legality_membership"
     params: frozenset[str] = frozenset({"list", "fires_when", "responsible_static", "universe",
-                                        "keyword", "counter_type"})
+                                        "keyword", "counter_type", "at_least", "judged_type",
+                                        "min_types"})
     general: frozenset[str] = frozenset({"list", "fires_when", "universe", "keyword",
-                                         "counter_type"})
+                                         "counter_type", "at_least"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         listed = params.get("list")
@@ -212,14 +262,21 @@ class LegalityMembership:
             raise ValueError(f"legality_membership: unknown universe {universe!r}")
         if record.kind is not RecordKind.PLAYABILITY or record.subkind is not _SUBKIND_OF[listed]:
             return None
+        if "at_least" in params and listed != "min_blockers":
+            raise ValueError("legality_membership: at_least reads the min_blockers list")
         inside, outside = _sides(record, listed, bool(params.get("responsible_static")),
-                                 universe)
+                                 universe, int(params.get("at_least", 2)))
         fires, near = (outside, inside) if fires_when == "outside" else (inside, outside)
         keyword, counter = params.get("keyword"), params.get("counter_type")
         if keyword is not None or counter is not None:
             counter = None if counter is None else normalize_counter_type(counter)
             fires = _carriers(record, fires, lines, keyword, counter, holding=True)
             near = _carriers(record, near, lines, keyword, counter, holding=False)
+        entity_type, min_types = params.get("judged_type"), params.get("min_types")
+        if entity_type is not None or min_types is not None:
+            min_types = None if min_types is None else int(min_types)
+            fires = _of_kind(record, fires, entity_type, min_types)
+            near = _of_kind(record, near, entity_type, min_types)
         for polarity, judged in ((Polarity.FIRES, fires), (Polarity.DOES_NOT_FIRE, near)):
             if judged:
                 condition, outcome = _roles(record, listed, judged)

@@ -33,7 +33,13 @@ Parameters:
   key or an API, ``Fog``, a protection keyword), or by a ``prevented``
   result, and its ``fires`` side is any of the three results that prevented
   something; ``not_replaced`` (damage that can't be prevented) is its near
-  miss. A ``result`` given beside it still names the ``fires`` side.
+  miss. A ``result`` given beside it still names the ``fires`` side;
+- ``outcome_event``'s subject qualifiers (``subject_is_copy``,
+  ``subject_merged``, ``subject_face_state``, ``subject_designation``,
+  ``subject_is_token`` …): the incoming event's subject is such an object in
+  the snapshot (a merged or melded permanent moving, a copy entering), which
+  picks the events the rule speaks for on both sides; an event whose subjects
+  cannot be read is on neither.
 
 The condition entities are the incoming event's subjects and the replacing
 effect's source; the outcome entities are the subjects of the event as
@@ -58,12 +64,16 @@ from effects.domain.rule_detectors import FamilyMatch, register
 from effects.domain.rule_detectors.acting_line import acting_line, is_keyword_line, source_ids
 from effects.domain.rule_detectors.outcome_event import (
     EVENT_FILTERS,
+    SUBJECT_QUALIFIER_NEEDS,
+    SUBJECT_QUALIFIERS,
     event_filters,
     meets_filters,
     same_value,
+    subject_verdict,
 )
 
-_OWN = frozenset({"event", "result", "mode", "keyword", "prevention"})
+_OWN = frozenset({"event", "result", "mode", "keyword", "prevention"}) | frozenset(
+    SUBJECT_QUALIFIERS)
 
 #: A chain that prevents: a ``PreventDamage``/``Prevent$``/``PreventionEffect$``
 #: key or API, a ``Fog``, or protection printed or granted.
@@ -91,7 +101,8 @@ class RewriteEvent:
     general: frozenset[str] = frozenset({"event", "result", "prevention", "keyword"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
-        return frozenset()
+        return frozenset(field for name, field in SUBJECT_QUALIFIER_NEEDS.items()
+                         if name in params)
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
@@ -110,6 +121,8 @@ class RewriteEvent:
             return None
         if not meets_filters(incoming, filters):
             return None
+        if not subject_verdict(incoming.subjects, record.state, params):
+            return None  # not the object the rule is about, or unreadable
         result = record.payload.result
         if result is None:
             return None  # collected before the result was recorded: no side to read

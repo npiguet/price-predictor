@@ -49,6 +49,10 @@ Parameters:
   (``{"Mode": "TurnFaceUp"}``, ``"*"`` for any value), which tells apart the
   keyword actions Forge writes as a parameter of a common API (monstrosity,
   bolster, adapt and support are all ``PutCounter``);
+- ``chain_param``: as ``script_param``, on any segment of the acting line's
+  chain, the root's included (a ``Duration$`` or ``WontPhaseInNormal$`` on
+  the ``Phases`` sub-ability, an ``ExcessDamage$`` on a ``DealDamage`` below
+  another root API);
 - ``absent``: true where the rule is that the event does *not* happen (a token
   whose characteristics the battlefield forbids, a duration already over): the
   half without the event is the ``fires`` side and the one holding it the near
@@ -70,6 +74,15 @@ leaving the battlefield that was not in combat):
 - ``subject_is_source``: the subject is (true) or is not (false) the acting
   ability's source, ``refs.source`` (a Saga sacrificing itself, a permanent
   sacrificed for its own unpaid upkeep);
+- ``subject_is_copy``: the subject is (true) or is not (false) a copy of
+  another object: it names a ``copy_source``, or a gen-3 ``copy_of`` link
+  leaves it;
+- ``subject_merged``: the subject is (true) or is not (false) a merged
+  permanent, one a gen-3 ``merged_with`` link reaches (a mutated permanent);
+- ``subject_face_state``: the subject's gen-3 face state is this one
+  (``melded``, ``face_down``, ``flipped``, ``back``, ``front``);
+- ``subject_designation``: the subject holds this gen-3 designation
+  (``unearthed``, ``suspected``, ``monstrous`` …);
 - ``with_event``, ``without_event``: the same record does, or does not, hold
   an event of this type as well (the sacrifice beside the counters it pays for,
   the Equipment entering with no ``attached`` event): a type, or a map of
@@ -115,11 +128,18 @@ from effects.domain.rule_detectors.acting_line import (
     source_ids,
     source_is_token_of_kind,
 )
+from effects.domain.rule_detectors.entity_facts import (
+    has_designation,
+    has_face_state,
+    is_copy,
+    is_merged,
+)
 from effects.domain.script_text import api_of, segments
 from effects.domain.script_text import params as params_of
 from effects.domain.state_snapshot import EntityState, StateSnapshot, normalize_counter_type
 
-__all__ = ["EVENT_FILTERS", "FAMILY", "acting_api", "event_filters", "source_is_token_of_kind",
+__all__ = ["EVENT_FILTERS", "FAMILY", "SUBJECT_QUALIFIERS", "SUBJECT_QUALIFIER_NEEDS",
+           "acting_api", "event_filters", "source_is_token_of_kind", "subject_verdict",
            "token_kind_of"]
 
 #: Event parameters a declaration may not filter on: they name a card or an
@@ -131,6 +151,15 @@ _UNFILTERABLE = frozenset({
     "defender", "called", "options", "piles", "mana_by_color"})
 EVENT_FILTERS = frozenset(
     name for names in EVENT_PARAMS.values() for name in names) - _UNFILTERABLE
+
+
+def _flag(read):
+    """A yes-or-no qualifier: the fact ``read`` returns, compared with the
+    declared true or false."""
+    def verdict(entity: EntityState, state: StateSnapshot, wanted: Any) -> bool | None:
+        found = read(entity, state)
+        return None if found is None else found == bool(wanted)
+    return verdict
 
 
 def _in_combat(entity: EntityState, state: StateSnapshot) -> bool | None:
@@ -151,17 +180,30 @@ def _is_source(entity: EntityState, state: StateSnapshot) -> bool | None:
     return None if state.refs.source is None else entity.id == state.refs.source
 
 
-#: Qualifiers read off the event's subject in the snapshot; None is unreadable.
-_SUBJECT_QUALIFIERS = {
-    "subject_in_combat": _in_combat,
-    "subject_is_token": _is_token,
-    "controller_is_owner": _controller_is_owner,
-    "subject_is_source": _is_source,
+#: Qualifiers read off an event's subject in the snapshot, each the subject's
+#: verdict for the declared value; None is unreadable.
+SUBJECT_QUALIFIERS = {
+    "subject_in_combat": _flag(_in_combat),
+    "subject_is_token": _flag(_is_token),
+    "controller_is_owner": _flag(_controller_is_owner),
+    "subject_is_source": _flag(_is_source),
+    "subject_is_copy": _flag(is_copy),
+    "subject_merged": _flag(is_merged),
+    "subject_face_state": lambda entity, state, wanted: has_face_state(entity, wanted),
+    "subject_designation": lambda entity, state, wanted: has_designation(entity, wanted),
+}
+#: The gen-3 field each subject qualifier reads, where it reads one.
+SUBJECT_QUALIFIER_NEEDS = {
+    "controller_is_owner": "owner",
+    "subject_merged": "links",
+    "subject_face_state": "face_state",
+    "subject_designation": "designations",
 }
 _RECORD_QUALIFIERS = frozenset({"with_event", "without_event"})
-_QUALIFIERS = frozenset(_SUBJECT_QUALIFIERS) | _RECORD_QUALIFIERS
+_QUALIFIERS = frozenset(SUBJECT_QUALIFIERS) | _RECORD_QUALIFIERS
 _OWN = frozenset({"event", "min_count", "api", "api_in_chain", "keyword", "source_keyword",
-                  "script_param", "absent", "token_kind", "source_token_kind"}) | _QUALIFIERS
+                  "script_param", "chain_param", "absent", "token_kind",
+                  "source_token_kind"}) | _QUALIFIERS
 #: The record kinds whose payload lists the events a rule's outcome is.
 _EVENT_KINDS = frozenset({RecordKind.RESOLUTION, RecordKind.COMBAT, RecordKind.TURN_ACTION})
 
@@ -181,6 +223,14 @@ def _acts_through(line: SidecarLine | None, api: str, in_chain: bool) -> bool:
         return True
     return in_chain and bool(line.script_text) and any(
         api_of(params_of(segment)) == api for segment in segments(line.script_text))
+
+
+def _chain_holds(line: SidecarLine | None, wanted: Any) -> bool:
+    """Whether a segment of ``line``'s chain holds the parameter(s) ``wanted``."""
+    if line is None or not line.script_text:
+        return False
+    return any(script_params_match(params_of(segment), wanted)
+               for segment in segments(line.script_text))
 
 
 def same_value(found: Any, wanted: Any, name: str | None = None) -> bool:
@@ -235,19 +285,20 @@ def token_kind_of(event: Event) -> frozenset[str]:
     return _subtypes(str(characteristics.get("types") or ""))
 
 
-def _subject_verdict(event: Event, state: StateSnapshot,
-                     params: Mapping[str, Any]) -> bool | None:
-    """Whether ``event`` meets every subject qualifier; None where unreadable."""
-    wanted = {name: bool(params[name]) for name in _SUBJECT_QUALIFIERS if name in params}
+def subject_verdict(subjects: tuple[str, ...], state: StateSnapshot,
+                    params: Mapping[str, Any]) -> bool | None:
+    """Whether one of ``subjects`` meets every subject qualifier of
+    ``params``; None where none of them can be read."""
+    wanted = {name: params[name] for name in SUBJECT_QUALIFIERS if name in params}
     if not wanted:
         return True
-    entities = [e for e in (state.entity(s) for s in event.subjects) if e is not None]
+    entities = [e for e in (state.entity(s) for s in subjects) if e is not None]
     verdicts = []
     for entity in entities:
-        found = [_SUBJECT_QUALIFIERS[name](entity, state) for name in wanted]
+        found = [SUBJECT_QUALIFIERS[name](entity, state, value) for name, value in wanted.items()]
         if None in found:
             continue
-        verdicts.append(all(f == v for f, v in zip(found, wanted.values(), strict=True)))
+        verdicts.append(all(found))
     return any(verdicts) if verdicts else None
 
 
@@ -259,7 +310,8 @@ class OutcomeEvent:
         {"event", "api", "api_in_chain", "keyword", "source_keyword", "absent"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
-        return frozenset({"owner"}) if "controller_is_owner" in params else frozenset()
+        return frozenset(field for name, field in SUBJECT_QUALIFIER_NEEDS.items()
+                         if name in params)
 
     def _filters(self, event: EventType, params: Mapping[str, Any]) -> dict[str, Any]:
         filters = event_filters(self.id, event, params, _OWN)
@@ -287,7 +339,7 @@ class OutcomeEvent:
         if record.kind not in _EVENT_KINDS or (
                 record.kind is RecordKind.RESOLUTION and record.moment is not Moment.RESOLUTION):
             return None
-        if scoped or "script_param" in params:
+        if scoped or "script_param" in params or "chain_param" in params:
             line = acting_line(record, lines)
             by_api = api is not None and _acts_through(line, api, bool(params.get("api_in_chain")))
             by_keyword = keyword is not None and is_keyword_line(line, keyword)
@@ -295,6 +347,8 @@ class OutcomeEvent:
                 return None
             if "script_param" in params and not script_params_match(
                     root_params_of(line), params["script_param"]):
+                return None
+            if "chain_param" in params and not _chain_holds(line, params["chain_param"]):
                 return None
         if source_keyword is not None and not card_has_keyword(
                 record.ability or (), lines, source_keyword):
@@ -333,7 +387,7 @@ class OutcomeEvent:
             "with_event" not in params or _holds(listed, params["with_event"]),
             "without_event" not in params or not _holds(listed, params["without_event"]),
         ))
-        read = [(e, _subject_verdict(e, record.state, params)) for e in wanted]
+        read = [(e, subject_verdict(e.subjects, record.state, params)) for e in wanted]
         read = [(e, verdict) for e, verdict in read if verdict is not None]
         meeting = [e for e, verdict in read if verdict and record_ok]
         condition = _condition(record)

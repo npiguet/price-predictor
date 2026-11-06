@@ -121,3 +121,43 @@ def test_another_event_or_destination_shows_nothing(by_kind):
     record = _entering(by_kind)
     assert FAMILY.match(record, None, {"event": "damage_dealt"}) is None
     assert FAMILY.match(record, None, {"event": "zone_change", "to_zone": "exile"}) is None
+
+
+class TestSubjectQualifiers:
+    """``outcome_event``'s subject qualifiers on the incoming event (T030 follow-up)."""
+
+    @staticmethod
+    def _rewrite(by_kind):
+        return next((r, s) for r in by_kind("rewrite")
+                    if r.payload.result is not None
+                    for s in r.payload.incoming.subjects if r.state.entity(s) is not None)
+
+    @staticmethod
+    def _declared(record, **qualifier):
+        return {"event": record.payload.incoming.type.value,
+                "result": record.payload.result.value, **qualifier}
+
+    def test_a_melded_subject_keeps_the_record_and_another_drops_it(self, by_kind):
+        record, subject = self._rewrite(by_kind)
+        declared = self._declared(record, subject_face_state="melded")
+
+        def subject_as(face_state):
+            return replace(record, state=replace(record.state, entities=tuple(
+                replace(e, lines=(), face_state=face_state) if e.id == subject else e
+                for e in record.state.entities)))
+        found = FAMILY.match(subject_as("melded"), None, declared)
+        assert found.polarity is Polarity.FIRES and subject in found.outcome
+        assert FAMILY.match(subject_as("front"), None, declared) is None
+        # A gen-2 subject has no face state: the record speaks for nothing.
+        assert FAMILY.match(record, None, declared) is None
+
+    def test_a_merged_subject_and_its_need(self, by_kind):
+        from effects.domain.state_snapshot import Link
+
+        record, subject = self._rewrite(by_kind)
+        merged = replace(record, state=replace(record.state, links=(
+            Link(from_="E999999", to=subject, type="merged_with"),)))
+        declared = self._declared(record, subject_merged=True)
+        assert FAMILY.match(merged, None, declared).polarity is Polarity.FIRES
+        assert FAMILY.needs(declared) == {"links"}
+        assert FAMILY.needs(self._declared(record)) == frozenset()

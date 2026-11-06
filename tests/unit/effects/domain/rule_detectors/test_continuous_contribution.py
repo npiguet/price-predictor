@@ -112,3 +112,53 @@ def test_a_type_is_compared_without_case(by_kind):
     for spelled in (written, written.upper(), written.capitalize()):
         found = FAMILY.match(record, None, {"field": "types", "value": spelled})
         assert found.polarity is Polarity.FIRES, spelled
+
+
+class TestT030Parameters:
+    """Source keyword, script parameter, face state and designation (T030 follow-up)."""
+
+    @staticmethod
+    def _carriers_as(record, **changes):
+        """``record`` with every contribution's entity changed, as gen-3 entities."""
+        carrying = {c.entity for c in record.payload.contributions}
+        return replace(record, state=replace(record.state, entities=tuple(
+            replace(e, lines=(), **changes) if e.id in carrying else e
+            for e in record.state.entities)))
+
+    def test_a_script_parameter_and_a_source_keyword_read_the_static(
+            self, by_kind, gen2_sidecars):
+        record = _trample_grant(by_kind)
+        line = acting_line(record, gen2_sidecars)
+        key = next(k for k in ("Mode", "Affected", "AddKeyword") if f"{k}$" in line.script_text)
+        declared = {"field": "keywords", "value": "trample"}
+        assert FAMILY.match(record, gen2_sidecars, {**declared, "script_param": key})
+        assert FAMILY.match(record, gen2_sidecars,
+                            {**declared, "script_param": "NoSuchKey"}) is None
+        assert FAMILY.match(record, gen2_sidecars,
+                            {**declared, "source_keyword": "No Such Keyword"}) is None
+
+    def test_a_face_state_narrows_the_contributions(self, by_kind):
+        record = _trample_grant(by_kind)
+        declared = {"field": "keywords", "value": "trample", "affected_face_state": "flipped"}
+        flipped = self._carriers_as(record, face_state="flipped")
+        assert FAMILY.match(flipped, None, declared).polarity is Polarity.FIRES
+        assert FAMILY.match(self._carriers_as(record, face_state="front"), None, declared) is None
+        assert FAMILY.needs(declared) == {"face_state"}
+
+    def test_a_designation_counts_where_it_explains_the_side(self, by_kind):
+        record = _trample_grant(by_kind)
+        record = replace(record, payload=ContinuousPayload(contributions=tuple(
+            c for c in record.payload.contributions if "trample" in c.keywords)))
+        declared = {"field": "keywords", "value": "trample", "designation": "suspected"}
+        held = self._carriers_as(record, designations=("suspected",))
+        found = FAMILY.match(held, None, declared)
+        assert found.polarity is Polarity.FIRES
+        stripped = replace(record, payload=ContinuousPayload(contributions=tuple(
+            replace(c, keywords=()) for c in record.payload.contributions)))
+        lacking = self._carriers_as(stripped, designations=())
+        assert FAMILY.match(lacking, None, declared).polarity is Polarity.DOES_NOT_FIRE
+        # Granted to an entity lacking it, or withheld from one holding it: neither side.
+        assert FAMILY.match(self._carriers_as(record, designations=()), None, declared) is None
+        assert FAMILY.match(self._carriers_as(stripped, designations=("suspected",)), None,
+                            declared) is None
+        assert FAMILY.needs(declared) == {"designations"}

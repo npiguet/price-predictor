@@ -241,3 +241,79 @@ class TestKeywordAndCounter:
         record, entity_id, _ = self._carrier(by_kind, gen2_sidecars)
         edited = self._edited(record, entity_id, counters={"P1P1": 1}, forbidden=True)
         assert FAMILY.match(edited, gen2_sidecars, self._declared("No Such Keyword")) is None
+
+
+class TestAnchorLists:
+    """``must_attack`` and ``min_blockers`` judge the anchor attacker (T030 follow-up)."""
+
+    @staticmethod
+    def _attackers():
+        return TestTheGen3Lists._golden("attackers")[0]
+
+    def test_an_anchor_an_attack_requirement_binds_is_inside_must_attack(self):
+        record = self._attackers()
+        bound = replace(record, payload=replace(record.payload, must_attack=True))
+        found = FAMILY.match(bound, None, {"list": "must_attack", "fires_when": "inside"})
+        anchor = record.payload.anchor_attacker
+        assert found.polarity is Polarity.FIRES and found.condition == (anchor,)
+        # The requirement is written at the anchor.
+        assert found.outcome == (anchor,)
+        free = replace(record, payload=replace(record.payload, must_attack=False))
+        found = FAMILY.match(free, None, {"list": "must_attack", "fires_when": "inside"})
+        assert found.polarity is Polarity.DOES_NOT_FIRE and found.outcome == (anchor,)
+
+    def test_must_attack_needs_the_gen3_record(self, by_kind):
+        assert FAMILY.needs({"list": "must_attack"}) == {"must_attack"}
+        assert FAMILY.match(by_kind("playability", "attackers")[0], None,
+                            {"list": "must_attack"}) is None
+
+    def test_an_anchor_needing_two_blockers_is_inside_min_blockers(self, by_kind):
+        record = by_kind("playability", "blockers")[0]
+        anchor = record.payload.anchor_attacker
+        declared = {"list": "min_blockers", "fires_when": "inside"}
+        menace = replace(record, payload=replace(record.payload, min_blockers=2))
+        found = FAMILY.match(menace, None, declared)
+        assert found.polarity is Polarity.FIRES
+        assert found.condition == (anchor,) and found.outcome == (anchor,)
+        lone = replace(record, payload=replace(record.payload, min_blockers=1))
+        assert FAMILY.match(lone, None, declared).polarity is Polarity.DOES_NOT_FIRE
+        assert FAMILY.match(menace, None, {**declared, "at_least": 3}).polarity is (
+            Polarity.DOES_NOT_FIRE)
+        assert FAMILY.needs(declared) == frozenset()
+
+    def test_at_least_reads_only_min_blockers(self, by_kind):
+        with pytest.raises(ValueError, match="at_least"):
+            FAMILY.match(by_kind("playability", "blockers")[0], None,
+                         {"list": "legal_blockers", "at_least": 2})
+
+
+class TestJudgedKind:
+    """``judged_type`` and ``min_types`` narrow the judged entities (T030 follow-up)."""
+
+    def test_only_a_judged_battle_counts(self):
+        record = next(r for r in TestTheGen3Lists._golden("attackers")
+                      if r.payload.anchor_attacker == "E2")
+        declared = {"list": "legal_defenders", "fires_when": "inside",
+                    "universe": "battlefield", "judged_type": "Battle"}
+        assert FAMILY.match(record, None, declared) is None
+        battle = next(e for e in record.state.entities if e.on_battlefield and e.id != "E2")
+        edited = replace(record, state=replace(record.state, entities=tuple(
+            replace(e, types=("battle",)) if e.id == battle.id else e
+            for e in record.state.entities)))
+        found = FAMILY.match(edited, None, declared)
+        assert found.polarity is Polarity.DOES_NOT_FIRE
+        assert _judged(found, edited) == (battle.id,)
+
+    def test_min_types_keeps_a_judged_entity_of_two_card_types(self, by_kind):
+        record = _forbidden_block(by_kind)
+        judged = record.payload.forbidden[0].entity
+        declared = {"list": "legal_blockers", "min_types": 2}
+        two = replace(record, state=replace(record.state, entities=tuple(
+            replace(e, types=("artifact", "creature")) if e.id == judged
+            else replace(e, types=("creature",)) for e in record.state.entities)))
+        found = FAMILY.match(two, None, declared)
+        assert found.polarity is Polarity.FIRES and _judged(found, two) == (judged,)
+        one = replace(two, state=replace(two.state, entities=tuple(
+            replace(e, types=("creature",)) for e in two.state.entities)))
+        found = FAMILY.match(one, None, declared)
+        assert found is None or judged not in _judged(found, one)

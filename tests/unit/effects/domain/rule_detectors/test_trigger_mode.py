@@ -94,3 +94,88 @@ class TestKeyword:
         with pytest.raises(ValueError, match="no script parameters"):
             FAMILY.match(by_kind("trigger")[0], gen2_sidecars,
                          {"keyword": "exalted", "mode": "Attacks"})
+
+
+def _phase_trigger(by_kind, sidecars, fired=True):
+    return next(r for r in by_kind("trigger") if bool(r.payload.fired) == fired
+                and (acting_root_params(r, sidecars) or {}).get("Phase"))
+
+
+class TestT030Parameters:
+    """Phase, script parameters, step, source and spawned triggers (T030 follow-up)."""
+
+    def test_the_phase_and_a_script_parameter_read_the_trigger_segment(
+            self, by_kind, gen2_sidecars):
+        record = _phase_trigger(by_kind, gen2_sidecars)
+        phase = acting_root_params(record, gen2_sidecars)["Phase"]
+        assert FAMILY.match(record, gen2_sidecars, {"mode": "Phase", "phase": phase})
+        assert FAMILY.match(record, gen2_sidecars, {"mode": "Phase", "phase": "Nowhere"}) is None
+        assert FAMILY.match(record, gen2_sidecars, {"mode": "Phase", "script_param": "Phase"})
+        assert FAMILY.match(record, gen2_sidecars,
+                            {"mode": "Phase", "script_param": "NoSuchKey"}) is None
+
+    def test_a_step_alone_speaks_for_every_trigger_evaluated_then(self, by_kind, gen2_sidecars):
+        record = by_kind("trigger")[0]
+        step = record.state.global_.phase.lower()
+        found = FAMILY.match(record, gen2_sidecars, {"step": step})
+        assert found.polarity is (Polarity.FIRES if record.payload.fired
+                                  else Polarity.DOES_NOT_FIRE)
+        other = next(p for p in ("cleanup", "untap") if p != step)
+        assert FAMILY.match(record, gen2_sidecars, {"step": other}) is None
+        with pytest.raises(ValueError, match="step"):
+            FAMILY.match(record, gen2_sidecars, {"step": "EndCombat"})
+
+    @staticmethod
+    def _sourced(by_kind, fired=True):
+        return next(r for r in by_kind("trigger") if bool(r.payload.fired) == fired
+                    and r.state.refs.source and r.state.entity(r.state.refs.source))
+
+    @staticmethod
+    def _source_as(record, **changes):
+        source = record.state.refs.source
+        return replace(record, state=replace(record.state, entities=tuple(
+            replace(e, **changes) if e.id == source else e for e in record.state.entities)))
+
+    def test_a_copy_source_is_read_off_the_trigger_source(self, by_kind):
+        record = self._sourced(by_kind)
+        declared = {"step": record.state.global_.phase.lower(), "source_is_copy": True}
+        copied = self._source_as(record, copy_source="E1")
+        assert FAMILY.match(copied, None, declared).polarity is Polarity.FIRES
+        assert FAMILY.match(self._source_as(record, copy_source=None), None, declared) is None
+
+    def test_a_designation_counts_on_the_side_it_explains(self, by_kind):
+        for fired, polarity in ((True, Polarity.FIRES), (False, Polarity.DOES_NOT_FIRE)):
+            record = self._sourced(by_kind, fired)
+            declared = {"step": record.state.global_.phase.lower(),
+                        "source_designation": "harnessed"}
+            held = self._source_as(record, lines=(), designations=("harnessed",))
+            lacking = self._source_as(record, lines=(), designations=())
+            explained, other = (held, lacking) if fired else (lacking, held)
+            assert FAMILY.match(explained, None, declared).polarity is polarity
+            assert FAMILY.match(other, None, declared) is None
+            # A gen-2 source records no designation.
+            assert FAMILY.match(record, None, declared) is None
+        assert FAMILY.needs({"mode": "Phase", "source_designation": "x"}) == {"designations"}
+
+    def test_a_delayed_trigger_is_read_off_the_segment_that_created_it(self, by_kind):
+        from effects.domain.provenance import ProvenanceKey, SidecarLine
+
+        spell = ProvenanceKey("cardsfolder/x/x.txt", 0, "spell", 0)
+        line = SidecarLine(
+            line_index=0, line_kind="spell", provenance=(spell,), script_api_type="Dig",
+            script_text="SP$ Dig | DigNum$ 3 | SubAbility$ SV1 [SEG] SV1: DB$ DelayedTrigger "
+                        "| Mode$ Phase | Phase$ End of Turn | Execute$ SV2")
+
+        class Lines:
+            def first_line(self, keys):
+                return line
+        record = replace(by_kind("trigger")[0], ability=(spell,))
+        declared = {"spawned_by": "DelayedTrigger", "mode": "Phase"}
+        assert FAMILY.match(record, Lines(), declared) is not None
+        assert FAMILY.match(record, Lines(), {**declared, "phase": "End of Turn"}) is not None
+        assert FAMILY.match(record, Lines(), {"spawned_by": "ImmediateTrigger"}) is None
+        # A trigger line's own chain is the printed trigger, not one it created.
+        printed = replace(record, ability=(replace(spell, trait_kind="trigger"),))
+        assert FAMILY.match(printed, Lines(), declared) is None
+        with pytest.raises(ValueError, match="spawned_by"):
+            FAMILY.match(record, Lines(), {"spawned_by": "Effect"})

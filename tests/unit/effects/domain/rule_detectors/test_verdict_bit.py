@@ -257,3 +257,23 @@ class TestLandPlays:
             assert params["land_play"] is True, scenario
             sides = {FAMILY.match(record, None, params).polarity for record in land}
             assert sides == {Polarity.FIRES, Polarity.DOES_NOT_FIRE}, scenario
+
+
+class TestCandidateFace:
+    """A candidate acting through its card's first face or another (T030 follow-up)."""
+
+    def test_the_face_is_read_off_the_candidate_key(self, by_kind):
+        record = next(r for r in _decisions(by_kind) if r.payload.candidates[0].ability)
+        candidate = record.payload.candidates[0]
+        back = replace(candidate, ability=tuple(
+            replace(key, face=1) for key in candidate.ability))
+        front = replace(candidate, ability=tuple(
+            replace(key, face=0) for key in candidate.ability))
+        declared = {"bit": "can_play", "candidate_face": "alternative"}
+        on_back = replace(record, payload=replace(record.payload, candidates=(back,)))
+        on_front = replace(record, payload=replace(record.payload, candidates=(front,)))
+        assert FAMILY.match(on_back, None, declared) is not None
+        assert FAMILY.match(on_front, None, declared) is None
+        assert FAMILY.match(on_front, None, {**declared, "candidate_face": "front"}) is not None
+        with pytest.raises(ValueError, match="candidate_face"):
+            FAMILY.match(record, None, {**declared, "candidate_face": "back"})

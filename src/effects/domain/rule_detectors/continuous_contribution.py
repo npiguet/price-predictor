@@ -19,7 +19,19 @@ Parameters:
   this type (``LEVEL``: a leveler's ``IsPresent$ Card.Self+counters_GE4_LEVEL``),
   read off the condition keys of the static's root segment (``IsPresent$``,
   ``Condition…$``, ``CheckSVar$``), never its ``Affected$`` selector; counter
-  types in ``normalize_counter_type``'s spelling.
+  types in ``normalize_counter_type``'s spelling;
+- ``source_keyword``: the static's card prints this keyword on any of its
+  lines (a bestow Aura's enchanted-creature static, a soulbond pair's
+  static), read off its sidecar as ``outcome_event`` reads it;
+- ``script_param``: the static's root segment holds this parameter, a name or
+  a name -> value map as ``outcome_event`` reads it (``{"Condition":
+  "MaxSpeed"}``, ``{"IsPresent": "Card.Self+IsSolved"}``);
+- ``affected_face_state``: only contributions to an entity in this gen-3 face
+  state count, on either side (a flipped permanent, a face-down one);
+- ``designation``: the contribution is the work of a gen-3 designation
+  (``suspected``): a contribution counts on the ``fires`` side only to an
+  entity holding it, and the near miss is the static contributing nothing to
+  an entity lacking it.
 
 The condition entity is the static's host (``acting_line.source_ids``: a
 ``continuous`` record names no source, so the battlefield entity printed by
@@ -45,9 +57,13 @@ from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
 from effects.domain.rule_detectors.acting_line import (
     acting_line,
+    acting_root_params,
+    card_has_keyword,
+    script_params_match,
     source_ids,
     source_is_token_of_kind,
 )
+from effects.domain.rule_detectors.entity_facts import has_designation, has_face_state
 from effects.domain.script_text import params, root
 from effects.domain.state_snapshot import normalize_counter_type
 
@@ -97,11 +113,17 @@ def _carries(contribution: Contribution, field: str, value: str | None) -> bool:
 class ContinuousContribution:
     id: str = "continuous_contribution"
     params: frozenset[str] = frozenset(
-        {"field", "value", "source_token_kind", "counter_condition"})
-    general: frozenset[str] = frozenset({"field", "value"})
+        {"field", "value", "source_token_kind", "counter_condition", "source_keyword",
+         "script_param", "affected_face_state", "designation"})
+    general: frozenset[str] = frozenset({"field", "value", "source_keyword", "designation"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
-        return frozenset()
+        needs = set()
+        if "affected_face_state" in params:
+            needs.add("face_state")
+        if "designation" in params:
+            needs.add("designations")
+        return frozenset(needs)
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
@@ -118,16 +140,42 @@ class ContinuousContribution:
             line = acting_line(record, lines)
             if not conditioned_on_counters(line.script_text if line else None, counters):
                 return None
+        if "script_param" in params and not script_params_match(
+                acting_root_params(record, lines), params["script_param"]):
+            return None
+        if "source_keyword" in params and not card_has_keyword(
+                record.ability or (), lines, params["source_keyword"]):
+            return None
         contributions = record.payload.contributions
+        face = params.get("affected_face_state")
+        if face is not None:
+            contributions = tuple(c for c in contributions if _entity_fact(
+                record, c.entity, lambda entity: has_face_state(entity, face)))
         if not contributions:
             return None
         carrying = tuple(dict.fromkeys(
             c.entity for c in contributions if _carries(c, field, params.get("value"))))
+        applied = tuple(dict.fromkeys(c.entity for c in contributions))
+        designation = params.get("designation")
+        if designation is not None:
+            def holds(entity_id: str) -> bool | None:
+                return _entity_fact(record, entity_id,
+                                    lambda entity: has_designation(entity, designation))
+            applied = tuple(e for e in applied if e not in carrying and holds(e) is False)
+            carrying = tuple(e for e in carrying if holds(e))
         host = source_ids(record)
         if carrying:
             return FamilyMatch(Polarity.FIRES, True, host, carrying)
-        return FamilyMatch(Polarity.DOES_NOT_FIRE, False, host,
-                           tuple(dict.fromkeys(c.entity for c in contributions)))
+        if not applied:
+            return None
+        return FamilyMatch(Polarity.DOES_NOT_FIRE, False, host, applied)
+
+
+def _entity_fact(record: EffectRecord, entity_id: str, read) -> bool | None:
+    """``read`` of the snapshot entity ``entity_id``; None where it is not in
+    the snapshot or the fact is unreadable."""
+    entity = record.state.entity(entity_id)
+    return None if entity is None else read(entity)
 
 
 FAMILY = register(ContinuousContribution())

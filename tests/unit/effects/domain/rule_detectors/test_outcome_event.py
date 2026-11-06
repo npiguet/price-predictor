@@ -404,3 +404,96 @@ class TestEntityRoles:
                                   entities=(spell,), targets=("E7",))
         found = FAMILY.match(record, None, {"event": "spell_copied"})
         assert found.polarity is Polarity.FIRES and found.outcome == ("E7",)
+
+
+def _leaving(by_kind):
+    """An effect half moving a snapshot permanent off the battlefield, and that permanent."""
+    return next((r, s) for r in _effect_halves(by_kind) for e in r.payload.events
+                if e.type is EventType.ZONE_CHANGE
+                and e.params.get("from_zone") == "battlefield"
+                for s in e.subjects if r.state.entity(s) is not None)
+
+
+def _with_subject(record, subject, **changes):
+    """``record`` with its entity ``subject`` changed, as a gen-3 entity (lines listed)."""
+    return replace(record, state=replace(record.state, entities=tuple(
+        replace(e, lines=(), **changes) if e.id == subject else e
+        for e in record.state.entities)))
+
+
+class TestGen3SubjectQualifiers:
+    """A melded, merged, copied or designated subject (T030 follow-up)."""
+
+    _MOVE = {"event": "zone_change", "from_zone": "battlefield"}
+
+    def test_a_melded_subject_fires_and_a_front_one_is_the_near_miss(self, by_kind):
+        record, subject = _leaving(by_kind)
+        declared = {**self._MOVE, "subject_face_state": "melded"}
+        found = FAMILY.match(_with_subject(record, subject, face_state="melded"), None, declared)
+        assert found.polarity is Polarity.FIRES and subject in found.outcome
+        found = FAMILY.match(_with_subject(record, subject, face_state="front"), None, declared)
+        assert found.polarity is Polarity.DOES_NOT_FIRE
+
+    def test_a_gen2_subject_has_no_face_state_to_read(self, by_kind):
+        record, _ = _leaving(by_kind)
+        assert FAMILY.match(record, None, {**self._MOVE, "subject_face_state": "melded"}) is None
+
+    def test_a_designation_is_read_off_the_gen3_subject(self, by_kind):
+        record, subject = _leaving(by_kind)
+        declared = {**self._MOVE, "subject_designation": "unearthed"}
+        held = _with_subject(record, subject, designations=("unearthed",))
+        assert FAMILY.match(held, None, declared).polarity is Polarity.FIRES
+        lacking = _with_subject(record, subject, designations=())
+        assert FAMILY.match(lacking, None, declared).polarity is Polarity.DOES_NOT_FIRE
+
+    def test_a_merged_subject_is_one_a_merged_with_link_reaches(self, by_kind):
+        from effects.domain.state_snapshot import Link
+
+        record, subject = _leaving(by_kind)
+        declared = {**self._MOVE, "subject_merged": True}
+        merged = replace(record, state=replace(record.state, links=(
+            Link(from_="E999999", to=subject, type="merged_with"),)))
+        assert FAMILY.match(merged, None, declared).polarity is Polarity.FIRES
+        alone = replace(record, state=replace(record.state, links=()))
+        assert FAMILY.match(alone, None, declared).polarity is Polarity.DOES_NOT_FIRE
+        # A snapshot with no links at all (gen-2) cannot say.
+        assert FAMILY.match(record, None, declared) is None
+
+    def test_a_copy_names_its_copy_source(self, by_kind):
+        record, subject = _leaving(by_kind)
+        declared = {**self._MOVE, "subject_is_copy": True}
+        copied = replace(record, state=replace(record.state, entities=tuple(
+            replace(e, copy_source="E1") if e.id == subject else replace(e, copy_source=None)
+            for e in record.state.entities)))
+        assert FAMILY.match(copied, None, declared).polarity is Polarity.FIRES
+        uncopied = replace(copied, state=replace(copied.state, entities=tuple(
+            replace(e, copy_source=None) for e in copied.state.entities)))
+        assert FAMILY.match(uncopied, None, declared).polarity is Polarity.DOES_NOT_FIRE
+
+    def test_each_needs_its_gen3_field(self):
+        assert FAMILY.needs({"event": "zone_change", "subject_face_state": "melded"}) == {
+            "face_state"}
+        assert FAMILY.needs({"event": "zone_change", "subject_designation": "x"}) == {
+            "designations"}
+        assert FAMILY.needs({"event": "zone_change", "subject_merged": True}) == {"links"}
+        assert FAMILY.needs({"event": "zone_change", "subject_is_copy": True}) == frozenset()
+
+
+class TestChainParam:
+    """A parameter on any segment of the acting line's chain (T030 follow-up)."""
+
+    def test_a_sub_ability_parameter_narrows_the_line(self, by_kind, gen2_sidecars):
+        from effects.domain.script_text import params, segments
+
+        record, below = next(
+            (r, name) for r in _effect_halves(by_kind) if r.payload.events
+            for line in [acting_line(r, gen2_sidecars)]
+            if line is not None and line.script_text and len(segments(line.script_text)) > 1
+            for name in params(segments(line.script_text)[1])
+            if name not in (acting_root_params(r, gen2_sidecars) or {}))
+        event = record.payload.events[0].type.value
+        assert FAMILY.match(record, gen2_sidecars, {"event": event, "script_param": below}) is None
+        assert FAMILY.match(record, gen2_sidecars,
+                            {"event": event, "chain_param": below}).polarity is Polarity.FIRES
+        assert FAMILY.match(record, gen2_sidecars,
+                            {"event": event, "chain_param": "NoSuchParam"}) is None

@@ -36,7 +36,12 @@ The candidates a rule speaks for, each filter narrowing both sides:
   ``Forage``, ``Waterbend``, ``Blight``), compared without case; unreadable
   on a candidate whose line the sidecar dropped (a permanent spell);
 - ``script_param``: the line's root segment holds this parameter, a name or a
-  name -> value map as ``outcome_event`` reads it.
+  name -> value map as ``outcome_event`` reads it;
+- ``candidate_face``: ``front`` for a candidate acting through its card's
+  first face, ``alternative`` for one acting through another (a double-faced
+  card's back face, an Adventure, an Omen, a split card's second half), read
+  off the candidate's provenance key, whose ``face`` counts the card's faces
+  from 0; which kind of second face it is, the key does not say.
 
 A candidate a filter cannot read is on neither side.
 
@@ -77,7 +82,8 @@ from effects.domain.rule_detectors.acting_line import (
 GEN2_BITS = frozenset({"can_play", "affordable", "has_legal_target"})
 GEN3_BITS = frozenset({"timing", "failed_check"})
 FILTERS = frozenset({"keyword", "source_keyword", "cost_symbol", "cost_part", "script_param",
-                     "land_play"})
+                     "land_play", "candidate_face"})
+CANDIDATE_FACES = frozenset({"front", "alternative"})
 CHECKS = frozenset(check.value for check in PlayabilityCheck)
 
 #: A mana symbol as ``Cost$`` spells it (``W``, ``12``, ``W/U``, ``2/W``,
@@ -129,6 +135,12 @@ def _passes(candidate: Candidate, lines: SidecarLookup | None,
     """Whether the candidate is one the declaration's filters speak for."""
     if "land_play" in params and candidate.land_play is not bool(params["land_play"]):
         return False
+    if "candidate_face" in params:
+        if not candidate.ability:
+            return False
+        alternative = candidate.ability[0].face != 0
+        if alternative != (params["candidate_face"] == "alternative"):
+            return False
     if "keyword" in params and not is_keyword_line(
             line_of(candidate.ability, lines), params["keyword"]):
         return False
@@ -164,7 +176,7 @@ class VerdictBit:
         {"bit", "check", "fires_when", "responsible_static"}) | FILTERS
     general: frozenset[str] = frozenset(
         {"bit", "check", "fires_when", "keyword", "source_keyword", "cost_symbol", "cost_part",
-         "land_play"})
+         "land_play", "candidate_face"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         bit = params.get("bit")
@@ -183,6 +195,8 @@ class VerdictBit:
         if bit == "failed_check" and params.get("check") not in CHECKS:
             raise ValueError(f"verdict_bit: a failed_check declaration names its check, "
                              f"one of {sorted(CHECKS)}; got {params.get('check')!r}")
+        if params.get("candidate_face", "front") not in CANDIDATE_FACES:
+            raise ValueError(f"verdict_bit: candidate_face is one of {sorted(CANDIDATE_FACES)}")
         if record.kind is not RecordKind.PLAYABILITY or (
                 record.subkind is not PlayabilitySubkind.DECISION):
             return None
