@@ -160,7 +160,9 @@
           "event": "phased",
           "out": false
         },
-        "needs": []
+        "needs": [
+          "turn_action"
+        ]
       }
     },
     {

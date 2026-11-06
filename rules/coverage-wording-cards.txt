@@ -1,14 +1,12 @@
 abbey gargoyles
 arcanum wings
 archivist of oghma
-aura graft
 aven farseer
 aven mindcensor
 balloon stand
 barkweave crusher
 barter in blood
 beloved beggar
-black knight
 blitz automaton
 bloodbraid elf
 braided net
@@ -52,7 +50,6 @@ glorious purpose
 goblin bombardment
 graf rats
 grafdigger's cage
-grafted wargear
 gravebane zombie
 grizzly bears
 hakbal of the surging soul
@@ -80,14 +77,12 @@ narci, fable singer
 naturalize
 night's whisper
 ornithopter
-pacifism
 phyrexian arena
 pir, imaginative rascal
 plains
 platinum emperion
 radiate
 radical idea
-rakdos cackler
 rest in peace
 reverse engineer
 runeclaw bear
