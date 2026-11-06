@@ -34,7 +34,15 @@ Parameters:
   ``battlefield_and_players`` (for ``legal_defenders`` those other than the
   anchor's controller). A static is never recorded for an unlisted entity, so
   ``responsible_static`` leaves them out; ``must_block`` takes no universe,
-  its outside being listed already.
+  its outside being listed already;
+- ``keyword``: only a listed entity whose card prints this keyword counts, on
+  either side, read off its sidecar as ``outcome_event``'s ``source_keyword``
+  is: the restriction a keyword makes, on the creatures carrying it (unleash's
+  "can't block");
+- ``counter_type``: the restriction holds while the entity has a counter of
+  this type (unleash's +1/+1 counter), so an entity on the ``fires`` side
+  counts only holding one and an entity on the near-miss side only holding
+  none, in ``normalize_counter_type``'s spelling.
 
 Without ``universe`` only an entity the record lists counts: the legal list's
 members are inside, the forbidden entities outside, and a decision record,
@@ -54,6 +62,8 @@ from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, PlayabilitySubkind, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors.acting_line import card_has_keyword
+from effects.domain.state_snapshot import normalize_counter_type
 
 UNIVERSES = frozenset({"battlefield", "battlefield_and_players"})
 #: The gen-2 collector's cap on a candidate's ``legal_targets``.
@@ -139,11 +149,31 @@ def _sides(record: EffectRecord, listed: str, statics_only: bool, universe: str 
     return inside, outside
 
 
+def _carriers(record: EffectRecord, ids: tuple[str, ...], lines: SidecarLookup | None,
+              keyword: str | None, counter: str | None, holding: bool) -> tuple[str, ...]:
+    """The entities of ``ids`` whose card prints ``keyword`` and that hold
+    (``holding``) or lack a ``counter``, each filter applying where given."""
+    def kept(entity_id: str) -> bool:
+        entity = record.state.entity(entity_id)
+        if entity is None:
+            return False
+        if keyword is not None and not card_has_keyword(entity.printed, lines, keyword):
+            return False
+        if counter is None:
+            return True
+        held = any(normalize_counter_type(name) == counter and n > 0
+                   for name, n in entity.counters.items())
+        return held == holding
+    return tuple(e for e in ids if kept(e))
+
+
 @dataclass(frozen=True, slots=True)
 class LegalityMembership:
     id: str = "legality_membership"
-    params: frozenset[str] = frozenset({"list", "fires_when", "responsible_static", "universe"})
-    general: frozenset[str] = frozenset({"list", "fires_when", "universe"})
+    params: frozenset[str] = frozenset({"list", "fires_when", "responsible_static", "universe",
+                                        "keyword", "counter_type"})
+    general: frozenset[str] = frozenset({"list", "fires_when", "universe", "keyword",
+                                         "counter_type"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         listed = params.get("list")
@@ -165,6 +195,11 @@ class LegalityMembership:
         inside, outside = _sides(record, listed, bool(params.get("responsible_static")),
                                  universe)
         fires, near = (outside, inside) if fires_when == "outside" else (inside, outside)
+        keyword, counter = params.get("keyword"), params.get("counter_type")
+        if keyword is not None or counter is not None:
+            counter = None if counter is None else normalize_counter_type(counter)
+            fires = _carriers(record, fires, lines, keyword, counter, holding=True)
+            near = _carriers(record, near, lines, keyword, counter, holding=False)
         if fires:
             return FamilyMatch(Polarity.FIRES, True, fires)
         if near:

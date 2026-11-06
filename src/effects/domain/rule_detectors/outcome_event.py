@@ -28,6 +28,11 @@ Parameters:
 - ``min_count``: how many such events the record must hold, 1 by default;
 - ``api``: the acting line's script API type (``ChangeZone``, ``Token`` …),
   which restricts both sides to resolutions of that API;
+- ``api_in_chain``: true to let ``api`` name any segment of the acting line's
+  chain, a sub-ability as well as the root (Aura Graft's ``Attach`` below its
+  ``GainControl``); the root alone otherwise, which most declarations want,
+  since a sub-ability may not run (an optional "you may attach", a branch a
+  condition skips) and its near miss would then be no near miss;
 - ``keyword``: the acting line is the line this keyword produced (``Equip``,
   ``Cycling``, ``Outlast``: an ability a keyword generates acts through the
   keyword's own line, whose API is no API of its own), compared in
@@ -83,7 +88,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from effects.domain.event_schema import EVENT_PARAMS, Event, EventType
-from effects.domain.provenance import SidecarLookup
+from effects.domain.provenance import SidecarLine, SidecarLookup
 from effects.domain.records import EffectRecord, Moment, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
@@ -95,6 +100,8 @@ from effects.domain.rule_detectors.acting_line import (
     script_params_match,
     source_is_token_of_kind,
 )
+from effects.domain.script_text import api_of, segments
+from effects.domain.script_text import params as params_of
 from effects.domain.state_snapshot import EntityState, StateSnapshot, normalize_counter_type
 
 __all__ = ["EVENT_FILTERS", "FAMILY", "acting_api", "event_filters", "source_is_token_of_kind",
@@ -138,8 +145,8 @@ _SUBJECT_QUALIFIERS = {
 }
 _RECORD_QUALIFIERS = frozenset({"with_event", "without_event"})
 _QUALIFIERS = frozenset(_SUBJECT_QUALIFIERS) | _RECORD_QUALIFIERS
-_OWN = frozenset({"event", "min_count", "api", "keyword", "source_keyword", "script_param",
-                  "absent", "token_kind", "source_token_kind"}) | _QUALIFIERS
+_OWN = frozenset({"event", "min_count", "api", "api_in_chain", "keyword", "source_keyword",
+                  "script_param", "absent", "token_kind", "source_token_kind"}) | _QUALIFIERS
 #: The record kinds whose payload lists the events a rule's outcome is.
 _EVENT_KINDS = frozenset({RecordKind.RESOLUTION, RecordKind.COMBAT, RecordKind.TURN_ACTION})
 
@@ -148,6 +155,17 @@ def acting_api(record: EffectRecord, lines: SidecarLookup | None) -> str | None:
     """The acting line's script API type, or None where no line is readable."""
     line = acting_line(record, lines)
     return line.script_api_type if line is not None else None
+
+
+def _acts_through(line: SidecarLine | None, api: str, in_chain: bool) -> bool:
+    """Whether ``line``'s root API is ``api``, or under ``in_chain`` any
+    segment's of its chain."""
+    if line is None:
+        return False
+    if line.script_api_type == api:
+        return True
+    return in_chain and bool(line.script_text) and any(
+        api_of(params_of(segment)) == api for segment in segments(line.script_text))
 
 
 def same_value(found: Any, wanted: Any, name: str | None = None) -> bool:
@@ -222,7 +240,8 @@ def _subject_verdict(event: Event, state: StateSnapshot,
 class OutcomeEvent:
     id: str = "outcome_event"
     params: frozenset[str] = _OWN | EVENT_FILTERS
-    general: frozenset[str] = frozenset({"event", "api", "keyword", "source_keyword", "absent"})
+    general: frozenset[str] = frozenset(
+        {"event", "api", "api_in_chain", "keyword", "source_keyword", "absent"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset({"owner"}) if "controller_is_owner" in params else frozenset()
@@ -255,7 +274,7 @@ class OutcomeEvent:
             return None
         if scoped or "script_param" in params:
             line = acting_line(record, lines)
-            if api is not None and (line is None or line.script_api_type != api):
+            if api is not None and not _acts_through(line, api, bool(params.get("api_in_chain"))):
                 return None
             if keyword is not None and not is_keyword_line(line, keyword):
                 return None

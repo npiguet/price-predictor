@@ -142,7 +142,19 @@
         "Grizzly Bears",
         "Runeclaw Bear"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "A creature with unleash and a +1/+1 counter is kept out of the legal blockers.",
+        "near_miss": "A creature with unleash and no +1/+1 counter is listed among the legal blockers.",
+        "params": {
+          "list": "legal_blockers",
+          "keyword": "Unleash",
+          "counter_type": "+1/+1"
+        },
+        "needs": []
+      }
     }
   ]
 }

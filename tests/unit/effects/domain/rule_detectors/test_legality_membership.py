@@ -159,3 +159,65 @@ class TestTheGen3Lists:
         assert FAMILY.needs({"list": "legal_defenders"}) == {"legal_defenders"}
         assert FAMILY.needs({"list": "must_block"}) == {"must_block"}
         assert FAMILY.needs({"list": "legal_blockers"}) == frozenset()
+
+
+class TestKeywordAndCounter:
+    """A keyword's restriction while a counter is on its carrier (unleash, 702.98a)."""
+
+    @staticmethod
+    def _carrier(by_kind, sidecars):
+        """A blockers record, one legal blocker whose card prints a keyword, and the keyword."""
+        for record in by_kind("playability", "blockers"):
+            for entity_id in record.payload.legal_blockers:
+                entity = record.state.entity(entity_id)
+                if entity is None or not entity.printed:
+                    continue
+                try:
+                    lines = sidecars.get(entity.printed[0].script_file).lines
+                except KeyError:
+                    continue
+                keyword = next((line.keyword_display_name for line in lines
+                                if line.keyword_display_name), None)
+                if keyword is not None:
+                    return record, entity_id, keyword
+        raise AssertionError("no legal blocker printing a keyword")
+
+    @staticmethod
+    def _edited(record, entity_id, *, counters, forbidden):
+        entities = tuple(replace(e, counters=counters) if e.id == entity_id else e
+                         for e in record.state.entities)
+        payload = record.payload
+        legal = tuple(e for e in payload.legal_blockers if e != entity_id)
+        if forbidden:
+            payload = replace(payload, legal_blockers=legal, forbidden=(
+                *payload.forbidden, ForbiddenEntity(entity_id)))
+        return replace(record, state=replace(record.state, entities=entities), payload=payload)
+
+    def _declared(self, keyword):
+        return {"list": "legal_blockers", "keyword": keyword, "counter_type": "+1/+1"}
+
+    def test_a_carrier_kept_out_while_holding_the_counter_fires(self, by_kind, gen2_sidecars):
+        record, entity_id, keyword = self._carrier(by_kind, gen2_sidecars)
+        edited = self._edited(record, entity_id, counters={"P1P1": 1}, forbidden=True)
+        found = FAMILY.match(edited, gen2_sidecars, self._declared(keyword))
+        assert found.polarity is Polarity.FIRES and entity_id in found.entities
+
+    def test_a_legal_carrier_without_the_counter_is_the_near_miss(self, by_kind, gen2_sidecars):
+        record, entity_id, keyword = self._carrier(by_kind, gen2_sidecars)
+        edited = self._edited(record, entity_id, counters={}, forbidden=False)
+        found = FAMILY.match(edited, gen2_sidecars, self._declared(keyword))
+        assert found.polarity is Polarity.DOES_NOT_FIRE and entity_id in found.entities
+
+    def test_a_carrier_on_the_side_its_counter_does_not_explain_is_not_counted(
+            self, by_kind, gen2_sidecars):
+        record, entity_id, keyword = self._carrier(by_kind, gen2_sidecars)
+        for counters, forbidden in (({}, True), ({"+1/+1": 2}, False)):
+            edited = self._edited(record, entity_id, counters=counters, forbidden=forbidden)
+            found = FAMILY.match(edited, gen2_sidecars, self._declared(keyword))
+            assert found is None or entity_id not in found.entities
+
+    def test_an_entity_whose_card_lacks_the_keyword_is_not_counted(
+            self, by_kind, gen2_sidecars):
+        record, entity_id, _ = self._carrier(by_kind, gen2_sidecars)
+        edited = self._edited(record, entity_id, counters={"P1P1": 1}, forbidden=True)
+        assert FAMILY.match(edited, gen2_sidecars, self._declared("No Such Keyword")) is None

@@ -81,7 +81,8 @@
         "near_miss": "An attach effect resolves and attaches nothing.",
         "params": {
           "event": "attached",
-          "api": "Attach"
+          "api": "Attach",
+          "api_in_chain": true
         },
         "needs": []
       }

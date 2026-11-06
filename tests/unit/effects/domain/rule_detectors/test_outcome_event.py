@@ -318,3 +318,35 @@ class TestT036Shapes:
         with pytest.raises(ValueError, match="no parameter"):
             FAMILY.match(record, None, {"event": other.type.value,
                                         "with_event": {"event": "zone_change", "amount": 1}})
+
+
+class TestApiInChain:
+    @staticmethod
+    def _chained(by_kind, sidecars):
+        """An effect half whose acting line chains a sub-ability of another API."""
+        from effects.domain.script_text import api_of, params, segments
+
+        for record in _effect_halves(by_kind):
+            line = acting_line(record, sidecars)
+            if line is None or not line.script_text or not record.payload.events:
+                continue
+            apis = [api_of(params(s)) for s in segments(line.script_text)]
+            sub = next((a for a in apis[1:] if a and a != apis[0]), None)
+            if apis[0] and sub:
+                return record, apis[0], sub, record.payload.events[0].type.value
+        raise AssertionError("no effect half acting through a chained script")
+
+    def test_a_sub_ability_s_api_is_read_only_when_asked_for(self, by_kind, gen2_sidecars):
+        record, _, sub, event = self._chained(by_kind, gen2_sidecars)
+        assert FAMILY.match(record, gen2_sidecars, {"event": event, "api": sub}) is None
+        found = FAMILY.match(record, gen2_sidecars,
+                             {"event": event, "api": sub, "api_in_chain": True})
+        assert found.polarity is Polarity.FIRES
+
+    def test_the_root_api_still_matches_in_the_chain(self, by_kind, gen2_sidecars):
+        record, root, _, event = self._chained(by_kind, gen2_sidecars)
+        for declared in ({"event": event, "api": root},
+                         {"event": event, "api": root, "api_in_chain": True}):
+            assert FAMILY.match(record, gen2_sidecars, declared).polarity is Polarity.FIRES
+        assert FAMILY.match(record, gen2_sidecars, {"event": event, "api": "NoSuchApi",
+                                                    "api_in_chain": True}) is None
