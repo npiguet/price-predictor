@@ -36,7 +36,9 @@ Parameters:
 - ``keyword``: the acting line is the line this keyword produced (``Equip``,
   ``Cycling``, ``Outlast``: an ability a keyword generates acts through the
   keyword's own line, whose API is no API of its own), compared in
-  ``keyword_names``' spelling; like ``api`` it restricts both sides;
+  ``keyword_names``' spelling; like ``api`` it restricts both sides, and
+  given beside ``api`` a line either names counts (an Attach resolution or
+  an equip, both of which attach);
 - ``source_keyword``: the acting line's card prints this keyword on any of its
   lines, read off its sidecar as ``verdict_bit`` reads it: an enters-with-
   counters keyword (amplify, modular, sunburst, bloodthirst, graft) works in
@@ -274,9 +276,9 @@ class OutcomeEvent:
             return None
         if scoped or "script_param" in params:
             line = acting_line(record, lines)
-            if api is not None and not _acts_through(line, api, bool(params.get("api_in_chain"))):
-                return None
-            if keyword is not None and not is_keyword_line(line, keyword):
+            by_api = api is not None and _acts_through(line, api, bool(params.get("api_in_chain")))
+            by_keyword = keyword is not None and is_keyword_line(line, keyword)
+            if (api is not None or keyword is not None) and not (by_api or by_keyword):
                 return None
             if "script_param" in params and not script_params_match(
                     root_params_of(line), params["script_param"]):

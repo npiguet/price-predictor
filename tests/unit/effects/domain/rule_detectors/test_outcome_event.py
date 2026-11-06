@@ -174,6 +174,19 @@ class TestKeyword:
         assert FAMILY.match(record, gen2_sidecars,
                             {"event": "token_created", "keyword": "Equip"}) is None
 
+    def test_beside_an_api_a_keyword_admits_its_own_line_too(self, by_kind, gen2_sidecars):
+        keyworded = self._keyword_resolution(by_kind, gen2_sidecars)
+        name = acting_line(keyworded, gen2_sidecars).keyword_display_name
+        scripted = _token_maker(by_kind, gen2_sidecars)
+        api = acting_api(scripted, gen2_sidecars)
+        for record in (keyworded, scripted):
+            event = record.payload.events[0].type.value
+            assert FAMILY.match(record, gen2_sidecars,
+                                {"event": event, "api": api, "keyword": name}) is not None
+        event = scripted.payload.events[0].type.value
+        assert FAMILY.match(scripted, gen2_sidecars, {"event": event, "api": "NoSuchApi",
+                                                      "keyword": name}) is None
+
 
 class TestScriptParam:
     @staticmethod
