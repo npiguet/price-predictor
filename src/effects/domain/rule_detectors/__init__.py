@@ -160,7 +160,7 @@ def families() -> Mapping[str, DetectorFamily]:
 FAMILY_MODULES: tuple[str, ...] = (
     "sba_zone_move", "trigger_mode", "keyword_combat", "verdict_bit",
     "continuous_contribution", "rewrite_event", "legality_membership",
-    "outcome_event", "resolution_outcome", "sba_game_loss",
+    "outcome_event", "resolution_outcome", "sba_game_loss", "combat_keyword_effect",
 )
 
 
