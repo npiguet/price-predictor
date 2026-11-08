@@ -6,7 +6,7 @@
 
 - A sibling MTG Forge checkout at `../forge`, built with `mvn install -DskipTests`.
 - The fat JAR built after this feature lands:
-  `cd forge-connector && mvn package -DskipTests`.
+  `cd forge-connector && mvn install -DskipTests`.
 - A draft corpus whose pods contain at least two distinct agent labels. The yardstick
   corpus at `output/draft/yardstick-drafts.jsonl` qualifies, its pods seating `gen4`
   alongside `gen1` and `forge-full`.
