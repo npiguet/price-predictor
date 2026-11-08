@@ -6,7 +6,7 @@ from price_predictor.domain.tokenizer import MtgTokenizer
 
 
 def _make_tokenizer() -> MtgTokenizer:
-    """Build a small tokenizer from the fixture vocab."""
+    """Build a small tokenizer from the fixture vocabulary."""
     vocab = {
         "[PAD]": 0,
         "[UNK]": 1,
@@ -94,8 +94,8 @@ class TestMtgTokenizerTokenizeToIds:
     def test_returns_unpadded_in_vocab_ids(self):
         tok = _make_tokenizer()
         # Include a mana cost: line so the tokenizer doesn't append the
-        # "mana cost: none" sentinel (whose tokens are absent from this
-        # tiny fixture vocab and would show up as UNK).
+        # "mana cost: none" no-mana-cost marker (whose tokens are absent from this
+        # tiny fixture vocabulary and would show up as UNK).
         ids = tok.tokenize_to_ids("mana cost: {W}\nflying vigilance")
         assert 6 in ids and 4 in ids and 9 in ids   # {W}, flying, vigilance
         assert ids[-1] != tok.PAD_ID                # not padded
@@ -120,7 +120,7 @@ class TestMtgTokenizerEncode:
     def test_flying_vigilance_produces_two_domain_tokens(self):
         tok = _make_tokenizer()
         ids, mask = tok.encode("flying, vigilance", max_length=10)
-        # flying (4) and vigilance (9) are both in-vocab
+        # flying (4) and vigilance (9) are both in the vocabulary
         assert 4 in ids  # flying
         assert 9 in ids  # vigilance
 

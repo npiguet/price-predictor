@@ -32,7 +32,7 @@ class TestEndToEnd:
             prices_path=fixtures_dir / "allprices_sample.json",
             printings_path=fixtures_dir / "allprintings_sample.json",
             output_path=tmp_path / "models",
-            test_split=0.2,
+            held_out_fraction=0.2,
             random_seed=42,
         )
         model_path = train_result.model_path
@@ -61,7 +61,7 @@ class TestEndToEnd:
             power="6",
             toughness="6",
             keywords=["Flying", "Haste"],
-            oracle_text=(
+            converted_ability_text=(
                 "Flying, haste. When Imaginary Dragon enters the "
                 "battlefield, deal 3 damage to any target."
             ),
@@ -77,7 +77,7 @@ class TestEndToEnd:
             output_dir=fixtures_dir / "converted_cards",
             prices_path=fixtures_dir / "allprices_sample.json",
             printings_path=fixtures_dir / "allprintings_sample.json",
-            test_split=0.2,
+            held_out_fraction=0.2,
             random_seed=42,
         )
         assert eval_result.metrics.sample_count > 0
@@ -91,14 +91,14 @@ class TestEndToEnd:
             prices_path=fixtures_dir / "allprices_sample.json",
             printings_path=fixtures_dir / "allprintings_sample.json",
             output_path=tmp_path / "models",
-            test_split=0.2,
+            held_out_fraction=0.2,
             random_seed=42,
         )
         card = Card(
             name="Test",
             types=["Instant"],
             mana_cost=ManaCost.parse("R"),
-            oracle_text="Deal 3 damage.",
+            converted_ability_text="Deal 3 damage.",
             ability_count=1,
         )
         predict_uc = PredictPriceUseCase()
@@ -106,20 +106,20 @@ class TestEndToEnd:
         r2 = predict_uc.execute(card, train_result.model_path)
         assert r1.predicted_price_eur == r2.predicted_price_eur
 
-    def test_train_with_metadata_enrichment_and_predict(
+    def test_train_with_printing_data_and_predict(
         self, tmp_path: Path, fixtures_dir: Path
     ) -> None:
-        """Train sklearn model on fixture data with metadata enrichment,
+        """Train sklearn model on fixture data with printing data,
         verify the model loads and predicts without error, and the feature
         engineering has the new feature count (593 = 93 dense + 500 tfidf)."""
-        # Train with the training fixtures (which include enriched cards)
+        # Train with the training fixtures (which include cards with printing data)
         train_uc = TrainModelUseCase()
         train_result = train_uc.execute(
             output_dir=fixtures_dir / "converted_cards_training",
             prices_path=fixtures_dir / "allprices_sample.json",
             printings_path=fixtures_dir / "allprintings_sample.json",
             output_path=tmp_path / "models",
-            test_split=0.2,
+            held_out_fraction=0.2,
             random_seed=42,
         )
         model_path = train_result.model_path
@@ -156,15 +156,15 @@ class TestEndToEnd:
             power="5",
             toughness="5",
             keywords=["Flying"],
-            oracle_text="Flying. When this creature enters, deal 2 damage.",
+            converted_ability_text="Flying. When this creature enters, deal 2 damage.",
             ability_count=2,
             printing_data=PrintingData(
                 is_reserved=False,
                 rarity="rare",
                 printings_count=2,
-                release_year=2020,
+                cheapest_printing_year=2020,
                 legalities=["commander", "legacy", "vintage", "modern"],
             ),
         )
-        prediction_enriched = predict_uc.execute(card_with_pd, model_path)
-        assert prediction_enriched.predicted_price_eur > 0
+        prediction_with_printing_data = predict_uc.execute(card_with_pd, model_path)
+        assert prediction_with_printing_data.predicted_price_eur > 0

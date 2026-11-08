@@ -11,7 +11,7 @@ from price_predictor.domain.entities import TransformerConfig
 class CardPriceTransformerModel(nn.Module):
     """Transformer encoder that predicts shifted-log card prices from token IDs.
 
-    Architecture: cat([max_pooled(d_model), mean_pooled(d_model), meta(meta_dim)])
+    Architecture: cat([max_pooled(d_model), mean_pooled(d_model), printing_data_vector(meta_dim)])
     → Linear(2*d_model + meta_dim, regression_hidden_dim) → ReLU → Linear(..., 1)
     """
 
@@ -76,7 +76,7 @@ class CardPriceTransformerModel(nn.Module):
 
     @torch.no_grad()
     def encode(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-        """Return pooled card embedding without meta or output head.
+        """Return the pooled card vector, without printing data or the output head.
 
         Returns:
             (batch_size, 2 * d_model) — cat([max_pooled, mean_pooled])
@@ -87,19 +87,19 @@ class CardPriceTransformerModel(nn.Module):
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        meta: torch.Tensor,
+        printing_data_vector: torch.Tensor,
     ) -> torch.Tensor:
         """Run forward pass.
 
         Args:
             input_ids: (batch_size, seq_len) token IDs.
             attention_mask: (batch_size, seq_len) 1 for real tokens, 0 for padding.
-            meta: (batch_size, meta_dim) side-channel metadata vector.
+            printing_data_vector: (batch_size, meta_dim) printing-data vector.
 
         Returns:
             (batch_size,) predictions in shifted-log-price space.
         """
         pooled_text = self._encode_and_pool(input_ids, attention_mask)
-        pooled = torch.cat([pooled_text, meta], dim=-1)
+        pooled = torch.cat([pooled_text, printing_data_vector], dim=-1)
         pooled = self.output_dropout(pooled)
         return self.output_head(pooled).squeeze(-1)

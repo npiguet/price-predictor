@@ -1,19 +1,19 @@
 # Goal
 
-Predict Magic: The Gathering card EUR market prices from game-visible attributes (mana cost, types, oracle text,
-power/toughness, keywords) and printing metadata (reserve list status, rarity, reprint count, format legalities). The
-system works for both real cards and hypothetical ones — predicting the price of custom or unreleased cards based on
-learned patterns from the entire real card catalog is the primary use case. A secondary role: the transformer model's
-internal representations serve as card embeddings for the sealed deck picker (see `specs/2026-03-28-sealed-deck-picker.md`).
+Predict Magic: The Gathering card prices, in euros, from game-visible attributes (mana cost, types, converted ability
+text, power/toughness, keywords) and printing data (reserve list status, rarity, printings count, format legalities). The
+system works for both real cards and hypothetical ones — predicting the price of hypothetical cards based on
+learned patterns from the entire real card catalog is the primary use case. A secondary role: the price transformer's
+pooled card vectors serve as card embeddings for the sealed deck picker (see `specs/2026-03-28-sealed-deck-picker.md`).
 
 # Overall Approach
 
 Two model architectures coexist, trained on the same data pipeline and exposed through the same CLI and REST API:
 
-- **sklearn GradientBoostingRegressor** — tabular regression on hand-engineered features. Fast to train (~2 minutes on
+- **sklearn model** (`GradientBoostingRegressor`) — tabular regression on hand-engineered features. Fast to train (~2 minutes on
   CPU), interpretable feature importances, good baseline accuracy.
-- **Custom transformer encoder** — encoder-only transformer trained on tokenized card text with a metadata side-channel.
-  Learns directly from the full card text; produces reusable card embeddings for downstream ML tasks.
+- **Price transformer** — encoder-only transformer trained on tokenized converted cards, with printing data fed beside
+  the tokens. Learns directly from the full card text; produces reusable pooled card vectors for downstream ML tasks.
 
 Both models are always returned when a prediction is requested — the consumer can compare or use whichever is more
 appropriate for their context.
@@ -21,17 +21,17 @@ appropriate for their context.
 ## Why Two Models
 
 The sklearn model was the original and remains useful: it trains in minutes, runs without a GPU, and its feature
-importances are directly inspectable. The transformer was added for three reasons:
+importances are directly inspectable. The price transformer was added for three reasons:
 
-1. **Learn from text without lossy feature engineering.** TF-IDF over oracle text (which the sklearn model uses) captures
-   word frequency but not word order, negation, or ability interactions. The transformer reads the full structured card
+1. **Learn from text without lossy feature engineering.** TF-IDF over converted ability text (which the sklearn model uses)
+   captures word frequency but not word order, negation, or ability interactions. The price transformer reads the full structured card
    text and can learn patterns like "this removal spell also draws a card" or "this creature has hexproof and is
    undercosted."
-2. **Produce reusable card embeddings.** The transformer's internal representation of a card — a 512-dimensional vector
+2. **Produce reusable pooled card vectors.** The price transformer's pooled card vector — a 512-dimensional vector
    capturing what the card does — is the foundation for the sealed deck picker's card encoder. This was not possible
    with the sklearn model.
 3. **Capture domain structure.** Mana symbols, ability types, and keywords have structural relationships
-   (e.g., `{W}{W}` signals strong white commitment) that the transformer can learn as embedding geometry.
+   (e.g., `{W}{W}` signals strong white commitment) that the price transformer can learn as embedding geometry.
 
 # Data Pipeline
 
@@ -41,8 +41,8 @@ MTG Forge stores card data as internal scripts optimized for its game engine —
 (`SVar:`, `DeckHints:`, `AI:` lines), Forge-specific syntax, and non-standard formatting. These are not suitable as
 model input.
 
-The Java converter (`ConvertMain` in the `forge-connector` module) transforms each Forge script into a clean,
-lowercase, English-keyed text format. The conversion:
+The Java converter (`ConvertMain` in the `forge-connector` module) transforms each Forge card script into a
+converted card: a clean, lowercase, English-keyed text format. The conversion:
 
 - Strips all engine metadata and Forge-internal syntax
 - Translates abilities into Oracle-text-matching English with classified type prefixes (`activated[N]:`, `triggered:`,
@@ -74,7 +74,7 @@ planeswalker[4]: [-12]: exile all cards from target player's library, ...
 replacement: CARDNAME enters with three loyalty counters on it.
 ```
 
-Multi-face cards use `ALTERNATE` as a separator, with each face carrying its own properties and abilities:
+Multi-face cards use `ALTERNATE` as a separator, with each face carrying its own header lines and ability lines:
 
 ```
 layout: adventure
@@ -110,7 +110,7 @@ replacement: as CARDNAME enters, you may pay 3 life. if you don't, it enters tap
 ### Name Line Handling
 
 The `name:` line is present in every converted card but is **stripped before model input** for both the sklearn parser
-and the transformer tokenizer. The model should learn to predict prices from what the card does, not from its name.
+and the tokenizer. The model should learn to predict prices from what the card does, not from its name.
 A card named "Jace" is not inherently expensive — it's expensive because of what its abilities do. Stripping the name
 also ensures the model generalizes to hypothetical cards that have no real name.
 
@@ -123,49 +123,49 @@ Prices come from MTGJSON's `AllPricesToday.json`, specifically the Cardmarket EU
 ignored — EUR from Cardmarket is the sole training signal, chosen for its lower volatility compared to alternatives.
 
 Since Forge card scripts represent cards at the oracle level (one entry per unique card, not per printing), many cards
-have multiple printings with different prices. The system selects the **cheapest price across all printings** — including
-foil, non-foil, promo, and special versions — as the training label. This represents the floor price attributable to
+have multiple printings with different prices. The card price, the training label, is the **cheapest price across all printings** —
+including foil, non-foil, promo, and special versions. This represents the floor price attributable to
 the card's game mechanics alone, stripped of collectibility and scarcity premiums from limited printings.
 
 A price floor of **€0.01** is applied: any card priced below €0.01 is clamped to €0.01 before use as a training label.
 This avoids `log(0)` errors during training while still representing near-worthless cards.
 
-Cards with no price in any printing are excluded from the training set entirely.
+Cards with no card price are excluded from training entirely.
 
-## Printing Metadata
+## Printing Data
 
-Five fields enrich each card's representation with information from `AllPrintings.json` that is not visible in the
-oracle text but strongly influences price:
+Five fields of printing data add to each card's representation information from `AllPrintings.json` that is not
+visible in its converted ability text but strongly influences price:
 
-| Field | Source | Default (unknown cards) |
+| Field | Source | Default printing data (hypothetical cards) |
 |-------|--------|------------------------|
 | `is_reserved` | MTGJSON `isReserved` flag | `false` |
 | `rarity` | Rarity of the cheapest printing | `rare` |
 | `printings_count` | Number of distinct sets containing the card | `1` |
-| `release_year` | Release year of the cheapest printing's set | `1993` |
+| `cheapest_printing_year` | Release year of the cheapest printing's set | `1993` |
 | `legalities` | Constructed formats where the card is legal | all 10 formats |
-| `is_abu` | Whether the cheapest printing is from Alpha/Beta/Unlimited | `false` |
+| `is_abu_only` | Whether the cheapest printing is from Alpha/Beta/Unlimited | `false` |
 
 The 10 recognized constructed formats: standard, pioneer, modern, brawl, legacy, vintage, pauper, commander, penny,
 oathbreaker.
 
-For **known cards** (name matches an entry in AllPrintings), all fields are auto-filled from the cheapest printing's
-data. For **unknown cards** (hypothetical or unreleased), defaults are applied — these defaults are deliberately
+For a card with a **canonical name** (its name matches an entry in AllPrintings), all fields are filled from its
+cheapest printing. For **hypothetical cards**, default printing data applies — these defaults are deliberately
 optimistic (legal everywhere, not reserved, rare) so that the model does not penalize cards it has never seen.
 
-### Why Printing Metadata
+### Why Printing Data
 
-Some of the strongest price signals are invisible in oracle text:
+Some of the strongest price signals are invisible in the converted ability text:
 
 - **Reserve list** cards cannot be reprinted, creating artificial scarcity that makes even mediocre cards expensive.
   Without this signal, the model cannot explain why Revised dual lands cost hundreds of euros.
-- **Reprint count** inversely correlates with price — a card printed in 15 sets has far more supply than one printed
+- **Printings count** inversely correlates with price — a card printed in 15 sets has far more supply than one printed
   once.
 - **Format legality** directly affects demand — a card banned in Modern loses a major demand source.
-- **Release year** captures historical context — older cards tend to have lower supply.
+- **Cheapest-printing year** captures historical context — older cards tend to have lower supply.
 - **Alpha/Beta/Unlimited** printings have extreme collectibility premiums.
 
-These fields are provided as a metadata side-channel rather than embedded in the card text, because they are
+These fields are fed to the models beside the card text rather than inside it, because they are
 numeric or categorical values that would be poorly represented as text tokens.
 
 ## Training Data Assembly
@@ -173,21 +173,21 @@ numeric or categorical values that would be poorly represented as text tokens.
 The pipeline to produce training examples:
 
 1. **Scan** `output/cardsfolder/` for converted `.txt` files (~32,000 cards)
-2. **Load** `AllPricesToday.json` and match each card by name to its cheapest EUR Cardmarket price
+2. **Load** `AllPricesToday.json` and match each card by canonical name to its card price (cheapest EUR Cardmarket price)
 3. **Load** `AllPrintings.json` and build a `PrintingData` object for each matched card (reserve list, rarity,
-   printings count, release year, legalities, ABU status)
-4. **Pair** each card's text + metadata with its price to produce `(text, price, PrintingData)` training tuples
-5. **Split** into 80% train / 20% test sets (random, seeded for reproducibility)
+   printings count, cheapest-printing year, legalities, ABU-only)
+4. **Pair** each card's text + printing data with its card price to produce `(text, price, PrintingData)` training tuples
+5. **Split** into 80% training cards and a 20% held-out split (random, seeded for reproducibility)
 
 Cards that fail parsing or have no matching price are skipped and reported. Typical yield: ~24,000 usable training
 examples from ~32,000 converted scripts.
 
 # Converted Card Text Format
 
-The canonical converted format uses lowercase property lines and classified ability lines. This is the input consumed
-by both the sklearn card parser and the transformer tokenizer.
+The canonical converted format uses lowercase header lines and classified ability lines. This is the input consumed
+by both the sklearn card parser and the tokenizer.
 
-## Property Lines
+## Header Lines
 
 | Prefix | Description | Example |
 |--------|-------------|---------|
@@ -225,11 +225,11 @@ Chapter lines encode the chapter number as part of the value: `chapter: I — ef
 ## Multi-Face Cards
 
 Multi-face cards (transform, split, adventure, modal DFC) use `ALTERNATE` on its own line to separate faces. Each
-face carries its own property lines and abilities with independent numbering.
+face carries its own header lines and ability lines with independent numbering.
 
 # Custom Tokenizer
 
-The transformer reads card text through a word-level tokenizer with a compact domain vocabulary, not a general-purpose
+The price transformer reads converted cards through a word-level tokenizer with a compact domain vocabulary, not a general-purpose
 tokenizer like BERT's WordPiece (~30,000 tokens).
 
 ## Vocabulary
@@ -237,10 +237,10 @@ tokenizer like BERT's WordPiece (~30,000 tokens).
 The vocabulary is built by `python -m price_predictor vocabulary`, which:
 
 1. **Collects domain terms** from structured fields: all card types, supertypes, subtypes, keyword abilities, game
-   zones, colors, and property-line prefixes from the converted card corpus.
+   zones, colors, and header-line prefixes from the converted card corpus.
 2. **Scans corpus frequency**: every word appearing 5+ times across all converted card files is included.
-3. **Seeds set codes**: alphabetic fragments of every set code from `AllPrintings.json` are added, so metadata-enriched
-   card texts never produce UNK for set identifiers.
+3. **Seeds set codes**: alphabetic fragments of every set code from `AllPrintings.json` are added, so card texts
+   carrying printing data never produce UNK for set identifiers.
 4. **Normalizes multi-word keywords** to underscore form: "first strike" becomes `first_strike`, "double strike"
    becomes `double_strike`. These compound keywords are recognized before word splitting.
 
@@ -277,8 +277,8 @@ and shrinks the embedding table from ~30,000 entries (BERT) to ~5,000.
 
 ## Architecture
 
-A `GradientBoostingRegressor` trained on a dense feature vector assembled from 7 feature groups plus a TF-IDF oracle
-text matrix.
+A `GradientBoostingRegressor` trained on a dense feature vector assembled from 7 feature groups plus a TF-IDF matrix
+over the converted ability text.
 
 ### Feature Groups
 
@@ -287,39 +287,39 @@ text matrix.
 | Mana cost | 13 | has_mana_cost, CMC, WUBRG pip counts, color count, generic, colorless, has_X, has_hybrid, has_phyrexian |
 | Card types | 15 | One-hot: Creature, Instant, Sorcery, Enchantment, Artifact, Planeswalker, Land, Battle, Scheme, Plane, Conspiracy, Vanguard, Phenomenon, Tribal, Kindred |
 | Supertypes | 7 | One-hot: Legendary, Basic, Snow, World, Ongoing, Host + subtype count |
-| Keywords | 32 | Top-30 keywords (one-hot) + total keyword count + oracle text length |
+| Keywords | 32 | Top-30 keywords (one-hot) + total keyword count + converted ability text length |
 | P/T & combat | 6 | Power, toughness, is_variable_power, is_variable_toughness, loyalty, ability count |
 | Layout | 6 | One-hot: normal, doublefaced, split, adventure, modal, flip |
-| Printing | 19 | is_reserved, is_abu, rarity one-hot (4), printings count, normalized release year, legality count, per-format legality multi-hot (10) |
-| Oracle TF-IDF | 500 | TF-IDF vectorizer over oracle text (max 500 features, English stop words removed) |
+| Printing data | 19 | is_reserved, is_abu_only, rarity one-hot (4), printings count, normalized cheapest-printing year, legality count, per-format legality multi-hot (10) |
+| Converted ability text TF-IDF | 500 | TF-IDF vectorizer over converted ability text (max 500 features, English stop words removed) |
 
-Total: ~598 features (exact count depends on vocabulary).
+Total: ~598 features (exact count depends on the learned TF-IDF terms).
 
-The top-30 keywords are learned from the training set. The TF-IDF vocabulary is also learned at training time.
+The top-30 keywords are learned from the training set. The TF-IDF terms are also learned at training time.
 
 ## Training
 
-The target is `log(price)` — the natural logarithm of the EUR price. The skew of the price distribution (many
+The target is `log(price)` — the natural logarithm of the card price. The skew of the price distribution (many
 cheap cards, few expensive ones) would otherwise let a handful of expensive cards dominate the loss. The model
 predicts in log space; predictions are transformed back via `exp()` for display.
 
 Training uses the full 80% training split with default `GradientBoostingRegressor` hyperparameters and
-`random_state=42`. The trained model, including the fitted `FeatureEngineering` pipeline (TF-IDF vocabulary, top-30
+`random_state=42`. The trained model, including the fitted `FeatureEngineering` pipeline (TF-IDF terms, top-30
 keywords), is serialized as a `.joblib` file to `models/price-predictor/sklearn/`.
 
 Two artifacts are saved: a timestamped version (`{timestamp}.joblib`) and a `latest.joblib` symlink for convenience.
 
-# Transformer Model
+# Price Transformer
 
 ## Architecture
 
-An encoder-only transformer that predicts shifted-log card prices from tokenized card text. The architecture:
+An encoder-only transformer that predicts shifted-log prices from tokenized converted cards. The architecture:
 
 ```
 Token IDs → Embedding(vocab_size, d_model) + Positional(max_seq_len, d_model) → Dropout
   → TransformerEncoder(n_layers layers, n_heads heads, ff_dim feedforward)
   → cat([max_pool, mean_pool])   →   (2 × d_model,)
-  → cat([pooled_text, metadata]) →   (2 × d_model + 15,)
+  → cat([pooled_text, printing_data]) → (2 × d_model + 15,)
   → Linear(2 × d_model + 15, regression_hidden_dim) → ReLU → Linear(regression_hidden_dim, 1)
 ```
 
@@ -331,17 +331,17 @@ Token IDs → Embedding(vocab_size, d_model) + Positional(max_seq_len, d_model) 
 | `n_layers` | 2 | Transformer encoder layers |
 | `n_heads` | 4 | Attention heads per layer |
 | `ff_dim` | 1024 | Feedforward inner dimension (4× d_model) |
-| `max_seq_len` | (from vocab) | Maximum token sequence length |
+| `max_seq_len` | (from vocabulary) | Maximum token sequence length |
 | `dropout` | 0.1 | Dropout rate |
 | `regression_hidden_dim` | 64 | Hidden dimension of the output MLP |
 | `log_offset` | 2.0 | Price transform: `log(price + offset)` |
-| `meta_dim` | 15 | Metadata side-channel width |
+| `meta_dim` | 15 | Printing-data vector width |
 
 All architecture hyperparameters are CLI flags, enabling experimentation without code changes.
 
 ### Pooling
 
-The encoder's output (one vector per token position) is reduced to a fixed-size card representation via
+The encoder's output (one vector per token position) is reduced to the pooled card vector via
 **dual pooling**: max-pool and mean-pool across the token dimension, concatenated.
 
 - **Max-pool** captures peak activations — the presence of rare keywords, specific mana symbols, or unusual ability
@@ -352,23 +352,23 @@ The encoder's output (one vector per token position) is reduced to a fixed-size 
 Both operations mask padding positions: max-pool fills padding with `-inf` (so padding never wins), mean-pool fills
 padding with `0.0` and divides by the true sequence length. The result is a vector of shape `(2 × d_model,)`.
 
-### Metadata Side-Channel
+### Printing Data
 
-After pooling, a 15-dimensional metadata vector is concatenated before the regression head:
+After pooling, a 15-dimensional printing-data vector is concatenated before the regression head:
 
 | Index | Feature | Encoding |
 |-------|---------|----------|
 | 0 | is_reserved | 0.0 / 1.0 |
 | 1 | rarity | ordinal: common=0.0, uncommon=0.33, rare=0.67, mythic=1.0 |
 | 2 | printings count | log(count) / log(50), clamped [0, 1] |
-| 3 | release year | (year - 1992) / 34, clamped [0, 1] |
+| 3 | cheapest-printing year | (year - 1992) / 34, clamped [0, 1] |
 | 4–13 | format legalities | multi-hot over 10 formats |
-| 14 | is_abu | 0.0 / 1.0 |
+| 14 | is_abu_only | 0.0 / 1.0 |
 
-The metadata enters after the transformer encoder, not as input tokens. This is deliberate: numeric and categorical
+Printing data enters after the price encoder, not as input tokens. This is deliberate: numeric and categorical
 features like "printings count = 12" or "rarity = mythic" would be poorly represented as text tokens, and mixing them
-into the token stream would dilute the text signal. The side-channel lets the regression head learn the interaction
-between text features and metadata without burdening the encoder.
+into the token stream would dilute the text signal. Feeding it beside the tokens lets the regression head learn the
+interaction between text features and printing data without burdening the encoder.
 
 ## Training
 
@@ -382,8 +382,8 @@ compared to MSE.
 
 **Batch size:** 64 (fits comfortably in 8GB VRAM on a GeForce RTX 3060 Ti).
 
-**Early stopping:** patience of 20 epochs. The best checkpoint is selected by validation accuracy (fraction of test-set
-cards where the predicted price bucket matches the actual price bucket), not by loss — this favors models that get the
+**Early stopping:** patience of 20 epochs. The best checkpoint is selected by accuracy on the held-out split (fraction of
+held-out cards where the predicted price bucket matches the actual price bucket), not by loss — this favors models that get the
 rank order right over models that minimize average error.
 
 **Price-bucket oversampling:** Training batches are resampled so that expensive cards (which are rare in the dataset)
@@ -391,13 +391,14 @@ appear more frequently. The `--sampler-exponent` flag controls the strength: 0 =
 of inverse frequency, 1.0 = full inverse frequency weighting. This prevents the model from learning to predict
 "everything is €0.10" just because most cards are bulk.
 
-## Card Embeddings for Downstream Use
+## Pooled Card Vectors for Downstream Use
 
 The `encode()` method returns `cat([max_pool, mean_pool])` — a `(2 × d_model,)` vector (512 dimensions at default
-settings). This is the card embedding used by the sealed deck picker as its frozen card encoder.
+settings). The sealed deck picker uses this pooled card vector as its card embedding, with the price encoder as its
+frozen card encoder.
 
-Before encoding, the `name:` line is stripped from the card text so that the embedding captures what the card does,
-not its identity. Two cards with identical abilities but different names produce identical embeddings.
+Before encoding, the `name:` line is stripped from the card text so that the pooled card vector captures what the card does,
+not its identity. Two cards with identical abilities but different names produce identical pooled card vectors.
 
 # CLI and REST API
 
@@ -407,15 +408,15 @@ Entry point: `python -m price_predictor <subcommand>`
 
 | Command | Description |
 |---------|-------------|
-| `convert` | Launch Java batch converter to transform Forge scripts → converted text format |
+| `convert` | Launch Java batch converter to transform Forge card scripts → converted cards |
 | `check-convert` | Compare converted files against Forge Oracle text, flag low-similarity cards |
-| `vocabulary` | Build custom tokenizer vocabulary from the converted card corpus |
+| `vocabulary` | Build the vocabulary from the converted card corpus |
 | `train sklearn` | Train the sklearn GradientBoostingRegressor |
-| `train transformer` | Train the transformer model (GPU required) |
+| `train transformer` | Train the price transformer (GPU required) |
 | `predict sklearn` | Predict price from `--file` or inline `--card` text using sklearn |
-| `predict transformer` | Predict price using the transformer model |
-| `evaluate sklearn` | Compute accuracy metrics on the held-out test split |
-| `evaluate transformer` | Compute accuracy metrics with per-price-bucket breakdown |
+| `predict transformer` | Predict price using the price transformer |
+| `evaluate sklearn` | Compute accuracy metrics on the held-out split |
+| `evaluate transformer` | Compute accuracy metrics with a breakdown by reporting bucket |
 | `serve` | Start the FastAPI prediction service |
 
 ## REST API
@@ -436,17 +437,17 @@ model:
 }
 ```
 
-The service loads the sklearn model (required — fails fast if absent), the transformer model (optional — graceful
-degradation to `null` if absent), the custom tokenizer, and the MTGJSON metadata map for auto-filling printing data
-on known cards.
+The service loads the sklearn model (required — fails fast if absent), the price transformer (optional — graceful
+degradation to `null` if absent), the tokenizer, and the MTGJSON printing data for cards with a canonical
+name.
 
 When a request arrives, the service:
 
 1. Extracts the card name from the `name:` line
-2. Looks up `PrintingData` from the metadata map (if the card is known)
+2. Looks up the card's `PrintingData` by canonical name (if it has one)
 3. Parses the text into a `Card` entity for sklearn
 4. Runs sklearn prediction (always)
-5. Runs transformer prediction (if loaded)
+5. Runs price transformer prediction (if loaded)
 6. Returns both results
 
 Each request is logged as structured JSON with timestamp, status code, latency, card attributes, and predicted prices.
@@ -463,28 +464,28 @@ The `forge-connector` Maven module serves two roles:
 
 # Evaluation
 
-Both models are evaluated on the same held-out 20% test split. Five metrics are reported:
+Both models are evaluated on the same 20% held-out split. Five metrics are reported:
 
 | Metric | What it measures |
 |--------|-----------------|
 | Mean Absolute Error (EUR) | Average distance between predicted and actual prices in euros |
 | Median Percentage Error | Typical relative error — less sensitive to outliers than mean |
-| Median Absolute Error (log) | Error in log-price space — treats a €1→€2 error the same as €10→€20 |
-| Top-20% Overlap | Precision of expensive-card detection: what fraction of the predicted top 20% actually are in the true top 20% |
-| Sample Count | Number of test examples evaluated |
+| Median Log Error | Error in log-price space — treats a €1→€2 error the same as €10→€20 |
+| Top-20 Overlap | Precision of expensive-card detection: what fraction of the predicted top 20% actually are in the true top 20% |
+| Sample Count | Number of held-out cards evaluated |
 
-The transformer evaluation additionally reports a **per-price-bucket breakdown** — accuracy and error within price
+The price transformer evaluation additionally reports a **breakdown by reporting bucket** — accuracy and error within price
 ranges (e.g., €0-€1, €1-€5, €5-€20, €20+). This reveals whether the model is good across the price spectrum or
 only accurate for bulk cards.
 
-Top-20% overlap is the most practically useful metric: if the model correctly identifies which cards are expensive,
+Top-20 overlap is the most practically useful metric: if the model correctly identifies which cards are expensive,
 it is doing something meaningful even if the exact EUR predictions are noisy.
 
 # Future Directions
 
-- The transformer's card embeddings are already consumed by the sealed deck picker as a frozen feature extractor.
-  Fine-tuning the embeddings for sealed play quality (Phase B of the scorer training) could improve both systems.
+- The price transformer's pooled card vectors are already consumed by the sealed deck picker as a frozen feature
+  extractor. Fine-tuning the price encoder for sealed play quality (Phase B of the scorer training) could improve both systems.
 - The unified `{model}` subcommand pattern (`train {model}`, `predict {model}`, `evaluate {model}`) is designed for
   extensibility — additional model architectures can be added without restructuring the CLI.
-- The custom tokenizer's vocabulary could be extended with set-specific terms if per-set price prediction is pursued
+- The vocabulary could be extended with set-specific terms if per-set price prediction is pursued
   in the future.

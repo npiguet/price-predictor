@@ -13,7 +13,7 @@ from price_predictor.domain.value_objects import RECOGNIZED_FORMATS, PrintingDat
 logger = logging.getLogger(__name__)
 
 # Set codes for Alpha, Beta, and Unlimited — the three original core sets.
-# A card whose only tournament-legal printings are in these sets gets is_abu=True.
+# A card whose only tournament-legal printings are in these sets gets is_abu_only=True.
 _ABU_SET_CODES = frozenset({"lea", "leb", "2ed"})
 
 
@@ -38,7 +38,7 @@ def _iter_cardmarket_prices(uuid_data: dict) -> Iterator[float]:
             yield price
 
 
-def _compute_is_abu(
+def _compute_is_abu_only(
     card_legal_uuids: Sequence[str],
     uuid_meta: dict[str, dict[str, Any]],
 ) -> bool:
@@ -59,7 +59,7 @@ def build_name_to_uuids(
     Filters to paper-available, English, non-funny, non-online-only cards.
 
     Returns:
-        (name_to_uuids, uuid_metadata) where uuid_metadata maps UUID to
+        (name_to_uuids, uuid_meta) where uuid_meta maps a printing's UUID to
         a dict with keys: rarity, setCode, isReserved, legalities, printings.
     """
     logger.info("Loading AllPrintings.json — building name-to-UUID mapping...")
@@ -73,16 +73,16 @@ def build_name_to_uuids(
     for set_code, set_info in sets_data.items():
         cards = set_info if isinstance(set_info, list) else set_info.get("cards", [])
 
-        # Extract release year from set-level data; fallback to 1993
-        release_year = 1993
+        # Extract the set's release year from set-level data; fallback to 1993
+        set_release_year = 1993
         if isinstance(set_info, dict):
             raw_date = set_info.get("releaseDate", "")
             try:
-                release_year = int(str(raw_date)[:4])
-                if release_year < 1993:
-                    release_year = 1993
+                set_release_year = int(str(raw_date)[:4])
+                if set_release_year < 1993:
+                    set_release_year = 1993
             except (ValueError, TypeError):
-                release_year = 1993
+                set_release_year = 1993
 
         for card in cards:
             # Apply filters
@@ -110,7 +110,7 @@ def build_name_to_uuids(
                     "legalities": raw_legalities,
                     "printings": card.get("printings", []),
                     "is_constructed_legal": _is_constructed_legal(raw_legalities),
-                    "releaseYear": release_year,
+                    "setReleaseYear": set_release_year,
                 }
 
     logger.info("Built name-to-UUID mapping (%d card names)", len(mapping))
@@ -182,16 +182,16 @@ def build_price_map_with_uuids(
     return result, cheapest_uuids
 
 
-def build_metadata_map(
+def build_printing_data_map(
     allprintings_path: Path,
     allprices_path: Path,
 ) -> tuple[dict[str, PrintingData], dict[str, float]]:
-    """Build a metadata map: card name -> PrintingData from cheapest printing.
+    """Build the printing-data map: card name -> PrintingData from its cheapest printing.
 
     Also returns the price map for convenience (avoids re-loading prices).
 
     Returns:
-        (metadata_map, price_map) where metadata_map is name->PrintingData
+        (printing_data_map, price_map) where printing_data_map is name->PrintingData
         derived from the cheapest printing's data.
     """
     name_to_uuids, uuid_meta = build_name_to_uuids(allprintings_path)
@@ -209,7 +209,7 @@ def build_metadata_map(
         allprices_path, name_to_uuids, legal_uuids=legal_uuids,
     )
 
-    metadata_map: dict[str, PrintingData] = {}
+    printing_data_map: dict[str, PrintingData] = {}
     for name, cheapest_uuid in cheapest_uuids.items():
         meta = uuid_meta.get(cheapest_uuid, {})
 
@@ -227,10 +227,10 @@ def build_metadata_map(
         printings_list = meta.get("printings", [])
         printings_count = max(len(printings_list), 1)
 
-        # release year
-        release_year = meta.get("releaseYear", 1993)
-        if not isinstance(release_year, int) or release_year < 1993:
-            release_year = 1993
+        # cheapest-printing year
+        cheapest_printing_year = meta.get("setReleaseYear", 1993)
+        if not isinstance(cheapest_printing_year, int) or cheapest_printing_year < 1993:
+            cheapest_printing_year = 1993
 
         # legalities: filter to recognized formats, only "Legal" status
         raw_legalities = meta.get("legalities", {})
@@ -242,16 +242,16 @@ def build_metadata_map(
         )
 
         card_legal_uuids = [u for u in name_to_uuids.get(name, []) if u in legal_uuids]
-        is_abu = _compute_is_abu(card_legal_uuids, uuid_meta)
+        is_abu_only = _compute_is_abu_only(card_legal_uuids, uuid_meta)
 
-        metadata_map[name] = PrintingData(
+        printing_data_map[name] = PrintingData(
             is_reserved=is_reserved,
             rarity=rarity,
             printings_count=printings_count,
-            release_year=release_year,
+            cheapest_printing_year=cheapest_printing_year,
             legalities=legalities,
-            is_abu=is_abu,
+            is_abu_only=is_abu_only,
         )
 
-    logger.info("Built metadata map (%d cards)", len(metadata_map))
-    return metadata_map, price_map
+    logger.info("Built printing data (%d cards)", len(printing_data_map))
+    return printing_data_map, price_map

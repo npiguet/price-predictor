@@ -297,7 +297,7 @@ class TestPrintingDataTerms:
         ):
             assert fmt in result.vocab, f"Missing format token: {fmt!r}"
 
-    def test_enrichment_field_names_always_present(self, tmp_path: Path):
+    def test_printing_data_field_names_always_present(self, tmp_path: Path):
         from price_predictor.application.build_vocabulary import build_vocabulary
 
         (tmp_path / "card.txt").write_text(
@@ -305,7 +305,7 @@ class TestPrintingDataTerms:
         )
         result = build_vocabulary(tmp_path, freq_threshold=1)
         for field in ("reserved", "rarity", "printings", "legalities", "true", "false"):
-            assert field in result.vocab, f"Missing enrichment field token: {field!r}"
+            assert field in result.vocab, f"Missing printing-data field token: {field!r}"
 
 
 class TestSetCodeExtraction:

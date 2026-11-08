@@ -20,13 +20,13 @@ def cards_for_fitting() -> list[Card]:
             power="2",
             toughness="2",
             keywords=[],
-            oracle_text="",
+            converted_ability_text="",
         ),
         Card(
             name="Lightning Bolt",
             types=["Instant"],
             mana_cost=ManaCost.parse("R"),
-            oracle_text="Lightning Bolt deals 3 damage to any target.",
+            converted_ability_text="Lightning Bolt deals 3 damage to any target.",
             ability_count=1,
         ),
         Card(
@@ -37,7 +37,7 @@ def cards_for_fitting() -> list[Card]:
             power="4",
             toughness="4",
             keywords=["Flying", "Vigilance"],
-            oracle_text="Flying, vigilance",
+            converted_ability_text="Flying, vigilance",
         ),
         Card(
             name="Jace, the Mind Sculptor",
@@ -46,7 +46,7 @@ def cards_for_fitting() -> list[Card]:
             subtypes=["Jace"],
             mana_cost=ManaCost.parse("2 U U"),
             loyalty="3",
-            oracle_text="Look at the top card. Draw three cards.",
+            converted_ability_text="Look at the top card. Draw three cards.",
             ability_count=4,
         ),
         Card(
@@ -55,14 +55,14 @@ def cards_for_fitting() -> list[Card]:
             supertypes=["Basic"],
             subtypes=["Island"],
             mana_cost=None,
-            oracle_text="{T}: Add {U}.",
+            converted_ability_text="{T}: Add {U}.",
             ability_count=1,
         ),
         Card(
             name="Sol Ring",
             types=["Artifact"],
             mana_cost=ManaCost.parse("1"),
-            oracle_text="{T}: Add {C}{C}.",
+            converted_ability_text="{T}: Add {C}{C}.",
             ability_count=1,
         ),
     ]
@@ -245,7 +245,7 @@ class TestFeatureEngineeringTransform:
             name="Bolt",
             types=["Instant"],
             mana_cost=ManaCost.parse("R"),
-            oracle_text="Deal 3 damage.",
+            converted_ability_text="Deal 3 damage.",
             ability_count=1,
         )
         result1 = fitted_fe.transform([card])
@@ -264,7 +264,7 @@ class TestFeatureEngineeringTransform:
             name="Your Puny Minds Cannot Fathom",
             types=["Scheme"],
             mana_cost=None,
-            oracle_text="Draw four cards.",
+            converted_ability_text="Draw four cards.",
         )
         result = fitted_fe.transform([card])
         # Types at index 13+: Creature(13)..Battle(20), Scheme(21)
@@ -300,9 +300,9 @@ class TestPrintingDataFeatures:
             is_reserved=True,
             rarity="mythic",
             printings_count=3,
-            release_year=2018,
+            cheapest_printing_year=2018,
             legalities=["commander", "legacy"],
-            is_abu=True,
+            is_abu_only=True,
         )
         card = Card(
             name="Test Reserved",
@@ -324,7 +324,7 @@ class TestPrintingDataFeatures:
 
         # is_reserved = 1.0
         assert row[pd_start] == 1.0
-        # is_abu = 1.0
+        # is_abu_only = 1.0
         assert row[pd_start + 1] == 1.0
 
         # rarity one-hot: common=0, uncommon=0, rare=0, mythic=1
@@ -336,7 +336,7 @@ class TestPrintingDataFeatures:
         # printings_count = 3.0
         assert row[pd_start + 6] == 3.0
 
-        # release_year normalized = (2018 - 1992) / 34 ≈ 0.7647
+        # cheapest_printing_year normalized = (2018 - 1992) / 34 ≈ 0.7647
         assert row[pd_start + 7] == pytest.approx((2018 - 1992) / 34.0)
 
         # legalities_count = 2.0
@@ -374,20 +374,20 @@ class TestPrintingDataFeatures:
                 f"Printing data feature at offset {i}: expected 0.0, got {row[pd_start + i]}"
             )
 
-    def test_release_year_feature_present(
+    def test_cheapest_printing_year_feature_present(
         self, fitted_fe: FeatureEngineering
     ) -> None:
-        """Two cards differing only by release_year produce different feature vectors,
-        proving the release_year feature is wired into the dense block."""
+        """Two cards differing only by cheapest_printing_year produce different feature vectors,
+        proving the cheapest_printing_year feature is wired into the dense block."""
         early = Card(
             name="Early", types=["Creature"], mana_cost=ManaCost.parse("2 G"),
             power="2", toughness="2",
-            printing_data=PrintingData(release_year=1995),
+            printing_data=PrintingData(cheapest_printing_year=1995),
         )
         recent = Card(
             name="Recent", types=["Creature"], mana_cost=ManaCost.parse("2 G"),
             power="2", toughness="2",
-            printing_data=PrintingData(release_year=2024),
+            printing_data=PrintingData(cheapest_printing_year=2024),
         )
         early_vec = fitted_fe.transform([early])[0]
         recent_vec = fitted_fe.transform([recent])[0]

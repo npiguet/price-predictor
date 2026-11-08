@@ -18,7 +18,7 @@ class Card:
     supertypes: list[str] = field(default_factory=list)
     subtypes: list[str] = field(default_factory=list)
     mana_cost: ManaCost | None = None
-    oracle_text: str | None = None
+    converted_ability_text: str | None = None
     keywords: list[str] = field(default_factory=list)
     power: str | None = None
     toughness: str | None = None
@@ -43,7 +43,7 @@ class Card:
         return any(t.lower() == "land" for t in self.types)
 
     def has_devoid(self) -> bool:
-        return "devoid" in (self.oracle_text or "").lower()
+        return "devoid" in (self.converted_ability_text or "").lower()
 
     def is_colorless(self) -> bool:
         if self.has_devoid() or self.mana_cost is None:
@@ -53,7 +53,7 @@ class Card:
 
 @dataclass(frozen=True)
 class PriceEstimate:
-    """The system's predicted EUR market price for a card."""
+    """The system's predicted card price, in euros."""
 
     predicted_price_eur: float
     model_version: str
@@ -67,7 +67,7 @@ class PriceEstimate:
 
 @dataclass(frozen=True)
 class TrainingExample:
-    """A Card paired with its known EUR market price."""
+    """A Card paired with its known card price, in euros."""
 
     card: Card
     actual_price_eur: float
@@ -83,7 +83,7 @@ class EvaluationMetrics:
 
     mean_absolute_error_eur: float
     median_percentage_error: float
-    median_abs_error_log: float
+    median_log_error: float
     top_20_overlap: float
     sample_count: int
 
@@ -121,7 +121,7 @@ class TransformerConfig:
     dropout: float
     regression_hidden_dim: int = 64
     log_offset: float = 2.0
-    meta_dim: int = 15  # must match metadata_encoder.encode_metadata output length
+    meta_dim: int = 15  # must match printing_data_encoder.encode_printing_data output length
 
     def __post_init__(self) -> None:
         for name in (

@@ -17,8 +17,8 @@ def _make_config(**overrides) -> TransformerConfig:
     return TransformerConfig(**defaults)
 
 
-def _make_meta(batch_size: int, meta_dim: int = 15) -> torch.Tensor:
-    """Create a zero meta tensor for testing."""
+def _make_printing_data_vector(batch_size: int, meta_dim: int = 15) -> torch.Tensor:
+    """Create a zero printing_data_vector tensor for testing."""
     return torch.zeros(batch_size, meta_dim)
 
 
@@ -31,8 +31,8 @@ class TestCardPriceTransformerModelForward:
         model.eval()
         input_ids = torch.randint(0, config.vocab_size, (1, config.max_seq_len))
         attention_mask = torch.ones(1, config.max_seq_len)
-        meta = _make_meta(1)
-        output = model(input_ids, attention_mask, meta)
+        printing_data_vector = _make_printing_data_vector(1)
+        output = model(input_ids, attention_mask, printing_data_vector)
         assert output.shape == (1,)
 
     def test_output_shape_batch(self):
@@ -42,8 +42,8 @@ class TestCardPriceTransformerModelForward:
         batch_size = 4
         input_ids = torch.randint(0, config.vocab_size, (batch_size, config.max_seq_len))
         attention_mask = torch.ones(batch_size, config.max_seq_len)
-        meta = _make_meta(batch_size)
-        output = model(input_ids, attention_mask, meta)
+        printing_data_vector = _make_printing_data_vector(batch_size)
+        output = model(input_ids, attention_mask, printing_data_vector)
         assert output.shape == (batch_size,)
 
     def test_output_is_float(self):
@@ -52,8 +52,8 @@ class TestCardPriceTransformerModelForward:
         model.eval()
         input_ids = torch.randint(0, config.vocab_size, (1, config.max_seq_len))
         attention_mask = torch.ones(1, config.max_seq_len)
-        meta = _make_meta(1)
-        output = model(input_ids, attention_mask, meta)
+        printing_data_vector = _make_printing_data_vector(1)
+        output = model(input_ids, attention_mask, printing_data_vector)
         assert output.dtype == torch.float32
 
     def test_deterministic_with_same_seed(self):
@@ -62,10 +62,10 @@ class TestCardPriceTransformerModelForward:
         model.eval()
         input_ids = torch.randint(0, config.vocab_size, (2, config.max_seq_len))
         attention_mask = torch.ones(2, config.max_seq_len)
-        meta = _make_meta(2)
+        printing_data_vector = _make_printing_data_vector(2)
         with torch.no_grad():
-            out1 = model(input_ids, attention_mask, meta)
-            out2 = model(input_ids, attention_mask, meta)
+            out1 = model(input_ids, attention_mask, printing_data_vector)
+            out2 = model(input_ids, attention_mask, printing_data_vector)
         assert torch.allclose(out1, out2)
 
     def test_attention_mask_affects_output(self):
@@ -77,10 +77,10 @@ class TestCardPriceTransformerModelForward:
         mask_full = torch.ones(1, config.max_seq_len)
         mask_half = torch.ones(1, config.max_seq_len)
         mask_half[0, config.max_seq_len // 2:] = 0
-        meta = _make_meta(1)
+        printing_data_vector = _make_printing_data_vector(1)
         with torch.no_grad():
-            out_full = model(input_ids, mask_full, meta)
-            out_half = model(input_ids, mask_half, meta)
+            out_full = model(input_ids, mask_full, printing_data_vector)
+            out_half = model(input_ids, mask_half, printing_data_vector)
         # Different masks should generally produce different outputs
         assert not torch.allclose(out_full, out_half)
 
@@ -100,10 +100,10 @@ class TestCardPriceTransformerModelForward:
         input_ids_alt = input_ids.clone()
         input_ids_alt[0, seq_len // 2:] = (input_ids_alt[0, seq_len // 2:] + 1) % config.vocab_size
 
-        meta = _make_meta(1)
+        printing_data_vector = _make_printing_data_vector(1)
         with torch.no_grad():
-            out1 = model(input_ids, mask, meta)
-            out2 = model(input_ids_alt, mask, meta)
+            out1 = model(input_ids, mask, printing_data_vector)
+            out2 = model(input_ids_alt, mask, printing_data_vector)
 
         # Outputs should be identical — masked positions must not contribute
         assert torch.allclose(out1, out2, atol=1e-5), (
@@ -124,7 +124,7 @@ class TestCardPriceTransformerModelForward:
         assert children[0].out_features == config.regression_hidden_dim
         assert children[2].out_features == 1
 
-    def test_output_head_input_dim_includes_meta(self):
+    def test_output_head_input_dim_includes_printing_data(self):
         """First Linear in output_head must accept 2*d_model + meta_dim inputs."""
         config = _make_config()
         model = CardPriceTransformerModel(config)
@@ -133,18 +133,18 @@ class TestCardPriceTransformerModelForward:
         expected_in = 2 * config.d_model + config.meta_dim
         assert first_linear.in_features == expected_in
 
-    def test_meta_affects_output(self):
-        """Different meta vectors should produce different predictions."""
+    def test_printing_data_vector_affects_output(self):
+        """Different printing_data_vector vectors should produce different predictions."""
         config = _make_config(dropout=0.0)
         model = CardPriceTransformerModel(config)
         model.eval()
         input_ids = torch.randint(0, config.vocab_size, (1, config.max_seq_len))
         attention_mask = torch.ones(1, config.max_seq_len)
-        meta_zeros = torch.zeros(1, config.meta_dim)
-        meta_ones = torch.ones(1, config.meta_dim)
+        printing_data_zeros = torch.zeros(1, config.meta_dim)
+        printing_data_ones = torch.ones(1, config.meta_dim)
         with torch.no_grad():
-            out_zeros = model(input_ids, attention_mask, meta_zeros)
-            out_ones = model(input_ids, attention_mask, meta_ones)
+            out_zeros = model(input_ids, attention_mask, printing_data_zeros)
+            out_ones = model(input_ids, attention_mask, printing_data_ones)
         assert not torch.allclose(out_zeros, out_ones)
 
 

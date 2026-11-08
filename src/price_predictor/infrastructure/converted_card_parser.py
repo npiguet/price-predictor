@@ -14,7 +14,7 @@ from price_predictor.domain.value_objects import WUBRG, ManaCost
 
 logger = logging.getLogger(__name__)
 
-# Lines whose values contribute to oracle_text and ability_count.
+# Lines whose values contribute to converted_ability_text and ability_count.
 # Matches prefixes like spell[1]:, triggered:, activated:, planeswalker[2]:,
 # replacement:, keyword[1]:, static:, etc.
 _ABILITY_LINE_RE = re.compile(
@@ -75,7 +75,7 @@ def parse_converted_text(converted: ConvertedCardText) -> Card:
         if not line:
             continue
 
-        # Check for ability lines first — they contribute to oracle_text
+        # Check for ability lines first — they contribute to converted_ability_text
         ability_match = _ABILITY_LINE_RE.match(line)
         if ability_match:
             # Value is everything after the matched prefix and colon
@@ -125,11 +125,11 @@ def parse_converted_text(converted: ConvertedCardText) -> Card:
     # --- Loyalty ---
     loyalty = fields.get("loyalty", "").strip() or None
 
-    # --- Oracle text & ability count ---
-    oracle_text: str | None = None
+    # --- Converted ability text & ability count ---
+    converted_ability_text: str | None = None
     ability_count = len(ability_lines)
     if ability_lines:
-        oracle_text = "\n".join(ability_lines)
+        converted_ability_text = "\n".join(ability_lines)
 
     return Card(
         name=name,
@@ -137,7 +137,7 @@ def parse_converted_text(converted: ConvertedCardText) -> Card:
         supertypes=supertypes,
         subtypes=subtypes,
         mana_cost=mana_cost,
-        oracle_text=oracle_text,
+        converted_ability_text=converted_ability_text,
         keywords=[],
         power=power,
         toughness=toughness,

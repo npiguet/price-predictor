@@ -178,15 +178,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--printings-path", type=str, default="resources/AllPrintings.json",
         help=(
             "Path to AllPrintings.json. When present, alphabetic fragments of "
-            "every set code are seeded into the vocabulary so enriched training "
-            "texts never produce UNK for set codes. Silently skipped if absent."
+            "every set code are seeded into the vocabulary so training texts "
+            "carrying printing data never produce UNK for set codes. Silently skipped if absent."
         ),
     )
     vocab_parser.set_defaults(func=run_vocabulary)
 
     # ── convert ───────────────────────────────────────────────────
     convert_parser = subparsers.add_parser(
-        "convert", help="Convert Forge card scripts to LLM-friendly text format"
+        "convert", help="Convert Forge card scripts to converted cards"
     )
     convert_parser.add_argument(
         "--cards-path", type=str,
@@ -316,22 +316,22 @@ def run_serve(args: argparse.Namespace) -> int:
         Path(args.vocab_path)
     )
 
-    metadata_map = None
+    printing_data_map = None
     printings_path = Path(args.printings_path)
     prices_path = Path(args.prices_path)
     if printings_path.exists() and prices_path.exists():
         try:
-            from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
-            metadata_map_result, _ = build_metadata_map(printings_path, prices_path)
-            metadata_map = metadata_map_result
-            logger.info("Metadata map loaded (%d cards).", len(metadata_map))
+            from price_predictor.infrastructure.mtgjson_loader import build_printing_data_map
+            printing_data_map_result, _ = build_printing_data_map(printings_path, prices_path)
+            printing_data_map = printing_data_map_result
+            logger.info("Printing data loaded (%d cards).", len(printing_data_map))
         except (OSError, ValueError) as e:
-            logger.warning("Failed to build metadata map: %s", e)
+            logger.warning("Failed to build printing data: %s", e)
     else:
-        logger.info("Metadata files not found — auto-fill disabled.")
+        logger.info("MTGJSON files not found — printing-data lookup disabled.")
 
     app = create_app(artifact, transformer_artifact=transformer_artifact,
-                      metadata_map=metadata_map, tokenizer=tokenizer)
+                      printing_data_map=printing_data_map, tokenizer=tokenizer)
     logger.info("Prediction service started on http://%s:%d", args.host, args.port)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     return 0
@@ -434,7 +434,7 @@ def run_train_sklearn(args: argparse.Namespace) -> int:
             prices_path=prices_path,
             printings_path=printings_path,
             output_path=Path(args.model_output),
-            test_split=args.test_split,
+            held_out_fraction=args.test_split,
             random_seed=args.random_seed,
         )
     except ValueError as e:
@@ -497,18 +497,18 @@ def run_train_transformer(args: argparse.Namespace) -> int:
     return 0
 
 
-def _load_metadata_map_optional() -> dict | None:
-    """Try to load metadata map from default paths. Returns None if unavailable."""
+def _load_printing_data_map_optional() -> dict | None:
+    """Try to load the printing-data map from default paths. Returns None if unavailable."""
     printings_path = Path("resources/AllPrintings.json")
     prices_path = Path("resources/AllPricesToday.json")
     if not (printings_path.exists() and prices_path.exists()):
         return None
     try:
-        from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
-        metadata_map, _ = build_metadata_map(printings_path, prices_path)
-        return metadata_map
+        from price_predictor.infrastructure.mtgjson_loader import build_printing_data_map
+        printing_data_map, _ = build_printing_data_map(printings_path, prices_path)
+        return printing_data_map
     except (OSError, ValueError) as e:
-        logger.warning("Failed to load metadata map: %s", e)
+        logger.warning("Failed to load printing data: %s", e)
         return None
 
 
@@ -527,17 +527,17 @@ def _write_per_card_csv(path: Path, per_card: list[dict]) -> None:
 
 
 def _resolve_optional_printing_data(card_name: str):
-    """Look up PrintingData for a card name from the default metadata map.
+    """Look up PrintingData for a card name from the default printing-data map.
 
-    Returns None when the metadata map is unavailable or the card name is
+    Returns None when the printing-data map is unavailable or the card name is
     unknown — both cases mean the caller should fall back to its own default.
     """
     from price_predictor.domain.card_name_resolver import CardNameResolver
 
-    metadata_map = _load_metadata_map_optional()
-    if not metadata_map:
+    printing_data_map = _load_printing_data_map_optional()
+    if not printing_data_map:
         return None
-    resolver = CardNameResolver(metadata_map=metadata_map)
+    resolver = CardNameResolver(printing_data_map=printing_data_map)
     if resolver.canonicalize(card_name) is None:
         return None
     return resolver.lookup_printing_data(card_name)
@@ -594,7 +594,7 @@ def _load_optional_transformer_bundle(
             logger.warning("Failed to load tokenizer: %s", e)
     else:
         logger.warning(
-            "Tokenizer vocab not found at %s — transformer encoding may fail.",
+            "Vocabulary not found at %s — transformer encoding may fail.",
             vocab_path,
         )
 
@@ -702,7 +702,7 @@ def run_evaluate_sklearn(args: argparse.Namespace) -> int:
             output_dir=Path(args.output_dir),
             prices_path=Path(args.prices_path),
             printings_path=Path(args.printings_path),
-            test_split=args.test_split,
+            held_out_fraction=args.test_split,
             random_seed=args.random_seed,
         )
     except ModelNotFoundError:
@@ -720,7 +720,7 @@ def run_evaluate_sklearn(args: argparse.Namespace) -> int:
         "model_version": result.model_version,
         "mean_absolute_error_eur": result.metrics.mean_absolute_error_eur,
         "median_percentage_error": result.metrics.median_percentage_error,
-        "median_abs_error_log": result.metrics.median_abs_error_log,
+        "median_abs_error_log": result.metrics.median_log_error,
         "top_20_overlap": result.metrics.top_20_overlap,
         "sample_count": result.metrics.sample_count,
     }
@@ -729,7 +729,7 @@ def run_evaluate_sklearn(args: argparse.Namespace) -> int:
 
 
 def run_evaluate_transformer(args: argparse.Namespace) -> int:
-    """Evaluate the transformer model on held-out validation data."""
+    """Evaluate the price transformer on the held-out split."""
     from price_predictor.application.evaluate_transformer import evaluate_transformer
 
     vocab_path = Path(args.vocab_path)
@@ -763,7 +763,7 @@ def run_evaluate_transformer(args: argparse.Namespace) -> int:
         "model_version": result.model_version,
         "mean_absolute_error_eur": result.mean_absolute_error_eur,
         "median_percentage_error": result.median_percentage_error,
-        "median_abs_error_log": result.median_abs_error_log,
+        "median_abs_error_log": result.median_log_error,
         "top_20_overlap": result.top_20_overlap,
         "sample_count": result.sample_count,
     }

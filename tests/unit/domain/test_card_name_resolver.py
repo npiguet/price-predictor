@@ -7,14 +7,14 @@ from price_predictor.domain.value_objects import PrintingData
 
 
 def _pd(rarity: str = "rare") -> PrintingData:
-    return PrintingData(rarity=rarity, printings_count=1, release_year=2020)
+    return PrintingData(rarity=rarity, printings_count=1, cheapest_printing_year=2020)
 
 
 class TestResolve:
     def test_resolves_exact_name(self) -> None:
         resolver = CardNameResolver(
             price_map={"Lightning Bolt": 1.50},
-            metadata_map={"Lightning Bolt": _pd("common")},
+            printing_data_map={"Lightning Bolt": _pd("common")},
         )
 
         result = resolver.resolve("Lightning Bolt")
@@ -27,7 +27,7 @@ class TestResolve:
     def test_resolves_lowercase_name(self) -> None:
         resolver = CardNameResolver(
             price_map={"Lightning Bolt": 1.50},
-            metadata_map={"Lightning Bolt": _pd()},
+            printing_data_map={"Lightning Bolt": _pd()},
         )
 
         result = resolver.resolve("lightning bolt")
@@ -38,7 +38,7 @@ class TestResolve:
     def test_resolves_split_card_front_face(self) -> None:
         resolver = CardNameResolver(
             price_map={"Fire // Ice": 0.75},
-            metadata_map={"Fire // Ice": _pd()},
+            printing_data_map={"Fire // Ice": _pd()},
         )
 
         result = resolver.resolve("Fire")
@@ -54,7 +54,7 @@ class TestResolve:
 
     def test_defaults_printing_data_when_missing(self) -> None:
         resolver = CardNameResolver(
-            price_map={"Lightning Bolt": 1.50}, metadata_map={}
+            price_map={"Lightning Bolt": 1.50}, printing_data_map={}
         )
 
         result = resolver.resolve("Lightning Bolt")
@@ -62,7 +62,7 @@ class TestResolve:
         assert result is not None
         assert result.printing_data == PrintingData.defaults()
 
-    def test_defaults_printing_data_when_metadata_map_is_none(self) -> None:
+    def test_defaults_printing_data_when_printing_data_map_is_none(self) -> None:
         resolver = CardNameResolver(price_map={"Lightning Bolt": 1.50})
 
         result = resolver.resolve("Lightning Bolt")
@@ -76,27 +76,27 @@ class TestResolve:
         assert resolver.resolve("Fir") is None
 
     def test_resolve_without_price_map_returns_none(self) -> None:
-        resolver = CardNameResolver(metadata_map={"Lightning Bolt": _pd()})
+        resolver = CardNameResolver(printing_data_map={"Lightning Bolt": _pd()})
 
         # The name canonicalizes, but no price is recorded for it.
         assert resolver.resolve("Lightning Bolt") is None
 
 
 class TestLookupPrintingData:
-    def test_returns_metadata_for_known_card(self) -> None:
+    def test_returns_printing_data_for_known_card(self) -> None:
         pd = _pd("common")
-        resolver = CardNameResolver(metadata_map={"Lightning Bolt": pd})
+        resolver = CardNameResolver(printing_data_map={"Lightning Bolt": pd})
 
         assert resolver.lookup_printing_data("lightning bolt") is pd
 
     def test_returns_defaults_for_unknown_card(self) -> None:
-        resolver = CardNameResolver(metadata_map={"Lightning Bolt": _pd()})
+        resolver = CardNameResolver(printing_data_map={"Lightning Bolt": _pd()})
 
         assert resolver.lookup_printing_data("Black Lotus") == PrintingData.defaults()
 
     def test_split_card_lookup(self) -> None:
         pd = _pd()
-        resolver = CardNameResolver(metadata_map={"Fire // Ice": pd})
+        resolver = CardNameResolver(printing_data_map={"Fire // Ice": pd})
 
         assert resolver.lookup_printing_data("Fire") is pd
 
@@ -104,7 +104,7 @@ class TestLookupPrintingData:
 class TestConstruction:
     def test_empty_maps_resolve_to_none(self) -> None:
         # Both maps empty is allowed — every lookup just yields nothing.
-        resolver = CardNameResolver(price_map={}, metadata_map={})
+        resolver = CardNameResolver(price_map={}, printing_data_map={})
 
         assert resolver.canonicalize("Lightning Bolt") is None
         assert resolver.lookup_printing_data("Lightning Bolt") == PrintingData.defaults()

@@ -9,11 +9,11 @@ from torch.utils.data import Dataset
 
 from price_predictor.application.training_sample import TrainingSample
 from price_predictor.domain.tokenizer import MtgTokenizer
-from price_predictor.infrastructure.metadata_encoder import encode_metadata
+from price_predictor.infrastructure.printing_data_encoder import encode_printing_data
 
 
 class TransformerTrainingDataset(Dataset):
-    """Dataset wrapping tokenized card texts paired with shifted-log prices and metadata."""
+    """Dataset wrapping tokenized card texts paired with shifted-log prices and printing data."""
 
     def __init__(
         self,
@@ -32,7 +32,7 @@ class TransformerTrainingDataset(Dataset):
         all_input_ids = []
         all_attention_masks = []
         all_targets = []
-        all_meta = []
+        all_printing_data_vectors = []
 
         for sample in samples:
             input_ids, attention_mask = tokenizer.encode(
@@ -43,12 +43,12 @@ class TransformerTrainingDataset(Dataset):
                 torch.tensor(attention_mask, dtype=torch.long),
             )
             all_targets.append(math.log(sample.price_eur + log_offset))
-            all_meta.append(encode_metadata(sample.printing_data))
+            all_printing_data_vectors.append(encode_printing_data(sample.printing_data))
 
         self.input_ids = torch.stack(all_input_ids)
         self.attention_masks = torch.stack(all_attention_masks)
         self.targets = torch.tensor(all_targets, dtype=torch.float32)
-        self.meta = torch.stack(all_meta)
+        self.printing_data_vectors = torch.stack(all_printing_data_vectors)
 
     def __len__(self) -> int:
         return len(self.targets)
@@ -58,5 +58,5 @@ class TransformerTrainingDataset(Dataset):
             "input_ids": self.input_ids[idx],
             "attention_mask": self.attention_masks[idx],
             "target": self.targets[idx],
-            "meta": self.meta[idx],
+            "printing_data_vector": self.printing_data_vectors[idx],
         }

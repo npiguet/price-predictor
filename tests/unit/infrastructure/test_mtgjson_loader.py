@@ -9,9 +9,9 @@ import pytest
 
 from price_predictor.domain.value_objects import PrintingData
 from price_predictor.infrastructure.mtgjson_loader import (
-    build_metadata_map,
     build_name_to_uuids,
     build_price_map_with_uuids,
+    build_printing_data_map,
 )
 
 
@@ -203,37 +203,37 @@ class TestBuildPriceMapExclusion:
         assert str(len(mapping)) in exclusion_msgs[0]
 
 
-class TestBuildMetadataMap:
-    """Tests for build_metadata_map: card name -> PrintingData from cheapest printing."""
+class TestBuildPrintingDataMap:
+    """Tests for build_printing_data_map: card name -> PrintingData from cheapest printing."""
 
-    def test_returns_metadata_and_price_maps(
+    def test_returns_printing_data_and_price_maps(
         self, allprintings_path: Path, allprices_path: Path
     ) -> None:
-        result = build_metadata_map(allprintings_path, allprices_path)
+        result = build_printing_data_map(allprintings_path, allprices_path)
         assert isinstance(result, tuple)
         assert len(result) == 2
-        metadata_map, price_map = result
-        assert isinstance(metadata_map, dict)
+        printing_data_map, price_map = result
+        assert isinstance(printing_data_map, dict)
         assert isinstance(price_map, dict)
 
     def test_serra_angel_is_reserved(
         self, allprintings_path: Path, allprices_path: Path
     ) -> None:
-        metadata_map, _price_map = build_metadata_map(allprintings_path, allprices_path)
-        serra = metadata_map["Serra Angel"]
+        printing_data_map, _price_map = build_printing_data_map(allprintings_path, allprices_path)
+        serra = printing_data_map["Serra Angel"]
         assert isinstance(serra, PrintingData)
         assert serra.is_reserved is True
 
-    def test_grizzly_bears_uses_cheapest_uuid_metadata(
+    def test_grizzly_bears_uses_cheapest_printing_data(
         self, allprintings_path: Path, allprices_path: Path
     ) -> None:
         # Grizzly Bears: cheapest is 7ED uuid (bbbbbbbb-1111...) at 0.10
         # 7ED was released in 2001, rarity "common"
-        metadata_map, price_map = build_metadata_map(allprintings_path, allprices_path)
-        bears = metadata_map["Grizzly Bears"]
+        printing_data_map, price_map = build_printing_data_map(allprintings_path, allprices_path)
+        bears = printing_data_map["Grizzly Bears"]
         assert isinstance(bears, PrintingData)
         assert bears.rarity == "common"
-        assert bears.release_year == 2001
+        assert bears.cheapest_printing_year == 2001
         # Grizzly Bears has 5 printings: ["10E", "7ED", "LEA", "LEB", "2ED"]
         assert bears.printings_count == 5
         # Verify the price map has the correct cheapest price
@@ -246,8 +246,8 @@ class TestBuildMetadataMap:
         # 2XM legalities: commander=Legal, legacy=Legal, modern=Legal,
         #   pauper=Legal, vintage=Legal, penny=Legal, oathbreaker=Legal
         # All are in RECOGNIZED_FORMATS and all are "Legal"
-        metadata_map, _price_map = build_metadata_map(allprintings_path, allprices_path)
-        bolt = metadata_map["Lightning Bolt"]
+        printing_data_map, _price_map = build_printing_data_map(allprintings_path, allprices_path)
+        bolt = printing_data_map["Lightning Bolt"]
         assert isinstance(bolt, PrintingData)
         # Should include all 7 legal formats (sorted)
         expected = sorted([
@@ -263,8 +263,8 @@ class TestBuildMetadataMap:
         # A25 legalities: commander=Legal, legacy=Legal, vintage=Restricted,
         #   modern=Banned, standard=Not Legal
         # Only "Legal" status counts -> commander, legacy
-        metadata_map, _price_map = build_metadata_map(allprintings_path, allprices_path)
-        jace = metadata_map["Jace, the Mind Sculptor"]
+        printing_data_map, _price_map = build_printing_data_map(allprintings_path, allprices_path)
+        jace = printing_data_map["Jace, the Mind Sculptor"]
         assert isinstance(jace, PrintingData)
         assert jace.legalities == ["commander", "legacy"]
 
@@ -275,21 +275,21 @@ class TestBuildMetadataMap:
         # C20 legalities: commander=Legal, legacy=Banned, vintage=Restricted,
         #   modern=Not Legal, standard=Not Legal
         # Only "Legal" status counts -> commander
-        metadata_map, _price_map = build_metadata_map(allprintings_path, allprices_path)
-        sol = metadata_map["Sol Ring"]
+        printing_data_map, _price_map = build_printing_data_map(allprintings_path, allprices_path)
+        sol = printing_data_map["Sol Ring"]
         assert isinstance(sol, PrintingData)
         assert sol.legalities == ["commander"]
 
-    def test_metadata_values_are_printing_data(
+    def test_map_values_are_printing_data(
         self, allprintings_path: Path, allprices_path: Path
     ) -> None:
-        metadata_map, _price_map = build_metadata_map(allprintings_path, allprices_path)
-        for name, pd in metadata_map.items():
+        printing_data_map, _price_map = build_printing_data_map(allprintings_path, allprices_path)
+        for name, pd in printing_data_map.items():
             assert isinstance(pd, PrintingData), f"{name} is not PrintingData"
 
     def test_cards_without_prices_excluded(
         self, allprintings_path: Path, allprices_path: Path
     ) -> None:
-        metadata_map, _price_map = build_metadata_map(allprintings_path, allprices_path)
-        # No Price Card has no price data -> excluded from metadata
-        assert "No Price Card" not in metadata_map
+        printing_data_map, _price_map = build_printing_data_map(allprintings_path, allprices_path)
+        # No Price Card has no price data -> excluded from printing data
+        assert "No Price Card" not in printing_data_map

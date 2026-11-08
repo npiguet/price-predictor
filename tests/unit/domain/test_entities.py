@@ -28,7 +28,7 @@ class TestCard:
             supertypes=["Legendary"],
             subtypes=["Angel"],
             mana_cost=mana,
-            oracle_text="Flying, vigilance",
+            converted_ability_text="Flying, vigilance",
             keywords=["flying", "vigilance"],
             power="4",
             toughness="4",
@@ -42,7 +42,7 @@ class TestCard:
         assert card.subtypes == ["Angel"]
         assert card.mana_cost is not None
         assert card.mana_cost.total_mana_value == 4.0
-        assert card.oracle_text == "Flying, vigilance"
+        assert card.converted_ability_text == "Flying, vigilance"
         assert card.keywords == ["flying", "vigilance"]
         assert card.power == "4"
         assert card.toughness == "4"
@@ -57,7 +57,7 @@ class TestCard:
         assert card.supertypes == []
         assert card.subtypes == []
         assert card.mana_cost is None
-        assert card.oracle_text is None
+        assert card.converted_ability_text is None
         assert card.keywords == []
         assert card.power is None
         assert card.toughness is None
@@ -70,12 +70,12 @@ class TestCard:
             name="Ancestral Recall",
             types=["Instant"],
             mana_cost=None,
-            oracle_text=None,
+            converted_ability_text=None,
             power=None,
             toughness=None,
         )
         assert card.mana_cost is None
-        assert card.oracle_text is None
+        assert card.converted_ability_text is None
         assert card.power is None
         assert card.toughness is None
 
@@ -219,7 +219,7 @@ class TestTrainedModel:
         metrics = EvaluationMetrics(
             mean_absolute_error_eur=0.50,
             median_percentage_error=12.5,
-            median_abs_error_log=0.123,
+            median_log_error=0.123,
             top_20_overlap=0.85,
             sample_count=200,
         )
@@ -259,7 +259,7 @@ class TestEvaluationMetrics:
         metrics = EvaluationMetrics(
             mean_absolute_error_eur=1.23,
             median_percentage_error=15.0,
-            median_abs_error_log=0.2,
+            median_log_error=0.2,
             top_20_overlap=0.75,
             sample_count=500,
         )
@@ -272,7 +272,7 @@ class TestEvaluationMetrics:
         metrics = EvaluationMetrics(
             mean_absolute_error_eur=1.0,
             median_percentage_error=10.0,
-            median_abs_error_log=0.15,
+            median_log_error=0.15,
             top_20_overlap=0.5,
             sample_count=100,
         )

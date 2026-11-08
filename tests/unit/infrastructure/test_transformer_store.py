@@ -58,14 +58,14 @@ class TestTransformerStore:
         model.eval()
         input_ids = torch.randint(0, config.vocab_size, (1, config.max_seq_len))
         mask = torch.ones(1, config.max_seq_len)
-        meta = torch.zeros(1, config.meta_dim)
+        printing_data_vector = torch.zeros(1, config.meta_dim)
         with torch.no_grad():
-            original_output = model(input_ids, mask, meta)
+            original_output = model(input_ids, mask, printing_data_vector)
         save_model(model, config, tmp_path)
         loaded_model, _ = load_model(tmp_path)
         loaded_model.eval()
         with torch.no_grad():
-            loaded_output = loaded_model(input_ids, mask, meta)
+            loaded_output = loaded_model(input_ids, mask, printing_data_vector)
         assert torch.allclose(original_output, loaded_output)
 
     def test_load_missing_file_raises_error(self, tmp_path: Path):

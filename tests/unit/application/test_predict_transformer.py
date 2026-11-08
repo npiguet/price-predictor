@@ -66,7 +66,7 @@ class TestPredictTransformerUseCase:
         model = _make_model(config)
         mock_load_model.return_value = (model, config)
         tokenizer = _make_tokenizer(config.vocab_size)
-        pd = PrintingData(rarity="mythic", printings_count=1, release_year=2021)
+        pd = PrintingData(rarity="mythic", printings_count=1, cheapest_printing_year=2021)
 
         use_case = PredictTransformerUseCase()
         result = use_case.execute("Lightning Bolt R Instant", Path("models/transformer"),

@@ -14,23 +14,24 @@ RECOGNIZED_FORMATS = (
     "vintage", "pauper", "commander", "penny", "oathbreaker",
 )
 
-# Normalization constants for release year: (year - YEAR_BASE) / YEAR_RANGE.
+# Normalization constants for the cheapest-printing year: (year - YEAR_BASE) / YEAR_RANGE.
 # 1993 → ~0.029, 2026 → 1.0. Used by both the sklearn feature engineer and
-# the transformer metadata encoder so they stay in lockstep.
+# the price transformer's printing-data encoder so they stay in lockstep.
 YEAR_BASE = 1992
 YEAR_RANGE = 34.0
 
 
 @dataclass(frozen=True)
 class PrintingData:
-    """Printing context: reserve list, rarity, reprint count, release year, legalities."""
+    """Printing data: reserve list, rarity, printings count, cheapest-printing year,
+    legalities, ABU-only."""
 
     is_reserved: bool = False
     rarity: str = "rare"
     printings_count: int = 1
-    release_year: int = 1993
+    cheapest_printing_year: int = 1993
     legalities: list[str] = field(default_factory=list)
-    is_abu: bool = False
+    is_abu_only: bool = False
 
     def __post_init__(self) -> None:
         if self.rarity not in VALID_RARITIES:
@@ -39,8 +40,10 @@ class PrintingData:
             )
         if self.printings_count < 1:
             raise ValueError(f"printings_count must be >= 1, got {self.printings_count}")
-        if self.release_year < 1993:
-            raise ValueError(f"release_year must be >= 1993, got {self.release_year}")
+        if self.cheapest_printing_year < 1993:
+            raise ValueError(
+                f"cheapest_printing_year must be >= 1993, got {self.cheapest_printing_year}"
+            )
         for fmt in self.legalities:
             if fmt not in RECOGNIZED_FORMATS:
                 raise ValueError(
@@ -54,13 +57,14 @@ class PrintingData:
             is_reserved=False,
             rarity="rare",
             printings_count=1,
-            release_year=1993,
+            cheapest_printing_year=1993,
             legalities=list(RECOGNIZED_FORMATS),
         )
 
-    def normalized_release_year(self) -> float:
-        """Return ``release_year`` mapped to ``[0, 1]`` via the shared YEAR_BASE/YEAR_RANGE."""
-        return min(max((self.release_year - YEAR_BASE) / YEAR_RANGE, 0.0), 1.0)
+    def normalized_cheapest_printing_year(self) -> float:
+        """Return ``cheapest_printing_year`` mapped to ``[0, 1]`` via the shared
+        YEAR_BASE/YEAR_RANGE."""
+        return min(max((self.cheapest_printing_year - YEAR_BASE) / YEAR_RANGE, 0.0), 1.0)
 
 # Two-character hybrid pairs (e.g., WU, WB, UB, UR, UG, BR, BG, RG, RW, GW, GU)
 _HYBRID_PAIRS = {

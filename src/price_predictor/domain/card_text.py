@@ -6,14 +6,14 @@ The project traffics in two structurally different card text formats:
   lines (``name:``, ``types:``, ``mana cost:``, ``spell[n]:``, ...),
   produced by the Java ``ConvertMain`` tool and ready to feed into the
   price-predictor tokenizer.
-* **Raw Forge script** (``../forge/forge-gui/res/cardsfolder/*.txt``) —
+* **Forge card script** (``../forge/forge-gui/res/cardsfolder/*.txt``) —
   Forge's own syntax with ``Name:``/``ManaCost:``/``A:``/``K:`` lines.
   Only consumed by ``check_convert`` on the Python side.
 
 The two formats share enough surface syntax to be easily confused, so
 each gets its own type. :class:`ConvertedCardText` carries format-specific
 helpers; :data:`ForgeCardScript` is a NewType alias that merely labels a
-string as originating from a raw Forge card script.
+string as originating from a Forge card script.
 """
 
 from __future__ import annotations

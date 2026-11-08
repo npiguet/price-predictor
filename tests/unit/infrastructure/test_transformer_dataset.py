@@ -52,14 +52,14 @@ SAMPLE_CARDS = [
         "name: lightning bolt\nmana cost: {R}\ntypes: instant\n"
         "spell[1]: CARDNAME deals 3 damage to any target.",
         2.50,
-        PrintingData(rarity="uncommon", printings_count=3, release_year=2018),
+        PrintingData(rarity="uncommon", printings_count=3, cheapest_printing_year=2018),
     ),
     TrainingSample(
         "Grizzly Bears",
         "name: grizzly bears\nmana cost: {1}{G}\ntypes: creature bear\n"
         "power toughness: 2/2",
         0.10,
-        PrintingData(rarity="common", printings_count=5, release_year=2001),
+        PrintingData(rarity="common", printings_count=5, cheapest_printing_year=2001),
     ),
     TrainingSample(
         "Jace, the Mind Sculptor",
@@ -70,7 +70,7 @@ SAMPLE_CARDS = [
         45.00,
         PrintingData(
             rarity="mythic", printings_count=2,
-            release_year=2018, is_reserved=False,
+            cheapest_printing_year=2018, is_reserved=False,
         ),
     ),
 ]
@@ -98,7 +98,7 @@ class TestTransformerTrainingDataset:
         assert "input_ids" in item
         assert "attention_mask" in item
         assert "target" in item
-        assert "meta" in item
+        assert "printing_data_vector" in item
 
     def test_input_ids_shape(self):
         tok = _make_tokenizer()
@@ -118,39 +118,39 @@ class TestTransformerTrainingDataset:
         item = ds[0]
         assert item["target"].shape == ()
 
-    def test_meta_shape_with_defaults(self):
-        """When sample has PrintingData.defaults(), meta is encoded from defaults."""
-        from price_predictor.infrastructure.metadata_encoder import encode_metadata
+    def test_printing_data_vector_shape_with_defaults(self):
+        """With PrintingData.defaults(), the printing-data vector is encoded from defaults."""
+        from price_predictor.infrastructure.printing_data_encoder import encode_printing_data
 
         tok = _make_tokenizer()
         ds = TransformerTrainingDataset(
             SAMPLE_DEFAULT_PD_CARDS, max_seq_len=64, tokenizer=tok,
         )
         item = ds[0]
-        expected = encode_metadata(_DEFAULT_PD)
-        assert item["meta"].shape == expected.shape
-        assert torch.allclose(item["meta"], expected)
+        expected = encode_printing_data(_DEFAULT_PD)
+        assert item["printing_data_vector"].shape == expected.shape
+        assert torch.allclose(item["printing_data_vector"], expected)
 
-    def test_meta_shape_with_printing_data(self):
-        """Meta should be encoded tensor of shape (15,)."""
+    def test_printing_data_vector_shape_with_printing_data(self):
+        """The printing-data vector should be a tensor of shape (15,)."""
         tok = _make_tokenizer()
         ds = TransformerTrainingDataset(
             SAMPLE_CARDS, max_seq_len=64, tokenizer=tok,
         )
         item = ds[0]
-        assert item["meta"].shape == (15,)
-        assert item["meta"].dtype == torch.float32
+        assert item["printing_data_vector"].shape == (15,)
+        assert item["printing_data_vector"].dtype == torch.float32
 
-    def test_meta_values_differ_with_printing_data(self):
-        """Meta tensors should reflect the PrintingData values."""
+    def test_printing_data_vector_values_differ_with_printing_data(self):
+        """Printing-data vectors should reflect the PrintingData values."""
         tok = _make_tokenizer()
         ds = TransformerTrainingDataset(
             SAMPLE_CARDS, max_seq_len=64, tokenizer=tok,
         )
-        meta_bolt = ds[0]["meta"]  # uncommon, printings=3
-        meta_bears = ds[1]["meta"]  # common, printings=5
+        printing_data_bolt = ds[0]["printing_data_vector"]  # uncommon, printings=3
+        printing_data_bears = ds[1]["printing_data_vector"]  # common, printings=5
         # rarity slot differs: uncommon=0.33, common=0.0
-        assert not torch.allclose(meta_bolt, meta_bears)
+        assert not torch.allclose(printing_data_bolt, printing_data_bears)
 
     def test_shifted_log_target_transform(self):
         """Target should be log(price + log_offset) using the configured offset."""

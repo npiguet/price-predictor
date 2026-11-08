@@ -37,7 +37,7 @@ class MtgTokenizer:
     def __init__(self, vocab: dict[str, int]) -> None:
         """Construct from a {token: id} vocabulary mapping.
 
-        Requires [PAD]=0 and [UNK]=1 in the vocab.
+        Requires [PAD]=0 and [UNK]=1 in the vocabulary.
         """
         self._vocab = vocab
         self._reverse_vocab = {v: k for k, v in vocab.items()}

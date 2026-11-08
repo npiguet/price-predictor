@@ -1,4 +1,4 @@
-"""TrainingSample value object — a card name + raw text + price + metadata.
+"""TrainingSample value object — a card name + converted card text + card price + printing data.
 
 Replaces the ``(name, text, price, printing_data)`` 4-tuple that train and
 evaluate use cases were unpacking inline. Giving the bundle a name makes
@@ -17,9 +17,9 @@ from price_predictor.domain.value_objects import PrintingData
 class TrainingSample:
     """A single transformer training/evaluation row.
 
-    ``text`` is the raw converted-card text (without the ``name:`` line being
-    stripped — the tokenizer handles that). ``printing_data`` carries the
-    side-channel features fed into the model alongside the token sequence.
+    ``text`` is the converted card's text (without the ``name:`` line being
+    stripped — the tokenizer handles that). ``printing_data`` is fed into the model
+    beside the token sequence.
     """
 
     name: str

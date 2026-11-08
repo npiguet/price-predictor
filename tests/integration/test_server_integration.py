@@ -30,7 +30,7 @@ def trained_model_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
         prices_path=FIXTURES_DIR / "allprices_sample.json",
         printings_path=FIXTURES_DIR / "allprintings_sample.json",
         output_path=tmp,
-        test_split=0.2,
+        held_out_fraction=0.2,
         random_seed=42,
     )
     return tmp
@@ -82,7 +82,7 @@ class TestServerIntegration:
         service_price = response.json()["sklearn"]["predicted_price_eur"]
 
         # Same card through standalone use case — parse from identical text so
-        # oracle_text and all fields match exactly what the server sees
+        # converted_ability_text and all fields match exactly what the server sees
         card = parse_converted_text(ConvertedCardText(BOLT_SCRIPT))
         use_case = PredictPriceUseCase()
         standalone = use_case.execute(card, model_path)
@@ -151,41 +151,43 @@ class TestServerConcurrency:
 
 
 @pytest.fixture(scope="module")
-def metadata_map() -> dict[str, PrintingData]:
-    """A small metadata_map with a known card for enrichment tests."""
+def printing_data_map() -> dict[str, PrintingData]:
+    """A small printing_data_map with a known card for printing-data lookup tests."""
     return {
         "Lightning Bolt": PrintingData(
             is_reserved=False,
             rarity="common",
             printings_count=12,
-            release_year=2018,
+            cheapest_printing_year=2018,
             legalities=["commander", "legacy", "modern", "pauper", "penny", "vintage"],
         ),
     }
 
 
 @pytest.fixture(scope="module")
-def enrichment_client(model_path: Path, metadata_map: dict[str, PrintingData]) -> TestClient:
-    """Create a TestClient with a real trained model and a metadata_map."""
+def printing_data_client(
+    model_path: Path, printing_data_map: dict[str, PrintingData],
+) -> TestClient:
+    """Create a TestClient with a real trained model and a printing_data_map."""
     artifact = load_model(model_path)
     artifact["model_version"] = model_path.stem
-    app = create_app(artifact, metadata_map=metadata_map)
+    app = create_app(artifact, printing_data_map=printing_data_map)
     return TestClient(app)
 
 
-# Card text with no printing data lines — server should auto-fill from metadata_map
+# Card text with no printing data lines — server should auto-fill from printing_data_map
 BOLT_NO_PRINTING = (
     "name: lightning bolt\nmana cost: {R}\ntypes: instant\n"
     "spell[1]: CARDNAME deals 3 damage to any target."
 )
 
-# Unknown card — name not in metadata_map
+# Unknown card — name not in printing_data_map
 UNKNOWN_CARD = (
     "name: totally invented spell\nmana cost: {2}{B}\ntypes: sorcery\n"
     "spell[1]: target player discards a card."
 )
 
-# Unknown card with partial metadata (rarity only)
+# Unknown card with partial printing data (rarity only)
 UNKNOWN_CARD_WITH_RARITY = (
     "name: totally invented spell\nmana cost: {2}{B}\ntypes: sorcery\n"
     "spell[1]: target player discards a card.\nrarity: mythic"
@@ -195,10 +197,10 @@ UNKNOWN_CARD_WITH_RARITY = (
 @pytest.mark.integration
 class TestServerAutoFill:
     def test_known_card_without_printing_data_returns_200(
-        self, enrichment_client: TestClient
+        self, printing_data_client: TestClient
     ) -> None:
-        """T023: POST known card text WITHOUT printing data, server enriches internally."""
-        response = enrichment_client.post(
+        """T023: POST known card text WITHOUT printing data, server looks up its printing data."""
+        response = printing_data_client.post(
             "/api/v1/predict",
             content=BOLT_NO_PRINTING,
             headers={"Content-Type": "text/plain"},
@@ -208,11 +210,11 @@ class TestServerAutoFill:
         assert isinstance(data["sklearn"]["predicted_price_eur"], float)
         assert data["sklearn"]["predicted_price_eur"] > 0
 
-    def test_unknown_card_without_metadata_returns_200(
-        self, enrichment_client: TestClient
+    def test_unknown_card_without_printing_data_returns_200(
+        self, printing_data_client: TestClient
     ) -> None:
-        """T028: POST unknown card text (not in metadata_map), server applies defaults."""
-        response = enrichment_client.post(
+        """T028: POST unknown card text (not in printing_data_map), server applies defaults."""
+        response = printing_data_client.post(
             "/api/v1/predict",
             content=UNKNOWN_CARD,
             headers={"Content-Type": "text/plain"},
@@ -222,11 +224,11 @@ class TestServerAutoFill:
         assert isinstance(data["sklearn"]["predicted_price_eur"], float)
         assert data["sklearn"]["predicted_price_eur"] > 0
 
-    def test_unknown_card_with_partial_metadata_returns_200(
-        self, enrichment_client: TestClient
+    def test_unknown_card_with_partial_printing_data_returns_200(
+        self, printing_data_client: TestClient
     ) -> None:
         """T029: POST unknown card with rarity: mythic only, server fills remaining defaults."""
-        response = enrichment_client.post(
+        response = printing_data_client.post(
             "/api/v1/predict",
             content=UNKNOWN_CARD_WITH_RARITY,
             headers={"Content-Type": "text/plain"},

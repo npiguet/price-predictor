@@ -1,9 +1,9 @@
-"""Walk a converted-cards directory and join entries to prices + printing metadata.
+"""Walk a converted-cards directory and join entries to card prices + printing data.
 
 Two views over the same directory tree:
 
 * ``load_parsed_cards`` — fully parses each ``.txt`` into a :class:`Card`
-  and enriches it with :class:`PrintingData`. Used by the sklearn pipeline.
+  and attaches its :class:`PrintingData`. Used by the sklearn pipeline.
 * ``load_training_samples`` — keeps the raw card text and bundles it into
   :class:`TrainingSample`. Used by the transformer pipeline, which feeds the
   raw text through its own tokenizer.
@@ -46,18 +46,18 @@ class ParsedCardDataset:
 def load_parsed_cards(
     output_dir: Path,
     price_map: dict[str, float],
-    metadata_map: dict[str, PrintingData] | None = None,
+    printing_data_map: dict[str, PrintingData] | None = None,
 ) -> ParsedCardDataset:
-    """Parse cards from ``output_dir`` and enrich them with price + printing data.
+    """Parse cards from ``output_dir`` and attach their card price + printing data.
 
     Skip reasons are reported under ``parse_error`` (file failed to parse) and
-    ``no_printings_match`` (parsed but no price/metadata found).
+    ``no_printings_match`` (parsed but no card price/printing data found).
     """
     cards, parse_errors = parse_converted_cards(output_dir)
     logger.info("Parsed %d cards (%d parse errors)", len(cards), len(parse_errors))
 
-    resolver = CardNameResolver(price_map, metadata_map)
-    enriched: list[Card] = []
+    resolver = CardNameResolver(price_map, printing_data_map)
+    priced_cards: list[Card] = []
     prices: list[float] = []
     skipped_reasons: dict[str, int] = {
         "parse_error": len(parse_errors),
@@ -69,22 +69,22 @@ def load_parsed_cards(
         if resolved is None:
             skipped_reasons["no_printings_match"] += 1
             continue
-        enriched.append(replace(card, printing_data=resolved.printing_data))
+        priced_cards.append(replace(card, printing_data=resolved.printing_data))
         prices.append(resolved.price_eur)
 
     logger.info(
         "Joined %d cards to prices (skipped %d total)",
-        len(enriched), sum(skipped_reasons.values()),
+        len(priced_cards), sum(skipped_reasons.values()),
     )
     return ParsedCardDataset(
-        cards=enriched, prices=prices, skipped_reasons=skipped_reasons,
+        cards=priced_cards, prices=prices, skipped_reasons=skipped_reasons,
     )
 
 
 def load_training_samples(
     output_dir: Path,
     price_map: dict[str, float],
-    metadata_map: dict[str, PrintingData] | None = None,
+    printing_data_map: dict[str, PrintingData] | None = None,
 ) -> list[TrainingSample]:
     """Walk ``output_dir`` and emit :class:`TrainingSample` for every resolved file.
 
@@ -92,7 +92,7 @@ def load_training_samples(
     resolved are silently skipped (read failures and missing names are
     logged in aggregate).
     """
-    resolver = CardNameResolver(price_map, metadata_map)
+    resolver = CardNameResolver(price_map, printing_data_map)
     samples: list[TrainingSample] = []
     unreadable_or_unnamed = 0
 

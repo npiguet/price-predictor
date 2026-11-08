@@ -45,7 +45,7 @@ class TestRunEvaluateTransformer:
         mock_result.model_version = "transformer"
         mock_result.mean_absolute_error_eur = 1.23
         mock_result.median_percentage_error = 65.2
-        mock_result.median_abs_error_log = 0.19
+        mock_result.median_log_error = 0.19
         mock_result.top_20_overlap = 0.45
         mock_result.sample_count = 4032
         mock_result.per_card = None

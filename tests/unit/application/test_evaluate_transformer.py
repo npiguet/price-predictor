@@ -32,10 +32,10 @@ def _make_fixture_tokenizer(vocab_size: int = 30522) -> MtgTokenizer:
 class TestEvaluateTransformer:
     @patch("price_predictor.application.evaluate_transformer.load_tokenizer")
     @patch("price_predictor.application.evaluate_transformer.load_model")
-    @patch("price_predictor.application.evaluate_transformer.build_metadata_map")
+    @patch("price_predictor.application.evaluate_transformer.build_printing_data_map")
     @patch("price_predictor.application.evaluate_transformer.load_training_samples")
     def test_returns_eval_result_with_metrics(
-        self, mock_load_samples, mock_metadata_map, mock_load,
+        self, mock_load_samples, mock_printing_data_map, mock_load,
         mock_load_tokenizer, tmp_path
     ):
         from price_predictor.application.evaluate_transformer import evaluate_transformer
@@ -56,7 +56,7 @@ class TestEvaluateTransformer:
         mock_model.to = MagicMock(return_value=mock_model)
         mock_load.return_value = (mock_model, config)
 
-        mock_metadata_map.return_value = ({}, {})
+        mock_printing_data_map.return_value = ({}, {})
 
         from price_predictor.domain.value_objects import PrintingData
         pd = PrintingData()
@@ -87,7 +87,7 @@ class TestEvaluateTransformer:
         assert result.model_version == "model"
         assert result.mean_absolute_error_eur >= 0
         assert result.median_percentage_error >= 0
-        assert result.median_abs_error_log >= 0
+        assert result.median_log_error >= 0
         assert result.top_20_overlap >= 0
         assert result.per_card is not None
         assert len(result.per_card) == 5

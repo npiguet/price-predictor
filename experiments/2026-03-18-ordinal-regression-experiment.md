@@ -4,9 +4,9 @@
 
 Starting point: commit `bd9a7b13` ("Make log_offset configurable and persist it in the model artifact").
 
-At that point the transformer model used **Huber loss on log(price + offset)** — a single scalar output per card trained to predict shifted log-price. The model had a three-layer output head: `Linear(d_model → 64) → ReLU → Linear(64 → 1)`.
+At that point the price transformer used **Huber loss on log(price + offset)** — a single scalar output per card trained to predict the shifted-log price. The model had a three-layer output head: `Linear(d_model → 64) → ReLU → Linear(64 → 1)`.
 
-The validation results at that baseline (with ABU flag and no-mana-cost improvements applied) were:
+The results on the held-out split at that baseline (with the ABU-only flag and no-mana-cost marker applied) were:
 
 ```
 median_abs_error_log: 0.864   top_20_overlap: 0.62
@@ -24,7 +24,7 @@ The per-bucket breakdown revealed a systematic bias: the model overpredicts chea
 
 ## Root cause analysis
 
-~90% of cards cost less than €2 (5461/6057 in validation). The model's gradient is dominated by cheap cards. Any signal from the ~85 expensive training cards is overwhelmed.
+~90% of cards cost less than €2 (5461/6057 in the held-out split). The model's gradient is dominated by cheap cards. Any signal from the ~85 expensive training cards is overwhelmed.
 
 ---
 
@@ -38,9 +38,9 @@ The idea was that each threshold neuron would only receive meaningful gradient f
 
 Price reconstruction uses probit-inverse: `log(price) = log(t_i) + σ × Φ⁻¹(p_i)` for each neuron, combined as a weighted average with weight `φ(z) = exp(−z²/2)`. This allows extrapolation above the last threshold (e.g. Black Lotus at p₇=0.998 reconstructs to ~€9500, not capped at the bucket center).
 
-**What actually happened:** The model still regressed toward the cheap majority. Overall metrics got slightly worse (median_abs_error_log 0.864 → various worse values through iterations). The >€50 bucket did not improve significantly.
+**What actually happened:** The model still regressed toward the cheap majority. Overall metrics got slightly worse (median log error 0.864 → various worse values through iterations). The >€50 bucket did not improve significantly.
 
-**Note:** There was a sign bug in an intermediate commit (proportional odds variant) that produced median_pct_error of 3329% — this was caught and fixed.
+**Note:** There was a sign bug in an intermediate commit (proportional odds variant) that produced a median percentage error of 3329% — this was caught and fixed.
 
 ---
 
@@ -69,7 +69,7 @@ Bucket   med_signed_log (old → new)
 >€50       -3.275 → -2.683   (better)
 ```
 
-The shared weight vector forced a compromise: cheap cards got worse, expensive cards got slightly better. The "parallel slopes" assumption (same feature importance at all price levels) was too strong. The overall median_abs_error_log got worse despite the >€50 improvement.
+The shared weight vector forced a compromise: cheap cards got worse, expensive cards got slightly better. The "parallel slopes" assumption (same feature importance at all price levels) was too strong. The overall median log error got worse despite the >€50 improvement.
 
 ---
 
@@ -111,7 +111,7 @@ alpha=0 (uniform):     median_abs_error_log: 0.959   top_20_overlap: 0.63
 alpha=0.5 (sqrt):      median_abs_error_log: 1.214   top_20_overlap: 0.59
 ```
 
-Worse on almost every metric. The top_20_overlap dropped from 0.63 to 0.59. The cheap bucket degraded significantly. Even the >€50 bucket got slightly worse despite seeing more expensive cards, possibly due to overfitting to the small set of expensive training examples.
+Worse on almost every metric. The top-20 overlap dropped from 0.63 to 0.59. The cheap bucket degraded significantly. Even the >€50 bucket got slightly worse despite seeing more expensive cards, possibly due to overfitting to the small set of expensive training examples.
 
 ---
 
@@ -125,8 +125,8 @@ The best overall model remained the simple architecture with uniform sampling an
 - Transformer encoder → masked mean pooling → `Linear(d_model → 1)` → scalar shifted-log prediction
 - Huber loss on `log(price + log_offset)`
 - Uniform sampling
-- ABU flag (filters non-constructed-legal prices)
-- `mana cost: none` token for lands (distinguishes zero-cost from no-cost)
+- ABU-only flag (filters non-constructed-legal prices)
+- No-mana-cost marker (`mana cost: none`) for lands (distinguishes zero-cost from no-cost)
 - Per-bucket evaluation output
 
 **Best observed metrics (simple arch, uniform sampling):**
@@ -157,7 +157,7 @@ The most promising remaining direction is **domain-specific features** that are 
 
 After rolling back to the simple scalar architecture, three pooling strategies were compared. All results use the same transformer encoder (d_model=128, 4 layers, 4 heads) and output head (`Linear → ReLU → Linear`).
 
-**Important metric note:** `median_abs_error_log` uses `log(price + 2.0)`, which heavily compresses errors for cheap cards. A 3.3× prediction error on a €0.10 card appears as 0.10 in shifted log space. The `med_signed_log` column (raw `log(price)`, no offset, negative = underprediction) is the honest per-bucket measure used for comparison throughout.
+**Important metric note:** the median log error (`median_abs_error_log`) uses `log(price + 2.0)`, which heavily compresses errors for cheap cards. A 3.3× prediction error on a €0.10 card appears as 0.10 in shifted-log space. The signed log error column (`med_signed_log`) (raw `log(price)`, no offset, negative = underprediction) is the honest per-bucket measure used for comparison throughout.
 
 ### 1. Mean pooling
 
@@ -191,7 +191,7 @@ Bucket   med_signed_log
 >€50       -2.644
 ```
 
-Better for expensive cards, significantly worse for cheap cards (+1.196 vs +0.379). The improved `median_abs_error_log` is a metric artifact from the log+offset compression, not a genuine overall improvement.
+Better for expensive cards, significantly worse for cheap cards (+1.196 vs +0.379). The improved median log error is a metric artifact from the log+offset compression, not a genuine overall improvement.
 
 ---
 

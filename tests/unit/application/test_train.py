@@ -38,7 +38,7 @@ def train_kwargs(
         "prices_path": allprices_path,
         "printings_path": allprintings_path,
         "output_path": tmp_path,
-        "test_split": 0.2,
+        "held_out_fraction": 0.2,
         "random_seed": 42,
     }
 
@@ -90,13 +90,13 @@ class TestTrainModelUseCase:
                 prices_path=prices,
                 printings_path=printings,
                 output_path=tmp_path / "out",
-                test_split=0.2,
+                held_out_fraction=0.2,
                 random_seed=42,
             )
 
     def test_trained_cards_have_printing_data(self, train_kwargs: dict) -> None:
-        """Training enriches Cards with printing_data so the printing-data feature
-        block is non-zero for cards whose metadata was found."""
+        """Training attaches printing_data to Cards so the printing-data feature
+        group is non-zero for cards whose printing data was found."""
         from price_predictor.domain.entities import Card
         from price_predictor.domain.value_objects import ManaCost, PrintingData
 
@@ -106,13 +106,13 @@ class TestTrainModelUseCase:
         fe = artifact["feature_engineering"]
 
         bare = Card(name="Bare", types=["Creature"], mana_cost=ManaCost.parse("1 G"))
-        enriched = Card(
-            name="Enriched", types=["Creature"], mana_cost=ManaCost.parse("1 G"),
+        with_printing_data = Card(
+            name="With Printing Data", types=["Creature"], mana_cost=ManaCost.parse("1 G"),
             printing_data=PrintingData(
-                rarity="mythic", printings_count=3, release_year=2020,
+                rarity="mythic", printings_count=3, cheapest_printing_year=2020,
                 legalities=["modern", "legacy"], is_reserved=True,
             ),
         )
         bare_vec = fe.transform([bare])[0]
-        enriched_vec = fe.transform([enriched])[0]
-        assert not np.array_equal(bare_vec, enriched_vec)
+        with_printing_data_vec = fe.transform([with_printing_data])[0]
+        assert not np.array_equal(bare_vec, with_printing_data_vec)

@@ -22,7 +22,7 @@ from price_predictor.domain.value_objects import PrintingData
 
 
 def _make_fixture_tokenizer(vocab_size: int = 512) -> MtgTokenizer:
-    """Build a fixture MtgTokenizer with a given vocab size."""
+    """Build a fixture MtgTokenizer with a given vocabulary size."""
     vocab = {"[PAD]": 0, "[UNK]": 1}
     for i in range(vocab_size - 2):
         vocab[f"token_{i}"] = i + 2
@@ -30,7 +30,7 @@ def _make_fixture_tokenizer(vocab_size: int = 512) -> MtgTokenizer:
 
 
 def _make_printing_data() -> PrintingData:
-    return PrintingData(rarity="rare", printings_count=1, release_year=2020)
+    return PrintingData(rarity="rare", printings_count=1, cheapest_printing_year=2020)
 
 
 class TestAnalyzeSequenceLengths:
@@ -68,7 +68,8 @@ class TestAnalyzeSequenceLengths:
 
 
 class _StubModel(nn.Module):
-    """Tiny model with the (input_ids, attention_mask, meta) signature the epoch helpers expect."""
+    """Tiny model with the (input_ids, attention_mask, printing_data_vector) signature
+    the epoch helpers expect."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -78,7 +79,7 @@ class _StubModel(nn.Module):
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        meta: torch.Tensor,
+        printing_data_vector: torch.Tensor,
     ) -> torch.Tensor:
         x = input_ids.float().mean(dim=1, keepdim=True)
         return self.linear(x).squeeze(-1)
@@ -89,32 +90,32 @@ def _make_batch(target: float = 1.0) -> dict:
         "input_ids": torch.tensor([[1, 2, 3, 4]], dtype=torch.long),
         "attention_mask": torch.tensor([[1, 1, 1, 1]], dtype=torch.long),
         "target": torch.tensor([target], dtype=torch.float),
-        "meta": torch.tensor([[0.0]], dtype=torch.float),
+        "printing_data_vector": torch.tensor([[0.0]], dtype=torch.float),
     }
 
 
 class TestBestCheckpoint:
     def test_first_update_is_always_improvement(self):
         best = _BestCheckpoint()
-        improved = best.update(epoch=1, val_loss=0.5, model=nn.Linear(2, 1))
+        improved = best.update(epoch=1, held_out_loss=0.5, model=nn.Linear(2, 1))
         assert improved is True
         assert best.best_epoch == 1
-        assert best.best_val_loss == 0.5
+        assert best.best_held_out_loss == 0.5
 
     def test_higher_loss_does_not_improve(self):
         best = _BestCheckpoint()
-        best.update(epoch=1, val_loss=0.5, model=nn.Linear(2, 1))
-        improved = best.update(epoch=2, val_loss=0.7, model=nn.Linear(2, 1))
+        best.update(epoch=1, held_out_loss=0.5, model=nn.Linear(2, 1))
+        improved = best.update(epoch=2, held_out_loss=0.7, model=nn.Linear(2, 1))
         assert improved is False
         assert best.best_epoch == 1
 
     def test_lower_loss_replaces_best(self):
         best = _BestCheckpoint()
-        best.update(epoch=1, val_loss=0.5, model=nn.Linear(2, 1))
-        improved = best.update(epoch=2, val_loss=0.3, model=nn.Linear(2, 1))
+        best.update(epoch=1, held_out_loss=0.5, model=nn.Linear(2, 1))
+        improved = best.update(epoch=2, held_out_loss=0.3, model=nn.Linear(2, 1))
         assert improved is True
         assert best.best_epoch == 2
-        assert best.best_val_loss == 0.3
+        assert best.best_held_out_loss == 0.3
 
     def test_restore_loads_snapshot_back_into_model(self):
         torch.manual_seed(0)
@@ -122,7 +123,7 @@ class TestBestCheckpoint:
         snapshot_weight = snapshot_model.weight.detach().clone()
 
         best = _BestCheckpoint()
-        best.update(epoch=1, val_loss=0.1, model=snapshot_model)
+        best.update(epoch=1, held_out_loss=0.1, model=snapshot_model)
 
         with torch.no_grad():
             snapshot_model.weight.fill_(99.0)
@@ -171,12 +172,12 @@ class TestRunEpochHelpers:
 
 
 class TestTrainTransformer:
-    @patch("price_predictor.application.train_transformer.build_metadata_map")
+    @patch("price_predictor.application.train_transformer.build_printing_data_map")
     @patch("price_predictor.application.train_transformer.load_training_samples")
     def test_insufficient_data_raises(
-        self, mock_load_samples, mock_metadata_map, tmp_path
+        self, mock_load_samples, mock_printing_data_map, tmp_path
     ):
-        mock_metadata_map.return_value = ({}, {})
+        mock_printing_data_map.return_value = ({}, {})
         pd = _make_printing_data()
         mock_load_samples.return_value = [
             TrainingSample(name="Card 1", text="text", price_eur=1.0, printing_data=pd),

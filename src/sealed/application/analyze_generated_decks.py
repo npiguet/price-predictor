@@ -24,7 +24,7 @@ from statistics import mean
 from price_predictor.domain.entities import Card
 from price_predictor.domain.value_objects import PrintingData
 from price_predictor.infrastructure.converted_card_parser import parse_converted_file
-from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
+from price_predictor.infrastructure.mtgjson_loader import build_printing_data_map
 from sealed.infrastructure.converted_card_locator import (
     BASIC_LAND_NAMES,
     ConvertedCardLocator,
@@ -93,7 +93,7 @@ def analyze_decks(
     elif not (ALLPRINTINGS_PATH.exists() and ALLPRICES_PATH.exists()):
         rarity_skip_reason = f"missing {ALLPRINTINGS_PATH} or {ALLPRICES_PATH}"
     else:
-        metadata, _ = build_metadata_map(ALLPRINTINGS_PATH, ALLPRICES_PATH)
+        metadata, _ = build_printing_data_map(ALLPRINTINGS_PATH, ALLPRICES_PATH)
 
     all_stats = [compute_deck_stats(deck, card_cache, metadata) for deck in decks]
 

@@ -24,7 +24,7 @@ def trained_model_path(fixtures_dir: Path, tmp_path: Path) -> Path:
         prices_path=fixtures_dir / "allprices_sample.json",
         printings_path=fixtures_dir / "allprintings_sample.json",
         output_path=tmp_path,
-        test_split=0.2,
+        held_out_fraction=0.2,
         random_seed=42,
     )
     return result.model_path
@@ -37,7 +37,7 @@ def evaluate_kwargs(fixtures_dir: Path, trained_model_path: Path) -> dict:
         "output_dir": fixtures_dir / "converted_cards",
         "prices_path": fixtures_dir / "allprices_sample.json",
         "printings_path": fixtures_dir / "allprintings_sample.json",
-        "test_split": 0.2,
+        "held_out_fraction": 0.2,
         "random_seed": 42,
     }
 

@@ -61,7 +61,7 @@ class TestVocabularyBuildPipeline:
 
 
 class TestVocabularyToDatasetPipeline:
-    """T018: Full pipeline: vocab -> tokenizer -> dataset -> batch shapes."""
+    """T018: Full pipeline: vocabulary -> tokenizer -> dataset -> batch shapes."""
 
     def test_full_pipeline_batch_shapes(self, tmp_path: Path):
         import torch

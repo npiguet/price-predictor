@@ -23,7 +23,7 @@ def trained_model_path(tmp_path: Path) -> Path:
         prices_path=fixtures / "allprices_sample.json",
         printings_path=fixtures / "allprintings_sample.json",
         output_path=tmp_path,
-        test_split=0.2,
+        held_out_fraction=0.2,
         random_seed=42,
     )
     return result.model_path
@@ -39,7 +39,7 @@ class TestPredictPriceUseCase:
             power="2",
             toughness="2",
             keywords=["Trample"],
-            oracle_text="Trample",
+            converted_ability_text="Trample",
         )
         use_case = PredictPriceUseCase()
         result = use_case.execute(card, trained_model_path)
@@ -61,7 +61,7 @@ class TestPredictPriceUseCase:
             name="Completely Made Up",
             types=["Enchantment"],
             mana_cost=ManaCost.parse("3 B B"),
-            oracle_text="Whenever a creature dies, draw a card and lose 1 life.",
+            converted_ability_text="Whenever a creature dies, draw a card and lose 1 life.",
             ability_count=2,
         )
         use_case = PredictPriceUseCase()
@@ -74,7 +74,7 @@ class TestPredictPriceUseCase:
             name="Bolt",
             types=["Instant"],
             mana_cost=ManaCost.parse("R"),
-            oracle_text="Deal 3 damage to any target.",
+            converted_ability_text="Deal 3 damage to any target.",
             ability_count=1,
         )
         use_case = PredictPriceUseCase()

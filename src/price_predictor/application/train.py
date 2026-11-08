@@ -15,7 +15,7 @@ from price_predictor.application.converted_card_dataset import load_parsed_cards
 from price_predictor.application.feature_engineering import FeatureEngineering
 from price_predictor.domain.entities import TrainedModel
 from price_predictor.infrastructure.model_store import save_model
-from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
+from price_predictor.infrastructure.mtgjson_loader import build_printing_data_map
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +39,11 @@ class TrainModelUseCase:
         prices_path: Path,
         printings_path: Path,
         output_path: Path,
-        test_split: float = 0.2,
+        held_out_fraction: float = 0.2,
         random_seed: int = 42,
     ) -> TrainResult:
-        metadata_map, price_map = build_metadata_map(printings_path, prices_path)
-        dataset = load_parsed_cards(output_dir, price_map, metadata_map)
+        printing_data_map, price_map = build_printing_data_map(printings_path, prices_path)
+        dataset = load_parsed_cards(output_dir, price_map, printing_data_map)
         logger.info(
             "Parsed %d cards (%d parse errors)",
             len(dataset.cards) + dataset.skipped_reasons.get("no_printings_match", 0),
@@ -78,10 +78,10 @@ class TrainModelUseCase:
 
         logger.info("Feature engineering complete (%d features)", X.shape[1])
 
-        # 8. Train/test split
+        # 8. Train/held-out split
         if len(training_cards) >= 5:
-            X_train, _X_test, y_train, _y_test = train_test_split(
-                X, y, test_size=test_split, random_state=random_seed
+            X_train, _X_held_out, y_train, _y_held_out = train_test_split(
+                X, y, test_size=held_out_fraction, random_state=random_seed
             )
         else:
             # Too few samples for a meaningful split

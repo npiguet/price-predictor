@@ -118,7 +118,7 @@ def _build_response(
 def create_app(
     model_artifact: dict[str, Any],
     transformer_artifact: dict[str, Any] | None = None,
-    metadata_map: dict | None = None,
+    printing_data_map: dict | None = None,
     tokenizer: Any | None = None,
 ) -> FastAPI:
     """Create a FastAPI application with the given model artifact(s).
@@ -134,9 +134,9 @@ def create_app(
     app = FastAPI(title="Price Predictor Service")
     app.state.model_artifact = model_artifact
     app.state.transformer_artifact = transformer_artifact
-    app.state.metadata_map = metadata_map or {}
+    app.state.printing_data_map = printing_data_map or {}
     app.state.card_name_resolver = (
-        CardNameResolver(metadata_map=metadata_map) if metadata_map else None
+        CardNameResolver(printing_data_map=printing_data_map) if printing_data_map else None
     )
     app.state.tokenizer = tokenizer
 

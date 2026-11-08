@@ -14,7 +14,7 @@ from price_predictor.application.feature_engineering import FeatureEngineering
 from price_predictor.application.metrics import compute_regression_metrics
 from price_predictor.domain.entities import EvaluationMetrics
 from price_predictor.infrastructure.model_store import load_model
-from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
+from price_predictor.infrastructure.mtgjson_loader import build_printing_data_map
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class EvaluateResult:
 
 
 class EvaluateModelUseCase:
-    """Load a trained model, re-derive test split, and compute accuracy metrics."""
+    """Load a trained model, re-derive the held-out split, and compute accuracy metrics."""
 
     def execute(
         self,
@@ -37,7 +37,7 @@ class EvaluateModelUseCase:
         output_dir: Path,
         prices_path: Path,
         printings_path: Path,
-        test_split: float = 0.2,
+        held_out_fraction: float = 0.2,
         random_seed: int = 42,
     ) -> EvaluateResult:
         # Load model
@@ -46,40 +46,42 @@ class EvaluateModelUseCase:
         model = artifact["model"]
         fe: FeatureEngineering = artifact["feature_engineering"]
 
-        metadata_map, price_map = build_metadata_map(printings_path, prices_path)
-        dataset = load_parsed_cards(output_dir, price_map, metadata_map)
+        printing_data_map, price_map = build_printing_data_map(printings_path, prices_path)
+        dataset = load_parsed_cards(output_dir, price_map, printing_data_map)
         eval_cards = dataset.cards
         eval_prices = dataset.prices
 
         if len(eval_cards) < 2:
             raise ValueError("Insufficient data for evaluation")
 
-        # Re-derive test split using same seed
+        # Re-derive the held-out split using the same seed
         all_indices = list(range(len(eval_cards)))
-        _, test_indices = train_test_split(
-            all_indices, test_size=test_split, random_state=random_seed
+        _, held_out_indices = train_test_split(
+            all_indices, test_size=held_out_fraction, random_state=random_seed
         )
 
-        test_cards = [eval_cards[i] for i in test_indices]
-        test_prices = np.array([eval_prices[i] for i in test_indices])
+        held_out_cards = [eval_cards[i] for i in held_out_indices]
+        held_out_prices = np.array([eval_prices[i] for i in held_out_indices])
 
-        if len(test_cards) == 0:
-            raise ValueError("Test set is empty after split")
+        if len(held_out_cards) == 0:
+            raise ValueError("Held-out split is empty")
 
         # Predict
-        logger.info("Computing predictions on test set (%d cards)...", len(test_cards))
-        X_test = fe.transform(test_cards)
-        log_predicted = model.predict(X_test)
+        logger.info(
+            "Computing predictions on the held-out split (%d cards)...", len(held_out_cards),
+        )
+        X_held_out = fe.transform(held_out_cards)
+        log_predicted = model.predict(X_held_out)
         predicted_prices = np.exp(log_predicted)
 
-        metrics = compute_regression_metrics(test_prices, predicted_prices)
+        metrics = compute_regression_metrics(held_out_prices, predicted_prices)
 
-        abs_errors = np.abs(predicted_prices - test_prices)
+        abs_errors = np.abs(predicted_prices - held_out_prices)
         per_card = []
-        for i, card in enumerate(test_cards):
+        for i, card in enumerate(held_out_cards):
             per_card.append({
                 "name": card.name,
-                "actual_price_eur": round(float(test_prices[i]), 2),
+                "actual_price_eur": round(float(held_out_prices[i]), 2),
                 "predicted_price_eur": round(float(predicted_prices[i]), 2),
                 "absolute_error_eur": round(float(abs_errors[i]), 2),
             })

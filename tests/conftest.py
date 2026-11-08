@@ -20,7 +20,7 @@ def make_printing_data(**overrides) -> PrintingData:
         "is_reserved": False,
         "rarity": "common",
         "printings_count": 1,
-        "release_year": 2020,
+        "cheapest_printing_year": 2020,
     }
     defaults.update(overrides)
     return PrintingData(**defaults)
@@ -93,7 +93,7 @@ def sample_instant() -> Card:
         name="Lightning Bolt",
         types=["Instant"],
         mana_cost=ManaCost.parse("R"),
-        oracle_text="Lightning Bolt deals 3 damage to any target.",
+        converted_ability_text="Lightning Bolt deals 3 damage to any target.",
         ability_count=1,
         layout="normal",
     )
@@ -123,7 +123,7 @@ def sample_land() -> Card:
         supertypes=["Basic"],
         subtypes=["Island"],
         mana_cost=None,
-        oracle_text="{T}: Add {U}.",
+        converted_ability_text="{T}: Add {U}.",
         ability_count=1,
         layout="normal",
     )

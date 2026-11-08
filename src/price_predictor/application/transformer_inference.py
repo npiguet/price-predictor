@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader, Dataset
 from price_predictor.domain.entities import TransformerConfig
 from price_predictor.domain.tokenizer import MtgTokenizer
 from price_predictor.domain.value_objects import PrintingData
-from price_predictor.infrastructure.metadata_encoder import encode_metadata
+from price_predictor.infrastructure.printing_data_encoder import encode_printing_data
 
 
 def shifted_log_to_eur(value: float, log_offset: float) -> float:
@@ -36,16 +36,16 @@ def predict_shifted_log(
     """Run a single-card forward pass and return the raw shifted-log prediction."""
     pd = printing_data if printing_data is not None else PrintingData.defaults()
     input_ids, attention_mask = tokenizer.encode(text, config.max_seq_len)
-    meta = encode_metadata(pd)
+    printing_data_vector = encode_printing_data(pd)
 
     device = _model_device(model)
     input_ids_t = torch.tensor([input_ids], dtype=torch.long).to(device)
     attention_mask_t = torch.tensor([attention_mask], dtype=torch.long).to(device)
-    meta_t = meta.unsqueeze(0).to(device)
+    printing_data_vector_t = printing_data_vector.unsqueeze(0).to(device)
 
     model.eval()
     with torch.no_grad():
-        return float(model(input_ids_t, attention_mask_t, meta_t).item())
+        return float(model(input_ids_t, attention_mask_t, printing_data_vector_t).item())
 
 
 def predict_batch(
@@ -64,8 +64,8 @@ def predict_batch(
         for batch in loader:
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
-            meta = batch["meta"].to(device)
-            outputs = model(input_ids, attention_mask, meta)
+            printing_data_vector = batch["printing_data_vector"].to(device)
+            outputs = model(input_ids, attention_mask, printing_data_vector)
             all_predictions.append(outputs.cpu())
             all_targets.append(batch["target"])
 

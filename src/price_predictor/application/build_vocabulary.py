@@ -5,7 +5,7 @@ Corpus results (full ./output/ at freq_threshold=5, 2026-03-17):
   SC-001 PASS (2451 < 10000), SC-002 PASS (99.5% >= 95%)
 
 name: lines are stripped before frequency counting (mirroring MtgTokenizer)
-so card-name proper nouns never enter the vocab. This pruned ~3,200 slots
+so card-name proper nouns never enter the vocabulary. This pruned ~3,200 slots
 vs earlier builds that included name-line tokens.
 """
 
@@ -70,8 +70,8 @@ _COLOR_NAMES: tuple[str, ...] = (
     "white",
 )
 
-# Printing-data field names and values fed to the model as side-channel
-# metadata at training time. These never appear in raw converted card texts,
+# Printing-data field names and values fed to the model as printing data
+# at training time. These never appear in raw converted card texts,
 # so they would always be UNK without explicit seeding — causing rarity,
 # reserved list, and legality information to be completely invisible.
 _PRINTING_DATA_TERMS: tuple[str, ...] = (
@@ -83,7 +83,7 @@ _PRINTING_DATA_TERMS: tuple[str, ...] = (
     "mythic",
     "rare",
     "uncommon",
-    # Enrichment field names
+    # Printing-data field names
     "abu",
     "legalities",
     "printings",
@@ -100,7 +100,7 @@ _PRINTING_DATA_TERMS: tuple[str, ...] = (
     "pioneer",
     "standard",
     "vintage",
-    # Mana cost sentinel: cards with no mana cost line get "mana cost: none"
+    # No-mana-cost marker: cards with no mana cost line get "mana cost: none"
     # inserted by MtgTokenizer so lands are distinguishable from {0}-cost cards.
     "none",
 )
@@ -118,10 +118,10 @@ def _extract_set_code_tokens(printings_path: Path) -> list[str]:
 
     Only set codes that appear in at least one card's ``printings`` list are
     considered — this is exactly the universe of codes that can ever surface
-    in a card's ``set:`` enrichment line. Walking the top-level ``data{}``
+    in a card's ``set:`` printing-data line. Walking the top-level ``data{}``
     keys instead would also pick up Art Series ("ABRO", "ACLB", ...), Token,
     and Minigame "sets" whose codes never appear in real card text, polluting
-    the vocab with nonsense fragments like "abro" / "aclb".
+    the vocabulary with nonsense fragments like "abro" / "aclb".
 
     Returns a sorted, deduplicated list of letter-sequence tokens.
     """
@@ -156,7 +156,7 @@ def _bootstrap_tokenizer() -> MtgTokenizer:
     """Build a tokenizer suitable for vocabulary scanning.
 
     The token IDs are irrelevant here — only the tokenize() output is used.
-    Multi-word keywords must be present in the vocab so that MtgTokenizer's
+    Multi-word keywords must be present in the vocabulary so that MtgTokenizer's
     longest-first replacement step recognizes them.
     """
     bootstrap_vocab: dict[str, int] = {
@@ -242,7 +242,7 @@ def _add_freq_tokens(
 
 
 def _add_remaining_mana_symbols(vocab: dict[str, int], counts: Counter[str]) -> None:
-    """Add every mana symbol seen in the corpus that isn't already in the vocab."""
+    """Add every mana symbol seen in the corpus that isn't already in the vocabulary."""
     for token in counts:
         if _MANA_SYMBOL_PATTERN.fullmatch(token) and token not in vocab:
             _add_token(vocab, token)
@@ -251,7 +251,7 @@ def _add_remaining_mana_symbols(vocab: dict[str, int], counts: Counter[str]) -> 
 def _compute_coverage(
     counts: Counter[str], vocab: dict[str, int], total_occurrences: int
 ) -> tuple[float, float]:
-    """Return (coverage_pct, unk_pct) of corpus tokens captured by the vocab."""
+    """Return (coverage_pct, unk_pct) of corpus tokens captured by the vocabulary."""
     if total_occurrences == 0:
         return 100.0, 0.0
     covered = sum(count for token, count in counts.items() if token in vocab)
@@ -312,10 +312,10 @@ def build_vocabulary(
         freq_threshold: Minimum corpus frequency for a word to be included.
         printings_path: Optional path to AllPrintings.json. When supplied,
             alphabetic fragments of every set code are seeded into the fixed
-            domain section so set codes in enriched training texts are never UNK.
+            domain section so set codes in training texts carrying printing data are never UNK.
 
     Returns:
-        VocabBuildResult with vocab dict and coverage statistics.
+        VocabBuildResult with the vocabulary and coverage statistics.
     """
     vocab: dict[str, int] = {}
 

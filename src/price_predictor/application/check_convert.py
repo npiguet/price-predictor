@@ -326,7 +326,7 @@ def _extract_oracle(forge_text: str) -> tuple[str | None, str | None]:
     return card_name, oracle
 
 
-def _extract_ability_text(converted_text: str) -> tuple[list[str], list[str]]:
+def _extract_converted_ability_text(converted_text: str) -> tuple[list[str], list[str]]:
     """Extract ability description lines from a converted output file.
 
     Returns (ability_lines, duplicate_lines).
@@ -400,7 +400,7 @@ def _display_name_from_converted(converted_text: str, fallback: str | None) -> s
 def check_card(converted_text: str, forge_text: ForgeCardScript) -> CardCheckResult:
     """Check a single converted card against its Forge source."""
     card_name, oracle = _extract_oracle(forge_text)
-    ability_lines, duplicates = _extract_ability_text(converted_text)
+    ability_lines, duplicates = _extract_converted_ability_text(converted_text)
 
     display_name = _display_name_from_converted(converted_text, card_name)
     has_oracle = oracle is not None and oracle.strip() != ""

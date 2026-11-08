@@ -47,7 +47,7 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
         self.random_seed = random_seed
 
     def fit(self, X: list[Card], y: object = None) -> "FeatureEngineering":
-        """Learn TF-IDF vocabulary and top-30 keywords from training cards."""
+        """Learn the TF-IDF terms and top-30 keywords from training cards."""
         keyword_counts: dict[str, int] = {}
         for card in X:
             for kw in card.keywords:
@@ -60,7 +60,7 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
             stop_words="english",
             lowercase=True,
         )
-        texts = [card.oracle_text or "" for card in X]
+        texts = [card.converted_ability_text or "" for card in X]
         self.tfidf_.fit(texts)
 
         self.n_dense_features_ = _DENSE_FEATURE_WIDTH
@@ -74,7 +74,7 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
             [self._dense_features(card) for card in X],
             dtype=np.float64,
         )
-        texts = [card.oracle_text or "" for card in X]
+        texts = [card.converted_ability_text or "" for card in X]
         tfidf_matrix = self.tfidf_.transform(texts).toarray()
         return np.hstack([dense, tfidf_matrix])
 
@@ -130,7 +130,8 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
         # Pad to fixed width when training data was too small to learn full top-K.
         features.extend([0.0] * (_TOP_KEYWORD_LIMIT - len(self.top_keywords_)))
         features.append(float(len(card.keywords)))
-        features.append(float(len(card.oracle_text)) if card.oracle_text else 0.0)
+        text = card.converted_ability_text
+        features.append(float(len(text)) if text else 0.0)
         return features
 
     def _pt_features(self, card: Card) -> list[float]:
@@ -152,12 +153,12 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
             return [0.0] * _PRINTING_FEATURE_WIDTH
         features = [
             1.0 if pd.is_reserved else 0.0,
-            1.0 if pd.is_abu else 0.0,
+            1.0 if pd.is_abu_only else 0.0,
         ]
         effective_rarity = pd.rarity if pd.rarity in RARITIES else "rare"
         features.extend(1.0 if effective_rarity == r else 0.0 for r in RARITIES)
         features.append(float(pd.printings_count))
-        features.append(pd.normalized_release_year())
+        features.append(pd.normalized_cheapest_printing_year())
         legalities_set = set(pd.legalities)
         features.append(float(len(legalities_set)))
         features.extend(1.0 if fmt in legalities_set else 0.0 for fmt in RECOGNIZED_FORMATS)

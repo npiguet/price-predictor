@@ -47,8 +47,8 @@ def test_parse_instant_with_spell_ability():
     assert card.mana_cost.r == 1
     assert card.mana_cost.total_mana_value == 1.0
     assert card.ability_count == 1
-    assert card.oracle_text is not None
-    assert "3 damage" in card.oracle_text
+    assert card.converted_ability_text is not None
+    assert "3 damage" in card.converted_ability_text
 
 
 # --- 3. Parse planeswalker with loyalty and multiple abilities ---
@@ -68,7 +68,7 @@ def test_parse_planeswalker_with_loyalty():
     assert card.mana_cost.total_mana_value == 4.0
     assert card.loyalty == "3"
     assert card.ability_count == 5
-    assert card.oracle_text is not None
+    assert card.converted_ability_text is not None
 
 
 # --- 4. Missing optional fields still parse ---
@@ -84,7 +84,7 @@ def test_missing_optional_fields_still_parse():
     assert card.power is None
     assert card.toughness is None
     assert card.loyalty is None
-    assert card.oracle_text is None
+    assert card.converted_ability_text is None
     assert card.ability_count == 0
 
 
@@ -202,7 +202,7 @@ def test_printing_data_lines_produce_same_card():
         "types: creature bear\n"
         "power toughness: 2/2\n"
     )
-    enriched_text = (
+    with_printing_data_text = (
         base_text
         + "reserved: false\n"
         "rarity: common\n"
@@ -211,17 +211,17 @@ def test_printing_data_lines_produce_same_card():
         "legalities: commander, legacy, modern, pauper, penny, vintage\n"
     )
     card_base = parse_converted_text(ConvertedCardText(base_text))
-    card_enriched = parse_converted_text(ConvertedCardText(enriched_text))
+    card_with_printing_data = parse_converted_text(ConvertedCardText(with_printing_data_text))
 
     # Core Card attributes must be identical
-    assert card_enriched.name == card_base.name
-    assert card_enriched.types == card_base.types
-    assert card_enriched.mana_cost == card_base.mana_cost
-    assert card_enriched.oracle_text == card_base.oracle_text
-    assert card_enriched.ability_count == card_base.ability_count
-    assert card_enriched.power == card_base.power
-    assert card_enriched.toughness == card_base.toughness
+    assert card_with_printing_data.name == card_base.name
+    assert card_with_printing_data.types == card_base.types
+    assert card_with_printing_data.mana_cost == card_base.mana_cost
+    assert card_with_printing_data.converted_ability_text == card_base.converted_ability_text
+    assert card_with_printing_data.ability_count == card_base.ability_count
+    assert card_with_printing_data.power == card_base.power
+    assert card_with_printing_data.toughness == card_base.toughness
 
     # The parser does NOT populate printing_data
-    assert card_enriched.printing_data is None
+    assert card_with_printing_data.printing_data is None
     assert card_base.printing_data is None

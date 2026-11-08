@@ -323,8 +323,8 @@ COLUMNS = (
 
 def load_rarity_map():
     try:
-        from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
-        metadata, _prices = build_metadata_map(
+        from price_predictor.infrastructure.mtgjson_loader import build_printing_data_map
+        metadata, _prices = build_printing_data_map(
             REPO / "resources/AllPrintings.json",
             REPO / "resources/AllPricesToday.json",
         )
@@ -406,7 +406,7 @@ def write_rows(out: Path, probe: pl.Probe, loo_acc, names, v_sum, v_cnt, wr, rar
         pdata = rarity.get(name)
         if pdata is not None:
             row["rarity"] = getattr(pdata, "rarity", "")
-            row["release_year"] = getattr(pdata, "release_year", "")
+            row["release_year"] = getattr(pdata, "cheapest_printing_year", "")
             row["printings_count"] = getattr(pdata, "printings_count", "")
 
         rows.append(row)

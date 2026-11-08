@@ -30,7 +30,7 @@ class PredictTransformerUseCase:
             card_text: Raw card text to predict from.
             model_dir: Directory containing the trained transformer latest.pt.
             tokenizer: MtgTokenizer to encode the card text.
-            printing_data: Side-channel metadata. Defaults to PrintingData.defaults()
+            printing_data: Printing data fed beside the tokens. Defaults to PrintingData.defaults()
                 if not provided.
 
         Returns:

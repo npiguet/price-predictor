@@ -44,7 +44,7 @@ class _ConstantModel(nn.Module):
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        meta: torch.Tensor,
+        printing_data_vector: torch.Tensor,
     ) -> torch.Tensor:
         return torch.full((input_ids.size(0),), self.value) + self._param
 
@@ -79,7 +79,7 @@ class TestPredictShiftedLog:
         model = _ConstantModel(value=2.0)
         config = _make_config()
         tok = _make_tokenizer()
-        pd = PrintingData(rarity="mythic", printings_count=2, release_year=2020)
+        pd = PrintingData(rarity="mythic", printings_count=2, cheapest_printing_year=2020)
         result = predict_shifted_log(model, tok, "name: test card", pd, config)
         assert abs(result - 2.0) < 1e-6
 

@@ -1,4 +1,4 @@
-"""Evaluate transformer use case: compute accuracy metrics on held-out validation data."""
+"""Evaluate transformer use case: compute accuracy metrics on the held-out split."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from price_predictor.application.converted_card_dataset import load_training_sam
 from price_predictor.application.metrics import compute_regression_metrics
 from price_predictor.application.transformer_inference import predict_batch
 from price_predictor.domain.price_buckets import REPORTING_BUCKETS
-from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
+from price_predictor.infrastructure.mtgjson_loader import build_printing_data_map
 from price_predictor.infrastructure.tokenizer_store import load_tokenizer
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
 from price_predictor.infrastructure.transformer_store import load_model
@@ -39,7 +39,7 @@ class TransformerEvalResult:
     model_version: str
     mean_absolute_error_eur: float
     median_percentage_error: float
-    median_abs_error_log: float
+    median_log_error: float
     top_20_overlap: float
     sample_count: int
     per_bucket: list[BucketMetrics] | None = None
@@ -73,7 +73,7 @@ def evaluate_transformer(
     vocab_path: Path = Path("models/transformer/vocab.txt"),
     random_seed: int = 42,
 ) -> TransformerEvalResult:
-    """Load a saved transformer model and evaluate on the validation split."""
+    """Load a saved transformer model and evaluate on the held-out split."""
     logger.info("Loading transformer model from %s...", model_dir)
     model, config = load_model(model_dir)
     tokenizer = load_tokenizer(vocab_path)
@@ -81,24 +81,24 @@ def evaluate_transformer(
     model.to(device)
     model.eval()
 
-    metadata_map, price_map = build_metadata_map(printings_path, prices_path)
-    samples = load_training_samples(output_dir, price_map, metadata_map)
+    printing_data_map, price_map = build_printing_data_map(printings_path, prices_path)
+    samples = load_training_samples(output_dir, price_map, printing_data_map)
     logger.info("Matched %d cards to texts and prices", len(samples))
 
     if len(samples) < 2:
         raise ValueError("Insufficient data for evaluation")
 
-    # Re-derive 80/20 split using same seed
+    # Re-derive the 80/20 held-out split using the same seed
     from sklearn.model_selection import train_test_split
 
-    _train_data, val_data = train_test_split(
+    _train_data, held_out_data = train_test_split(
         samples, test_size=0.2, random_state=random_seed
     )
 
-    logger.info("Validation set: %d cards", len(val_data))
+    logger.info("Held-out split: %d cards", len(held_out_data))
 
     dataset = TransformerTrainingDataset(
-        val_data,
+        held_out_data,
         max_seq_len=config.max_seq_len,
         tokenizer=tokenizer,
         log_offset=config.log_offset,
@@ -117,7 +117,7 @@ def evaluate_transformer(
 
     abs_errors = np.abs(predicted_prices - actual_prices)
     per_card = []
-    for i, sample in enumerate(val_data):
+    for i, sample in enumerate(held_out_data):
         per_card.append({
             "name": sample.name,
             "actual_price_eur": round(float(actual_prices[i]), 2),
@@ -127,7 +127,7 @@ def evaluate_transformer(
 
     logger.info(
         "Evaluation complete — MAE: €%.2f, median abs error (log): %.3f",
-        metrics.mean_absolute_error_eur, metrics.median_abs_error_log,
+        metrics.mean_absolute_error_eur, metrics.median_log_error,
     )
 
     # Model version from directory name
@@ -137,7 +137,7 @@ def evaluate_transformer(
         model_version=model_version,
         mean_absolute_error_eur=metrics.mean_absolute_error_eur,
         median_percentage_error=metrics.median_percentage_error,
-        median_abs_error_log=metrics.median_abs_error_log,
+        median_log_error=metrics.median_log_error,
         top_20_overlap=metrics.top_20_overlap,
         sample_count=metrics.sample_count,
         per_bucket=per_bucket,

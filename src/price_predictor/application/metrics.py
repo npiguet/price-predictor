@@ -44,7 +44,7 @@ def compute_regression_metrics(
     return EvaluationMetrics(
         mean_absolute_error_eur=round(mae, 2),
         median_percentage_error=round(median_pct_error, 1),
-        median_abs_error_log=round(median_log_error, 3),
+        median_log_error=round(median_log_error, 3),
         top_20_overlap=round(top_20_overlap, 2),
         sample_count=len(actual),
     )

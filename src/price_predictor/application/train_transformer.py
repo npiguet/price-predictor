@@ -18,7 +18,7 @@ from price_predictor.application.training_sample import TrainingSample
 from price_predictor.domain.entities import TransformerConfig
 from price_predictor.domain.price_buckets import SAMPLING_BUCKETS
 from price_predictor.domain.tokenizer import MtgTokenizer
-from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
+from price_predictor.infrastructure.mtgjson_loader import build_printing_data_map
 from price_predictor.infrastructure.tokenizer_store import load_tokenizer
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
@@ -33,7 +33,7 @@ class TransformerTrainResult:
 
     model_path: Path
     best_epoch: int
-    best_val_loss: float
+    best_held_out_loss: float
     stopped_early: bool
     final_epoch: int
     card_count: int
@@ -95,7 +95,7 @@ def _batch_to_device(batch: dict, device: torch.device) -> tuple[torch.Tensor, .
         batch["input_ids"].to(device),
         batch["attention_mask"].to(device),
         batch["target"].to(device),
-        batch["meta"].to(device),
+        batch["printing_data_vector"].to(device),
     )
 
 
@@ -111,8 +111,8 @@ def _run_training_epoch(
     model.train(True)
     losses: list[float] = []
     for batch in loader:
-        input_ids, attention_mask, targets, meta = _batch_to_device(batch, device)
-        predictions = model(input_ids, attention_mask, meta)
+        input_ids, attention_mask, targets, printing_data_vector = _batch_to_device(batch, device)
+        predictions = model(input_ids, attention_mask, printing_data_vector)
         loss = loss_fn(predictions, targets)
 
         optimizer.zero_grad()
@@ -136,26 +136,28 @@ def _run_eval_epoch(
     losses: list[float] = []
     with torch.no_grad():
         for batch in loader:
-            input_ids, attention_mask, targets, meta = _batch_to_device(batch, device)
-            predictions = model(input_ids, attention_mask, meta)
+            input_ids, attention_mask, targets, printing_data_vector = _batch_to_device(
+                batch, device,
+            )
+            predictions = model(input_ids, attention_mask, printing_data_vector)
             loss = loss_fn(predictions, targets)
             losses.append(loss.item())
     return sum(losses) / len(losses)
 
 
 class _BestCheckpoint:
-    """Tracks the lowest val_loss seen and the model weights at that epoch."""
+    """Tracks the lowest held_out_loss seen and the model weights at that epoch."""
 
     def __init__(self) -> None:
-        self.best_val_loss: float = float("inf")
+        self.best_held_out_loss: float = float("inf")
         self.best_epoch: int = 0
         self._state_dict: dict[str, torch.Tensor] | None = None
 
-    def update(self, epoch: int, val_loss: float, model: torch.nn.Module) -> bool:
-        """Snapshot model weights when val_loss improves. Returns True on new best."""
-        if val_loss >= self.best_val_loss:
+    def update(self, epoch: int, held_out_loss: float, model: torch.nn.Module) -> bool:
+        """Snapshot model weights when held_out_loss improves. Returns True on new best."""
+        if held_out_loss >= self.best_held_out_loss:
             return False
-        self.best_val_loss = val_loss
+        self.best_held_out_loss = held_out_loss
         self.best_epoch = epoch
         self._state_dict = {
             k: v.cpu().clone() for k, v in model.state_dict().items()
@@ -171,7 +173,7 @@ class _BestCheckpoint:
 def _train_loop(
     model: CardPriceTransformerModel,
     train_loader: DataLoader,
-    val_loader: DataLoader,
+    held_out_loader: DataLoader,
     device: torch.device,
     epochs: int,
     lr: float,
@@ -180,7 +182,7 @@ def _train_loop(
 ) -> tuple[int, float, bool, int]:
     """Run the training loop with early stopping.
 
-    Returns (best_epoch, best_val_loss, stopped_early, final_epoch).
+    Returns (best_epoch, best_held_out_loss, stopped_early, final_epoch).
     """
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
@@ -201,26 +203,26 @@ def _train_loop(
         train_loss = _run_training_epoch(
             model, train_loader, loss_fn, device, optimizer, scheduler,
         )
-        val_loss = _run_eval_epoch(model, val_loader, loss_fn, device)
+        held_out_loss = _run_eval_epoch(model, held_out_loader, loss_fn, device)
         elapsed = time.perf_counter() - epoch_start
 
         print(
             f"Epoch {epoch}/{epochs} — "
-            f"train_loss: {train_loss:.3f}, val_loss: {val_loss:.3f}, "
+            f"train_loss: {train_loss:.3f}, held_out_loss: {held_out_loss:.3f}, "
             f"{elapsed:.1f}s"
         )
 
-        if best.update(epoch, val_loss, model):
+        if best.update(epoch, held_out_loss, model):
             patience_counter = 0
         else:
             patience_counter += 1
             if patience_counter >= patience:
                 print(f"Early stopping triggered at epoch {epoch}")
                 best.restore(model)
-                return best.best_epoch, best.best_val_loss, True, epoch
+                return best.best_epoch, best.best_held_out_loss, True, epoch
 
     best.restore(model)
-    return best.best_epoch, best.best_val_loss, False, epochs
+    return best.best_epoch, best.best_held_out_loss, False, epochs
 
 
 @dataclass
@@ -232,10 +234,10 @@ class _LoadedSamples:
 def _load_samples(
     output_dir: Path, prices_path: Path, printings_path: Path
 ) -> _LoadedSamples:
-    """Resolve cards against price + metadata maps and report skip count."""
-    metadata_map, price_map = build_metadata_map(printings_path, prices_path)
+    """Resolve cards against card prices + printing data and report skip count."""
+    printing_data_map, price_map = build_printing_data_map(printings_path, prices_path)
     txt_file_count = len(list(output_dir.rglob("*.txt")))
-    samples = load_training_samples(output_dir, price_map, metadata_map)
+    samples = load_training_samples(output_dir, price_map, printing_data_map)
     logger.info("Matched %d cards to texts and prices", len(samples))
 
     if len(samples) < 5:
@@ -270,22 +272,22 @@ def _build_loaders(
     sampler_exponent: float,
     random_seed: int,
 ) -> tuple[DataLoader, DataLoader]:
-    """Stratified split + oversampled train loader + plain val loader."""
+    """Stratified split + oversampled train loader + plain held-out loader."""
     buckets_all = [SAMPLING_BUCKETS.index_for(s.price_eur) for s in samples]
-    train_data, val_data = train_test_split(
+    train_data, held_out_data = train_test_split(
         samples, test_size=0.2, random_state=random_seed, stratify=buckets_all,
     )
-    logger.info("Split: %d train, %d validation", len(train_data), len(val_data))
+    logger.info("Split: %d train, %d held out", len(train_data), len(held_out_data))
 
     train_dataset = _build_dataset(train_data, max_seq_len, tokenizer, log_offset)
-    val_dataset = _build_dataset(val_data, max_seq_len, tokenizer, log_offset)
+    held_out_dataset = _build_dataset(held_out_data, max_seq_len, tokenizer, log_offset)
 
     sampler = _make_weighted_sampler(
         [s.price_eur for s in train_data], exponent=sampler_exponent,
     )
     train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=sampler)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-    return train_loader, val_loader
+    held_out_loader = DataLoader(held_out_dataset, batch_size=batch_size, shuffle=False)
+    return train_loader, held_out_loader
 
 
 def _build_model(
@@ -322,7 +324,7 @@ def _finalise_and_save(
     samples: list[TrainingSample],
     cards_skipped: int,
     best_epoch: int,
-    best_val_loss: float,
+    best_held_out_loss: float,
     stopped_early: bool,
     final_epoch: int,
     epochs: int,
@@ -334,7 +336,7 @@ def _finalise_and_save(
     prices = [s.price_eur for s in samples]
     print(
         f"\nTraining complete. Best epoch: {best_epoch}/{epochs}, "
-        f"val_loss: {best_val_loss:.3f}. "
+        f"held_out_loss: {best_held_out_loss:.3f}. "
         + (f"Early stopping triggered at epoch {final_epoch}." if stopped_early else "")
     )
     print(f"Model saved to {model_path}")
@@ -342,7 +344,7 @@ def _finalise_and_save(
     return TransformerTrainResult(
         model_path=model_path,
         best_epoch=best_epoch,
-        best_val_loss=best_val_loss,
+        best_held_out_loss=best_held_out_loss,
         stopped_early=stopped_early,
         final_epoch=final_epoch,
         card_count=len(samples),
@@ -383,7 +385,7 @@ def train_transformer(
     )
     _log_sequence_length_stats(max_seq_len, stats)
 
-    train_loader, val_loader = _build_loaders(
+    train_loader, held_out_loader = _build_loaders(
         loaded.samples, tokenizer, max_seq_len, batch_size,
         log_offset, sampler_exponent, random_seed,
     )
@@ -397,11 +399,11 @@ def train_transformer(
     device = _require_cuda_device()
     model = _build_model(config, device)
 
-    best_epoch, best_val_loss, stopped_early, final_epoch = _train_loop(
-        model, train_loader, val_loader, device, epochs, lr, patience,
+    best_epoch, best_held_out_loss, stopped_early, final_epoch = _train_loop(
+        model, train_loader, held_out_loader, device, epochs, lr, patience,
     )
 
     return _finalise_and_save(
         model, config, model_output, loaded.samples, loaded.cards_skipped,
-        best_epoch, best_val_loss, stopped_early, final_epoch, epochs,
+        best_epoch, best_held_out_loss, stopped_early, final_epoch, epochs,
     )
