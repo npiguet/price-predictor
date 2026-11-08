@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-ML models for Magic: The Gathering, built on the MTG Forge engine: a card price predictor, and agents that build sealed decks, draft, and predict what card abilities do in play. Each module has its own `CLAUDE.md` (commands, file formats, invariants) and, where one exists, a `GLOSSARY.md` of its domain terms; both load when you work in that module. Setup instructions are in `README.md`.
+ML models for Magic: The Gathering, built on the MTG Forge engine: a card price predictor, and agents that build sealed decks, draft, and predict what card abilities do in play. Each module has its own `CLAUDE.md` (commands, file formats, invariants) and, where one exists, a `GLOSSARY.md` of its domain terms; both load when you work in that module. Terms more than one module uses are in the root `GLOSSARY.md`. Setup instructions are in `README.md`.
 
 ## Modules
 

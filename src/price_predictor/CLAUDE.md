@@ -1,6 +1,6 @@
 # `price_predictor` — the price prediction system
 
-Entry point: `python -m price_predictor <subcommand>` (see `src/price_predictor/__main__.py` and `infrastructure/cli.py`). The terms this file uses are defined in `GLOSSARY.md` beside it.
+Entry point: `python -m price_predictor <subcommand>` (see `src/price_predictor/__main__.py` and `infrastructure/cli.py`). The terms this file uses are defined in `GLOSSARY.md` beside it, or, for those shared with other packages, in the root `GLOSSARY.md`.
 
 Besides its two price models, the package owns what every other package reads cards through: the converted card format, the tokenizer and the vocabulary. `sealed`, `draft` and `effects` import from it; it imports from none of them.
 

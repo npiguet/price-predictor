@@ -1,7 +1,7 @@
 # `sealed` — sealed-format ML pipeline
 
 
-Entry point: `python -m sealed <subcommand>` (see `src/sealed/infrastructure/cli.py`). The sealed pipeline is built around a sealed-trained card encoder; the price-predictor transformer is a valid alternate encoder source via `--encoder-checkpoint`.
+Entry point: `python -m sealed <subcommand>` (see `src/sealed/infrastructure/cli.py`). The package's domain terms are defined in `GLOSSARY.md` beside this file, and the terms it shares with other packages in the root `GLOSSARY.md`. The sealed pipeline is built around a sealed-trained card encoder; the price-predictor transformer is a valid alternate encoder source via `--encoder-checkpoint`.
 
 Subcommands:
 - **`build-vocab`** — scans the converted card corpus (default `output/cardsfolder/`) and writes a sealed-side tokenizer vocab to `models/sealed/encoder/vocab.txt`. Wraps `price_predictor.application.build_vocabulary`; `--target-size` (default 5000) post-truncates the corpus-frequency vocab while preserving seeded specials and domain tokens. The seeded specials include `[PAD]`, `[UNK]`, `cardname`, and `[MASK]` (the last reserved for `train-encoder`'s MLM auxiliary loss). Independent from the price-side `vocab.txt` — building one does not modify the other.

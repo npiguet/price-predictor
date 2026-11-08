@@ -1,34 +1,10 @@
 # Price predictor
 
-Predicts a card's euro price from what is printed on it and how it has been printed, for real cards and hypothetical ones alike. It also owns the card text format, the tokenizer and the vocabulary that the sealed, draft and effects packages read cards through.
+Predicts a card's euro price from what is printed on it and how it has been printed, for real cards and hypothetical ones alike. It also owns the converter, the tokenizer and the vocabulary builder that the sealed, draft and effects packages read cards through. The card-text, card-name, vocabulary and training terms those packages share are in the root `GLOSSARY.md`.
 
 ## Language
 
-### Card text
-
-**Forge card script**:
-A card as Forge's own script describes it, in Forge's scripting syntax. The input to conversion, never to a model.
-_Avoid_: raw card, Forge card, card file
-
-**Converted card**:
-A card rewritten from its Forge card script into the project's own plain-text form: one header line per characteristic, then one ability line per ability, one block per face. Every model in the project reads cards in this form.
-_Avoid_: LLM-friendly format, output card, card text file
-
-**Header line**:
-A converted card line stating one characteristic: name, mana cost, types, power and toughness, loyalty, defense, colours or layout.
-_Avoid_: property line, metadata line
-
-**Ability line**:
-A converted card line carrying one ability's rules text, tagged by its kind (spell, static, triggered, activated, replacement, mana, planeswalker, chapter, level, mode and so on).
-_Avoid_: oracle line, ability text line
-
-**Converted ability text**:
-All of a converted card's ability lines taken together. It is the converter's rendering of the rules text, not the card's Oracle text, and the two differ in wording.
-_Avoid_: oracle text (that term means the official Oracle wording), ability text (unqualified)
-
-**CARDNAME**:
-The placeholder that stands for the card's own name wherever the card refers to itself, so that a card's text says nothing about what the card is called.
-_Avoid_: self-reference, ~
+### Card conversion
 
 **Conversion check**:
 A comparison of each converted card's converted ability text against the card's Oracle text, scored as word-bag similarity, that flags cards the converter rendered badly.
@@ -39,10 +15,6 @@ The share of words two texts have in common, counted with repetition and ignorin
 _Avoid_: oracle similarity, match score
 
 ### Cards and prices
-
-**Canonical name**:
-A card's name as MTGJSON spells it, with both halves for a split card. A card is found by its canonical name ignoring case, and one half's name finds the whole card.
-_Avoid_: card key, display name
 
 **Hypothetical card**:
 A card that has no canonical name, because it was never printed, and so has neither a card price nor printing data of its own. It can still be priced.
@@ -98,15 +70,11 @@ _Avoid_: feature block, feature set
 
 **Price transformer**:
 The price model that reads a converted card as a sequence of tokens and combines the result with the card's printing data to predict a shifted-log price.
-_Avoid_: BERT, transformer (unqualified, where the sealed card encoder is also in play), neural model
+_Avoid_: BERT, transformer (unqualified, where the sealed encoder is also in play), neural model
 
 **Price encoder**:
-The part of the price transformer that turns a converted card into a pooled card vector, without printing data or the price output. The sealed pipeline can borrow it in place of its own card encoder.
+The part of the price transformer that turns a converted card into a pooled card vector, by putting the element-wise maximum and the mean of its per-token outputs side by side, without printing data or the price output. The sealed package can use it as its card encoder in place of the sealed encoder.
 _Avoid_: price-trained encoder, BERT
-
-**Pooled card vector**:
-A single vector standing for a whole card, made by putting the element-wise maximum and the mean of the encoder's per-token outputs side by side.
-_Avoid_: card embedding (in this package), CLS vector
 
 **Shifted-log price**:
 The logarithm of a card price plus the log offset; what the price transformer is trained to predict, and turned back into euros by the inverse transform.
@@ -115,10 +83,6 @@ _Avoid_: log price (unqualified), target
 **Log offset**:
 The constant added to a price before taking its logarithm. A smaller offset widens the gaps between cheap cards' targets and so weighs them more in training.
 _Avoid_: price offset, epsilon
-
-**Model version**:
-The name a trained model is saved and reported under: the timestamp of its training run.
-_Avoid_: model id, checkpoint name
 
 ### Price buckets and evaluation
 
@@ -138,10 +102,6 @@ _Avoid_: evaluation buckets
 How strongly training oversamples rare price buckets: each card is drawn with weight one over its sampling bucket's size raised to this exponent, so zero samples uniformly and one gives every bucket an equal share.
 _Avoid_: oversampling factor, sampling temperature
 
-**Held-out split**:
-The fifth of the priced cards kept out of training and used to score a model, drawn reproducibly from a fixed seed.
-_Avoid_: test split, validation split, test set (use one name for both models)
-
 **Top-20 overlap**:
 The share of the held-out split's most expensive fifth, by card price, that the model also places in its own most expensive fifth.
 _Avoid_: top-k accuracy, ranking accuracy
@@ -157,17 +117,3 @@ _Avoid_: log MAE, median |log|
 **Signed log error**:
 Predicted minus actual shifted-log price, kept with its sign so that a negative median within a price bucket shows the model underprices that bucket.
 _Avoid_: bias, log bias
-
-### Tokens and vocabulary
-
-**Vocabulary**:
-The project's fixed list of word-level tokens built from the converted-card corpus, shared by every model in the project that reads converted cards. A word outside it reads as unknown.
-_Avoid_: vocab (in prose), tokenizer dictionary
-
-**Multi-word keyword**:
-A keyword whose name holds a space, such as first strike, which the tokenizer joins into a single token.
-_Avoid_: compound keyword, phrase token
-
-**No-mana-cost marker**:
-The `none` mana cost a card with no mana cost line is read as, so that a card without a mana cost (a land) is told apart from a card costing {0}.
-_Avoid_: mana cost sentinel, null cost
