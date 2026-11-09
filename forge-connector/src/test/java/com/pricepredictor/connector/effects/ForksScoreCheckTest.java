@@ -16,7 +16,10 @@ import forge.ai.simulation.GameCopier;
 import forge.card.CardStateName;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.card.CardFactoryUtil;
 import forge.game.combat.Combat;
+import forge.game.keyword.Keyword;
+import forge.game.spellability.SpellAbility;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.zone.PlayerZoneBattlefield;
@@ -114,6 +117,30 @@ class ForksScoreCheckTest {
             MyRandom.setRandom(was);
         }
         assertEquals(0, stream.draws, "the score check drew from the live game's stream");
+    }
+
+    /**
+     * A disguised creature is a face-down 2/2 with ward {2}: casting it face
+     * down writes the ward into the card's face-down state, which the copier
+     * rebuilt blank, so the copy's creature had no ward and scored lower.
+     */
+    @Test
+    void aCopyOfADisguisedCreatureKeepsItsWardAndScoresAsTheLiveGame() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN2);
+        Player you = live.getPlayers().get(0);
+        Card disguised = TestBoard.inPlay(live, live.getPlayers().get(1), "Alley Assailant");
+        SpellAbility faceDown = disguised.getSpellAbilities().stream()
+                .filter(sa -> sa.hasParam("FaceDownKeyword")).findFirst().orElseThrow();
+        disguised.turnFaceDown(true);
+        CardFactoryUtil.setFaceDownState(disguised, faceDown);
+        disguised.updateKeywordsCache();
+        assertTrue(disguised.hasKeyword(Keyword.WARD), "the live creature has no ward to copy");
+
+        GameCopier copier = new GameCopier(live);
+        Game fork = copier.makeCopy();
+
+        assertTrue(copier.find(disguised).hasKeyword(Keyword.WARD), "the copy lost the ward");
+        assertTrue(Forks.scoreCheck(live, copier, fork, you));
     }
 
     /** A random stream that counts what is drawn from it. */
