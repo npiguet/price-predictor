@@ -135,9 +135,6 @@ final class InterventionScheduler {
      * it has been cast already.
      */
     static List<SpellAbility> forcedFrom(Card card, ZoneType zone) {
-        if (zone == ZoneType.Hand) {
-            return List.copyOf(card.getSpellAbilities());
-        }
         List<SpellAbility> lines = new ArrayList<>();
         for (SpellAbility candidate : card.getSpellAbilities()) {
             if (zone == ZoneType.Battlefield && candidate.isSpell()) {
@@ -150,8 +147,18 @@ final class InterventionScheduler {
         return lines;
     }
 
+    /**
+     * Whether {@code candidate} is played from {@code zone}. A card lists
+     * every one of its lines wherever it is, so a permanent's activated
+     * abilities are listed in the hand too; forced there, one resolved with
+     * its host in the hand, a board no activation reaches. A spell declares
+     * no zone of its own and is cast from the hand.
+     */
     private static boolean activatesFrom(SpellAbility candidate, ZoneType zone) {
         ZoneType declared = candidate.getRestrictions() == null ? null : candidate.getRestrictions().getZone();
+        if (zone == ZoneType.Hand && candidate.isSpell() && (declared == null || declared == ZoneType.Hand)) {
+            return true;
+        }
         return zone == declared
                 || zone.name().equalsIgnoreCase(candidate.getParamOrDefault("AdditionalActivationZone", ""));
     }

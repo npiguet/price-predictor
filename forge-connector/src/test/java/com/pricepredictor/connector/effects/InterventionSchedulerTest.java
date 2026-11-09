@@ -69,7 +69,7 @@ class InterventionSchedulerTest {
     }
 
     @Test
-    void aPermanentsActivatedAbilityIsForcedOnTheBattlefieldAndAllItsLinesInTheHand() {
+    void aPermanentsActivatedAbilityIsForcedOnTheBattlefieldAndOnlyItsSpellInTheHand() {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player you = game.getPlayers().get(0);
         Card inPlay = TestBoard.inPlay(game, you, "Prodigal Sorcerer");
@@ -78,7 +78,20 @@ class InterventionSchedulerTest {
         List<SpellAbility> onBattlefield = InterventionScheduler.forcedFrom(inPlay, ZoneType.Battlefield);
         assertEquals(1, onBattlefield.size(), onBattlefield.toString());
         assertTrue(onBattlefield.get(0).isActivatedAbility());
-        assertTrue(InterventionScheduler.forcedFrom(inHand, ZoneType.Hand).stream().anyMatch(SpellAbility::isSpell));
+        List<SpellAbility> fromHand = InterventionScheduler.forcedFrom(inHand, ZoneType.Hand);
+        assertEquals(1, fromHand.size(), fromHand.toString());
+        assertTrue(fromHand.get(0).isSpell(), "its tap ability is not activated with the card in hand");
+    }
+
+    @Test
+    void aCyclingAbilityIsForcedFromTheHand() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        Card tusker = TestBoard.inHand(game, you, "Krosan Tusker");
+
+        List<SpellAbility> fromHand = InterventionScheduler.forcedFrom(tusker, ZoneType.Hand);
+        assertTrue(fromHand.stream().anyMatch(SpellAbility::isSpell), fromHand.toString());
+        assertTrue(fromHand.stream().anyMatch(SpellAbility::isCycling), fromHand.toString());
     }
 
     @Test
