@@ -143,6 +143,37 @@ class ForksScoreCheckTest {
         assertTrue(Forks.scoreCheck(live, copier, fork, you));
     }
 
+    /**
+     * Darkblade Agent has deathtouch as long as its controller has surveilled
+     * this turn. The copier carried only some of a player's counts for the
+     * turn and started the surveils from zero, so the copy's Agent had no
+     * deathtouch and scored lower; every count the cleanup step resets is
+     * carried now.
+     */
+    @Test
+    void aCopyKeepsThePlayersTurnCountsAndWhatReadsThem() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN2);
+        Player you = live.getPlayers().get(0);
+        Card agent = TestBoard.inPlay(live, you, "Darkblade Agent");
+        SpellAbility consider = TestBoard.inHand(live, you, "Consider").getFirstSpellAbility();
+        consider.setActivatingPlayer(you);
+        live.getAction().moveToLibrary(TestBoard.inHand(live, you, "Island"), consider);
+        you.surveil(1, consider, new java.util.HashMap<>());
+        you.addInvestigatedThisTurn();
+        live.getAction().checkStaticAbilities();
+        assertEquals(1, you.getSurveilThisTurn(), "the live player did not surveil");
+        assertTrue(agent.hasKeyword(Keyword.DEATHTOUCH), "the live Agent has no deathtouch to copy");
+
+        GameCopier copier = new GameCopier(live);
+        Game fork = copier.makeCopy();
+        Player forkYou = (Player) copier.find(you);
+
+        assertEquals(1, forkYou.getSurveilThisTurn());
+        assertEquals(1, forkYou.getInvestigateNumThisTurn());
+        assertTrue(copier.find(agent).hasKeyword(Keyword.DEATHTOUCH), "the copy's Agent lost deathtouch");
+        assertTrue(Forks.scoreCheck(live, copier, fork, you));
+    }
+
     /** A random stream that counts what is drawn from it. */
     private static final class CountingRandom extends Random {
         int draws;
