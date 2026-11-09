@@ -271,8 +271,9 @@ def held_out_texts_of(
 
     Reads the depletion list rather than recomputing the holdout, so the round
     needs none of the holdout's flags; a text an unlisted card also carries is
-    not held out. It may also cover a text only listed cards carry without it
-    being held out, which is harmless.
+    not held out. It also returns texts only listed cards carry that are not
+    held out — a held-out card's other lines — which no game is ever credited
+    to; the held-out round drops those by the holdout itself.
     """
     carriers: dict[str, set[str]] = defaultdict(set)
     elsewhere: set[str] = set()

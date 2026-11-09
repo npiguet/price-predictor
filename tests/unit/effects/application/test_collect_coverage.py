@@ -762,6 +762,22 @@ class TestHeldOutTextUnit:
         })
         assert texts == {"SP$ Rare | Thing$ 1": frozenset({"alpha", "beta"})}
 
+    def test_a_listed_cards_line_the_holdout_does_not_hold_is_no_unit(self):
+        """A held-out card's other lines are carried by it alone too; under
+        ``template`` theirs is printed elsewhere, so no game is ever credited
+        to them and the round would deck them until each retired."""
+        from effects.application.collect_coverage import _held_out_carriers
+        from effects.domain.text_holdout import HoldoutUnit
+
+        held, other = "SP$ Rare | Thing$ 1", "AB$ GainLife | LifeAmount$ 3"
+        carriers = _held_out_carriers(
+            ["alpha"],
+            {"alpha": [held, other], "gamma": ["AB$ GainLife | LifeAmount$ 2"]},
+            set(),
+            _holding({held}, HoldoutUnit.TEMPLATE),
+        )
+        assert carriers == {held: frozenset({"alpha"})}
+
     def test_a_shard_counts_distinct_games_per_text(self):
         """Counted as build-corpus counts a held-out text's games (FR-053):
         from resolution records only, so a text whose triggers fire but never
@@ -1094,9 +1110,12 @@ class TestNonDeckTypesLeaveTheUnit:
             consulted.append(list(names))
             return {}
 
+        held_out = _holding({"SP$ Shared", "SP$ Alpha", "SP$ Plan"})
         with patch.object(collect_coverage, "consult_castability", _consult), \
              patch("effects.infrastructure.converted_trees.load_card_texts",
                    return_value=texts_by_card), \
+             patch("effects.infrastructure.converted_trees.ConvertedTrees.holdout",
+                   return_value=held_out), \
              caplog.at_level(logging.INFO, logger=collect_coverage.__name__):
             collect_coverage.run(collect_coverage.CollectCoverageConfig(
                 effect_records=tmp_path / "records", cards_folders=(cards,),

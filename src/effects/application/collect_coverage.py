@@ -605,19 +605,25 @@ class TextRounds(CoverageRounds):
 
 def _held_out_carriers(
     listed: Iterable[str], texts_by_card: Mapping[str, list[str]],
-    non_deck: set[str],
+    non_deck: set[str], held_out: HeldOutCards,
 ) -> dict[str, frozenset[str]]:
     """``held-out text -> its deckable listed carriers``, for each text some
     deckable card carries.
 
     Held-out texts are decided over every listed card, non-deck ones
     included, or those would read as unlisted carriers and take their texts
-    out of the round; only then do non-deck cards leave as carriers.
+    out of the round; only then do non-deck cards leave as carriers. A text
+    only listed cards carry is a unit only when ``held_out`` holds it: a held-out
+    card's other lines are carried by it alone too, and under ``template`` their
+    template is often printed elsewhere, so no game could ever be credited to
+    them (:meth:`HeldOutCards.text_acted_through` credits held-out texts only)
+    and the round would deck them until each retired.
     """
     carriers = held_out_texts_of(frozenset(listed), texts_by_card)
     return {
         text: cards - non_deck
-        for text, cards in carriers.items() if cards - non_deck
+        for text, cards in carriers.items()
+        if cards - non_deck and held_out.holds_text(text)
     }
 
 
@@ -653,7 +659,8 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
     texts = {name: converted[name].text for name in listed_files}
     non_deck = non_deck_names(texts)
     present = frozenset(name for name in listed_files if name not in non_deck)
-    carriers = _held_out_carriers(listed_files, trees.card_texts(), non_deck)
+    held_out = trees.holdout(config.holdout)
+    carriers = _held_out_carriers(listed_files, trees.card_texts(), non_deck, held_out)
     if non_deck:
         logger.info(
             "Held-out round: %d listed card(s) of a non-deck type left out",
@@ -670,9 +677,7 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
     coverage = _text_coverage(carriers, verdicts)
     floor = config.min_text_games
     records_dir = config.effect_records
-    counter = TextCoverageCounter(
-        config.source_trees.sidecar_roots(), trees.holdout(config.holdout),
-    )
+    counter = TextCoverageCounter(config.source_trees.sidecar_roots(), held_out)
     counter.update(coverage, records_dir)
     logger.info(
         "Held-out round: %d text(s) on %d card(s); %d already at %d games; %d "
