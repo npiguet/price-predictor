@@ -28,6 +28,18 @@ _BOLT = (
 )
 
 
+def _unstage(tmp_path: Path) -> None:
+    """Take this test's variants back out of Forge's custom-cards directory.
+
+    The sidecar pass stages its tree into Forge's one shared custom-cards
+    directory, and a script left there is loaded by every later worker JVM,
+    collection runs included. Staging an empty tree clears what the last
+    staging listed and adds nothing."""
+    empty = tmp_path / "no-variants"
+    empty.mkdir()
+    write_variant_sidecars(empty)
+
+
 def test_generated_variants_are_scripts_forge_can_read(tmp_path: Path) -> None:
     """A variant that Forge cannot load never reaches a game, which would make
     the whole stage silently produce nothing."""
@@ -81,7 +93,10 @@ def test_every_variant_script_gets_a_sidecar(tmp_path: Path) -> None:
     )
     assert variants
 
-    code = write_variant_sidecars(output)
+    try:
+        code = write_variant_sidecars(output)
+    finally:
+        _unstage(tmp_path)
     assert code == 0, "VariantSidecarMain failed"
 
     for variant in variants:
