@@ -537,7 +537,11 @@ class ForgeWorkerPool:
         ``--n-pairings`` stops near its target instead of at the next status tick.
         """
         start_time = time.monotonic()
-        last_count = 0
+        # The output file is append-only and usually holds earlier runs' rows:
+        # the status line counts this run's, and the first rate is not inflated
+        # by the whole file.
+        baseline = self.output_line_count()
+        last_count = baseline
         last_time = start_time
         next_status = start_time + self._status_interval
 
@@ -558,7 +562,7 @@ class ForgeWorkerPool:
                 continue  # a stop-poll slice, not a status tick
 
             last_count, last_time = self._report_status(
-                start_time, now, last_count, last_time,
+                start_time, now, last_count, last_time, baseline,
             )
             next_status = now + self._status_interval
             if self._should_stop is not None and self._should_stop(last_count):
@@ -582,7 +586,14 @@ class ForgeWorkerPool:
         now: float,
         last_count: int,
         last_time: float,
+        baseline: int = 0,
     ) -> tuple[int, float]:
+        """Print one status line and return the file's line count and ``now``.
+
+        ``baseline`` is the line count when the run started; the line reports
+        the matches completed since, while the returned count stays the whole
+        file's, which is what ``should_stop`` is handed.
+        """
         elapsed = now - start_time
         interval = now - last_time
 
@@ -594,7 +605,7 @@ class ForgeWorkerPool:
             alive = sum(1 for p in self._processes if p.poll() is None)
 
         print(
-            f"[{elapsed:.0f}s] {count} matches completed"
+            f"[{elapsed:.0f}s] {count - baseline} matches completed"
             f" | {rate:.1f} matches/min"
             f" | {alive}/{self._worker_count} workers alive"
         )

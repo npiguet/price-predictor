@@ -53,6 +53,16 @@ class TestStatusLine:
 
         assert (count, when) == (2, 60.0)
 
+    def test_counts_this_runs_matches_and_returns_the_whole_file(self, tmp_path, capsys):
+        out = tmp_path / "out.txt"
+        out.write_text("\n" * 105, encoding="utf-8")
+
+        # 100 rows were there when the run began; 5 are this run's
+        count, _ = _pool(out)._report_status(0.0, 60.0, 100, 0.0, baseline=100)
+
+        assert capsys.readouterr().out.startswith("[60s] 5 matches completed | 5.0 matches/min")
+        assert count == 105
+
     def test_rate_is_per_minute_over_the_interval(self, tmp_path, capsys):
         out = tmp_path / "out.txt"
         out.write_text("\n" * 10, encoding="utf-8")
