@@ -88,16 +88,16 @@ final class DirectedForkScheduler {
     /**
      * Take this boundary's directed forks.
      *
-     * <p>Never at the beginning of combat: the score check reads a combat
-     * Forge has not built yet there, so the copy always disagrees, and a fork
-     * taken there would spend the rule's one fork of the game on nothing. A
-     * rule about combat forks as attackers are about to be declared instead.
+     * <p>Never where the score check cannot pass ({@link Forks#scoreCheckable}):
+     * a fork taken there would spend the rule's one fork of the game on
+     * nothing. A rule about combat forks as attackers are about to be
+     * declared instead.
      *
      * @param phase the phase this boundary begins
      * @return how many forks were taken, kept or discarded
      */
     int collect(PhaseType phase) {
-        if (phase == PhaseType.COMBAT_BEGIN || game.isGameOver() || !budget.mayDirect()) {
+        if (!Forks.scoreCheckable(phase) || game.isGameOver() || !budget.mayDirect()) {
             return 0;
         }
         List<Match> matching = new ArrayList<>();

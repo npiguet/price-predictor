@@ -4,6 +4,7 @@ import forge.ai.simulation.GameCopier;
 import forge.ai.simulation.GameStateEvaluator;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 
@@ -137,6 +138,18 @@ final class Forks {
     }
 
     // ── the score check ─────────────────────────────────────────────────
+
+    /**
+     * Whether a fork taken at the boundary beginning {@code phase} can pass
+     * its score check. Not at the beginning of combat: the evaluator plays
+     * its own copy on to combat damage, and the phase event comes before
+     * Forge builds the turn's combat, so declaring attackers on that copy
+     * reads a combat that does not exist and the check always fails. A
+     * scheduler skips the boundary rather than spend a fork on it.
+     */
+    static boolean scoreCheckable(PhaseType phase) {
+        return phase != PhaseType.COMBAT_BEGIN;
+    }
 
     /**
      * Verify a fresh copy scores the same as the game it came from.

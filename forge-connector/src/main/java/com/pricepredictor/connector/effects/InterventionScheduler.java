@@ -54,8 +54,15 @@ final class InterventionScheduler {
         this.protection = protection;
     }
 
-    /** This boundary's interventions: the forced resolutions, then a protection fork. */
+    /**
+     * This boundary's interventions: the forced resolutions, then a protection
+     * fork. None where the score check cannot pass ({@link Forks#scoreCheckable}),
+     * which would spend the game's budget, and mark the line forced, for no record.
+     */
     void collect(PhaseType phase) {
+        if (!Forks.scoreCheckable(phase)) {
+            return;
+        }
         collect();
         if (protection != null) {
             protection.collect(phase);

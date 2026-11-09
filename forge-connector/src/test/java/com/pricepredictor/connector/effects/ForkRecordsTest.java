@@ -676,6 +676,29 @@ class ForkRecordsTest {
     }
 
     /**
+     * Not at the beginning of combat, where the copy's score check never
+     * passes: the budget is kept for a boundary whose fork can be kept, and
+     * the line stays unforced until then.
+     */
+    @Test
+    void noInterventionIsTakenAtTheBeginningOfCombat() throws IOException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        TestBoard.inHand(game, game.getPlayers().get(0), "Lightning Bolt");
+        RecordShardWriter shard = ShardRun.writer(tempDir);
+        ForkBudget budget = new ForkBudget(forkCaps().interventions(1).probes(0).build());
+        try {
+            InterventionScheduler scheduler = new InterventionScheduler(game, new InterventionFork(
+                    game, TestCollectors.context(shard, ShardRun.GAME_ID), budget, 1L), null);
+            scheduler.collect(PhaseType.COMBAT_BEGIN);
+            assertTrue(budget.mayIntervene(-1), "an intervention was forced at the beginning of combat");
+            scheduler.collect(PhaseType.MAIN2);
+        } finally {
+            shard.close();
+        }
+        assertEquals(1, ShardRun.readShard(shard.path()).size());
+    }
+
+    /**
      * The scheduler's records over {@code boundaries} boundaries of {@code
      * game}, {@code between} run after each but the last, read from the shard.
      */
