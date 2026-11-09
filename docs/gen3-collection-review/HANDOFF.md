@@ -11,8 +11,10 @@ round (implementation) does not start in the next session: only the review conti
 - Decided by the user and written into the gen-3 specs (commit 71c7e03b): the record-moments principle.
   Each record's board is read just before the moment it records (root spec § 8.14, delta contract,
   spec.md FR-042a–f, tasks.md phase 12).
-- Interrupted: the review of the Python side of collection. Its reviewer was stopped before reporting,
-  so relaunch it with the prompt below.
+- Done and verified, findings committed: `python-collection-findings.md` (Python collection supervisors,
+  two slices). Step 1 below is complete; the next decision is the user's (step 2).
+- Do not run `collect-variants` before R1 in that file is fixed: the old `loadable.txt` in
+  `output/effects/variant-scripts/` would poison every Forge startup on the machine.
 
 ## Next steps, in order
 1. Relaunch the Python collection review (prompt below), then verify its findings with a fresh

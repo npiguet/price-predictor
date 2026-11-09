@@ -31,7 +31,7 @@ The user then decided to:
 |---|---|---|---|
 | forge-connector | done 2026-11-09 | done | `connector-findings.md` |
 | Forge `effect-record-hooks` (../forge) | done 2026-11-09 | done | `forge-hooks-findings.md` |
-| Collection supervisors in Python: `src/sealed` collection flags, `forge_jvm`, and `src/effects`' `collect-coverage`, `collect-variants`, holdout and collector connector | interrupted; relaunch per HANDOFF.md | | `python-collection-findings.md` (to come) |
+| Collection supervisors in Python: `src/sealed` collection flags, `forge_jvm`, and `src/effects`' `collect-coverage`, `collect-variants`, holdout and collector connector | done 2026-11-09 | done | `python-collection-findings.md` |
 | `src/effects` beyond collection (corpus build, training, evaluation) | to do; may run during the re-collection, since it only reads records | | |
 | `rules/` catalogue and `scripts/` | to do | | |
 
