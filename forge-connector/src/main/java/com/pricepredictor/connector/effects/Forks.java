@@ -230,6 +230,9 @@ final class Forks {
 
     /**
      * Copy the live game and score-check the copy, empty when either fails.
+     * Every copy is first audited against the live game's board snapshot
+     * ({@link ForkFidelity}), whose differences are reported and decide
+     * nothing.
      *
      * @param perspective read after the copy, because a game the copier cannot
      *                    read may not answer it either
@@ -245,6 +248,7 @@ final class Forks {
         } catch (RuntimeException e) {
             return Optional.empty();
         }
+        ForkFidelity.report(live, fork);
         Player from = perspective.get();
         if (from == null || !scoreCheck(live, copier, fork, from)) {
             return Optional.empty();

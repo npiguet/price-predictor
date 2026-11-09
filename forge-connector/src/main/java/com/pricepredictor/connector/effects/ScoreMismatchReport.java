@@ -81,7 +81,7 @@ final class ScoreMismatchReport {
     }
 
     /** The first class outside the fork machinery on the stack: which kind of fork asked. */
-    private static String caller() {
+    static String caller() {
         return StackWalker.getInstance().walk(frames -> frames
                 .map(StackWalker.StackFrame::getClassName)
                 .filter(name -> !name.contains(".Forks") && !name.contains(".ScoreMismatchReport"))
