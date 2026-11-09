@@ -30,7 +30,7 @@ The user then decided to:
 | Module | Review | Verified | Findings |
 |---|---|---|---|
 | forge-connector | done 2026-11-09 | done | `connector-findings.md` |
-| Forge `effect-record-hooks` (../forge) | in progress | | `forge-hooks-findings.md` (to come) |
+| Forge `effect-record-hooks` (../forge) | done 2026-11-09 | done | `forge-hooks-findings.md` |
 | `src/sealed` + `forge_jvm` (collection supervisor) | to do | | |
 | `src/effects` (corpus build, training, evaluation) | to do; may run during the re-collection, since it only reads records | | |
 | `rules/` catalogue and `scripts/` | to do | | |
