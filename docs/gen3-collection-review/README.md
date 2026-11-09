@@ -1,6 +1,6 @@
 # Gen-3 collection review before re-collecting (feature 025)
 
-A working document for the review-then-fix round that runs before gen-3's records are collected again
+Resuming? Read `HANDOFF.md` first. A working document for the review-then-fix round that runs before gen-3's records are collected again
 from scratch. Read this first in a fresh session.
 
 ## Why
@@ -31,8 +31,8 @@ The user then decided to:
 |---|---|---|---|
 | forge-connector | done 2026-11-09 | done | `connector-findings.md` |
 | Forge `effect-record-hooks` (../forge) | done 2026-11-09 | done | `forge-hooks-findings.md` |
-| `src/sealed` + `forge_jvm` (collection supervisor) | to do | | |
-| `src/effects` (corpus build, training, evaluation) | to do; may run during the re-collection, since it only reads records | | |
+| Collection supervisors in Python: `src/sealed` collection flags, `forge_jvm`, and `src/effects`' `collect-coverage`, `collect-variants`, holdout and collector connector | interrupted; relaunch per HANDOFF.md | | `python-collection-findings.md` (to come) |
+| `src/effects` beyond collection (corpus build, training, evaluation) | to do; may run during the re-collection, since it only reads records | | |
 | `rules/` catalogue and `scripts/` | to do | | |
 
 ## The fixing round (fresh session)
