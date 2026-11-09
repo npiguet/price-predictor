@@ -429,6 +429,18 @@ S-RESOLVING, S's effects, S-RESOLVED, P-RESOLVED.
   face_down), anthem boosts and keywords, clones entering as copies. The `LibraryCapture` Javadoc's "name,
   types, lines are read right" is false for these.
 - **Decision pending** (see README): render with library defaults, which removes both parts.
+- **Observed in a real record** (Evolving Wilds, full-strength shard `7c8cb070-…0-mw925w0vet3c`, link
+  `…43.link.131450`, records 8046/8047):
+  - The effect half's fetched Island E21 reads `zone: library, order_rank: 6` but `tapped: true,
+    entered_this_turn: true`.
+  - The zone_change event (`subjects [E21], library→battlefield, cause E7`) carries no "entered tapped". The
+    leaked entity field is the only place that fact appears, so the fix must also put "enters tapped" on
+    the event: a `tapped` flag on zone_change, or a `tapped` event for the entering card. Otherwise
+    rendering library defaults would erase it.
+  - Two more oddities to investigate:
+    1. The sacrificed Evolving Wilds E7 is in the graveyard but renders `tapped: true`.
+    2. Both halves carry two unrelated `library_card` entities, a Baleful Ammit (`sick: true`) and an
+       opponent's Swamp (controller P1), that no event of these records names.
 
 ### B4: played-forward forks list no floating effect drawn before the fork. CONFIRMED (fork records only)
 - **Mechanism:** a played-forward fork (directed, protection) builds `GameRecording(fork, …)` →

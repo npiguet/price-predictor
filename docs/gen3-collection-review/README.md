@@ -55,10 +55,28 @@ After fixing, verify before any long run:
   paid. No link from a spell to the lands that paid for it.
 - **Questions-to-the-user style:** in plain text in the reply, never through the question pop-up tool.
 
-## Open decisions (being discussed with the user)
-- **A7, a resolution's board timing.** Today a resolution's effect half pairs with the cast-time board, so
-  responses are missing from its input. Options under discussion: read the board at resolution start, or
-  drop records where something happened in response.
-- **B5, library cards named by an event.** Today they are rendered after the move (a fetched land shows
-  tapped and entered this turn; manifest and cloak entries show face-down). Proposal: render them with
-  library defaults.
+- **The record principle (decided 2026-11-09, covers A7, B5, C2):** every record describes one thing that
+  happened at one moment. Its board is read just before that thing happens, and its outcome is what
+  changed (the events are the "after"; no after-board is stored). A spell is several moments:
+  1. **Cost half (casting or activating).** Read the board BEFORE: card still in hand (601.2a), costs
+     unpaid. Today the board is read after payment: in a real Evolving Wilds record, Wilds is already in
+     the graveyard. The outcome is what casting did: the card from hand to stack (for a spell; for an
+     activated ability nothing moves), and the costs paid (mana by colour, tapped, sacrificed, discarded,
+     exiled, life). A sacrificed card later shown tapped in the graveyard is fine.
+  2. **Remove `outcome` from the cost half.** Today it holds the stack item's eventual fate (resolved,
+     fizzled, countered, declined), written once known; that's a later moment. Record the fate when it
+     happens:
+     - resolved: the resolution record;
+     - fizzled or declined: a resolution record whose outcome is "nothing happened";
+     - countered: the counterspell's own resolution record, which must show the countered item leaving the
+       stack (verify it does).
+  3. **Effect half (resolution).** Read the board when resolution STARTS (a Forge "resolution starting"
+     hook; we own the branch). Responses and simultaneous triggers have their own records. Fizzles stay
+     learnable, because the resolution-time board already shows the target gone.
+  4. **Library cards named by an event (B5).** Render them as they were in the library (untapped, no
+     counters, not entered this turn, face up, owner-controlled, nothing chosen), and put "entered tapped"
+     on the outcome (a flag on `zone_change` or a `tapped` event for the entering card). Today the leaked
+     entity field is the only place it appears.
+  5. **Mana records (C2):** already decided above, and the same principle.
+  The user rejected the alternative of dropping records where something happened in response (it would
+  lose fizzles and needs a fragile definition of "response").
