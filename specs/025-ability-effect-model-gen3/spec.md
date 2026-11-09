@@ -142,6 +142,26 @@ State on master when this feature starts (the gen-3 record's Result):
   one at 1 in 1,000, and a special one whenever stage 1 kept it. One snapshot shared per priority
   stop is rejected: not needed at these rates.
 
+### Session 2026-11-09
+
+- Q: When is each record's board read? → A: Each record describes one moment, and its snapshot is
+  the board just before it (root § 8.14, FR-042a–FR-042f). A cost half reads before casting or
+  activating, an effect half when its resolution starts, a mana record before the mana ability is
+  activated. Responses between casting and resolving have their own records. Dropping records
+  where something happened in response is rejected: it would lose every fizzle.
+- Q: Where does a stack item's fate go? → A: Not on the cost half. A resolved, fizzled or declined
+  item's fate is its effect half's `outcome`; a countered item's is in the countering ability's
+  effect half (FR-042b).
+- Q: What moves when a spell is cast and when it resolves? → A: Casting moves the card to the stack
+  (601.2a); resolving moves it to the graveyard, or onto the battlefield for a permanent spell
+  (608.2n, 608.3). An activated or triggered ability moves no card (FR-042a, FR-042b).
+- Q: What should a mana record teach? → A: That tapping a source whose ability says "add {G}"
+  produces {G}: a `tapped` event for the source and `mana_produced`, on the board before the
+  activation (FR-042c). The cost half's `costs.mana_by_color` says what mana paid for a spell; no
+  link from a spell to the lands that paid for it is recorded.
+- Q: How is a library card an event names described? → A: As it was in the library (FR-042e). "It
+  entered tapped" is a `tapped` event (FR-042d).
+
 ## User Scenarios & Testing *(mandatory)*
 
 The stories follow the gen-3 record's Future plans. Story 1 runs on gen-2's corpus and needs no
@@ -830,6 +850,32 @@ and that the reporting half never enters the control score.
 - **FR-042**: `validate-corpus` and `field-coverage` MUST cover every new field of root § 8.13,
   and a field's coverage MUST be checked before any figure computed from that field is published.
 
+#### Collection: record moments (root § 8.14)
+
+- **FR-042a**: A spell's cost half MUST take its snapshot before the card moves to the stack (601.2a),
+  with the card where it was cast from and its costs unpaid, and an activated ability's cost half
+  before its costs are paid. The cost half MUST be written when its costs are paid, with payload
+  `{events, costs}`: `events` the cast card's `zone_change` to the stack (`[]` for an activated
+  ability), `costs` as in gen-2. It MUST NOT carry `outcome`.
+- **FR-042b**: An effect half MUST take its snapshot when its resolution starts, before the first
+  clause resolves (a modal half: before its mode's first clause), through a Forge hook at the start
+  of `MagicStack.resolveStack`'s resolution. It MUST carry `outcome` (`resolved`, `fizzled`,
+  `partially_fizzled`, `declined`); a fizzled or declined resolution writes an effect half with
+  `events: []`. A spell's effect half MUST end with its card's `zone_change` off the stack. A
+  countered stack item MUST write no effect half; the countering clause's effect half MUST hold the
+  countered spell's `spell_countered` and its card's move off the stack.
+- **FR-042c**: A mana record MUST take its snapshot before the mana ability's costs are paid and its
+  mana is added, through a Forge hook fired before payment, and MUST carry a `tapped` event for each
+  permanent its cost tapped before `mana_produced`. Mana made by a resolving spell or trigger MUST
+  NOT write a mana record; its `mana_produced` belongs in that resolution's effect half.
+- **FR-042d**: A permanent that enters the battlefield tapped MUST get a `tapped` event after its
+  `zone_change`, in the record that moved it.
+- **FR-042e**: A library card a record's events name MUST be rendered as it was in the library:
+  `tapped` false, no counters, no `attached_to`, no `combat`, `controller` its owner, face up,
+  `entered_this_turn` false, nothing `chosen`, its library face's name, types and lines.
+- **FR-042f**: The stat-change differ MUST re-read the battlefield at each snapshot moment of
+  FR-042a–FR-042c, so a record's stat changes are measured from its own snapshot.
+
 #### Model input (root § 9)
 
 - **FR-043**: The ability encoder, `e` and the trunk MUST each be 256 wide by default.
@@ -890,8 +936,9 @@ and that the reporting half never enters the control score.
   given there, each supervised only by records that carry it. Per-card and per-player outputs join
   the per-entity head; outputs on the acting ability join the verdict head; a new global head beside
   the created-objects head carries the turn-structure and day/night outputs. The resolution outcome
-  MUST be an output only, and the gen-2 resolution-outcome input on the acting-ability slot MUST be
-  removed. The replacement result MUST supervise `rewrite` records.
+  MUST be an output only, supervised on effect halves (FR-042b) over `resolved`, `fizzled`,
+  `partially_fizzled` and `declined`, and the gen-2 resolution-outcome input on the acting-ability
+  slot MUST be removed. The replacement result MUST supervise `rewrite` records.
 - **FR-053**: The existing outputs MUST be extended as root § 11.3 says: `zone_outcome`'s new
   values, `library_bottom` set, phasing in and out distinct; `library_events` setting `scry`,
   `surveil` and `tutor` only for their own events, plus `shuffle`; each created-objects group's

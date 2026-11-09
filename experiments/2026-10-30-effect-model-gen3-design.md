@@ -2187,6 +2187,83 @@ whose mana events are all empty gets no label. The collector writes no map at al
 read the mana, so the empty maps seen in gen-2's events are not yet explained, and gen-3's first
 pilot should count them.
 
+### Gen-3's first records are set aside, because forks misdescribed the game and several records put their answer in the input
+
+**The records collected so far are set aside, and gen-3 is collected again once the defects below
+are fixed.** Two checks run before the full collection found them. A comparison of every fork's
+copy against the live board showed that the copies often described a different game. A review of
+the collectors and of the Forge branch then found records whose input already showed their outcome,
+and events filed to the wrong record. The findings, with their evidence and the test that pins
+each one, are in [`docs/gen3-collection-review/`](../docs/gen3-collection-review/README.md).
+
+#### A fork's copy differed from the live board in more than a quarter of forks, and the score check could not see it
+
+**The copier dropped state the model reads, and the check meant to catch a bad copy compared a single
+noisy number.** A fork is only kept if Forge's position evaluator gives the copy the same score as
+the live game. That score simulates the coming combat with the AI's attack and block choices, which
+draw on Forge's global random stream. Two scorings of the same board could therefore differ, and
+exact copies were discarded as bad ones. The check now scores both games from one seeded stream of
+its own.
+
+**The copier lost the turn's history and much card state.** The audit renders the copy's board the
+way a fork record does and compares it field by field with the live game's. Before any fix, the copy
+had forgotten:
+- which creatures attacked, blocked and dealt damage this turn;
+- which creatures died this turn, so morbid read false;
+- the players' per-turn counts, such as surveils;
+- what effect cards do, so a regeneration shield did nothing and the monarch drew no card.
+
+Each fix was checked by the next audit run.
+
+| fork fidelity audit | share of forks whose board differs from the live game |
+|---|---:|
+| first audit run | 28% |
+| after two rounds of copier fixes | 5% |
+
+**The forks still differing are mostly damage-step probes.** The review traced most of the remaining
+differences to card state the copier does not carry:
+- class levels;
+- transformed faces;
+- mutated permanents;
+- dungeons;
+- designations such as bestowed and unearthed;
+- "once each turn" limits, which reset in every fork.
+
+It also found a defect the audit cannot see. A copied combat forgets which creatures already dealt
+first-strike damage, so in a regular-damage-step probe every first striker deals its damage a
+second time.
+
+#### Every record now describes one moment, with the board read just before it
+
+**A record's snapshot is the board just before the moment it records, and its events are what that
+moment changed.** Four kinds of record broke this, and each one either showed the model part of the
+answer or described a board other than the one the ability acted on:
+- A mana record read the board after the mana entered the pool and the source was tapped. In nearly
+  every mana record of a full-strength shard, the producing player's floating mana equalled the
+  record's label.
+- A cost half read the board after its costs were paid. A sacrificed Evolving Wilds was already in
+  the graveyard in the input of its own activation record. The cost half also carried the stack
+  item's later fate as its outcome, a fact from a later moment.
+- An effect half read the board at the cast. A response that resolved in between, such as a pump on
+  the creature a Lightning Bolt targets, was missing from the input of Bolt's record.
+- A library card that an effect put onto the battlefield appeared in the library already tapped and
+  entered this turn. That leaked field was the only place the record said the land entered tapped.
+
+**Each moment now has its own snapshot** ([root spec § 8.14](../specs/2026-10-30-ability-effect-model-gen3.md)):
+- A spell's cost half reads the board before casting, with the card still in hand, and records the
+  card moving to the stack (rule 601.2a) and the costs paid. An activated ability's cost half reads
+  the board before its costs are paid and records them; no card moves.
+- An effect half reads the board when the resolution starts. A spell's card leaves the stack as the
+  resolution's last event.
+- A mana record reads the board before the activation. It records the source becoming tapped and
+  the mana produced, so that tapping a source whose ability says "add {G}" is seen to produce {G}.
+- The stack item's fate moves to its effect half. A countered item writes none; the counterspell's
+  record shows it leaving the stack.
+
+**Dropping every record where something happened in response was rejected.** It would have removed
+every fizzle, because a spell fizzles almost only when its target becomes illegal in response. With
+the board read at resolution start, a fizzle follows from the input: the target is already gone.
+
 ### The deviance floor is 0.04 nats, where gen-2's output fields turn noisy
 
 **Below a constant-prediction loss of about 0.04 nats, nearly every output field's explained
@@ -2231,6 +2308,9 @@ line gives every field's card-disjoint explained deviance, and each run's "Const
 ## Future plans
 
 **The next steps turn the catalogue and the map into collection and training.**
+
+- **Fix the collection review's findings and build the record moments of root spec § 8.14**, check
+  the copies with the fork fidelity audit, and collect gen-3 again from scratch.
 
 - **Rerun the map against master's targets**, then make the input and output changes in the order
   the Description sets, rerunning the map after each to count what it made learnable.

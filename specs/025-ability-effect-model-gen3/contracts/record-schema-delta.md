@@ -148,9 +148,10 @@ Appended to `state.entities` after the four tiers, each card once:
 | `mutate_component` | a mutated permanent's merged cards | the card as it is |
 | `last_known` | the pending event's subject as it last existed (the run parameters' `CardLKI`) | id `L<card id>`; `zone` the zone it was last in |
 
-A library card an event names is rendered at the write from the object the library held. A card
-put onto the battlefield is that same object, so its board state (tapped, counters) reads as after
-the move; any other move leaves the library's object as it was.
+A library card an event names is rendered as it was in the library: `tapped` false, no counters,
+no `attached_to`, no `combat`, `controller` its owner, face up, `entered_this_turn` false, nothing
+`chosen`; its name, types and lines are its library face's. A card put onto the battlefield is the
+library's own object, so these fields are not read from it after the move.
 
 ### Links
 
@@ -204,6 +205,8 @@ static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of
 
 | Payload | Field | Shape |
 |---|---|---|
+| resolution, cost half | `events` | before `costs`: the cast card's `zone_change` to the stack, from the zone it was cast from; `[]` on an activated ability's cost half. The payload is `{events, costs}` |
+| resolution, effect half | `outcome` | after `conditions_met`: `resolved`, `fizzled`, `partially_fizzled` or `declined`; a `fizzled` or `declined` half has `events: []` |
 | resolution | `conditions_met` | `[{segment, met}]`, after `events`, on every effect half: one entry per conditional clause that resolved in the half, in resolution order; a clause is conditional when it carries a parameter `SpellAbilityCondition.setConditions` reads (`Condition$`, `ConditionPresent$`, `ConditionCheckSVar$`, …; not `ConditionDescription$`); `segment` is spelled as the clause's events' `attributed_to` (`root`, or the chain index as a string), `met` is `metConditions()` read at the clause hook, before the engine reads it; `[]` where no conditional clause resolved, and always on a mana ability's record and the game-end rescue record |
 | decision candidate | `verdict.timing` | bool |
 | decision candidate | `failed_checks` | `[{check, responsible_static}]`, after `responsible_static` in the candidate, one entry per failed check in the order listed here; `responsible_static` a key list, one key where a static decided the check (`static_prohibition`), else empty; `check` ∈ `split_second`, `casting_speed`, `whose_turn`, `phase`, `combat`, `activation_limit`, `land_play_limit`, `script_condition`, `zone`, `static_prohibition`, `cost`, `script_restriction` |
@@ -223,6 +226,9 @@ may carry. `state_flag_change` gains flags outside `DESIGNATIONS`, listed below.
 
 | Event | Field | Shape |
 |---|---|---|
+| `tapped` | after a `zone_change` onto the battlefield | subjects the card, written when it entered tapped, in the record that moved it |
+| `tapped` | mana record | subjects each permanent the mana ability's cost tapped, before `mana_produced` |
+| `zone_change` off the stack | last event of a spell's effect half | the resolved spell's card to the graveyard, or onto the battlefield for a permanent spell |
 | `zone_change` into a library | `library_position` | int, after `to_zone`: where the card sits in the library as the bus publishes the move (after the add): `0` the top, `-1` the bottom of a library holding other cards, else its index from the top; a card alone in its library is `0`. Absent on every other move, where the card is not found in the library, and on a move into a library that a `library_shuffled` of that library's owner follows in the same event buffer (the shuffle takes it off). Never written for a move out of a library |
 | `pt_change` | `set_pt` | `[power, toughness]`, after `toughness_delta`: the base the change set (`getNetPowerBreakdown().currentValue`, the snapshot's `base_pt`), written when the base moved and the card is a creature after the change: a layer-7b setting effect, a CDA, a face change, an animation of a noncreature. A `pt_change` is written when the base moved even if the total did not (deltas `0`) |
 | `card_looked_at` | `mode` | `Scry` on a scry's look, `Surveil` on a surveil's look (bus events; a surveil keeping every card on top writes no `card_milled`, so only `mode` tells the two apart), `SearchedLibrary` on a search: `subjects` the searching player, `from_zone` `library`, no `count`; written by the `ChangeZone` clause rule when the player's `Player.getLibrarySearched()` rose across the clause, so only a search of one's own library (Forge counts no other) |
@@ -243,6 +249,16 @@ position a card left a library from, and a search of another player's library.
 
 ## Behaviour changes readers rely on
 
+- Each record describes one moment; its snapshot is the board just before it (root § 8.14):
+  - a spell's cost half: before the card moves to the stack, the card where it was cast from and its
+    costs unpaid;
+  - an activated ability's cost half: before its costs are paid;
+  - an effect half: when the resolution starts, before its first clause (a modal half: before its
+    mode's first clause);
+  - a mana record: before the mana ability's costs are paid and its mana is added.
+- A cost half is written when its costs are paid. It does not wait for the stack item's fate.
+- A countered stack item writes no effect half. The countering clause's effect half holds the
+  countered spell's `spell_countered` event and its card's `zone_change` off the stack.
 - A combat record's snapshot precedes every damage event of its step.
 - An attackers record's snapshot is the board before the declaration, and the record is written when
   the declaration is made, at the next declaration, or at the game's end; only the first gives
@@ -252,7 +268,8 @@ position a card left a library from, and a search of another player's library.
 - A prevention event with amount 0 is not written.
 - A record's stat-change events (`pt_change`, `keyword_change`, `type_change`, `color_change`,
   `control_change`) are changes after its own snapshot: the differ re-reads the battlefield when a
-  bracket opened at a cast, a mode's half or a damage step takes its snapshot. A change Forge
+  cost half, an effect half at its resolution's start, a mode's half or a damage step takes its
+  snapshot. A change Forge
   applied before such a snapshot and published after it reaches no record and is counted as
   dropped.
 - `can_play = canPlay ∧ timing ∧ no static prohibition`.
@@ -279,6 +296,7 @@ position a card left a library from, and a search of another player's library.
 
 ## Removed
 
+- `outcome` on the cost half (the effect half carries it).
 - `what_if` on `attackers` records (none is written).
 - A card's `printed` and `granted_attached` (both now in `lines`) and `pt` (now `base_pt` and `pt_boosts`).
 - The AI hook's decision records (replaced by the enumerator's).

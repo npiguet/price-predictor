@@ -567,6 +567,35 @@ keyed as `attributed_to` spells the segment; `[]` where none resolved.
 | `must_block` | `blockers` payload, per listed creature | bool: the creature is required to block the anchor |
 | `turn_action` | `kind` | with the subkinds of § 8.11 |
 | the fields of § 8.4 | snapshot | as `rules/gen3-fields.json` gives each field's shape |
+| `events` | cost-half payload | the cast card's move to the stack (§ 8.14) |
+| `outcome` | effect-half payload | resolved, fizzled, partially fizzled or declined (§ 8.14); removed from the cost half |
+
+## 8.14 Record moments
+
+This section replaces the base spec's timing of the cost half, the effect half and the mana record.
+
+Each record describes one moment of the game. Its snapshot is the board just before that moment, and
+its events and payload are what the moment changed. No board after the moment is recorded.
+
+| record | moment | snapshot | what it records |
+|---|---|---|---|
+| cost half of a spell | casting | before the card moves to the stack (601.2a): the card where it was cast from, its costs unpaid | the card's `zone_change` to the stack; the costs paid |
+| cost half of an activated ability | activation | before its costs are paid | the costs paid |
+| effect half | resolution | when the resolution starts, before its first clause; a modal resolution's half, before its mode's first clause | the resolution's events; for a spell, the card's own move off the stack last: to the graveyard, or onto the battlefield for a permanent spell |
+| mana record | a mana ability's activation | before its costs are paid and its mana is added | a `tapped` event for each permanent its cost tapped, then `mana_produced` |
+
+- The cost half carries no outcome. It is written when its costs are paid.
+- The effect half carries the stack item's outcome: resolved, fizzled, partially fizzled or
+  declined. A fizzled or declined resolution writes an effect half with no events.
+- A countered stack item writes no effect half. The countering ability's effect half holds the
+  countered spell's events: `spell_countered` and its card's move off the stack.
+- A triggered ability has no cost half. Its effect half follows the effect-half row.
+- A record's stat changes are measured from its own snapshot, at the moment the table gives.
+- A permanent that enters the battlefield tapped gets a `tapped` event after its `zone_change`, in
+  the record that moved it.
+- A library card a record's events name (§ 8.4) is described as it was in the library: untapped,
+  no counters, not attached, not in combat, controlled by its owner, face up, not entered this
+  turn, nothing chosen. Its name, types and lines are its library face's.
 
 # 9. Model input
 
@@ -821,7 +850,7 @@ The 22 outputs of `rules/gen3-fields.json`:
 | combat status change | card | binary each for removed from combat, became blocked, put onto the battlefield attacking or blocking |
 | subtypes changed | card | multi-binary gained and lost over a closed list the manifest records; supertypes as a second pair |
 | abilities changed | card | count of non-keyword abilities gained; binary for abilities lost; binary for text changed |
-| resolution outcome | verdict head, cost halves | categorical: resolved, fizzled, partially fizzled, countered, declined |
+| resolution outcome | verdict head, effect halves | categorical: resolved, fizzled, partially fizzled, declined (§ 8.14) |
 | turn structure change | global head | counts of extra turns, turns skipped, extra steps or phases, steps or phases skipped |
 | day/night change | global head | categorical: became day, became night, unchanged |
 | base P/T delta | card | signed delta of base power and of base toughness, against the previous base |

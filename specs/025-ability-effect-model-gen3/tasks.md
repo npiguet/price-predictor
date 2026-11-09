@@ -504,6 +504,19 @@ never enters the control score.
 
 ---
 
+## Phase 12: Review and fixes before re-collecting
+
+The gen-3 records collected so far are set aside and gen-3 is collected again from scratch, after a
+review of every module this feature touched. The plan, the reviewer brief, the verified findings
+and the user's decisions are in `docs/gen3-collection-review/` (start at its README).
+
+- [ ] T178 Finish the module reviews in the README's order (Forge `effect-record-hooks`, then `src/sealed` with `forge_jvm`, then `src/effects`, `rules/` and `scripts/`), each verified by a fresh adversarial verifier, asking the user after each module; `src/effects`, `rules/` and `scripts/` may be reviewed while the re-collection runs
+- [ ] T179 Implement the record moments, test-first (FR-042a–FR-042f, root § 8.14): Forge hooks at resolution start and before a mana ability's payment; cost halves snapshotted before casting with `{events, costs}` and no `outcome`; effect halves snapshotted at resolution start with `outcome` and the card's move off the stack; mana records with the source's `tapped` event; `tapped` after entering tapped; library cards as they were in the library; the resolution-outcome output on effect halves (FR-052)
+- [ ] T180 Fix every confirmed collection finding in `docs/gen3-collection-review/*-findings.md`, test-first with the test each finding names, deciding for each attribution finding whether the fix belongs at the Forge hook or in the connector (the Forge review's recommendations)
+- [ ] T181 Verify before any long run: the fork fidelity audit on a 20-minute collection with the full-strength flags (count `fork fidelity:` lines by field), `validate-corpus` and `field-coverage` on the first minutes of shards, and the score-discard count; then move `output/effects/records-gen3/` aside and rerun stage 5 from scratch
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase dependencies
