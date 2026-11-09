@@ -7,8 +7,10 @@ import forge.game.card.Card;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
+import forge.util.MyRandom;
 
 import java.util.Optional;
+import java.util.Random;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -162,20 +164,19 @@ final class Forks {
      */
     static boolean scoreCheck(Game live, GameCopier copier, Game fork, Player perspective) {
         try {
-            GameStateEvaluator evaluator = new GameStateEvaluator();
-            int original = evaluator.getScoreForGameState(live, perspective).value;
+            int original = score(live, perspective);
             Player forkPerspective = mappedPlayer(copier, perspective);
             if (forkPerspective == null) {
                 return false;
             }
-            int copied = evaluator
-                    .getScoreForGameState(fork, forkPerspective).value;
+            int copied = score(fork, forkPerspective);
             if (original != copied) {
                 System.err.println(
                         "Effect records: discarding a fork whose score "
                                 + copied + " disagrees with the live game's "
                                 + original + "; it would measure the copier "
                                 + "rather than the ability");
+                ScoreMismatchReport.print(live, perspective, fork, forkPerspective);
                 return false;
             }
             return true;
@@ -184,6 +185,37 @@ final class Forks {
                     "Effect records: fork score check failed (" + e.getMessage()
                             + "); discarding");
             return false;
+        }
+    }
+
+    /** The seed every score-check scoring draws from; any fixed value would do. */
+    static final long SCORE_SEED = 0x5C0_2EC4L;
+
+    /**
+     * {@code game}'s score for {@code perspective}, every random draw taken
+     * from a fresh stream seeded with {@link #SCORE_SEED}.
+     *
+     * <p>Before the second main phase the evaluator scores the combat to come
+     * by having the AI declare attackers and blockers in a copy, and those
+     * choices draw from Forge's one random stream ({@code MyRandom}): scored
+     * from it, the same board can simulate two different combats, so a live
+     * game and its exact copy disagreed by a creature's worth and the fork
+     * was discarded as a copier error. Both are scored from the same seeded
+     * stream instead, and the live game's stream is put back untouched, so
+     * the check no longer shifts what the live game draws next either.
+     */
+    static int score(Game game, Player perspective) {
+        return seeded(() -> new GameStateEvaluator().getScoreForGameState(game, perspective).value);
+    }
+
+    /** Run {@code action} drawing from a fresh stream seeded with {@link #SCORE_SEED}; see {@link #score}. */
+    static <T> T seeded(Supplier<T> action) {
+        Random live = MyRandom.getRandom();
+        MyRandom.setRandom(new Random(SCORE_SEED));
+        try {
+            return action.get();
+        } finally {
+            MyRandom.setRandom(live);
         }
     }
 
