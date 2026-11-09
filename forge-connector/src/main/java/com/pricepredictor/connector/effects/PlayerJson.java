@@ -120,11 +120,15 @@ final class PlayerJson {
      * bounced or exiled creature counts here too. It is a close reading of a
      * condition many triggers ask about; an exact count would need a hook where
      * the death is decided.
+     *
+     * <p>The controller is matched by id, as Forge matches players: a fork's
+     * copy carries the live game's last-known copies, whose controller is the
+     * live game's player.
      */
     private static int creaturesLost(Game game, Player player) {
         int count = 0;
         for (Card card : game.getLeftBattlefieldThisTurn()) {
-            if (card.isCreature() && card.getController() == player) {
+            if (card.isCreature() && player.equals(card.getController())) {
                 count++;
             }
         }

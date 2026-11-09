@@ -32,7 +32,7 @@ final class ForkFidelity {
     /** At most this many differences printed for one fork. */
     static final int MAX_REPORTED = 20;
     /** At most this many characters of a value printed. */
-    static final int MAX_VALUE = 160;
+    static final int MAX_VALUE = 600;
 
     private ForkFidelity() {
     }

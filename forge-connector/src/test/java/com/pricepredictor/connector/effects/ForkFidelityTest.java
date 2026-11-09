@@ -44,6 +44,46 @@ class ForkFidelityTest {
         assertEquals(List.of(), ForkFidelity.differences(live, fork));
     }
 
+    /**
+     * After combat: a creature attacked, another blocked it, damage was
+     * dealt and a creature died. The copier copied none of the turn's combat
+     * or zone history, so the copy's creatures had not attacked or blocked,
+     * no damage linked them and no creature had died this turn.
+     */
+    @Test
+    void aCopyTakenAfterCombatKeepsTheTurnsHistory() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN2);
+        Player you = live.getPlayers().get(0);
+        Player opponent = live.getPlayers().get(1);
+        Card attacker = TestBoard.inPlay(live, you, "Hill Giant");
+        Card blocker = TestBoard.inPlay(live, opponent, "Grizzly Bears");
+        Card chump = TestBoard.inPlay(live, opponent, "Llanowar Elves");
+        attacker.getDamageHistory().setCreatureAttackedThisCombat(opponent, 0);
+        blocker.addBlockedThisTurn(attacker);
+        attacker.addBlockedByThisTurn(blocker);
+        attacker.getDamageHistory().registerDamage(1, true, attacker, blocker, new java.util.HashMap<>());
+        live.getAction().moveTo(forge.game.zone.ZoneType.Graveyard, chump, null, null);
+        assertEquals(1, live.getLeftBattlefieldThisTurn().size(), "the chump blocker did not leave");
+
+        Game fork = new GameCopier(live).makeCopy();
+
+        assertEquals(List.of(), ForkFidelity.differences(live, fork));
+    }
+
+    /**
+     * The monarch is a command-zone effect card holding the designation's
+     * triggers; the copy's effect card came out with no lines and no colour.
+     */
+    @Test
+    void aCopyKeepsTheMonarchsEffectCard() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN2);
+        live.getAction().becomeMonarch(live.getPlayers().get(0), null);
+
+        Game fork = new GameCopier(live).makeCopy();
+
+        assertEquals(List.of(), ForkFidelity.differences(live, fork));
+    }
+
     @Test
     void aCopyThatDiffersIsNamedByEntityAndField() {
         Game live = board();
