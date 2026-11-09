@@ -84,7 +84,8 @@ final class ScoreMismatchReport {
     static String caller() {
         return StackWalker.getInstance().walk(frames -> frames
                 .map(StackWalker.StackFrame::getClassName)
-                .filter(name -> !name.contains(".Forks") && !name.contains(".ScoreMismatchReport"))
+                .filter(name -> !name.contains(".Forks") && !name.contains(".ScoreMismatchReport")
+                        && !name.contains(".ForkFidelity"))
                 .findFirst().map(name -> name.substring(name.lastIndexOf('.') + 1))
                 .orElse("?"));
     }
