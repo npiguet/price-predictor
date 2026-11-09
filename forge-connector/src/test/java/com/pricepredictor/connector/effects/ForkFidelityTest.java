@@ -84,6 +84,41 @@ class ForkFidelityTest {
         assertEquals(List.of(), ForkFidelity.differences(live, fork));
     }
 
+    /**
+     * An effect card a resolved spell left in the command zone names that
+     * spell's line through the ability that made it. The copier set an
+     * effect's source only on battlefield cards, so the copy's effect card
+     * named no line and nothing it was created by.
+     */
+    @Test
+    void aCopyKeepsWhatMadeAnEffectCard() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN2);
+        Player you = live.getPlayers().get(0);
+        forge.game.spellability.SpellAbility spell =
+                TestBoard.inGraveyard(live, you, "Giant Growth").getFirstSpellAbility();
+        spell.setActivatingPlayer(you);
+        Card effect = forge.game.ability.SpellAbilityEffect.createEffect(
+                spell, you, "Giant Growth's Effect", null);
+        live.getAction().moveTo(forge.game.zone.ZoneType.Command, effect, spell, null);
+
+        Game fork = new GameCopier(live).makeCopy();
+
+        assertEquals(List.of(), ForkFidelity.differences(live, fork));
+    }
+
+    /** "Target creature blocks this turn if able": the requirement survives the copy. */
+    @Test
+    void aCopyKeepsACreaturesRequirementToBlock() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Card attacker = TestBoard.inPlay(live, live.getPlayers().get(0), "Hill Giant");
+        Card blocker = TestBoard.inPlay(live, live.getPlayers().get(1), "Grizzly Bears");
+        blocker.addMustBlockCard(live.getNextTimestamp(), attacker);
+
+        Game fork = new GameCopier(live).makeCopy();
+
+        assertEquals(List.of(), ForkFidelity.differences(live, fork));
+    }
+
     @Test
     void aCopyThatDiffersIsNamedByEntityAndField() {
         Game live = board();
