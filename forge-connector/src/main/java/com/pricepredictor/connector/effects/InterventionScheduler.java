@@ -7,7 +7,9 @@ import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -88,25 +90,70 @@ final class InterventionScheduler {
     }
 
     /**
-     * Force each line in {@code holder}'s hand {@code wanted} accepts and
-     * {@code seen} does not hold yet, for {@code holder}.
+     * Force each line {@code holder} holds in the {@link #FORCED_ZONES} that
+     * {@code wanted} accepts and {@code seen} does not hold yet, for
+     * {@code holder}.
      *
      * @return false once the budget refuses a fork, which ends the boundary
      */
     private boolean force(Player holder, Set<String> seen, Predicate<SpellAbility> wanted) {
-        for (Card card : holder.getCardsIn(ZoneType.Hand)) {
-            for (SpellAbility candidate : card.getSpellAbilities()) {
-                if (!worthIntervening(candidate, seen) || !wanted.test(candidate)) {
-                    continue;
+        for (ZoneType zone : FORCED_ZONES) {
+            for (Card card : holder.getCardsIn(zone)) {
+                for (SpellAbility candidate : forcedFrom(card, zone)) {
+                    if (!worthIntervening(candidate, seen) || !wanted.test(candidate)) {
+                        continue;
+                    }
+                    if (!forks.mayIntervene(candidate.getId())) {
+                        return false;
+                    }
+                    seen.add(AbilityLines.key(candidate));
+                    forks.intervene(candidate, candidate.getId(), holder);
                 }
-                if (!forks.mayIntervene(candidate.getId())) {
-                    return false;
-                }
-                seen.add(AbilityLines.key(candidate));
-                forks.intervene(candidate, candidate.getId(), holder);
             }
         }
         return true;
+    }
+
+    /**
+     * The zones whose lines are forced, in the order the budget is spent on
+     * them: the hand first, as it always was, so a run's spells keep the
+     * budget they had; then what is already on the battlefield; then the
+     * graveyard and exile. A permanent's activated abilities — a
+     * planeswalker's loyalty abilities among them — and a graveyard's are
+     * where the AI passes most often, and a hand-only list never reached them.
+     */
+    static final List<ZoneType> FORCED_ZONES = List.of(
+            ZoneType.Hand, ZoneType.Battlefield, ZoneType.Graveyard, ZoneType.Exile);
+
+    /**
+     * The lines {@code card} offers from {@code zone}: in the hand all of them,
+     * as before; anywhere else only those whose activation zone is that zone
+     * (Forge's own rule, {@code SpellAbilityRestriction}: the {@code
+     * ActivationZone$} or {@code AdditionalActivationZone$}), so a graveyard
+     * card's flashback or return-to-hand ability is forced and its printed
+     * spell is not. On the battlefield a permanent's own spell is never one:
+     * it has been cast already.
+     */
+    static List<SpellAbility> forcedFrom(Card card, ZoneType zone) {
+        if (zone == ZoneType.Hand) {
+            return List.copyOf(card.getSpellAbilities());
+        }
+        List<SpellAbility> lines = new ArrayList<>();
+        for (SpellAbility candidate : card.getSpellAbilities()) {
+            if (zone == ZoneType.Battlefield && candidate.isSpell()) {
+                continue;
+            }
+            if (activatesFrom(candidate, zone)) {
+                lines.add(candidate);
+            }
+        }
+        return lines;
+    }
+
+    private static boolean activatesFrom(SpellAbility candidate, ZoneType zone) {
+        ZoneType declared = candidate.getRestrictions() == null ? null : candidate.getRestrictions().getZone();
+        return zone == declared
+                || zone.name().equalsIgnoreCase(candidate.getParamOrDefault("AdditionalActivationZone", ""));
     }
 
     /**
