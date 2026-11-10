@@ -80,3 +80,20 @@ After fixing, verify before any long run:
   5. **Mana records (C2):** already decided above, and the same principle.
   The user rejected the alternative of dropping records where something happened in response (it would
   lose fizzles and needs a fragile definition of "response").
+
+- **Random-seat games naming a held-out card are kept (decided 2026-11-10, covers python D2).** Today
+  FR-059 and root spec § 12.4 keep only Forge-AI games in the validation strata, so `build-corpus` drops
+  them (`corpus_survey._candidate_games`, `_fate`). They go to the card-disjoint stratum instead, beside
+  the Forge-AI games. Training already holds about a quarter random-seat games; the random seat casts
+  held-out cards the AI never casts; and the evaluation's random-seat slice (FR-066, `breakdowns.py`) is
+  empty today because no validation stratum holds a random-seat record. Needs a spec change (FR-059,
+  § 12.4) and the build-corpus change; the held-out round then counts those games, as it does today.
+- **Every stratum has the same record composition (decided 2026-11-10, covers python R7).** The
+  two-stage decision sampling rates (`--playability-rate`, `--zone-candidate-rate`,
+  `--plain-candidate-rate`) stay, because most zone and plain candidates teach nothing new. They must be
+  identical, or close enough, across every stratum, both at collection and after `build-corpus`. So the
+  held-out round drops its `playability_rate=1.0` override (`held_out_round_caps`). Still to check, in
+  the `src/effects` review: `build-corpus` reshapes the training stratum by `--class-mix` while each
+  validation stratum is written as collected (plus rule-budget copies), so their compositions may differ.
+- **Depleted match-outcomes runs feeding the sealed corpus (python, not-a-bug list):** fine. The sealed
+  corpus will not be trained again.
