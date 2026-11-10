@@ -95,13 +95,37 @@ T186 first (R1, R3, R8: `loadable.lst`, hash names, unstaging), then T185 (`rule
 `VariantSidecarMain` writes `loadable.lst`; `ScriptFiles.under` stages only `.txt` files with a `Name:`
 line (fix `VariantRegistryTest.aNonScriptFileIsIgnored`); unstaging at round end if Python cannot do it;
 per-game `aimed_at` from the steered deck file's rule column (`CollectorContext`); T189's intervention
-pass. The exact requirements come from the WP6 Python agent's report.
+pass. The Python agent's requirements (its halves landed in e1ca65a8, 76872cf3):
+1. `VariantSidecarMain.LOADABLE_FILE = "loadable.lst"`; then delete the strict-xfail mark on
+   `test_the_list_is_the_one_variant_sidecar_main_writes`.
+2. `ScriptFiles.under` stages only `.txt` files holding a `Name:` line; fix
+   `VariantRegistryTest.aNonScriptFileIsIgnored`; R1's test: `initialize(tree)` succeeds twice running.
+3. Unstaging: none in Java (Python's `variant_staging.py` empties `.staged-by-effects.list`'s files).
+4. Steered deck lines are `LABEL;SET_CODE;Card1|…|Card40;RULE` (label `variant`, set code `COVERAGE`);
+   other decks keep three fields. `GeneratedDeck.parse` splits with limit 4 and holds a nullable rule
+   (today's limit-3 split would fold `;RULE` into the last card).
+5. `CollectorContext`: when either deck of a game has a rule, every record of that game carries
+   `aimed_at` = both decks' rules, de-duplicated and sorted, instead of the run-wide `effect.aimed.at`;
+   already-aimed records (directed forks) keep theirs.
+6. A game is steered when either deck carries a rule (no new cap property).
+7. T189: in a steered game, `InterventionScheduler`'s first pass forces the lines of the variant cards
+   each player holds, before FR-057's pass; then T188's integration game (records carry the decks' rules).
+
+### T191's loops (Forge AI; not fixed, awaiting the user)
+Chain of Smog Variant 5437 wrote 100,083 gen-2 records (55,006 in one game): with both hands empty the
+two AIs copy it forever (`SpecialCardAi.ChainOfSmog` copies whenever its own hand is empty), and the real
+card loops the same way. Sage of Hours (`CounterNum$ 0`, 36,588), Crypt Rats and the en-Kor variants
+re-activate free abilities. The Python-caused loops (a selector swap on `Duration$ Permanent`: Opal
+Avenger, Hidden Predators, Veiled Crocodile) are fixed in 93906a7d.
 
 ## Progress
 - WP1 done: Forge 8f105fb36cd; hook contract in `WP1-HOOKS.md`.
 - WP5 done: commits 16c7a568 … 892ebb30, 8003c9a5. `build-corpus` did not give the validation strata the
   class mix; it now repeats validation records toward it (c2e7de82), never dropping one.
-- Running: WP2 (stream J), WP6 Python and catalogue parts (stream P).
+- WP2 done: Forge cfb2ae28564; copier API in `WP2-COPIER.md`.
+- WP6 Python and catalogue parts done (T184, T185, T187 ticked; T186, T188 Python halves; 207 of 260
+  card-level variants carry a `script_edit`, the rest listed with reasons in the agent's scratchpad).
+- Running: WP3a (record moments, connector side of the new hooks).
 
 ## Order and gates
 
