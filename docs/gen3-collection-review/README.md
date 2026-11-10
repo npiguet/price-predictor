@@ -32,8 +32,8 @@ The user then decided to:
 | forge-connector | done 2026-11-09 | done | `connector-findings.md` |
 | Forge `effect-record-hooks` (../forge) | done 2026-11-09 | done | `forge-hooks-findings.md` |
 | Collection supervisors in Python: `src/sealed` collection flags, `forge_jvm`, and `src/effects`' `collect-coverage`, `collect-variants`, holdout and collector connector | done 2026-11-09 | done | `python-collection-findings.md` |
-| `src/effects` beyond collection (corpus build, training, evaluation) | to do; may run during the re-collection, since it only reads records | | |
-| `rules/` catalogue and `scripts/` | to do | | |
+| `src/effects` beyond collection (corpus build, training, evaluation) | left out for now (user, 2026-11-10) | | |
+| `rules/` catalogue and `scripts/` | left out for now (user, 2026-11-10) | | |
 
 ## The fixing round (fresh session)
 Fix every confirmed collection finding in one planned pass, test-first. Each finding in the findings files
@@ -97,3 +97,26 @@ After fixing, verify before any long run:
   validation stratum is written as collected (plus rule-budget copies), so their compositions may differ.
 - **Depleted match-outcomes runs feeding the sealed corpus (python, not-a-bug list):** fine. The sealed
   corpus will not be trained again.
+- **Variants: breadth plus steering (decided 2026-11-10, covers python D7 and R3; a new feature, so it
+  needs a spec section, plan and tasks before code).** Variants exist against memorization (texts no card
+  printed, with engine results: gen-1 design, the memorization levers and script-primary sections) and to
+  add rare cases (gen-3: protection qualities). Gen-2's variant run played 13,584 of 15,951 variants,
+  median 13 records each, in 4,386 games; one variant alone wrote 100,073 records (a loop, to look into).
+  1. **Untargeted round:** a variant of every eligible script, played until each has about 1-3 games,
+     not one fixed round.
+  2. **Steered round:** driven by `rule-counts` over the re-collection's own shards. Short (rule,
+     polarity) pairs pick carriers (the scenario's cards, or cards carrying the condition the detector
+     reads) and an edit: the scenario variant's card-level operation (`pt`, `keyword` with protection
+     quality as one case, `colour_type`, `counters`, `replace_card`) as a script edit, or a numeric or
+     selector shift on the line the detector reads (near misses). Variants per rule are weighted by the
+     shortfall, aimed with `aimed_at = [rule]`, played until each has N games, recounted, and retired
+     when a rule stops moving. On night-1's counts about 85 gaps already have a card-level operation (40
+     short pairs, 45 untagged rules); choice, timing and turn-structure gaps stay with directed forks,
+     the random seat and interventions.
+  3. **Interventions prefer the aimed variants:** in a steered game, `InterventionScheduler` forces the
+     aimed variants' lines first, a pass ahead of the existing two, so a variant the AI dislikes still
+     resolves.
+  4. `--variant-volume` is replaced by these targets (it never binds on a real corpus).
+- **Review scope (decided 2026-11-10):** the `src/effects`-beyond-collection review and the `rules/` and
+  `scripts/` review are left out for now. The stratum-composition check above is still owed by
+  whoever next works on `build-corpus`.
