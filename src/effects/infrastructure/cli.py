@@ -518,7 +518,7 @@ def holdout_source_error(args: argparse.Namespace) -> str | None:
 def _check_workers_can_start(command: str, config: Any) -> None:
     """The connector JAR, ``java`` and the list files the run reads, checked
     before any worker starts (python R2)."""
-    from price_predictor.infrastructure import forge_jvm
+    import price_predictor.infrastructure.forge_jvm as forge_jvm
 
     holdout = config.deck_holdout
     try:
