@@ -159,3 +159,70 @@ def test_the_report_groups_rules_by_unit():
                                         ("701.10a", "701.10"), ("614.11a", "614")])
 def test_unit_of(rule, unit):
     assert unit_of(rule) == unit
+
+
+# --- carriers (T185, FR-058f) ---------------------------------------------------------------
+
+GEN3 = FIXTURES / "gen3-records.jsonl.gz"
+GEN3_SIDECARS = FIXTURES / "gen3-sidecars"
+
+_CARRIER_CATALOGUE = (
+    _scenario("702.2b-1", ["702.2b"], "combat", {
+        "family": "keyword_combat", "record_kind": "combat", "outcome": "o",
+        "near_miss": "n", "params": {"keyword": "deathtouch"}}),
+    _scenario("106.3-1", ["106.3"], "resolution", {
+        "family": "outcome_event", "record_kind": "resolution", "outcome": "o",
+        "near_miss": "n", "params": {"event": "mana_produced"}}),
+)
+
+
+def _gen3_counts(tmp_path, workers=1, copies=1):
+    records = tmp_path / "records"
+    records.mkdir(parents=True)
+    for copy in range(copies):
+        shutil.copyfile(GEN3, records / f"{copy}-{GEN3.name}")
+    config = RuleCountsConfig(
+        records_dir=records, output=tmp_path / "rule-counts.json",
+        rules_dir=_rules_dir(tmp_path, *_CARRIER_CATALOGUE),
+        sidecar_roots={"cardsfolder": GEN3_SIDECARS / "cardsfolder",
+                       "tokenscripts": GEN3_SIDECARS / "tokenscripts"},
+        workers=workers)
+    counts, none = count(config)
+    return counts.to_json(none)["carriers"]
+
+
+def _carrier(carriers, rule, script_file):
+    return next(c for c in carriers[rule] if c["script_file"] == script_file)
+
+
+def test_a_keyword_rule_s_carrier_acts_through_its_keyword_line(tmp_path):
+    """A combat record names no acting line: the deathtouch carrier's own
+    deathtouch line is what the rule's tags act through."""
+    carriers = _gen3_counts(tmp_path)
+    servant = _carrier(carriers, "702.2b", "cardsfolder/s/servant_of_the_stinger.txt")
+    assert servant["lines"] == [{"key": {"face": 0, "trait_kind": "keyword",
+                                         "index_within_kind": 0},
+                                 "records": servant["records"]}]
+
+
+def test_a_resolution_rule_s_carrier_acts_through_the_record_s_acting_line(tmp_path):
+    carriers = _gen3_counts(tmp_path)
+    acting = [line for carrier in carriers["106.3"] for line in carrier["lines"]]
+    assert acting and all(line["key"]["trait_kind"] != "keyword" for line in acting)
+
+
+def test_carriers_come_most_recorded_first_and_no_line_outcounts_its_card(tmp_path):
+    carriers = _gen3_counts(tmp_path)
+    for found in carriers.values():
+        records = [carrier["records"] for carrier in found]
+        assert records == sorted(records, reverse=True)
+        for carrier in found:
+            assert all(0 < line["records"] <= carrier["records"] for line in carrier["lines"])
+
+
+def test_carriers_add_up_across_workers(tmp_path):
+    one = _gen3_counts(tmp_path / "a", workers=1)
+    two = _gen3_counts(tmp_path / "b", workers=2, copies=2)
+    servant = _carrier(two, "702.2b", "cardsfolder/s/servant_of_the_stinger.txt")
+    assert servant["records"] == 2 * _carrier(
+        one, "702.2b", "cardsfolder/s/servant_of_the_stinger.txt")["records"]

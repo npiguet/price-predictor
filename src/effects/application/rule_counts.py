@@ -11,6 +11,16 @@ came from, which decides what it can be trusted for:
 
 Gen-2 records carry no ``aimed_at``, so all of them are natural.
 
+Per rule the counts also list its carriers (FR-058f), the cards the steered
+variant round edits: the script file of every card that is a condition entity
+of the rule's tags, with the lines the tags act through on it and the records
+of each. A line acted through is an acting key of the record (the acting line,
+or a decision's candidate) on the carrier's script; where none is, the
+carrier's keyword line of the keyword the tagging scenario's detector names,
+from the entity's lines or, where the snapshot lists none, from the carrier's
+sidecar. A card entity with no printed line names no script file and carries
+nothing.
+
 Shards are read once each, in parallel; a game never spans shards (a shard is
 one worker JVM's lifetime), so whether a game has a random seat is decided at
 the end of its shard. Each worker builds the detector index and its sidecar
@@ -28,8 +38,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.application.parallel_map import run_parallel
+from effects.domain.keyword_names import normalize_keyword
+from effects.domain.provenance import ProvenanceKey, SidecarLookup
+from effects.domain.records import EffectRecord, acting_keys
 from effects.domain.rule_catalogue import NoDetector, Polarity
-from effects.domain.rule_detectors import DetectorIndex, RuleSource, tag_record
+from effects.domain.rule_detectors import DetectorIndex, RuleSource, RuleTag, tag_record
 from effects.domain.shard_generation import ShardGeneration
 from effects.domain.tally_merge import merge_into
 
@@ -50,6 +63,9 @@ class RuleCounts:
     #: ``(record_id, scenario)`` of every finding whose outcome disagrees with its side.
     review: set = field(default_factory=set)
     records: int = 0
+    #: ``(rule, script file, key) -> records``: a carrier's own count under
+    #: key None, each line its tags act through under the line's key.
+    carriers: Counter = field(default_factory=Counter)
 
     def to_json(self, none: dict[str, str]) -> dict:
         by_rule: dict[str, dict[str, dict[str, int]]] = {}
@@ -61,6 +77,33 @@ class RuleCounts:
             "not_countable": sorted(self.not_countable - set(by_rule)),
             "none": dict(sorted(none.items())),
             "review": [{"record_id": r, "scenario": s} for r, s in sorted(self.review)],
+            "carriers": self._carriers_json(),
+        }
+
+    def _carriers_json(self) -> dict[str, list[dict]]:
+        """``rule -> [{script_file, records, lines: [{key, records}]}]``, the
+        carriers most records name first, each line keyed as a sidecar keys it."""
+        files: dict[str, dict[str, int]] = {}
+        lines: dict[tuple[str, str], list[tuple[ProvenanceKey, int]]] = {}
+        for (rule, script_file, key), n in self.carriers.items():
+            if key is None:
+                files.setdefault(rule, {})[script_file] = n
+            else:
+                lines.setdefault((rule, script_file), []).append((key, n))
+        return {
+            rule: [
+                {"script_file": script_file, "records": n, "lines": [
+                    {"key": key.sidecar_dict(), "records": m}
+                    for key, m in sorted(
+                        lines.get((rule, script_file), ()),
+                        key=lambda item: (-item[1], item[0].trait_kind,
+                                          item[0].face, item[0].index_within_kind,
+                                          item[0].option or -1),
+                    )
+                ]}
+                for script_file, n in sorted(by_file.items(), key=lambda i: (-i[1], i[0]))
+            ]
+            for rule, by_file in sorted(files.items())
         }
 
 
@@ -75,8 +118,64 @@ class _CountContext:
         from effects.infrastructure.converted_trees import process_sidecars
         from effects.infrastructure.rules_catalogue_io import load_scenarios
 
-        return DetectorIndex.of(load_scenarios(self.rules_dir)), process_sidecars(
-            self.sidecar_roots)
+        catalogue = load_scenarios(self.rules_dir)
+        return DetectorIndex.of(catalogue), process_sidecars(
+            self.sidecar_roots), scenario_keywords(catalogue)
+
+
+def scenario_keywords(catalogue) -> dict[str, str]:
+    """``scenario id -> keyword`` its detector declares, in the package's
+    spelling, for the scenarios whose detector names one."""
+    found: dict[str, str] = {}
+    for scenario in catalogue.scenarios:
+        params = getattr(scenario.detector, "params", None) or {}
+        if isinstance(params.get("keyword"), str):
+            found[scenario.id] = normalize_keyword(params["keyword"])
+    return found
+
+
+def tag_carriers(
+    record: EffectRecord, tag: RuleTag, keywords: dict[str, str],
+    sidecars: SidecarLookup | None = None,
+) -> set[tuple[str, ProvenanceKey | None]]:
+    """``(script file, key)`` of the carriers ``tag`` names in ``record``:
+    each condition entity's card with key None, and each line the tag acts
+    through on it (see the module's docstring)."""
+    acting = acting_keys(record)
+    keyword = keywords.get(tag.scenario)
+    found: set[tuple[str, ProvenanceKey | None]] = set()
+    for entity_id in tag.condition:
+        entity = record.state.entity(entity_id)
+        if entity is None or not entity.printed:
+            continue
+        script_file = entity.printed[0].script_file
+        found.add((script_file, None))
+        through = [key for key in acting if key.script_file == script_file]
+        if not through and keyword is not None:
+            through = [
+                key for line in entity.keyword_lines if line.keyword == keyword
+                for key in line.keys if key.script_file == script_file
+            ] or _sidecar_keyword_keys(sidecars, script_file, keyword)
+        found.update((script_file, key) for key in through)
+    return found
+
+
+def _sidecar_keyword_keys(
+    sidecars: SidecarLookup | None, script_file: str, keyword: str,
+) -> list[ProvenanceKey]:
+    """The keys of ``script_file``'s keyword lines of ``keyword``, read off its
+    sidecar; none where it has no sidecar."""
+    if sidecars is None:
+        return []
+    try:
+        sidecar = sidecars.get(script_file)
+    except (KeyError, LookupError, OSError, ValueError):
+        return []
+    return [
+        key for line in sidecar.lines
+        if line.script_text and normalize_keyword(line.script_text) == keyword
+        for key in line.provenance if key.trait_kind == "keyword"
+    ]
 
 
 def count_shard(built, shard: Path) -> RuleCounts:
@@ -84,7 +183,7 @@ def count_shard(built, shard: Path) -> RuleCounts:
     each game's source is known."""
     from effects.infrastructure.shard_io import read_shard
 
-    index, sidecars = built
+    index, sidecars, keywords = built
     out = RuleCounts()
     seat_games: set[str] = set()
     pending: list[tuple[str, bool, object]] = []
@@ -97,6 +196,12 @@ def count_shard(built, shard: Path) -> RuleCounts:
         out.review |= {(record.record_id, tag.scenario) for tag in result.review}
         if result.tags:
             pending.append((record.game_id, record.aimed_at is not None, result.tags))
+        carried = {
+            (tag.rule, script_file, key)
+            for tag in result.tags
+            for script_file, key in tag_carriers(record, tag, keywords, sidecars)
+        }
+        out.carriers.update(carried)
     for game_id, aimed, tags in pending:
         source = RuleSource.of(aimed=aimed, random_seat_game=game_id in seat_games)
         for tag in tags:

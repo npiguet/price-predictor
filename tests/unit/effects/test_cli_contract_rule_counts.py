@@ -102,3 +102,24 @@ def test_a_gen1_set_exits_1(tmp_path):
     records.mkdir()
     shutil.copyfile(FIXTURES / "gen1-records.jsonl.gz", records / "gen1.jsonl.gz")
     assert _run(tmp_path, records) == 1
+
+
+def test_the_counts_file_lists_each_rule_s_carriers(tmp_path):
+    """FR-058f, contracts/cli.md: per rule, the script files of its tags'
+    condition entities' cards, each with its record count and the lines its
+    tags act through, each with its own."""
+    records = tmp_path / "records"
+    records.mkdir()
+    shutil.copyfile(FIXTURES / "gen2-records.jsonl.gz", records / "gen2.jsonl.gz")
+    assert _run(tmp_path, records) == 0
+    document = json.loads((tmp_path / "counts.json").read_text(encoding="utf-8"))
+    carriers = document["carriers"]
+    assert set(carriers) <= set(document["rules"]) and carriers["704.5f"]
+    for found in carriers.values():
+        for carrier in found:
+            assert set(carrier) == {"script_file", "records", "lines"}
+            assert carrier["script_file"].split("/")[0] in {"cardsfolder", "tokenscripts",
+                                                            "variant-scripts"}
+            for line in carrier["lines"]:
+                assert set(line) == {"key", "records"}
+                assert {"face", "trait_kind", "index_within_kind"} <= set(line["key"])
