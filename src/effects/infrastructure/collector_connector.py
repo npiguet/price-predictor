@@ -88,14 +88,16 @@ class CollectorSupervisor:
 
     def play_round(
         self, decks: list[list[str]], decks_file: Path, *, label: str, matches: int,
+        rules: list[str | None] | None = None,
     ) -> None:
         """Write ``decks`` to ``decks_file``, the file the workers read, and
-        play ``matches`` matches from it, then stop.
+        play ``matches`` matches from it, then stop. ``rules`` gives each
+        steered deck its rule column (``deck_file``).
 
         No deck raises before any worker spawns: every worker is decks-only,
         so no worker could play at all.
         """
-        deck_count = write_deck_file(decks, decks_file, label=label)
+        deck_count = write_deck_file(decks, decks_file, label=label, rules=rules)
         if deck_count == 0:
             raise ValueError(
                 f"{decks_file}: a decks-only round cannot run without decks "

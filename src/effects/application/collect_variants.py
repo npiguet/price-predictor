@@ -4,14 +4,23 @@ Real cards cluster (most damage spells deal 2, 3 or 4), so "deal 3 damage" can
 be memorized as a phrase rather than read as a number. A variant is a real
 Forge script with one parameter changed, so its records differ from the
 source card's only in the way the parameter differs.
+
+Two rounds (root spec § 8.15). The untargeted round makes one variant of every
+eligible source script and plays rounds of decks, each variant weighted by the
+games it lacks, until every variant has ``--variant-games`` games or has
+retired. The steered round (``steered_variants.py``) aims variants at the
+(rule, polarity) pairs a ``rule-counts`` file shows short. A variant's games
+are counted from this run's own shards only.
 """
 
 from __future__ import annotations
 
 import logging
 import random
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from effects.application.collector_common import (
     RANDOM_SEED,
@@ -19,9 +28,10 @@ from effects.application.collector_common import (
     build_coverage_decks,
     collector_supervisor,
 )
+from effects.application.parallel_map import run_parallel
 from effects.domain import default_paths
 from effects.domain.card_names import fold_card_name
-from effects.domain.coverage import DeckCandidate
+from effects.domain.coverage import DeckCandidate, is_complete, retire_stalled
 from effects.domain.rule_outcomes import (
     CARD_TYPES,
     CONDITIONS,
@@ -39,15 +49,32 @@ from effects.domain.script_variants import (
     variant_name,
 )
 from effects.domain.split import HeldOutCards
+from effects.domain.variant_rounds import (
+    DEFAULT_NO_PROGRESS_ROUNDS,
+    DEFAULT_STEER_FLOOR,
+    DEFAULT_STEER_ITERATIONS,
+    DEFAULT_STEER_MIN_GAIN,
+    DEFAULT_STEER_VARIANTS,
+    DEFAULT_VARIANT_GAMES,
+    VariantGames,
+    VariantRound,
+    VariantShardGames,
+    credit_games,
+    missing_games,
+    variant_script_file,
+)
 from effects.infrastructure.one_shot_workers import write_variant_sidecars
 from effects.infrastructure.variant_staging import unstage_variants
 from price_predictor.infrastructure.card_filenames import sanitize_card_name
 from sealed.infrastructure.effect_collection_flags import directed_fork_error
 
+if TYPE_CHECKING:
+    from effects.infrastructure.collector_connector import CollectorSupervisor
+
 logger = logging.getLogger(__name__)
 
-#: Cap on variant records as a fraction of the real records already present.
-DEFAULT_VARIANT_VOLUME = 0.2
+#: Shards between progress lines while a round's shards are counted.
+PROGRESS_EVERY_SHARDS = 50
 
 
 @dataclass
@@ -64,32 +91,56 @@ class CollectVariantsConfig(CollectorConfig):
             f"(default: {default_paths.DEFAULT_VARIANT_SCRIPTS})"
         )},
     )
-    variant_volume: float = field(default=DEFAULT_VARIANT_VOLUME, metadata={
-        "help": (
-            "Cap on generated variant scripts, as a fraction of the real records "
-            "already present, so it scales with the corpus (default: %(default)s)"
+    round: VariantRound = field(default=VariantRound.UNTARGETED, metadata={
+        "type": VariantRound, "help": (
+            "untargeted: one variant of every eligible script; steered: variants "
+            "aimed at the short (rule, polarity) pairs of --rule-counts "
+            "(default: %(default)s)"
         ),
     })
-    #: Unset, the destination, which caps a run writing to its own directory
-    #: at zero.
-    corpus_records: Path | None = field(default=None, metadata={"help": (
-        "The real records --variant-volume is measured against (default: "
-        "--effect-records); name the corpus when variants go to their own "
-        "directory, or the cap allows nothing"
+    variant_games: int = field(default=DEFAULT_VARIANT_GAMES, metadata={
+        "help": "Games each variant is played to (default: %(default)s)",
+    })
+    no_progress_rounds: int = field(default=DEFAULT_NO_PROGRESS_ROUNDS, metadata={
+        "help": (
+            "Rounds without a new game before a variant retires "
+            "(default: %(default)s)"
+        ),
+    })
+    rule_counts: Path | None = field(default=None, metadata={"help": (
+        "Steered only, required there: rule-counts over the corpus being "
+        "collected, gen-3"
     )})
+    steer_floor: int = field(default=DEFAULT_STEER_FLOOR, metadata={
+        "help": "Records below which a (rule, polarity) is short (default: %(default)s)",
+    })
+    steer_variants: int = field(default=DEFAULT_STEER_VARIANTS, metadata={
+        "help": (
+            "Variants per iteration, split over the short pairs by shortfall "
+            "(default: %(default)s)"
+        ),
+    })
+    steer_min_gain: int = field(default=DEFAULT_STEER_MIN_GAIN, metadata={
+        "help": (
+            "Records of its short polarity an iteration must add to keep a rule "
+            "(default: %(default)s)"
+        ),
+    })
+    steer_iterations: int = field(default=DEFAULT_STEER_ITERATIONS, metadata={
+        "help": "Iterations of the steered round at most (default: %(default)s)",
+    })
+    #: The catalogue the steered round reads its short pairs, scenario cards
+    #: and script edits from; no flag, as on build-corpus.
+    rules_dir: Path = Path("rules")
     #: The base field, with the help a variant round needs: it seeds the
     #: perturbation as well as the decks.
     seed: int = field(default=RANDOM_SEED, metadata={
         "help": (
             "Seeds the perturbation and the deck build; a repeat run with the "
-            "same seed collects nothing new, so change it to top a corpus up "
+            "same seed perturbs alike and reuses the variants it wrote "
             "(default: %(default)s)"
         ),
     })
-
-    def volume_source(self) -> Path:
-        """The directory the volume cap counts records in."""
-        return self.corpus_records or self.effect_records
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,26 +159,39 @@ class GeneratedVariant:
     perturbation: str
     mana_cost: str | None = None
     fresh: bool = True
+    #: The rule a steered variant is aimed at; None in the untargeted round.
+    rule: str | None = None
 
     def deck_candidate(self) -> DeckCandidate:
         """The deck candidate ``compute_basic_lands`` reads for this variant."""
         return DeckCandidate(self.name, self.mana_cost)
 
+    def games_unit(self) -> VariantGames:
+        """The unit its games are counted in, by its file in the variant tree."""
+        return VariantGames(
+            name=self.name, script_file=variant_script_file(self.path.name), rule=self.rule,
+        )
 
-def variant_budget(existing_records: int, volume: float) -> int:
-    """How many variant records this run may add (FR-058)."""
-    return int(existing_records * volume)
 
-
-def volume_ceiling(source_scripts: int, volume: float) -> int:
-    """Records past which ``--variant-volume`` cannot bind.
-
-    The budget can never exceed the source scripts, so counting the corpus
-    past this point would gunzip it all for a number that cannot matter.
-    """
-    if volume <= 0:
-        return 0
-    return int(source_scripts / volume) + 1
+def write_variant(
+    output_path: Path, card_name: str, lines: list[str], description: str,
+    *, rule: str | None = None,
+) -> GeneratedVariant:
+    """File one changed script as a variant: named by its digest (FR-058b),
+    written unless a file of that name exists, which is then reused as it
+    stands, because an earlier run's records join it by key."""
+    name = variant_name(card_name, variant_digest(lines))
+    # The sanitized card name is the path a provenance key resolves to.
+    path = Path(output_path) / f"{sanitize_card_name(name)}.txt"
+    script = renamed_script(lines, name)
+    fresh = not path.exists()
+    if fresh:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("\n".join(script) + "\n", encoding="utf-8")
+    return GeneratedVariant(
+        name, card_name, path, description, mana_cost=script_mana_cost(script),
+        fresh=fresh, rule=rule,
+    )
 
 
 #: Written by VariantSidecarMain: every variant name Forge's card database
@@ -244,11 +308,12 @@ def generate_variants(
     output_path: Path,
     *,
     held_out: frozenset[str],
-    limit: int,
     seed: int = RANDOM_SEED,
     sources: list[Path] | None = None,
 ) -> list[GeneratedVariant]:
-    """Write perturbed scripts into the variant tree.
+    """Write one perturbed script of every eligible source script into the
+    variant tree (FR-058a): single-faced, not held out, with a parameter the
+    perturbations can change.
 
     No variant is generated from a held-out card (FR-057): its changed text
     would not be held out, and generation is the only point where the rule
@@ -272,8 +337,6 @@ def generate_variants(
     generated: list[GeneratedVariant] = []
     names: set[str] = set()
     for source in sources:
-        if len(generated) >= limit:
-            break
         try:
             lines = source.read_text(encoding="utf-8").splitlines()
         except OSError:
@@ -287,20 +350,11 @@ def generate_variants(
         if result is None:
             continue
         perturbed, description = result
-        name = variant_name(card_name, variant_digest(perturbed))
-        if name in names:
+        if variant_name(card_name, variant_digest(perturbed)) in names:
             continue
-        names.add(name)
-        # The sanitized card name is the path a provenance key resolves to.
-        path = output_path / f"{sanitize_card_name(name)}.txt"
-        script = renamed_script(perturbed, name)
-        fresh = not path.exists()
-        if fresh:
-            path.write_text("\n".join(script) + "\n", encoding="utf-8")
-        generated.append(GeneratedVariant(
-            name, card_name, path, description, mana_cost=script_mana_cost(script),
-            fresh=fresh,
-        ))
+        variant = write_variant(output_path, card_name, perturbed, description)
+        names.add(variant.name)
+        generated.append(variant)
     return generated
 
 
@@ -332,16 +386,35 @@ def _collect(config: CollectVariantsConfig) -> int:
         )
         raise CollectorAbort
     sources = source_scripts(config.forge_cards_path)
-    budget = _size_budget(config, len(sources))
-    variants = _generate(config, budget, sources)
+    if config.round is VariantRound.STEERED:
+        from effects.application.steered_variants import collect_steered
+
+        return collect_steered(config, sources)
+    variants = _generate(config, sources)
     try:
-        _write_sidecars(config.variant_scripts)
-        variants = _keep_unheld(config, _keep_loadable(variants, config.variant_scripts))
-        return _play_and_check_growth(config, variants, budget)
+        variants = prepare_variants(config, variants)
+        units = {variant.name: variant.games_unit() for variant in variants}
+        candidates = {variant.name: variant.deck_candidate() for variant in variants}
+        with collector_supervisor(
+            workers=config.workers, effect_records=config.effect_records,
+            caps=config.caps, variant_scripts=config.variant_scripts,
+        ) as supervisor:
+            counter = VariantGameCounter(config.effect_records, supervisor.run_id, config.workers)
+            play_variant_rounds(units, candidates, supervisor, counter, config)
+        return finish(config, units, counter, interrupted=supervisor.interrupted)
     finally:
         # The sidecar pass and every worker staged the tree into Forge's
         # custom-cards directory, which every later Forge startup reads.
         unstage_variants()
+
+
+def prepare_variants(
+    config: CollectVariantsConfig, variants: list[GeneratedVariant],
+) -> list[GeneratedVariant]:
+    """Every variant's sidecar written before any deck holds it, then the ones
+    Forge loaded and that print no held-out text."""
+    _write_sidecars(config.variant_scripts)
+    return _keep_unheld(config, _keep_loadable(variants, config.variant_scripts))
 
 
 def _check_directed_forks(config: CollectVariantsConfig) -> None:
@@ -355,35 +428,13 @@ def _check_directed_forks(config: CollectVariantsConfig) -> None:
         raise CollectorAbort
 
 
-def _size_budget(config: CollectVariantsConfig, scripts: int) -> int:
-    """How many variant scripts this run may generate; aborts, saying why,
-    when none."""
-    from effects.infrastructure.shard_io import count_records
-
-    source = config.volume_source()
-    existing = count_records(
-        source,
-        ceiling=volume_ceiling(scripts, config.variant_volume),
-    )
-    budget = variant_budget(existing, config.variant_volume)
-    if budget <= 0:
-        logger.error(
-            "%s holds %d records, so --variant-volume %.2f allows %d variant "
-            "scripts. Collect real records first, or point --corpus-records at "
-            "the corpus when variants are written to a directory of their own.",
-            source, existing, config.variant_volume, budget,
-        )
-        raise CollectorAbort
-    return budget
-
-
 def _generate(
-    config: CollectVariantsConfig, budget: int, sources: list[Path],
+    config: CollectVariantsConfig, sources: list[Path],
 ) -> list[GeneratedVariant]:
     held_out = config.deck_holdout.exclusions()
     variants = generate_variants(
         config.forge_cards_path, config.variant_scripts,
-        held_out=held_out, limit=budget, seed=config.seed, sources=sources,
+        held_out=held_out, seed=config.seed, sources=sources,
     )
     logger.info(
         "Generated %d variant scripts into %s (%d cards held out with their "
@@ -495,57 +546,167 @@ def _keep_unheld(
     return kept
 
 
-def _play_and_check_growth(
-    config: CollectVariantsConfig, variants: list[GeneratedVariant], budget: int,
-) -> int:
-    """Play one round of variant decks and fail it when it collected nothing."""
-    from effects.infrastructure.shard_io import count_records, count_shard_records, iter_shards
+def count_variant_shard(shard: Path) -> VariantShardGames:
+    """One shard's variant games: every record read once."""
+    from effects.infrastructure.shard_io import read_shard
 
-    # Equal weights: a fresh variant has no records to balance against.
-    decks = build_coverage_decks(
-        {variant.name: 1.0 for variant in variants},
-        {variant.name: variant.deck_candidate() for variant in variants},
-        config.decks_per_round,
-        rng=random.Random(config.seed),
-    )
-    with collector_supervisor(
-        workers=config.workers, effect_records=config.effect_records,
-        caps=config.caps, variant_scripts=config.variant_scripts,
-    ) as supervisor:
-        # Listed rather than counted: a shard is never reopened, so what the
-        # round wrote is exactly the shards it added.
-        before = set(iter_shards(config.effect_records))
-        # The run's own decks file: every worker reloads it at its start, so
-        # two runs on one records directory would play each other's decks.
-        decks_file = config.effect_records / f"variant-decks.{supervisor.run_id}.txt"
-        supervisor.play_round(
-            decks, decks_file, label="variant", matches=config.decks_per_round,
+    found = VariantShardGames()
+    for record in read_shard(shard):
+        found.add(record)
+    return found
+
+
+class VariantGameCounter:
+    """Each variant's games from this run's own shards, each read once.
+
+    A shard is named ``{run_id}.{worker}-{lifetime}``, so another run writing
+    to the same directory never counts here; and a shard is final once its
+    round's workers are stopped, so no later round reopens one.
+    """
+
+    def __init__(self, records_dir: Path, run_id: str, workers: int | None) -> None:
+        self._records_dir = Path(records_dir)
+        self._prefix = f"{run_id}."
+        self._workers = workers
+        self._counted: set[Path] = set()
+        #: Every record this run's shards hold, over every round so far.
+        self.records = 0
+
+    def fresh_shards(self) -> list[Path]:
+        """This run's shards not yet counted."""
+        from effects.infrastructure.shard_io import iter_shards
+
+        return [
+            shard for shard in iter_shards(self._records_dir)
+            if shard.name.startswith(self._prefix) and shard not in self._counted
+        ]
+
+    def update(self, units: Mapping[str, VariantGames]) -> set[str]:
+        """Credit the new shards' games to ``units``; the names of the units
+        their snapshots showed."""
+        fresh = self.fresh_shards()
+        found = VariantShardGames()
+        for part in run_parallel(
+            fresh, count_variant_shard, workers=self._workers, label="Counted",
+            progress_every=PROGRESS_EVERY_SHARDS,
+        ):
+            found.merge(part)
+        self._counted.update(fresh)
+        self.records += found.records
+        return credit_games(units, found)
+
+
+def decks_of(
+    weights: dict[str, float], candidates: Mapping[str, DeckCandidate], count: int,
+    rng: random.Random, units: Mapping[str, VariantGames], *, by_rule: bool,
+) -> tuple[list[list[str]], list[str | None] | None]:
+    """A round's decks, and in the steered round the rule each deck is aimed
+    at: a steered deck holds one rule's variants (FR-058d), decks dealt to the
+    rules by the games their variants lack."""
+    if not by_rule:
+        return build_coverage_decks(weights, candidates, count, rng=rng), None
+    per_rule: dict[str, dict[str, float]] = {}
+    for name, weight in weights.items():
+        per_rule.setdefault(units[name].rule or "", {})[name] = weight
+    rules = sorted(per_rule)
+    drawn = rng.choices(rules, weights=[sum(per_rule[r].values()) for r in rules], k=count)
+    decks: list[list[str]] = []
+    aimed: list[str | None] = []
+    for rule in drawn:
+        deck = build_coverage_decks(per_rule[rule], candidates, 1, rng=rng)
+        if deck:
+            decks.append(deck[0])
+            aimed.append(rule)
+    return decks, aimed
+
+
+def play_variant_rounds(
+    units: dict[str, VariantGames],
+    candidates: Mapping[str, DeckCandidate],
+    supervisor: CollectorSupervisor,
+    counter: VariantGameCounter,
+    config: CollectVariantsConfig,
+    *,
+    by_rule: bool = False,
+    rng: random.Random | None = None,
+) -> bool:
+    """Play rounds until every variant has ``--variant-games`` games or has
+    retired (FR-058a); True when Ctrl-C ended them.
+
+    Each round plays ``--decks-per-round`` matches from decks weighted by the
+    games each variant lacks. A variant a round's games showed and that gained
+    no game counts a stalled round, and retires after ``--no-progress-rounds``
+    of them in a row; one written into decks no game showed retires after
+    ``UNSEEN_RETIRE_FACTOR`` times as many.
+    """
+    decks_file = config.effect_records / f"variant-decks.{supervisor.run_id}.txt"
+    rng = rng if rng is not None else random.Random(config.seed)
+    target = config.variant_games
+    round_number = 0
+    while not is_complete(units, target):
+        round_number += 1
+        weights = missing_games(units, target)
+        decks, rules = decks_of(
+            weights, candidates, config.decks_per_round, rng, units, by_rule=by_rule,
         )
+        if not decks:
+            logger.error("No unfinished variant has a deck candidate; nothing to deck.")
+            break
+        previous = {name: unit.progress for name, unit in units.items()}
+        written = {name for deck in decks for name in deck} & set(units)
+        supervisor.play_round(
+            decks, decks_file, label="variant", matches=config.decks_per_round, rules=rules,
+        )
+        shown = counter.update(units)
+        retired = retire_stalled(
+            units, previous, no_progress_rounds=config.no_progress_rounds,
+            decked=written & shown, written=written,
+        )
+        logger.info("%s", round_line(round_number, units, target, len(retired)))
+        if supervisor.interrupted:
+            logger.warning(
+                "Interrupted after round %d; stopping instead of starting another",
+                round_number,
+            )
+            return True
+    return False
 
-    # Counted rather than assumed: scripts that never reach Forge's card
-    # database make every deck basics, and the round otherwise succeeds
-    # having collected nothing.
-    collected = sum(
-        count_shard_records(shard)
-        for shard in iter_shards(config.effect_records) if shard not in before
+
+def round_line(round_number: int, units: Mapping[str, VariantGames], target: int,
+               retired: int) -> str:
+    done = sum(1 for unit in units.values() if unit.satisfied(target))
+    remaining = sum(1 for unit in units.values() if not unit.done(target))
+    return (
+        f"variant round {round_number}: {done} with {target} games, "
+        f"{remaining} remaining, {retired} retired this round"
     )
-    if supervisor.interrupted:
+
+
+def finish(
+    config: CollectVariantsConfig, units: Mapping[str, VariantGames],
+    counter: VariantGameCounter, *, interrupted: bool,
+) -> int:
+    """Report what the run's rounds collected; 130 when Ctrl-C ended them, 1
+    when they wrote no record at all."""
+    played = sum(1 for unit in units.values() if unit.progress)
+    retired = sum(1 for unit in units.values() if unit.retired)
+    if interrupted:
         logger.warning(
-            "Interrupted after %d new effect records; the variant round did "
-            "not finish", collected,
+            "Interrupted after %d new effect records; the variant round did not finish",
+            counter.records,
         )
         return 130
-    if collected <= 0:
+    if counter.records <= 0:
         logger.error(
             "The variant round played its matches and added no new effect "
-            "records at all (%s still holds %d). The staged scripts most "
-            "likely never reached Forge's card database under the names %s "
-            "spells, so every deck materialized as basics only.",
-            config.effect_records, count_records(config.effect_records), decks_file,
+            "records at all. The staged scripts most likely never reached "
+            "Forge's card database under the names the decks file spells, so "
+            "every deck materialized as basics only.",
         )
         return 1
     logger.info(
-        "Collected %d new effect records from %d variant scripts "
-        "(budget %d)", collected, len(variants), budget,
+        "Collected %d new effect records; %d of %d variants played in at least "
+        "one game, %d retired short of %d games",
+        counter.records, played, len(units), retired, config.variant_games,
     )
     return 0

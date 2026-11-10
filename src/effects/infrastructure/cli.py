@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import functools
 import importlib
+import json
 import logging
 import sys
 import typing
@@ -430,7 +431,9 @@ def _collect_variants_parser(subparsers) -> None:
         help_text=f"Destination shard directory (default: {DEFAULT_RECORDS_DIR})",
     )
     add_config_flags(parser, CollectVariantsConfig, only=(
-        "forge_cards_path", "variant_scripts", "corpus_records", "variant_volume", "seed",
+        "forge_cards_path", "variant_scripts", "round", "variant_games",
+        "no_progress_rounds", "rule_counts", "steer_floor", "steer_variants",
+        "steer_min_gain", "steer_iterations", "seed",
     ))
     _add_holdout_sources(parser, excluded="held-out cards, and their variants,")
     # A variant printing a held-out text is dropped under this rule, so it has
@@ -515,6 +518,36 @@ def holdout_source_error(args: argparse.Namespace) -> str | None:
     )
 
 
+def steered_round_error(args: argparse.Namespace) -> str | None:
+    """Why a steered variant round cannot start, or None (FR-058g).
+
+    It aims at the pairs the counts of the corpus being collected show short,
+    so it needs ``--rule-counts``, written by ``rule-counts`` over gen-3 records.
+    """
+    from effects.domain.variant_rounds import VariantRound
+
+    if getattr(args, "round", None) is not VariantRound.STEERED:
+        return None
+    if args.rule_counts is None:
+        return "--round steered needs --rule-counts, the corpus's own gen-3 counts"
+    try:
+        document = json.loads(Path(args.rule_counts).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return f"--rule-counts {args.rule_counts}: {exc}"
+    generation = document.get("generation")
+    if generation is None:
+        return (
+            f"--rule-counts {args.rule_counts} names no generation; rerun "
+            "rule-counts over the corpus being collected"
+        )
+    if generation != "gen-3":
+        return (
+            f"--rule-counts {args.rule_counts} counts {generation} records; the "
+            "steered round needs the gen-3 counts of the corpus being collected"
+        )
+    return None
+
+
 def _check_workers_can_start(command: str, config: Any) -> None:
     """The connector JAR, ``java`` and the list files the run reads, checked
     before any worker starts (python R2)."""
@@ -545,7 +578,8 @@ def _collector_runner(command: str, config_type: type, module: str) -> Callable:
     })
     def run(args: argparse.Namespace) -> int:
         error = (
-            random_seat_error(args) or candidate_rate_error(args) or holdout_source_error(args)
+            random_seat_error(args) or candidate_rate_error(args)
+            or holdout_source_error(args) or steered_round_error(args)
         )
         if error is not None:
             raise CollectorRefusal(f"{command}: {error}")

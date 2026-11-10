@@ -123,3 +123,13 @@ def test_the_counts_file_lists_each_rule_s_carriers(tmp_path):
             for line in carrier["lines"]:
                 assert set(line) == {"key", "records"}
                 assert {"face", "trait_kind", "index_within_kind"} <= set(line["key"])
+
+
+def test_the_counts_file_names_its_records_generation(tmp_path):
+    """The steered variant round refuses counts of gen-2 records (FR-058g)."""
+    records = tmp_path / "records"
+    records.mkdir()
+    shutil.copyfile(FIXTURES / "gen2-records.jsonl.gz", records / "gen2.jsonl.gz")
+    assert _run(tmp_path, records) == 0
+    document = json.loads((tmp_path / "counts.json").read_text(encoding="utf-8"))
+    assert document["generation"] == "gen-2"

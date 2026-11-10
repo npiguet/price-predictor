@@ -36,3 +36,18 @@ class TestDeckFile:
 
         assert write_deck_file([], path, label="coverage") == 0
         assert path.read_text(encoding="utf-8") == ""
+
+    def test_a_steered_deck_carries_its_rule_in_a_fourth_column(self, tmp_path):
+        """FR-058d: the worker stamps each game's records with its two decks' rules."""
+        path = tmp_path / "decks.txt"
+
+        write_deck_file([["a", "b"], ["c"]], path, label="variant", rules=["702.2b", None])
+
+        assert path.read_text(encoding="utf-8").splitlines() == [
+            "variant;COVERAGE;a|b;702.2b", "variant;COVERAGE;c"]
+
+    def test_one_rule_per_deck_or_none(self, tmp_path):
+        import pytest
+
+        with pytest.raises(ValueError, match="rules for"):
+            write_deck_file([["a"]], tmp_path / "d.txt", label="variant", rules=[])

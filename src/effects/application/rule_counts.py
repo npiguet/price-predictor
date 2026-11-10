@@ -44,7 +44,7 @@ from effects.domain.records import EffectRecord, acting_keys
 from effects.domain.rule_catalogue import NoDetector, Polarity
 from effects.domain.rule_detectors import DetectorIndex, RuleSource, RuleTag, tag_record
 from effects.domain.shard_generation import ShardGeneration
-from effects.domain.tally_merge import merge_into
+from effects.domain.tally_merge import NOT_MERGED, merge_into
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +66,16 @@ class RuleCounts:
     #: ``(rule, script file, key) -> records``: a carrier's own count under
     #: key None, each line its tags act through under the line's key.
     carriers: Counter = field(default_factory=Counter)
+    #: The records' generation (``gen-2``, ``gen-3``), which the steered
+    #: variant round checks (FR-058g); set once over the whole set.
+    generation: str = field(default="", metadata=NOT_MERGED)
 
     def to_json(self, none: dict[str, str]) -> dict:
         by_rule: dict[str, dict[str, dict[str, int]]] = {}
         for (rule, polarity, source), n in sorted(self.counts.items()):
             by_rule.setdefault(rule, {}).setdefault(polarity, {})[source] = n
         return {
+            "generation": self.generation,
             "records": self.records,
             "rules": by_rule,
             "not_countable": sorted(self.not_countable - set(by_rule)),
@@ -108,7 +112,7 @@ class RuleCounts:
 
 
 @dataclass(frozen=True)
-class _CountContext:
+class CountContext:
     """One worker's read side: the detector index and its sidecar cache, built once."""
 
     rules_dir: Path
@@ -242,10 +246,10 @@ def count(config: RuleCountsConfig) -> tuple[RuleCounts, dict[str, str]]:
     generation = require_generation(shards, *COUNTED_GENERATIONS)
     logger.info("Counting %d %s shard(s) under %s", len(shards), generation,
                 config.records_dir)
-    total = RuleCounts()
+    total = RuleCounts(generation=str(generation))
     for found in run_parallel(
         shards, count_shard, workers=config.workers, label="Counted",
-        progress_every=50, context=_CountContext(config.rules_dir, config.sidecar_roots),
+        progress_every=50, context=CountContext(config.rules_dir, config.sidecar_roots),
     ):
         merge_into(total, found)
     return total, none_rules(load_scenarios(config.rules_dir))

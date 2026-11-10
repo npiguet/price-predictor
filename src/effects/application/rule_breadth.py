@@ -1,6 +1,6 @@
 """The breadth check's pass over a records set (T036): pool and tagged counts per scenario.
 
-Reads shards the way ``rule-counts`` does (``rule_counts._CountContext``: one
+Reads shards the way ``rule-counts`` does (``rule_counts.CountContext``: one
 detector index and sidecar cache per worker), and counts, per declared
 scenario, the ``fires`` records its detector finds and those its family finds
 with the rule-specific parameters dropped (``domain.rule_breadth``). Run by
@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.application.parallel_map import run_parallel
-from effects.application.rule_counts import COUNTED_GENERATIONS, _CountContext
+from effects.application.rule_counts import COUNTED_GENERATIONS, CountContext
 from effects.domain.rule_breadth import BreadthRow, breadth_counts, breadth_rows
 from effects.domain.rule_detectors import DetectorIndex
 from effects.domain.tally_merge import merge_into
@@ -58,7 +58,7 @@ def breadth(records_dir: Path, rules_dir: Path, sidecar_roots: dict,
     total = BreadthTally()
     for found in run_parallel(
         shards, breadth_shard, workers=workers, label="Breadth", progress_every=20,
-        context=_CountContext(rules_dir, sidecar_roots),
+        context=CountContext(rules_dir, sidecar_roots),
     ):
         merge_into(total, found)
     return breadth_rows(DetectorIndex.of(load_scenarios(rules_dir)), total.counts), total.records

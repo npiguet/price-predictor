@@ -29,8 +29,6 @@ from effects.application.collect_variants import (
     loadable_variants,
     perturb_script,
     swap_protection_quality,
-    variant_budget,
-    volume_ceiling,
 )
 from effects.domain.records import EffectRecord
 from effects.domain.rule_outcomes import ProtectionQuality, QualityKind
@@ -72,7 +70,7 @@ class TestVariantGeneration:
         source.mkdir()
         self._write_source(source, "bolt", "Lightning Bolt", _BOLT_SCRIPT)
         variants = generate_variants(
-            source, tmp_path / "variants", held_out=frozenset(), limit=5,
+            source, tmp_path / "variants", held_out=frozenset(),
         )
         assert variants
         assert variants[0].source_card == "Lightning Bolt"
@@ -90,7 +88,7 @@ class TestVariantGeneration:
         self._write_source(source, "bolt", "Lightning Bolt", _BOLT_SCRIPT)
         variants = generate_variants(
             source, tmp_path / "variants",
-            held_out=frozenset({"Lightning Bolt"}), limit=5,
+            held_out=frozenset({"Lightning Bolt"}),
         )
         assert variants == []
 
@@ -100,7 +98,7 @@ class TestVariantGeneration:
         source.mkdir()
         self._write_source(source, "bolt", "Lightning Bolt", _BOLT_SCRIPT)
         output = tmp_path / "variants"
-        generate_variants(source, output, held_out=frozenset(), limit=5)
+        generate_variants(source, output, held_out=frozenset())
         # The variant tree holds Forge source scripts. The sidecar beside them
         # is written by the Java parser, not here.
         for path in output.glob("*.txt"):
@@ -120,7 +118,7 @@ class TestVariantGeneration:
         source.mkdir()
         self._write_source(source, "bolt", "Lightning Bolt", _BOLT_SCRIPT)
         variants = generate_variants(
-            source, tmp_path / "variants", held_out=frozenset(), limit=1,
+            source, tmp_path / "variants", held_out=frozenset(),
         )
         assert variants
         assert variants[0].path.name == (
@@ -150,7 +148,7 @@ class TestVariantGeneration:
         source.mkdir()
         self._write_source(source, "bolt", "Lightning Bolt", _BOLT_SCRIPT)
         (variant,) = generate_variants(
-            source, tmp_path / "variants", held_out=frozenset(), limit=1,
+            source, tmp_path / "variants", held_out=frozenset(),
         )
         written = variant.path.read_text(encoding="utf-8").splitlines()
         perturbed = [
@@ -168,10 +166,10 @@ class TestVariantGeneration:
         for index in range(8):
             self._write_source(source, f"bolt{index}", f"Bolt {index}", _BOLT_SCRIPT)
         output = tmp_path / "variants"
-        first = generate_variants(source, output, held_out=frozenset(), limit=8, seed=1)
+        first = generate_variants(source, output, held_out=frozenset(), seed=1)
         before = {v.path: v.path.read_bytes() for v in first}
 
-        second = generate_variants(source, output, held_out=frozenset(), limit=8, seed=2)
+        second = generate_variants(source, output, held_out=frozenset(), seed=2)
 
         assert {path: path.read_bytes() for path in before} == before
         assert {v.name for v in second} != {v.name for v in first}, (
@@ -186,15 +184,16 @@ class TestVariantGeneration:
         source.mkdir()
         self._write_source(source, "bolt", "Lightning Bolt", _BOLT_SCRIPT)
         output = tmp_path / "variants"
-        (fresh,) = generate_variants(source, output, held_out=frozenset(), limit=1)
+        (fresh,) = generate_variants(source, output, held_out=frozenset())
         fresh.path.write_text("kept as it was\n", encoding="utf-8")
 
-        (again,) = generate_variants(source, output, held_out=frozenset(), limit=1)
+        (again,) = generate_variants(source, output, held_out=frozenset())
 
         assert again.name == fresh.name and fresh.fresh and not again.fresh
         assert again.path.read_text(encoding="utf-8") == "kept as it was\n"
 
-    def test_the_limit_is_respected(self, tmp_path):
+    def test_every_eligible_script_gets_one_variant(self, tmp_path):
+        """FR-058a: the untargeted round varies every eligible script once."""
         source = tmp_path / "cards"
         source.mkdir()
         for index in range(10):
@@ -202,9 +201,10 @@ class TestVariantGeneration:
                 source, f"bolt{index}", f"Bolt {index}", _BOLT_SCRIPT,
             )
         variants = generate_variants(
-            source, tmp_path / "variants", held_out=frozenset(), limit=3,
+            source, tmp_path / "variants", held_out=frozenset(),
         )
-        assert len(variants) == 3
+        assert sorted(v.source_card for v in variants) == sorted(
+            f"Bolt {index}" for index in range(10))
 
     def test_a_variant_carries_the_cost_its_script_declares(self, tmp_path):
         """Read once, as the script is written, rather than off disk per deck."""
@@ -212,7 +212,7 @@ class TestVariantGeneration:
         source.mkdir()
         self._write_source(source, "bolt", "Lightning Bolt", _BOLT_SCRIPT)
         (variant,) = generate_variants(
-            source, tmp_path / "variants", held_out=frozenset(), limit=1,
+            source, tmp_path / "variants", held_out=frozenset(),
         )
         assert variant.mana_cost == "{R}"
 
@@ -224,10 +224,10 @@ class TestVariantGeneration:
                 source, f"bolt{index}", f"Bolt {index}", _BOLT_SCRIPT,
             )
         first = generate_variants(
-            source, tmp_path / "a", held_out=frozenset(), limit=3, seed=5,
+            source, tmp_path / "a", held_out=frozenset(), seed=5,
         )
         second = generate_variants(
-            source, tmp_path / "b", held_out=frozenset(), limit=3, seed=5,
+            source, tmp_path / "b", held_out=frozenset(), seed=5,
         )
         assert [v.name for v in first] == [v.name for v in second]
 
@@ -239,7 +239,7 @@ class TestVariantGeneration:
             encoding="utf-8",
         )
         assert generate_variants(
-            source, tmp_path / "variants", held_out=frozenset(), limit=5,
+            source, tmp_path / "variants", held_out=frozenset(),
         ) == []
 
     def test_perturb_script_finds_the_first_perturbable_line(self):
@@ -310,7 +310,7 @@ class TestProtectionQualitySwap:
         source.mkdir()
         (source / "white_knight.txt").write_text("\n".join(self._KNIGHT) + "\n", encoding="utf-8")
         [variant] = generate_variants(
-            source, tmp_path / "variants", held_out=frozenset(), limit=5,
+            source, tmp_path / "variants", held_out=frozenset(),
         )
         written = variant.path.read_text(encoding="utf-8").splitlines()
         assert written[0] == f"Name:{variant.name}"
@@ -318,69 +318,10 @@ class TestProtectionQualitySwap:
         assert written[-1].removeprefix("K:") in PROTECTION_QUALITY_WHITELIST
 
 
-class TestVolumeCap:
-    def test_the_budget_is_a_fraction_of_the_real_corpus(self):
-        """Expressed against the corpus so it scales with it, rather than
-        needing a new absolute every time the corpus grows."""
-        assert variant_budget(1000, 0.2) == 200
-        assert variant_budget(0, 0.2) == 0
-
-    def test_a_larger_volume_allows_more(self):
-        assert variant_budget(1000, 0.5) > variant_budget(1000, 0.2)
-
-    def test_the_volume_is_measured_against_the_corpus_not_the_destination(self):
-        """Writing variants to their own directory must not zero the budget.
-
-        `--variant-volume` scales the cap with the corpus that already exists.
-        When variants are written into that same tree the destination *is* the
-        corpus, but a run that keeps them in `records/variants/` starts with an
-        empty destination — and measuring there caps the run at zero records
-        against a corpus of millions.
-        """
-        config = CollectVariantsConfig(
-            effect_records=Path("output/effects/records/variants"),
-            corpus_records=Path("output/effects/records"),
-        )
-        assert config.volume_source() == Path("output/effects/records")
-
-    def test_the_volume_source_defaults_to_the_destination(self):
-        """Unset, the corpus and the destination are the same directory."""
-        config = CollectVariantsConfig(
-            effect_records=Path("output/effects/records"),
-        )
-        assert config.volume_source() == Path("output/effects/records")
-
-    def test_the_record_count_stops_once_the_cap_cannot_bind(self):
-        """Counting the corpus exactly is minutes of gzip for an inert number.
-
-        The budget caps how many variant *scripts* are generated, and there are
-        only ever as many candidates as source scripts. Past
-        `source_scripts / volume` records the cap cannot bind, so the count
-        stops there rather than gunzipping the rest of the corpus.
-        """
-        assert volume_ceiling(33_700, 0.2) == 168_501
-        assert volume_ceiling(33_700, 0.0) == 0
-
-    def test_a_ceiling_stops_the_count_early(self, tmp_path):
-        from effects.infrastructure.shard_io import count_records, write_shard
-
-        for index in range(4):
-            write_shard(
-                tmp_path / f"run.0-{index}.jsonl.gz",
-                [_record(record_id=f"r.{index}.{n}") for n in range(10)],
-            )
-        assert count_records(tmp_path) == 40
-        assert count_records(tmp_path, ceiling=15) == 15
-
+class TestTheSeed:
     def test_the_seed_is_settable_so_a_second_run_draws_differently(self):
-        """A repeat run is the only way to top up, and it needs a new draw.
-
-        `collect-coverage` re-weights each round by how far a card is from its
-        target, so its rounds make progress whatever the seed. A variant round
-        weights every variant equally and plays once, so with the seed pinned a
-        second invocation regenerates the same perturbations, builds the same
-        decks, and collects nothing.
-        """
+        """A second run under another seed perturbs differently; under the same
+        seed it names and reuses the variants the first wrote."""
         from effects.infrastructure.cli import build_parser
 
         assert CollectVariantsConfig().seed == RANDOM_SEED
@@ -403,7 +344,7 @@ class TestVolumeCap:
             seed: [
                 v.perturbation for v in generate_variants(
                     source, tmp_path / f"out{seed}",
-                    held_out=frozenset(), limit=50, seed=seed,
+                    held_out=frozenset(), seed=seed,
                 )
             ]
             for seed in range(1, 21)
@@ -443,7 +384,7 @@ class TestTheHoldoutNameBoundary:
 
         variants = generate_variants(
             source, tmp_path / "variants",
-            held_out=frozenset({"lightning bolt"}), limit=5,
+            held_out=frozenset({"lightning bolt"}),
         )
 
         assert variants == []
@@ -588,48 +529,59 @@ class TestTheVariantCandidateMatchesAConvertedCard:
         assert variant.deck_candidate().mana_cost is None
 
 
-class TestTheRunReportsWhatItCollected:
-    """``run`` used to return 0 with no evidence that a
-    single variant record had been written.
+_RUN = "run-1"
 
-    It counted the corpus once, before play, purely to size the budget, and
-    never counted it again -- so a round in which every deck materialized as
-    17 basics (the whole-run case if the staged custom cards do not land in
-    Forge's card database under the exact names the decks file spells) exited
-    0 having collected nothing, and nothing said so.
-    """
 
-    def _fixture(self, tmp_path, monkeypatch, supervisor, source_records, added):
-        """A run whose only unknowns are the corpus sizes.
+def _variant_record(script_file: str, game: str, n: int, **overrides) -> EffectRecord:
+    """A resolution acting through ``script_file``'s first spell line."""
+    from effects.domain.provenance import ProvenanceKey
 
-        ``source_records`` is what ``count_records`` reports for the *volume
-        source* the budget is taken from, which can name a different directory
-        from the destination -- that is what ``--corpus-records`` is for -- so
-        the growth check must never subtract it. ``added`` is how many records
-        the round writes, in a shard of its own beside one already in the
-        destination, which must not count as growth either.
-        """
+    return _record(
+        record_id=f"{game}.{n}", game_id=game, run_id=_RUN,
+        ability=(ProvenanceKey(script_file, 0, "spell", 0),), **overrides,
+    )
 
+
+def _round_writes(directory: Path, *rounds: list[EffectRecord], run: str = _RUN):
+    """A stand-in for the workers: the n-th round writes ``rounds[n]`` as a
+    shard of this run's, and a round past the last writes nothing."""
+    from effects.infrastructure.shard_io import write_shard
+
+    played = iter(rounds)
+
+    def write(*_args, **_kwargs) -> None:
+        records = next(played, None)
+        if records:
+            directory.mkdir(parents=True, exist_ok=True)
+            index = len(list(directory.glob(f"{run}.*")))
+            write_shard(directory / f"{run}.0-{index}.jsonl.gz", records)
+
+    return write
+
+
+class TestTheUntargetedRound:
+    """FR-058a: one variant of every eligible script, played in rounds
+    weighted by the games each lacks, until each has ``--variant-games``
+    games or has retired; its games counted from this run's own shards."""
+
+    BOLT = "variant-scripts/bolt_variant_0a1b2c3d.txt"
+    SHOCK = "variant-scripts/shock_variant_99aa00ff.txt"
+
+    def _fixture(self, tmp_path, monkeypatch, supervisor, *rounds, **config):
         import effects.application.collect_variants as collect_variants
-        import effects.infrastructure.shard_io as shard_io
 
-        path = tmp_path / "variant-scripts" / "bolt_variant_0.txt"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            "Name:Bolt Variant 0\nManaCost:R\nTypes:Instant\n", encoding="utf-8",
-        )
-        variant = GeneratedVariant(
-            name="Bolt Variant 0", source_card="Bolt", path=path,
-            perturbation="numeric",
-        )
-        monkeypatch.setattr(
-            shard_io, "count_records", lambda directory, **_: source_records,
-        )
-        monkeypatch.setattr(
-            collect_variants, "generate_variants", lambda *a, **k: [variant],
-        )
-        # As above: the real filter needs a Forge database staged with the
-        # variants. TestOnlyLoadableVariantsAreDecked covers it directly.
+        variants = []
+        for name, card in (("Bolt Variant 0a1b2c3d", "Bolt"), ("Shock Variant 99aa00ff", "Shock")):
+            path = tmp_path / "variant-scripts" / f"{name.lower().replace(' ', '_')}.txt"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"Name:{name}\nManaCost:R\nTypes:Instant\n", encoding="utf-8")
+            variants.append(GeneratedVariant(
+                name=name, source_card=card, path=path, perturbation="numeric",
+                mana_cost="{R}",
+            ))
+        monkeypatch.setattr(collect_variants, "generate_variants", lambda *a, **k: variants)
+        # The real filter needs a Forge database staged with the variants;
+        # TestOnlyLoadableVariantsAreDecked covers it directly.
         monkeypatch.setattr(
             collect_variants, "loadable_variants", lambda generated, _root: generated,
         )
@@ -637,56 +589,138 @@ class TestTheRunReportsWhatItCollected:
             collect_variants, "write_variant_sidecars", MagicMock(return_value=0),
         )
         records = tmp_path / "records"
-        _writes_a_shard(records, 7, name="earlier.0-a.jsonl")()
-        if added:
-            supervisor.play_round.side_effect = _writes_a_shard(records, added)
+        records.mkdir()
+        supervisor.run_id = _RUN
+        supervisor.play_round.side_effect = _round_writes(records, *rounds)
         forge_cards = tmp_path / "forge-cards"
         forge_cards.mkdir()
-        config = CollectVariantsConfig(
-            effect_records=records,
-            forge_cards_path=forge_cards,
-            variant_scripts=tmp_path / "variant-scripts",
+        return collect_variants, CollectVariantsConfig(
+            effect_records=records, forge_cards_path=forge_cards,
+            variant_scripts=tmp_path / "variant-scripts", decks_per_round=4,
+            workers=1, **config,
         )
-        return collect_variants, config, supervisor
+
+    def _games(self, script_file, *games):
+        return [_variant_record(script_file, game, n) for n, game in enumerate(games)]
+
+    def test_rounds_end_once_every_variant_has_its_games(
+        self, tmp_path, monkeypatch, fake_supervisor, caplog,
+    ):
+        import logging
+
+        collect_variants, config = self._fixture(
+            tmp_path, monkeypatch, fake_supervisor,
+            self._games(self.BOLT, "g1", "g2") + self._games(self.SHOCK, "g1"),
+            self._games(self.SHOCK, "g3"),
+        )
+        with caplog.at_level(logging.INFO):
+            assert collect_variants.run(config) == 0
+
+        assert fake_supervisor.play_round.call_count == 2
+        assert "Collected 4 new effect records; 2 of 2 variants played" in caplog.text
+
+    def test_each_round_weights_a_variant_by_the_games_it_lacks(
+        self, tmp_path, monkeypatch, fake_supervisor,
+    ):
+        """After the first round only Shock lacks a game, so it alone is decked."""
+        collect_variants, config = self._fixture(
+            tmp_path, monkeypatch, fake_supervisor,
+            self._games(self.BOLT, "g1", "g2") + self._games(self.SHOCK, "g1"),
+            self._games(self.SHOCK, "g3"),
+        )
+        collect_variants.run(config)
+
+        second = fake_supervisor.play_round.call_args_list[1].args[0]
+        nonlands = {card for deck in second for card in deck} - {
+            "Plains", "Island", "Swamp", "Mountain", "Forest"}
+        assert nonlands == {"Shock Variant 99aa00ff"}
+
+    def test_a_game_counts_once_however_many_records_it_holds(
+        self, tmp_path, monkeypatch, fake_supervisor,
+    ):
+        collect_variants, config = self._fixture(
+            tmp_path, monkeypatch, fake_supervisor,
+            self._games(self.BOLT, "g1", "g1", "g1") + self._games(self.SHOCK, "g1", "g2"),
+            self._games(self.BOLT, "g2"),
+        )
+        assert collect_variants.run(config) == 0
+        assert fake_supervisor.play_round.call_count == 2
+
+    def test_a_decision_candidate_naming_the_variant_counts_its_game(self):
+        from effects.domain.provenance import ProvenanceKey
+        from effects.domain.records import (
+            Candidate,
+            PlayabilityDecisionPayload,
+            PlayabilitySubkind,
+            RecordKind,
+        )
+        from effects.domain.variant_rounds import VariantShardGames
+
+        key = ProvenanceKey(self.BOLT, 0, "spell", 0)
+        found = VariantShardGames()
+        found.add(make_record(
+            RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.DECISION, game_id="g7",
+            payload=PlayabilityDecisionPayload(candidates=(Candidate(
+                ability=(key,), can_play=True, affordable=True, has_legal_target=True,
+            ),)),
+        ))
+        assert found.games == {self.BOLT: {"g7"}}
+
+    def test_another_run_s_shard_never_counts(
+        self, tmp_path, monkeypatch, fake_supervisor,
+    ):
+        """python, two runs on one directory: only this run's shards say what
+        its variants played."""
+        from effects.infrastructure.shard_io import write_shard
+
+        collect_variants, config = self._fixture(
+            tmp_path, monkeypatch, fake_supervisor, no_progress_rounds=1,
+        )
+        write_shard(
+            config.effect_records / "other-run.0-a.jsonl.gz",
+            self._games(self.BOLT, "x1", "x2") + self._games(self.SHOCK, "x1", "x2"),
+        )
+        assert collect_variants.run(config) == 1
+
+    def test_a_variant_shown_without_a_new_game_retires(
+        self, tmp_path, monkeypatch, fake_supervisor, caplog,
+    ):
+        """Bolt has its two games; Shock sits on the board in every round's
+        games and never acts, so it retires after --no-progress-rounds."""
+        import logging
+
+        from effects.domain.provenance import ProvenanceKey
+        from tests.unit.effects.builders import make_entity, make_snapshot
+
+        shock_on_board = make_snapshot(entities=(make_entity(
+            "E9", "Shock Variant 99aa00ff", printed=(ProvenanceKey(self.SHOCK, 0, "spell", 0),),
+        ),))
+        shown = [_variant_record(self.BOLT, "g9", 0, state=shock_on_board)]
+        collect_variants, config = self._fixture(
+            tmp_path, monkeypatch, fake_supervisor,
+            self._games(self.BOLT, "g1", "g2"), shown, shown, no_progress_rounds=2,
+        )
+        with caplog.at_level(logging.INFO):
+            assert collect_variants.run(config) == 0
+
+        assert fake_supervisor.play_round.call_count == 3
+        assert "1 retired short of 2 games" in caplog.text
 
     def test_a_round_that_collected_nothing_fails_loudly(
         self, tmp_path, monkeypatch, caplog, fake_supervisor,
     ):
+        """A round whose decks all materialized as basics writes no variant
+        record; the variants retire unseen and the run exits 1."""
         import logging
 
-        collect_variants, config, supervisor = self._fixture(
-            tmp_path, monkeypatch, fake_supervisor, 1000, added=0,
+        collect_variants, config = self._fixture(
+            tmp_path, monkeypatch, fake_supervisor, no_progress_rounds=1,
         )
-
         with caplog.at_level(logging.ERROR):
             code = collect_variants.run(config)
 
-        supervisor.play_round.assert_called_once()
-        assert code != 0, (
-            "a variant run that collected no record at all reported success"
-        )
-        assert any(
-            "no new effect records" in record.getMessage().lower()
-            for record in caplog.records
-        ), "nothing in the log said the round collected nothing"
-
-    def test_a_round_that_collected_records_says_how_many(
-        self, tmp_path, monkeypatch, caplog, fake_supervisor,
-    ):
-        import logging
-
-        collect_variants, config, _ = self._fixture(
-            tmp_path, monkeypatch, fake_supervisor, 1000, added=42,
-        )
-
-        with caplog.at_level(logging.INFO):
-            code = collect_variants.run(config)
-
-        assert code == 0
-        assert any(
-            "Collected 42 new effect records" in record.getMessage()
-            for record in caplog.records
-        ), "the run never reported how many records it added"
+        assert code == 1
+        assert "no new effect records" in caplog.text.lower()
 
     def test_each_generated_variant_is_logged_with_its_source_and_perturbation(
         self, tmp_path, monkeypatch, caplog, fake_supervisor,
@@ -694,63 +728,37 @@ class TestTheRunReportsWhatItCollected:
         """So a variant's records can be traced back to what was changed."""
         import logging
 
-        collect_variants, config, _ = self._fixture(
-            tmp_path, monkeypatch, fake_supervisor, 1000, added=1,
+        collect_variants, config = self._fixture(
+            tmp_path, monkeypatch, fake_supervisor, no_progress_rounds=1,
         )
-
         with caplog.at_level(logging.INFO):
             collect_variants.run(config)
 
-        assert "Bolt Variant 0, from Bolt: numeric" in caplog.text
+        assert "Bolt Variant 0a1b2c3d, from Bolt: numeric" in caplog.text
 
     def test_a_step_with_nothing_to_go_on_ends_the_run_with_its_code(
         self, tmp_path, monkeypatch, fake_supervisor,
     ):
         """The sidecar pass's own exit code, not a blanket 1."""
-        collect_variants, config, supervisor = self._fixture(
-            tmp_path, monkeypatch, fake_supervisor, 1000, added=1,
-        )
+        collect_variants, config = self._fixture(tmp_path, monkeypatch, fake_supervisor)
         monkeypatch.setattr(
             collect_variants, "write_variant_sidecars", MagicMock(return_value=3),
         )
 
         assert collect_variants.run(config) == 3
-        supervisor.play_round.assert_not_called()
+        fake_supervisor.play_round.assert_not_called()
 
-    def test_a_corpus_counted_elsewhere_never_enters_the_growth_figure(
-        self, tmp_path, monkeypatch, caplog, fake_supervisor,
-    ):
-        """The reported figure was "Interrupted after -39332737 new records".
-
-        ``--corpus-records`` sizes the budget against a corpus the variants are
-        not written into. Subtracting that count from a count of the
-        destination reports a run against a 39M-record corpus writing to an
-        empty directory as having collected minus thirty-nine million.
-        """
-        import logging
-
-        collect_variants, config, _ = self._fixture(
-            tmp_path, monkeypatch, fake_supervisor, 39_000_000, added=42,
-        )
-
-        with caplog.at_level(logging.INFO):
-            code = collect_variants.run(config)
-
-        assert code == 0
-        assert any("42" in r.getMessage() for r in caplog.records)
-        assert not any("-38" in r.getMessage() for r in caplog.records), (
-            "the growth figure was taken against the wrong directory"
-        )
-
-    @pytest.mark.parametrize("sidecar_code, added", [(0, 42), (0, 0), (3, 0)])
+    @pytest.mark.parametrize("sidecar_code, plays", [(0, True), (0, False), (3, False)])
     def test_the_round_s_staged_variants_are_taken_out_however_it_ends(
-        self, tmp_path, monkeypatch, fake_supervisor, sidecar_code, added,
+        self, tmp_path, monkeypatch, fake_supervisor, sidecar_code, plays,
     ):
         """FR-058b, python R8: the sidecar pass and every worker stage the
         tree into Forge's custom-cards directory, which every later Forge
         startup on the machine reads."""
-        collect_variants, config, _ = self._fixture(
-            tmp_path, monkeypatch, fake_supervisor, 1000, added=added,
+        rounds = [self._games(self.BOLT, "g1", "g2") + self._games(self.SHOCK, "g1", "g2")]
+        collect_variants, config = self._fixture(
+            tmp_path, monkeypatch, fake_supervisor, *(rounds if plays else []),
+            no_progress_rounds=1,
         )
         monkeypatch.setattr(
             collect_variants, "write_variant_sidecars", MagicMock(return_value=sidecar_code),
@@ -765,25 +773,15 @@ class TestTheRunReportsWhatItCollected:
     def test_an_interrupted_round_does_not_report_success(
         self, tmp_path, monkeypatch, fake_supervisor,
     ):
-        """Ctrl-C on the variant side: ``ForgeWorkerPool``
-        swallows SIGINT, so a round the operator stopped returns exactly like
-        one that finished."""
-        collect_variants, config, supervisor = self._fixture(
-            tmp_path, monkeypatch, fake_supervisor, 1000, added=42,
+        """Ctrl-C on the variant side: ``ForgeWorkerPool`` swallows SIGINT, so
+        a round the operator stopped returns exactly like one that finished."""
+        collect_variants, config = self._fixture(
+            tmp_path, monkeypatch, fake_supervisor, self._games(self.BOLT, "g1"),
         )
-        supervisor.interrupted = True
+        fake_supervisor.interrupted = True
 
         assert collect_variants.run(config) == 130
-
-
-def _writes_a_shard(directory: Path, records: int, *, name: str = "round.0-b.jsonl"):
-    """A stand-in for a round's workers: one new shard of ``records`` lines."""
-
-    def write(*_args, **_kwargs) -> None:
-        directory.mkdir(parents=True, exist_ok=True)
-        (directory / name).write_text("{}\n" * records, encoding="utf-8")
-
-    return write
+        assert fake_supervisor.play_round.call_count == 1
 
 
 class TestOnlyLoadableVariantsAreDecked:
@@ -873,7 +871,7 @@ class TestMultiFaceCardsAreLeftAlone:
             encoding="utf-8",
         )
         assert generate_variants(
-            source, tmp_path / "variants", held_out=frozenset(), limit=5,
+            source, tmp_path / "variants", held_out=frozenset(),
         ) == []
 
 

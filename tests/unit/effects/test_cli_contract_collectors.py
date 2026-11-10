@@ -555,3 +555,81 @@ class TestWorkersMustBeAbleToStart:
         with patch(module, side_effect=WorkerStartError("every slot failed")):
             assert runner(parse(command, "--exclude-cards", "h.txt")) == 1
         assert "every slot failed" in caplog.text
+
+
+class TestTheVariantRounds:
+    """FR-058a, FR-058c, contracts/cli.md § collect-variants: the round flags
+    and their defaults; --variant-volume and --corpus-records are gone."""
+
+    def test_the_defaults_are_the_contract_s(self):
+        args = parse("collect-variants")
+        assert str(args.round) == "untargeted"
+        assert (args.variant_games, args.no_progress_rounds) == (2, 3)
+        assert args.rule_counts is None
+        assert (args.steer_floor, args.steer_variants, args.steer_min_gain,
+                args.steer_iterations) == (100, 2000, 1, 5)
+
+    @pytest.mark.parametrize("flag", ["--variant-volume", "--corpus-records"])
+    def test_the_volume_flags_are_removed(self, flag):
+        with pytest.raises(SystemExit):
+            parse("collect-variants", flag, "1")
+
+    def test_an_unknown_round_is_refused(self):
+        with pytest.raises(SystemExit):
+            parse("collect-variants", "--round", "sideways")
+
+    def test_the_flags_reach_the_config(self, tmp_path):
+        from unittest.mock import patch
+
+        counts = tmp_path / "counts.json"
+        counts.write_text('{"generation": "gen-3", "rules": {}}', encoding="utf-8")
+        with patch("effects.application.collect_variants.run", return_value=0) as collect:
+            assert run_collect_variants(parse(
+                "collect-variants", "--exclude-cards", "h.txt", "--round", "steered",
+                "--rule-counts", str(counts), "--variant-games", "3",
+                "--no-progress-rounds", "4", "--steer-floor", "50", "--steer-variants", "10",
+                "--steer-min-gain", "2", "--steer-iterations", "6",
+            )) == 0
+        config = collect.call_args.args[0]
+        assert str(config.round) == "steered" and config.rule_counts == counts
+        assert (config.variant_games, config.no_progress_rounds, config.steer_floor,
+                config.steer_variants, config.steer_min_gain, config.steer_iterations) == (
+            3, 4, 50, 10, 2, 6)
+
+
+class TestTheSteeredRoundNeedsGen3Counts:
+    """FR-058g: --round steered exits 1 at startup without --rule-counts, or
+    with a counts file holding gen-2 records."""
+
+    def _refused(self, caplog, *argv) -> None:
+        from unittest.mock import patch
+
+        with patch("effects.application.collect_variants.run") as collect:
+            assert run_collect_variants(parse(
+                "collect-variants", "--exclude-cards", "h.txt", "--round", "steered", *argv,
+            )) == 1
+        collect.assert_not_called()
+        assert "collect-variants: " in caplog.text
+
+    def test_without_rule_counts(self, caplog):
+        self._refused(caplog)
+        assert "--rule-counts" in caplog.text
+
+    @pytest.mark.parametrize("document, message", [
+        ('{"generation": "gen-2", "rules": {}}', "gen-2"),
+        ('{"rules": {}}', "names no generation"),
+    ])
+    def test_with_counts_of_another_generation(self, tmp_path, caplog, document, message):
+        counts = tmp_path / "counts.json"
+        counts.write_text(document, encoding="utf-8")
+        self._refused(caplog, "--rule-counts", str(counts))
+        assert message in caplog.text
+
+    def test_with_a_counts_file_that_is_missing(self, tmp_path, caplog):
+        self._refused(caplog, "--rule-counts", str(tmp_path / "none.json"))
+
+    def test_the_untargeted_round_reads_no_counts(self):
+        from unittest.mock import patch
+
+        with patch("effects.application.collect_variants.run", return_value=0):
+            assert run_collect_variants(parse("collect-variants", "--exclude-cards", "h.txt")) == 0
