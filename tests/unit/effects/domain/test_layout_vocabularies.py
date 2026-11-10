@@ -54,10 +54,11 @@ def test_the_generated_counter_fields_keep_their_names():
 
 def test_the_heads_keep_their_widths():
     """Gen-3's widths (root spec § 11): the per-entity head's 1,386 columns
-    are 932 for the 233 counter fields, the verdict head's 170 are 136 for
-    the cost adjustment's 34 mana symbols."""
+    are 932 for the 233 counter fields, the verdict head's 169 are 136 for
+    the cost adjustment's 34 mana symbols and 4 for the resolution outcome
+    (FR-052: resolved, fizzled, partially fizzled, declined)."""
     assert PER_ENTITY_WIDTH == 1386
-    assert VERDICT_WIDTH == 170
+    assert VERDICT_WIDTH == 169
     assert GLOBAL_WIDTH == 7
     assert VALUE_WIDTH == 541
 

@@ -1,10 +1,11 @@
-"""``resolution_outcome`` on real gen-2 cost halves."""
+"""``resolution_outcome`` on real gen-2 cost halves, and on gen-3 effect halves."""
 
 from __future__ import annotations
 
 from dataclasses import replace
 
-from effects.domain.records import ResolutionOutcome
+from effects.domain.event_schema import Event, EventType
+from effects.domain.records import ActivationPayload, Costs, ResolutionOutcome
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors.resolution_outcome import FAMILY
 
@@ -47,3 +48,39 @@ def test_an_outcome_outside_both_sides_shows_nothing(by_kind):
 def test_effect_halves_show_nothing(by_kind):
     effect = next(r for r in by_kind("resolution") if r.moment.value == "resolution")
     assert FAMILY.match(effect, None, {"outcome": "fizzled"}) is None
+
+
+# -- gen-3: the outcome is the effect half's (FR-042b) ------------------------
+
+
+def _effect_half(by_kind, **payload):
+    effect = next(r for r in by_kind("resolution") if r.moment.value == "resolution")
+    return replace(effect, payload=replace(effect.payload, **payload))
+
+
+def test_a_gen3_effect_half_carries_its_outcome(by_kind):
+    fizzled = _effect_half(by_kind, events=(), outcome=ResolutionOutcome.FIZZLED)
+    found = FAMILY.match(fizzled, None, {"outcome": "fizzled", "targeted": True})
+    assert found.polarity is Polarity.FIRES and found.observed
+    resolved = _effect_half(by_kind, outcome=ResolutionOutcome.RESOLVED)
+    assert FAMILY.match(resolved, None, {"outcome": "fizzled"}).polarity is (
+        Polarity.DOES_NOT_FIRE)
+
+
+def test_a_countering_half_shows_the_countered_object(by_kind):
+    """A countered item writes no effect half: the countering clause's holds
+    its ``spell_countered``, whose subject is the object that left the stack."""
+    countering = _effect_half(
+        by_kind, outcome=ResolutionOutcome.RESOLVED,
+        events=(Event(EventType.SPELL_COUNTERED, subjects=("E99",)),))
+    found = FAMILY.match(countering, None, {"outcome": "countered"})
+    assert found.polarity is Polarity.FIRES
+    assert found.condition == ("E99",) and found.outcome == ("E99",)
+    near = FAMILY.match(countering, None, {"outcome": "resolved", "near": ["countered"]})
+    assert near.polarity is Polarity.DOES_NOT_FIRE and near.outcome == ("E99",)
+
+
+def test_a_gen3_cost_half_shows_nothing(by_kind):
+    cost = next(r for r in by_kind("resolution") if r.moment.value == "activation")
+    gen3 = replace(cost, payload=ActivationPayload(costs=Costs(), events=()))
+    assert FAMILY.match(gen3, None, {"outcome": "resolved", "near": ["fizzled"]}) is None

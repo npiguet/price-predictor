@@ -309,6 +309,44 @@ class TestRoundTrip:
         assert "global" in record_to_dict(_record())["state"]
 
 
+class TestRecordMoments:
+    """The record-moment payloads (root spec § 8.14, FR-042a, FR-042b) keep
+    their bytes through a read and a write, the generations before them too."""
+
+    @staticmethod
+    def _payload(record_payload) -> dict:
+        return record_to_dict(_record(**record_payload))["payload"]
+
+    def test_a_gen3_cost_half_is_its_events_then_its_costs(self):
+        data = self._payload({
+            "moment": Moment.ACTIVATION,
+            "payload": ActivationPayload(costs=Costs(), events=()),
+        })
+        assert list(data) == ["events", "costs"]
+        assert record_from_dict(record_to_dict(_record(
+            moment=Moment.ACTIVATION, payload=ActivationPayload(costs=Costs(), events=()),
+        ))).payload == ActivationPayload(costs=Costs(), events=())
+
+    def test_a_gen2_cost_half_keeps_its_outcome_and_no_events(self):
+        payload = ActivationPayload(costs=Costs(), outcome=ResolutionOutcome.COUNTERED)
+        data = self._payload({"moment": Moment.ACTIVATION, "payload": payload})
+        assert list(data) == ["costs", "outcome"]
+
+    def test_an_effect_halfs_outcome_and_a_written_null_survive(self):
+        for outcome in (ResolutionOutcome.FIZZLED, None):
+            data = record_to_dict(_record())
+            data["payload"]["conditions_met"] = []
+            data["payload"]["outcome"] = outcome.value if outcome else None
+            restored = record_from_dict(data)
+            assert restored.payload.outcome == outcome
+            assert record_to_dict(restored)["payload"] == data["payload"]
+
+    def test_an_effect_half_written_before_the_outcome_writes_none(self):
+        data = record_to_dict(_record())
+        data["payload"].pop("outcome", None)
+        assert "outcome" not in record_to_dict(record_from_dict(data))["payload"]
+
+
 class TestForwardCompatibility:
     def test_an_unknown_envelope_field_is_preserved_on_read(self):
         data = record_to_dict(_record())

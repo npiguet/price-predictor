@@ -71,6 +71,14 @@ class CollectionMode(StrEnum):
 
 
 class ResolutionOutcome(StrEnum):
+    """What became of a stack item.
+
+    Gen-1 and gen-2 stamped it on the cost half; gen-3 writes it on the
+    effect half (root spec § 8.14, FR-042b), never ``countered``: a countered
+    item writes no effect half, its fate being the countering clause's
+    ``spell_countered``.
+    """
+
     RESOLVED = "resolved"
     FIZZLED = "fizzled"
     PARTIALLY_FIZZLED = "partially_fizzled"
@@ -112,8 +120,9 @@ REWRITE_RESULTS_RUNNING_AN_ABILITY: frozenset[RewriteResult] = frozenset({
     RewriteResult.UPDATED,
 })
 
-#: Outcomes whose cost half has no linked effect half, so it carries no
-#: ``link_id``. Only ``resolved`` and ``partially_fizzled`` reach resolution.
+#: Outcomes whose gen-1/gen-2 cost half has no linked effect half, so it
+#: carries no ``link_id``. Only ``resolved`` and ``partially_fizzled`` reach
+#: resolution there; a gen-3 cost half carries no outcome and always links.
 PARTNERLESS_OUTCOMES: frozenset[ResolutionOutcome] = frozenset({
     ResolutionOutcome.FIZZLED,
     ResolutionOutcome.DECLINED,
@@ -289,14 +298,33 @@ class Costs:
 
 @dataclass(frozen=True, slots=True)
 class ActivationPayload(_PayloadQueries):
-    """``resolution`` / ``activation``: the cost half of a resolution pair."""
+    """``resolution`` / ``activation``: the cost half of a resolution pair.
+
+    Gen-3 (root spec § 8.14, FR-042a) writes ``{events, costs}``: what casting
+    did — a spell card's ``zone_change`` to the stack, ``[]`` for an activated
+    ability — and what was paid, with no ``outcome``, which is the effect
+    half's. Gen-1 and gen-2 wrote ``{costs, outcome}``. The cast's events are
+    listed, not happened: they describe the cast itself, which no per-entity
+    output supervises, so :func:`events_of` gives none.
+    """
 
     costs: Costs
-    outcome: ResolutionOutcome
+    #: Gen-1/gen-2 only: the stack item's fate. None on gen-3.
+    outcome: ResolutionOutcome | None = None
+    #: Gen-3 only: what casting did. None on gen-1 and gen-2.
+    events: tuple[Event, ...] | None = None
 
     @property
     def has_partner(self) -> bool:
-        return self.outcome not in PARTNERLESS_OUTCOMES
+        """Whether an effect half may share this half's ``link_id``: always on
+        gen-3, written at the cast before the item's fate is known."""
+        return self.outcome is None or self.outcome not in PARTNERLESS_OUTCOMES
+
+    def listed_events(self) -> tuple[Event, ...]:
+        return self.events or ()
+
+    def all_events(self) -> tuple[Event, ...]:
+        return self.events or ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -322,6 +350,14 @@ class ResolutionPayload(_PayloadQueries):
     #: Gen-3: one entry per conditional clause that resolved in the half, in
     #: resolution order; empty where none did. None on gen-1 and gen-2.
     conditions_met: tuple[ConditionMet, ...] | None = None
+    #: Gen-3 (FR-042b): what became of the stack item — resolved, fizzled,
+    #: partially fizzled or declined. None where the half resolves no stack
+    #: item (a mana record, the game-end rescue record), on gen-1/gen-2 and on
+    #: gen-3 records collected before the record moments.
+    outcome: ResolutionOutcome | None = None
+    #: Whether the record wrote an ``outcome`` key at all, null included, so a
+    #: record read and written back keeps its bytes. Not part of equality.
+    outcome_written: bool = field(default=False, compare=False)
 
     def happened_events(self) -> tuple[Event, ...]:
         return self.events
@@ -818,7 +854,7 @@ class EffectRecord:
         payload = self.payload
         if isinstance(payload, ActivationPayload) and not payload.has_partner:
             raise ValueError(
-                f"a {payload.outcome.value} activation never reaches resolution, "
+                f"a {payload.outcome} activation never reaches resolution, "
                 "so it has no linked effect half"
             )
 

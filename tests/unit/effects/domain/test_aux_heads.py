@@ -9,6 +9,7 @@ belongs to no card or player.
 from __future__ import annotations
 
 import functools
+from dataclasses import replace
 
 import pytest
 import torch
@@ -51,6 +52,7 @@ from effects.domain.records import (
     PlayabilityDecisionPayload,
     PlayabilitySubkind,
     RecordKind,
+    ResolutionOutcome,
     ResolutionPayload,
 )
 from effects.domain.state_snapshot import Refs
@@ -150,13 +152,22 @@ class TestVerdictTargets:
         set_fields = {str(spec.name) for spec, on in zip(VERDICT_LAYOUT.fields, mask) if on}
         assert set_fields == {*VERDICT_BITS, "timing", "failed_checks", "cost_adjustment"}
 
-    def test_a_cost_half_sets_the_mana_it_paid_and_its_resolution_outcome(self):
-        """The resolution outcome is an output (FR-052), from the cost half."""
+    def test_a_cost_half_sets_the_mana_it_paid_and_no_resolution_outcome(self):
+        """The resolution outcome is supervised on effect halves only (FR-052):
+        a cost half, even one a pre-moments gen-3 shard stamped, sets none."""
         row = verdict_targets(_fixture()[f"{_RUN}.0-mvyv5jxepqmy.818"])
-        assert _column(row, VERDICT_LAYOUT, "resolution_outcome") == (
-            [float(RESOLUTION_OUTCOMES.index("countered"))], True)
+        assert _column(row, VERDICT_LAYOUT, "resolution_outcome")[1] is False
         paid, supervised = _column(row, VERDICT_LAYOUT, "mana_paid")
         assert supervised and sum(paid) == 5.0
+
+    def test_an_effect_half_sets_its_resolution_outcome(self):
+        """FR-052: over resolved, fizzled, partially fizzled and declined."""
+        record = _fixture()[f"{_RUN}.0-mvyv84qu3axl.27377"]
+        fizzled = replace(record, payload=replace(
+            record.payload, events=(), outcome=ResolutionOutcome.FIZZLED))
+        assert _column(verdict_targets(fizzled), VERDICT_LAYOUT, "resolution_outcome") == (
+            [float(RESOLUTION_OUTCOMES.index("fizzled"))], True)
+        assert "countered" not in RESOLUTION_OUTCOMES
 
     def test_an_effect_half_counts_the_effect_objects_it_created(self):
         row = verdict_targets(_fixture()[f"{_RUN}.0-mvyv84qu3axl.27377"])

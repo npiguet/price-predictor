@@ -24,6 +24,7 @@ from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     KINDS_WITHOUT_ACTING_ABILITY,
     PAYLOAD_TYPES,
+    ActivationPayload,
     CollectionMode,
     CombatPayload,
     EffectRecord,
@@ -75,18 +76,24 @@ def _digest(record: EffectRecord) -> bytes:
 def _is_deferred_mana_record(record: EffectRecord) -> bool:
     """A resolution half the mana reservoir held back until the game ended.
 
-    Its snapshot is from when the mana was made, so it lands after later turns
-    and would read as a backward turn jump. Recognised by the payload (every
-    event ``mana_produced``) rather than the acting card; nothing defers an
-    activation half, so a jump on one is still a game boundary.
+    Its snapshot is from when the mana ability was activated, so it lands
+    after later turns and would read as a backward turn jump. Recognised by
+    the payload (a ``mana_produced``, and otherwise only the ``tapped`` events
+    of the permanents its cost tapped, FR-042c) rather than the acting card;
+    nothing defers an activation half, so a jump on one is still a game
+    boundary.
     """
     payload = record.payload
     return (
         record.moment is Moment.RESOLUTION
         and isinstance(payload, ResolutionPayload)
-        and bool(payload.events)
-        and all(event.type is EventType.MANA_PRODUCED for event in payload.events)
+        and any(event.type is EventType.MANA_PRODUCED for event in payload.events)
+        and all(event.type in _MANA_RECORD_EVENTS for event in payload.events)
     )
+
+
+#: The events a mana record holds: what its cost tapped, then the mana.
+_MANA_RECORD_EVENTS = frozenset({EventType.MANA_PRODUCED, EventType.TAPPED})
 
 
 class RecordIds:
@@ -186,6 +193,10 @@ class _LinkHalf(NamedTuple):
     #: None on a record of a kind with no halves, which never pairs.
     moment: Moment | None
     keys: tuple[ProvenanceKey, ...]
+    #: A gen-3 cost half (no ``outcome``): written at the cast, before the
+    #: item's fate, so it may stand alone where the item was countered or the
+    #: game ended with it on the stack (FR-042a, FR-042b).
+    written_at_cast: bool = False
 
 
 def _joined(halves: list[_LinkHalf]) -> bool:
@@ -194,6 +205,8 @@ def _joined(halves: list[_LinkHalf]) -> bool:
     keys (``option`` set) of one charm root."""
     costs = [half.keys for half in halves if half.moment is Moment.ACTIVATION]
     effects = [half.keys for half in halves if half.moment is Moment.RESOLUTION]
+    if len(costs) == 1 and len(halves) == 1:
+        return halves[0].written_at_cast
     if len(costs) != 1 or not effects or len(costs) + len(effects) != len(halves):
         return False
     if len(effects) == 1:
@@ -215,9 +228,10 @@ class Links:
 
     def add(self, record: EffectRecord) -> None:
         if record.link_id is not None:
-            self.links[record.link_id].append(
-                _LinkHalf(record.moment, tuple(record.ability or ())),
-            )
+            self.links[record.link_id].append(_LinkHalf(
+                record.moment, tuple(record.ability or ()),
+                isinstance(record.payload, ActivationPayload) and record.payload.outcome is None,
+            ))
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         unpaired = Share()
@@ -228,7 +242,8 @@ class Links:
         yield ceiling_finding(
             name=(
                 "every link_id joins one activation to its resolution(s): one, "
-                "or one per chosen mode of a charm"
+                "or one per chosen mode of a charm, or none for a gen-3 "
+                "activation whose item never resolved"
             ),
             ceiling=limits.max_unpaired_link_rate,
             rate=unpaired.rate,

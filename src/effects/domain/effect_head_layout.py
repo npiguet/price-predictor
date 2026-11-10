@@ -621,7 +621,10 @@ VERDICT_BITS: tuple[str, ...] = (
 #: One column per check a candidate can fail, in :class:`PlayabilityCheck`
 #: order, ``script_restriction`` and ``land_play_limit`` included.
 FAILED_CHECKS: tuple[str, ...] = tuple(check.value for check in PlayabilityCheck)
-RESOLUTION_OUTCOMES: tuple[str, ...] = tuple(outcome.value for outcome in ResolutionOutcome)
+#: The effect half's outcomes (FR-052, root § 11.2): ``countered`` is no class,
+#: a countered item writing no effect half.
+RESOLUTION_OUTCOMES: tuple[str, ...] = tuple(
+    outcome.value for outcome in ResolutionOutcome if outcome is not ResolutionOutcome.COUNTERED)
 REPLACEMENT_RESULTS: tuple[str, ...] = tuple(result.value for result in RewriteResult)
 
 VERDICT_LAYOUT = RecordHeadLayout((

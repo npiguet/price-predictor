@@ -24,6 +24,7 @@ from effects.domain.records import (
     ActivationPayload,
     Costs,
     EffectRecord,
+    ResolutionPayload,
     RewritePayload,
     RewriteResult,
     TriggerPayload,
@@ -45,20 +46,30 @@ _NO_RESULT_LABEL = "absent"
 
 
 class Activations:
-    """The activation records, read once: whether their outcomes vary, as a
-    real game's do, and which cost channels they ever populate."""
+    """The resolution records, read once: whether the stack items' outcomes
+    vary, as a real game's do, and which cost channels the activation records
+    ever populate.
+
+    The outcome is a gen-3 effect half's (FR-042b) and a gen-1/gen-2 cost
+    half's; a half with no outcome (a mana record, the rescue record) is not
+    counted.
+    """
 
     def __init__(self) -> None:
         self.activations = 0
+        self.with_outcome = 0
         self.outcomes: Counter[str] = Counter()
         self.cost_fields: Counter[str] = Counter()
         self.populated = 0
 
     def add(self, record: EffectRecord) -> None:
+        outcome = getattr(record.payload, "outcome", None)
+        if isinstance(record.payload, (ActivationPayload, ResolutionPayload)) and outcome:
+            self.with_outcome += 1
+            self.outcomes[outcome.value] += 1
         if not isinstance(record.payload, ActivationPayload):
             return
         self.activations += 1
-        self.outcomes[record.payload.outcome.value] += 1
         paid = {
             name: bool(getattr(record.payload.costs, name)) for name in _COST_FIELDS
         }
@@ -75,10 +86,10 @@ class Activations:
         return Finding(
             name="outcome takes more than one value",
             # A window with no activation records holds, as an absent kind does.
-            ok=len(self.outcomes) > 1 or self.activations == 0,
+            ok=len(self.outcomes) > 1 or self.with_outcome == 0,
             measured=(
-                f"{len(self.outcomes)} distinct over {self.activations} "
-                f"activation records: {shown}"
+                f"{len(self.outcomes)} distinct over {self.with_outcome} "
+                f"records carrying an outcome: {shown}"
             ),
             detail=() if len(self.outcomes) > 1 else (
                 "a real game counters or fizzles something, so one value means "

@@ -129,6 +129,17 @@ class TestLinkId:
         )
         assert record.link_id == "pair-1"
 
+    def test_a_gen3_cost_half_carries_no_outcome_and_always_links(self, make_record):
+        """Written at the cast, before the item's fate (FR-042a): its link
+        promises an effect half that a countered item never writes."""
+        record = make_record(
+            moment=Moment.ACTIVATION,
+            payload=ActivationPayload(costs=Costs(), events=()),
+            link_id="pair-1",
+        )
+        assert record.payload.has_partner
+        assert record.payload.outcome is None
+
     def test_a_partnerless_outcome_without_a_link_id_is_fine(self, make_record):
         record = make_record(
             moment=Moment.ACTIVATION,

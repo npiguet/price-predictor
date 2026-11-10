@@ -89,6 +89,7 @@ GEN3_FIELDS: tuple[str, ...] = (
         "day_night", "floating_effects", "delayed_triggers", "dungeons")),
     "record.state.refs.random", "record.state.links",
     "record.payload<ResolutionPayload>.conditions_met",
+    "record.payload<ResolutionPayload>.outcome", "record.payload<ActivationPayload>.events",
     f"{_DECISION}.timing", f"{_DECISION}.failed_checks", f"{_DECISION}.land_play",
     *(f"{_ATTACKERS}.{name}" for name in (
         "anchor_attacker", "legal_defenders", "must_attack", "tapped_by_attack")),
@@ -198,6 +199,10 @@ class _Tally:
 def _visit(value: Any, path: str, tally: dict[str, _Tally]) -> None:
     """Count every field of one dataclass instance, then recurse."""
     for spec in dataclasses.fields(value):
+        if not spec.compare:
+            # Bookkeeping kept out of equality, such as whether a payload
+            # wrote a key at all: how the record was spelt, not what it says.
+            continue
         child = getattr(value, spec.name)
         child_path = f"{path}.{spec.name}"
         if spec.name == "payload" and _is_instance(child):

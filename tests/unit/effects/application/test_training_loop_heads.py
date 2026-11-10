@@ -162,7 +162,8 @@ class TestTheTargets:
         start, end = VERDICT_LAYOUT.target_slices["mana_paid"]
         assert target[start:end] == [float(paid.get(c, 0)) for c in COLORS]
         supervised = {str(spec.name) for spec, on in zip(VERDICT_LAYOUT.fields, mask) if on}
-        assert supervised == {"mana_paid", "resolution_outcome"}
+        # The resolution outcome is the effect half's (FR-052).
+        assert supervised == {"mana_paid"}
 
     def test_a_trigger_record_yields_its_fired_bit(self, records):
         for fired in (True, False):

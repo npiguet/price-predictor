@@ -356,7 +356,11 @@ class TestTheGen3Fields:
             "record.state.players[].initiative",
             # Both pilots predate the member (T054a): absent on every player.
             "record.state.players[].max_land_plays",
-            "record.state.players[].land_plays_unlimited"}, sorted(constant)
+            "record.state.players[].land_plays_unlimited",
+            # Both pilots predate the record moments (FR-042a, FR-042b): no
+            # cost half lists its events, no effect half its outcome.
+            "record.payload<ActivationPayload>.events",
+            "record.payload<ResolutionPayload>.outcome"}, sorted(constant)
 
     def test_the_report_rows_each_gen3_field(self):
         lines = gen3_report_lines(field_coverage(self._golden()))

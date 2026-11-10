@@ -65,9 +65,11 @@ def verdict_targets(record: EffectRecord) -> HeadRow | None:
     """The verdict head's targets at ``[ACT]`` and which fields this record sets.
 
     A ``decision`` record sets its candidate's verdict bits, timing, failed
-    checks and cost adjustment; a cost half the mana it paid by colour and its
-    resolution outcome; an effect half the effect objects and delayed
-    triggers it created; a ``rewrite`` record the replacement's result; a
+    checks and cost adjustment; a cost half the mana it paid by colour; an
+    effect half the effect objects and delayed triggers it created and the
+    stack item's resolution outcome (FR-052: supervised on effect halves
+    only, a gen-3 cost half carrying none); a ``rewrite`` record the
+    replacement's result; a
     ``trigger`` record whether it fired. Every other field is masked out,
     since a cost half is no evidence of playability.
     """
@@ -75,16 +77,16 @@ def verdict_targets(record: EffectRecord) -> HeadRow | None:
     match record.payload:
         case PlayabilityDecisionPayload(candidates=(candidate, *_)):
             _decision_verdict(record, candidate, row)
-        case ActivationPayload(costs=costs, outcome=outcome):
+        case ActivationPayload(costs=costs):
             paid = costs.mana_by_color
             VERDICT_LAYOUT.put(row, VerdictField.MANA_PAID,
                                [float(paid.get(color, 0)) for color in COLORS])
-            if outcome is not None:
-                VERDICT_LAYOUT.put(row, VerdictField.RESOLUTION_OUTCOME,
-                                   RESOLUTION_OUTCOMES.index(outcome))
-        case ResolutionPayload():
+        case ResolutionPayload(outcome=outcome):
             created = sum(1 for event in events_of(record) if event.type in _EFFECT_OBJECTS)
             VERDICT_LAYOUT.put(row, VerdictField.EFFECTS_CREATED, created)
+            if outcome in RESOLUTION_OUTCOMES:
+                VERDICT_LAYOUT.put(row, VerdictField.RESOLUTION_OUTCOME,
+                                   RESOLUTION_OUTCOMES.index(outcome))
         case RewritePayload(result=result) if result is not None:
             VERDICT_LAYOUT.put(row, VerdictField.REPLACEMENT_RESULT,
                                REPLACEMENT_RESULTS.index(result))

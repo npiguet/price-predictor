@@ -706,13 +706,22 @@ def _costs_from_json(data: dict) -> Costs:
 
 
 def _activation_to_json(payload: ActivationPayload) -> dict:
-    return {"costs": _costs_to_json(payload.costs), "outcome": payload.outcome.value}
+    out: dict = {}
+    if payload.events is not None:
+        out["events"] = _events_to_json(payload.events)
+    out["costs"] = _costs_to_json(payload.costs)
+    if payload.outcome is not None:
+        out["outcome"] = payload.outcome.value
+    return out
 
 
 def _activation_from_json(data: dict) -> ActivationPayload:
+    """A cost half: gen-3's ``{events, costs}`` or gen-1/gen-2's ``{costs, outcome}``."""
+    outcome = data.get("outcome")
     return ActivationPayload(
         costs=_costs_from_json(data.get("costs") or {}),
-        outcome=ResolutionOutcome(data["outcome"]),
+        outcome=ResolutionOutcome(outcome) if outcome is not None else None,
+        events=_events_from_json(data["events"]) if "events" in data else None,
     )
 
 
@@ -721,6 +730,8 @@ def _resolution_to_json(payload: ResolutionPayload) -> dict:
     if payload.conditions_met is not None:
         out["conditions_met"] = [
             {"segment": entry.segment, "met": entry.met} for entry in payload.conditions_met]
+    if payload.outcome is not None or payload.outcome_written:
+        out["outcome"] = payload.outcome.value if payload.outcome is not None else None
     return out
 
 
@@ -731,6 +742,8 @@ def _resolution_from_json(data: dict) -> ResolutionPayload:
         conditions_met=tuple(
             ConditionMet(segment=entry["segment"], met=entry["met"]) for entry in conditions
         ) if conditions is not None else None,
+        outcome=ResolutionOutcome(data["outcome"]) if data.get("outcome") is not None else None,
+        outcome_written="outcome" in data,
     )
 
 
