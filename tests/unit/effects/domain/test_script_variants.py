@@ -14,6 +14,7 @@ from effects.domain.script_variants import (
     script_mana_cost,
     selector_params,
     shift,
+    variant_digest,
     variant_name,
 )
 
@@ -75,9 +76,18 @@ class TestSelectorPerturbation:
                 assert perturbation.replacement in perturbed
 
 
-def test_variant_name_derives_from_its_source():
-    assert variant_name("Lightning Bolt", 0) == "Lightning Bolt Variant 0"
-    assert variant_name("Lightning Bolt", 1) != variant_name("Lightning Bolt", 0)
+def test_variant_name_derives_from_its_source_and_its_script_s_digest():
+    """FR-058b: ``<card> Variant <h>``, so one perturbed script has one name."""
+    assert variant_name("Lightning Bolt", "0a1b2c3d") == "Lightning Bolt Variant 0a1b2c3d"
+
+
+def test_the_digest_is_the_first_eight_hex_digits_of_the_script_s_sha256():
+    import hashlib
+
+    lines = ["Name:Bolt", "A:SP$ DealDamage | NumDmg$ 4"]
+    expected = hashlib.sha256(b"Name:Bolt\nA:SP$ DealDamage | NumDmg$ 4\n").hexdigest()
+    assert variant_digest(lines) == expected[:8]
+    assert variant_digest(["Name:Bolt", "A:SP$ DealDamage | NumDmg$ 5"]) != variant_digest(lines)
 
 
 class TestScriptManaCost:

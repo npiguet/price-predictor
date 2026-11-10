@@ -45,6 +45,14 @@ from tests.unit.effects.builders import make_record
 from tests.unit.effects.domain.test_script_variants import _BOLT_SCRIPT
 
 
+@pytest.fixture(autouse=True)
+def _no_real_unstaging(monkeypatch):
+    """A run ends by emptying Forge's real custom-cards directory; never here."""
+    from effects.application import collect_variants
+
+    monkeypatch.setattr(collect_variants, "unstage_variants", MagicMock(return_value=0))
+
+
 def _record(**overrides) -> EffectRecord:
     defaults: dict = {"record_id": "r.0.1", "run_id": "r", "game_id": "r.0.1"}
     defaults.update(overrides)
@@ -126,9 +134,65 @@ class TestVariantGeneration:
             sanitize_card_name,
         )
 
-        stem = sanitize_card_name(variant_name("Lightning Bolt", 0))
-        assert stem == "lightning_bolt_variant_0"
+        stem = sanitize_card_name(variant_name("Lightning Bolt", "0a1b2c3d"))
+        assert stem == "lightning_bolt_variant_0a1b2c3d"
         assert "(" not in stem and ")" not in stem
+
+    def test_a_variant_is_named_by_its_perturbed_script_s_digest(self, tmp_path):
+        """FR-058b: the name says which script it is, so two runs that perturb
+        one card alike name it alike and two that perturb it differently
+        never share a name."""
+        import re
+
+        from effects.domain.script_variants import variant_digest
+
+        source = tmp_path / "cards"
+        source.mkdir()
+        self._write_source(source, "bolt", "Lightning Bolt", _BOLT_SCRIPT)
+        (variant,) = generate_variants(
+            source, tmp_path / "variants", held_out=frozenset(), limit=1,
+        )
+        written = variant.path.read_text(encoding="utf-8").splitlines()
+        perturbed = [
+            "Name:Lightning Bolt" if line.startswith("Name:") else line for line in written
+        ]
+        assert re.fullmatch(r"Lightning Bolt Variant [0-9a-f]{8}", variant.name)
+        assert variant.name == variant_name("Lightning Bolt", variant_digest(perturbed))
+
+    def test_a_second_run_never_rewrites_a_variant_of_the_first(self, tmp_path):
+        """Python R3: a top-up run with another seed used to write a different
+        perturbation under an earlier variant's name, so the earlier records
+        joined the later text."""
+        source = tmp_path / "cards"
+        source.mkdir()
+        for index in range(8):
+            self._write_source(source, f"bolt{index}", f"Bolt {index}", _BOLT_SCRIPT)
+        output = tmp_path / "variants"
+        first = generate_variants(source, output, held_out=frozenset(), limit=8, seed=1)
+        before = {v.path: v.path.read_bytes() for v in first}
+
+        second = generate_variants(source, output, held_out=frozenset(), limit=8, seed=2)
+
+        assert {path: path.read_bytes() for path in before} == before
+        assert {v.name for v in second} != {v.name for v in first}, (
+            "two seeds perturbed every card alike; the test shows nothing"
+        )
+
+    def test_an_existing_variant_file_is_reused_as_it_is(self, tmp_path):
+        """A file already under the name is the same script (the name is its
+        digest), so it is decked again and never written over, whatever it
+        holds."""
+        source = tmp_path / "cards"
+        source.mkdir()
+        self._write_source(source, "bolt", "Lightning Bolt", _BOLT_SCRIPT)
+        output = tmp_path / "variants"
+        (fresh,) = generate_variants(source, output, held_out=frozenset(), limit=1)
+        fresh.path.write_text("kept as it was\n", encoding="utf-8")
+
+        (again,) = generate_variants(source, output, held_out=frozenset(), limit=1)
+
+        assert again.name == fresh.name and fresh.fresh and not again.fresh
+        assert again.path.read_text(encoding="utf-8") == "kept as it was\n"
 
     def test_the_limit_is_respected(self, tmp_path):
         source = tmp_path / "cards"
@@ -249,7 +313,7 @@ class TestProtectionQualitySwap:
             source, tmp_path / "variants", held_out=frozenset(), limit=5,
         )
         written = variant.path.read_text(encoding="utf-8").splitlines()
-        assert written[0] == "Name:White Knight Variant 0"
+        assert written[0] == f"Name:{variant.name}"
         assert "K:Protection from black" not in written
         assert written[-1].removeprefix("K:") in PROTECTION_QUALITY_WHITELIST
 
@@ -678,6 +742,26 @@ class TestTheRunReportsWhatItCollected:
             "the growth figure was taken against the wrong directory"
         )
 
+    @pytest.mark.parametrize("sidecar_code, added", [(0, 42), (0, 0), (3, 0)])
+    def test_the_round_s_staged_variants_are_taken_out_however_it_ends(
+        self, tmp_path, monkeypatch, fake_supervisor, sidecar_code, added,
+    ):
+        """FR-058b, python R8: the sidecar pass and every worker stage the
+        tree into Forge's custom-cards directory, which every later Forge
+        startup on the machine reads."""
+        collect_variants, config, _ = self._fixture(
+            tmp_path, monkeypatch, fake_supervisor, 1000, added=added,
+        )
+        monkeypatch.setattr(
+            collect_variants, "write_variant_sidecars", MagicMock(return_value=sidecar_code),
+        )
+        unstage = MagicMock(return_value=1)
+        monkeypatch.setattr(collect_variants, "unstage_variants", unstage)
+
+        collect_variants.run(config)
+
+        unstage.assert_called_once_with()
+
     def test_an_interrupted_round_does_not_report_success(
         self, tmp_path, monkeypatch, fake_supervisor,
     ):
@@ -721,7 +805,7 @@ class TestOnlyLoadableVariantsAreDecked:
         ]
 
     def test_a_variant_forge_rejected_is_not_decked(self, tmp_path):
-        (tmp_path / "loadable.txt").write_text(
+        (tmp_path / "loadable.lst").write_text(
             "Bolt Variant 0" + chr(10) + "Shock Variant 2" + chr(10),
             encoding="utf-8",
         )
@@ -733,6 +817,27 @@ class TestOnlyLoadableVariantsAreDecked:
             tmp_path,
         )
         assert [v.name for v in kept] == ["Bolt Variant 0", "Shock Variant 2"]
+
+    def test_the_list_is_no_card_script(self):
+        """Python R1: Forge loads every ``.txt`` staged from the variant tree as
+        a card, and a list of names with no ``Name:`` line stops every Forge
+        startup on the machine."""
+        from effects.application.collect_variants import LOADABLE_FILE
+
+        assert LOADABLE_FILE == "loadable.lst"
+
+    @pytest.mark.xfail(strict=True, reason=(
+        "T186's Java half: VariantSidecarMain still writes loadable.txt; drop this "
+        "mark when it writes loadable.lst"))
+    def test_the_list_is_the_one_variant_sidecar_main_writes(self):
+        import re
+
+        from effects.application.collect_variants import LOADABLE_FILE
+
+        java = (Path(__file__).resolve().parents[4] / "forge-connector" / "src" / "main"
+                / "java" / "com" / "pricepredictor" / "connector" / "VariantSidecarMain.java")
+        declared = re.search(r'LOADABLE_FILE\s*=\s*"([^"]+)"', java.read_text(encoding="utf-8"))
+        assert declared is not None and declared.group(1) == LOADABLE_FILE
 
     def test_a_missing_list_is_refused_rather_than_ignored(self, tmp_path):
         """No list is no evidence, and decking anyway is the defect itself."""
@@ -823,6 +928,22 @@ class TestNoVariantPrintsAHeldOutText:
         assert kept == [clean]
         assert not held.path.exists()
         assert not sidecar_path_for(held.path).exists()
+
+    def test_a_reused_variant_printing_a_held_out_text_stays_on_disk(self, tmp_path):
+        """FR-058b: only a variant no deck has held yet is deleted. A reused
+        one may have records from an earlier run, which join its file by key."""
+        import dataclasses
+
+        from effects.application.collect_variants import drop_held_out_variants
+        from effects.infrastructure.sidecar_io import sidecar_path_for
+
+        held = dataclasses.replace(self._variant(
+            tmp_path, "act_of_treason_variant_1",
+            "SP$ DealDamage | ValidTgts$ Artifact | NumDmg$ 5",
+        ), fresh=False)
+
+        assert drop_held_out_variants([held], self._holdout(HoldoutUnit.TEMPLATE)) == []
+        assert held.path.exists() and sidecar_path_for(held.path).exists()
 
     def test_under_the_text_unit_only_the_text_itself_is_held_out(self, tmp_path):
         from effects.application.collect_variants import drop_held_out_variants

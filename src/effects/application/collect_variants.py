@@ -35,10 +35,12 @@ from effects.domain.script_variants import (
     renamed_script,
     script_card_name,
     script_mana_cost,
+    variant_digest,
     variant_name,
 )
 from effects.domain.split import HeldOutCards
 from effects.infrastructure.one_shot_workers import write_variant_sidecars
+from effects.infrastructure.variant_staging import unstage_variants
 from price_predictor.infrastructure.card_filenames import sanitize_card_name
 from sealed.infrastructure.effect_collection_flags import directed_fork_error
 
@@ -95,7 +97,9 @@ class GeneratedVariant:
     """One perturbed script and where it came from.
 
     ``mana_cost`` is read off the script as written, since a variant has no
-    prose (FR-056); None for a script declaring none.
+    prose (FR-056); None for a script declaring none. ``fresh`` is False for a
+    variant whose file an earlier run wrote: it may have records already, so
+    it is never deleted (FR-058b).
     """
 
     name: str
@@ -103,6 +107,7 @@ class GeneratedVariant:
     path: Path
     perturbation: str
     mana_cost: str | None = None
+    fresh: bool = True
 
     def deck_candidate(self) -> DeckCandidate:
         """The deck candidate ``compute_basic_lands`` reads for this variant."""
@@ -126,8 +131,11 @@ def volume_ceiling(source_scripts: int, volume: float) -> int:
 
 
 #: Written by VariantSidecarMain: every variant name Forge's card database
-#: accepted, by the same lookup DeckMaterializer.resolve uses.
-LOADABLE_FILE = "loadable.txt"
+#: accepted, by the same lookup DeckMaterializer.resolve uses. Never a
+#: ``.txt``: the whole variant tree is staged into Forge's custom-cards
+#: directory, where Forge reads every ``.txt`` as a card script, and a list of
+#: names with no ``Name:`` line stops every Forge startup (python R1).
+LOADABLE_FILE = "loadable.lst"
 
 
 def loadable_variants(
@@ -248,6 +256,10 @@ def generate_variants(
     printed case and the holdout is lowercase. ``sources`` is
     :func:`source_scripts` of ``forge_cards_path`` when the caller already
     listed them: the walk is over all of Forge.
+
+    A variant is named by its perturbed script's digest (FR-058b), so a file
+    already under its name is the same script: it is reused as it stands,
+    never written over, because an earlier run's records join it by key.
     """
     held_out = frozenset(fold_card_name(name) for name in held_out)
     rng = random.Random(seed)
@@ -258,6 +270,7 @@ def generate_variants(
     rng.shuffle(sources)
 
     generated: list[GeneratedVariant] = []
+    names: set[str] = set()
     for source in sources:
         if len(generated) >= limit:
             break
@@ -274,13 +287,19 @@ def generate_variants(
         if result is None:
             continue
         perturbed, description = result
-        name = variant_name(card_name, len(generated))
+        name = variant_name(card_name, variant_digest(perturbed))
+        if name in names:
+            continue
+        names.add(name)
         # The sanitized card name is the path a provenance key resolves to.
         path = output_path / f"{sanitize_card_name(name)}.txt"
         script = renamed_script(perturbed, name)
-        path.write_text("\n".join(script) + "\n", encoding="utf-8")
+        fresh = not path.exists()
+        if fresh:
+            path.write_text("\n".join(script) + "\n", encoding="utf-8")
         generated.append(GeneratedVariant(
             name, card_name, path, description, mana_cost=script_mana_cost(script),
+            fresh=fresh,
         ))
     return generated
 
@@ -315,9 +334,14 @@ def _collect(config: CollectVariantsConfig) -> int:
     sources = source_scripts(config.forge_cards_path)
     budget = _size_budget(config, len(sources))
     variants = _generate(config, budget, sources)
-    _write_sidecars(config.variant_scripts)
-    variants = _keep_unheld(config, _keep_loadable(variants, config.variant_scripts))
-    return _play_and_check_growth(config, variants, budget)
+    try:
+        _write_sidecars(config.variant_scripts)
+        variants = _keep_unheld(config, _keep_loadable(variants, config.variant_scripts))
+        return _play_and_check_growth(config, variants, budget)
+    finally:
+        # The sidecar pass and every worker staged the tree into Forge's
+        # custom-cards directory, which every later Forge startup reads.
+        unstage_variants()
 
 
 def _check_directed_forks(config: CollectVariantsConfig) -> None:
@@ -413,11 +437,14 @@ def _keep_loadable(
 def drop_held_out_variants(
     variants: list[GeneratedVariant], held_out: HeldOutCards,
 ) -> list[GeneratedVariant]:
-    """The variants whose sidecar prints no held-out text, deleting the rest.
+    """The variants whose sidecar prints no held-out text, deleting the
+    fresh ones among the rest.
 
     Read off the sidecar, the only place the chained text exists. A dropped
-    variant's files are deleted so a later round cannot stage them; one with
-    no sidecar is kept, as the loadable filter has already decided it.
+    fresh variant's files are deleted so a later round cannot stage them; a
+    reused one is only left out of the decks, since an earlier run may have
+    decked it and its records join its files (FR-058b). One with no sidecar
+    is kept, as the loadable filter has already decided it.
     """
     from effects.infrastructure.sidecar_io import read_sidecar, sidecar_path_for
 
@@ -433,8 +460,9 @@ def drop_held_out_variants(
             line.script_text and held_out.holds_text(line.script_text)
             for line in sidecar.lines
         ):
-            variant.path.unlink(missing_ok=True)
-            sidecar_path.unlink(missing_ok=True)
+            if variant.fresh:
+                variant.path.unlink(missing_ok=True)
+                sidecar_path.unlink(missing_ok=True)
             continue
         kept.append(variant)
     return kept

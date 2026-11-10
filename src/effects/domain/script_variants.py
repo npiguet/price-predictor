@@ -12,6 +12,7 @@ AI prefers to deck or pay, not what the card does.
 
 from __future__ import annotations
 
+import hashlib
 import random
 import re
 from dataclasses import dataclass
@@ -178,14 +179,29 @@ def _apply(script_text: str, perturbation: Perturbation) -> str:
     return pattern.sub(rf"\g<1>{perturbation.replacement}", script_text, count=1)
 
 
-def variant_name(card_name: str, index: int) -> str:
-    """The name a variant script is filed under.
+#: Hex digits of a perturbed script's SHA-256 a variant's name carries.
+VARIANT_DIGEST_LENGTH = 8
 
-    Suffixed with words rather than parentheses: Forge reads a parenthesised
-    suffix on a deck-list line as a set code, and no filename sanitizer strips
-    brackets.
+
+def variant_digest(script_lines: list[str]) -> str:
+    """The first :data:`VARIANT_DIGEST_LENGTH` hex digits of the SHA-256 of a
+    perturbed script, its lines joined by newlines with a final newline, before
+    the variant's own name is written into it (FR-058b)."""
+    text = "\n".join(script_lines) + "\n"
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:VARIANT_DIGEST_LENGTH]
+
+
+def variant_name(card_name: str, digest: str) -> str:
+    """The name a variant script is filed under: its source card and its
+    perturbed script's :func:`variant_digest` (FR-058b).
+
+    The digest makes the name the script's: two runs perturbing a card alike
+    name it alike, and two perturbing it differently never share a name, so
+    a variant file is never rewritten under its name. Suffixed with words
+    rather than parentheses: Forge reads a parenthesised suffix on a
+    deck-list line as a set code, and no filename sanitizer strips brackets.
     """
-    return f"{card_name} Variant {index}"
+    return f"{card_name} Variant {digest}"
 
 
 def script_card_name(lines: list[str]) -> str | None:
