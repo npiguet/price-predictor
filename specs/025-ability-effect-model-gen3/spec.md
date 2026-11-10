@@ -1061,7 +1061,10 @@ and that the reporting half never enters the control score.
   corpus, the held-out coverage round included, MUST use the same `--playability-rate`,
   `--zone-candidate-rate` and `--plain-candidate-rate` (the held-out round sets none of its own),
   and `build-corpus` MUST give each validation stratum the training stratum's class mix
-  (`--class-mix`).
+  (`--class-mix`). A validation stratum reaches the mix through its records' natural copies and
+  drops none: over the classes it holds, the class most over its share is written once a record,
+  and each other class is repeated toward its share, at most `--reuse-cap` times a record; a
+  class the mix omits is written once a record.
 - **FR-060**: The manifest MUST add the per-rule counts (FR-008's shape, three sources), per class
   and rule the records available, share, written and shortfall, each split by polarity and by the
   same three sources, the one-sided conditions

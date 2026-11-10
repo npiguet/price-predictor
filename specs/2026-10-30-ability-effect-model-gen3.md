@@ -1050,7 +1050,9 @@ get examples from three sources, in amounts per-rule rebalancing sets:
   - every collecting run of the corpus, the held-out coverage round included, uses the same
     `--playability-rate`, `--zone-candidate-rate` and `--plain-candidate-rate`;
   - `build-corpus` gives each validation stratum the training stratum's class mix
-    (`--class-mix`).
+    (`--class-mix`) through its records' natural copies, dropping none: the class most over
+    its share is written once a record, each other class repeats toward its share, at most
+    `--reuse-cap` times a record, and a class the mix omits is written once a record.
 - Each validation stratum is built with the training stratum's rule budgets (§ 12.1), its
   added copies carrying their rule. The explained-deviance component (§ 14.1) reads a
   stratum's records with those copies, under the run's `--rule-mask`, as training reads its
