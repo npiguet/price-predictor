@@ -342,8 +342,9 @@ def test_the_supply_counts_only_records_of_games_that_train_whatever_placement_d
 
 
 def test_a_random_seat_game_trains_unless_it_names_a_held_out_card(tmp_path):
-    """FR-059: no random-seat game enters a validation stratum, so one in the
-    pool trains outright and one naming a held-out card is dropped."""
+    """FR-059 (T182): a random-seat game never enters the game-disjoint
+    stratum, so one in the pool trains outright; one naming a held-out card is
+    a card-disjoint candidate like a Forge-AI game naming one."""
     games = [f"g{i}" for i in range(400)]
     pooled = [g for g in games if game_disjoint_draw(g) < 0.5]
     out = _survey_one(tmp_path, [
@@ -356,7 +357,7 @@ def test_a_random_seat_game_trains_unless_it_names_a_held_out_card(tmp_path):
 
     assert out.games.random_seat == {pooled[0], pooled[1]}
     assert sum(out.supply.keyed.values()) == 1
-    assert out.candidates == []
+    assert {record.game for record in out.candidates} == {pooled[1]}
 
 
 # ── held-out texts (G13, G14) ──────────────────────────────────────────
@@ -446,11 +447,14 @@ def test_every_record_is_tagged_and_counted_as_rule_counts_counts_it(gen3_survey
 
 
 def test_candidates_are_forge_ai_games_with_their_inventories(gen3_survey):
-    """Inventories count budgeted rules' rule-test-eligible tags (research R3)."""
+    """Inventories count budgeted rules' rule-test-eligible tags (research R3).
+    A random-seat game is a candidate only when it names a held-out card."""
     survey, config = gen3_survey
     totals = survey.totals
     candidate_games = {record.game for record in totals.candidates}
-    assert candidate_games == totals.games.games - totals.games.random_seat
+    games = totals.games
+    assert candidate_games == (games.games - games.random_seat) | (
+        games.games & games.random_seat & games.held_out)
     assert totals.games.random_seat
     inventories = dict(totals.inventories)
     assert inventories and set(inventories) <= candidate_games

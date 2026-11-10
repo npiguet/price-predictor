@@ -1828,11 +1828,9 @@ def test_the_manifest_holds_every_gen3_field(gen3_build):
     assert set(manifest.halves) == {"card-disjoint", "game-disjoint"}
 
 
-def test_validation_strata_hold_forge_ai_games_only(gen3_build):
-    """FR-059: a random-seat game enters neither validation stratum."""
-    store = gen3_build
-    for directory in (store.card_disjoint_dir, store.game_disjoint_dir):
-        assert not [r for r in read_records(directory) if r.random_seat]
+def test_the_game_disjoint_stratum_holds_forge_ai_games_only(gen3_build):
+    """FR-059: a random-seat game never enters the game-disjoint stratum."""
+    assert not [r for r in read_records(gen3_build.game_disjoint_dir) if r.random_seat]
 
 
 def test_a_gen2_record_stops_the_build_before_any_record_is_read(tmp_path):

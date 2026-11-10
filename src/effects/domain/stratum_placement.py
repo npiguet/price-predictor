@@ -137,22 +137,29 @@ class GameCensus:
     keyword_combat: frozenset[str]
     #: Held-out text -> games holding a resolution record acting through it.
     held_out_text_games: Mapping[str, Iterable[str]]
-    #: ``game -> (rule, polarity) -> records``, Forge-AI games only, over
+    #: ``game -> (rule, polarity) -> records`` over the candidate games (the
+    #: Forge-AI games of the pool and every game naming a held-out card), over
     #: budgeted rules and :func:`rule_test_eligible` records.
     inventories: Mapping[str, Mapping[RuleCell, int]] = field(default_factory=dict)
 
 
 def place_games(census: GameCensus, rule: PlacementRule) -> GameStrata:
-    """Every game's stratum and every validation game's half."""
+    """Every game's stratum and every validation game's half.
+
+    The card-disjoint stratum admits every game naming a held-out card,
+    random-seat games included (FR-059); the game-disjoint stratum draws from
+    games two Forge AIs played.
+    """
     forge_ai = census.games - census.random_seat
+    candidates = forge_ai | (census.held_out & census.games)
     inventories = {
         game: {cell: n for cell, n in inventory.items()
                if cell[1] in TEST_POLARITIES and n > 0}
-        for game, inventory in census.inventories.items() if game in forge_ai
+        for game, inventory in census.inventories.items() if game in candidates
     }
     need = 2 * rule_test_records_needed(rule.max_item_error)
     card = _admit_card_disjoint(
-        census.held_out & forge_ai, census.held_out_text_games, inventories,
+        census.held_out & census.games, census.held_out_text_games, inventories,
         cap=rule.card_disjoint_text_cap, need=need, seed=rule.seed,
     )
     game = _game_disjoint(

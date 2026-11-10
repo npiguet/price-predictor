@@ -391,7 +391,6 @@ class _Fate(StrEnum):
 
     TRAINS = "trains"
     CANDIDATE = "candidate"
-    DROPPED = "dropped"
 
 
 @dataclass(frozen=True, slots=True)
@@ -563,8 +562,6 @@ class _ShardSurveyor:
         held_out = self.out.games.held_out
         for pending in self.pending:
             fate = self._fate(pending.game, candidates)
-            if fate is _Fate.DROPPED:
-                continue
             surveyed = self._surveyed(pending, seat_games)
             if pending.acts_through_held_out_text and pending.game not in held_out:
                 self.out.held_out_text_dropped[pending.klass] += 1
@@ -582,24 +579,21 @@ class _ShardSurveyor:
         return self.out
 
     def _candidate_games(self) -> frozenset[str]:
-        """Forge-AI games placement may put in a validation stratum: every one
-        naming a held-out card, and every other of the candidate pool."""
+        """Games placement may put in a validation stratum: every one naming a
+        held-out card, random-seat games included (FR-059), and every other
+        Forge-AI game of the candidate pool; the game-disjoint stratum keeps
+        Forge-AI games only."""
         games, placement = self.out.games, self.config.placement
         return frozenset(
             game for game in games.games
-            if game not in games.random_seat and (
-                game in games.held_out
-                or placement.in_pool(game, keyword_combat=game in games.keyword_combat)
+            if game in games.held_out or (
+                game not in games.random_seat
+                and placement.in_pool(game, keyword_combat=game in games.keyword_combat)
             )
         )
 
     def _fate(self, game: str, candidates: frozenset[str]) -> _Fate:
-        if game in candidates:
-            return _Fate.CANDIDATE
-        if game in self.out.games.held_out:
-            # A random-seat game naming a held-out card: dropped (FR-059).
-            return _Fate.DROPPED
-        return _Fate.TRAINS
+        return _Fate.CANDIDATE if game in candidates else _Fate.TRAINS
 
     def _surveyed(self, pending: _PendingRecord, seat_games: set[str]) -> SurveyedRecord:
         return SurveyedRecord(

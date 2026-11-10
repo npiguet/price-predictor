@@ -90,15 +90,23 @@ def test_a_rule_whose_records_cannot_fill_every_half_is_named():
     assert all("704.5f" not in rules for by_half in named.values() for rules in by_half.values())
 
 
-def test_validation_strata_keep_only_forge_ai_games():
-    seat_drawn = ids_drawn(0.0, 0.01)
+def test_a_random_seat_game_naming_a_held_out_card_is_card_disjoint():
+    """FR-059 (T182): the card-disjoint stratum keeps every game naming a
+    held-out card, random-seat games included; the random seat casts held-out
+    cards the AI never casts."""
     seat_held = sorted(HELD)[:3]
-    strata = place_games(
-        census(alternating("704.5f"), random_seat=[*seat_drawn, *seat_held]), rule())
-    assert not set(seat_drawn) & strata.game_disjoint
-    assert not set(seat_held) & strata.card_disjoint
+    strata = place_games(census(alternating("704.5f"), random_seat=seat_held), rule())
     for game in seat_held:
-        assert strata.stratum_of(game) is Stratum.DROPPED_HELD_OUT
+        assert strata.stratum_of(game) is Stratum.CARD_DISJOINT
+        assert strata.half_of(game) is not None
+
+
+def test_the_game_disjoint_stratum_keeps_only_forge_ai_games():
+    """FR-059: a random-seat game naming no held-out card trains, even one
+    gen-2's draw would have placed."""
+    seat_drawn = ids_drawn(0.0, 0.01)
+    strata = place_games(census(alternating("704.5f"), random_seat=seat_drawn), rule())
+    assert not set(seat_drawn) & strata.game_disjoint
     for game in seat_drawn:
         assert strata.stratum_of(game) is Stratum.TRAINING
         assert strata.half_of(game) is None
