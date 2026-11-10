@@ -383,7 +383,14 @@
           "polarity": "other",
           "delta": "Grizzly Bears also has a +1/+1 counter.",
           "expected": "Grizzly Bears is a 4/4: the printed 2/2, the +1/+1 counter and the +1/+1 from Glorious Anthem.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [],
+            "add": [
+              "K:etbCounter:P1P1:1"
+            ]
+          }
         }
       ],
       "cards": [

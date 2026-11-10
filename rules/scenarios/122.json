@@ -367,7 +367,14 @@
           "polarity": "other",
           "delta": "Grizzly Bears has two stun counters.",
           "expected": "Grizzly Bears stays tapped and keeps one stun counter.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [],
+            "add": [
+              "K:etbCounter:STUN:2"
+            ]
+          }
         }
       ],
       "cards": [
@@ -439,7 +446,16 @@
           "polarity": "does_not_fire",
           "delta": "Jace Beleren has 2 loyalty.",
           "expected": "Jace Beleren has 1 loyalty and stays on the battlefield; B draws a card.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Jace Beleren",
+            "remove": [
+              "Loyalty:3"
+            ],
+            "add": [
+              "Loyalty:2"
+            ]
+          }
         }
       ],
       "cards": [
@@ -600,7 +616,16 @@
           "polarity": "does_not_fire",
           "delta": "Invasion of Zendikar has 4 defense counters, so no defeat trigger goes on the stack and Stifle is not cast.",
           "expected": "Invasion of Zendikar keeps 1 defense counter and stays on the battlefield.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Invasion of Zendikar",
+            "remove": [
+              "Defense:3"
+            ],
+            "add": [
+              "Defense:4"
+            ]
+          }
         }
       ],
       "cards": [
@@ -960,7 +985,14 @@
           "polarity": "other",
           "delta": "Grizzly Bears has two +1/+1 counters.",
           "expected": "One +1/+1 and the -1/-1 counter are removed, leaving one +1/+1 counter; Grizzly Bears is a 3/3.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [],
+            "add": [
+              "K:etbCounter:P1P1:2"
+            ]
+          }
         }
       ],
       "cards": [
@@ -1019,7 +1051,16 @@
           "polarity": "does_not_fire",
           "delta": "Rasputin Dreamweaver has 5 dream counters.",
           "expected": "Rasputin Dreamweaver ends with 6 dream counters; nothing is removed.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Rasputin Dreamweaver",
+            "remove": [
+              "K:etbCounter:DREAM:7"
+            ],
+            "add": [
+              "K:etbCounter:DREAM:5"
+            ]
+          }
         }
       ],
       "cards": [
@@ -1250,14 +1291,28 @@
           "polarity": "does_not_fire",
           "delta": "Midnight Clock has 10 hour counters.",
           "expected": "Midnight Clock goes from 10 to 11 hour counters; its trigger does not fire and Grizzly Bears stays in A's graveyard.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Midnight Clock",
+            "remove": [],
+            "add": [
+              "K:etbCounter:HOUR:10"
+            ]
+          }
         },
         {
           "label": "twelve_to_thirteen",
           "polarity": "does_not_fire",
           "delta": "Midnight Clock already has 12 hour counters.",
           "expected": "Midnight Clock goes from 12 to 13 hour counters; it already had 12 or more beforehand, so its trigger does not fire and it stays on the battlefield.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Midnight Clock",
+            "remove": [],
+            "add": [
+              "K:etbCounter:HOUR:12"
+            ]
+          }
         }
       ],
       "cards": [

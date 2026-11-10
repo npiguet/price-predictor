@@ -127,14 +127,32 @@
           "polarity": "does_not_fire",
           "delta": "A's attacker is Craw Wurm (6/4, no trample) instead of Colossal Dreadmaw.",
           "expected": "Craw Wurm assigns all 6 damage to Grizzly Bears, which is destroyed. B's life stays 20.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Colossal Dreadmaw",
+            "remove": [
+              "K:Trample"
+            ],
+            "add": [],
+            "note": "Craw Wurm (6/4, no trample) replaces Colossal Dreadmaw; the Dreadmaw loses the one thing the Wurm lacks"
+          }
         },
         {
           "label": "toughness_matches_power",
           "polarity": "does_not_fire",
           "delta": "B's blocker is a Colossal Dreadmaw (6 toughness) instead of Grizzly Bears.",
           "expected": "A's Colossal Dreadmaw assigns all 6 damage to the blocking Colossal Dreadmaw as lethal damage, and none to B (life 20). Both Colossal Dreadmaws are destroyed.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:6/6"
+            ],
+            "note": "Colossal Dreadmaw (6/6) replaces Grizzly Bears as the blocker; the Bears take its power and toughness"
+          }
         },
         {
           "label": "damage_already_marked",
@@ -227,7 +245,15 @@
           "polarity": "does_not_fire",
           "delta": "A's attacker is Colossal Dreadmaw (6/6, trample but not trample over planeswalkers) instead of Thrasta, and A assigns all 6 damage to Jace Beleren.",
           "expected": "Jace Beleren is dealt 6 damage and goes to B's graveyard. B's life stays 20: Colossal Dreadmaw cannot assign damage to B.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Thrasta, Tempest's Roar",
+            "remove": [
+              "K:Trample:Planeswalker"
+            ],
+            "add": [],
+            "note": "Colossal Dreadmaw (plain trample) replaces Thrasta; Thrasta loses trample over planeswalkers"
+          }
         },
         {
           "label": "blocked",
@@ -312,7 +338,15 @@
           "polarity": "does_not_fire",
           "delta": "A's attacker is Craw Wurm (6/4, no trample) instead of Colossal Dreadmaw.",
           "expected": "Craw Wurm is blocked and has no blocker, so it deals no combat damage. B's life stays 20. Grizzly Bears is in B's graveyard.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Colossal Dreadmaw",
+            "remove": [
+              "K:Trample"
+            ],
+            "add": [],
+            "note": "Craw Wurm (6/4, no trample) replaces Colossal Dreadmaw; the Dreadmaw loses trample"
+          }
         }
       ],
       "cards": [
@@ -404,7 +438,15 @@
           "polarity": "does_not_fire",
           "delta": "A's attacker is Colossal Dreadmaw (6/6, trample but not trample over planeswalkers) instead of Thrasta.",
           "expected": "Colossal Dreadmaw deals no combat damage to B (life 20) because it can only assign damage to the planeswalker that left the battlefield. Jace Beleren is in B's graveyard.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Thrasta, Tempest's Roar",
+            "remove": [
+              "K:Trample:Planeswalker"
+            ],
+            "add": [],
+            "note": "Colossal Dreadmaw (plain trample) replaces Thrasta; Thrasta loses trample over planeswalkers"
+          }
         }
       ],
       "cards": [
@@ -487,7 +529,16 @@
           "polarity": "does_not_fire",
           "delta": "A's attacker is Thrasta, Tempest's Roar (7/7, trample over planeswalkers) instead of Craw Wurm.",
           "expected": "Jace Beleren is in B's graveyard. Thrasta deals all 7 combat damage to B (life 13).",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Craw Wurm",
+            "remove": [],
+            "add": [
+              "K:Trample",
+              "K:Trample:Planeswalker"
+            ],
+            "note": "Thrasta, Tempest's Roar (7/7, trample over planeswalkers) replaces Craw Wurm; the Wurm gains Thrasta's trample keywords"
+          }
         },
         {
           "label": "planeswalker_stays",

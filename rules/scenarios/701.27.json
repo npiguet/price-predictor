@@ -302,7 +302,17 @@
           "polarity": "does_not_fire",
           "delta": "A controls Delver of Secrets instead of Villagers of Estwald.",
           "expected": "Delver of Secrets is Insectile Aberration, a Human Insect. Cult of the Waxing Moon's trigger does not fire and A has no Wolf token.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Villagers of Estwald",
+            "remove": [
+              "Types:Creature Werewolf"
+            ],
+            "add": [
+              "Types:Creature Human Werewolf"
+            ],
+            "note": "Delver of Secrets (whose back face is a Human Insect) replaces Villagers of Estwald; the Villagers' back face (the only line spelled exactly Types:Creature Werewolf) becomes a Human"
+          }
         }
       ],
       "cards": [

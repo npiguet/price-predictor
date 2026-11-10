@@ -47,21 +47,47 @@
           "polarity": "fires",
           "delta": "A's permanent is Delver of Secrets already transformed into Insectile Aberration (no mana cost, blue color indicator) instead of Dryad Arbor.",
           "expected": "Insectile Aberration is blue.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Dryad Arbor",
+            "remove": [
+              "Colors:green"
+            ],
+            "add": [
+              "Colors:blue"
+            ],
+            "note": "Insectile Aberration, a blue permanent with no mana cost, replaces Dryad Arbor; Arbor's colour becomes blue"
+          }
         },
         {
           "label": "no_indicator",
           "polarity": "does_not_fire",
           "delta": "A's permanent is Forest (no mana cost, no color indicator) instead of Dryad Arbor.",
           "expected": "Forest is colorless.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Dryad Arbor",
+            "remove": [
+              "Colors:green"
+            ],
+            "add": [],
+            "note": "Forest (no mana cost, no colour indicator) replaces Dryad Arbor; the Arbor loses its colour"
+          }
         },
         {
           "label": "mana_cost_not_indicator",
           "polarity": "does_not_fire",
           "delta": "A's permanent is Ornithopter (mana cost {0}, no color indicator) instead of Dryad Arbor.",
           "expected": "Ornithopter is colorless.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Dryad Arbor",
+            "remove": [
+              "Colors:green"
+            ],
+            "add": [],
+            "note": "Ornithopter (mana cost {0}, no colour indicator) replaces Dryad Arbor; the Arbor loses its colour and, like the Ornithopter, has no coloured mana cost"
+          }
         }
       ],
       "cards": [

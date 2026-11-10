@@ -52,7 +52,15 @@
           "polarity": "does_not_fire",
           "delta": "A's attacker is Fugitive Wizard (1/1, no abilities) instead of Cinderbones.",
           "expected": "Fugitive Wizard deals 1 damage to Grizzly Bears, which has 1 damage marked, no counters, and stays a 2/2. Grizzly Bears deals 2 damage to Fugitive Wizard, which is destroyed. B's life stays 20.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Cinderbones",
+            "remove": [
+              "K:Wither"
+            ],
+            "add": [],
+            "note": "Fugitive Wizard (1/1, no abilities) replaces Cinderbones in the scenario; the Cinderbones lose wither, the one thing the rule reads"
+          }
         },
         {
           "label": "unblocked",

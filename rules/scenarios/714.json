@@ -63,7 +63,15 @@
           "polarity": "does_not_fire",
           "delta": "History of Benalia starts with 2 lore counters instead of 1.",
           "expected": "The count goes from 2 to 4. Only chapter III triggers; chapter II does not trigger again because the count was not below 2. No Knight token is created, chapter III resolves with no Knights to pump, and History of Benalia is then sacrificed to A's graveyard.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "History of Benalia",
+            "remove": [],
+            "add": [
+              "K:etbCounter:LORE:1"
+            ],
+            "note": "one more lore counter than the base setup gives"
+          }
         }
       ],
       "cards": [
@@ -134,7 +142,15 @@
           "polarity": "does_not_fire",
           "delta": "History of Benalia starts with 2 lore counters instead of 1, so the new counter makes it 3 and chapter III triggers instead.",
           "expected": "Chapter III triggers and resolves: Knights A controls get +2/+1 until end of turn. No Knight token is created, since the Knight-creating text belongs to chapters I and II only. History of Benalia is then sacrificed.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "History of Benalia",
+            "remove": [],
+            "add": [
+              "K:etbCounter:LORE:1"
+            ],
+            "note": "one more lore counter than the base setup gives"
+          }
         }
       ],
       "cards": [
@@ -463,7 +479,17 @@
           "polarity": "does_not_fire",
           "delta": "History of Benalia starts with 1 lore counter instead of 2.",
           "expected": "The new counter makes it 2, below the final chapter number 3. Chapter II triggers and creates a Knight token; History of Benalia is not sacrificed and stays with 2 lore counters.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "History of Benalia",
+            "remove": [
+              "K:Chapter:3:DBToken,DBToken,DBPump"
+            ],
+            "add": [
+              "K:Chapter:4:DBToken,DBToken,DBToken,DBPump"
+            ],
+            "note": "the lore count stays below the final chapter: the final chapter moves up rather than the counters down"
+          }
         },
         {
           "label": "response_on_stack",

@@ -57,7 +57,15 @@
           "polarity": "does_not_fire",
           "delta": "A's creature is Mons's Goblin Raiders (no haste) instead of Raging Goblin, also summoning sick.",
           "expected": "Mons's Goblin Raiders is not a legal attacker.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Raging Goblin",
+            "remove": [
+              "K:Haste"
+            ],
+            "add": [],
+            "note": "Mons's Goblin Raiders (no haste) replaces Raging Goblin in the scenario; the Goblin loses haste, the one thing the Raiders lack"
+          }
         }
       ],
       "cards": [

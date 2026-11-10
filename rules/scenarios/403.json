@@ -231,7 +231,19 @@
           "polarity": "other",
           "delta": "The creature is Elvish Visionary (1/1) with a +1/+1 counter and 1 damage instead of Grizzly Bears.",
           "expected": "Elvish Visionary returns as a new 1/1 with no counter or damage and its enters trigger fires, so A draws Forest.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:1/1",
+              "T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Card.Self | Execute$ TrigDraw | TriggerDescription$ When CARDNAME enters, draw a card.",
+              "SVar:TrigDraw:DB$ Draw | Defined$ You | NumCards$ 1"
+            ],
+            "note": "Elvish Visionary (1/1, draws a card when it enters) replaces Grizzly Bears in the scenario; the Bears take its power/toughness and its enters trigger (the counter and damage are setup)"
+          }
         }
       ],
       "cards": [

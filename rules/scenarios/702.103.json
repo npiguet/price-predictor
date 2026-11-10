@@ -365,7 +365,17 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Centaur Courser (3/3) instead of Grizzly Bears.",
           "expected": "Shock leaves Centaur Courser on the battlefield with 2 damage. Hopeful Eidolon resolves as a bestowed Aura attached to Centaur Courser, which is 4/4 with lifelink and 2 damage.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:3/3"
+            ],
+            "note": "Centaur Courser (3/3) replaces Grizzly Bears in the scenario; the Bears take its toughness so Shock does not kill them"
+          }
         }
       ],
       "cards": [
@@ -444,7 +454,17 @@
           "polarity": "does_not_fire",
           "delta": "A's creature is Centaur Courser (3/3, 4/4 with the Aura) instead of Grizzly Bears.",
           "expected": "Centaur Courser survives with 3 damage. Hopeful Eidolon stays attached to it as a bestowed Aura and is not a creature.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:3/3"
+            ],
+            "note": "Centaur Courser (3/3) replaces Grizzly Bears in the scenario; the Bears take its toughness so Lightning Bolt does not kill it"
+          }
         }
       ],
       "cards": [

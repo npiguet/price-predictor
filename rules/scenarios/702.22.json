@@ -136,7 +136,15 @@
           "polarity": "does_not_fire",
           "delta": "A's second Grizzly Bears is Mesa Pegasus (flying, banding) instead.",
           "expected": "The band declaration is legal: Benalish Hero and Mesa Pegasus have banding, and Grizzly Bears is the only member without it.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [],
+            "add": [
+              "K:Banding"
+            ],
+            "note": "Mesa Pegasus (flying, banding) replaces the second Grizzly Bears in the scenario; the Bears gain banding, the one thing the rule reads"
+          }
         }
       ],
       "cards": [

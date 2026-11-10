@@ -58,7 +58,14 @@
           "polarity": "does_not_fire",
           "delta": "Cuboid Colony already has a +1/+1 counter (it is a 2/2).",
           "expected": "Increment does not trigger: 2 mana spent is not greater than power 2 or toughness 2. Cuboid Colony stays a 2/2 with one counter.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Cuboid Colony",
+            "remove": [],
+            "add": [
+              "K:etbCounter:P1P1:1"
+            ]
+          }
         },
         {
           "label": "one_mana_spent",

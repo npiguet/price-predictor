@@ -278,7 +278,16 @@
           "polarity": "does_not_fire",
           "delta": "Maelstrom Djinn has one instance of vanishing.",
           "expected": "One upkeep trigger fires and removes one time counter. Maelstrom Djinn stays on the battlefield with one time counter.",
-          "operation": "keyword"
+          "operation": "keyword",
+          "script_edit": {
+            "card": "Maelstrom Djinn",
+            "remove": [],
+            "add": [
+              "K:Vanishing",
+              "K:etbCounter:TIME:2"
+            ],
+            "note": "entering normally the Djinn has one instance of vanishing without a number (as after one turn face up) and two time counters; the face-up trigger is not involved"
+          }
         }
       ],
       "cards": [

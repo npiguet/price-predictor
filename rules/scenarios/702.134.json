@@ -52,7 +52,17 @@
           "polarity": "does_not_fire",
           "delta": "A's second attacker is Hill Giant (3/3) instead of Grizzly Bears.",
           "expected": "Hill Giant's power is not less than Blade Instructor's, so the mentor trigger has no legal target and puts no counter on anything; Hill Giant stays a 3/3.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:3/3"
+            ],
+            "note": "Hill Giant (3/3) replaces Grizzly Bears; the Bears take its power and toughness"
+          }
         },
         {
           "label": "mentor_alone",

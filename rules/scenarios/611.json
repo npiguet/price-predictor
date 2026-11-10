@@ -807,7 +807,15 @@
           "polarity": "does_not_fire",
           "delta": "Gaea's Anthem is not on the battlefield (A controls a third Forest instead).",
           "expected": "Grizzly Bears enters as a 2/2; Garruk's Packleader's trigger does not fire and A draws nothing.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Gaea's Anthem",
+            "remove": [
+              "S:Mode$ Continuous | Affected$ Creature.YouCtrl | AddPower$ 1 | AddToughness$ 1 | Description$ Creatures you control get +1/+1."
+            ],
+            "add": [],
+            "note": "A third Forest replaces Gaea's Anthem in the scenario; the Anthem loses its +1/+1 effect, the one thing the Forest lacks"
+          }
         }
       ],
       "cards": [

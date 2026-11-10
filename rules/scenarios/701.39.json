@@ -55,7 +55,17 @@
           "polarity": "other",
           "delta": "A controls Savannah Lions (2/1) instead of Wall of Wood.",
           "expected": "Savannah Lions (toughness 1) gets three +1/+1 counters and is a 5/4. Grizzly Bears gets no counters and stays 2/2. Cached Defenses is in A's graveyard.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Wall of Wood",
+            "remove": [
+              "PT:0/3"
+            ],
+            "add": [
+              "PT:2/1"
+            ],
+            "note": "Savannah Lions (2/1) replaces Wall of Wood; the Wall takes its power and toughness"
+          }
         }
       ],
       "cards": [

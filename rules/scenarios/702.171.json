@@ -56,7 +56,17 @@
           "polarity": "does_not_fire",
           "delta": "Fugitive Wizard (1/1) is on A's battlefield instead of Grizzly Bears.",
           "expected": "Saddling is not legal: the total power of the other untapped creatures is 1, less than 2. Quilled Charger is not saddled, its attack trigger does not fire, and it deals 4 damage. B is at 16.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:1/1"
+            ],
+            "note": "Fugitive Wizard (1/1) replaces Grizzly Bears in the scenario; the Bears take its power"
+          }
         },
         {
           "label": "two_small_creatures",

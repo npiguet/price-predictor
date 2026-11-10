@@ -458,7 +458,20 @@
           "polarity": "does_not_fire",
           "delta": "A's artifact is Juggernaut (a 5/3 artifact creature with mana value 4) instead of Mind Stone.",
           "expected": "Juggernaut stays 5/3: it was not a noncreature artifact in layer 4, so the layer 7b part does not apply to it either.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Mind Stone",
+            "remove": [
+              "Types:Artifact",
+              "ManaCost:2"
+            ],
+            "add": [
+              "Types:Artifact Creature Juggernaut",
+              "ManaCost:4",
+              "PT:5/3"
+            ],
+            "note": "Juggernaut (a 5/3 artifact creature with mana value 4) replaces Mind Stone; the Stone takes its type, power/toughness and mana value"
+          }
         }
       ],
       "cards": [

@@ -1886,7 +1886,17 @@
           "polarity": "does_not_fire",
           "delta": "A's creature is Craw Wurm (6/4) instead of Grizzly Bears.",
           "expected": "Craw Wurm has the Young Hero Role but its toughness is 4, so the trigger does not fire and no counter is put on it; it stays 6/4.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:2/4"
+            ],
+            "note": "Craw Wurm (6/4) replaces Grizzly Bears in the scenario; the Bears take its toughness, the one thing the rule reads"
+          }
         }
       ],
       "cards": [
@@ -2114,7 +2124,17 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Colossus of Sardia (9/9) instead of Grizzly Bears.",
           "expected": "Orbital Plunge deals 6 damage, no excess damage is dealt, and no Lander token is created; Colossus of Sardia survives.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:9/9"
+            ],
+            "note": "Colossus of Sardia (9/9) replaces Grizzly Bears in the scenario; the Bears take its toughness so Orbital Plunge's 6 damage has no excess"
+          }
         }
       ],
       "cards": [

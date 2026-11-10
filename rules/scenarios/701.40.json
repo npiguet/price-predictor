@@ -138,7 +138,18 @@
           "polarity": "does_not_fire",
           "delta": "The manifested card is Shock instead of Grizzly Bears.",
           "expected": "Turning the permanent face up for its mana cost is not legal although Mountain could pay {R}. It stays a face-down colorless 2/2 creature with no name.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "Types:Creature Bear",
+              "PT:2/2"
+            ],
+            "add": [
+              "Types:Instant"
+            ],
+            "note": "Shock (an instant card) is the manifested card instead of Grizzly Bears and is wholly another card; the Bears become an instant"
+          }
         }
       ],
       "cards": [
@@ -200,7 +211,15 @@
           "polarity": "does_not_fire",
           "delta": "The manifested card is Serra Angel (mana cost {3}{W}{W}, no morph) instead of Exalted Angel.",
           "expected": "No way to turn the permanent face up is legal: Serra Angel has no morph cost and A's four Plains cannot pay {3}{W}{W}. It stays a face-down colorless 2/2.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Exalted Angel",
+            "remove": [
+              "K:Morph:2 W W"
+            ],
+            "add": [],
+            "note": "Serra Angel (no morph) is the manifested card instead of Exalted Angel; the Angel loses its morph"
+          }
         }
       ],
       "cards": [
@@ -271,7 +290,15 @@
           "polarity": "does_not_fire",
           "delta": "The manifested card is Craw Wurm (mana cost {4}{G}{G}, no disguise) instead of Bolrac-Clan Basher.",
           "expected": "No way to turn the permanent face up is legal: Craw Wurm has no disguise cost and A's five Mountains cannot pay {4}{G}{G}. It stays a face-down colorless 2/2.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Bolrac-Clan Basher",
+            "remove": [
+              "K:Disguise:3 R R"
+            ],
+            "add": [],
+            "note": "Craw Wurm (no disguise) is the manifested card instead of Bolrac-Clan Basher; the Basher loses its disguise"
+          }
         }
       ],
       "cards": [
@@ -514,7 +541,18 @@
           "polarity": "does_not_fire",
           "delta": "The manifested card is Shock instead of Grizzly Bears.",
           "expected": "The trigger resolves; A reveals Shock and the permanent stays face down as a 2/2. Aven Farseer's trigger does not fire and Farseer stays 1/1 with no counter. Craw Wurm deals 6 damage and B is at 14.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "Types:Creature Bear",
+              "PT:2/2"
+            ],
+            "add": [
+              "Types:Instant"
+            ],
+            "note": "Shock (an instant card) is the manifested card instead of Grizzly Bears and is wholly another card; the Bears become an instant"
+          }
         }
       ],
       "cards": [

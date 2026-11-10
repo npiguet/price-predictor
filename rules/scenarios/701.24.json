@@ -466,7 +466,15 @@
           "polarity": "other",
           "delta": "A controls one Darksteel Colossus and one Grizzly Bears instead of the second Colossus.",
           "expected": "The Colossus is shuffled into A's library (four cards) and the Grizzly Bears goes to A's graveyard. One shuffle, so Cosi's Trickster triggers once and becomes 2/2.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Darksteel Colossus",
+            "remove": [
+              "R:Event$ Moved | Destination$ Graveyard | ValidCard$ Card.Self | ReplaceWith$ DBShuffle | Description$ If CARDNAME would be put into a graveyard from anywhere, reveal CARDNAME and shuffle it into its owner's library instead."
+            ],
+            "add": [],
+            "note": "Grizzly Bears replaces the second Darksteel Colossus in the scenario; that Colossus loses its shuffle replacement effect, the one thing the Bears lack"
+          }
         },
         {
           "label": "own-trickster",
@@ -577,14 +585,30 @@
           "polarity": "does_not_fire",
           "delta": "A controls a Grizzly Bears instead of Darksteel Colossus.",
           "expected": "Gravebane Zombie is on top of A's library (four cards: Zombie then three Forests). Nothing was shuffled, so Cosi's Trickster stays 1/1. The Grizzly Bears is in A's graveyard.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Darksteel Colossus",
+            "remove": [
+              "R:Event$ Moved | Destination$ Graveyard | ValidCard$ Card.Self | ReplaceWith$ DBShuffle | Description$ If CARDNAME would be put into a graveyard from anywhere, reveal CARDNAME and shuffle it into its owner's library instead."
+            ],
+            "add": [],
+            "note": "Grizzly Bears replaces Darksteel Colossus in the scenario; the Colossus loses its shuffle replacement effect"
+          }
         },
         {
           "label": "colossus-only",
           "polarity": "other",
           "delta": "A controls a Grizzly Bears instead of Gravebane Zombie.",
           "expected": "Darksteel Colossus is shuffled into A's library (four cards) and no card is forced on top. Cosi's Trickster becomes 2/2. The Grizzly Bears is in A's graveyard.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Gravebane Zombie",
+            "remove": [
+              "R:Event$ Moved | ActiveZones$ Battlefield | Origin$ Battlefield | Destination$ Graveyard | ValidCard$ Card.Self | ReplaceWith$ ToLibrary | Description$ If CARDNAME would die, put CARDNAME on top of its owner's library instead."
+            ],
+            "add": [],
+            "note": "Grizzly Bears replaces Gravebane Zombie in the scenario; the Zombie loses its put-on-top replacement effect"
+          }
         }
       ],
       "cards": [

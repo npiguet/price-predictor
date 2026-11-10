@@ -174,7 +174,17 @@
           "polarity": "does_not_fire",
           "delta": "The face-down permanent is Daru Lancer, which A turns face up paying its morph cost {2}{W}{W} with both Plains and two Forests.",
           "expected": "Daru Lancer is face up as a 3/4 with first strike and no counters. Two Forests stay untapped.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Aerie Bowmasters",
+            "remove": [
+              "K:Megamorph:5 G"
+            ],
+            "add": [
+              "K:Morph:2 W W"
+            ],
+            "note": "Daru Lancer (plain morph {2}{W}{W}) replaces Aerie Bowmasters; the Bowmasters' megamorph becomes a plain morph"
+          }
         }
       ],
       "cards": [

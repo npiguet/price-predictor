@@ -54,7 +54,15 @@
           "polarity": "does_not_fire",
           "delta": "A's other creature is Savannah Lions (2/1, no abilities) instead of Akrasan Squire.",
           "expected": "No exalted trigger. Grizzly Bears stays a 2/2 and deals 2 damage to B, whose life becomes 18.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Akrasan Squire",
+            "remove": [
+              "K:Exalted"
+            ],
+            "add": [],
+            "note": "Savannah Lions (no abilities) replaces Akrasan Squire; the Squire loses exalted"
+          }
         }
       ],
       "cards": [

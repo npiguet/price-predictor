@@ -55,7 +55,17 @@
           "polarity": "does_not_fire",
           "delta": "A controls Mountain and Mountain instead of Forest and Mountain.",
           "expected": "Casting Grizzly Bears is not legal: two mana are available but none is green.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Forest",
+            "remove": [
+              "Types:Basic Land Forest"
+            ],
+            "add": [
+              "Types:Basic Land Mountain"
+            ],
+            "note": "a second Mountain replaces the Forest; the Forest becomes a Mountain"
+          }
         },
         {
           "label": "too_little_mana",
@@ -201,28 +211,68 @@
           "polarity": "fires",
           "delta": "A's permanent is Watchwolf (mana cost {G}{W}) instead of Grizzly Bears.",
           "expected": "Watchwolf is green and white.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "ManaCost:1 G"
+            ],
+            "add": [
+              "ManaCost:G W"
+            ],
+            "note": "Watchwolf (mana cost {G}{W}) replaces Grizzly Bears; the Bears take its mana cost"
+          }
         },
         {
           "label": "hybrid",
           "polarity": "fires",
           "delta": "A's permanent is Kitchen Finks (mana cost {1}{G/W}{G/W}) instead of Grizzly Bears.",
           "expected": "Kitchen Finks is green and white.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "ManaCost:1 G"
+            ],
+            "add": [
+              "ManaCost:1 G/W G/W"
+            ],
+            "note": "Kitchen Finks (mana cost {1}{G/W}{G/W}) replaces Grizzly Bears; the Bears take its mana cost"
+          }
         },
         {
           "label": "phyrexian",
           "polarity": "fires",
           "delta": "A's permanent is Birthing Pod (an artifact with mana cost {3}{G/P}) instead of Grizzly Bears.",
           "expected": "Birthing Pod is green although it is an artifact.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "ManaCost:1 G"
+            ],
+            "add": [
+              "ManaCost:3 GP"
+            ],
+            "note": "Birthing Pod (an artifact with mana cost {3}{G/P}) replaces Grizzly Bears; the Bears take its mana cost, the rule reading only the cost"
+          }
         },
         {
           "label": "no_colored_symbol",
           "polarity": "does_not_fire",
           "delta": "A's permanent is Wurmcoil Engine (mana cost {6}) instead of Grizzly Bears.",
           "expected": "Wurmcoil Engine has no colored symbol in its mana cost and is colorless.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "ManaCost:1 G"
+            ],
+            "add": [
+              "ManaCost:6"
+            ],
+            "note": "Wurmcoil Engine (mana cost {6}) replaces Grizzly Bears; the Bears take its mana cost"
+          }
         }
       ],
       "cards": [
@@ -278,14 +328,32 @@
           "polarity": "fires",
           "delta": "A's permanent is Delver of Secrets already transformed into Insectile Aberration (no mana cost, blue color indicator) instead of Dryad Arbor.",
           "expected": "Insectile Aberration is blue.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Dryad Arbor",
+            "remove": [
+              "Colors:green"
+            ],
+            "add": [
+              "Colors:blue"
+            ],
+            "note": "Insectile Aberration (no mana cost, blue colour indicator) replaces Dryad Arbor; the Arbor takes its colour indicator"
+          }
         },
         {
           "label": "no_indicator",
           "polarity": "does_not_fire",
           "delta": "A's permanent is Forest (no mana cost, no color indicator) instead of Dryad Arbor.",
           "expected": "Forest is colorless.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Dryad Arbor",
+            "remove": [
+              "Colors:green"
+            ],
+            "add": [],
+            "note": "Forest (no colour indicator) replaces Dryad Arbor; the Arbor loses its colour indicator"
+          }
         }
       ],
       "cards": [

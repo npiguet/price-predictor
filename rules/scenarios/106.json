@@ -482,7 +482,17 @@
           "polarity": "does_not_fire",
           "delta": "A's land is Plains instead of Ancient Ziggurat.",
           "expected": "Legal: Mana Reflection makes Plains add {W}{W} with no restriction, both Elite Vanguard and Healing Salve are cast and resolve, and A goes to 23 life.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Ancient Ziggurat",
+            "remove": [
+              "A:AB$ Mana | Cost$ T | Produced$ Any | RestrictValid$ Spell.Creature | SpellDescription$ Add one mana of any color. Spend this mana only to cast a creature spell."
+            ],
+            "add": [
+              "A:AB$ Mana | Cost$ T | Produced$ Any | SpellDescription$ Add one mana of any color."
+            ],
+            "note": "Plains replaces Ancient Ziggurat in the scenario; the Ziggurat's mana loses its spending restriction, the one thing the rule reads"
+          }
         }
       ],
       "cards": [
@@ -541,7 +551,17 @@
           "polarity": "does_not_fire",
           "delta": "B's land is Mountain instead of Forest.",
           "expected": "Not legal: Exotic Orchard can add only {R}, so {G} is not available and Llanowar Elves cannot be cast.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Forest",
+            "remove": [
+              "Types:Basic Land Forest"
+            ],
+            "add": [
+              "Types:Basic Land Mountain"
+            ],
+            "note": "B's Mountain replaces B's Forest; the Forest becomes a Mountain"
+          }
         },
         {
           "label": "opponent_no_lands",
@@ -768,7 +788,18 @@
           "polarity": "other",
           "delta": "B's land is Ancient Ziggurat instead of Mountain, tapped for {R}.",
           "expected": "A's pool gets {R} that can be spent only on a creature spell, so Shock cannot be cast with it. B stays at 20 life.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Mountain",
+            "remove": [
+              "Types:Basic Land Mountain"
+            ],
+            "add": [
+              "Types:Land",
+              "A:AB$ Mana | Cost$ T | Produced$ Any | RestrictValid$ Spell.Creature | SpellDescription$ Add one mana of any color. Spend this mana only to cast a creature spell."
+            ],
+            "note": "Ancient Ziggurat replaces Mountain in the scenario; the Mountain takes the Ziggurat's creature-only mana ability"
+          }
         }
       ],
       "cards": [

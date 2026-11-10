@@ -362,7 +362,15 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Savannah Lions (white 2/1) instead of Burrenton Forge-Tender.",
           "expected": "Savannah Lions is dealt 2 damage and is destroyed.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Burrenton Forge-Tender",
+            "remove": [
+              "K:Protection from red"
+            ],
+            "add": [],
+            "note": "Savannah Lions replaces Burrenton Forge-Tender; the Forge-Tender loses protection from red"
+          }
         }
       ],
       "cards": [
@@ -725,7 +733,15 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Hill Giant instead of Progenitus.",
           "expected": "Hill Giant is dealt 2 damage and has 2 damage marked; it stays on the battlefield.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Progenitus",
+            "remove": [
+              "K:Protection from everything"
+            ],
+            "add": [],
+            "note": "Hill Giant replaces Progenitus; Progenitus loses protection from everything"
+          }
         }
       ],
       "cards": [

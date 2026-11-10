@@ -836,7 +836,17 @@
           "polarity": "does_not_fire",
           "delta": "One land is a Snow-Covered Forest and the other a plain Forest.",
           "expected": "Not legal: only one of the two {S} can be paid.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Snow-Covered Forest",
+            "remove": [
+              "Types:Basic Snow Land Forest"
+            ],
+            "add": [
+              "Types:Basic Land Forest"
+            ],
+            "note": "a plain Forest replaces one Snow-Covered Forest; the land loses the Snow supertype"
+          }
         }
       ],
       "cards": [
@@ -977,7 +987,18 @@
           "polarity": "does_not_fire",
           "delta": "The permanent is Llanowar Elves (summoning_sick true) instead of Mind Stone, and A tries to activate its {T}: Add {G} ability.",
           "expected": "Not legal: the creature has not been under A's control since the turn began.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Mind Stone",
+            "remove": [
+              "Types:Artifact"
+            ],
+            "add": [
+              "Types:Creature Elf Druid",
+              "PT:1/1"
+            ],
+            "note": "Llanowar Elves replaces Mind Stone in the scenario; the Stone becomes a creature, so its {T} mana ability is subject to summoning sickness"
+          }
         }
       ],
       "cards": [
@@ -1199,21 +1220,42 @@
           "polarity": "fires",
           "delta": "Student of Warfare has 6 level counters.",
           "expected": "At the top of the range it is still a 3/3 with first strike and no double strike.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Student of Warfare",
+            "remove": [],
+            "add": [
+              "K:etbCounter:LEVEL:6"
+            ]
+          }
         },
         {
           "label": "level_one",
           "polarity": "does_not_fire",
           "delta": "Student of Warfare has 1 level counter.",
           "expected": "Below the range it is a 1/1 with no first strike.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Student of Warfare",
+            "remove": [],
+            "add": [
+              "K:etbCounter:LEVEL:1"
+            ]
+          }
         },
         {
           "label": "level_seven",
           "polarity": "other",
           "delta": "Student of Warfare has 7 level counters.",
           "expected": "Above the range it is a 4/4 with double strike and no longer takes the 3/3 first strike values.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Student of Warfare",
+            "remove": [],
+            "add": [
+              "K:etbCounter:LEVEL:7"
+            ]
+          }
         }
       ],
       "cards": [
@@ -1278,14 +1320,28 @@
           "polarity": "fires",
           "delta": "Student of Warfare has 10 level counters.",
           "expected": "Above N3 it is still a 4/4 with double strike.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Student of Warfare",
+            "remove": [],
+            "add": [
+              "K:etbCounter:LEVEL:10"
+            ]
+          }
         },
         {
           "label": "level_six",
           "polarity": "does_not_fire",
           "delta": "Student of Warfare has 6 level counters.",
           "expected": "One counter short it is a 3/3 with first strike and no double strike.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Student of Warfare",
+            "remove": [],
+            "add": [
+              "K:etbCounter:LEVEL:6"
+            ]
+          }
         }
       ],
       "cards": [
@@ -1417,7 +1473,15 @@
           "polarity": "does_not_fire",
           "delta": "History of Benalia starts with 2 lore counters.",
           "expected": "The count goes from 2 to 3: chapter III triggers (Silver Knight is a 4/3 until end of turn) but chapter II does not trigger again and no Knight token is created; History of Benalia is sacrificed after chapter III resolves.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "History of Benalia",
+            "remove": [],
+            "add": [
+              "K:etbCounter:LORE:1"
+            ],
+            "note": "the saga's own entry lore counter plus this one make the 2 lore counters of the variant"
+          }
         }
       ],
       "cards": [
@@ -1688,7 +1752,18 @@
           "polarity": "does_not_fire",
           "delta": "A's Wastes is a Forest instead.",
           "expected": "Not legal: three green mana cannot pay {C}; Matter Reshaper stays in A's hand.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Wastes",
+            "remove": [
+              "Types:Basic Land",
+              "A:AB$ Mana | Cost$ T | Produced$ C | SpellDescription$ Add {C}."
+            ],
+            "add": [
+              "Types:Basic Land Forest"
+            ],
+            "note": "a Forest replaces Wastes: it taps for {G} through its land type and no longer for {C}"
+          }
         }
       ],
       "cards": [
@@ -1755,14 +1830,34 @@
           "polarity": "fires",
           "delta": "A's land is a Forest instead of a Plains.",
           "expected": "Legal: green mana pays {G/W}; Dryad Militant enters the battlefield.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Plains",
+            "remove": [
+              "Types:Basic Land Plains"
+            ],
+            "add": [
+              "Types:Basic Land Forest"
+            ],
+            "note": "a Forest replaces the Plains"
+          }
         },
         {
           "label": "blue",
           "polarity": "does_not_fire",
           "delta": "A's land is an Island instead of a Plains.",
           "expected": "Not legal: blue mana pays neither half of {G/W}; Dryad Militant stays in A's hand.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Plains",
+            "remove": [
+              "Types:Basic Land Plains"
+            ],
+            "add": [
+              "Types:Basic Land Island"
+            ],
+            "note": "an Island replaces the Plains"
+          }
         }
       ],
       "cards": [
@@ -1842,7 +1937,17 @@
           "polarity": "fires",
           "delta": "One of A's six Islands is a Plains instead, and A taps only the Plains and four Islands.",
           "expected": "Legal: the Plains pays one {2/W} with {W} and four blue mana pay the other two; A creates three Spirit tokens and one Island stays untapped.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Island",
+            "remove": [
+              "Types:Basic Land Island"
+            ],
+            "add": [
+              "Types:Basic Land Plains"
+            ],
+            "note": "one of the Islands is a Plains instead"
+          }
         }
       ],
       "cards": [

@@ -925,7 +925,17 @@
           "polarity": "fires",
           "delta": "B's creature is Walking Corpse (a black 2/2) instead of Grizzly Bears.",
           "expected": "No nonblack, nonartifact creature can be targeted (Nekrataal itself is black), so the trigger is removed from the stack without resolving; Walking Corpse stays on the battlefield.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "ManaCost:1 G"
+            ],
+            "add": [
+              "ManaCost:1 B"
+            ],
+            "note": "Walking Corpse (a black 2/2, {1}{B}) replaces Grizzly Bears in the scenario; the Bears take its mana cost, which makes them black"
+          }
         }
       ],
       "cards": [
@@ -1948,7 +1958,17 @@
           "polarity": "does_not_fire",
           "delta": "A's other creature is Centaur Courser (3/3) instead of Grizzly Bears.",
           "expected": "Shock leaves Centaur Courser on the battlefield with 2 damage marked; A still controls another creature, so Emperor Crocodile does not trigger and stays on the battlefield.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:3/3"
+            ],
+            "note": "Centaur Courser (3/3) replaces Grizzly Bears in the scenario; the Bears take its power and toughness"
+          }
         }
       ],
       "cards": [

@@ -70,7 +70,17 @@
           "polarity": "fires",
           "delta": "A controls Hill Giant (power 3) instead of Grizzly Bears and taps it.",
           "expected": "The cast is legal with a total cost of {2}{U}. Hill Giant becomes tapped and three Islands are tapped, leaving one Island untapped. A draws Island.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:3/3"
+            ],
+            "note": "Hill Giant (power 3) replaces Grizzly Bears; the Bears take its power and toughness"
+          }
         }
       ],
       "cards": [

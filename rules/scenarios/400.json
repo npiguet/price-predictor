@@ -186,14 +186,36 @@
           "polarity": "fires",
           "delta": "The face-down card is Divination instead of Lightning Bolt.",
           "expected": "Divination is exiled face up and does not return to the battlefield; it stays in exile.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Lightning Bolt",
+            "remove": [
+              "Types:Instant"
+            ],
+            "add": [
+              "Types:Sorcery"
+            ],
+            "note": "Divination (a sorcery, wholly another card) replaces Lightning Bolt as the face-down card; the Bolt becomes a sorcery"
+          }
         },
         {
           "label": "creature",
           "polarity": "does_not_fire",
           "delta": "The face-down card is Grizzly Bears instead of Lightning Bolt.",
           "expected": "Grizzly Bears is exiled and returns to the battlefield face up under A's control as a 2/2 Grizzly Bears.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Lightning Bolt",
+            "remove": [
+              "Types:Instant",
+              "A:SP$ DealDamage | ValidTgts$ Any | NumDmg$ 3 | SpellDescription$ CARDNAME deals 3 damage to any target."
+            ],
+            "add": [
+              "Types:Creature Bear",
+              "PT:2/2"
+            ],
+            "note": "Grizzly Bears (a creature card, wholly another card) replaces Lightning Bolt as the face-down card; the Bolt is edited into a 2/2 creature"
+          }
         }
       ],
       "cards": [

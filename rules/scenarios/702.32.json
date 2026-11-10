@@ -130,14 +130,33 @@
           "polarity": "other",
           "delta": "Blastoderm has 1 fade counter.",
           "expected": "The last fade counter is removed: Blastoderm has 0 fade counters and stays on the battlefield (it is sacrificed only when no counter can be removed).",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Blastoderm",
+            "remove": [
+              "K:Fading:3"
+            ],
+            "add": [
+              "K:Fading:1"
+            ]
+          }
         },
         {
           "label": "no_counters",
           "polarity": "other",
           "delta": "Blastoderm has no fade counters.",
           "expected": "No counter can be removed, so Blastoderm is sacrificed and is in A's graveyard.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Blastoderm",
+            "remove": [
+              "K:Fading:3"
+            ],
+            "add": [
+              "K:Fading:0"
+            ],
+            "note": "Fading 0: the Blastoderm enters with no fade counters"
+          }
         },
         {
           "label": "opponents_upkeep",

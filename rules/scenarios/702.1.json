@@ -201,7 +201,16 @@
           "polarity": "does_not_fire",
           "delta": "Hill Giant (no keywords) replaces White Knight.",
           "expected": "No creature has first strike or protection; Grizzly Bears and Hill Giant gain nothing.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "White Knight",
+            "remove": [
+              "K:First Strike",
+              "K:Protection from black"
+            ],
+            "add": [],
+            "note": "Hill Giant (no keywords) replaces White Knight; the Knight loses its keywords"
+          }
         }
       ],
       "cards": [

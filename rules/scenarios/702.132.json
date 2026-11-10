@@ -64,7 +64,17 @@
           "polarity": "does_not_fire",
           "delta": "A's land is a Plains instead of a Mountain.",
           "expected": "Casting Magma Hellion is not legal: assist covers only generic mana, and neither A's Plains nor B's Forests can pay {R}.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Mountain",
+            "remove": [
+              "Types:Basic Land Mountain"
+            ],
+            "add": [
+              "Types:Basic Land Plains"
+            ],
+            "note": "A's Plains replaces A's Mountain; the Mountain becomes a Plains"
+          }
         }
       ],
       "cards": [

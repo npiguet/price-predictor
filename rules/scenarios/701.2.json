@@ -174,7 +174,19 @@
           "polarity": "does_not_fire",
           "delta": "A's creature is Prodigal Sorcerer instead (ready to tap), and B considers activating its ability.",
           "expected": "Prodigal Sorcerer does not say another player may activate it, so B cannot activate it (can_play false).",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Flailing Soldier",
+            "remove": [
+              "A:AB$ Pump | Cost$ 1 | Defined$ Self | NumAtt$ +1 | NumDef$ +1 | Activator$ Player | SpellDescription$ CARDNAME gets +1/+1 until end of turn. Any player may activate this ability.",
+              "A:AB$ Pump | Cost$ 1 | Defined$ Self | NumAtt$ -1 | NumDef$ -1 | Activator$ Player | IsCurse$ True | SpellDescription$ CARDNAME gets -1/-1 until end of turn. Any player may activate this ability."
+            ],
+            "add": [
+              "A:AB$ Pump | Cost$ 1 | Defined$ Self | NumAtt$ +1 | NumDef$ +1 | SpellDescription$ CARDNAME gets +1/+1 until end of turn.",
+              "A:AB$ Pump | Cost$ 1 | Defined$ Self | NumAtt$ -1 | NumDef$ -1 | IsCurse$ True | SpellDescription$ CARDNAME gets -1/-1 until end of turn."
+            ],
+            "note": "Prodigal Sorcerer (whose ability only its controller may activate) replaces Flailing Soldier in the scenario; the Soldier's abilities lose Activator$ Player"
+          }
         }
       ],
       "cards": [

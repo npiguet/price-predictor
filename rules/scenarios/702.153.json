@@ -95,7 +95,17 @@
           "polarity": "does_not_fire",
           "delta": "A controls Memnite (power 1) instead of Grizzly Bears (power 2).",
           "expected": "Memnite is not a legal sacrifice for casualty 2, so the casualty cost cannot be paid and A casts Cut Your Losses without it. No casualty trigger fires and no copy is created. Memnite stays on the battlefield. Cut Your Losses makes B mill 10: B's library holds 10 cards.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:1/1"
+            ],
+            "note": "Memnite (power 1) replaces Grizzly Bears; the Bears take its power and toughness"
+          }
         }
       ],
       "cards": [

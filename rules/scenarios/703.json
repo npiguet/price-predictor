@@ -361,7 +361,15 @@
           "polarity": "does_not_fire",
           "delta": "A's tapped permanent is Grim Monolith instead of Grizzly Bears.",
           "expected": "Grim Monolith stays tapped.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [],
+            "add": [
+              "R:Event$ Untap | ValidCard$ Card.Self | ValidStepTurnToController$ You | Layer$ CantHappen | Description$ This permanent doesn't untap during your untap step."
+            ],
+            "note": "Grim Monolith replaces Grizzly Bears; the Bears take Monolith's untap restriction"
+          }
         }
       ],
       "cards": [
@@ -639,7 +647,15 @@
           "polarity": "does_not_fire",
           "delta": "B's blocker is Youthful Knight (first strike) instead of Grizzly Bears.",
           "expected": "Youthful Knight deals 2 damage in the first-strike damage step and A's Grizzly Bears is destroyed; it deals no damage and Youthful Knight survives undamaged.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [],
+            "add": [
+              "K:First Strike"
+            ],
+            "note": "Youthful Knight (first strike) replaces Grizzly Bears as the blocker; the Bears gain first strike"
+          }
         }
       ],
       "cards": [

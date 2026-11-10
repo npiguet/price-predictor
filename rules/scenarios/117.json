@@ -842,7 +842,17 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Centaur Courser (3/3, so 5/3 with Rancor) instead of Grizzly Bears, and Rancor is attached to it.",
           "expected": "Centaur Courser survives with 2 damage marked, no state-based action is performed and Rancor stays attached; no trigger is put on the stack.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:3/3"
+            ],
+            "note": "Centaur Courser (3/3) replaces Grizzly Bears; the Bears take its toughness"
+          }
         }
       ],
       "cards": [

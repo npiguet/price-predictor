@@ -45,7 +45,15 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Walking Corpse (a 2/2 with the same mana cost {1}{B} and no devoid) instead of Culling Drone.",
           "expected": "Walking Corpse is black.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Culling Drone",
+            "remove": [
+              "K:Devoid"
+            ],
+            "add": [],
+            "note": "Walking Corpse (black, no devoid) replaces Culling Drone; the Drone loses devoid"
+          }
         }
       ],
       "cards": [
@@ -113,7 +121,15 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Walking Corpse (black, no devoid) instead of Culling Drone.",
           "expected": "Walking Corpse is not a legal target for Doom Blade: it is black, so Doom Blade has no legal target and cannot be cast.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Culling Drone",
+            "remove": [
+              "K:Devoid"
+            ],
+            "add": [],
+            "note": "Walking Corpse (black, no devoid) replaces Culling Drone; the Drone loses devoid"
+          }
         }
       ],
       "cards": [

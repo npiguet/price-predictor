@@ -61,14 +61,34 @@
           "polarity": "other",
           "delta": "B's creature is Craw Wurm (6/4) instead of Grizzly Bears.",
           "expected": "Centaur Courser deals 3 damage to Craw Wurm and Craw Wurm deals 6 damage to Centaur Courser. Centaur Courser is destroyed and moves to A's graveyard. Craw Wurm stays on the battlefield with 3 damage marked.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:6/4"
+            ],
+            "note": "Craw Wurm (6/4) replaces Grizzly Bears; the Bears take its power and toughness"
+          }
         },
         {
           "label": "zero_power",
           "polarity": "does_not_fire",
           "delta": "A's creature is Wall of Wood (0/3) instead of Centaur Courser.",
           "expected": "Wall of Wood deals 0 damage to Grizzly Bears, which stays on the battlefield undamaged. Grizzly Bears deals 2 damage to Wall of Wood, which stays on the battlefield with 2 damage marked.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Centaur Courser",
+            "remove": [
+              "PT:3/3"
+            ],
+            "add": [
+              "PT:0/3"
+            ],
+            "note": "Wall of Wood (0/3) replaces Centaur Courser; the Courser takes its power and toughness"
+          }
         }
       ],
       "cards": [

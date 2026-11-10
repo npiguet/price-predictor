@@ -517,7 +517,17 @@
           "polarity": "does_not_fire",
           "delta": "The second Raging Goblin is a Grizzly Bears instead, which has no red symbol.",
           "expected": "A's devotion to red is 4 (1 + 2 + 1). Purphoros is not a creature, only a legendary enchantment.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Raging Goblin",
+            "remove": [
+              "ManaCost:R"
+            ],
+            "add": [
+              "ManaCost:1 G"
+            ],
+            "note": "Grizzly Bears (no red symbol) replaces the second Raging Goblin in the scenario; the Goblin takes the Bears' mana cost"
+          }
         }
       ],
       "cards": [
@@ -572,7 +582,15 @@
           "polarity": "does_not_fire",
           "delta": "Altar of the Pantheon is replaced by a Mountain.",
           "expected": "A's devotion to red is 4 (1 + 2 + 1). Purphoros is not a creature.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Altar of the Pantheon",
+            "remove": [
+              "S:Mode$ Devotion | ValidPlayer$ You | Description$ Your devotion to each color and each combination of colors is increased by one."
+            ],
+            "add": [],
+            "note": "a Mountain, which has no devotion-modifying ability, replaces Altar of the Pantheon; the Altar loses that ability"
+          }
         }
       ],
       "cards": [
@@ -697,7 +715,17 @@
           "polarity": "fires",
           "delta": "Cabal Evangel is a Fugitive Wizard instead.",
           "expected": "A's party has 4 creatures (Cleric, Warrior, Rogue, Wizard), a full party. Archpriest of Iona is a 4/2.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Cabal Evangel",
+            "remove": [
+              "Types:Creature Human Cleric"
+            ],
+            "add": [
+              "Types:Creature Human Wizard"
+            ],
+            "note": "Fugitive Wizard (a Human Wizard) replaces Cabal Evangel in the scenario"
+          }
         }
       ],
       "cards": [
@@ -753,7 +781,17 @@
           "polarity": "does_not_fire",
           "delta": "Shieldmage Elder is a Cabal Evangel instead, which is only a Cleric.",
           "expected": "A's party has 3 creatures (Cleric, Warrior, Rogue) and no Wizard. Archpriest of Iona is a 3/2.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Shieldmage Elder",
+            "remove": [
+              "Types:Creature Human Cleric Wizard"
+            ],
+            "add": [
+              "Types:Creature Human Cleric"
+            ],
+            "note": "Cabal Evangel (only a Cleric) replaces Shieldmage Elder in the scenario; the Elder loses the Wizard type"
+          }
         }
       ],
       "cards": [
@@ -1203,28 +1241,64 @@
           "polarity": "fires",
           "delta": "A's creature is Kasimir the Lone Wolf (legendary, white and blue) instead of Tyrox.",
           "expected": "Kasimir is legendary, not a Villain and white, so it is worthy: the activation is legal.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Tyrox, Saurid Tyrant",
+            "remove": [],
+            "add": [
+              "Colors:white,blue"
+            ],
+            "note": "Kasimir the Lone Wolf (legendary, white and blue) replaces Tyrox; Tyrox takes its colours"
+          }
         },
         {
           "label": "villain",
           "polarity": "does_not_fire",
           "delta": "A's creature is Living Laser (legendary, red, a Villain) instead of Tyrox.",
           "expected": "Living Laser is a Villain, so it is not worthy and is not a legal equip target: no legal target (has_legal_target false).",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Tyrox, Saurid Tyrant",
+            "remove": [
+              "Types:Legendary Creature Dinosaur Warrior"
+            ],
+            "add": [
+              "Types:Legendary Creature Dinosaur Warrior Villain"
+            ],
+            "note": "Living Laser (legendary, red, a Villain) replaces Tyrox; Tyrox gains the Villain type"
+          }
         },
         {
           "label": "not_legendary",
           "polarity": "does_not_fire",
           "delta": "A's creature is Goblin Assailant (red, not legendary) instead of Tyrox.",
           "expected": "Goblin Assailant is not legendary, so it is not worthy and is not a legal equip target (has_legal_target false).",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Tyrox, Saurid Tyrant",
+            "remove": [
+              "Types:Legendary Creature Dinosaur Warrior"
+            ],
+            "add": [
+              "Types:Creature Dinosaur Warrior"
+            ],
+            "note": "Goblin Assailant (red, not legendary) replaces Tyrox; Tyrox loses legendary"
+          }
         },
         {
           "label": "wrong_colour",
           "polarity": "does_not_fire",
           "delta": "A's creature is Terrian, World Tyrant (legendary, green) instead of Tyrox.",
           "expected": "Terrian is neither red nor white, so it is not worthy and is not a legal equip target (has_legal_target false).",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Tyrox, Saurid Tyrant",
+            "remove": [],
+            "add": [
+              "Colors:green"
+            ],
+            "note": "Terrian, World Tyrant (legendary, green) replaces Tyrox; Tyrox becomes green"
+          }
         }
       ],
       "cards": [

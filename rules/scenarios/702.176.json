@@ -131,7 +131,17 @@
           "polarity": "fires",
           "delta": "Overlord of the Floodpits starts with 1 time counter instead of 2.",
           "expected": "The trigger fires and removes the last time counter: Overlord of the Floodpits has no time counters and becomes a 5/3 Enchantment Creature with flying.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Overlord of the Floodpits",
+            "remove": [
+              "K:Impending:4:1 U U"
+            ],
+            "add": [
+              "K:Impending:1:1 U U"
+            ],
+            "note": "cast for its impending cost it enters with one time counter instead of four"
+          }
         },
         {
           "label": "opponents_end_step",

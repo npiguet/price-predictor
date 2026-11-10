@@ -859,7 +859,17 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Centaur Courser (3/3) instead of Grizzly Bears.",
           "expected": "No state-based action applies; Centaur Courser stays on the battlefield with 2 damage.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:3/3"
+            ],
+            "note": "Centaur Courser (3/3) replaces Grizzly Bears; the Bears take its toughness"
+          }
         },
         {
           "label": "respond_early",

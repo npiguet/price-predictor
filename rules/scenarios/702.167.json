@@ -286,7 +286,17 @@
           "polarity": "fires",
           "delta": "The material is Hill Giant (3/3) instead of Grizzly Bears.",
           "expected": "Wretched Bonemass enters the battlefield as a 3/3.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:3/3"
+            ],
+            "note": "Hill Giant (3/3) replaces Grizzly Bears as the material; the Bears take its power and toughness"
+          }
         },
         {
           "label": "unrelated_exiled_card",

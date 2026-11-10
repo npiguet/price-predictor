@@ -329,7 +329,17 @@
           "polarity": "does_not_fire",
           "delta": "The second permanent is Grizzly Bears, which is not a Merfolk.",
           "expected": "Only Hakbal explores: Forest goes to A's hand and Hakbal gets no counter (3/3). Grizzly Bears does not explore and Shock stays on top of A's library.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Merfolk Branchwalker",
+            "remove": [
+              "Types:Creature Merfolk Scout"
+            ],
+            "add": [
+              "Types:Creature Scout"
+            ],
+            "note": "Grizzly Bears (not a Merfolk) replaces Merfolk Branchwalker; the Branchwalker is no Merfolk"
+          }
         }
       ],
       "cards": [

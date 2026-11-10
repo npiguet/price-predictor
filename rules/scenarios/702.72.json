@@ -58,7 +58,17 @@
           "polarity": "does_not_fire",
           "delta": "A controls Grizzly Bears instead of Goblin Piker.",
           "expected": "A controls no other Goblin to exile, so Boggart Mob is sacrificed and goes to A's graveyard. Grizzly Bears stays on the battlefield.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Goblin Piker",
+            "remove": [
+              "Types:Creature Goblin Warrior"
+            ],
+            "add": [
+              "Types:Creature Bear"
+            ],
+            "note": "Grizzly Bears replaces Goblin Piker in the scenario; the Piker is no longer a Goblin"
+          }
         }
       ],
       "cards": [

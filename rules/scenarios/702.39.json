@@ -59,7 +59,15 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Ironclaw Orcs (tapped), which cannot block creatures with power 2 or greater.",
           "expected": "Ironclaw Orcs untaps but cannot block, so Crested Craghorn is unblocked and deals 4 damage to B (life 16). Both creatures survive.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [],
+            "add": [
+              "S:Mode$ CantBlockBy | ValidAttacker$ Creature.powerGE2 | ValidBlocker$ Creature.Self | Description$ CARDNAME can't block creatures with power 2 or greater."
+            ],
+            "note": "Ironclaw Orcs replaces Grizzly Bears; the Bears gain the Orcs' inability to block creatures with power 2 or greater"
+          }
         }
       ],
       "cards": [

@@ -423,7 +423,21 @@
           "polarity": "does_not_fire",
           "delta": "B controls a second Forest instead of Llanowar Elves.",
           "expected": "B pays {1}{G} with two Forests (can_play true) and plays Grizzly Bears, which enters B's battlefield. Word of Command is in A's graveyard.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Llanowar Elves",
+            "remove": [
+              "ManaCost:G",
+              "Types:Creature Elf Druid",
+              "PT:1/1",
+              "A:AB$ Mana | Cost$ T | Produced$ G | SpellDescription$ Add {G}."
+            ],
+            "add": [
+              "ManaCost:no cost",
+              "Types:Basic Land Forest"
+            ],
+            "note": "a second Forest replaces Llanowar Elves; the Elves become a Forest land"
+          }
         }
       ],
       "cards": [

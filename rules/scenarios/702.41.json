@@ -118,7 +118,15 @@
           "polarity": "does_not_fire",
           "delta": "A controls a second Ornithopter instead of Mycosynth Golem.",
           "expected": "Frogmite costs {2} (one instance, two artifacts); A has no mana, so it cannot be cast.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Mycosynth Golem",
+            "remove": [
+              "S:Mode$ Continuous | Affected$ Artifact.Creature+wasCastByYou | AffectedZone$ Stack | AddKeyword$ Affinity:Artifact | Description$ Artifact creature spells you cast have affinity for artifacts. (They cost {1} less to cast for each artifact you control.)"
+            ],
+            "add": [],
+            "note": "A second Ornithopter replaces Mycosynth Golem in the scenario; the Golem loses the static ability that grants a second instance of affinity (its own K:Affinity does not apply to Frogmite)"
+          }
         }
       ],
       "cards": [

@@ -53,14 +53,30 @@
           "polarity": "does_not_fire",
           "delta": "B's blocker is a second Benalish Cavalry instead of Grizzly Bears.",
           "expected": "Flanking does not trigger. The blocker stays 2/2. Both Benalish Cavalry deal 2 damage to each other and both move to their owners' graveyards.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [],
+            "add": [
+              "K:Flanking"
+            ],
+            "note": "a second Benalish Cavalry replaces Grizzly Bears as the blocker; the Bears gain flanking"
+          }
         },
         {
           "label": "attacker_without_flanking",
           "polarity": "other",
           "delta": "A's attacker is Grizzly Bears instead of Benalish Cavalry.",
           "expected": "No flanking trigger. Both Grizzly Bears are 2/2, deal 2 damage to each other and both move to their owners' graveyards.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Benalish Cavalry",
+            "remove": [
+              "K:Flanking"
+            ],
+            "add": [],
+            "note": "Grizzly Bears replaces Benalish Cavalry as the attacker; the Cavalry loses flanking"
+          }
         }
       ],
       "cards": [
@@ -139,7 +155,15 @@
           "polarity": "does_not_fire",
           "delta": "B's blocker is a Benalish Cavalry instead of Grizzly Bears.",
           "expected": "Neither instance of flanking triggers because the blocker has flanking. The blocker stays 2/2; both Benalish Cavalry deal 2 damage to each other and die.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [],
+            "add": [
+              "K:Flanking"
+            ],
+            "note": "a Benalish Cavalry replaces Grizzly Bears as the blocker; the Bears gain flanking"
+          }
         }
       ],
       "cards": [

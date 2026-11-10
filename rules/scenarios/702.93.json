@@ -56,7 +56,14 @@
           "polarity": "does_not_fire",
           "delta": "Young Wolf already has one +1/+1 counter (it is 2/2).",
           "expected": "Young Wolf is dealt 2 damage and is destroyed. It had a +1/+1 counter, so undying does not trigger. Young Wolf stays in A's graveyard.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Young Wolf",
+            "remove": [],
+            "add": [
+              "K:etbCounter:P1P1:1"
+            ]
+          }
         }
       ],
       "cards": [
@@ -137,7 +144,14 @@
           "polarity": "does_not_fire",
           "delta": "Young Wolf already has one +1/+1 counter (it is 2/2).",
           "expected": "Young Wolf is destroyed and goes to A's graveyard, its owner's. It had a +1/+1 counter, so undying does not trigger and it stays there.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Young Wolf",
+            "remove": [],
+            "add": [
+              "K:etbCounter:P1P1:1"
+            ]
+          }
         }
       ],
       "cards": [

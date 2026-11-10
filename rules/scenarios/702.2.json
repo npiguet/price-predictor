@@ -59,7 +59,15 @@
           "polarity": "does_not_fire",
           "delta": "B's blocker is Mons's Goblin Raiders (1/1, no abilities) instead of Typhoid Rats.",
           "expected": "Hill Giant deals 3 damage to Mons's Goblin Raiders, which is destroyed. Hill Giant has 1 damage marked and stays on the battlefield. B's life stays 20.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Typhoid Rats",
+            "remove": [
+              "K:Deathtouch"
+            ],
+            "add": [],
+            "note": "Mons's Goblin Raiders (1/1, no abilities) replaces Typhoid Rats; the Rats lose deathtouch"
+          }
         }
       ],
       "cards": [

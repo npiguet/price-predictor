@@ -615,7 +615,18 @@
           "polarity": "does_not_fire",
           "delta": "The face-down card is a Forest instead of Grizzly Bears.",
           "expected": "The permanent is revealed as a Forest, which is not a creature card. A can't turn it face up and it stays face down.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "Types:Creature Bear",
+              "PT:2/2"
+            ],
+            "add": [
+              "Types:Basic Land Forest"
+            ],
+            "note": "a Forest card is the face-down card instead of Grizzly Bears and is wholly another card; the Bears become a Forest"
+          }
         }
       ],
       "cards": [

@@ -382,7 +382,17 @@
           "polarity": "does_not_fire",
           "delta": "Earth Elemental is replaced by Grizzly Bears (power 2).",
           "expected": "Total power is 8, so the cost after adjustment is {2}{G}{G}; with two Forests Ghalta is not castable.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Earth Elemental",
+            "remove": [
+              "PT:4/5"
+            ],
+            "add": [
+              "PT:2/5"
+            ],
+            "note": "Grizzly Bears (power 2) replaces Earth Elemental; the Elemental takes its power"
+          }
         }
       ],
       "cards": [

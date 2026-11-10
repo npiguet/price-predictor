@@ -320,7 +320,15 @@
           "polarity": "does_not_fire",
           "delta": "B's only creature is Black Knight (protection from white) instead of Grizzly Bears.",
           "expected": "Casting Pacifism is not legal: Black Knight is not a legal target of the white Aura, has_legal_target is false and can_play is false.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [],
+            "add": [
+              "K:Protection from white"
+            ],
+            "note": "Black Knight (protection from white) replaces Grizzly Bears; the Bears gain its protection"
+          }
         }
       ],
       "cards": [
@@ -394,7 +402,17 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Centaur Courser (3/3), the Aura's enchanted object, instead of Grizzly Bears.",
           "expected": "Centaur Courser stays on the battlefield with 2 damage marked and Pacifism stays attached to it.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:3/3"
+            ],
+            "note": "Centaur Courser (3/3) replaces Grizzly Bears; the Bears take its power and toughness"
+          }
         }
       ],
       "cards": [
@@ -1053,7 +1071,15 @@
           "polarity": "does_not_fire",
           "delta": "B's other creature is Centaur Courser instead of Black Knight.",
           "expected": "Pacifism moves from Grizzly Bears to Centaur Courser; Enchantment Alteration goes to A's graveyard.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Black Knight",
+            "remove": [
+              "K:Protection from white"
+            ],
+            "add": [],
+            "note": "Centaur Courser replaces Black Knight; the Knight loses its protection from white"
+          }
         }
       ],
       "cards": [

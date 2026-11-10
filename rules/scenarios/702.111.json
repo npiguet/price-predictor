@@ -63,7 +63,15 @@
           "polarity": "does_not_fire",
           "delta": "A's attacker is Hill Giant (3/3, no menace) instead of Boggart Brute.",
           "expected": "The block declaration is legal: Hill Giant is blocked by the single Grizzly Bears.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Boggart Brute",
+            "remove": [
+              "K:Menace"
+            ],
+            "add": [],
+            "note": "Hill Giant (no menace) replaces Boggart Brute; the Brute loses menace"
+          }
         }
       ],
       "cards": [

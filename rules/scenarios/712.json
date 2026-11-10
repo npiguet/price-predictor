@@ -70,7 +70,16 @@
           "polarity": "does_not_fire",
           "delta": "A controls Hill Giant instead of Midnight Scavengers.",
           "expected": "Graf Rats' trigger does not fire. Graf Rats (2/1) and Hill Giant stay on the battlefield as separate permanents and nothing is exiled.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Midnight Scavengers",
+            "remove": [
+              "MeldPair:Graf Rats",
+              "AlternateMode:Meld"
+            ],
+            "add": [],
+            "note": "Hill Giant replaces Midnight Scavengers; the Scavengers lose their meld pairing with Graf Rats"
+          }
         }
       ],
       "cards": [

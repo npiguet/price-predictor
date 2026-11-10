@@ -56,7 +56,15 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Great-Horn Krushok (3/5, no abilities) with 4 damage marked instead of Wolverine.",
           "expected": "Great-Horn Krushok has 6 damage marked and moves to B's graveyard in the state-based check.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Wolverine, Fierce Fighter",
+            "remove": [
+              "R:Event$ DamageDone | ActiveZones$ Battlefield | ValidTarget$ Card.Self | ReplaceWith$ Healing | ReplacementResult$ Updated | Description$ If damage would be dealt to NICKNAME, instead that damage is dealt, but all other damage already dealt to him is healed."
+            ],
+            "add": [],
+            "note": "Great-Horn Krushok (3/5, no abilities) replaces Wolverine; Wolverine loses its damage-healing replacement effect (the unused SVar:Healing stays)"
+          }
         }
       ],
       "cards": [

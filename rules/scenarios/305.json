@@ -527,7 +527,18 @@
           "polarity": "does_not_fire",
           "delta": "A controls Wastes (a basic land without a basic land type, whose own ability adds only {C}) instead of Dryad Arbor.",
           "expected": "Wastes can only add {C}; Giant Growth cannot be cast (can_play false) and stays in A's hand; Grizzly Bears stays 2/2.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Dryad Arbor",
+            "remove": [
+              "Types:Land Creature Forest Dryad"
+            ],
+            "add": [
+              "Types:Land Creature Dryad",
+              "A:AB$ Mana | Cost$ T | Produced$ C | SpellDescription$ Add {C}."
+            ],
+            "note": "Wastes replaces Dryad Arbor in the scenario; the Arbor loses its basic land type Forest and taps for {C} through its own ability, as Wastes does"
+          }
         }
       ],
       "cards": [
@@ -596,7 +607,17 @@
           "polarity": "other",
           "delta": "Urborg, Tomb of Yawgmoth is on A's battlefield instead of Blood Moon.",
           "expected": "Bayou keeps Swamp and Forest (Swamp is added in addition) and keeps its mana abilities; it taps for {G}. Giant Growth is cast and resolves, Grizzly Bears is 5/5 until end of turn.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Blood Moon",
+            "remove": [
+              "S:Mode$ Continuous | Affected$ Land.nonBasic | AddType$ Mountain | RemoveLandTypes$ True | Description$ Nonbasic lands are Mountains."
+            ],
+            "add": [
+              "S:Mode$ Continuous | Affected$ Land | AddType$ Swamp | Description$ Each land is a Swamp in addition to its other land types."
+            ],
+            "note": "Urborg, Tomb of Yawgmoth replaces Blood Moon in the scenario (wholly another card); the Moon's effect is edited into Urborg's: it adds Swamp to every land and removes no types"
+          }
         }
       ],
       "cards": [

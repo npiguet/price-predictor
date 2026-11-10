@@ -269,7 +269,19 @@
           "polarity": "does_not_fire",
           "delta": "B controls only a Forest, no creature, instead of Dryad Arbor.",
           "expected": "Illegal: there is no legal target creature (has_legal_target false, can_play false); Spiteful Blow stays in A's hand and the Swamps stay untapped.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Dryad Arbor",
+            "remove": [
+              "Colors:green",
+              "Types:Land Creature Forest Dryad",
+              "PT:1/1"
+            ],
+            "add": [
+              "Types:Land Forest"
+            ],
+            "note": "a plain Forest replaces Dryad Arbor; the Arbor is no longer a creature"
+          }
         }
       ],
       "cards": [
@@ -408,7 +420,17 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Grizzly Bears instead of Child of Night.",
           "expected": "Legal: Doom Blade is cast on Grizzly Bears (can_play true, Swamps tapped); when it resolves Grizzly Bears moves to B's graveyard.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Child of Night",
+            "remove": [
+              "ManaCost:1 B"
+            ],
+            "add": [
+              "ManaCost:1 G"
+            ],
+            "note": "Grizzly Bears (green) replaces Child of Night; the Child is not black"
+          }
         }
       ],
       "cards": [
@@ -1112,7 +1134,17 @@
           "polarity": "does_not_fire",
           "delta": "A controls Grizzly Bears instead of Faerie Miscreant.",
           "expected": "Illegal: the condition is not met, so Illusion Spinners cannot be cast in B's end step (can_play false); it stays in A's hand.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Faerie Miscreant",
+            "remove": [
+              "Types:Creature Faerie Rogue"
+            ],
+            "add": [
+              "Types:Creature Rogue"
+            ],
+            "note": "Grizzly Bears replaces Faerie Miscreant; the Miscreant is no Faerie"
+          }
         }
       ],
       "cards": [
@@ -1173,7 +1205,17 @@
           "polarity": "other",
           "delta": "Melek, Izzet Paragon is on A's battlefield instead of Garruk's Horde.",
           "expected": "Chop Down can be cast from the top of the library (can_play true, Craw Wurm is a legal target); Giant Killer cannot, because it is not an instant or sorcery card (can_play false).",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Garruk's Horde",
+            "remove": [
+              "S:Mode$ Continuous | Affected$ Creature.TopLibrary+YouCtrl+nonLand | AffectedZone$ Library | MayPlay$ True | Description$ You may cast creature spells from the top of your library. (Do this only any time you could cast that creature spell. You still pay the spell's costs.)"
+            ],
+            "add": [
+              "S:Mode$ Continuous | Affected$ Instant.TopLibrary+YouCtrl,Sorcery.TopLibrary+YouCtrl | AffectedZone$ Library | EffectZone$ Battlefield | MayPlay$ True | Description$ You may cast instant and sorcery spells from the top of your library."
+            ],
+            "note": "Melek, Izzet Paragon replaces Garruk's Horde and is wholly another card; the Horde takes Melek's static ability (cast instants and sorceries, not creatures, from the top of the library)"
+          }
         },
         {
           "label": "neither",
@@ -1396,7 +1438,17 @@
           "polarity": "does_not_fire",
           "delta": "The attacking creature is Grizzly Bears instead of Isamaru, Hound of Konda (not legendary).",
           "expected": "The condition never holds: Scarring Memories cannot be cast in the declare attackers step (can_play false); it stays in A's hand and nothing is sacrificed.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Isamaru, Hound of Konda",
+            "remove": [
+              "Types:Legendary Creature Dog"
+            ],
+            "add": [
+              "Types:Creature Dog"
+            ],
+            "note": "Grizzly Bears (not legendary) replaces Isamaru; Isamaru loses legendary"
+          }
         }
       ],
       "cards": [

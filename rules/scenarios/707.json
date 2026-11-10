@@ -80,7 +80,15 @@
           "polarity": "does_not_fire",
           "delta": "Grizzly Bears has a +1/+1 counter on it before Clone is cast.",
           "expected": "The original Grizzly Bears is a 3/3 with a +1/+1 counter; the Clone enters as a 2/2 named Grizzly Bears with no counter.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [],
+            "add": [
+              "K:etbCounter:P1P1:1"
+            ],
+            "note": "the original Grizzly Bears carries the counter; a Clone copying it must not copy the counter"
+          }
         },
         {
           "label": "giant_growth",
@@ -2040,7 +2048,15 @@
           "polarity": "fires",
           "delta": "Hill Giant replaces Abbey Gargoyles on B's battlefield.",
           "expected": "A copy also targets Hill Giant: it has 2 damage marked; A is at 18, B is at 18, Grizzly Bears is dead.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Abbey Gargoyles",
+            "remove": [
+              "K:Protection from red"
+            ],
+            "add": [],
+            "note": "Hill Giant (no protection) replaces Abbey Gargoyles; the Gargoyles lose protection from red"
+          }
         }
       ],
       "cards": [

@@ -75,7 +75,15 @@
           "polarity": "other",
           "delta": "The permanent is Grizzly Bears (no phasing) instead of Sandbar Crocodile.",
           "expected": "Grizzly Bears stays phased in; nothing phases.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Sandbar Crocodile",
+            "remove": [
+              "K:Phasing"
+            ],
+            "add": [],
+            "note": "Grizzly Bears (no phasing) replaces Sandbar Crocodile; the Crocodile loses phasing"
+          }
         }
       ],
       "cards": [

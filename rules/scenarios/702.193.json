@@ -136,7 +136,19 @@
           "polarity": "does_not_fire",
           "delta": "A's creature is Gamma Grotesque (mana cost {2}{G}, power-up {4}{G}{G}), also entered this turn, instead of Hulk.",
           "expected": "The cost after adjustment is {2}{G}: Gamma Grotesque's {G} removes one {G} and its {2} removes only generic mana, so one {G} remains. Three Plains cannot pay {G}, so the activation is not legal.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Hulk, Gamma Goliath",
+            "remove": [
+              "ManaCost:3 R G",
+              "A:AB$ PutCounter | Cost$ 6 R G | Defined$ Self | CounterType$ P1P1 | CounterNum$ 5 | PowerUp$ True | SpellDescription$ Put five +1/+1 counters on NICKNAME. (Activate each power-up ability only once. Reduce the cost by his mana cost if he entered this turn.)"
+            ],
+            "add": [
+              "ManaCost:2 G",
+              "A:AB$ PutCounter | Cost$ 4 G G | Defined$ Self | CounterType$ P1P1 | CounterNum$ 5 | PowerUp$ True | SpellDescription$ Put five +1/+1 counters on NICKNAME. (Activate each power-up ability only once. Reduce the cost by his mana cost if he entered this turn.)"
+            ],
+            "note": "Gamma Grotesque is wholly another card; Hulk takes its mana cost {2}{G} and power-up cost {4}{G}{G}"
+          }
         }
       ],
       "cards": [

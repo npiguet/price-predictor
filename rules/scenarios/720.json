@@ -60,7 +60,17 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Craw Wurm (6/4) instead of Grizzly Bears.",
           "expected": "Casting the card as the Omen Petty Revenge is not legal: has_legal_target is false, because no creature has power 3 or less. can_play is false.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:6/4"
+            ],
+            "note": "Craw Wurm (6/4) replaces Grizzly Bears in the scenario; the Bears take its power and toughness"
+          }
         },
         {
           "label": "cost_unpayable",

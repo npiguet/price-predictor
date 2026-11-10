@@ -231,7 +231,15 @@
           "polarity": "does_not_fire",
           "delta": "A's land is a tapped Island instead of Tolaria West.",
           "expected": "Island untaps: it has only a mana ability.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Tolaria West",
+            "remove": [
+              "K:Transmute:1 U U"
+            ],
+            "add": [],
+            "note": "a tapped Island replaces Tolaria West; the land keeps only a mana ability and loses its activated transmute ability"
+          }
         }
       ],
       "cards": [

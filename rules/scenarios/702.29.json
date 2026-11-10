@@ -134,7 +134,15 @@
           "polarity": "does_not_fire",
           "delta": "The tapped land is Island instead of Lonely Sandbar.",
           "expected": "Island has only a mana ability, so Tsabo's Web does not affect it: Island is untapped after A's untap step.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Lonely Sandbar",
+            "remove": [
+              "K:Cycling:U"
+            ],
+            "add": [],
+            "note": "Island replaces Lonely Sandbar in the scenario; the Sandbar loses cycling, its only non-mana activated ability"
+          }
         }
       ],
       "cards": [

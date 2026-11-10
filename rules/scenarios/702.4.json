@@ -60,7 +60,15 @@
           "polarity": "does_not_fire",
           "delta": "A's attacker is a second Mons's Goblin Raiders (1/1, no abilities) instead of Fencing Ace.",
           "expected": "There is a single combat damage step. Each Mons's Goblin Raiders deals 1 damage to the other and both are destroyed. B's life stays 20.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Fencing Ace",
+            "remove": [
+              "K:Double Strike"
+            ],
+            "add": [],
+            "note": "Mons's Goblin Raiders (1/1, no abilities) replaces Fencing Ace; the Ace loses double strike"
+          }
         }
       ],
       "cards": [
@@ -130,7 +138,15 @@
           "polarity": "does_not_fire",
           "delta": "A's attacker is Mons's Goblin Raiders (1/1, no abilities) instead of Fencing Ace.",
           "expected": "There is a single combat damage step. The attacker deals 1 damage to Grizzly Bears, which survives with 1 damage marked; Grizzly Bears deals 2 damage and destroys the attacker.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Fencing Ace",
+            "remove": [
+              "K:Double Strike"
+            ],
+            "add": [],
+            "note": "Mons's Goblin Raiders (1/1, no abilities) replaces Fencing Ace; the Ace loses double strike"
+          }
         }
       ],
       "cards": [
@@ -196,7 +212,15 @@
           "polarity": "does_not_fire",
           "delta": "A's attacker is Mons's Goblin Raiders (1/1, no abilities) instead of Fencing Ace.",
           "expected": "There is a single combat damage step in which the attacker deals 1 damage to B. B's life is 19.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Fencing Ace",
+            "remove": [
+              "K:Double Strike"
+            ],
+            "add": [],
+            "note": "Mons's Goblin Raiders (1/1, no abilities) replaces Fencing Ace; the Ace loses double strike"
+          }
         }
       ],
       "cards": [

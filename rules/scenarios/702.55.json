@@ -55,7 +55,14 @@
           "polarity": "does_not_fire",
           "delta": "Blind Hunter has a +1/+1 counter (3/3).",
           "expected": "Blind Hunter survives with 2 damage; no haunt trigger fires and nothing is exiled.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Blind Hunter",
+            "remove": [],
+            "add": [
+              "K:etbCounter:P1P1:1"
+            ]
+          }
         }
       ],
       "cards": [

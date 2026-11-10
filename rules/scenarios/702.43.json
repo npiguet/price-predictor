@@ -61,14 +61,34 @@
           "polarity": "does_not_fire",
           "delta": "A controls Grizzly Bears instead of Ornithopter.",
           "expected": "Arcbound Worker dies. The trigger has no legal target (Grizzly Bears is not an artifact creature) and is not put on the stack; Grizzly Bears stays a 2/2.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Ornithopter",
+            "remove": [
+              "Types:Artifact Creature Thopter"
+            ],
+            "add": [
+              "Types:Creature Thopter"
+            ],
+            "note": "Grizzly Bears, not an artifact creature, replaces Ornithopter; the Ornithopter loses the Artifact type"
+          }
         },
         {
           "label": "three_counters",
           "polarity": "fires",
           "delta": "Arcbound Worker has three +1/+1 counters, a 3/3 that Lightning Bolt still kills.",
           "expected": "Arcbound Worker dies and Ornithopter gets three +1/+1 counters, a 3/5.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Arcbound Worker",
+            "remove": [
+              "K:Modular:1"
+            ],
+            "add": [
+              "K:Modular:3"
+            ],
+            "note": "Arcbound Worker enters with three +1/+1 counters and moves three when it dies"
+          }
         }
       ],
       "cards": [

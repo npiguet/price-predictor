@@ -62,7 +62,15 @@
           "polarity": "does_not_fire",
           "delta": "A's other creature is Black Knight (protection from white) instead of Hill Giant.",
           "expected": "A gains control of Pacifism, but a white Aura can't be attached to Black Knight, so Pacifism does not move: it stays attached to Grizzly Bears, which still can't attack or block. Black Knight is unaffected. Aura Graft resolved and is in A's graveyard.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Hill Giant",
+            "remove": [],
+            "add": [
+              "K:Protection from white"
+            ],
+            "note": "Black Knight (protection from white) replaces Hill Giant in the scenario; the Giant gains the protection, the thing the rule reads"
+          }
         }
       ],
       "cards": [
@@ -212,7 +220,15 @@
           "polarity": "does_not_fire",
           "delta": "A's other creature is Hill Giant instead of Black Knight.",
           "expected": "A gains control of Pacifism. Pacifism moves from Grizzly Bears to Hill Giant: Hill Giant can't attack or block, Grizzly Bears can. Aura Graft resolved and is in A's graveyard.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Black Knight",
+            "remove": [
+              "K:Protection from white"
+            ],
+            "add": [],
+            "note": "Hill Giant (no protection) replaces Black Knight in the scenario; the Knight loses its protection from white"
+          }
         }
       ],
       "cards": [

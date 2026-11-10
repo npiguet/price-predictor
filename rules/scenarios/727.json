@@ -108,7 +108,16 @@
           "polarity": "does_not_fire",
           "delta": "Karn Liberated has 13 loyalty counters instead of 14.",
           "expected": "The -14 ability cannot be activated because its cost cannot be paid. The game is not restarted: life stays A 12, B 5 and every permanent stays on the battlefield.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Karn Liberated",
+            "remove": [
+              "Loyalty:6"
+            ],
+            "add": [
+              "Loyalty:13"
+            ]
+          }
         }
       ],
       "cards": [
@@ -600,7 +609,16 @@
           "polarity": "does_not_fire",
           "delta": "Karn Liberated has 13 loyalty counters instead of 14.",
           "expected": "The -14 ability cannot be activated; the subgame is not restarted and the main game and Shahrazad are unchanged.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Karn Liberated",
+            "remove": [
+              "Loyalty:6"
+            ],
+            "add": [
+              "Loyalty:13"
+            ]
+          }
         }
       ],
       "cards": [

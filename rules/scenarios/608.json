@@ -379,7 +379,17 @@
           "polarity": "other",
           "delta": "B's creature is Grizzly Bears (green) instead of Merfolk of the Pearl Trident, and A targets it.",
           "expected": "Pyroblast resolves (it is not countered or fizzled) but does nothing: Grizzly Bears stays on the battlefield undamaged; Pyroblast moves to A's graveyard.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Merfolk of the Pearl Trident",
+            "remove": [
+              "ManaCost:U"
+            ],
+            "add": [
+              "ManaCost:G"
+            ],
+            "note": "Grizzly Bears (green) replaces the Merfolk; the Merfolk become green through their mana cost"
+          }
         },
         {
           "label": "target-leaves",
@@ -861,7 +871,17 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Grizzly Bears instead of Edgewalker.",
           "expected": "Grizzly Bears is not black: it stays on the battlefield undamaged; Cleanse moves to A's graveyard.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Edgewalker",
+            "remove": [
+              "ManaCost:1 W B"
+            ],
+            "add": [
+              "ManaCost:1 G"
+            ],
+            "note": "Grizzly Bears (green) replaces Edgewalker; Edgewalker is no longer black"
+          }
         }
       ],
       "cards": [
@@ -924,7 +944,17 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Grizzly Bears instead of Edgewalker.",
           "expected": "Grizzly Bears is nonblack: it is destroyed and moves to B's graveyard. One creature died, so Hellfire deals 4 damage to A (A at 16).",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Edgewalker",
+            "remove": [
+              "ManaCost:1 W B"
+            ],
+            "add": [
+              "ManaCost:1 G"
+            ],
+            "note": "Grizzly Bears (green) replaces Edgewalker; Edgewalker is no longer black"
+          }
         }
       ],
       "cards": [
@@ -1141,7 +1171,17 @@
           "polarity": "does_not_fire",
           "delta": "History of Benalia starts with 1 lore counter instead of 2.",
           "expected": "Chapter II resolves: A creates a 2/2 white Knight token with vigilance. Narci's trigger does not fire; life totals stay 20 and 20; History of Benalia stays on the battlefield with 2 lore counters; A draws nothing.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "History of Benalia",
+            "remove": [
+              "K:Chapter:3:DBToken,DBToken,DBPump"
+            ],
+            "add": [
+              "K:Chapter:4:DBToken,DBToken,DBToken,DBPump"
+            ],
+            "note": "the lore count stays below the final chapter: the final chapter moves up rather than the counters down"
+          }
         }
       ],
       "cards": [

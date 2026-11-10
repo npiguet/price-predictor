@@ -121,7 +121,17 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Grizzly Bears (a creature that is not an artifact) instead of Ornithopter.",
           "expected": "Shatter has no legal target: has_legal_target is false and can_play is false.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Ornithopter",
+            "remove": [
+              "Types:Artifact Creature Thopter"
+            ],
+            "add": [
+              "Types:Creature Thopter"
+            ],
+            "note": "Grizzly Bears, a creature that is not an artifact, replaces Ornithopter; the Ornithopter loses the Artifact type"
+          }
         }
       ],
       "cards": [

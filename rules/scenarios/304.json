@@ -225,7 +225,19 @@
           "polarity": "does_not_fire",
           "delta": "The manifested card is Grizzly Bears instead of Lightning Bolt.",
           "expected": "Grizzly Bears is exiled and returns to the battlefield face up under A's control as a 2/2; Cloudshift goes to A's graveyard.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Lightning Bolt",
+            "remove": [
+              "Types:Instant",
+              "A:SP$ DealDamage | ValidTgts$ Any | NumDmg$ 3 | SpellDescription$ CARDNAME deals 3 damage to any target."
+            ],
+            "add": [
+              "Types:Creature Bear",
+              "PT:2/2"
+            ],
+            "note": "Grizzly Bears is wholly another card; the Bolt becomes a 2/2 creature card without its spell"
+          }
         }
       ],
       "cards": [

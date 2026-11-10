@@ -78,14 +78,34 @@
           "polarity": "does_not_fire",
           "delta": "The second Ornithopter is replaced by Grizzly Bears, which is not an artifact, Saga or legendary.",
           "expected": "A has no enduring story. Balin's trigger resolves: A discards two Mountains and draws two Mountains; B stays at 20.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Ornithopter",
+            "remove": [
+              "Types:Artifact Creature Thopter"
+            ],
+            "add": [
+              "Types:Creature Thopter"
+            ],
+            "note": "Grizzly Bears (not an artifact, Saga or legendary) replaces the second Ornithopter; the Ornithopter is no artifact (the edit applies to the card, so to the other copy too)"
+          }
         },
         {
           "label": "third_is_legendary",
           "polarity": "fires",
           "delta": "The second Ornithopter is replaced by Isamaru, Hound of Konda, a legendary creature.",
           "expected": "A has an enduring story. Balin's trigger resolves: A discards two Mountains, draws two Mountains, and Balin deals 2 damage to B (B at 18).",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Ornithopter",
+            "remove": [
+              "Types:Artifact Creature Thopter"
+            ],
+            "add": [
+              "Types:Legendary Creature Thopter"
+            ],
+            "note": "Isamaru, Hound of Konda (legendary, not an artifact) replaces the second Ornithopter; the Ornithopter is legendary rather than an artifact"
+          }
         }
       ],
       "cards": [

@@ -118,7 +118,15 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Hill Giant instead of Rot-Curse Rakshasa.",
           "expected": "The block is legal. Hill Giant deals 3 damage to Grizzly Bears, which is destroyed, and takes 2 damage. B's life stays 20.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Rot-Curse Rakshasa",
+            "remove": [
+              "K:Decayed"
+            ],
+            "add": [],
+            "note": "Hill Giant replaces Rot-Curse Rakshasa; the Rakshasa loses decayed (its power and toughness are not changed)"
+          }
         }
       ],
       "cards": [

@@ -134,7 +134,15 @@
           "polarity": "other",
           "delta": "A's creature is Runeclaw Bear with one +1/+1 counter instead of Rakdos Cackler.",
           "expected": "The block is legal: Runeclaw Bear has no unleash, so its +1/+1 counter does not stop it blocking.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Rakdos Cackler",
+            "remove": [
+              "K:Unleash"
+            ],
+            "add": [],
+            "note": "Runeclaw Bear (no unleash) replaces Rakdos Cackler in the scenario; the Cackler loses unleash, the one thing the Bear lacks"
+          }
         }
       ],
       "cards": [

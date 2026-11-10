@@ -137,7 +137,17 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Runeclaw Bear (2/2) instead of Hill Giant.",
           "expected": "Runeclaw Bear (power 2, not greater than 2) can legally block Grizzly Bears.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Hill Giant",
+            "remove": [
+              "PT:3/3"
+            ],
+            "add": [
+              "PT:2/2"
+            ],
+            "note": "Runeclaw Bear (2/2) replaces Hill Giant; the Giant takes its power and toughness"
+          }
         },
         {
           "label": "not_bearer",
@@ -556,7 +566,17 @@
           "polarity": "other",
           "delta": "A's Ring-bearer is Isamaru, Hound of Konda (a printed legendary 2/2) instead of Grizzly Bears.",
           "expected": "Clone enters as Isamaru, Hound of Konda, legendary because that supertype is copiable, but not a Ring-bearer. The legend rule puts the Clone into A's graveyard; the original Isamaru stays A's Ring-bearer.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "Types:Creature Bear"
+            ],
+            "add": [
+              "Types:Legendary Creature Bear"
+            ],
+            "note": "Isamaru, Hound of Konda (a printed legendary 2/2) replaces Grizzly Bears as the Ring-bearer; the Bears become legendary"
+          }
         }
       ],
       "cards": [

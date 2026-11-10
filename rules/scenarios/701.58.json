@@ -205,7 +205,20 @@
           "polarity": "does_not_fire",
           "delta": "The cloaked card is Shock instead of Grizzly Bears.",
           "expected": "Turning the permanent face up for its mana cost is not legal although Mountain could pay {R}. It stays a face-down colorless 2/2 creature with ward {2} and no name.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "ManaCost:1 G",
+              "Types:Creature Bear",
+              "PT:2/2"
+            ],
+            "add": [
+              "ManaCost:R",
+              "Types:Instant"
+            ],
+            "note": "Shock (an instant, {R}) replaces Grizzly Bears as the cloaked card; the Bears take its card type and mana cost (Shock is wholly another card)"
+          }
         }
       ],
       "cards": [
@@ -268,7 +281,15 @@
           "polarity": "does_not_fire",
           "delta": "The cloaked card is Serra Angel (mana cost {3}{W}{W}, no morph) instead of Exalted Angel.",
           "expected": "No way to turn the permanent face up is legal: Serra Angel has no morph cost and A's four Plains cannot pay {3}{W}{W}. It stays a face-down colorless 2/2 with ward {2}.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Exalted Angel",
+            "remove": [
+              "K:Morph:2 W W"
+            ],
+            "add": [],
+            "note": "Serra Angel ({3}{W}{W}, no morph) replaces Exalted Angel as the cloaked card; the Exalted Angel loses its morph (Serra Angel is wholly another card)"
+          }
         }
       ],
       "cards": [
@@ -331,7 +352,15 @@
           "polarity": "does_not_fire",
           "delta": "The cloaked card is Craw Wurm (mana cost {4}{G}{G}, no disguise) instead of Bolrac-Clan Basher.",
           "expected": "No way to turn the permanent face up is legal: Craw Wurm has no disguise cost and A's five Mountains cannot pay {4}{G}{G}. It stays a face-down colorless 2/2 with ward {2}.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Bolrac-Clan Basher",
+            "remove": [
+              "K:Disguise:3 R R"
+            ],
+            "add": [],
+            "note": "Craw Wurm ({4}{G}{G}, no disguise) replaces Bolrac-Clan Basher as the cloaked card; the Basher loses its disguise (Craw Wurm is wholly another card)"
+          }
         }
       ],
       "cards": [
@@ -572,7 +601,21 @@
           "polarity": "does_not_fire",
           "delta": "The cloaked card is Serra Angel instead of Lightning Bolt.",
           "expected": "Serra Angel turns face up and is a 4/4 flying, vigilance Serra Angel again. Aven Farseer's trigger fires and Aven Farseer gets a +1/+1 counter (2/2).",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Lightning Bolt",
+            "remove": [
+              "Types:Instant",
+              "A:SP$ DealDamage | ValidTgts$ Any | NumDmg$ 3 | SpellDescription$ CARDNAME deals 3 damage to any target."
+            ],
+            "add": [
+              "Types:Creature Angel",
+              "PT:4/4",
+              "K:Flying",
+              "K:Vigilance"
+            ],
+            "note": "Serra Angel (a creature card, wholly another card) replaces Lightning Bolt as the cloaked card; the Bolt is edited toward a 4/4 flying vigilance creature"
+          }
         }
       ],
       "cards": [

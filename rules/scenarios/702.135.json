@@ -54,7 +54,17 @@
           "polarity": "does_not_fire",
           "delta": "B's creature is Syndicate Messenger (2/3) instead of Ministrant of Obligation.",
           "expected": "Syndicate Messenger survives with 2 damage marked; its afterlife trigger does not fire and B has no Spirit tokens.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Ministrant of Obligation",
+            "remove": [
+              "PT:2/1"
+            ],
+            "add": [
+              "PT:2/3"
+            ],
+            "note": "Syndicate Messenger (2/3) replaces Ministrant of Obligation; the Ministrant takes its toughness"
+          }
         },
         {
           "label": "bounced",

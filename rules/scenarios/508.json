@@ -278,7 +278,17 @@
           "polarity": "does_not_fire",
           "delta": "B controls an Island instead of a Mountain.",
           "expected": "Declaring Dandân is legal; it becomes an attacking creature.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Mountain",
+            "remove": [
+              "Types:Basic Land Mountain"
+            ],
+            "add": [
+              "Types:Basic Land Island"
+            ],
+            "note": "an Island replaces B's Mountain; the Mountain becomes an Island"
+          }
         }
       ],
       "cards": [

@@ -418,14 +418,32 @@
           "polarity": "does_not_fire",
           "delta": "The summoning-sick creature is Vulshok Sorcerer (haste, {T}: 1 damage to any target) instead of Prodigal Pyromancer.",
           "expected": "The activation is legal despite the creature having come under A's control this turn; Vulshok Sorcerer taps and deals 1 damage to B (B at 19).",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Prodigal Pyromancer",
+            "remove": [],
+            "add": [
+              "K:Haste"
+            ],
+            "note": "Vulshok Sorcerer (haste, a {T} damage ability) replaces Prodigal Pyromancer; the Pyromancer gains haste"
+          }
         },
         {
           "label": "no_tap_cost",
           "polarity": "other",
           "delta": "The summoning-sick creature is Basking Rootwalla and A activates its {1}{G} ability, tapping both Forests.",
           "expected": "The activation is legal because the cost has no {T}; Basking Rootwalla gets +2/+2 until end of turn and is 3/3.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Prodigal Pyromancer",
+            "remove": [
+              "A:AB$ DealDamage | Cost$ T | ValidTgts$ Any | NumDmg$ 1 | SpellDescription$ CARDNAME deals 1 damage to any target."
+            ],
+            "add": [
+              "A:AB$ DealDamage | Cost$ 1 G | ValidTgts$ Any | NumDmg$ 1 | SpellDescription$ CARDNAME deals 1 damage to any target."
+            ],
+            "note": "Basking Rootwalla replaces Prodigal Pyromancer and is wholly another card; the Pyromancer's ability takes the Rootwalla's {1}{G} cost with no {T}"
+          }
         }
       ],
       "cards": [

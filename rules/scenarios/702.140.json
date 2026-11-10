@@ -56,7 +56,17 @@
           "polarity": "does_not_fire",
           "delta": "A's creature is Elite Vanguard (a Human) instead of Grizzly Bears.",
           "expected": "Cloudpiercer is not castable: mutate has no legal target because Elite Vanguard is a Human, and the normal cost {4}{R} is not payable.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "Types:Creature Bear"
+            ],
+            "add": [
+              "Types:Creature Human"
+            ],
+            "note": "Elite Vanguard (a 2/1 Human) replaces Grizzly Bears in the scenario; the Bears become a Human, the one thing the mutate target rule reads"
+          }
         },
         {
           "label": "opponent-owned-target",

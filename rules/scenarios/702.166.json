@@ -68,7 +68,20 @@
           "polarity": "does_not_fire",
           "delta": "Short Sword is replaced on A's battlefield by Grizzly Bears (a nonartifact, nontoken creature).",
           "expected": "Casting Ice Out is not legal: Grizzly Bears is not an artifact, enchantment or token, so the spell cannot be bargained and costs {1}{U}{U}, which two Islands cannot pay.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Short Sword",
+            "remove": [
+              "Types:Artifact Equipment",
+              "K:Equip:1",
+              "S:Mode$ Continuous | Affected$ Creature.EquippedBy | AddPower$ 1 | AddToughness$ 1 | Description$ Equipped creature gets +1/+1."
+            ],
+            "add": [
+              "Types:Creature Bear",
+              "PT:2/2"
+            ],
+            "note": "Grizzly Bears is wholly another card; the Short Sword becomes a nonartifact creature and loses its equipment abilities"
+          }
         }
       ],
       "cards": [

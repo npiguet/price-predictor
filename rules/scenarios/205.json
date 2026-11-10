@@ -63,7 +63,17 @@
           "polarity": "other",
           "delta": "B's permanent is Dryad Arbor (Land Creature - Forest Dryad) instead of Grizzly Bears.",
           "expected": "Dryad Arbor is a colorless Land - Forest only: it has neither the Creature type nor the creature type Dryad, and it has no power or toughness.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "Types:Creature Bear"
+            ],
+            "add": [
+              "Types:Land Creature Forest Dryad"
+            ],
+            "note": "Dryad Arbor replaces Grizzly Bears in the scenario; the Bears take its land and creature types (Arbor's green already matches the Bears' green mana cost)"
+          }
         },
         {
           "label": "aura-removed",
@@ -79,7 +89,14 @@
           "polarity": "other",
           "delta": "Grizzly Bears has one +1/+1 counter on it.",
           "expected": "Grizzly Bears is a colorless Land - Forest with no power or toughness, and the +1/+1 counter stays on it.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [],
+            "add": [
+              "K:etbCounter:P1P1:1"
+            ]
+          }
         }
       ],
       "cards": [
@@ -229,7 +246,17 @@
           "polarity": "does_not_fire",
           "delta": "B's permanent is Grizzly Bears (a creature that is not an artifact) instead of Ornithopter.",
           "expected": "Shatter has no legal target: has_legal_target is false and it cannot be cast.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Ornithopter",
+            "remove": [
+              "Types:Artifact Creature Thopter"
+            ],
+            "add": [
+              "Types:Creature Thopter"
+            ],
+            "note": "Grizzly Bears, a creature that is not an artifact, replaces Ornithopter; the Ornithopter loses the Artifact type"
+          }
         }
       ],
       "cards": [
@@ -302,7 +329,19 @@
           "polarity": "does_not_fire",
           "delta": "B's permanent is Sol Ring (an artifact that is not a creature) instead of Ornithopter.",
           "expected": "Doom Blade has no legal target: has_legal_target is false and it cannot be cast.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Ornithopter",
+            "remove": [
+              "Types:Artifact Creature Thopter",
+              "PT:0/2",
+              "K:Flying"
+            ],
+            "add": [
+              "Types:Artifact"
+            ],
+            "note": "Sol Ring, an artifact that is not a creature, replaces Ornithopter; the Ornithopter loses the Creature type and what only a creature has"
+          }
         }
       ],
       "cards": [
@@ -582,7 +621,17 @@
           "polarity": "does_not_fire",
           "delta": "A's creature is Isamaru, Hound of Konda instead of Grizzly Bears.",
           "expected": "A controls a legendary creature: Urza's Ruinous Blast can be cast and can_play is true.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "Types:Creature Bear"
+            ],
+            "add": [
+              "Types:Legendary Creature Hound"
+            ],
+            "note": "Isamaru, Hound of Konda replaces Grizzly Bears; the Bears become a legendary creature"
+          }
         },
         {
           "label": "legendary-planeswalker",

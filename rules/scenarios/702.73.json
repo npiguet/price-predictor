@@ -52,7 +52,15 @@
           "polarity": "does_not_fire",
           "delta": "A controls Grizzly Bears instead of Avian Changeling.",
           "expected": "Grizzly Bears is a Bear, not a Goblin, so Goblin King's bonus does not apply. Grizzly Bears is 2/2 with no mountainwalk.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Avian Changeling",
+            "remove": [
+              "K:Changeling"
+            ],
+            "add": [],
+            "note": "Grizzly Bears replaces Avian Changeling; the Changeling loses changeling and so is no Goblin"
+          }
         }
       ],
       "cards": [

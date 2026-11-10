@@ -208,7 +208,19 @@
           "polarity": "does_not_fire",
           "delta": "Manabarbs is on the battlefield instead of Mana Flare.",
           "expected": "Casting Grizzly Bears is illegal (can_play false): Manabarbs's trigger is not a mana ability and adds no mana, so one Forest produces only {G}.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Mana Flare",
+            "remove": [
+              "T:Mode$ TapsForMana | ValidCard$ Land | Execute$ TrigMana | TriggerZones$ Battlefield | Static$ True | TriggerDescription$ Whenever a player taps a land for mana, that player adds one mana of any type that land produced.",
+              "SVar:TrigMana:DB$ ManaReflected | ColorOrType$ Type | ReflectProperty$ Produced | Defined$ TriggeredActivator"
+            ],
+            "add": [
+              "T:Mode$ TapsForMana | ValidCard$ Land | TriggerZones$ Battlefield | Execute$ TrigDamage | TriggerDescription$ Whenever a player taps a land for mana, CARDNAME deals 1 damage to that player.",
+              "SVar:TrigDamage:DB$ DealDamage | Defined$ TriggeredActivator | NumDmg$ 1"
+            ],
+            "note": "Manabarbs is wholly another card; Mana Flare's land-tap trigger is replaced by Manabarbs's"
+          }
         }
       ],
       "cards": [

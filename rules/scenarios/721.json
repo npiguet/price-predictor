@@ -59,7 +59,14 @@
           "polarity": "does_not_fire",
           "delta": "Lumen-Class Frigate has 1 charge counter instead of 2.",
           "expected": "Lumen-Class Frigate has 1 charge counter, below STATION 2+, and gives no anthem: Grizzly Bears is 2/2. Lumen-Class Frigate is not a creature.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Lumen-Class Frigate",
+            "remove": [],
+            "add": [
+              "K:etbCounter:CHARGE:1"
+            ]
+          }
         }
       ],
       "cards": [
@@ -128,7 +135,14 @@
           "polarity": "does_not_fire",
           "delta": "Rescue Skiff has 9 charge counters instead of 10.",
           "expected": "Rescue Skiff has 9 charge counters, below STATION 10+: it is a noncreature artifact Spacecraft with no power or toughness in play and no flying. It stays on the battlefield.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Rescue Skiff",
+            "remove": [],
+            "add": [
+              "K:etbCounter:CHARGE:9"
+            ]
+          }
         }
       ],
       "cards": [
@@ -207,7 +221,14 @@
           "polarity": "other",
           "delta": "Debris Field Crusher has 8 charge counters instead of 7.",
           "expected": "The station ability is legal to activate (can_play true) and the {1}{R} pump ability is also available (can_play true, payable with the two Mountains), because STATION 8+ is met.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Debris Field Crusher",
+            "remove": [],
+            "add": [
+              "K:etbCounter:CHARGE:8"
+            ]
+          }
         }
       ],
       "cards": [

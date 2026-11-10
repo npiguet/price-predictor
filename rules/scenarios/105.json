@@ -47,28 +47,72 @@
           "polarity": "fires",
           "delta": "A's permanent is Watchwolf (mana cost {G}{W}) instead of Grizzly Bears.",
           "expected": "Watchwolf is green and white (multicolored).",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "ManaCost:1 G"
+            ],
+            "add": [
+              "ManaCost:G W"
+            ],
+            "note": "Watchwolf replaces Grizzly Bears in the scenario; the Bears take its mana cost"
+          }
         },
         {
           "label": "colorless_cost",
           "polarity": "does_not_fire",
           "delta": "A's permanent is Wurmcoil Engine (mana cost {6}, an artifact) instead of Grizzly Bears.",
           "expected": "Wurmcoil Engine has no color symbol in its mana cost and is colorless.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "ManaCost:1 G",
+              "Types:Creature Bear"
+            ],
+            "add": [
+              "ManaCost:6",
+              "Types:Artifact Creature Bear"
+            ],
+            "note": "Wurmcoil Engine ({6} artifact creature) replaces Grizzly Bears in the scenario; the Bears take its mana cost and artifact type"
+          }
         },
         {
           "label": "color_indicator",
           "polarity": "fires",
           "delta": "A's permanent is Dryad Arbor (no mana cost, color indicator green) instead of Grizzly Bears.",
           "expected": "Dryad Arbor is green even though it has no mana cost.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "ManaCost:1 G"
+            ],
+            "add": [
+              "ManaCost:no cost",
+              "Colors:green"
+            ],
+            "note": "Dryad Arbor (no mana cost, green colour indicator) replaces Grizzly Bears in the scenario; the Bears take its lack of mana cost and its explicit green colour"
+          }
         },
         {
           "label": "cda",
           "polarity": "fires",
           "delta": "A's permanent is Transguild Courier (mana cost {4}, characteristic-defining ability making it all colors) instead of Grizzly Bears.",
           "expected": "Transguild Courier is white, blue, black, red and green.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "ManaCost:1 G"
+            ],
+            "add": [
+              "ManaCost:4",
+              "S:Mode$ Continuous | Affected$ Card.Self | CharacteristicDefining$ True | SetColor$ All | Description$ CARDNAME is all colors."
+            ],
+            "note": "Transguild Courier ({4}, all colors by characteristic-defining ability) replaces Grizzly Bears in the scenario; the Bears take its mana cost and its colour ability"
+          }
         }
       ],
       "cards": [

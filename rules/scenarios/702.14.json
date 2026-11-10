@@ -52,7 +52,17 @@
           "polarity": "does_not_fire",
           "delta": "B controls a Forest instead of the Swamp.",
           "expected": "Declaring Grizzly Bears as a blocker of Bog Wraith is legal.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Swamp",
+            "remove": [
+              "Types:Basic Land Swamp"
+            ],
+            "add": [
+              "Types:Basic Land Forest"
+            ],
+            "note": "B's Forest replaces B's Swamp; the Swamp becomes a Forest"
+          }
         }
       ],
       "cards": [
@@ -122,7 +132,18 @@
           "polarity": "does_not_fire",
           "delta": "B controls a Forest instead of Evolving Wilds.",
           "expected": "Declaring Grizzly Bears as a blocker of Dryad Sophisticate is legal.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Evolving Wilds",
+            "remove": [
+              "Types:Land",
+              "A:AB$ ChangeZone | Cost$ T Sac<1/CARDNAME> | Origin$ Library | Destination$ Battlefield | Tapped$ True | ChangeType$ Land.Basic | ChangeTypeDesc$ basic land | SpellDescription$ Search your library for a basic land card, put it onto the battlefield tapped, then shuffle."
+            ],
+            "add": [
+              "Types:Basic Land Forest"
+            ],
+            "note": "B's Forest (a basic land) replaces Evolving Wilds; the Wilds become a basic Forest"
+          }
         }
       ],
       "cards": [
@@ -192,7 +213,17 @@
           "polarity": "does_not_fire",
           "delta": "B controls a Forest instead of the Swamp.",
           "expected": "Declaring B's Bog Wraith as a blocker of A's Bog Wraith is legal.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Swamp",
+            "remove": [
+              "Types:Basic Land Swamp"
+            ],
+            "add": [
+              "Types:Basic Land Forest"
+            ],
+            "note": "B's Forest replaces B's Swamp; the Swamp becomes a Forest"
+          }
         }
       ],
       "cards": [

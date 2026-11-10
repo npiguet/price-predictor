@@ -633,7 +633,15 @@
           "polarity": "other",
           "delta": "B's creature is Hill Giant instead of Typhoid Rats.",
           "expected": "Both text boxes are empty, so nothing changes: Grizzly Bears 2/2 and Hill Giant 3/3, neither with abilities.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Typhoid Rats",
+            "remove": [
+              "K:Deathtouch"
+            ],
+            "add": [],
+            "note": "Hill Giant (no rules text) replaces Typhoid Rats; the Rats lose their one ability"
+          }
         },
         {
           "label": "target_destroyed",

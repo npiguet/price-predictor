@@ -367,7 +367,15 @@
           "polarity": "does_not_fire",
           "delta": "A's permanent is Grizzly Bears instead of Hound Tamer.",
           "expected": "It stays neither day nor night. Grizzly Bears is a 2/2.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Hound Tamer",
+            "remove": [
+              "K:Nightbound"
+            ],
+            "add": [],
+            "note": "Grizzly Bears replaces Hound Tamer in the scenario; the Tamer's back face (Untamed Pup) loses nightbound, the one thing the Bears lack"
+          }
         }
       ],
       "cards": [
@@ -427,7 +435,15 @@
           "polarity": "does_not_fire",
           "delta": "A's creature is Gatstaf Shepherd (a Human Werewolf double-faced card without daybound) instead of Hound Tamer.",
           "expected": "Moonmist resolves and Gatstaf Shepherd transforms into Gatstaf Howler, a 3/3 Werewolf with intimidate.",
-          "operation": "replace_card"
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Hound Tamer",
+            "remove": [
+              "K:Daybound"
+            ],
+            "add": [],
+            "note": "Gatstaf Shepherd, a double-faced Werewolf without daybound, replaces Hound Tamer; the Tamer loses daybound"
+          }
         }
       ],
       "cards": [

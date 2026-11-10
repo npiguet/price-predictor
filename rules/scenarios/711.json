@@ -54,21 +54,42 @@
           "polarity": "fires",
           "delta": "It has 6 level counters instead of 2.",
           "expected": "Student of Warfare with 6 level counters (the top of LEVEL 2-6) is 3/3 with first strike.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Student of Warfare",
+            "remove": [],
+            "add": [
+              "K:etbCounter:LEVEL:6"
+            ]
+          }
         },
         {
           "label": "one_counter",
           "polarity": "does_not_fire",
           "delta": "It has 1 level counter instead of 2.",
           "expected": "Student of Warfare with 1 level counter is 1/1 with no first strike.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Student of Warfare",
+            "remove": [],
+            "add": [
+              "K:etbCounter:LEVEL:1"
+            ]
+          }
         },
         {
           "label": "seven_counters",
           "polarity": "other",
           "delta": "It has 7 level counters instead of 2.",
           "expected": "Student of Warfare with 7 level counters is 4/4 with double strike, not 3/3 with first strike.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Student of Warfare",
+            "remove": [],
+            "add": [
+              "K:etbCounter:LEVEL:7"
+            ]
+          }
         }
       ],
       "cards": [
@@ -134,14 +155,28 @@
           "polarity": "fires",
           "delta": "It has 12 level counters instead of 7.",
           "expected": "Student of Warfare with 12 level counters is 4/4 with double strike.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Student of Warfare",
+            "remove": [],
+            "add": [
+              "K:etbCounter:LEVEL:12"
+            ]
+          }
         },
         {
           "label": "six_counters",
           "polarity": "does_not_fire",
           "delta": "It has 6 level counters instead of 7.",
           "expected": "Student of Warfare with 6 level counters is 3/3 with first strike and not double strike.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Student of Warfare",
+            "remove": [],
+            "add": [
+              "K:etbCounter:LEVEL:6"
+            ]
+          }
         }
       ],
       "cards": [
@@ -205,7 +240,14 @@
           "polarity": "fires",
           "delta": "Student of Warfare has 9 level counters instead of 0.",
           "expected": "Level up is legal to activate with 9 level counters.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Student of Warfare",
+            "remove": [],
+            "add": [
+              "K:etbCounter:LEVEL:9"
+            ]
+          }
         }
       ],
       "cards": [
@@ -271,7 +313,14 @@
           "polarity": "does_not_fire",
           "delta": "Student of Warfare starts with 1 level counter instead of 0.",
           "expected": "Student of Warfare has 2 level counters and is 3/3 with first strike.",
-          "operation": "counters"
+          "operation": "counters",
+          "script_edit": {
+            "card": "Student of Warfare",
+            "remove": [],
+            "add": [
+              "K:etbCounter:LEVEL:1"
+            ]
+          }
         }
       ],
       "cards": [
