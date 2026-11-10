@@ -89,3 +89,62 @@ class TestScriptManaCost:
 
     def test_a_script_declaring_none_names_none(self):
         assert script_mana_cost(["Name:X", "Types:Instant"]) is None
+
+
+class TestSignedValues:
+    """python review, perturbation oddities: a ``+N`` value (``NumAtt$ +2``,
+    most pumps) never parsed as a number, and a ``-N`` one was floored to 0 or
+    1, turning a debuff into nothing or a buff."""
+
+    _PUMP = "A:SP$ Pump | ValidTgts$ Creature | NumAtt$ +2 | NumDef$ +2"
+    _DEBUFF = "A:SP$ Pump | ValidTgts$ Creature | NumAtt$ -2 | NumDef$ -2"
+
+    def test_a_plus_value_is_a_number(self):
+        assert numeric_params(self._PUMP) == {"NumAtt": 2, "NumDef": 2}
+
+    def test_a_pump_stays_a_pump_written_with_its_sign(self):
+        rng = random.Random(0)
+        numeric = 0
+        for _ in range(100):
+            result = perturb(self._PUMP, rng)
+            assert result is not None
+            perturbed, perturbation = result
+            if perturbation.kind == PerturbationKind.SELECTOR:
+                continue
+            numeric += 1
+            assert perturbation.original == "+2"
+            assert perturbation.replacement.startswith("+")
+            assert int(perturbation.replacement) >= 1
+            assert f"{perturbation.key}$ {perturbation.replacement}" in perturbed
+        assert numeric > 0
+
+    def test_a_debuff_stays_a_debuff(self):
+        rng = random.Random(0)
+        numeric = 0
+        for _ in range(100):
+            result = perturb(self._DEBUFF, rng)
+            assert result is not None
+            perturbed, perturbation = result
+            if perturbation.kind == PerturbationKind.SELECTOR:
+                continue
+            numeric += 1
+            assert perturbation.original == "-2"
+            assert int(perturbation.replacement) <= -1
+            assert f"{perturbation.key}$ {perturbation.replacement}" in perturbed
+        assert numeric > 0
+
+
+class TestDeckBuildingHints:
+    """python review: a ``DeckHints:Type$ Creature`` swap changes nothing in a
+    game, only what the AI's deck builder prefers."""
+
+    def test_a_deck_building_hint_is_not_perturbed(self):
+        rng = random.Random(0)
+        for line in (
+            "DeckHints:Type$Creature",
+            "DeckHints:Type$ Creature",
+            "DeckNeeds:Type$Artifact",
+            "DeckHas:Ability$Token & Type$Creature",
+            "SVar:AIPreference:SacCost$Creature",
+        ):
+            assert perturb(line, rng) is None, line

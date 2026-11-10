@@ -3,7 +3,11 @@
 Real cards cluster (most damage spells deal 2, 3 or 4), so a variant that
 deals 7 breaks a memorized phrase without inventing a mechanic. Perturbations
 are kept small: a numeric shift of up to ±3 or a doubling, floored at zero, or
-a selector swapped from a whitelist.
+a selector swapped from a whitelist. A signed value (``NumAtt$ +2``, ``NumDef$
+-2``) keeps its sign and a magnitude of at least one, so a pump stays a pump and
+a debuff a debuff. A deck-building hint (``DeckHints:``, ``DeckNeeds:``,
+``DeckHas:``, an ``AIPreference`` SVar) is never perturbed: it changes what the
+AI prefers to deck or pay, not what the card does.
 """
 
 from __future__ import annotations
@@ -40,6 +44,16 @@ NUMERIC_PARAM_KEYS: frozenset[str] = frozenset({
 _PARAM_RE = re.compile(r"(\w+)\$\s*([^|]+?)(?=\s*\||\s*$)")
 
 
+#: Line kinds that only steer the AI's deck building or cost choice: a swap
+#: there changes nothing in a game.
+NON_GAMEPLAY_LINE_PREFIXES: tuple[str, ...] = (
+    "DeckHints:", "DeckNeeds:", "DeckHas:", "SVar:AIPreference:", "AIPreference:",
+)
+
+#: A signed number as a source script writes a pump or a debuff: ``+2``, ``-2``.
+_SIGNED_RE = re.compile(r"[+-]\d+")
+
+
 class PerturbationKind(StrEnum):
     SHIFT = "numeric-shift"
     DOUBLE = "numeric-double"
@@ -60,13 +74,25 @@ class Perturbation:
 
 
 def numeric_params(script_text: str) -> dict[str, int]:
-    """Whitelisted numeric parameters of a script line, by key."""
-    found: dict[str, int] = {}
+    """Whitelisted numeric parameters of a script line, by key; a signed value
+    (``+2``, ``-2``) reads as its number."""
+    return {key: int(value) for key, value in _numeric_values(script_text).items()}
+
+
+def _numeric_values(script_text: str) -> dict[str, str]:
+    """Whitelisted numeric parameters of a script line, by key, as written."""
+    found: dict[str, str] = {}
     for key, value in _PARAM_RE.findall(script_text):
         stripped = value.strip()
-        if key in NUMERIC_PARAM_KEYS and stripped.lstrip("-").isdigit():
-            found[key] = int(stripped)
+        if key in NUMERIC_PARAM_KEYS and (
+            stripped.isdigit() or _SIGNED_RE.fullmatch(stripped)
+        ):
+            found[key] = stripped
     return found
+
+
+def _is_gameplay_line(script_text: str) -> bool:
+    return not script_text.lstrip().startswith(NON_GAMEPLAY_LINE_PREFIXES)
 
 
 def selector_params(script_text: str) -> dict[str, str]:
@@ -90,6 +116,18 @@ def double(value: int) -> int:
     return max(0, value * 2)
 
 
+def _perturbed_number(written: str, kind: PerturbationKind, rng: random.Random) -> str:
+    """``written`` shifted or doubled. An unsigned count is floored at zero; a
+    signed one keeps its sign and a magnitude of at least one, written with
+    the sign, so a +2 pump stays a pump and a -2 debuff a debuff."""
+    if written[0] not in "+-":
+        value = int(written)
+        return str(shift(value, rng) if kind == PerturbationKind.SHIFT else double(value))
+    sign, magnitude = written[0], int(written[1:])
+    changed = shift(magnitude, rng) if kind == PerturbationKind.SHIFT else double(magnitude)
+    return f"{sign}{max(1, changed)}"
+
+
 def perturb(
     script_text: str, rng: random.Random,
 ) -> tuple[str, Perturbation] | None:
@@ -98,7 +136,9 @@ def perturb(
     Returns the perturbed script and what changed, or None when the line has
     nothing this module knows how to perturb.
     """
-    numbers = numeric_params(script_text)
+    if not _is_gameplay_line(script_text):
+        return None
+    numbers = _numeric_values(script_text)
     selectors = selector_params(script_text)
     choices: list[str] = []
     if numbers:
@@ -116,15 +156,12 @@ def perturb(
         replacement = rng.choice(alternatives)
     else:
         key = rng.choice(sorted(numbers))
-        original = str(numbers[key])
-        value = numbers[key]
-        replacement = str(
-            shift(value, rng) if kind == PerturbationKind.SHIFT else double(value)
-        )
+        original = numbers[key]
+        replacement = _perturbed_number(original, kind, rng)
         if replacement == original:
             # A shift of zero is not a variant; try the other perturbation.
-            replacement = str(double(value))
             kind = PerturbationKind.DOUBLE
+            replacement = _perturbed_number(original, kind, rng)
             if replacement == original:
                 return None
 
