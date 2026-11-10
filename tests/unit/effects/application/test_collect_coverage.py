@@ -290,6 +290,9 @@ class TestTheRoundPlaysTheComputedDecks:
         records_dir = tmp_path / "records"
         records_dir.mkdir()
         produced = iter([0, 9, 1])
+        # The records act through a converted line, or build-corpus's refusal
+        # rule, which the counts apply, refuses them as no-acting-text.
+        _convert_acting_line(cards)
 
         def _play(_decks, _decks_file, *, label, matches):
             count = next(produced, 0)
@@ -323,6 +326,21 @@ class TestTheRoundPlaysTheComputedDecks:
             "argument' implementation would split them roughly evenly "
             "instead and fail this assertion"
         )
+
+
+def _convert_acting_line(cards_folder: Path) -> None:
+    """A sidecar for :data:`ACTING_KEY` under ``cards_folder``, so a
+    :func:`_record` acting through it is kept by the refusal rule."""
+    from effects.domain.provenance import ProvenanceSidecar, SidecarLine
+    from tests.unit.effects.builders import write_sidecar
+    from tests.unit.effects.domain.test_coverage import ACTING_KEY
+
+    write_sidecar(
+        ProvenanceSidecar(card="shock", script_file=ACTING_KEY.script_file, lines=(
+            SidecarLine(0, "spell", (ACTING_KEY,), script_text="SP$ DealDamage | NumDmg$ 2"),
+        )),
+        cards_folder / "s" / "shock.provenance.json",
+    )
 
 
 class TestARoundEndsInItsReport:
@@ -417,10 +435,13 @@ class TestCtrlCEndsTheRun:
         assert code == 130, "an interrupted run must not report success"
 
     def test_an_uninterrupted_run_plays_every_round_it_needs(self, tmp_path, fake_supervisor):
-        """The control: five stalled rounds, then retirement ends the run."""
+        """The control: no game ever shows the card, so it retires after
+        ``UNSEEN_RETIRE_FACTOR`` times five written rounds, which ends the run."""
+        from effects.domain.coverage import UNSEEN_RETIRE_FACTOR
+
         code, supervisor = self._run_with(tmp_path, fake_supervisor, interrupted=False)
 
-        assert supervisor.play_round.call_count == 5
+        assert supervisor.play_round.call_count == 5 * UNSEEN_RETIRE_FACTOR
         assert code == 0
 
 
@@ -471,11 +492,11 @@ class TestOnlyDeckedCardsCountAStalledRound:
         seen = []
         real = collect_coverage.retire_stalled
 
-        def _spy(coverage, previous, *, no_progress_rounds, decked):
-            seen.append(frozenset(decked))
+        def _spy(coverage, previous, *, no_progress_rounds, decked, written):
+            seen.append(frozenset(written))
             return real(
                 coverage, previous, no_progress_rounds=no_progress_rounds,
-                decked=decked,
+                decked=decked, written=written,
             )
 
         with patch.object(collect_coverage, "consult_castability", return_value={}), \
@@ -789,7 +810,7 @@ class TestHeldOutTextUnit:
         counted = count_text_shard(
             _GEN3_SHARD, roots=_GEN3_ROOTS, held_out=_holding(everything),
         )
-        assert counted == resolutions
+        assert counted.games == resolutions
 
     def test_a_game_goes_to_the_first_acting_text_held_out_by_its_unit(
         self, tmp_path,
@@ -823,14 +844,18 @@ class TestHeldOutTextUnit:
             )
             keys.append(key)
         shard = tmp_path / "records" / "run.0-a.jsonl.gz"
-        write_shard(shard, [make_record(ability=tuple(keys), payload=ResolutionPayload(
-            events=(Event(type=EventType.CARD_DRAWN, subjects=("P0",)),),
-        ))])
+        write_shard(shard, [make_record(
+            generation=3, ability=tuple(keys), payload=ResolutionPayload(
+                events=(Event(type=EventType.CARD_DRAWN, subjects=("P0",)),),
+            ),
+        )])
         roots = {"cardsfolder": str(tmp_path / "cardsfolder")}
         held_out = _holding({"SP$ DealDamage | NumDmg$ 3", draw}, HoldoutUnit.TEMPLATE)
         coverage = {draw: TextCoverage(text=draw)}
 
-        assert count_text_shard(shard, roots=roots, held_out=held_out) == {damage: {"g1"}}
+        assert count_text_shard(shard, roots=roots, held_out=held_out).games == {
+            damage: {"g1"},
+        }
         TextCoverageCounter(roots, held_out).update(coverage, tmp_path / "records", workers=1)
         assert coverage[draw].games == set()
 
@@ -858,8 +883,8 @@ class TestHeldOutTextUnit:
         _, everything = _texts_by_game(_GEN3_SHARD)
         held_out = _holding(everything)
 
-        assert count_text_shard(clean, roots=_GEN3_ROOTS, held_out=held_out)
-        assert count_text_shard(flooded, roots=_GEN3_ROOTS, held_out=held_out) == {}
+        assert count_text_shard(clean, roots=_GEN3_ROOTS, held_out=held_out).games
+        assert count_text_shard(flooded, roots=_GEN3_ROOTS, held_out=held_out).games == {}
 
     def test_a_process_reads_each_sidecar_once_across_shards(self, monkeypatch):
         """A sidecar cache per shard re-read every sidecar the shard named."""
@@ -887,7 +912,7 @@ class TestHeldOutTextUnit:
 
         assert read_by_one > 0
         assert len(reads) == read_by_one
-        assert first == second == {}
+        assert first.games == second.games == {}
 
     def test_satisfaction_is_distinct_games_at_the_floor(self):
         from effects.domain.coverage import TextCoverage
@@ -1213,3 +1238,190 @@ class TestTheWordingRound:
                 wording_cards=tmp_path / "w.txt",
                 deck_holdout=DeckHoldout(only_cards=tmp_path / "h.txt"),
             )
+
+
+
+# ── what a coverage count credits (python D1, D5, D6, D8, R5; the generation) ──
+
+
+def _turn_action(entities, events):
+    from effects.domain.records import TurnActionPayload, TurnActionSubkind
+    from tests.unit.effects.builders import make_record, make_snapshot
+
+    return make_record(
+        RecordKind.TURN_ACTION, subkind=TurnActionSubkind.DRAW, generation=3,
+        state=make_snapshot(entities=tuple(entities)),
+        payload=TurnActionPayload(events=tuple(events)),
+    )
+
+
+class TestOnlyWhatBuildCorpusKeepsCounts:
+    """python D1: ``count_shard`` credited every record kind, ``turn_action``
+    included, so every card drawn (and every permanent untapped) made
+    progress though build-corpus writes no such record to any stratum."""
+
+    def test_a_turn_action_record_credits_nothing(self, tmp_path):
+        from effects.application.collect_coverage import count_shard
+
+        drawn, land = make_entity("E1", "drawn card", zone="hand"), make_entity("E2", "forest")
+        shard = write_plain_shard(tmp_path, "x", [_turn_action([drawn, land], [
+            Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
+                  params={"from_zone": "library", "to_zone": "hand"}),
+            Event(type=EventType.UNTAPPED, subjects=("E2",)),
+        ])])
+
+        assert count_shard(shard).credits == {}
+
+    def test_a_record_build_corpus_refuses_credits_nothing(self, tmp_path):
+        """A resolution with no acting ability is refused as ``no-ability``."""
+        from dataclasses import replace
+
+        from effects.application.collect_coverage import count_shard
+
+        record = replace(
+            _record([make_entity("E1", "shock")], source="E1"), ability=None,
+        )
+        shard = write_plain_shard(tmp_path, "x", [record])
+
+        assert count_shard(shard).credits == {}
+
+    def test_a_kept_record_still_credits(self, tmp_path):
+        from effects.application.collect_coverage import count_shard
+
+        shard = write_plain_shard(tmp_path, "x", [
+            _record([make_entity("E1", "shock")], source="E1"),
+        ])
+
+        assert count_shard(shard).credits == {"shock": 1}
+
+
+class TestOnlyGenThreeRecordsCount:
+    """The counters ignored ``generation``, so a gen-2 shard under the records
+    tree would have counted toward a gen-3 corpus's coverage."""
+
+    def test_a_gen_two_record_credits_nothing(self, tmp_path):
+        from dataclasses import replace
+
+        from effects.application.collect_coverage import count_shard
+
+        record = replace(
+            _record([make_entity("E1", "shock")], source="E1"), generation=None,
+        )
+        shard = write_plain_shard(tmp_path, "x", [record])
+
+        assert count_shard(shard).credits == {}
+
+    def test_a_gen_two_record_counts_toward_no_held_out_text(self):
+        from dataclasses import replace
+
+        from effects.application.collect_coverage import count_text_shard
+        from effects.infrastructure.shard_io import read_shard
+
+        _, everything = _texts_by_game(_GEN3_SHARD)
+        held_out = _holding(everything)
+        assert count_text_shard(_GEN3_SHARD, roots=_GEN3_ROOTS, held_out=held_out).games
+        demoted = [replace(record, generation=None) for record in read_shard(_GEN3_SHARD)]
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            written = write_plain_shard(Path(directory), "x", demoted)
+            counted = count_text_shard(written, roots=_GEN3_ROOTS, held_out=held_out)
+        assert counted.games == {}
+
+
+class TestTheCountersUseTheRunsWorkers:
+    """python R5: shard counting passed no ``workers``, so it ran one process
+    per CPU (32 here), above the machine's budget."""
+
+    def test_every_count_runs_on_config_workers(self, tmp_path, fake_supervisor):
+        from effects.application import collect_coverage
+
+        cards = tmp_path / "cardsfolder"
+        cards.mkdir()
+        (cards / "aa.txt").write_text(
+            "name: aa\nmana cost: {G}\ntypes: creature\n", encoding="utf-8",
+        )
+        seen = []
+        real = collect_coverage.CoverageCounter.update
+
+        def _spy(self, coverage, records_dir, *, workers=None):
+            seen.append(workers)
+            return real(self, coverage, records_dir, workers=workers)
+
+        with patch.object(collect_coverage, "consult_castability", return_value={}), \
+                patch.object(collect_coverage.CoverageCounter, "update", _spy):
+            collect_coverage.run(CollectCoverageConfig(
+                effect_records=tmp_path / "records", cards_folders=(cards,),
+                target_records=1, decks_per_round=1, no_progress_rounds=1, workers=7,
+            ))
+
+        assert len(seen) >= 2, "the initial count and a round's count"
+        assert set(seen) == {7}
+
+
+class TestTheDeckFileIsTheRunsOwn:
+    """Two runs on one records directory replaced each other's fixed-name
+    deck file, which every worker reloads at its start."""
+
+    def test_the_decks_file_names_the_run(self, tmp_path, fake_supervisor):
+        from effects.application import collect_coverage
+
+        cards = tmp_path / "cardsfolder"
+        cards.mkdir()
+        (cards / "aa.txt").write_text(
+            "name: aa\nmana cost: {G}\ntypes: creature\n", encoding="utf-8",
+        )
+        fake_supervisor.run_id = "run-123"
+        with patch.object(collect_coverage, "consult_castability", return_value={}):
+            collect_coverage.run(CollectCoverageConfig(
+                effect_records=tmp_path / "records", cards_folders=(cards,),
+                target_records=1, decks_per_round=1, no_progress_rounds=1,
+            ))
+
+        decks_file = fake_supervisor.play_round.call_args.args[1]
+        assert decks_file == tmp_path / "records" / "coverage-decks.run-123.txt"
+
+
+class TestARoundChargesTheCardsItsGamesShowed:
+    """python D8: retirement is charged to the cards the round's games showed,
+    not to every card of every deck written."""
+
+    def test_a_written_card_no_game_showed_is_not_charged(self, tmp_path, fake_supervisor):
+        from effects.application import collect_coverage
+
+        cards = tmp_path / "cardsfolder"
+        cards.mkdir()
+        for name in ("shown", "unseen"):
+            (cards / f"{name}.txt").write_text(
+                f"name: {name}\nmana cost: {{G}}\ntypes: creature\n", encoding="utf-8",
+            )
+        records_dir = tmp_path / "records"
+        records_dir.mkdir()
+        played = iter(range(100))
+
+        def _play(_decks, _decks_file, *, label, matches):
+            # The round's games show "shown" in hand, crediting nothing.
+            record = _record([make_entity("E9", "other")], source="E9")
+            seen_record = _turn_action([make_entity("E1", "shown", zone="hand")], [])
+            write_plain_shard(records_dir, f"r{next(played)}", [record, seen_record])
+
+        fake_supervisor.play_round.side_effect = _play
+        calls = []
+        real = collect_coverage.retire_stalled
+
+        def _spy(coverage, previous, **kwargs):
+            calls.append(kwargs)
+            return real(coverage, previous, **kwargs)
+
+        with patch.object(collect_coverage, "consult_castability", return_value={}), \
+                patch.object(collect_coverage, "retire_stalled", _spy), \
+                patch.object(collect_coverage, "build_coverage_decks",
+                             return_value=[["shown", "unseen"]]):
+            collect_coverage.run(CollectCoverageConfig(
+                effect_records=records_dir, cards_folders=(cards,),
+                target_records=1, decks_per_round=1, no_progress_rounds=1,
+            ))
+
+        first = calls[0]
+        assert first["written"] == {"shown", "unseen"}
+        assert first["decked"] == {"shown"}

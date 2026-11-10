@@ -10,28 +10,39 @@ from __future__ import annotations
 import pytest
 
 from effects.domain.coverage import (
+    UNSEEN_RETIRE_FACTOR,
     CardCoverage,
     ConsultVerdict,
     deck_weights,
     qualifying_cards,
     rank_by_consult,
+    retire_stalled,
 )
 from effects.domain.event_schema import Event, EventType
+from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
+    ContinuousPayload,
     EffectRecord,
+    RecordKind,
     ResolutionPayload,
 )
-from effects.domain.state_snapshot import Refs
+from effects.domain.state_snapshot import CardLine, Refs
 from tests.unit.effects.builders import (
     make_entity,
     make_record,
     make_snapshot,
 )
 
+#: The acting key every :func:`_record` carries: build-corpus refuses a
+#: resolution with none, so the coverage counts do too.
+ACTING_KEY = ProvenanceKey("cardsfolder/s/shock.txt", 0, "spell", 0)
+
 
 def _record(entities, *, source=None, targets=(), events=()) -> EffectRecord:
+    """A gen-3 resolution record, the only generation coverage counts."""
     return make_record(
-        record_id="r.0.1", run_id="r", game_id="r.0.1",
+        record_id="r.0.1", run_id="r", game_id="r.0.1", generation=3,
+        ability=(ACTING_KEY,),
         state=make_snapshot(
             entities=tuple(entities),
             refs=Refs(source=source, targets=tuple(targets)),
@@ -157,3 +168,110 @@ class TestDeckCandidateFromConvertedText:
 @pytest.mark.parametrize("records,target,expected", [(0, 50, False), (50, 50, True)])
 def test_satisfied_is_records_at_or_above_target(records, target, expected):
     assert CardCoverage("x", records=records).satisfied(target) is expected
+
+
+_ANTHEM = "cardsfolder/g/glorious_anthem.txt"
+
+
+def _anthem_record(host_lines) -> EffectRecord:
+    """A ``continuous`` record of the anthem's static: no ``refs.source``, and
+    the host's snapshot lacks the acting static's own line."""
+    return make_record(
+        RecordKind.CONTINUOUS, generation=3,
+        ability=(ProvenanceKey(_ANTHEM, 0, "static", 0),),
+        state=make_snapshot(entities=(
+            make_entity("E1", "glorious anthem", lines=host_lines),
+            make_entity("E2", "grizzly bears"),
+        )),
+        payload=ContinuousPayload(),
+    )
+
+
+class TestAStaticCreditsItsHost:
+    """python D5: a ``continuous`` record names no ``refs.source`` and holds
+    contributions, not events, so it credited no card at all."""
+
+    def test_the_host_printing_the_acting_script_is_credited(self):
+        other_line = CardLine(
+            keys=(ProvenanceKey(_ANTHEM, 0, "spell", 0),), kind="spell", granted=False,
+        )
+        assert qualifying_cards(_anthem_record((other_line,))) == {"glorious anthem"}
+
+    def test_a_host_with_no_other_line_is_credited_through_its_script(self):
+        names = {_ANTHEM: "glorious anthem"}
+        assert qualifying_cards(_anthem_record(()), card_of_script=names.get) == {
+            "glorious anthem",
+        }
+
+
+class TestCreditGoesToTheConvertedCard:
+    """python D6: a split card in hand is "Fire // Ice", its half on the stack
+    "Ice", a transformed card its back face: none of them a converted card's
+    name. Credit goes through the entity's printed script file instead."""
+
+    _FIRE_ICE = "cardsfolder/f/fire_ice.txt"
+
+    def _on_stack(self, name: str, face: int) -> EffectRecord:
+        key = ProvenanceKey(self._FIRE_ICE, face, "spell", 0)
+        return _record(
+            [make_entity("E1", name, zone="stack", lines=(
+                CardLine(keys=(key,), kind="spell", granted=False),
+            ))],
+            source="E1",
+        )
+
+    @pytest.mark.parametrize(("name", "face"), [("Fire // Ice", 0), ("Ice", 1)])
+    def test_every_face_credits_the_converted_card(self, name, face):
+        names = {self._FIRE_ICE: "fire"}
+        assert qualifying_cards(self._on_stack(name, face), card_of_script=names.get) == {
+            "fire",
+        }
+
+    def test_an_entity_with_no_printed_line_keeps_its_name(self):
+        record = _record([make_entity("E1", "grizzly bears")], source="E1")
+        assert qualifying_cards(record, card_of_script={}.get) == {"grizzly bears"}
+
+
+class TestOnlyPlayedDecksCountAStalledRound:
+    """python D8: workers draw decks with replacement, so about one deck in
+    seven written is never played; its cards were still charged a stalled
+    round. A round now charges the cards its games showed; a card written but
+    never shown retires only after ``UNSEEN_RETIRE_FACTOR`` times as many
+    rounds, so a card no game can show still ends the run."""
+
+    def test_a_written_card_no_game_showed_is_not_charged(self):
+        coverage = {"unplayed": CardCoverage("unplayed")}
+
+        retire_stalled(
+            coverage, {"unplayed": 0}, no_progress_rounds=1,
+            decked=frozenset(), written=frozenset({"unplayed"}),
+        )
+
+        assert coverage["unplayed"].rounds_without_progress == 0
+        assert not coverage["unplayed"].retired
+
+    def test_a_shown_card_is_charged(self):
+        coverage = {"shown": CardCoverage("shown")}
+
+        retired = retire_stalled(
+            coverage, {"shown": 0}, no_progress_rounds=1,
+            decked=frozenset({"shown"}), written=frozenset({"shown"}),
+        )
+
+        assert retired == ["shown"]
+
+    def test_a_card_never_shown_still_retires_in_the_end(self):
+        coverage = {"never": CardCoverage("never")}
+        for _ in range(UNSEEN_RETIRE_FACTOR * 2 - 1):
+            retire_stalled(
+                coverage, {"never": 0}, no_progress_rounds=2,
+                decked=frozenset(), written=frozenset({"never"}),
+            )
+        assert not coverage["never"].retired
+
+        retire_stalled(
+            coverage, {"never": 0}, no_progress_rounds=2,
+            decked=frozenset(), written=frozenset({"never"}),
+        )
+
+        assert coverage["never"].retired

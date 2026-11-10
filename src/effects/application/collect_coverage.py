@@ -35,11 +35,13 @@ from effects.domain.collection_caps import CollectionCaps
 from effects.domain.coverage import (
     HELD_OUT_GAME_FLOOR,
     CardCoverage,
+    CardOfScript,
     ConsultVerdict,
     CoverageUnit,
     DeckCandidate,
     TextCoverage,
     awaited_texts,
+    cards_shown,
     deck_weights,
     held_out_texts_of,
     is_complete,
@@ -49,8 +51,9 @@ from effects.domain.coverage import (
     retire_stalled,
     text_deck_weights,
 )
-from effects.domain.record_quality import record_refusal
-from effects.domain.records import RecordKind, acting_keys
+from effects.domain.provenance import SidecarLookup, SourceTree, split_script_file
+from effects.domain.record_quality import quality_defect, record_refusal
+from effects.domain.records import EffectRecord, RecordKind, acting_keys
 
 if TYPE_CHECKING:
     from effects.domain.split import HeldOutCards
@@ -115,30 +118,89 @@ def no_converted_cards(trees: ConvertedTrees) -> str:
     )
 
 
-def count_shard(shard: Path) -> Counter[str]:
+#: The record generation coverage counts: the corpus build-corpus reads.
+COUNTED_GENERATION = 3
+
+
+@dataclass(frozen=True)
+class ShardCoverage:
+    """What one shard adds to the card run: each card's credited records,
+    and every card its games showed (a round charges a stalled round to those
+    alone)."""
+
+    credits: Counter[str]
+    seen: frozenset[str]
+
+
+def _card_of_script(sidecars: SidecarLookup | None) -> CardOfScript | None:
+    """``script file -> converted card name`` (a sidecar's ``card``), for
+    card-tree scripts only; None without sidecars."""
+    if sidecars is None:
+        return None
+
+    def card_of(script_file: str) -> str | None:
+        if split_script_file(script_file)[0] != SourceTree.CARDSFOLDER:
+            return None
+        try:
+            return sidecars.get(script_file).card
+        except (KeyError, OSError, ValueError):
+            return None
+
+    return card_of
+
+
+def _kept(record: EffectRecord, sidecars: SidecarLookup | None) -> bool:
+    """Whether build-corpus would keep the record: gen-3, not a
+    ``turn_action``, and not refused (its quality rule alone without sidecars)."""
+    if record.generation != COUNTED_GENERATION or record.kind is RecordKind.TURN_ACTION:
+        return False
+    if sidecars is None:
+        return quality_defect(record) is None
+    return record_refusal(record, sidecars.resolution_of) is None
+
+
+def count_shard(shard: Path, *, roots: Mapping[str, Path] | None = None) -> ShardCoverage:
     """One shard's qualifying records, keyed by folded card name to match the
     converted (lowercase) unit names. Top-level so a process pool can pickle it.
+
+    Only the records build-corpus keeps count (python D1): gen-3, no
+    ``turn_action`` (a draw or an untap is no record of the card), none it
+    refuses. Under ``roots`` an entity counts as the converted card its
+    printed script is (python D6), and a static's host through its script
+    (python D5).
     """
+    from effects.infrastructure.converted_trees import process_sidecars
     from effects.infrastructure.shard_io import read_shard
 
+    sidecars = process_sidecars(roots) if roots else None
+    card_of = _card_of_script(sidecars)
     counts: Counter[str] = Counter()
+    seen: set[str] = set()
     for record in read_shard(shard):
-        for name in qualifying_cards(record):
+        if record.generation != COUNTED_GENERATION:
+            continue
+        seen.update(fold_card_name(name) for name in cards_shown(record, card_of))
+        if not _kept(record, sidecars):
+            continue
+        for name in qualifying_cards(record, card_of):
             counts[fold_card_name(name)] += 1
-    return counts
+    return ShardCoverage(counts, frozenset(seen))
 
 
 class _ShardCounter:
     """Counts each shard once across a whole run, not once per round.
 
     Sound because a shard is final once counted: a round's workers are all
-    terminated before ``play_round`` returns, and a shard's name carries its
-    JVM lifetime, so no later round reopens it.
+    terminated before ``play_round`` returns (a worker spawned while the pool
+    shuts down is killed by the pool too), and a shard's name carries its JVM
+    lifetime, so no later round reopens it.
     """
 
     def __init__(self, progress_every: int = PROGRESS_EVERY_SHARDS) -> None:
         self._counted: set[Path] = set()
         self._progress_every = progress_every
+        #: Every card the shards of the last ``update`` showed.
+        self.seen: set[str] = set()
 
     def _count_fresh[T](
         self,
@@ -169,7 +231,18 @@ class _ShardCounter:
 class CoverageCounter(_ShardCounter):
     """Each card's qualifying records, each shard counted once across the run.
     ``CardCoverage.records`` is accumulated, so nothing else may overwrite it.
+
+    ``roots`` (the converted trees' sidecar roots) apply build-corpus's whole
+    refusal rule and credit each entity as its converted card; without them
+    only the quality rule applies and an entity counts by its name.
     """
+
+    def __init__(
+        self, roots: Mapping[str, Path] | None = None,
+        progress_every: int = PROGRESS_EVERY_SHARDS,
+    ) -> None:
+        super().__init__(progress_every)
+        self._roots = dict(roots) if roots else None
 
     def update(
         self,
@@ -179,14 +252,17 @@ class CoverageCounter(_ShardCounter):
         workers: int | None = None,
     ) -> int:
         """Add the counts of shards not yet read. Returns how many it read."""
+        self.seen = set()
 
-        def add(counts: Counter[str]) -> None:
-            for name, records in counts.items():
+        def add(part: ShardCoverage) -> None:
+            self.seen |= part.seen
+            for name, records in part.credits.items():
                 card = coverage.get(name)
                 if card is not None:
                     card.records += records
 
-        return self._count_fresh(records_dir, count_shard, add, workers=workers)
+        count = partial(count_shard, roots=self._roots)
+        return self._count_fresh(records_dir, count, add, workers=workers)
 
 
 @dataclass
@@ -251,6 +327,8 @@ class CoverageRounds(ABC):
     records_dir: Path
     target: int
     candidates: dict[str, DeckCandidate]
+    #: Processes counting shards: the run's ``--workers``, never the CPU count.
+    workers: int | None = None
     #: Logged when the weighted cards yield no deck at all.
     no_decks: ClassVar[str]
 
@@ -274,7 +352,7 @@ class CoverageRounds(ABC):
 
     def count_new_shards(self) -> int:
         """Count the shards the last round wrote into ``units``; how many."""
-        return self.counter.update(self.coverage, self.records_dir)
+        return self.counter.update(self.coverage, self.records_dir, workers=self.workers)
 
     @abstractmethod
     def report(self) -> str:
@@ -301,8 +379,13 @@ def play_rounds(
     supervisor: CollectorSupervisor,
     config: CollectCoverageConfig,
 ) -> bool:
-    """Play rounds until every awaited unit is done. True when Ctrl-C ended them."""
-    decks_file = config.effect_records / "coverage-decks.txt"
+    """Play rounds until every awaited unit is done. True when Ctrl-C ended them.
+
+    The decks file is the run's own (``coverage-decks.<run_id>.txt``): every
+    worker reloads it at its start, so two runs on one records directory
+    would otherwise play each other's decks.
+    """
+    decks_file = config.effect_records / f"coverage-decks.{supervisor.run_id}.txt"
     rng = random.Random(config.seed)
     round_number = 0
     while not is_complete(rounds.awaited, rounds.target):
@@ -317,15 +400,18 @@ def play_rounds(
         if not decks:
             logger.error("%s", rounds.no_decks)
             break
-        decked = rounds.units_decked({name for deck in decks for name in deck})
+        written = {name for deck in decks for name in deck}
         supervisor.play_round(
             decks, decks_file, label="coverage", matches=config.decks_per_round,
         )
         read = rounds.count_new_shards()
         logger.info("Counted %d new shard(s) from round %d", read, round_number)
+        # Charged to what the round's games showed: a worker draws its decks
+        # with replacement, so some written decks are never played.
         retired = retire_stalled(
             rounds.units, previous, no_progress_rounds=config.no_progress_rounds,
-            decked=decked,
+            decked=rounds.units_decked(written & rounds.counter.seen),
+            written=rounds.units_decked(written),
         )
         logger.info("%s", round_summary(round_number, rounds, retired))
         if supervisor.interrupted:
@@ -414,8 +500,8 @@ def run(config: CollectCoverageConfig) -> int:
     )
 
     records_dir = config.effect_records
-    counter = CoverageCounter()
-    seeded = counter.update(coverage, records_dir)
+    counter = CoverageCounter(config.source_trees.sidecar_roots())
+    seeded = counter.update(coverage, records_dir, workers=config.workers)
     logger.info(
         "Counted %d existing shard(s); %d of %d cards already at target",
         seeded,
@@ -430,7 +516,7 @@ def run(config: CollectCoverageConfig) -> int:
 
     rounds = CardRounds(
         coverage=coverage, verdicts=verdicts, counter=counter,
-        records_dir=records_dir, target=config.target_records,
+        records_dir=records_dir, target=config.target_records, workers=config.workers,
         candidates={
             name: DeckCandidate.from_converted_text(name, text)
             for name, text in texts.items()
@@ -478,15 +564,27 @@ def consult_castability(names: list[str]) -> dict[str, ConsultVerdict]:
 # ── the held-out coverage round (FR-035–FR-038) ─────────────────────────
 
 
+@dataclass(frozen=True)
+class TextShardCoverage:
+    """What one shard adds to the held-out round: each held-out text's games,
+    and every card the shard's games showed."""
+
+    games: dict[str, set[str]]
+    seen: frozenset[str]
+
+
 def count_text_shard(
     shard: Path, *, roots: dict[str, Path], held_out: HeldOutCards,
-) -> dict[str, set[str]]:
+) -> TextShardCoverage:
     """``held-out text -> the game ids it resolved in``, over one shard.
 
     Counted as build-corpus counts a held-out text's games (FR-053): from the
-    resolution records its refusal rule keeps, through
-    :meth:`HeldOutCards.text_acted_through`. Top-level so a process pool can
-    pickle it; each process resolves keys through its own
+    gen-3 resolution records its refusal rule keeps, through
+    :meth:`HeldOutCards.text_acted_through`. A random-seat game counts: it
+    goes to the card-disjoint stratum like any game naming a held-out card
+    (FR-059). The cards shown are read off the same resolution records, whose
+    snapshots hold every hand, graveyard and permanent. Top-level so a
+    process pool can pickle it; each process resolves keys through its own
     :func:`~effects.infrastructure.converted_trees.process_sidecars`, because a
     sidecar cache does not pickle.
     """
@@ -494,14 +592,19 @@ def count_text_shard(
     from effects.infrastructure.shard_io import iter_shard_matching
 
     sidecars = process_sidecars(roots)
+    card_of = _card_of_script(sidecars)
     games: dict[str, set[str]] = defaultdict(set)
+    seen: set[str] = set()
     for record in iter_shard_matching(shard, kinds={RecordKind.RESOLUTION}):
+        if record.generation != COUNTED_GENERATION:
+            continue
+        seen.update(fold_card_name(name) for name in cards_shown(record, card_of))
         if record_refusal(record, sidecars.resolution_of) is not None:
             continue
         text = held_out.text_acted_through(acting_keys(record), sidecars.script_text)
         if text is not None:
             games[text].add(record.game_id)
-    return dict(games)
+    return TextShardCoverage(dict(games), frozenset(seen))
 
 
 class TextCoverageCounter(_ShardCounter):
@@ -525,9 +628,11 @@ class TextCoverageCounter(_ShardCounter):
         *, workers: int | None = None,
     ) -> int:
         """Add the games of shards not yet read. Returns how many it read."""
+        self.seen = set()
 
-        def add(games_by_text: dict[str, set[str]]) -> None:
-            for text, games in games_by_text.items():
+        def add(part: TextShardCoverage) -> None:
+            self.seen |= part.seen
+            for text, games in part.games.items():
                 if text in coverage:
                     coverage[text].games |= games
 
@@ -678,7 +783,7 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
     floor = config.min_text_games
     records_dir = config.effect_records
     counter = TextCoverageCounter(config.source_trees.sidecar_roots(), held_out)
-    counter.update(coverage, records_dir)
+    counter.update(coverage, records_dir, workers=config.workers)
     logger.info(
         "Held-out round: %d text(s) on %d card(s); %d already at %d games; %d "
         "with no castable carrier",
@@ -689,7 +794,7 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
 
     rounds = TextRounds(
         coverage=coverage, carriers=carriers, verdicts=verdicts,
-        counter=counter, records_dir=records_dir, target=floor,
+        counter=counter, records_dir=records_dir, target=floor, workers=config.workers,
         candidates={
             name: DeckCandidate.from_converted_text(name, text)
             for name, text in texts.items() if name in present

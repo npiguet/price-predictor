@@ -7,12 +7,14 @@ reads shards and drives Forge.
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Collection, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from itertools import chain
 
-from effects.domain.records import EffectRecord, events_of
+from effects.domain.records import EffectRecord, RecordKind, events_of
+from effects.domain.rule_detectors.acting_line import source_entities
+from effects.domain.state_snapshot import EntityState
 from effects.domain.text_holdout import normalize_script_text
 
 #: Card types Forge's card database does not load as deck cards, so a deck
@@ -57,6 +59,12 @@ class ConsultVerdict(StrEnum):
 #: (FR-053). Both count the kept resolution records' games.
 HELD_OUT_GAME_FLOOR = 5
 
+#: A unit written into a round's decks that no game of the round showed is
+#: not charged a stalled round (its deck may never have been drawn); after
+#: this many times ``--no-progress-rounds`` such rounds in a row it retires
+#: anyway, or a card no game can show would keep the run going forever.
+UNSEEN_RETIRE_FACTOR = 3
+
 #: An uncastable card's share of a castable card's deck weight: above zero so
 #: interventions have it in play, below one since the AI mostly cannot cast it.
 UNCASTABLE_RANK_MULTIPLIER = 0.25
@@ -97,6 +105,8 @@ class CoverageUnit:
 
     retired: bool
     rounds_without_progress: int
+    #: Rounds in a row the unit was written into a deck no game showed it from.
+    rounds_unseen: int
 
     @property
     def progress(self) -> int:
@@ -123,6 +133,7 @@ class CardCoverage(CoverageUnit):
     rounds_without_progress: int = 0
     retired: bool = False
     verdict: ConsultVerdict = ConsultVerdict.UNKNOWN
+    rounds_unseen: int = 0
 
     @property
     def progress(self) -> int:
@@ -143,6 +154,7 @@ class TextCoverage(CoverageUnit):
     rounds_without_progress: int = 0
     #: Whether any card carrying the text is castable by the consult (FR-037).
     castable: bool = True
+    rounds_unseen: int = 0
 
     @property
     def progress(self) -> int:
@@ -150,23 +162,69 @@ class TextCoverage(CoverageUnit):
         return len(self.games)
 
 
-def qualifying_cards(record: EffectRecord) -> set[str]:
+#: ``script file -> the converted card it is``, None where it is none.
+CardOfScript = Callable[[str], "str | None"]
+
+
+def card_name(entity: EntityState, card_of_script: CardOfScript | None = None) -> str:
+    """The card ``entity`` counts as: the converted card its printed lines'
+    script file is, under ``card_of_script``, else its name.
+
+    Forge names a split card in hand "Fire // Ice", its half on the stack
+    "Ice", a transformed card by its back face; the coverage unit is the
+    converted card, named by its first face.
+    """
+    if card_of_script is not None:
+        for key in entity.printed:
+            name = card_of_script(key.script_file)
+            if name is not None:
+                return name
+    return entity.name
+
+
+def qualifying_cards(
+    record: EffectRecord, card_of_script: CardOfScript | None = None,
+) -> set[str]:
     """Cards this record counts toward (FR-049).
 
     The acting line's host, every event subject and every referenced ref, but
-    not an entity that merely sat in the snapshot.
+    not an entity that merely sat in the snapshot. A ``continuous`` record
+    names no source and holds contributions rather than events, so its host is
+    the battlefield card printing the acting script, or, under
+    ``card_of_script``, the acting script's own card. Each entity counts as
+    :func:`card_name`.
     """
-    by_id: dict[str, str] = {
-        entity.id: entity.name for entity in record.state.entities
+    by_id: dict[str, EntityState] = {
+        entity.id: entity for entity in record.state.entities
     }
     refs = record.state.refs
-    return {
-        by_id[entity] for entity in chain(
+    credited = {
+        card_name(by_id[entity], card_of_script) for entity in chain(
             (refs.source,), refs.targets,
             (subject for event in events_of(record) for subject in event.subjects),
         )
         if entity in by_id
     }
+    if record.kind is RecordKind.CONTINUOUS:
+        keys = record.ability or ()
+        credited |= {
+            card_name(entity, card_of_script)
+            for entity in source_entities(record.state, keys)
+        }
+        if card_of_script is not None:
+            credited |= {
+                name for key in keys
+                if (name := card_of_script(key.script_file)) is not None
+            }
+    return credited
+
+
+def cards_shown(
+    record: EffectRecord, card_of_script: CardOfScript | None = None,
+) -> set[str]:
+    """Every card the record's snapshot shows, as :func:`card_name`: the
+    cards a game put in sight, which a round's decks were played to do."""
+    return {card_name(entity, card_of_script) for entity in record.state.entities}
 
 
 def deck_weights(
@@ -225,26 +283,39 @@ def retire_stalled(
     *,
     no_progress_rounds: int,
     decked: Collection[str],
+    written: Collection[str] | None = None,
 ) -> list[str]:
     """Retire units that gained no qualifying record this round (FR-050).
 
-    Only units in ``decked``, the ones this round's decks held, can stall: at
-    the defaults most cards sit out any given round, and counting it against
-    them would retire cards never tried. Required rather than defaulted to
-    everything for that reason.
+    Only units in ``decked``, the ones this round's games showed, can stall:
+    at the defaults most cards sit out any given round, and a worker draws its
+    decks with replacement, so about one written deck in seven is never
+    played; counting either against a card would retire it untried. Required
+    rather than defaulted to everything for that reason. A unit in
+    ``written`` (the round's decks; ``decked`` when not given) but not in
+    ``decked`` counts an unseen round instead, and retires after
+    ``UNSEEN_RETIRE_FACTOR × no_progress_rounds`` of them in a row.
     """
     decked_names = frozenset(decked)
+    written_names = decked_names if written is None else frozenset(written)
     retired: list[str] = []
     for name, unit in coverage.items():
         if unit.retired:
             continue
         if unit.progress > previous.get(name, 0):
             unit.rounds_without_progress = 0
+            unit.rounds_unseen = 0
             continue
-        if name not in decked_names:
+        if name in decked_names:
+            unit.rounds_unseen = 0
+            unit.rounds_without_progress += 1
+            stalled = unit.rounds_without_progress >= no_progress_rounds
+        elif name in written_names:
+            unit.rounds_unseen += 1
+            stalled = unit.rounds_unseen >= UNSEEN_RETIRE_FACTOR * no_progress_rounds
+        else:
             continue
-        unit.rounds_without_progress += 1
-        if unit.rounds_without_progress >= no_progress_rounds:
+        if stalled:
             unit.retired = True
             retired.append(name)
     return retired

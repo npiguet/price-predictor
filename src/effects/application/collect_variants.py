@@ -474,7 +474,6 @@ def _play_and_check_growth(
     from effects.infrastructure.shard_io import count_records, count_shard_records, iter_shards
 
     # Equal weights: a fresh variant has no records to balance against.
-    decks_file = config.effect_records / "variant-decks.txt"
     decks = build_coverage_decks(
         {variant.name: 1.0 for variant in variants},
         {variant.name: variant.deck_candidate() for variant in variants},
@@ -488,6 +487,9 @@ def _play_and_check_growth(
         # Listed rather than counted: a shard is never reopened, so what the
         # round wrote is exactly the shards it added.
         before = set(iter_shards(config.effect_records))
+        # The run's own decks file: every worker reloads it at its start, so
+        # two runs on one records directory would play each other's decks.
+        decks_file = config.effect_records / f"variant-decks.{supervisor.run_id}.txt"
         supervisor.play_round(
             decks, decks_file, label="variant", matches=config.decks_per_round,
         )

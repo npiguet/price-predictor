@@ -389,6 +389,7 @@ class TestTheVariantRoundPlaysTheVariants:
     def test_the_scripts_are_staged_and_decked(self, tmp_path, fake_supervisor):
         from effects.application import collect_variants
 
+        fake_supervisor.run_id = "run-123"
         source = tmp_path / "cards"
         source.mkdir()
         (source / "bolt.txt").write_text(
@@ -420,6 +421,11 @@ class TestTheVariantRoundPlaysTheVariants:
         assert constructed["variant_scripts"] == tmp_path / "variants"
         assert fake_supervisor.play_round.call_args.args[0], "no variant decks"
         assert fake_supervisor.play_round.call_args.kwargs["matches"] == 3
+        # The run's own decks file: every worker reloads it at its start, so
+        # two runs on one records directory would play each other's decks.
+        assert fake_supervisor.play_round.call_args.args[1] == (
+            records / f"variant-decks.{fake_supervisor.run_id}.txt"
+        )
 
 
 class TestVariantManaCostIsParseable:
