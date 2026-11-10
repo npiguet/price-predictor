@@ -622,6 +622,10 @@ Both rounds
 - A round plays `--decks-per-round` matches at a time, as the coverage collector does, each
   variant weighted by how many games it lacks. A variant with no new game in
   `--no-progress-rounds` consecutive rounds retires.
+- Every variant, steered ones included, is written to the variant tree as a script file with
+  its sidecar before any deck holds it, and stays there for good, because its records join its
+  lines by key and training encodes its text from that file. A variant is deleted only before
+  any deck holds it, when it prints a held-out text.
 - A variant is named `<card> Variant <h>`, `h` the first eight hex digits of the SHA-256 of
   its perturbed script. A variant whose file already exists is the same script and is
   reused, so a repeated or resumed round never rewrites a variant under its name.

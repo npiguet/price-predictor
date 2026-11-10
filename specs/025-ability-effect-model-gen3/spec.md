@@ -178,6 +178,12 @@ State on master when this feature starts (the gen-3 record's Result):
   the (rule, polarity) pairs the corpus's own `rule-counts` shows short, whose carriers take a
   scenario variant's `script_edit` or a near-miss shift. Interventions in a steered game force the
   aimed variants' lines first. `--variant-volume` is removed: it never bound on a real corpus.
+- Q: Where does a steered variant's text live? → A: In the variant tree, as for every variant: its
+  script file and sidecar are written before any deck holds it and never removed, so its records
+  join and the encoder reads its text in training (FR-058b). A scenario's card change reaches the
+  script through the variant's `script_edit` (FR-058f).
+- Q: Do the card-disjoint stratum's random-seat records serve as rule-test records? → A: Yes, as
+  any natural record there (FR-071, FR-072 unchanged).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -1012,6 +1018,9 @@ and that the reporting half never enters the control score.
   records carry `aimed_at = []`.
 - **FR-058b**: A variant MUST be named `<card> Variant <h>`, `h` the first eight hex digits of the
   SHA-256 of its perturbed script; an existing file of that name MUST be reused, never rewritten.
+  Every variant of either round MUST be written to the variant tree with its sidecar before any deck
+  holds it and MUST stay there (its records join it by key and training encodes its text from it);
+  only a variant printing a held-out text is deleted, and only before any deck holds it.
   Only variant scripts may end in `.txt` in the variant tree: the loadable list MUST be written
   under another extension on both the Java and the Python side. A round MUST remove its staged
   variants from Forge's custom-cards directory when it ends.
