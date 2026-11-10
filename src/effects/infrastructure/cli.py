@@ -493,6 +493,42 @@ class CollectorRefusal(ValueError):
     before any worker starts."""
 
 
+def holdout_source_error(args: argparse.Namespace) -> str | None:
+    """Why a collector cannot run without a holdout source, or None (FR-058g).
+
+    Without ``--exclude-cards``, ``--split-from`` or ``--training-corpus`` a
+    coverage round decks the held-out cards and a variant round varies them,
+    so their texts reach training. The held-out round (``--only-cards``) decks
+    them on purpose and needs none.
+    """
+    if getattr(args, "only_cards", None) is not None:
+        return None
+    if any(
+        getattr(args, name, None) is not None
+        for name in ("exclude_cards", "split_from", "training_corpus")
+    ):
+        return None
+    return (
+        "no holdout source: pass --exclude-cards, --split-from or "
+        "--training-corpus, or this run decks the held-out cards and their "
+        "texts reach training"
+    )
+
+
+def _check_workers_can_start(command: str, config: Any) -> None:
+    """The connector JAR, ``java`` and the list files the run reads, checked
+    before any worker starts (python R2)."""
+    from price_predictor.infrastructure import forge_jvm
+
+    holdout = config.deck_holdout
+    try:
+        forge_jvm.check_worker_prerequisites(files={
+            "--exclude-cards": holdout.exclude_cards, "--only-cards": holdout.only_cards,
+        })
+    except FileNotFoundError as exc:
+        raise CollectorRefusal(f"{command}: {exc}") from exc
+
+
 def _collector_runner(command: str, config_type: type, module: str) -> Callable:
     """The ``run_*`` of one collector: its config, refused as a message on a
     bad flag combination, then ``module.run`` over it.
@@ -503,15 +539,21 @@ def _collector_runner(command: str, config_type: type, module: str) -> Callable:
     traceback.
     """
 
-    @exits_with({CollectorRefusal: 1, _LAYOUT_REFUSED: 1})
+    @exits_with({
+        CollectorRefusal: 1, _LAYOUT_REFUSED: 1,
+        "price_predictor.infrastructure.forge_jvm.WorkerStartError": 1,
+    })
     def run(args: argparse.Namespace) -> int:
-        error = random_seat_error(args) or candidate_rate_error(args)
+        error = (
+            random_seat_error(args) or candidate_rate_error(args) or holdout_source_error(args)
+        )
         if error is not None:
             raise CollectorRefusal(f"{command}: {error}")
         try:
             config = collector_config(config_type, args)
         except ValueError as exc:
             raise CollectorRefusal(f"{command}: {exc}") from exc
+        _check_workers_can_start(command, config)
         print(announce_probe_state(args.probe_keywords, args.probes_per_game))
         return importlib.import_module(module).run(config)
 

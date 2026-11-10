@@ -224,9 +224,13 @@ class TestTheCollectors:
         from effects.infrastructure.cli import build_parser, run_collect_coverage
 
         monkeypatch.setattr(flags, "registered_directed_rules", _never_asked)
-        with patch("effects.application.collect_coverage.run", return_value=0) as collect:
+        with (
+            patch("effects.application.collect_coverage.run", return_value=0) as collect,
+            patch("price_predictor.infrastructure.forge_jvm.check_worker_prerequisites"),
+        ):
             assert run_collect_coverage(build_parser().parse_args(
-                ["collect-coverage", "--directed-fork-rules", "no-such-rule"],
+                ["collect-coverage", "--directed-fork-rules", "no-such-rule",
+                 "--exclude-cards", "h.txt"],
             )) == 0
         assert collect.call_args.args[0].caps.directed_fork_rules == ()
         assert "directed_fork_error" not in Path(collect_coverage.__file__).read_text(

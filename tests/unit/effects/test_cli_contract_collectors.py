@@ -41,6 +41,19 @@ def parse(*argv: str):
     return build_parser().parse_args(argv)
 
 
+#: Stands in for the JAR, ``java`` and input-file check (python R2), which a
+#: unit test must not make depend on a built connector.
+PREREQUISITES = "price_predictor.infrastructure.forge_jvm.check_worker_prerequisites"
+
+
+@pytest.fixture(autouse=True)
+def _workers_could_start():
+    from unittest.mock import patch
+
+    with patch(PREREQUISITES) as check:
+        yield check
+
+
 #: Each collecting command, the application entry point its dispatcher calls,
 #: and the dispatcher.
 COLLECTORS = pytest.mark.parametrize(("command", "module", "runner"), [
@@ -303,7 +316,7 @@ class TestCollectVariantsHoldoutRule:
 
         with patch("effects.application.collect_variants.run", return_value=0) as collect:
             assert run_collect_variants(parse(
-                "collect-variants", "--cards-folder", "trees/cards",
+                "collect-variants", "--exclude-cards", "h.txt", "--cards-folder", "trees/cards",
                 "--holdout-permille", "50", "--holdout-max-carriers", "3",
                 "--holdout-unit", "text",
             )) == 0
@@ -342,6 +355,7 @@ class TestTheWordingRound:
         with patch("effects.application.collect_coverage.run", return_value=0) as collect:
             assert run_collect_coverage(parse(
                 "collect-coverage", "--wording-cards", "any-target.txt",
+                "--exclude-cards", "h.txt",
             )) == 0
         assert collect.call_args.args[0].wording_cards == Path("any-target.txt")
 
@@ -392,6 +406,7 @@ class TestEveryCollectorRecordIsAimed:
         with patch("effects.application.collect_coverage.run", return_value=0) as collect:
             assert run_collect_coverage(parse(
                 "collect-coverage", "--directed-fork-rules", "704.5f",
+                "--exclude-cards", "h.txt",
             )) == 0
         assert collect.call_args.args[0].caps.aimed_at == ("704.5f",)
 
@@ -402,6 +417,7 @@ class TestEveryCollectorRecordIsAimed:
         with patch("effects.application.collect_coverage.run", return_value=0) as collect:
             assert run_collect_coverage(parse(
                 "collect-coverage", "--directed-fork-rules", "no-such-rule",
+                "--exclude-cards", "h.txt",
             )) == 0
         collect.assert_called_once()
 
@@ -452,5 +468,90 @@ class TestDirectedForksOnCollectVariants:
         with patch("effects.application.collect_variants.run", return_value=0) as collect:
             assert run_collect_variants(parse(
                 "collect-variants", "--directed-fork-rules", "704.5f",
+                "--exclude-cards", "h.txt",
             )) == 0
         assert collect.call_args.args[0].caps.directed_fork_rules == ("704.5f",)
+
+
+class TestAHoldoutSourceIsRequired:
+    """T190, FR-058g (python D3): without --exclude-cards, --split-from or
+    --training-corpus a collector decks and varies held-out cards, so it exits
+    1 before any worker starts."""
+
+    @COLLECTORS
+    def test_no_holdout_source_exits_1_before_any_worker(
+        self, command, module, runner, caplog,
+    ):
+        from unittest.mock import patch
+
+        with patch(module) as collect:
+            assert runner(parse(command)) == 1
+        collect.assert_not_called()
+        assert f"{command}: " in caplog.text
+        assert "--exclude-cards, --split-from or --training-corpus" in caplog.text
+
+    @COLLECTORS
+    @pytest.mark.parametrize("source", [
+        ("--exclude-cards", "h.txt"), ("--split-from", "latest.pt"),
+    ])
+    def test_any_one_source_is_enough(self, command, module, runner, source):
+        from unittest.mock import patch
+
+        with patch(module, return_value=0) as collect:
+            assert runner(parse(command, *source)) == 0
+        collect.assert_called_once()
+
+    @COLLECTORS
+    def test_a_training_corpus_is_a_source(self, command, module, runner, tmp_path):
+        from unittest.mock import patch
+
+        (tmp_path / "holdout-cards.txt").write_text("fire\n", encoding="utf-8")
+        with patch(module, return_value=0) as collect:
+            assert runner(parse(command, "--training-corpus", str(tmp_path))) == 0
+        collect.assert_called_once()
+
+    def test_the_held_out_round_needs_none(self):
+        """``--only-cards`` decks the held-out cards on purpose."""
+        from unittest.mock import patch
+
+        with patch("effects.application.collect_coverage.run", return_value=0) as collect:
+            assert run_collect_coverage(parse("collect-coverage", "--only-cards", "h.txt")) == 0
+        collect.assert_called_once()
+
+
+class TestWorkersMustBeAbleToStart:
+    """python R2: the JAR, ``java`` and the list files are checked before any
+    worker starts, and a pool whose every slot fails to start ends the run."""
+
+    @COLLECTORS
+    def test_a_missing_prerequisite_exits_1_before_any_worker(
+        self, command, module, runner, caplog, _workers_could_start,
+    ):
+        from unittest.mock import patch
+
+        _workers_could_start.side_effect = FileNotFoundError("Connector JAR not found")
+        with patch(module) as collect:
+            assert runner(parse(command, "--exclude-cards", "h.txt")) == 1
+        collect.assert_not_called()
+        assert "Connector JAR not found" in caplog.text
+
+    @COLLECTORS
+    def test_the_list_files_are_checked(
+        self, command, module, runner, _workers_could_start,
+    ):
+        from unittest.mock import patch
+
+        with patch(module, return_value=0):
+            runner(parse(command, "--exclude-cards", "h.txt"))
+        files = _workers_could_start.call_args.kwargs["files"]
+        assert files["--exclude-cards"] == Path("h.txt")
+
+    @COLLECTORS
+    def test_a_pool_that_cannot_start_exits_1(self, command, module, runner, caplog):
+        from unittest.mock import patch
+
+        from price_predictor.infrastructure.forge_jvm import WorkerStartError
+
+        with patch(module, side_effect=WorkerStartError("every slot failed")):
+            assert runner(parse(command, "--exclude-cards", "h.txt")) == 1
+        assert "every slot failed" in caplog.text
