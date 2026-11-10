@@ -60,9 +60,11 @@ the polarity its counts lack first and starred.
 Prints one line per rule, grouped by unit: `fires` and `does_not_fire` counts, each split
 `random_seat / forge_ai / aimed`; then the rules declared `none` with their reasons, the rules not
 countable on the records' generation, and the size of the review list. The counts file omits a rule
-no record tags. The counts file also holds `carriers`: per rule, the script files of the cards whose
-lines are its tags' condition entities, each with the line keys its tags act through and its record
-count, read by the steered variant round (FR-058f). Exit 1 when the directory holds no shard, holds a
+no record tags. The counts file also holds `generation` (`gen-2` or `gen-3`, the records' generation)
+and `carriers`: per rule, the script files of the cards whose lines are its tags' condition
+entities, each with the line keys its tags act through and its record count, read by the steered
+variant round (FR-058f), as `rule -> [{script_file, records, lines: [{key, records}]}]`, a key
+spelled as a sidecar spells it (without `script_file`). Exit 1 when the directory holds no shard, holds a
 gen-1 shard, or mixes generations.
 
 ## `python -m sealed match-outcomes` (existing)
@@ -127,8 +129,10 @@ two decks). A protection keyword line of a source script swaps its quality for a
 | `--steer-iterations N` | 5 | iterations at most |
 
 `--variant-volume` is removed. Startup, exit 1: no holdout source (`--exclude-cards`,
-`--split-from`, `--training-corpus`); `--round steered` without `--rule-counts`, or with counts
-of gen-2 records. The loadable list is `loadable.lst` in the variant tree, never a `.txt` file, and a round
+`--split-from`, `--training-corpus`); `--round steered` without `--rule-counts`, or with a counts
+file whose `generation` is not `gen-3`. A steered round's deck file adds a fourth column, the
+deck's rule (`LABEL;SET_CODE;Card1|...|Card40;RULE`); the worker stamps every record of a game
+whose decks carry one with `aimed_at` listing its two decks' rules. The loadable list is `loadable.lst` in the variant tree, never a `.txt` file, and a round
 removes its staged variants from Forge's custom-cards directory when it ends (FR-058b).
 
 ## `python -m effects build-corpus` (existing)
