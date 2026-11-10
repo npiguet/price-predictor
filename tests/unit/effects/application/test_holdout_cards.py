@@ -28,11 +28,15 @@ from effects.infrastructure.sidecar_io import sidecar_path_for
 from tests.unit.effects.builders import write_sidecar
 
 
-def _report(card_files, texts_by_card, *, unit="text", canonical_names=None, **rule):
+def _report(
+    card_files, texts_by_card, *, unit="text", canonical_names=None, split_faces=None,
+    **rule,
+):
     """The report over ``text_keyed_holdout``, as ``run`` builds it from the trees."""
     return holdout_report(
         text_keyed_holdout(card_files, texts_by_card, HoldoutRule(unit=unit, **rule)),
         converted_cards=len(card_files), canonical_names=canonical_names,
+        **({} if split_faces is None else {"split_faces": split_faces}),
     )
 
 
@@ -329,3 +333,49 @@ def test_a_real_gen1_checkpoint_split_reads_as_the_text_unit():
         **recorded,
         **{k: tuple(v) for k, v in recorded.items() if isinstance(v, list)},
     }
+
+
+class TestSplitCardsAreListedByTheirCombinedName:
+    """python D4: Forge names a split card "Fire // Ice" and depletes by exact
+    name, but the list wrote the converted first face ("fire"), so a held-out
+    split card stayed in every depleted pool."""
+
+    _FIRE = "SP$ DealDamage | NumDmg$ 2 | ValidTgts$ Any | Bespoke$ Fire"
+
+    def test_the_report_writes_the_combined_printed_name(self) -> None:
+        listed = _report(
+            {"fire": "cardsfolder/f/fire_ice.txt"},
+            {"fire": [self._FIRE]},
+            permille=1000, max_carriers=8,
+            canonical_names={"Fire // Ice": "2001-01-01", "Fire": "2001-01-01"},
+            split_faces={"fire": ("fire", "ice")},
+        ).names
+
+        assert listed == ["Fire // Ice"]
+
+    def test_a_held_out_split_card_on_disk_is_listed_combined(self, tmp_path) -> None:
+        _convert(tmp_path, "cardsfolder/f/fire_ice.txt", "fire", [self._FIRE])
+        (tmp_path / "cardsfolder" / "f" / "fire_ice.txt").write_text(
+            "layout: split\nname: fire\ntypes: instant\n\nALTERNATE\n\n"
+            "name: ice\ntypes: instant\n",
+            encoding="utf-8",
+        )
+
+        listed = _run(tmp_path, tmp_path / "holdout-cards.txt", permille=1000).names
+
+        assert listed == ["fire // ice"]
+
+    def test_the_collectors_read_the_combined_name_as_the_converted_card(
+        self, tmp_path,
+    ) -> None:
+        """A collector keys cards by the converted first face."""
+        from effects.application.collector_common import read_name_list
+
+        listed = tmp_path / "holdout-cards.txt"
+        listed.write_text("Fire // Ice\nShock\n", encoding="utf-8")
+
+        names = read_name_list(listed)
+
+        assert "fire" in names
+        assert "shock" in names
+        assert "ice" not in names

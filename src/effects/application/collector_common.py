@@ -199,12 +199,21 @@ def _depletion_list(training_corpus: Path) -> Path:
 
 def read_name_list(path: Path) -> frozenset[str]:
     """The card names a one-per-line list holds, folded to match converted
-    names; blank lines skipped."""
-    return frozenset(
-        fold_card_name(line.strip())
-        for line in Path(path).read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    )
+    names; blank lines skipped.
+
+    A split card's combined name (``Fire // Ice``, as ``holdout-cards`` writes
+    it for Forge) is read as its first face too, the name the converted tree
+    gives the card.
+    """
+    names: set[str] = set()
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        name = fold_card_name(line.strip())
+        if not name:
+            continue
+        names.add(name)
+        if " // " in name:
+            names.add(name.split(" // ", 1)[0])
+    return frozenset(names)
 
 
 def load_held_out(split_from: Path | None) -> frozenset[str]:

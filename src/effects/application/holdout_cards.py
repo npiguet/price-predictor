@@ -83,9 +83,29 @@ def run(config: HoldoutCardsConfig) -> HoldoutReport:
         trees.holdout(config.holdout),
         converted_cards=len(trees.card_files),
         canonical_names=canonical,
+        split_faces={
+            name: split_faces_of(card.text)
+            for name, card in trees.converted_cards.items()
+            if split_faces_of(card.text)
+        },
     )
     write_depletion_list(report.names, config.out)
     return report
+
+
+#: How Forge joins a split card's faces into the one name it compares.
+SPLIT_NAME_SEPARATOR = " // "
+
+
+def split_faces_of(converted_text: str) -> tuple[str, ...]:
+    """A split card's face names in order, read off its converted text's
+    ``name:`` lines; ``()`` for any other layout."""
+    lines = converted_text.splitlines()
+    if not lines or lines[0].strip() != "layout: split":
+        return ()
+    return tuple(
+        line.split(":", 1)[1].strip() for line in lines if line.startswith("name:")
+    )
 
 
 def holdout_report(
@@ -93,13 +113,17 @@ def holdout_report(
     *,
     converted_cards: int,
     canonical_names: Mapping[str, object] | None = None,
+    split_faces: Mapping[str, tuple[str, ...]] | None = None,
 ) -> HoldoutReport:
     """The depletion list with its held-out template, text and card counts.
 
-    ``canonical_names`` (keyed by printed name) restores Forge's printed case
-    for an operator to read; an unknown name keeps the lowercase, which still
-    depletes since every comparison folds case. Sorted so an unchanged holdout
-    writes an unchanged file.
+    A split card is listed by its combined name ("Fire // Ice", from
+    ``split_faces``: converted name -> face names), the one name Forge's
+    ``getName()`` gives it and its depletion compares exactly; the converted
+    tree names it by its first face. ``canonical_names`` (keyed by printed
+    name) restores Forge's printed case for an operator to read; an unknown
+    name keeps the lowercase, which still depletes since every comparison
+    folds case. Sorted so an unchanged holdout writes an unchanged file.
     """
     from effects.domain.card_names import fold_card_name
     from effects.domain.text_holdout import holdout_key
@@ -107,8 +131,14 @@ def holdout_report(
     printed = {
         fold_card_name(name): name for name in (canonical_names or {})
     }
+    faces = split_faces or {}
+
+    def forge_name(name: str) -> str:
+        combined = SPLIT_NAME_SEPARATOR.join(faces[name]) if faces.get(name) else name
+        return printed.get(fold_card_name(combined), combined)
+
     return HoldoutReport(
-        names=sorted(printed.get(name, name) for name in held.names),
+        names=sorted(forge_name(name) for name in held.names),
         unit=held.unit,
         keys=len({holdout_key(text, held.unit) for text in held.texts}),
         texts=len(held.texts),
