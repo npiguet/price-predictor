@@ -77,8 +77,13 @@ Check: the rules newly learnable are printed and committed with the change.
 python -u -m sealed match-outcomes --effect-records --directed-fork-rules "$(paste -sd, rules/directed-fork-rules.txt)" <run flags>
 python -u -m effects collect-coverage --wording-cards <any-target cards> <run flags>
 python -u -m effects collect-coverage --wording-cards rules/coverage-wording-cards.txt --directed-fork-rules "$(paste -sd, rules/directed-fork-rules.txt)" <run flags>
-python -u -m effects collect-variants <run flags>
+python -u -m effects collect-variants --round untargeted --exclude-cards <holdout list> <run flags>
+python -u -m effects rule-counts --records-dir <the corpus being collected> --output <counts>
+python -u -m effects collect-variants --round steered --rule-counts <counts> --exclude-cards <holdout list> <run flags>
 ```
+
+The steered round runs last, on counts of everything collected before it (FR-058c). Every
+collecting command takes the same three decision-sampling rates (FR-059a).
 
 ## Stage 6 — curate and freeze (story 6, story 8)
 

@@ -60,7 +60,10 @@ the polarity its counts lack first and starred.
 Prints one line per rule, grouped by unit: `fires` and `does_not_fire` counts, each split
 `random_seat / forge_ai / aimed`; then the rules declared `none` with their reasons, the rules not
 countable on the records' generation, and the size of the review list. The counts file omits a rule
-no record tags. Exit 1 when the directory holds no shard, holds a gen-1 shard, or mixes generations.
+no record tags. The counts file also holds `carriers`: per rule, the script files of the cards whose
+lines are its tags' condition entities, each with the line keys its tags act through and its record
+count, read by the steered variant round (FR-058f). Exit 1 when the directory holds no shard, holds a
+gen-1 shard, or mixes generations.
 
 ## `python -m sealed match-outcomes` (existing)
 
@@ -90,8 +93,8 @@ the common cap flags (`add_cap_flags`; Python `CollectionCaps.zone_candidate_rat
 `plain_candidate_rate`). A rate outside [0, 1], or a candidate rate above `--playability-rate`, is
 refused before any game, as the random-seat flags are (`candidate_rate_error`): exit 2 on
 `match-outcomes`, 1 on the `effects` collectors. A special candidate (FR-033b) is written whenever
-stage 1 keeps it. The held-out coverage round sets `--playability-rate` to 1 and keeps the two
-candidate rates.
+stage 1 keeps it. Every collecting run of a corpus, the held-out coverage round included, uses
+the same three rates (FR-059a).
 
 ## `python -m effects collect-coverage` (existing)
 
@@ -101,15 +104,32 @@ candidate rates.
 | `--count-dropped-events` | off | as `match-outcomes` |
 | `--directed-fork-rules LIST` | none | a label only: rule ids written to every record's `aimed_at`; no directed fork runs, and no startup check applies |
 
-`--wording-cards` beside `--only-cards` exits 1.
+`--wording-cards` beside `--only-cards` exits 1. A run with none of `--exclude-cards`,
+`--split-from` and `--training-corpus` exits 1 (FR-058g).
 
 ## `python -m effects collect-variants` (existing)
 
 Takes `--count-dropped-events`, `--directed-fork-rules`, `--directed-forks-per-game` and
 `--directed-fork-probability` as `match-outcomes` does, with the same startup checks and exits.
-Every record carries `aimed_at` (the listed rules, or `[]`). A protection keyword line of a source
-script swaps its quality for another of `PROTECTION_QUALITY_WHITELIST` (FR-058) before any other
-perturbation of that line is tried.
+Every record carries `aimed_at` (the listed rules, or `[]`; in a steered game, the rules of its
+two decks). A protection keyword line of a source script swaps its quality for another of
+`PROTECTION_QUALITY_WHITELIST` (FR-058) before any other perturbation of that line is tried.
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--round untargeted\|steered` | `untargeted` | which variant round runs (FR-058a, FR-058c) |
+| `--variant-games N` | 2 | games each variant is played to |
+| `--no-progress-rounds N` | 3 | rounds without a new game before a variant retires |
+| `--rule-counts PATH` | — | steered only, required there: `rule-counts` over the corpus being collected |
+| `--steer-floor N` | 100 | records below which a (rule, polarity) is short |
+| `--steer-variants N` | 2000 | variants per iteration, split over the short pairs by shortfall |
+| `--steer-min-gain N` | 1 | records of its short polarity an iteration must add to keep a rule |
+| `--steer-iterations N` | 5 | iterations at most |
+
+`--variant-volume` is removed. Startup, exit 1: no holdout source (`--exclude-cards`,
+`--split-from`, `--training-corpus`); `--round steered` without `--rule-counts`, or with counts
+of gen-2 records. The loadable list is `loadable.lst` in the variant tree, never a `.txt` file, and a round
+removes its staged variants from Forge's custom-cards directory when it ends (FR-058b).
 
 ## `python -m effects build-corpus` (existing)
 

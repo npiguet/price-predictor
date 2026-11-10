@@ -162,6 +162,23 @@ State on master when this feature starts (the gen-3 record's Result):
 - Q: How is a library card an event names described? → A: As it was in the library (FR-042e). "It
   entered tapped" is a `tapped` event (FR-042d).
 
+### Session 2026-11-10
+
+- Q: What happens to a random-seat game that names a held-out card? → A: It goes to the
+  card-disjoint stratum beside the Forge-AI games; the game-disjoint stratum stays Forge-AI only
+  (FR-059). Dropping it is rejected: the random seat casts held-out cards the AI never casts, and
+  the evaluation's random-seat slice is otherwise empty. The held-out coverage round keeps counting
+  those games.
+- Q: May the strata differ in record composition? → A: No. Every collecting run uses the same three
+  decision-sampling rates, the held-out round included, and `build-corpus` gives every stratum the
+  training stratum's class mix (FR-059a). The rates stay, because most zone and plain candidates
+  teach nothing new.
+- Q: How are variants collected? → A: In two rounds (FR-058a–FR-058e): an untargeted round over
+  every eligible script, played until each variant has a few games, and a steered round aimed at
+  the (rule, polarity) pairs the corpus's own `rule-counts` shows short, whose carriers take a
+  scenario variant's `script_edit` or a near-miss shift. Interventions in a steered game force the
+  aimed variants' lines first. `--variant-volume` is removed: it never bound on a real corpus.
+
 ## User Scenarios & Testing *(mandatory)*
 
 The stories follow the gen-3 record's Future plans. Story 1 runs on gen-2's corpus and needs no
@@ -985,11 +1002,57 @@ and that the reporting half never enters the control score.
   relabelling the outcomes by rule 702.16), from `collect-variants` swapping a protection keyword's
   quality as a whitelisted selector, and from interventional forks granting protection mid-game, in
   amounts per-rule rebalancing sets.
-- **FR-059**: The validation strata MUST keep only games between two Forge AIs. A permanent spell's
+- **FR-058a**: `collect-variants --round untargeted|steered` (default `untargeted`, root § 8.15)
+  MUST replace the single variant round and `--variant-volume`. The untargeted round MUST generate
+  one variant of every eligible source script (single-faced, not held out under `build-corpus`'s
+  holdout, perturbable) and play rounds of `--decks-per-round` matches, each variant weighted by the
+  games it lacks, until every variant has `--variant-games` (default 2) games or has retired after
+  `--no-progress-rounds` (default 3) rounds without a new game. A variant's games are the distinct
+  games holding a record whose acting key or decision candidate's key names its script file. Its
+  records carry `aimed_at = []`.
+- **FR-058b**: A variant MUST be named `<card> Variant <h>`, `h` the first eight hex digits of the
+  SHA-256 of its perturbed script; an existing file of that name MUST be reused, never rewritten.
+  Only variant scripts may end in `.txt` in the variant tree: the loadable list MUST be written
+  under another extension on both the Java and the Python side. A round MUST remove its staged
+  variants from Forge's custom-cards directory when it ends.
+- **FR-058c**: The steered round MUST read `--rule-counts PATH` (required; gen-3 counts of the
+  corpus being collected) and find the short pairs: a rule the map marks `trained` with a declared
+  detector, and a polarity (`fires`, `does_not_fire`) with fewer than `--steer-floor` (default 100)
+  records over all sources; a rule no record tags is short in both. Its carriers MUST be the cards
+  the rule's scenarios name and the cards `rule-counts` lists as its carriers, held-out and
+  multi-faced cards excepted. Each carrier MUST get the `script_edit` of every scenario variant of
+  the pair's rule and polarity that names it, and near-miss shifts (one numeric shift or selector
+  swap) on a line the rule's tags act through. A pair MUST get `--steer-variants` (default 2000) ×
+  its shortfall ÷ the summed shortfall variants, at least one, each (carrier, edit) at most once.
+- **FR-058d**: A steered deck MUST hold one rule's variants, and every record of a steered game MUST
+  carry `aimed_at` listing its two decks' rules. The steered round MUST iterate: generate for every
+  short pair not retired, play until each variant has `--variant-games` games or retires, recount
+  over the corpus and the round's shards, and retire each rule whose short polarity gained fewer
+  than `--steer-min-gain` (default 1) records; no carrier and edit repeats across iterations, and
+  the round ends when no unretired short pair is left or after `--steer-iterations` (default 5).
+- **FR-058e**: In a steered game, `InterventionScheduler` MUST force the lines of the variant cards
+  each player holds in a first pass at each boundary, before FR-057's pass and the general pass,
+  in the same zones, under the same budget and once-per-line rule.
+- **FR-058f**: A scenario variant whose operation is `pt`, `keyword`, `colour_type`, `counters` or
+  `replace_card` MUST carry `script_edit` `{card, remove, add}`: the Forge card it changes and the
+  script lines removed and added to make the variant's fact. `rules_catalogue.py validate` MUST
+  refuse one whose card has no Forge script or whose removed line is not in it. `rule-counts` MUST
+  write, per rule, its carriers: the script files of its tags' condition entities' cards, with the
+  lines its tags act through and their record counts.
+- **FR-058g**: `collect-coverage` and `collect-variants` MUST exit 1 at startup without a holdout
+  source (`--exclude-cards`, `--split-from` or `--training-corpus`); the steered round MUST exit 1
+  without `--rule-counts` or on counts of gen-2 records.
+- **FR-059**: The game-disjoint stratum MUST keep only games between two Forge AIs; the card-disjoint
+  stratum MUST keep every game naming a held-out card, random-seat games included. A permanent spell's
   resolution record MUST survive `build-corpus`, keyed to the permanent's card. A decision record
   whose candidate's key is unjoinable MUST be refused as `unjoinable-key`. A `turn_action` record
   MUST NOT be written to the training or either validation stratum; the manifest counts the
   records left out by subkind.
+- **FR-059a**: Every stratum MUST have the same record composition. Every collecting run of a
+  corpus, the held-out coverage round included, MUST use the same `--playability-rate`,
+  `--zone-candidate-rate` and `--plain-candidate-rate` (the held-out round sets none of its own),
+  and `build-corpus` MUST give each validation stratum the training stratum's class mix
+  (`--class-mix`).
 - **FR-060**: The manifest MUST add the per-rule counts (FR-008's shape, three sources), per class
   and rule the records available, share, written and shortfall, each split by polarity and by the
   same three sources, the one-sided conditions

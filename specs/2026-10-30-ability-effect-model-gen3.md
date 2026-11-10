@@ -52,7 +52,8 @@ In scope
 - The rules-to-fields map and its rerun per layout (§ 7).
 - Collection: the gen-3 record schema, every line of a permanent, keyword lines, the new
   snapshot fields, the combat snapshot, state-based checks, the playability verdict and its
-  checks, resolution branches, new record coverage, and the dropped-event count (§ 8).
+  checks, resolution branches, new record coverage, the dropped-event count, record moments
+  and the two variant rounds (§ 8).
 - The model input: widths, line flags, command-zone and library slots, card, player and
   global inputs, and keyword flags (§ 9).
 - The relation-aware trunk and its relation types (§ 10).
@@ -182,6 +183,11 @@ minimal pair of boards on which changing one fact flips the rule's outcome.
   card it uses.
 - A scenario names the record kind and observable outcome its detector looks for, and its
   contrasting variant gives the near miss the detector rejects.
+- A variant whose operation (§ 6) is `pt`, `keyword`, `colour_type`, `counters` or
+  `replace_card` carries a `script_edit`: the card it changes, as Forge names it, and the
+  script lines removed from and added to that card's Forge script to make the variant's one
+  fact. `validate` checks that the card has a Forge script and that every removed line is in
+  it. The steered variant round reads it (§ 8.15).
 
 ## 4.4 Review against Forge
 
@@ -597,6 +603,66 @@ its events and payload are what the moment changed. No board after the moment is
   no counters, not attached, not in combat, controlled by its owner, face up, not entered this
   turn, nothing chosen. Its name, types and lines are its library face's.
 
+## 8.15 Variant rounds
+
+This section replaces the base spec's single variant round and its `--variant-volume`.
+`collect-variants --round` runs one of two rounds.
+
+| round | variants | `aimed_at` | the round ends when |
+|---|---|---|---|
+| `untargeted` | one of every eligible source script | `[]` | every variant has `--variant-games` games or has retired |
+| `steered` | aimed at the short (rule, polarity) pairs of a `rule-counts` file | the rules of the game's two decks | no short pair is left that has not retired |
+
+Both rounds
+
+- An eligible source script is a single-faced Forge script of a card that is not held out
+  under `build-corpus`'s holdout, with a parameter the base spec's perturbations can change.
+- A variant's games are the distinct games holding a record whose acting key, or decision
+  candidate's key, names the variant's script file.
+- A round plays `--decks-per-round` matches at a time, as the coverage collector does, each
+  variant weighted by how many games it lacks. A variant with no new game in
+  `--no-progress-rounds` consecutive rounds retires.
+- A variant is named `<card> Variant <h>`, `h` the first eight hex digits of the SHA-256 of
+  its perturbed script. A variant whose file already exists is the same script and is
+  reused, so a repeated or resumed round never rewrites a variant under its name.
+- Every `.txt` file in the variant tree is a variant script, because Forge loads every
+  `.txt` file staged into its custom-cards directory as a card. The list of variants Forge
+  loaded is written under another extension.
+- A round's staged variants are removed from Forge's custom-cards directory when the round
+  ends.
+
+Steered round
+
+- `--rule-counts PATH` names the counts of the corpus being collected, written by
+  `rule-counts` over its own shards.
+- A short pair is a rule the rules-to-fields map marks `trained` (§ 7) with a declared
+  detector, and a polarity, `fires` or `does_not_fire`, with fewer than `--steer-floor`
+  records over all three sources (§ 5.2). A rule no record tags is short in both
+  polarities.
+- A pair's carriers are the cards its rule's scenarios name, and the cards whose lines are
+  condition entities of the rule's tags in the counted records, as `rule-counts` lists them
+  (§ 16). A held-out card and a multi-faced card carry no variant.
+- A carrier gets two kinds of edit:
+  - the `script_edit` of a scenario variant of the pair's rule and polarity that names the
+    carrier (§ 4.3);
+  - a near miss: one numeric shift or selector swap of the base spec's perturbations, on a
+    line of the carrier that the rule's tags act through.
+- Each pair gets `--steer-variants` × its shortfall ÷ the summed shortfall variants, at least
+  one. A (carrier, edit) pair yields at most one variant.
+- A steered deck holds the variants of one rule. Each record of a steered game carries
+  `aimed_at`, the rules of its two decks.
+- The round iterates:
+  1. generate the variants of every short pair not retired;
+  2. play them until each has `--variant-games` games or has retired;
+  3. count the pairs again over the corpus and the round's shards;
+  4. retire every rule whose short polarity gained fewer than `--steer-min-gain` records in
+     this iteration.
+  A later iteration draws carriers and edits no earlier one used. The round also ends after
+  `--steer-iterations` iterations.
+- In a steered game, the intervention scheduler's first pass at each boundary forces the
+  lines of the variant cards each player holds, in the zones and under the budgets the
+  other two passes use, before the pass for lines that branch on whose turn it is.
+
 # 9. Model input
 
 ## 9.1 Widths
@@ -974,7 +1040,13 @@ get examples from three sources, in amounts per-rule rebalancing sets:
 
 ## 12.4 Strata and refusals
 
-- The validation strata keep games between two Forge AIs.
+- The game-disjoint stratum keeps games between two Forge AIs. The card-disjoint stratum
+  keeps every game naming a held-out card, random-seat games included.
+- Every stratum has the same record composition:
+  - every collecting run of the corpus, the held-out coverage round included, uses the same
+    `--playability-rate`, `--zone-candidate-rate` and `--plain-candidate-rate`;
+  - `build-corpus` gives each validation stratum the training stratum's class mix
+    (`--class-mix`).
 - Each validation stratum is built with the training stratum's rule budgets (§ 12.1), its
   added copies carrying their rule. The explained-deviance component (§ 14.1) reads a
   stratum's records with those copies, under the run's `--rule-mask`, as training reads its
@@ -1207,7 +1279,25 @@ python -m effects train-effect-model
 
 `collect-coverage` and `collect-variants` take `--count-dropped-events`,
 `--playability-rate`, `--zone-candidate-rate` and `--plain-candidate-rate` as
-`match-outcomes` does. The held-out coverage round sets `--playability-rate` to 1.
+`match-outcomes` does, the held-out coverage round included (§ 12.4).
+
+```
+python -m effects collect-variants
+    [--round untargeted|steered]         default untargeted (§ 8.15)
+    [--variant-games N]                  default 2; games each variant is played to
+    [--rule-counts PATH]                 steered only, required there; the corpus's own counts
+    [--steer-floor N]                    default 100; records below which a (rule, polarity) is short
+    [--steer-variants N]                 default 2000; variants per iteration, split by shortfall
+    [--steer-min-gain N]                 default 1; records an iteration must add to keep a rule
+    [--steer-iterations N]               default 5
+    [--no-progress-rounds N]             default 3; rounds without a new game before a variant retires
+```
+
+`--variant-volume` is removed.
+
+`rule-counts` also lists, per rule, the carriers of § 8.15: the script files of the cards
+whose lines are its tags' condition entities, with the lines its tags act through, each
+with its record count.
 
 `collect-variants` takes `--directed-fork-rules`, `--directed-forks-per-game` and
 `--directed-fork-probability` as `match-outcomes` does.
@@ -1235,6 +1325,10 @@ Startup validation
 - `match-outcomes` and `collect-variants` check that every rule in
   `--directed-fork-rules` has a detector, a board precondition (§ 6) and at least one
   contrasting variant classified into a fork operation.
+- `collect-coverage` and `collect-variants` refuse to start without a holdout source
+  (`--exclude-cards`, `--split-from` or `--training-corpus`).
+- `collect-variants --round steered` refuses to start without `--rule-counts`, or with a
+  counts file holding gen-2 records.
 
 Exit codes
 
@@ -1264,14 +1358,15 @@ Printed output
 
 | file | written | purpose |
 |---|---|---|
-| `rules/` | by the catalogue scripts | catalogue, triage, scenarios, findings; formats in `rules/README.md` |
+| `rules/` | by the catalogue scripts | catalogue, triage, scenarios with their variants' `script_edit` (§ 4.3), findings; formats in `rules/README.md` |
 | `rules/heads/<unit>.jsonl` | by the map | per-rule verdict, missing facts, gen-3 fields, learnable after gen-3 |
 | `rules/gen3-fields.json`, `rules/GEN3-FIELDS.md` | by the map's merge | gen-3's inputs, outputs, extensions and fixes |
 | effect-record shards | by collection | gen-3 records, `generation: 3`, aimed records marked by `aimed_at` (§ 8.1) |
 | `rules/directed-fork-rules.txt`, `rules/coverage-wording-cards.txt` | by `rules_catalogue.py directed-rules` | the rules the full collection's directed forks run for (§ 6), and the cards of the wording-card coverage round (§ 8.11) |
 | curated shards | by `build-corpus` | every record carries `curation` (natural share, copies, drawn rule, drawn rules, condition and outcome entities); a protection copy is the synthetic record `<record_id>~pc<i>` (§ 12.1, § 12.3) |
 | `manifest.json` | by `build-corpus` | adds per-rule counts by source (§ 5.2), the map snapshot: each tagged rule's verdict and outputs, with the map's content hash, and each rule's effective outputs (§ 12.1), per-rule budgets per polarity, one-sided rules and unbudgeted rules (§ 12.1), one-sided conditions (§ 12.2), rules left out of a validation half and `turn_action` records left out by subkind (§ 12.4), the closed subtype and keyword lists (§ 11.2, § 11.3), and each validation stratum's selection and reporting halves (§ 14.2) |
-| `output/effects/rule-counts.json` | by `rule-counts` | per-rule counts by source over a records set (§ 5.2) |
+| `output/effects/rule-counts.json` | by `rule-counts` | per-rule counts by source over a records set (§ 5.2), and per rule its carriers with the lines its tags act through (§ 8.15) |
+| `output/effects/variant-scripts/` | by `collect-variants` | variant scripts of both rounds, named by their script's hash, with their sidecars (§ 8.15) |
 | `output/effects/reports/selection-set-<corpus digest>.json` | by the freeze | per validation stratum and half: the probe items, the grid records, the rule tests and the deviance sample; the balance ratio r, each item's standard error, the items left out by the precision target and the thresholds; a content digest (§ 14.2) |
 | checkpoints | by `train-effect-model` | add the relation tables, the relation type names in table order (§ 10.3), the averaged weights, the best control score, the loss denominators, `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight`, `--relation-values`, the manifest's map content hash and the selection set's digest; record the input layout `gen-3` with the subtype, named-counter and closed output lists, and every loader refuses a checkpoint of any other layout, gen-1 and gen-2 included, or with a different list |
 | `resume.pt` | every epoch | adds the averaged weights, the loss denominators and the best control score |

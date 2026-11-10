@@ -2264,6 +2264,36 @@ answer or described a board other than the one the ability acted on:
 every fizzle, because a spell fizzles almost only when its target becomes illegal in response. With
 the board read at resolution start, a fizzle follows from the input: the target is already gone.
 
+#### The re-collection keeps the random seat's held-out games, samples every stratum alike, and collects variants in two rounds
+
+The card-disjoint stratum now keeps the games in which a random seat meets a held-out card. Until
+now `build-corpus` dropped every such game, because both validation strata held only games between
+two Forge AIs. About a quarter of the last held-out coverage round's sampled games had a random seat,
+so that round counted games the corpus then threw away. Keeping them scores the model on held-out
+cards the Forge AI never casts and fills the evaluation's random-seat slice, which no validation
+stratum supplied before. The game-disjoint stratum stays Forge-AI only.
+
+Every collecting run now samples decision candidates at the same rates, the held-out coverage round
+included. That round evaluated every candidate, so its special decision records were about a hundred
+times denser than training's. A validation stratum whose mix of records differs from training's
+scores the model on a different task from the one it trained on. The sampling itself stays, because
+most zone and plain candidates repeat what the corpus already holds. Whether `build-corpus` gives each
+validation stratum the training stratum's class mix is not yet checked.
+
+Variants are collected in two rounds instead of one fixed round. Gen-2's single round played most of
+its variants, with a median of 13 records each, and one variant alone wrote over a hundred thousand
+records. Its volume cap never limited anything on a real corpus. Gen-3 first plays an untargeted round
+until every variant has a few games, which gives breadth against memorization. A steered round then
+aims variants at the rules the re-collection's own per-rule counts show short of records of one
+polarity. Each short rule's carrier cards take one of two edits:
+- a scenario variant's card-level change, written as an edit to the card's script;
+- a numeric or selector shift on the line the rule's records act through, which makes a near miss.
+
+About 85 of the gaps in the first gen-3 overnight run's counts already have a card-level change.
+Gaps that turn on a choice, a timing or the turn structure stay with directed forks, the random seat
+and interventions. In a steered game the interventions force the aimed variants' lines first, so a
+variant the Forge AI never plays still resolves.
+
 ### The deviance floor is 0.04 nats, where gen-2's output fields turn noisy
 
 **Below a constant-prediction loss of about 0.04 nats, nearly every output field's explained
@@ -2310,7 +2340,8 @@ line gives every field's card-disjoint explained deviance, and each run's "Const
 **The next steps turn the catalogue and the map into collection and training.**
 
 - **Fix the collection review's findings and build the record moments of root spec § 8.14**, check
-  the copies with the fork fidelity audit, and collect gen-3 again from scratch.
+  the copies with the fork fidelity audit, and collect gen-3 again from scratch, ending with the
+  two variant rounds of root spec § 8.15.
 
 - **Rerun the map against master's targets**, then make the input and output changes in the order
   the Description sets, rerunning the map after each to count what it made learnable.
