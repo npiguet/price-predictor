@@ -103,7 +103,7 @@ def add_cap_flags(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--probe-keywords", default=EFFECT_PROBE_KEYWORDS,
+        "--probe-keywords", type=probe_keyword_list, default=EFFECT_PROBE_KEYWORDS,
         help=(
             "Comma-separated damage-step keywords to probe (default: all "
             "eight); an empty string takes no probe fork at all"
@@ -132,6 +132,26 @@ def add_cap_flags(parser: argparse.ArgumentParser) -> None:
             "run ends"
         ),
     )
+
+
+def probe_keyword_list(text: str) -> str:
+    """``--probe-keywords``: each keyword spelled as the JVM compares it
+    (``KeywordEdit.normalize``: lower case, spaces as ``_``), blanks dropped.
+
+    The worker matches the list exactly against a Forge keyword so spelled, so
+    ``Trample`` or ``first strike`` would never be probed and nothing would
+    say so; a keyword gate 2 does not check is refused.
+    """
+    known = EFFECT_PROBE_KEYWORDS.split(",")
+    named = [
+        word.strip().lower().replace(" ", "_") for word in text.split(",") if word.strip()
+    ]
+    unknown = [word for word in named if word not in known]
+    if unknown:
+        raise argparse.ArgumentTypeError(
+            f"not a damage-step keyword: {', '.join(unknown)} (known: {', '.join(known)})"
+        )
+    return ",".join(named)
 
 
 def rule_list(text: str) -> tuple[str, ...]:

@@ -289,3 +289,31 @@ class TestDirectedForkFlags:
         monkeypatch.setattr(flags, "registered_directed_rules", lambda: frozenset())
         err = self._refused(monkeypatch, capsys, "--directed-fork-rules", "704.5f")
         assert "704.5f has no board precondition registered" in err
+
+
+class TestProbeKeywordSpelling:
+    """python R6: the JVM compares each listed keyword exactly against Forge's
+    keyword as ``KeywordEdit.normalize`` spells it (lower case, spaces as
+    ``_``), so ``Trample`` or ``first strike`` was never probed, silently."""
+
+    def test_a_spelling_the_jvm_would_miss_is_normalised(self):
+        args = parse("match-outcomes", "--probe-keywords", "first strike, Trample")
+        assert args.probe_keywords == "first_strike,trample"
+
+    def test_a_keyword_gate_two_does_not_check_is_refused(self, capsys):
+        with pytest.raises(SystemExit) as stopped:
+            parse("match-outcomes", "--probe-keywords", "trample,flying")
+        assert stopped.value.code == 2
+        assert "flying" in capsys.readouterr().err
+
+    def test_the_default_and_the_empty_list_pass_unchanged(self):
+        assert parse("match-outcomes").probe_keywords == EFFECT_PROBE_KEYWORDS
+        assert parse("match-outcomes", "--probe-keywords", "").probe_keywords == ""
+
+    def test_the_effects_collectors_share_it(self):
+        from effects.infrastructure.cli import build_parser as effects_parser
+
+        args = effects_parser().parse_args(
+            ["collect-coverage", "--probe-keywords", "Double Strike"],
+        )
+        assert args.probe_keywords == "double_strike"
