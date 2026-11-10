@@ -23,6 +23,14 @@ user decision. This file says where the work stands and what comes next.
 - Do not run `collect-variants` before python R1 is fixed: the old `loadable.txt` in
   `output/effects/variant-scripts/` would poison every Forge startup on the machine.
 
+## Fixing round progress (2026-11-10)
+- Step 2 done: the decisions are specced (commit 7e82b7b1): root § 8.15 (variant rounds), § 12.4,
+  § 15, § 16; spec.md FR-058a–g, FR-059, FR-059a; tasks.md T182–T191.
+- Step 3 done: `FIX-PLAN.md` in this folder places every finding in a work package and settles where
+  each attribution finding is fixed.
+- Implementation runs in two streams (Java: WP1→WP4; Python: WP5→WP6), heavy jobs under one
+  machine-wide `mkdir` lock.
+
 ## Next: the fixing round, in a fresh session
 1. Load the feature-workflow skill before every edit under `specs/` or `experiments/`.
 2. Write the spec changes the decisions need: FR-059 / root § 12.4 (random-seat card-disjoint games),
