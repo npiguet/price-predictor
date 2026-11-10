@@ -1152,13 +1152,39 @@ class TestNonDeckTypesLeaveTheUnit:
 
 
 class TestHeldOutRoundCaps:
-    """FR-035: full strength for the card's own records, not for the AI's planning."""
+    """FR-059a (T183, python R7): every stratum has one record composition,
+    so the held-out round collects under the run's own caps. It used to lift
+    ``--playability-rate`` to 1.0, which made special decision records about
+    a hundred times denser in the card-disjoint stratum than in training."""
 
-    def test_every_playability_record_is_kept(self):
-        from effects.application.collect_coverage import held_out_round_caps
+    def test_the_held_out_rounds_caps_are_the_runs(self, tmp_path, fake_supervisor):
+        from effects.application import collect_coverage
         from effects.domain.collection_caps import CollectionCaps
 
-        assert held_out_round_caps(CollectionCaps()).playability_rate == 1.0
+        cards = tmp_path / "cardsfolder"
+        (cards / "a").mkdir(parents=True)
+        (cards / "a" / "alpha.txt").write_text(
+            "name: alpha\nmana cost: {G}\ntypes: creature\n", encoding="utf-8",
+        )
+        listed = tmp_path / "holdout-cards.txt"
+        listed.write_text("alpha\n", encoding="utf-8")
+        (tmp_path / "records").mkdir()
+        caps = CollectionCaps(aimed_at=(), playability_rate=0.02)
+
+        with (
+            patch.object(collect_coverage, "consult_castability", return_value={}),
+            patch("effects.infrastructure.converted_trees.load_card_texts",
+                  return_value={"alpha": ["SP$ Alpha"]}),
+            patch("effects.infrastructure.converted_trees.ConvertedTrees.holdout",
+                  return_value=_holding({"SP$ Alpha"})),
+        ):
+            collect_coverage.run(collect_coverage.CollectCoverageConfig(
+                effect_records=tmp_path / "records", cards_folders=(cards,),
+                deck_holdout=DeckHoldout(only_cards=listed), min_text_games=0,
+                caps=caps,
+            ))
+
+        assert fake_supervisor.constructor.call_args.kwargs["caps"] == caps
 
 
 class TestTheWordingRound:

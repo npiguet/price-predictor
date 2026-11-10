@@ -18,7 +18,7 @@ import random
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -670,13 +670,6 @@ def text_residues(coverage: dict[str, TextCoverage], floor: int) -> TextResidues
     return TextResidues(under, uncastable)
 
 
-def held_out_round_caps(caps: CollectionCaps) -> CollectionCaps:
-    """Full strength (FR-035): every record the held-out cards produce is kept,
-    because these are the only games that will ever see them.
-    """
-    return replace(caps, playability_rate=1.0)
-
-
 @dataclass(kw_only=True)
 class TextRounds(CoverageRounds):
     """The held-out round's rounds: each held-out text a unit, awaited only
@@ -800,4 +793,6 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
             for name, text in texts.items() if name in present
         },
     )
-    return _play_to_completion(rounds, config, held_out_round_caps(config.caps))
+    # The run's own caps, the three decision-sampling rates included: every
+    # stratum has one record composition (FR-059a).
+    return _play_to_completion(rounds, config, config.caps)
