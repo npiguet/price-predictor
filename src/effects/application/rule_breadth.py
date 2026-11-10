@@ -35,7 +35,7 @@ def breadth_shard(built, shard: Path) -> BreadthTally:
     """One shard's pool and tagged counts."""
     from effects.infrastructure.shard_io import read_shard
 
-    index, sidecars = built
+    index, sidecars, _ = built
     out = BreadthTally()
     for record in read_shard(shard):
         out.records += 1
