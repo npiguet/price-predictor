@@ -1132,7 +1132,13 @@ def run_play_draft_games(args: argparse.Namespace) -> int:
         workers=args.workers,
     )
 
-    summary = PlayDraftGamesUseCase().execute(config)
+    from price_predictor.infrastructure.forge_jvm import WorkerStartError
+
+    try:
+        summary = PlayDraftGamesUseCase().execute(config)
+    except WorkerStartError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
     # 130 only for an interrupt that arrived before the first match completed.
     # A clean bounded finish, and an interrupt after any match, are both 0.
     if summary.interrupted and summary.matches_played == 0:

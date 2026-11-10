@@ -11,6 +11,7 @@ import functools
 import os
 import platform
 import re
+import shutil
 import signal
 import subprocess
 import threading
@@ -83,6 +84,25 @@ def resolve_connector_jar() -> Path:
             "Build it first: cd forge-connector && mvn install -DskipTests"
         )
     return jar
+
+
+def check_worker_prerequisites(
+    *, files: dict[str, Path | None] | None = None,
+) -> None:
+    """Refuse a worker pool that could not start one worker, before any starts.
+
+    Checks the connector JAR, ``java`` on PATH and each named input file
+    (``{"--exclude-cards": path}``; a None path is skipped). Raises
+    ``FileNotFoundError`` naming the first missing one. Without this a missing
+    JAR or ``java`` surfaced only inside each worker's spawn, which the pool
+    retries until :class:`ForgeWorkerPool` gives up.
+    """
+    resolve_connector_jar()
+    if shutil.which("java") is None:
+        raise FileNotFoundError("Java not found. Ensure java is on PATH.")
+    for flag, path in (files or {}).items():
+        if path is not None and not Path(path).is_file():
+            raise FileNotFoundError(f"{flag}: no such file {path}")
 
 
 def build_forge_classpath(
@@ -393,6 +413,11 @@ class WorkerLogFiles:
         self._open.clear()
 
 
+class WorkerStartError(RuntimeError):
+    """Every slot of a :class:`ForgeWorkerPool` failed to start a worker
+    ``max_failed_starts`` times in a row: the run cannot collect anything."""
+
+
 class ForgeWorkerPool:
     """Supervise a pool of Forge JVM workers that append to one output file.
 
@@ -408,6 +433,15 @@ class ForgeWorkerPool:
     Progress is measured by counting lines in ``output_path`` rather than by
     workers reporting back, so a worker needs no channel to the supervisor.
 
+    A failed start (``spawn_worker`` raising, or a worker exiting within
+    ``quick_exit_seconds`` of its start without the pool having killed it) is
+    retried after a backoff that doubles from ``restart_backoff``; the first
+    retry is immediate, as after an ordinary crash. Once every slot has failed
+    ``max_failed_starts`` starts in a row, ``run`` ends with
+    :class:`WorkerStartError`: a missing JAR, a card database that stops every
+    Forge startup or an unreadable input file would otherwise be retried
+    forever, collecting nothing.
+
     Used by ``sealed match-outcomes`` and ``draft play-draft-games``; the printed
     lines are part of both commands' operator contract and must not drift.
     """
@@ -418,6 +452,15 @@ class ForgeWorkerPool:
     #: win throughput.
     STATUS_INTERVAL = 60
 
+    #: Consecutive failed starts in every slot that end the run.
+    MAX_FAILED_STARTS = 5
+    #: The second retry's delay in seconds; each later one doubles it.
+    RESTART_BACKOFF = 1.0
+    MAX_RESTART_BACKOFF = 30.0
+    #: A worker exiting this soon after its start, unkilled, failed to start:
+    #: a Forge start takes tens of seconds, and a worker plays until recycled.
+    QUICK_EXIT_SECONDS = 120.0
+
     def __init__(
         self,
         *,
@@ -426,6 +469,9 @@ class ForgeWorkerPool:
         output_path: Path,
         status_interval: int | None = None,
         should_stop: Callable[[int], bool] | None = None,
+        max_failed_starts: int | None = None,
+        restart_backoff: float | None = None,
+        quick_exit_seconds: float | None = None,
     ) -> None:
         """
         Args:
@@ -435,6 +481,8 @@ class ForgeWorkerPool:
             status_interval: seconds between status lines (default 60).
             should_stop: called with the current line count after each status
                 line; returning True ends the run. None means run until signalled.
+            max_failed_starts, restart_backoff, quick_exit_seconds: the
+                failed-start rule (class docstring); default the class constants.
         """
         self._worker_count = worker_count
         self._spawn_worker = spawn_worker
@@ -448,6 +496,19 @@ class ForgeWorkerPool:
         self._processes: list[subprocess.Popen] = []
         self._start_times: dict[subprocess.Popen, float] = {}
         self._processes_lock = threading.Lock()
+        self._max_failed_starts = (
+            self.MAX_FAILED_STARTS if max_failed_starts is None else max_failed_starts
+        )
+        self._restart_backoff = (
+            self.RESTART_BACKOFF if restart_backoff is None else restart_backoff
+        )
+        self._quick_exit_seconds = (
+            self.QUICK_EXIT_SECONDS if quick_exit_seconds is None else quick_exit_seconds
+        )
+        #: Processes the pool killed itself (recycled): their exit is no failure.
+        self._killed: set[subprocess.Popen] = set()
+        self._failed_starts: dict[int, int] = {}
+        self._start_failure: str | None = None
 
     @property
     def interrupted(self) -> bool:
@@ -459,7 +520,11 @@ class ForgeWorkerPool:
         return self._interrupted
 
     def run(self) -> None:
-        """Start all workers and block until shutdown."""
+        """Start all workers and block until shutdown.
+
+        Raises :class:`WorkerStartError` when every slot failed to start a
+        worker ``max_failed_starts`` times in a row.
+        """
         self._output_path.parent.mkdir(parents=True, exist_ok=True)
 
         signal.signal(signal.SIGINT, self._handle_signal)
@@ -478,6 +543,12 @@ class ForgeWorkerPool:
         for t in monitor_threads:
             t.join(timeout=10)
 
+        if self._start_failure is not None:
+            raise WorkerStartError(
+                f"every one of {self._worker_count} worker slot(s) failed to "
+                f"start {self._max_failed_starts} time(s) in a row; last: "
+                f"{self._start_failure}"
+            )
         print("Done.")
 
     def output_line_count(self) -> int:
@@ -505,25 +576,77 @@ class ForgeWorkerPool:
         while not self._shutdown_event.is_set():
             try:
                 proc = self._spawn_worker(worker_id)
-                with self._processes_lock:
-                    self._processes.append(proc)
-                    self._start_times[proc] = time.monotonic()
-
-                proc.wait()
-
-                with self._processes_lock:
-                    if proc in self._processes:
-                        self._processes.remove(proc)
-                    self._start_times.pop(proc, None)
-
+            except Exception as exc:
                 if self._shutdown_event.is_set():
                     return
+                print(f"Monitor error for worker {worker_id}: {exc}")
+                self._note_failed_start(worker_id, f"{type(exc).__name__}: {exc}")
+                continue
 
-                print(f"Worker {worker_id} exited (code {proc.returncode}), restarting...")
+            started = time.monotonic()
+            with self._processes_lock:
+                self._processes.append(proc)
+                self._start_times[proc] = started
+            # _terminate_all may have taken its snapshot before the append; a
+            # worker spawned while the pool shuts down is killed here, or it
+            # outlives the run.
+            if self._shutdown_event.is_set():
+                kill_process_tree(proc)
 
+            try:
+                proc.wait()
             except Exception as exc:
-                if not self._shutdown_event.is_set():
-                    print(f"Monitor error for worker {worker_id}: {exc}")
+                print(f"Monitor error for worker {worker_id}: {exc}")
+
+            lifetime = time.monotonic() - started
+            failed = self._failed_start(proc, lifetime=lifetime)
+            with self._processes_lock:
+                if proc in self._processes:
+                    self._processes.remove(proc)
+                self._start_times.pop(proc, None)
+                self._killed.discard(proc)
+
+            if self._shutdown_event.is_set():
+                return
+
+            print(f"Worker {worker_id} exited (code {proc.returncode}), restarting...")
+            if failed:
+                self._note_failed_start(
+                    worker_id,
+                    f"worker exited (code {proc.returncode}) {lifetime:.0f}s "
+                    "after starting",
+                )
+            else:
+                with self._processes_lock:
+                    self._failed_starts[worker_id] = 0
+
+    def _failed_start(self, proc: subprocess.Popen, *, lifetime: float) -> bool:
+        """Whether a worker that exited after ``lifetime`` seconds failed to
+        start: it exited that soon and the pool did not kill it."""
+        with self._processes_lock:
+            killed = proc in self._killed
+        return not killed and lifetime < self._quick_exit_seconds
+
+    def _note_failed_start(self, worker_id: int, reason: str) -> None:
+        """Count one failed start of ``worker_id``. Once every slot has failed
+        ``max_failed_starts`` in a row the run ends; otherwise wait out the
+        backoff."""
+        with self._processes_lock:
+            failures = self._failed_starts.get(worker_id, 0) + 1
+            self._failed_starts[worker_id] = failures
+            every_slot_failed = all(
+                self._failed_starts.get(slot, 0) >= self._max_failed_starts
+                for slot in range(self._worker_count)
+            )
+        if every_slot_failed:
+            self._start_failure = reason
+            self._shutdown_event.set()
+            return
+        if failures > 1:
+            delay = min(
+                self._restart_backoff * 2 ** (failures - 2), self.MAX_RESTART_BACKOFF,
+            )
+            self._shutdown_event.wait(timeout=delay)
 
     #: How often the stop condition is polled, in seconds. Far shorter than the
     #: status interval: a run with a small target would otherwise overshoot it by
@@ -636,6 +759,7 @@ class ForgeWorkerPool:
                 return
             oldest_proc, oldest_time = min(alive, key=lambda x: x[1])
             age = time.monotonic() - oldest_time
+            self._killed.add(oldest_proc)
 
         kill_process_tree(oldest_proc)
         print(f"Recycled longest-running worker (PID {oldest_proc.pid}, age {age:.0f}s)")

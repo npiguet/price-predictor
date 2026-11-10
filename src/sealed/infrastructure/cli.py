@@ -1821,23 +1821,26 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
             )
         )
 
-    supervisor = MatchOutcomeSupervisor(
-        worker_count=args.workers,
-        output_path=output_path,
-        best_of=args.best_of,
-        side_a_decks_path=side_a_decks,
-        side_b_decks_path=side_b_decks,
-        side_b_decks_weight=side_b_decks_weight,
-        effect_records_dir=effect_records_dir,
-        collection_caps=_effect_collection_caps(args),
-        exclude_cards_path=(
-            Path(args.exclude_cards) if args.exclude_cards else None
-        ),
-    )
+    from price_predictor.infrastructure import forge_jvm
 
+    exclude_cards = Path(args.exclude_cards) if args.exclude_cards else None
     try:
+        # Before any worker: a missing JAR, java or list file would otherwise
+        # surface only inside each worker's start.
+        forge_jvm.check_worker_prerequisites(files={"--exclude-cards": exclude_cards})
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=args.workers,
+            output_path=output_path,
+            best_of=args.best_of,
+            side_a_decks_path=side_a_decks,
+            side_b_decks_path=side_b_decks,
+            side_b_decks_weight=side_b_decks_weight,
+            effect_records_dir=effect_records_dir,
+            collection_caps=_effect_collection_caps(args),
+            exclude_cards_path=exclude_cards,
+        )
         supervisor.run()
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, forge_jvm.WorkerStartError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
 

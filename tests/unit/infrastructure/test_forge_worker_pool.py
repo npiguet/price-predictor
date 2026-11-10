@@ -7,9 +7,13 @@ shape is a contract, not an implementation detail.
 
 from __future__ import annotations
 
+import threading
+import time
 from unittest.mock import patch
 
-from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+import pytest
+
+from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool, WorkerStartError
 
 KILL = "price_predictor.infrastructure.forge_jvm.kill_process_tree"
 
@@ -167,3 +171,145 @@ class TestStopCondition:
             pool._supervisor_loop()
 
         assert "Shutting down, terminating 2 workers..." in capsys.readouterr().out
+
+
+class _ExitingProc:
+    """A worker that exits at once with ``code``, as a JVM failing at startup does."""
+
+    def __init__(self, pid: int, code: int = 1) -> None:
+        self.pid = pid
+        self.returncode = code
+
+    def wait(self):
+        return self.returncode
+
+    def poll(self):
+        return self.returncode
+
+
+def _run_with_watchdog(pool: ForgeWorkerPool, seconds: float = 5.0) -> float:
+    """``pool.run()`` on the main thread (it installs signal handlers), stopped
+    by a watchdog if it never ends by itself; returns how long it took."""
+    watchdog = threading.Timer(seconds, pool.request_shutdown)
+    watchdog.start()
+    started = time.monotonic()
+    try:
+        pool.run()
+    finally:
+        watchdog.cancel()
+    return time.monotonic() - started
+
+
+class TestAWorkerThatCannotStart:
+    """python R2: a missing JAR or ``java`` made ``spawn_worker`` raise, and a
+    worker failing at startup exited at once; both were restarted forever, at
+    full speed, collecting nothing and naming no reason."""
+
+    def test_a_spawn_that_always_raises_ends_the_run_with_an_error(self, tmp_path):
+        calls = []
+
+        def spawn(worker_id):
+            calls.append(worker_id)
+            raise FileNotFoundError("Connector JAR not found")
+
+        pool = _pool(
+            tmp_path / "out.txt", worker_count=2, spawn_worker=spawn,
+            max_failed_starts=3, restart_backoff=0.01,
+        )
+
+        with patch(KILL), pytest.raises(WorkerStartError, match="Connector JAR not found"):
+            elapsed = _run_with_watchdog(pool)
+            pytest.fail(f"run() returned after {elapsed:.1f}s instead of raising")
+        assert len(calls) <= 2 * 3 + 2
+
+    def test_the_error_comes_within_about_two_seconds(self, tmp_path):
+        def spawn(worker_id):
+            raise FileNotFoundError("java")
+
+        pool = _pool(
+            tmp_path / "out.txt", worker_count=2, spawn_worker=spawn,
+            max_failed_starts=3, restart_backoff=0.01,
+        )
+        started = time.monotonic()
+        with patch(KILL), pytest.raises(WorkerStartError):
+            _run_with_watchdog(pool)
+        assert time.monotonic() - started < 2.5
+
+    def test_quick_exits_in_every_slot_end_the_run_after_n_restarts(self, tmp_path):
+        spawned = []
+
+        def spawn(worker_id):
+            spawned.append(worker_id)
+            return _ExitingProc(1000 + len(spawned))
+
+        pool = _pool(
+            tmp_path / "out.txt", worker_count=1, spawn_worker=spawn,
+            should_stop=lambda count: False, max_failed_starts=4,
+            restart_backoff=0.01,
+        )
+
+        with patch(KILL), pytest.raises(WorkerStartError, match="exited"):
+            _run_with_watchdog(pool)
+        assert len(spawned) == 4
+
+    def test_a_worker_that_ran_a_while_before_exiting_is_no_failed_start(self, tmp_path):
+        spawned = []
+
+        def spawn(worker_id):
+            spawned.append(worker_id)
+            return _ExitingProc(1000 + len(spawned))
+
+        pool = _pool(
+            tmp_path / "out.txt", worker_count=1, spawn_worker=spawn,
+            max_failed_starts=2, restart_backoff=0.01, quick_exit_seconds=0.0,
+        )
+
+        with patch(KILL):
+            _run_with_watchdog(pool, seconds=0.3)  # ends by the watchdog, no raise
+        assert len(spawned) > 2
+
+    def test_a_recycled_worker_is_no_failed_start(self, tmp_path):
+        pool = _pool(tmp_path / "out.txt", worker_count=1)
+        young = _FakeProc(1)
+        pool._start_times = {young: time.monotonic()}
+
+        with patch(KILL):
+            pool._kill_oldest_worker()
+
+        assert pool._failed_start(young, lifetime=0.1) is False
+        assert pool._failed_start(_FakeProc(2), lifetime=0.1) is True
+
+
+class TestNoWorkerOutlivesTheRun:
+    """python R4: a worker spawned while the pool shut down was appended after
+    ``_terminate_all`` took its snapshot, and was never killed."""
+
+    def test_a_worker_spawned_during_shutdown_is_killed(self, tmp_path):
+        from tests.unit.sealed.conftest import FakeProcess
+
+        release = threading.Event()
+        spawned: list[FakeProcess] = []
+
+        def spawn(worker_id):
+            release.wait(timeout=5)
+            proc = FakeProcess(pid=4000 + len(spawned), hang=True)
+            spawned.append(proc)
+            return proc
+
+        pool = _pool(
+            tmp_path / "out.txt", worker_count=1, spawn_worker=spawn,
+            should_stop=lambda count: True,
+        )
+        original = ForgeWorkerPool._terminate_all
+
+        def terminate_then_release(self):
+            original(self)
+            release.set()
+
+        with patch(KILL, side_effect=lambda proc: proc.kill()), patch.object(
+            ForgeWorkerPool, "_terminate_all", terminate_then_release,
+        ):
+            _run_with_watchdog(pool, seconds=15)
+
+        assert spawned, "the spawn never returned"
+        assert all(proc._terminated for proc in spawned)
