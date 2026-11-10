@@ -417,3 +417,50 @@ class TestConditionBalance:
             condition_key(klass, TurnStepCondition(one, ConditionSide.MET)): 7,
         }
         assert one_sided_conditions(counts) == {str(klass): [one.label]}
+
+
+
+class TestValidationClassMix:
+    """FR-059a (T183): each validation stratum is written in the training
+    stratum's class mix. A validation record is never dropped, so the
+    over-represented class sets the size and the others are repeated, at most
+    ``--reuse-cap`` times a record, as training repeats a short family's."""
+
+    def test_the_multipliers_deliver_the_mix(self):
+        from effects.domain.corpus_curation import validation_multipliers
+
+        counts = {"combat": 60, "rewrite": 10, "trigger": 30}
+        mix = {"combat": 0.5, "rewrite": 0.25, "trigger": 0.25}
+
+        multipliers = validation_multipliers(counts, mix, reuse_cap=10)
+
+        written = {name: counts[name] * multipliers[name] for name in counts}
+        total = sum(written.values())
+        assert {name: n / total for name, n in written.items()} == pytest.approx(mix)
+        assert min(multipliers.values()) == pytest.approx(1.0)
+
+    def test_no_record_is_dropped_and_none_repeats_past_the_cap(self):
+        from effects.domain.corpus_curation import validation_multipliers
+
+        multipliers = validation_multipliers(
+            {"combat": 100, "rewrite": 1}, {"combat": 0.5, "rewrite": 0.5}, reuse_cap=4,
+        )
+
+        assert multipliers == {"combat": 1.0, "rewrite": 4.0}
+
+    def test_a_class_the_mix_omits_is_written_as_collected(self):
+        from effects.domain.corpus_curation import validation_multipliers
+
+        multipliers = validation_multipliers(
+            {"combat": 10, "continuous": 5}, {"combat": 1.0}, reuse_cap=4,
+        )
+
+        assert multipliers["continuous"] == 1.0
+
+    def test_copies_realize_a_fractional_multiplier_on_average(self):
+        from effects.domain.corpus_curation import natural_copies, record_hash
+
+        copies = [natural_copies(2.25, record_hash(f"r{i}", seed=1)) for i in range(4000)]
+
+        assert set(copies) == {2, 3}
+        assert sum(copies) / len(copies) == pytest.approx(2.25, abs=0.03)

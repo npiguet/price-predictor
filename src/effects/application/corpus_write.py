@@ -24,7 +24,7 @@ from pathlib import Path
 
 from effects.application.corpus_survey import ReadConfig, RefusalTally, WorkerContext
 from effects.application.parallel_map import run_parallel
-from effects.domain.corpus_curation import CopyPlan
+from effects.domain.corpus_curation import CopyPlan, natural_copies
 from effects.domain.corpus_manifest import SourceShard
 from effects.domain.corpus_plan import Cell, GameStrata, Keys, planned_copies
 from effects.domain.protection_copies import protection_copy, qualify
@@ -54,6 +54,9 @@ class WritePlan:
     #: Places a legality record in its rarest mode's family exactly as the
     #: survey's supply was folded.
     mode_counts: dict[str, int] = field(default_factory=dict)
+    #: ``validation stratum -> class -> natural copies per record``
+    #: (``corpus_curation.validation_multipliers``): the class mix (FR-059a).
+    validation_copies: Mapping[Stratum, Mapping[str, float]] = field(default_factory=dict)
 
 
 #: ``game -> record hash -> drawn rule per added copy``: the rule budgets'
@@ -202,13 +205,18 @@ class _ShardWriter:
         elif stratum is Stratum.TRAINING:
             self._train(record, klass, keys)
         else:
-            self._hold(record, stratum, keys)
+            self._hold(record, stratum, keys, klass)
 
-    def _hold(self, record: EffectRecord, stratum: Stratum, keys: Keys) -> None:
-        """A validation game's record, its added copies and protection copies,
-        and gate 1's one copy of a card-disjoint resolution acting through a
-        held-out text."""
-        natural = self._write(stratum, record, keys, natural=1)[0]
+    def _hold(
+        self, record: EffectRecord, stratum: Stratum, keys: Keys, klass: SamplingClass,
+    ) -> None:
+        """A validation game's record, written as many natural times as its
+        class's share of the mix asks (FR-059a), its added copies and
+        protection copies, and gate 1's one copy of a card-disjoint resolution
+        acting through a held-out text."""
+        multiplier = self.plan.validation_copies.get(stratum, {}).get(str(klass), 1.0)
+        copies = natural_copies(multiplier, self.context.hash_of(record))
+        natural = self._write(stratum, record, keys, natural=copies)[0]
         self._protection_copies(record, stratum, keys)
         if stratum is Stratum.CARD_DISJOINT and record.kind is RecordKind.RESOLUTION:
             text = self.context.held_out_text(keys)

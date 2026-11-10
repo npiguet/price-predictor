@@ -1828,6 +1828,32 @@ def test_the_manifest_holds_every_gen3_field(gen3_build):
     assert set(manifest.halves) == {"card-disjoint", "game-disjoint"}
 
 
+def test_each_validation_stratum_is_written_in_the_class_mix(tmp_path):
+    """FR-059a (T183): the strata's natural copies follow ``--class-mix`` over
+    the classes each holds, as training's do; before, a validation stratum
+    was written as collected. The reuse cap is lifted so the mix is reachable
+    on the fixture's few records."""
+    from effects.domain.sampling import DEFAULT_KIND_MIX, sampling_class
+
+    root = tmp_path / "gen3"
+    output = root / "out"
+    assert build(_gen3_config(_gen3_records(root), output, reuse_cap=100)) == 0
+    store = CorpusStore(output)
+    for directory in (store.card_disjoint_dir, store.game_disjoint_dir):
+        natural: Counter[str] = Counter(
+            str(sampling_class(record)) for record in read_records(directory)
+            if record.curation is not None and record.curation.drawn_rule is None
+            and not record.synthetic
+        )
+        mixed = {name: share for name, share in DEFAULT_KIND_MIX.items() if natural[name]}
+        total, total_share = sum(natural[name] for name in mixed), sum(mixed.values())
+        assert len(mixed) >= 3, "the fixture must hold several classes or this proves nothing"
+        for name, share in mixed.items():
+            assert natural[name] / total == pytest.approx(share / total_share, abs=0.06), (
+                f"{directory.name}: {name}"
+            )
+
+
 def test_the_game_disjoint_stratum_holds_forge_ai_games_only(gen3_build):
     """FR-059: a random-seat game never enters the game-disjoint stratum."""
     assert not [r for r in read_records(gen3_build.game_disjoint_dir) if r.random_seat]

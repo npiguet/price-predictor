@@ -48,7 +48,11 @@ from effects.application.corpus_write import (
 from effects.application.rule_counts import none_rules
 from effects.domain import default_paths
 from effects.domain.ability_tokenizer import Surface
-from effects.domain.corpus_curation import one_sided_conditions
+from effects.domain.corpus_curation import (
+    natural_copies,
+    one_sided_conditions,
+    validation_multipliers,
+)
 from effects.domain.corpus_manifest import rule_curation_fields
 from effects.domain.corpus_plan import (
     BuildCorpusError,
@@ -373,6 +377,9 @@ class Decisions:
         (), class_targets={}, budgeted=(), reuse_cap=1, text_cap=0))
     #: Each validation stratum's, planned the same way over its own records.
     validation_budgets: dict[Stratum, RuleBudgets] = field(default_factory=dict)
+    #: ``validation stratum -> class -> natural copies per record``, which
+    #: write each validation stratum in the class mix (FR-059a).
+    validation_copies: dict[Stratum, dict[str, float]] = field(default_factory=dict)
     #: ``game -> record hash -> drawn rule per added copy`` over every stratum.
     copies: dict[str, dict[int, tuple[str, ...]]] = field(default_factory=dict)
     #: Placement's per-game rule inventories, which the precision check reads.
@@ -390,6 +397,7 @@ class Decisions:
             plans=self.selection.plans,
             keyless_plans=self.selection.keyless,
             mode_counts=self.mode_counts,
+            validation_copies=self.validation_copies,
         )
 
     def write_tasks(self, survey: Survey) -> list[WriteTask]:
@@ -455,8 +463,10 @@ def decide(
         ceiling=config.training_records, text_cap=config.text_cap,
         reuse_cap=config.reuse_cap,
     )
+    validation_copies = _validation_copies(survey, strata, config)
     budgets, validation = _rule_budgets(
         survey, strata, selection, key_text, config=config, budgeted=rules.budgeted,
+        validation_copies=validation_copies,
     )
     copies: dict[str, dict[int, tuple[str, ...]]] = dict(budgets.copies)
     for planned in validation.values():
@@ -476,6 +486,7 @@ def decide(
         mode_counts=dict(sorted(totals.mode_counts.items())),
         budgets=budgets,
         validation_budgets=validation,
+        validation_copies=validation_copies,
         copies=copies,
         inventories=dict(census.inventories),
         rule_fields=rule_curation_fields(
@@ -528,14 +539,38 @@ def _training_supply(survey: Survey, strata: GameStrata) -> TrainingSupply:
     return supply
 
 
+def _validation_copies(
+    survey: Survey, strata: GameStrata, config: BuildCorpusConfig,
+) -> dict[Stratum, dict[str, float]]:
+    """Each validation stratum's natural copies per record and class, which
+    write it in the training stratum's ``--class-mix`` (FR-059a), logged
+    beside the class counts they reshape."""
+    copies: dict[Stratum, dict[str, float]] = {}
+    for stratum in (Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT):
+        counts = Counter(
+            str(record.klass) for record in survey.totals.candidates
+            if strata.stratum_of(record.game) is stratum
+        )
+        copies[stratum] = validation_multipliers(
+            counts, {str(k): v for k, v in config.mix().items()}, reuse_cap=config.reuse_cap,
+        )
+        for name in sorted(counts):
+            logger.info(
+                "%-14s %-22s %7d record(s), %.2f natural copies each",
+                stratum, name, counts[name], copies[stratum][name],
+            )
+    return copies
+
+
 def _rule_budgets(
     survey: Survey, strata: GameStrata, selection: SelectionPlan, key_text: dict[Keys, str],
     *, config: BuildCorpusConfig, budgeted: frozenset[str],
+    validation_copies: Mapping[Stratum, Mapping[str, float]] | None = None,
 ) -> tuple[RuleBudgets, dict[Stratum, RuleBudgets]]:
     """The training stratum's rule budgets over gen-2's natural share, and
-    each validation stratum's over its records written once each (FR-068a):
-    every stratum is built with the same rule budgets, a class's target being
-    the records it writes before any copy is added."""
+    each validation stratum's over its own natural copies, the class mix's
+    (FR-059a, FR-068a): every stratum is built with the same rule budgets, a
+    class's target being the records it writes before any copy is added."""
     totals = survey.totals
     mode_counts = totals.mode_counts
 
@@ -558,10 +593,16 @@ def _rule_budgets(
     validation: dict[Stratum, RuleBudgets] = {}
     for stratum in (Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT):
         records = [r for r in totals.candidates if strata.stratum_of(r.game) is stratum]
-        targets = Counter(str(record.klass) for record in records)
+        multipliers = (validation_copies or {}).get(stratum, {})
+
+        def held(record: SurveyedRecord, multipliers=multipliers) -> int:
+            return natural_copies(multipliers.get(str(record.klass), 1.0), record.record_hash)
+
+        targets: Counter[str] = Counter()
+        for record in records:
+            targets[str(record.klass)] += held(record)
         validation[stratum] = plan(
-            _budgeted_records(records, key_text, lambda _record: 1),
-            class_targets=dict(targets),
+            _budgeted_records(records, key_text, held), class_targets=dict(targets),
         )
     return budgets, validation
 

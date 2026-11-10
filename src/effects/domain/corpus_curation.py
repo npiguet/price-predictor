@@ -168,6 +168,42 @@ def class_targets(
     return targets, shortfall
 
 
+def validation_multipliers(
+    counts: Mapping[str, int], mix: Mapping[str, float], *, reuse_cap: int,
+) -> dict[str, float]:
+    """Natural copies per record of each class of one validation stratum, so
+    the stratum is written in the training stratum's class mix (FR-059a).
+
+    No validation record is dropped: the class most over-represented against
+    its share sets the stratum's size, and every other class is repeated
+    toward its share, at most ``reuse_cap`` times a record, as training
+    repeats a short family's records; a class still short stays short. Shares
+    are over the classes the stratum holds. A class the mix omits is written
+    once, as collected.
+    """
+    held = {name: n for name, n in counts.items() if n > 0}
+    shares = {name: float(mix.get(name, 0.0)) for name in held}
+    shares = {name: share for name, share in shares.items() if share > 0}
+    multipliers = {name: 1.0 for name in held}
+    if not shares:
+        return multipliers
+    total_share = sum(shares.values())
+    size = max(held[name] * total_share / share for name, share in shares.items())
+    for name, share in shares.items():
+        wanted = size * share / total_share / held[name]
+        multipliers[name] = min(float(max(1, reuse_cap)), max(1.0, wanted))
+    return multipliers
+
+
+def natural_copies(multiplier: float, value: int) -> int:
+    """A record's natural copies under a class ``multiplier``: its whole part,
+    plus one with the fractional part's chance, drawn from the record's
+    ``value`` (:func:`record_hash`, uniform in [0, 2^64)), so the survey and
+    the write pass agree."""
+    whole = int(multiplier)
+    return whole + (1 if value / 2.0**64 < multiplier - whole else 0)
+
+
 #: The sampling classes whose families split further by outcome signature
 #: (FR-049 step 2); the others have no per-entity outcome to sort by.
 SIGNATURE_CLASSES: frozenset[SamplingClass] = frozenset({
