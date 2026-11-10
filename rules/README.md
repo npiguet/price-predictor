@@ -228,9 +228,9 @@ and `out_of_scope` rules. `note`: optional, for example why a borderline rule go
 - **`verified`** and **`review`** belong to the verification agent: `review` holds one string per
   change it made, and `verified` is true once it has checked the whole file.
 
-### Gen-3 fields: `detector`, `variants[].operation`, `departure`
+### Gen-3 fields: `detector`, `variants[].operation`, `variants[].script_edit`, `departure`
 
-Gen-3 reads three more fields off every scenario. `validate` refuses a scenario missing the first
+Gen-3 reads four more fields off every scenario. `validate` refuses a scenario missing the first
 two.
 
 - **`detector`** says how a record showing the scenario's rule is found in the self-play corpus. It
@@ -299,6 +299,30 @@ two.
   {"label": "no-servant", "polarity": "does_not_fire", "delta": "Painter's Servant is not on the battlefield.",
    "expected": "...", "operation": "remove_permanent"}
   ```
+
+- **`script_edit`**, on a variant whose operation is `pt`, `keyword`, `colour_type`, `counters` or
+  `replace_card`, states the variant's one fact as a change to one card's Forge script, which the
+  steered variant round applies to make a variant card (`collect-variants --round steered`):
+
+  ```json
+  {"label": "tougher", "polarity": "does_not_fire", "delta": "Drudge Skeletons has base toughness 3 (it is a 1/3).",
+   "expected": "...", "operation": "pt",
+   "script_edit": {"card": "Drudge Skeletons", "remove": ["PT:1/1"], "add": ["PT:1/3"]}}
+  ```
+
+  `card` is the card the edit changes, spelled as its Forge `Name:` line spells it. `remove` lists
+  lines of that card's script (under `../forge/forge-gui/res/cardsfolder/`) the edit takes out,
+  each compared without surrounding spaces; `add` lists the lines it puts in, in Forge's script
+  syntax. The edit is the smallest change that makes the variant's `delta` true of the card: a
+  `PT:` line for `pt`, a `K:` line for `keyword`, `Colors:` or `Types:` for `colour_type`,
+  `K:etbCounter:<type>:<n>` for counters the card enters with, and for `replace_card` the base
+  card's lines that differ from the replacement's in what the rule reads. An optional `note` says
+  what the edit stands for where the script cannot say it alone, for example that the
+  replacement is wholly another card and the base card's script is edited toward it. `validate`
+  refuses an edit whose card has no Forge script, a removed line absent from it, an edit that
+  changes nothing, and any member but these four; a card-level variant with no `script_edit` is
+  a warning (`--warnings`), since some facts, such as a player's counters, belong to no card's
+  script.
 
 - **`departure`**, optional, records a disagreement between the scenario and Forge that survived
   review. `status` is `suspected` or `confirmed`. A confirmed departure also has a `resolution`:

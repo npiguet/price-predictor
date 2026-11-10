@@ -52,6 +52,7 @@ HEAD_OUTPUT_PREFIXES = rule_catalogue.HEAD_OUTPUT_PREFIXES
 OUTPUT_TAGS = rule_catalogue.OUTPUT_TAGS
 INPUT_TAGS = rule_catalogue.INPUT_TAGS
 FORK_OPERATIONS = rule_catalogue.FORK_OPERATIONS
+SCRIPT_EDIT_OPERATIONS = frozenset(map(str, rule_catalogue.SCRIPT_EDIT_OPERATIONS))
 
 RULE_RE = re.compile(r"^(\d{3})\.(\d+)([a-z]*)\.? (.*)$")
 SECTION_RE = re.compile(r"^(\d{3})\. (.*)$")
@@ -251,6 +252,37 @@ def card_names():
     return names
 
 
+SCRIPTS_CACHE = RULES / ".forge-card-scripts.tsv"  # gitignored; delete it after updating Forge
+
+
+def card_scripts():
+    """``card name -> the lines of its Forge script``, None for a name no script declares.
+
+    Every ``Name:`` line of a script names it, so a face of a multi-faced card
+    finds the card's file. The name-to-file index is cached beside the names.
+    """
+    if SCRIPTS_CACHE.exists():
+        index = dict(line.split("\t", 1)
+                     for line in SCRIPTS_CACHE.read_text(encoding="utf-8").splitlines() if line)
+    else:
+        index = {}
+        for p in sorted(CARDSFOLDER.rglob("*.txt")):
+            with open(p, encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    if line.startswith("Name:"):
+                        index.setdefault(line[5:].strip(), p.relative_to(CARDSFOLDER).as_posix())
+        SCRIPTS_CACHE.write_text("".join(f"{n}\t{f}\n" for n, f in sorted(index.items())),
+                                 encoding="utf-8", newline="\n")
+
+    def script(name):
+        relative = index.get(name)
+        if relative is None:
+            return None
+        return (CARDSFOLDER / relative).read_text(encoding="utf-8", errors="replace").splitlines()
+
+    return script
+
+
 def read_jsonl(path):
     out = []
     with open(path, encoding="utf-8") as f:
@@ -437,6 +469,53 @@ def validate_gen3_fields(s, families):
     return errs
 
 
+_SCRIPT_EDIT_MEMBERS = {"card", "remove", "add", "note"}
+
+
+def _script_edit_errors(label, edit, scripts):
+    """What keeps one ``script_edit`` from applying to its card's Forge script (FR-058f)."""
+    if not isinstance(edit, dict):
+        return [f"{label}: script_edit is not an object"]
+    errs = []
+    unknown = set(edit) - _SCRIPT_EDIT_MEMBERS
+    if unknown:
+        errs.append(f"{label}: script_edit has unknown member(s) {sorted(unknown)}")
+    lists = [edit.get(key, []) for key in ("remove", "add")]
+    if not all(isinstance(lines, list) and all(isinstance(x, str) for x in lines)
+               for lines in lists):
+        return errs + [f"{label}: script_edit remove and add are lists of script lines"]
+    if not any(lines for lines in lists):
+        errs.append(f"{label}: script_edit changes nothing")
+    card = edit.get("card")
+    if not isinstance(card, str) or not card.strip():
+        return errs + [f"{label}: script_edit names no card"]
+    script = scripts(card)
+    if script is None:
+        return errs + [f"{label}: script_edit card {card!r} has no Forge script"]
+    present = {line.strip() for line in script}
+    for line in edit.get("remove", []):
+        if line.strip() not in present:
+            errs.append(f"{label}: script_edit removes {line!r}, not in its Forge script")
+    return errs
+
+
+def validate_script_edits(s, scripts):
+    """``(errors, warnings)`` of one scenario's variants' ``script_edit`` (FR-058f).
+
+    ``scripts`` reads a card's Forge script lines by name (:func:`card_scripts`).
+    A card-level variant (``SCRIPT_EDIT_OPERATIONS``) without one is a warning:
+    a fact no card script can state, such as a player's counters, has none.
+    """
+    errs, warns = [], []
+    for v in s.get("variants", [])[1:]:
+        label = f"{s.get('id')}/{v.get('label')}"
+        if "script_edit" in v:
+            errs += _script_edit_errors(label, v["script_edit"], scripts)
+        elif isinstance(op := v.get("operation"), str) and op in SCRIPT_EDIT_OPERATIONS:
+            warns.append(f"{label}: {v['operation']} variant has no script_edit")
+    return errs, warns
+
+
 def detector_families():
     """``family id -> declared params`` from the package's registry."""
     from effects.domain.rule_detectors import families
@@ -444,7 +523,7 @@ def detector_families():
     return {family_id: family.params for family_id, family in families().items()}
 
 
-def validate_scenarios(doc, triage, all_rule_ids, names, families=None):
+def validate_scenarios(doc, triage, all_rule_ids, names, families=None, scripts=None):
     errs, warns = [], []
     scen = doc.get("scenarios", [])
     covered = {rid for s in scen for rid in s.get("rules", [])}
@@ -472,6 +551,10 @@ def validate_scenarios(doc, triage, all_rule_ids, names, families=None):
                 errs.append(f"{sid}: card not in Forge cardsfolder: {c!r}")
         if families is not None:
             errs += validate_gen3_fields(s, families)
+        if scripts is not None:
+            e2, w2 = validate_script_edits(s, scripts)
+            errs += e2
+            warns += w2
     return errs, warns
 
 
@@ -482,6 +565,7 @@ def cmd_validate(args):
     for r in rules:
         ids_by_unit[r["unit"]].append(r["id"])
     names = card_names() if not args.no_cards else None
+    scripts = card_scripts() if not args.no_cards else None
     families = detector_families()
     units = args.units or sorted(ids_by_unit, key=unit_sort_key)
     n_err = 0
@@ -499,7 +583,7 @@ def cmd_validate(args):
             doc, errs = None, errs + [f"scenarios json: {e}"]
         if doc is not None and tri is not None:
             known = names if names is not None else _AnyName()
-            e2, w2 = validate_scenarios(doc, tri, all_ids, known, families)
+            e2, w2 = validate_scenarios(doc, tri, all_ids, known, families, scripts)
             errs += e2
             warns += w2
         if args.heads and tri is not None and wanted_rules(tri):

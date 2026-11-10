@@ -95,3 +95,18 @@ def test_fork_operation_order_is_the_contract_order():
     assert [str(o) for o in ForkOperation] == [
         "pt", "keyword", "colour_type", "counters", "tap", "life", "replace_card",
         "remove_permanent", "add_permanent", "move_card"]
+
+
+def test_a_script_edit_takes_its_lines_out_and_appends_its_own():
+    from effects.domain.rule_catalogue import ScriptEdit
+
+    edit = ScriptEdit("Bears", remove=("PT:2/2",), add=("PT:3/3", "K:Flying"))
+    assert edit.applied(["Name:Bears", " PT:2/2", "Types:Creature Bear"]) == [
+        "Name:Bears", "Types:Creature Bear", "PT:3/3", "K:Flying"]
+
+
+def test_a_script_edit_refuses_a_line_its_script_lacks():
+    from effects.domain.rule_catalogue import ScriptEdit
+
+    with pytest.raises(ValueError, match="no script line"):
+        ScriptEdit("Bears", remove=("PT:9/9",)).applied(["Name:Bears", "PT:2/2"])

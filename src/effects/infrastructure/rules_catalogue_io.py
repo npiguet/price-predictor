@@ -27,6 +27,7 @@ from effects.domain.rule_catalogue import (
     Scenario,
     ScenarioCatalogue,
     ScenarioVariant,
+    ScriptEdit,
     Unclassifiable,
     is_model_output,
 )
@@ -58,6 +59,7 @@ def _variant(data: Mapping[str, Any], *, is_base: bool) -> ScenarioVariant:
         expected=data.get("expected") or "",
         operation=_operation(data.get("operation")),
         is_base=is_base,
+        script_edit=ScriptEdit.from_json(edit) if (edit := data.get("script_edit")) else None,
     )
 
 
@@ -72,6 +74,7 @@ def _scenario(unit: str, data: Mapping[str, Any]) -> Scenario:
                        for i, v in enumerate(data.get("variants") or ())),
         detector=_detector(data.get("detector")),
         departure=Departure.from_json(departure) if departure else None,
+        cards=tuple(data.get("cards") or ()),
     )
 
 

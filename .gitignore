@@ -61,3 +61,4 @@ output/
 
 # Working notes of the superpowers plugin
 .superpowers/
+/rules/.forge-card-scripts.tsv

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from effects.domain.rule_catalogue import MapVerdict, Polarity, is_model_output
+from effects.domain.rule_catalogue import MapVerdict, Polarity, ScriptEdit, is_model_output
 from effects.infrastructure.rules_catalogue_io import (
     heads_digest,
     load_heads,
@@ -75,3 +75,42 @@ def test_the_digest_follows_the_lines_not_their_files(tmp_path):
     edited = json.loads(lines[0]) | {"output": "missing"}
     first.write_text("\n".join([json.dumps(edited), *lines[1:]]) + "\n", encoding="utf-8")
     assert heads_digest(copy) != heads_digest(RULES)
+
+
+def _one_scenario_tree(tmp_path, variant_extra):
+    scenario = {
+        "id": "704.5f-1", "rules": ["704.5f"], "record_kind": "resolution",
+        "cards": ["Swamp", "Disfigure", "Drudge Skeletons"],
+        "variants": [
+            {"label": "base", "polarity": "fires", "delta": "", "expected": ""},
+            {"label": "tougher", "polarity": "does_not_fire", "delta": "a 1/3",
+             "expected": "", "operation": "pt", **variant_extra},
+        ],
+    }
+    root = tmp_path / "rules" / "scenarios"
+    root.mkdir(parents=True)
+    (root / "704.json").write_text(
+        json.dumps({"unit": "704", "scenarios": [scenario]}), encoding="utf-8")
+    return tmp_path / "rules"
+
+
+def test_a_variant_s_script_edit_and_the_scenario_s_cards_are_read(tmp_path):
+    """FR-058f: the steered variant round reads both off the catalogue."""
+    rules = _one_scenario_tree(tmp_path, {"script_edit": {
+        "card": "Drudge Skeletons", "remove": ["PT:1/1"], "add": ["PT:1/3"],
+        "note": "toughness 3"}})
+    scenario = load_scenarios(rules).scenarios[0]
+    assert scenario.cards == ("Swamp", "Disfigure", "Drudge Skeletons")
+    edit = scenario.variants[1].script_edit
+    assert edit == ScriptEdit("Drudge Skeletons", ("PT:1/1",), ("PT:1/3",), "toughness 3")
+    assert scenario.variants[0].script_edit is None
+
+
+def test_a_variant_without_a_script_edit_reads_none(tmp_path):
+    scenario = load_scenarios(_one_scenario_tree(tmp_path, {})).scenarios[0]
+    assert scenario.variants[1].script_edit is None
+
+
+def test_the_real_tree_names_the_cards_of_its_scenarios(catalogue):
+    scenario = next(s for s in catalogue.scenarios if s.id == "704.5g-1")
+    assert scenario.cards == ("Mountain", "Swamp", "Shock", "Drudge Skeletons")

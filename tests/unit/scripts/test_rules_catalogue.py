@@ -459,3 +459,71 @@ def test_the_gen3_fields_subcommand_is_wired(mapped, monkeypatch, capsys):
     rc.main()
     assert _registry_on_disk(mapped)["learnable"] == ["500.1"]
     assert (mapped.rules_dir / "GEN3-FIELDS.md").exists()
+
+
+# --- script_edit (T184, FR-058f) ------------------------------------------------------------
+
+_SKELETONS = ["Name:Drudge Skeletons", "ManaCost:3", "Types:Artifact Creature Skeleton",
+              "PT:1/1", "A:AB$ Regenerate | Cost$ B | SpellDescription$ Regenerate CARDNAME."]
+
+
+def _scripts(name):
+    return {"Drudge Skeletons": _SKELETONS}.get(name)
+
+
+def _edited(declared, edit, operation="pt"):
+    declared["variants"][1]["operation"] = operation
+    declared["variants"][1]["script_edit"] = edit
+    return declared
+
+
+def _edit_errors(scenario):
+    return rc.validate_script_edits(scenario, _scripts)
+
+
+def test_a_script_edit_whose_removed_lines_are_in_the_card_s_script_passes(declared):
+    scenario = _edited(declared, {"card": "Drudge Skeletons", "remove": ["PT:1/1"],
+                                  "add": ["PT:1/3"]})
+    assert _edit_errors(scenario) == ([], [])
+
+
+def test_removed_lines_compare_without_their_surrounding_spaces(declared):
+    scenario = _edited(declared, {"card": "Drudge Skeletons", "remove": [" PT:1/1 "],
+                                  "add": ["PT:1/3"], "note": "a 1/3"})
+    assert _edit_errors(scenario) == ([], [])
+
+
+@pytest.mark.parametrize("edit, message", [
+    ({"card": "Drudge Skeleton", "remove": [], "add": ["PT:1/3"]}, "no Forge script"),
+    ({"card": "Drudge Skeletons", "remove": ["PT:2/2"], "add": ["PT:1/3"]},
+     "not in its Forge script"),
+    ({"remove": ["PT:1/1"], "add": ["PT:1/3"]}, "names no card"),
+    ({"card": "Drudge Skeletons", "remove": "PT:1/1", "add": []}, "lists of script lines"),
+    ({"card": "Drudge Skeletons", "remove": [], "add": []}, "changes nothing"),
+    ({"card": "Drudge Skeletons", "remove": [], "add": ["K:Flying"], "why": "x"},
+     "unknown member"),
+], ids=lambda value: value if isinstance(value, str) else "")
+def test_validate_refuses_a_script_edit_it_cannot_apply(declared, edit, message):
+    errors, _ = _edit_errors(_edited(declared, edit))
+    assert errors and any(message in error for error in errors), errors
+
+
+@pytest.mark.parametrize("operation", ["pt", "keyword", "colour_type", "counters",
+                                       "replace_card"])
+def test_a_card_level_variant_without_a_script_edit_is_warned_of(declared, operation):
+    declared["variants"][1]["operation"] = operation
+    errors, warnings = _edit_errors(declared)
+    assert errors == [] and any("no script_edit" in w for w in warnings)
+
+
+@pytest.mark.parametrize("operation", ["tap", "life", "remove_permanent", "add_permanent",
+                                       "move_card", {"unclassifiable": "a choice"}])
+def test_a_board_level_variant_needs_no_script_edit(declared, operation):
+    declared["variants"][1]["operation"] = operation
+    assert _edit_errors(declared) == ([], [])
+
+
+def test_the_forge_script_index_reads_a_card_by_its_name():
+    script = rc.card_scripts()("Grizzly Bears")
+    assert script is not None and "PT:2/2" in [line.strip() for line in script]
+    assert rc.card_scripts()("No Such Card Anywhere") is None

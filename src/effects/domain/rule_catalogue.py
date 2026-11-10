@@ -91,6 +91,12 @@ POLARITIES: frozenset[str] = frozenset(Polarity)
 OUTPUT_STATUS: frozenset[str] = frozenset(MapVerdict)
 INPUT_STATUS: frozenset[str] = frozenset(InputStatus)
 FORK_OPERATIONS: frozenset[str] = frozenset(ForkOperation)
+#: The card-level operations a variant also states as a Forge script change
+#: (``script_edit``), which the steered variant round applies (FR-058f).
+SCRIPT_EDIT_OPERATIONS: frozenset[ForkOperation] = frozenset({
+    ForkOperation.PT, ForkOperation.KEYWORD, ForkOperation.COLOUR_TYPE,
+    ForkOperation.COUNTERS, ForkOperation.REPLACE_CARD,
+})
 
 # ── the model's output names, as a heads line spells them ────────────────
 
@@ -197,6 +203,43 @@ class Unclassifiable:
 
 
 @dataclass(frozen=True, slots=True)
+class ScriptEdit:
+    """A variant's one fact as a change to one card's Forge script (FR-058f).
+
+    ``card`` is the card as Forge's ``Name:`` line spells it; ``remove`` the
+    lines of its script the change takes out, compared without surrounding
+    spaces; ``add`` the lines it puts in. ``note`` says what the edit stands
+    for where the script cannot say it alone, such as a replacement card the
+    base card's script is edited toward.
+    """
+
+    card: str
+    remove: tuple[str, ...] = ()
+    add: tuple[str, ...] = ()
+    note: str = ""
+
+    @classmethod
+    def from_json(cls, data: Mapping[str, Any]) -> ScriptEdit:
+        return cls(
+            card=data["card"],
+            remove=tuple(data.get("remove") or ()),
+            add=tuple(data.get("add") or ()),
+            note=data.get("note") or "",
+        )
+
+    def applied(self, lines: list[str]) -> list[str]:
+        """``lines``, a script of :attr:`card`, with the edit made: each
+        removed line's first match taken out, the added lines appended."""
+        kept = list(lines)
+        for removed in self.remove:
+            stripped = [line.strip() for line in kept]
+            if removed.strip() not in stripped:
+                raise ValueError(f"{self.card}: no script line {removed!r} to remove")
+            del kept[stripped.index(removed.strip())]
+        return kept + list(self.add)
+
+
+@dataclass(frozen=True, slots=True)
 class ScenarioVariant:
     """One variant of a scenario: the base, which is the first, or a one-fact change to it."""
 
@@ -206,6 +249,7 @@ class ScenarioVariant:
     expected: str
     operation: ForkOperation | Unclassifiable | None = None
     is_base: bool = False
+    script_edit: ScriptEdit | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,6 +267,8 @@ class Scenario:
     variants: tuple[ScenarioVariant, ...]
     detector: DetectorDeclaration | NoDetector | None = None
     departure: Departure | None = None
+    #: Every card the scenario names, as Forge's ``Name:`` line spells it.
+    cards: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
