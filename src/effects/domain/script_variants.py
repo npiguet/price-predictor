@@ -96,12 +96,30 @@ def _is_gameplay_line(script_text: str) -> bool:
     return not script_text.lstrip().startswith(NON_GAMEPLAY_LINE_PREFIXES)
 
 
+#: Parameters that select cards and do not start or end with ``Valid``.
+_SELECTING_KEYS: frozenset[str] = frozenset({
+    "ChangeType", "Affected", "IsPresent", "ConditionPresent", "UntapType", "UnlessType",
+    "RepeatCards", "RepeatPresent", "TopCardOfLibraryIs", "CardChoices", "AITgts",
+    "AttachedTo", "SacCost", "DiscardCost",
+})
+
+
+def selects_cards(key: str) -> bool:
+    """Whether a script parameter's value is a card selector: a ``Valid…`` or
+    ``…Valid`` key, or one of :data:`_SELECTING_KEYS`. A duration
+    (``Duration$ Permanent``), a type name (``Type$``, ``Types$``,
+    ``AddType$``), a chain label (``SubAbility$``) or a description can read
+    like a whitelisted selector and is none (T191)."""
+    return key.startswith("Valid") or key.endswith("Valid") or key in _SELECTING_KEYS
+
+
 def selector_params(script_text: str) -> dict[str, str]:
-    """Parameters whose value is a selector this module knows how to swap."""
+    """Card-selecting parameters whose value is a selector this module knows
+    how to swap."""
     found: dict[str, str] = {}
     for key, value in _PARAM_RE.findall(script_text):
         stripped = value.strip()
-        if stripped in SELECTOR_WHITELIST:
+        if stripped in SELECTOR_WHITELIST and selects_cards(key):
             found[key] = stripped
     return found
 

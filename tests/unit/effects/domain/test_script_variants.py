@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import random
 
+import pytest
+
 from effects.domain.script_variants import (
     MAX_NUMERIC_SHIFT,
     SELECTOR_WHITELIST,
@@ -61,6 +63,28 @@ class TestSelectorPerturbation:
     def test_a_whitelisted_selector_is_swappable(self):
         script = "Mode$ Continuous | Affected$ Creature | AddPower$ 1"
         assert selector_params(script) == {"Affected": "Creature"}
+
+    @pytest.mark.parametrize("script", [
+        # T191: gen-2's Opal Avenger, Hidden Predators and Veiled Crocodile
+        # variants swapped "Duration$ Permanent" for a card selector; the
+        # animation then ended at once and the state trigger re-fired it,
+        # 13,000 to 24,000 records a variant in a handful of games.
+        "SVar:Animate:DB$ Animate | Types$ Creature,Soldier | Power$ 3 | Duration$ Permanent",
+        "SVar:DBType:DB$ ChooseType | Type$ Creature",
+        "A:AB$ Animate | Cost$ 1 | Types$ Creature | AddType$ Creature",
+        "A:SP$ Charm | Choices$ Creature",
+        "A:AB$ Pump | Cost$ 1 | SubAbility$ Creature | SpellDescription$ Creature",
+    ])
+    def test_a_value_that_names_no_card_set_is_never_swapped(self, script):
+        """Only a parameter that selects cards takes a selector swap: a
+        duration, a type name, a chain label or a description that happens to
+        read like one becomes a script that loads and misbehaves."""
+        assert selector_params(script) == {}
+
+    @pytest.mark.parametrize("key", ["ValidTgts", "ValidCards", "SacValid", "ChangeType",
+                                     "Affected", "IsPresent", "ConditionPresent"])
+    def test_a_card_selecting_parameter_is_swappable(self, key):
+        assert selector_params(f"A:AB$ Destroy | {key}$ Creature") == {key: "Creature"}
 
     def test_a_swap_produces_a_selector_forge_recognises(self):
         script = "Mode$ Continuous | Affected$ Creature | AddPower$ 1"
