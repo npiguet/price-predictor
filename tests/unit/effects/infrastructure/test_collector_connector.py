@@ -299,3 +299,37 @@ class TestInterruptIsVisibleToTheCaller:
     def test_nothing_played_yet_is_not_an_interrupt(self, tmp_path):
         supervisor = _supervisor(tmp_path)
         assert supervisor.interrupted is False
+
+
+class TestACtrlCBetweenRoundsIsNotLost:
+    """python R9: the pool's SIGINT handler stays installed after its run, but
+    the supervisor latched ``interrupted`` right after ``run()`` returned, so a
+    Ctrl-C while the round's shards were counted reached a pool nobody asked."""
+
+    def test_sigint_after_play_round_reads_as_interrupted(self, tmp_path):
+        import signal
+
+        from tests.unit.sealed.conftest import FakeProcess
+
+        supervisor = _supervisor(tmp_path)
+        connector = MagicMock()
+        connector.start.return_value = FakeProcess(pid=1000, hang=True)
+        supervisor._connector = connector
+        saved = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)}
+        try:
+            with patch(
+                "price_predictor.infrastructure.forge_jvm.kill_process_tree",
+                side_effect=lambda proc: proc.kill(),
+            ):
+                # A budget of 0 matches: the real pool stops at its first poll.
+                supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=0)
+            assert supervisor.interrupted is False
+
+            signal.getsignal(signal.SIGINT)(signal.SIGINT, None)
+
+            assert supervisor.interrupted is True
+            supervisor.stop()
+            assert supervisor.interrupted is True
+        finally:
+            for sig, handler in saved.items():
+                signal.signal(sig, handler)

@@ -52,10 +52,12 @@ class CollectorSupervisor:
         """True when some round ended on Ctrl-C rather than at its budget.
 
         ``ForgeWorkerPool.run`` returns normally on SIGINT, so without this a
-        caller would start the next round. Latched, because ``stop()`` drops
-        the pool before ``collect_variants`` asks.
+        caller would start the next round. The last pool is asked live: its
+        SIGINT handler stays installed after its round, so a Ctrl-C while the
+        round's shards are counted lands there. Latched when the pool is
+        dropped, because ``stop()`` drops it before ``collect_variants`` asks.
         """
-        return self._interrupted
+        return self._interrupted or (self._pool is not None and self._pool.interrupted)
 
     def start_worker(self, worker_id: int, decks_file: Path) -> subprocess.Popen:
         """Spawn one records-only worker playing both sides from ``decks_file``:
@@ -101,6 +103,7 @@ class CollectorSupervisor:
             )
         self.progress_path.parent.mkdir(parents=True, exist_ok=True)
         self.progress_path.write_text("", encoding="utf-8")
+        self._interrupted = self.interrupted
         self._pool = ForgeWorkerPool(
             worker_count=self._worker_count,
             spawn_worker=functools.partial(self.start_worker, decks_file=Path(decks_file)),
@@ -109,13 +112,13 @@ class CollectorSupervisor:
         )
         logger.info("Playing %d matches from %d decks", matches, deck_count)
         self._pool.run()
-        self._interrupted = self._interrupted or self._pool.interrupted
 
     def stop(self) -> None:
         """End the run: flush the worker logs, stop the pool, and print the
         dropped-event table summed over every round's workers when the run
         counted dropped events (FR-041)."""
         self._worker_logs.close_all()
+        self._interrupted = self.interrupted
         if self._pool is not None:
             # Runs in both collectors' ``finally``: a raise here would hide
             # the run's report and return code.
