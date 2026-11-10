@@ -91,6 +91,18 @@ T186 first (R1, R3, R8: `loadable.lst`, hash names, unstaging), then T185 (`rule
 (`script_edit` field and the catalogue pass), T187 (untargeted round), T188 (steered round), T189
 (intervention pass, Java), T191 (the 100,073-record variant).
 
+### WP6-Java — the variant rounds' Java halves (stream J, after WP4)
+`VariantSidecarMain` writes `loadable.lst`; `ScriptFiles.under` stages only `.txt` files with a `Name:`
+line (fix `VariantRegistryTest.aNonScriptFileIsIgnored`); unstaging at round end if Python cannot do it;
+per-game `aimed_at` from the steered deck file's rule column (`CollectorContext`); T189's intervention
+pass. The exact requirements come from the WP6 Python agent's report.
+
+## Progress
+- WP1 done: Forge 8f105fb36cd; hook contract in `WP1-HOOKS.md`.
+- WP5 done: commits 16c7a568 … 892ebb30, 8003c9a5. `build-corpus` did not give the validation strata the
+  class mix; it now repeats validation records toward it (c2e7de82), never dropping one.
+- Running: WP2 (stream J), WP6 Python and catalogue parts (stream P).
+
 ## Order and gates
 
 1. Stream J: WP1 → install Forge → WP2 → install Forge → WP3 → WP4 → connector install. Stream P:
