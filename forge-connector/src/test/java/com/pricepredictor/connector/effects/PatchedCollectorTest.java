@@ -49,6 +49,10 @@ class PatchedCollectorTest {
             HookShapes.method(HookShapes.CombatLegality.class, "onAttackersDeclarable");
     private static final Method ON_MANA_PRODUCED =
             HookShapes.method(HookShapes.Mana.class, "onManaProduced");
+    private static final Method ON_PAYING_COSTS =
+            HookShapes.method(HookShapes.Payment.class, "onPayingCosts");
+    private static final Method ON_COSTS_PAID =
+            HookShapes.method(HookShapes.Payment.class, "onCostsPaid");
     private static final Method ON_STATE_BASED_LOOP_BEGIN =
             HookShapes.method(HookShapes.StateBasedLoop.class, "onStateBasedLoopBegin");
     private static final Method ON_STATE_BASED_LOOP_END =
@@ -154,8 +158,7 @@ class PatchedCollectorTest {
         Player forkPlayer = new Player("fork-player", forkCard.getGame(), 92302);
 
         Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collectors) ->
-                collectors.mana().handler().invoke(null, ON_MANA_PRODUCED,
-                        new Object[]{forkAbility, forkPlayer, "G"}));
+                activate(collectors, forkAbility, forkPlayer, true));
 
         assertFalse(Files.exists(shard),
                 "a fork's own mana production must not land in the live shard");
@@ -208,10 +211,42 @@ class PatchedCollectorTest {
         // them immediately; only ManaChannel.flush(), called when the run
         // closes the collectors, writes them out.
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) ->
-                collectors.mana().handler().invoke(null, ON_MANA_PRODUCED,
-                        new Object[]{liveAbility, livePlayer, "G"}));
-        assertTrue(lines.stream().anyMatch(l -> l.contains("mana_produced")),
-                "live mana production must reach the shard: " + lines);
+                activate(collectors, liveAbility, livePlayer, true));
+        assertEquals(1, lines.size(), lines.toString());
+        // The tap its cost made, then the mana (FR-042c).
+        assertEquals(List.of("tapped", "mana_produced"), RecordLines.eventTypes(lines.get(0)),
+                lines.get(0));
+        assertEquals(List.of(Refs.of(liveAbility.getHostCard())),
+                RecordLines.events(lines.get(0)).get(0).get("subjects"), lines.get(0));
+    }
+
+    /** A mana ability whose payment failed produces no mana and writes no record. */
+    @Test
+    void aFailedManaPaymentWritesNoRecord() throws Throwable {
+        SpellAbility liveAbility = AbilityFactory.getAbility(
+                "AB$ Mana | Cost$ T | Produced$ G", TestCards.build("Llanowar Elves"));
+        Player livePlayer = new Player("live-player", TestCards.game(), 93103);
+
+        Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collectors) ->
+                activate(collectors, liveAbility, livePlayer, false));
+
+        assertFalse(Files.exists(shard), "a failed payment's mana record was written");
+    }
+
+    /**
+     * A mana ability's activation as the engine tells it: its payment, then,
+     * if it paid, its mana.
+     */
+    private static void activate(
+            Channels collectors, SpellAbility ability, Player player, boolean paid)
+            throws Throwable {
+        var payment = collectors.mana().paymentHandler();
+        payment.invoke(null, ON_PAYING_COSTS, new Object[]{ability, player, false});
+        payment.invoke(null, ON_COSTS_PAID, new Object[]{ability, player, paid});
+        if (paid) {
+            collectors.mana().handler().invoke(null, ON_MANA_PRODUCED,
+                    new Object[]{ability, player, "G"});
+        }
     }
 
     // ── the phase signals ───────────────────────────────────────────────

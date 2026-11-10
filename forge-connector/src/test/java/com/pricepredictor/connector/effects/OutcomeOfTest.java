@@ -8,9 +8,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** What {@link ActivationLedger} says became of a cast that resolved. */
+/** What {@link OpenResolution} says became of an item that resolved: its effect half's {@code outcome}. */
 @ExtendWith(ForgeExtension.class)
-class ActivationLedgerTest {
+class OutcomeOfTest {
 
     /**
      * Losing some targets but not all is a partial fizzle.
@@ -31,15 +31,15 @@ class ActivationLedgerTest {
         bolt.getTargets().add(TestCards.build("Grizzly Bears"));
 
         assertEquals(ActivationOutcome.RESOLVED,
-                ActivationLedger.outcomeOf(2, bolt));
+                OpenResolution.outcomeOf(2, bolt));
 
         bolt.getTargets().remove(bolt.getTargets().get(0));
         assertEquals(ActivationOutcome.PARTIALLY_FIZZLED,
-                ActivationLedger.outcomeOf(2, bolt));
+                OpenResolution.outcomeOf(2, bolt));
 
         bolt.resetTargets();
         assertEquals(ActivationOutcome.RESOLVED,
-                ActivationLedger.outcomeOf(2, bolt));
+                OpenResolution.outcomeOf(2, bolt));
     }
 
     /** An untargeted spell never reads as partially fizzled. */
@@ -50,6 +50,6 @@ class ActivationLedgerTest {
                 TestCards.build("Healing Salve"));
 
         assertEquals(ActivationOutcome.RESOLVED,
-                ActivationLedger.outcomeOf(0, gain));
+                OpenResolution.outcomeOf(0, gain));
     }
 }

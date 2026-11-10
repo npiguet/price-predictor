@@ -59,7 +59,14 @@ final class ClauseOutcomeRouter {
      * against, so the argument order below is a runtime contract rather than
      * one the compiler enforces: {@code onClauseResolving} is called with
      * {@code args[0]} the clause; {@code onClauseResolved} with
-     * {@code args[0]} the same clause and {@code args[1]} whether it threw.
+     * {@code args[0]} the same clause and {@code args[1]} Forge's {@code
+     * ClauseRun}, read by its constant's name ({@link
+     * PatchHooks#clauseRunName}).
+     *
+     * <p>Forge tells "resolved" where the clause's own effect ends, before its
+     * sub-abilities resolve, so the clauses of a chain, a charm's chosen modes
+     * included, are told one after another, never one inside another (A1).
+     * A triggered ability's wrapper is no clause and is never told (A2).
      *
      * <p>Package-private: that argument order has no compiler behind it, so
      * {@code ClauseContractTest} calls this with a synthesized argument array
@@ -82,7 +89,8 @@ final class ClauseOutcomeRouter {
             switch (callback) {
                 case ON_CLAUSE_RESOLVING -> clauseResolving(clause, rules);
                 case ON_CLAUSE_RESOLVED -> clauseResolved(
-                        clause, Boolean.TRUE.equals(args.optional(1)), rules);
+                        clause, PatchHooks.clauseRunName(args.optional(1)), rules);
+                default -> { }
             }
         });
     }
@@ -92,9 +100,8 @@ final class ClauseOutcomeRouter {
         // A chosen mode's first clause is where a modal resolution is
         // cut into per-mode halves (FR-029a): the live bracket opens
         // the next half here, and a fork running on this thread marks
-        // the same boundary in its own event stream. Nested, so
-        // "resolved" cannot delimit modes; "resolving" of the first
-        // clause is the one moment FR-029b's snapshot has to be taken.
+        // the same boundary in its own event stream. "Resolving" of the
+        // first clause is the one moment FR-029b's snapshot has to be taken.
         if (live.owns(clause)) {
             // The timestamp a floating effect's rows will carry is drawn
             // while this clause runs; the note is their only join to a line.
@@ -103,30 +110,38 @@ final class ClauseOutcomeRouter {
             if (start != null) {
                 bracket.beginMode(clause, start.option());
             }
-            // Read now, on the state Forge's own metConditions() reads next,
-            // and after beginMode, so a mode's first clause files into its
-            // own half (FR-034).
-            bracket.recordClauseCondition(clause, ConditionsMet.of(clause));
         } else {
-            Forks.noteClauseResolving(clause);
+            Forks.forkHooks().clauseResolving(clause);
         }
     }
 
+    /**
+     * A clause's own effect is over: its events are filed, and whether its
+     * condition held (FR-034), as Forge decided it.
+     *
+     * <p>Only a clause whose own effect ran files its events (A3): one whose
+     * condition failed, whose unless cost decided against it or that threw
+     * did nothing its API promises, though its sub-abilities may still
+     * resolve. A jar whose listener passes no {@code ClauseRun} is read as
+     * the clause having run, the one answer such a jar could not tell.
+     *
+     * @param run the {@code ClauseRun} constant's name, or null
+     */
     private void clauseResolved(
-            SpellAbility clause, boolean threw, Function<ApiType, ApiEvents.Rule<?>> rules) {
+            SpellAbility clause, String run, Function<ApiType, ApiEvents.Rule<?>> rules) {
         Deque<ApiEvents.ClauseObservation<?>> observations = clauseObservations.get();
         ApiEvents.ClauseObservation<?> observed = observations.isEmpty()
                 ? ApiEvents.unobserved(clause, rules)
                 : observations.pop();
-        if (live.owns(clause)) {
-            FloatingEffects.of(live.game()).clauseResolved(live.game(), clause);
-        }
-        if (threw) {
-            // A clause that threw did not finish, and an event claiming it
-            // did would be a fact the game never contained.
+        if (!live.owns(clause)) {
+            Forks.forkHooks().clauseResolved(clause, run);
             return;
         }
-        if (live.owns(clause)) {
+        FloatingEffects.of(live.game()).clauseResolved(live.game(), clause);
+        // Filed into the half the clause resolved in: a later mode's first
+        // clause has not begun yet (A1).
+        bracket.recordClauseCondition(clause, ConditionsMet.of(clause, run));
+        if (run == null || "RAN".equals(run)) {
             bracket.recordClauseEvent(observed.finish());
         }
     }

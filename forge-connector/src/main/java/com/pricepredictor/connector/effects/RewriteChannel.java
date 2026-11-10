@@ -2,6 +2,8 @@ package com.pricepredictor.connector.effects;
 
 import forge.game.CardTraitBase;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
 
 /**
@@ -12,6 +14,15 @@ import java.util.List;
  * <p>Two replacements stacked on one event each get their own record, and the
  * second's incoming is the first's outgoing — which only holds because the
  * hook deep-copies the parameter map before the call.
+ *
+ * <p>The record's board is read before the replacement runs ({@code
+ * onReplacing}, H1-2, root § 8.14): by {@code onReplacement} its {@code
+ * ReplaceWith$} ability has already run, so the land that enters tapped would
+ * already be tapped and the card exiled instead already in exile. The engine
+ * pairs each {@code onReplacing} with exactly one {@code onReplacement}, the
+ * pairs nested strictly — an exile-instead runs its own zone change, which
+ * other replacements see — so the boards wait on a stack, the innermost open
+ * one closing first.
  */
 final class RewriteChannel {
 
@@ -21,6 +32,13 @@ final class RewriteChannel {
     private final LiveGame live;
     private final CollectorContext context;
     private final RecordDedup dedup;
+
+    /** The boards read at each open {@code onReplacing}, innermost on top. */
+    private final Deque<Pending> replacing = new ArrayDeque<>();
+
+    /** A replacement's board, read before it ran, and the trait it was read for. */
+    private record Pending(Object trait, String state) {
+    }
 
     RewriteChannel(LiveGame live, CollectorContext context, RecordDedup dedup) {
         this.live = live;
@@ -56,10 +74,38 @@ final class RewriteChannel {
             if (live.foreign(args.get(0))) {
                 return;
             }
-            context.emitDistinct(record(
-                    args.get(0), args.get(1), args.get(2), args.optional(3), args.optional(4)),
-                    dedup);
+            switch (callback) {
+                case ON_REPLACING -> replacing.push(new Pending(
+                        args.get(0), board(args.get(0), args.get(1))));
+                case ON_REPLACEMENT -> context.emitDistinct(record(
+                        args.get(0), args.get(1), args.get(2), args.optional(3),
+                        args.optional(4), boardBefore(args.get(0))),
+                        dedup);
+                default -> { }
+            }
         });
+    }
+
+    /**
+     * The board a replacement is about to change, with the event as it
+     * arrived: read at {@code onReplacing}, before anything ran.
+     */
+    private String board(Object trait, Object runParams) {
+        return live.traitState(trait, RunParamNormalizer.describeParams(trait, runParams));
+    }
+
+    /**
+     * The board read when the closing replacement started, or null where
+     * none was read for it: a jar whose listener never says {@code
+     * onReplacing}, which the record then reads as before, now.
+     */
+    private String boardBefore(Object trait) {
+        Pending open = replacing.peek();
+        if (open == null || open.trait() != trait) {
+            return null;
+        }
+        replacing.pop();
+        return open.state();
     }
 
     /**
@@ -91,6 +137,17 @@ final class RewriteChannel {
     EffectRecord record(
             Object trait, Object before, Object after, Object result,
             Object replacedBy) {
+        return record(trait, before, after, result, replacedBy, null);
+    }
+
+    /**
+     * The same, on the board read before the replacement ran.
+     *
+     * @param state the board read at {@code onReplacing}, or null to read it now
+     */
+    EffectRecord record(
+            Object trait, Object before, Object after, Object result,
+            Object replacedBy, String state) {
         EffectEvent incoming = RunParamNormalizer.describeParams(trait, before);
         EffectEvent rendered = RunParamNormalizer.describeParams(trait, after);
         // Null rather than a copy, and this is the whole of the contract. A
@@ -114,8 +171,11 @@ final class RewriteChannel {
         JVM_REWRITES.record(
                 RunParamNormalizer.modeOf(trait), wireResult, outgoing != null,
                 !ranKeys.isEmpty(), before, after);
-        return live.traitRecord(context, RecordKind.REWRITE, trait, incoming)
-                .payload(RecordPayloads.rewritePayload(
-                        incoming, outgoing, wireResult, ranKeys));
+        EffectRecord record = state == null
+                ? live.traitRecord(context, RecordKind.REWRITE, trait, incoming)
+                : live.traitRecordOn(
+                        context, RecordKind.REWRITE, trait, LiveGame.lineOf(trait), state);
+        return record.payload(RecordPayloads.rewritePayload(
+                incoming, outgoing, wireResult, ranKeys));
     }
 }

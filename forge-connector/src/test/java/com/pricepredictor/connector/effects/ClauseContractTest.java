@@ -4,11 +4,14 @@ import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.StdStreams;
 import forge.game.ability.AbilityFactory;
 import forge.game.ability.ApiType;
+import forge.game.ability.ClauseRun;
 import forge.game.card.Card;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -78,7 +81,7 @@ class ClauseContractTest {
     void theHandlerReadsEachArgumentOffItsOwnPosition() throws Throwable {
         SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
 
-        String effectHalf = resolveClause(sa, false).get(1);
+        String effectHalf = resolveClause(sa, ClauseRun.RAN).get(1);
 
         assertTrue(effectHalf.contains("\"type\":\"turn_added\""), effectHalf);
         assertTrue(effectHalf.contains("\"count\":1"), effectHalf);
@@ -93,10 +96,25 @@ class ClauseContractTest {
     void aClauseThatThrewWritesNoEvent() throws Throwable {
         SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
 
-        String effectHalf = resolveClause(sa, true).get(1);
+        String effectHalf = resolveClause(sa, ClauseRun.THREW).get(1);
 
         assertTrue(effectHalf.contains("\"moment\":\"resolution\""), effectHalf);
         assertFalse(effectHalf.contains("\"type\":\"turn_added\""), effectHalf);
+    }
+
+    /**
+     * A clause whose own effect did not run — its condition failed, or its
+     * unless cost decided against it — writes no event (A3): only {@code
+     * RAN} lets the event through.
+     */
+    @ParameterizedTest
+    @EnumSource(value = ClauseRun.class, names = {"CONDITIONS_UNMET", "UNLESS_COST_DECIDED"})
+    void aClauseThatDidNotRunWritesNoEvent(ClauseRun run) throws Throwable {
+        SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+
+        String effectHalf = resolveClause(sa, run).get(1);
+
+        assertFalse(effectHalf.contains("\"type\":\"turn_added\""), run + ": " + effectHalf);
     }
 
     /**
@@ -161,9 +179,9 @@ class ClauseContractTest {
             handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{inner});
             handler.invoke(null, clauseMethod("onClauseResolved"),
-                    new Object[]{inner, false});
+                    new Object[]{inner, ClauseRun.RAN});
             handler.invoke(null, clauseMethod("onClauseResolved"),
-                    new Object[]{outer, false});
+                    new Object[]{outer, ClauseRun.RAN});
             bracket.endBracket(outer.getId(), false);
             bracket.onNextAction();
         });
@@ -207,7 +225,7 @@ class ClauseContractTest {
             handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{forkAbility});
             handler.invoke(null, clauseMethod("onClauseResolved"),
-                    new Object[]{forkAbility, false});
+                    new Object[]{forkAbility, ClauseRun.RAN});
             bracket.endBracket(forkAbility.getId(), false);
             bracket.onNextAction();
         });
@@ -278,9 +296,9 @@ class ClauseContractTest {
                 resolvingContained(handler, outer);
                 resolvingContained(handler, inner);
                 handler.invoke(null, clauseMethod("onClauseResolved"),
-                        new Object[]{inner, false});
+                        new Object[]{inner, ClauseRun.RAN});
                 handler.invoke(null, clauseMethod("onClauseResolved"),
-                        new Object[]{outer, false});
+                        new Object[]{outer, ClauseRun.RAN});
                 bracket.endBracket(outer.getId(), false);
                 bracket.onNextAction();
             }));
@@ -325,14 +343,14 @@ class ClauseContractTest {
      * Drive the clause hook the way the engine drives it -- resolving then
      * resolved, on a real bracket -- and return the shard's rendered lines.
      */
-    private List<String> resolveClause(SpellAbility sa, boolean threw) throws Throwable {
+    private List<String> resolveClause(SpellAbility sa, ClauseRun run) throws Throwable {
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
             InvocationHandler handler = collector.clauses().clauseHandler();
             bracket.beginBracket(sa);
             handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{sa});
             handler.invoke(null, clauseMethod("onClauseResolved"),
-                    new Object[]{sa, threw});
+                    new Object[]{sa, run});
             bracket.endBracket(sa.getId(), false);
             bracket.onNextAction();
         });

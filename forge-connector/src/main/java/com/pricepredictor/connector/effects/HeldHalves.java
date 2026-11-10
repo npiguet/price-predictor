@@ -67,6 +67,15 @@ final class HeldHalves<H> {
     }
 
     /**
+     * File an event of the resolution's own into its last half, after what
+     * that half already holds: a spell's card leaving the stack, which comes
+     * after the resolution is published.
+     */
+    void fileLast(EffectEvent event) {
+        halves.get(halves.size() - 1).events.file(event);
+    }
+
+    /**
      * File a state-based death into the half it belongs to
      * ({@link #halfForDeath}), checked there for a repeat as any event of
      * that half is. The death is filed as given: each side stamps it its own

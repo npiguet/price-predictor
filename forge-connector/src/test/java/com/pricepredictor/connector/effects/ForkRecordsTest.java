@@ -443,7 +443,8 @@ class ForkRecordsTest {
      * damage step open, so live counts it and files it nowhere, the fork
      * refuses it, and the two records agree. Maro counts its caster's hand,
      * and casting Pyroclasm, the hand's one card, leaves it 0/0 before
-     * Pyroclasm resolves; its shrink is still the cast's.
+     * Pyroclasm resolves; its shrink precedes the effect half's board, read
+     * as the resolution starts (FR-042b), and is in neither record.
      */
     @Test
     void aDeathInTheCheckBeforeTheResolutionIsNobodys() throws Throwable {
@@ -456,7 +457,7 @@ class ForkRecordsTest {
                 .filter(card -> card.getName().equals("Maro")).findFirst().orElseThrow();
         String forced = payloadOf(forcedRecord(forkedGame, firstSpellInHand(forkedGame), 1L));
 
-        assertTrue(forced.contains("{\"type\":\"pt_change\",\"subjects\":[\"" + Refs.of(maro)
+        assertFalse(forced.contains("{\"type\":\"pt_change\",\"subjects\":[\"" + Refs.of(maro)
                 + "\"]"), forced);
         assertFalse(forced.contains("\"subjects\":[\"" + Refs.of(maro)
                 + "\"],\"params\":{\"from_zone\":\"battlefield\""), forced);

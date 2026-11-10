@@ -44,6 +44,10 @@ public final class PatchHooks {
     static final String PLAYER_CONTROLLER_AI = "forge.ai.PlayerControllerAi";
     static final String EFFECT_RECORD_HOOK = "forge.game.ability.EffectRecordHook";
     static final String PHASE_HANDLER = "forge.game.phase.PhaseHandler";
+    static final String MAGIC_STACK = "forge.game.zone.MagicStack";
+    static final String COST_PAYMENT = "forge.game.cost.CostPayment";
+    /** The enum the clause hook's "resolved" call carries, read by constant name. */
+    static final String CLAUSE_RUN = "forge.game.ability.ClauseRun";
 
     /**
      * One method the engine patch adds, and what having it buys.
@@ -123,6 +127,7 @@ public final class PatchHooks {
      * {@link Args#optional} and the shorter call still reaches it.
      */
     enum Callback {
+        ON_REPLACING("onReplacing", 2),
         ON_REPLACEMENT("onReplacement", 3),
         ON_CONDITION_EVALUATED("onConditionEvaluated", 3),
         ON_ATTACKERS_DECLARABLE("onAttackersDeclarable", 4),
@@ -134,7 +139,11 @@ public final class PatchHooks {
         ON_OUTCOME("onOutcome", 3),
         ON_STATE_BASED_LOOP_BEGIN("onStateBasedLoopBegin", 1),
         ON_STATE_BASED_LOOP_END("onStateBasedLoopEnd", 1),
-        ON_PRIORITY_SETTLED("onPrioritySettled", 2);
+        ON_PRIORITY_SETTLED("onPrioritySettled", 2),
+        ON_CAST_STARTING("onCastStarting", 1),
+        ON_RESOLUTION_STARTING("onResolutionStarting", 2),
+        ON_PAYING_COSTS("onPayingCosts", 3),
+        ON_COSTS_PAID("onCostsPaid", 3);
 
         private final String methodName;
         private final int arity;
@@ -242,8 +251,9 @@ public final class PatchHooks {
             REPLACEMENT_HANDLER, "setEffectRecordListener",
             "rewrite records: the event a replacement received, what it "
             + "rewrote in place, which of the five ReplacementResults "
-            + "it returned and which ability stood in for the event",
-            List.of(Callback.ON_REPLACEMENT));
+            + "it returned and which ability stood in for the event; "
+            + "their board, read before the replacement runs",
+            List.of(Callback.ON_REPLACING, Callback.ON_REPLACEMENT));
     static final Hook CLAUSE_LISTENER = new Hook(
             ABILITY_UTILS, "setEffectRecordClauseListener",
             "the events an effect API describes but the bus never announces",
@@ -298,6 +308,20 @@ public final class PatchHooks {
             "the moment both seats' decision candidates are enumerated, "
             + "before the priority holder chooses",
             List.of(Callback.ON_PRIORITY_SETTLED));
+    static final Hook CAST_LISTENER = new Hook(
+            MAGIC_STACK, "setEffectRecordCastListener",
+            "a cost half's board, read before the spell's card moves to the "
+            + "stack or the activation's costs are paid (FR-042a)",
+            List.of(Callback.ON_CAST_STARTING));
+    static final Hook RESOLUTION_LISTENER = new Hook(
+            MAGIC_STACK, "setEffectRecordResolutionListener",
+            "an effect half's board, read as the resolution starts (FR-042b)",
+            List.of(Callback.ON_RESOLUTION_STARTING));
+    static final Hook PAYMENT_LISTENER = new Hook(
+            COST_PAYMENT, "setEffectRecordPaymentListener",
+            "a mana record's board, read before the mana ability's costs are "
+            + "paid, and the permanents its cost tapped (FR-042c)",
+            List.of(Callback.ON_PAYING_COSTS, Callback.ON_COSTS_PAID));
 
     /**
      * Every hook the collectors need, and the specification of the patch.
@@ -334,7 +358,8 @@ public final class PatchHooks {
             CANT_BLOCK_BY_STATIC, MANA_LISTENER, CHANGED_TYPES_BY_STATIC,
             CHANGED_COLORS_BY_STATIC, TYPE_WITHOUT, COLOR_WITHOUT, KEYWORDS_WITHOUT,
             CHANGED_NAMES, ASSIGNED_DAMAGE, CONFIRM_LISTENER, OUTCOME_LISTENER,
-            PENDING_DELAYED_TRIGGERS, STATE_BASED_LOOP_LISTENER, PRIORITY_SETTLED_LISTENER);
+            PENDING_DELAYED_TRIGGERS, STATE_BASED_LOOP_LISTENER, PRIORITY_SETTLED_LISTENER,
+            CAST_LISTENER, RESOLUTION_LISTENER, PAYMENT_LISTENER);
 
     /**
      * The components of the two layer records {@link #CHANGED_COLORS_BY_STATIC}
@@ -607,6 +632,15 @@ public final class PatchHooks {
     private static Object invokeOrNull(Optional<Method> method, Object receiver, Object... args) {
         Object result = call(method, receiver, args);
         return result == FAILED ? null : result;
+    }
+
+    /**
+     * The constant name of the {@code ClauseRun} the clause hook's "resolved"
+     * call carries, or null where the argument is absent or not an enum: a
+     * jar whose listener predates it, or one that passed a boolean.
+     */
+    static String clauseRunName(Object run) {
+        return run instanceof Enum<?> constant ? constant.name() : null;
     }
 
     /** The sub-ability currently resolving, when the pointer hook is present. */

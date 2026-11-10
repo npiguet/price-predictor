@@ -29,15 +29,22 @@ final class RecordPayloads {
     }
 
     /**
-     * ``{"events": [...], "conditions_met": [{segment, met}]}`` — a resolution
-     * effect half: its events, and whether each conditional clause that
-     * resolved in it met its condition (FR-034), in resolution order; empty
-     * where none did.
+     * ``{"events": [...], "conditions_met": [{segment, met}], "outcome": ...}``
+     * — a resolution effect half: its events, whether each conditional clause
+     * that resolved in it met its condition (FR-034), in resolution order,
+     * empty where none did, and what became of the stack item (FR-042b).
+     *
+     * @param outcome the stack item's outcome, or null for a half that
+     *                resolves no stack item — a mana ability's, the game-end
+     *                rescue record — which writes {@code "outcome": null}
      */
-    static String resolutionPayload(List<EffectEvent> events, List<ConditionsMet> conditions) {
+    static String resolutionPayload(
+            List<EffectEvent> events, List<ConditionsMet> conditions,
+            ActivationOutcome outcome) {
         return Json.object()
                 .raw("events", eventArray(events))
                 .raw("conditions_met", ConditionsMet.toJsonArray(conditions))
+                .value("outcome", outcome)
                 .render();
     }
 
@@ -132,19 +139,16 @@ final class RecordPayloads {
     }
 
     /**
-     * ``{"costs": {...}, "outcome": "..."}`` — a resolution cost half.
-     *
-     * <p>The two halves become knowable at different moments: what was paid is
-     * only readable while the cast event is being published, and whether the
-     * spell resolved, fizzled or was countered is only readable later. Holding
-     * the {@link PaidCosts} read at the cast is what lets one record carry both
-     * without keeping a reference to a {@link SpellAbility} whose paid lists
-     * the next activation will overwrite.
+     * ``{"events": [...], "costs": {...}}`` — a resolution cost half
+     * (FR-042a): what casting did, a spell card's {@code zone_change} to the
+     * stack ({@code []} for an activated ability, which moves no card), and
+     * what was paid. No {@code outcome}: what became of the item is its
+     * effect half's.
      */
-    static String costPayload(PaidCosts costs, ActivationOutcome outcome) {
+    static String costPayload(List<EffectEvent> events, PaidCosts costs) {
         return Json.object()
+                .raw("events", eventArray(events))
                 .raw("costs", costs.toJson())
-                .value("outcome", outcome)
                 .render();
     }
 }

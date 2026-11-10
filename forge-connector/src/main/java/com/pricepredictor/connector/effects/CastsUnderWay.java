@@ -22,9 +22,13 @@ import java.util.function.IntPredicate;
  * that card's cast; and from the push to the cast event, while the stack's
  * top is the action in progress and not yet announced. What the static
  * checks in that window set off — the one {@code GameAction.changeZone} runs
- * before the cast is pushed, the one {@code MagicStack.push} runs after — is
- * the cast's own consequence, held here until its cast event opens its
- * bracket.
+ * before the cast is pushed, the one {@code MagicStack.push} runs after —
+ * reaches no record: the cost half records the card's move and the costs
+ * alone (FR-042a), and the effect half's board, read when the resolution
+ * starts, already shows it (FR-042b). The collector counts it as dropped.
+ *
+ * <p>Where each card came from is kept from its arrival, for the cost half's
+ * {@code zone_change} to the stack ({@link #arrivedFrom}).
  *
  * <p>A card in the stack zone that no stack item holds is otherwise a cast
  * given up — {@code ComputerUtil.handlePlayingSpellAbility} returns on a
@@ -47,10 +51,10 @@ final class CastsUnderWay {
     private final Set<Integer> abandoned = new LinkedHashSet<>();
 
     /**
-     * What a card on its way onto the stack set off before its cast was
-     * announced, or null when nothing is held.
+     * The zone each card in the stack zone arrived from, by card id, as the
+     * bus published its move: what a spell's cost half says it was cast from.
      */
-    private PreCast preCast;
+    private final java.util.Map<Integer, String> arrivedFrom = new java.util.HashMap<>();
 
     /**
      * @param announced whether the live collector holds a cast of an ability
@@ -67,12 +71,21 @@ final class CastsUnderWay {
      * a new card on its way means any other still in the zone with no stack
      * item was given up.
      */
-    void onStackArrival(int cardId) {
+    void onStackArrival(int cardId, String fromZone) {
         abandonAllBut(cardId);
         // A card keeps its id across zones: a mark from an earlier attempt
         // is not this one's.
         abandoned.remove(cardId);
         arrived.add(cardId);
+        arrivedFrom.put(cardId, fromZone);
+    }
+
+    /**
+     * The zone the card with this id arrived in the stack zone from, as its
+     * move was published, or null when no arrival of it was seen.
+     */
+    String arrivedFrom(int cardId) {
+        return arrivedFrom.get(cardId);
     }
 
     /**
@@ -180,6 +193,7 @@ final class CastsUnderWay {
         zone.forEach(card -> inZone.add(card.getId()));
         arrived.retainAll(inZone);
         abandoned.retainAll(inZone);
+        arrivedFrom.keySet().retainAll(inZone);
     }
 
     /** Whether the action in progress is casting {@code card}. */
@@ -192,19 +206,13 @@ final class CastsUnderWay {
         abandonAllBut(-1);
     }
 
-    /**
-     * The same, but for the card {@code keep}, whose cast is the one now
-     * under way, and what its window has held so far.
-     */
+    /** The same, but for the card {@code keep}, whose cast is the one now under way. */
     private void abandonAllBut(int keep) {
         Set<Integer> held = heldHostIds();
         for (Card card : game.getCardsIn(ZoneType.Stack)) {
             if (!held.contains(card.getId()) && card.getId() != keep) {
                 abandoned.add(card.getId());
             }
-        }
-        if (preCast != null && !preCast.isFor(keep)) {
-            preCast = null;
         }
     }
 
@@ -222,74 +230,5 @@ final class CastsUnderWay {
             }
         }
         return held;
-    }
-
-    /**
-     * Hold an event the cast of {@code card} set off, for that cast's
-     * bracket. What was held for another card is dropped: one cast is under
-     * way at a time.
-     */
-    void hold(Card card, EffectEvent event, String namedCause) {
-        if (preCast == null || !preCast.isFor(card)) {
-            preCast = new PreCast(card.getId());
-        }
-        preCast.hold(event, namedCause);
-    }
-
-    /**
-     * The cast of {@code cast} has been announced: file what its card's move
-     * onto the stack set off into its bracket, stamped against its ability,
-     * if anything was held for that card.
-     */
-    void fileHeldInto(SpellAbility cast, EventBuffer bracket) {
-        if (preCast != null && preCast.isFor(cast.getHostCard())) {
-            preCast.fileInto(cast, bracket);
-        }
-    }
-
-    /**
-     * The cast under way has been announced or given up: what its window
-     * held is taken or dropped.
-     */
-    void dropHeld() {
-        preCast = null;
-    }
-
-    /**
-     * What a card on its way onto the stack set off before its cast was
-     * announced, held for that cast's bracket.
-     *
-     * <p>Held raw and stamped when the cast opens, against the cast's own
-     * ability: when they were published there was no bracket to stamp them
-     * against. Dropped if the cast is abandoned and no cast event follows.
-     */
-    private static final class PreCast {
-        private record Held(EffectEvent event, String namedCause) {
-        }
-
-        private final int cardId;
-        private final List<Held> events = new ArrayList<>();
-
-        private PreCast(int cardId) {
-            this.cardId = cardId;
-        }
-
-        boolean isFor(Card card) {
-            return card != null && isFor(card.getId());
-        }
-
-        boolean isFor(int id) {
-            return id == cardId;
-        }
-
-        void hold(EffectEvent event, String namedCause) {
-            events.add(new Held(event, namedCause));
-        }
-
-        void fileInto(SpellAbility cast, EventBuffer bracket) {
-            for (Held held : events) {
-                bracket.file(EventAttribution.stampAt(held.event(), cast, null, held.namedCause()));
-            }
-        }
     }
 }

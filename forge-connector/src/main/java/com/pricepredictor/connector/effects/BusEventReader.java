@@ -335,8 +335,30 @@ abstract class BusEventReader {
             // statics and the counters it entered with have already reached.
             stats.prime(cardById(event.card().getId()));
         }
+        if (event.to() != null && event.to().zoneType() == ZoneType.Battlefield) {
+            enteredTapped(event);
+        }
         if (event.to() != null && event.to().zoneType() == ZoneType.Stack) {
-            onStackArrival(event.card().getId());
+            onStackArrival(event.card().getId(),
+                    event.from() == null ? null : CardSpelling.zoneName(event.from().zoneType()));
+        }
+    }
+
+    /**
+     * A permanent that entered the battlefield tapped: a {@code tapped} event
+     * after its {@code zone_change}, in the record that moved it (FR-042d).
+     *
+     * <p>Forge publishes no tap for it. An "enters tapped" replacement and a
+     * "put onto the battlefield tapped" effect both set the flag with {@code
+     * Card.setTapped} before the card arrives, which publishes nothing, so the
+     * entering card's own state after the move is the only place the fact
+     * shows, and a library card a record names is rendered as it was in the
+     * library (FR-042e), untapped.
+     */
+    private void enteredTapped(GameEventCardChangeZone event) {
+        Card entered = cardById(event.card().getId());
+        if (entered != null && entered.isTapped()) {
+            fileOutcome(new EffectEvent(EventType.TAPPED).subject(Refs.of(entered)), null);
         }
     }
 
@@ -382,8 +404,10 @@ abstract class BusEventReader {
      *
      * <p>A no-op here: only the bracket collector follows a cast from the
      * card's arrival to its cast event.
+     *
+     * @param fromZone the zone it came from, as a record spells it, or null
      */
-    void onStackArrival(int cardId) {
+    void onStackArrival(int cardId, String fromZone) {
     }
 
     /**

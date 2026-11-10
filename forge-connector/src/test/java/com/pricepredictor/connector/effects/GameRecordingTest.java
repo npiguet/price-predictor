@@ -53,6 +53,10 @@ class GameRecordingTest {
         assertNotNull(manaListener, "open installs the mana hook");
         assertNotNull(installed(PlayerControllerAi.class, "CONFIRM_HOOK"),
                 "open installs the confirm hook");
+        Object paymentListener = installed(forge.game.cost.CostPayment.class, "PAYMENT_HOOK");
+        assertNotNull(paymentListener, "open installs the payment hook");
+        callback(paymentListener, "onPayingCosts").invoke(paymentListener, mana, producer, false);
+        callback(paymentListener, "onCostsPaid").invoke(paymentListener, mana, producer, true);
         callback(manaListener, "onManaProduced").invoke(manaListener, mana, producer, "G");
         writer.close();
 

@@ -48,7 +48,8 @@ record Channels(
                 new TriggerChannel(live, context, dedup, new TriggerNegativeSampler(sampler)),
                 playability,
                 candidates,
-                new ManaChannel(live, context, new ManaReservoir(caps.manaCap(), sampler)),
+                new ManaChannel(
+                        live, context, new ManaReservoir(caps.manaCap(), sampler), bracket),
                 new ClauseOutcomeRouter(live, bracket),
                 new ContinuousChannel(live, context, dedup),
                 new PhaseSignals(live, PhaseSignals.Sink.both(bracket.phaseSink(), candidates.sink())));

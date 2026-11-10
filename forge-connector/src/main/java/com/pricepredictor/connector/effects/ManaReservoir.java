@@ -43,6 +43,11 @@ final class ManaReservoir {
         this.sampler = sampler;
     }
 
+    /** Whether any record is kept at all: {@code --mana-cap} above zero. */
+    boolean keepsAny() {
+        return cap > 0;
+    }
+
     /**
      * Which slot this activation takes, or -1 to skip it.
      *

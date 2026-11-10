@@ -214,14 +214,14 @@ public final class SnapshotBuilder {
         for (var player : game.getPlayers()) {
             Card top = player.getCardsIn(ZoneType.Library).isEmpty()
                     ? null : player.getCardsIn(ZoneType.Library).get(0);
-            addBeyond(entities, present, cards, top, withoutStatic, ROLE_LIBRARY_CARD);
+            addLibraryCard(entities, present, cards, top, 0, withoutStatic);
         }
         if (pending != null) {
             for (String subject : pending.subjects()) {
                 LibraryCapture.Slot slot = libraries.byId().get(subject);
                 if (slot != null) {
-                    addBeyond(entities, present, cards, slot.card(), withoutStatic,
-                            ROLE_LIBRARY_CARD);
+                    addLibraryCard(entities, present, cards, slot.card(), slot.position(),
+                            withoutStatic);
                 }
             }
         }
@@ -259,6 +259,22 @@ public final class SnapshotBuilder {
             cards.add(card);
             entities.add(EntityJson.render(game, card, withoutStatic,
                     new EntityJson.Beyond(null, null, null, role)));
+        }
+    }
+
+    /**
+     * A library card, read as it is in the library (FR-042e), at its
+     * position: the same rendering whether the snapshot holds it as a
+     * library's top card or the record's events name it ({@link
+     * LibraryCapture}).
+     */
+    private void addLibraryCard(
+            List<String> entities, Set<String> present, List<Card> cards, Card card,
+            int position, Long withoutStatic) {
+        if (card != null && present.add(Refs.of(card))) {
+            cards.add(card);
+            entities.add(EntityJson.render(game, LibraryCapture.asInLibrary(card), withoutStatic,
+                    new EntityJson.Beyond(null, "library", position, ROLE_LIBRARY_CARD)));
         }
     }
 

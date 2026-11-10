@@ -176,11 +176,33 @@ final class LiveGame {
     EffectRecord traitRecord(
             CollectorContext context, RecordKind kind, Object trait,
             ProvenanceKey.Resolved line, EffectEvent pending) {
-        Card source = trait instanceof CardTraitBase acting ? acting.getHostCard() : null;
+        return traitRecordOn(context, kind, trait, line, traitState(trait, pending));
+    }
+
+    /**
+     * The board a trait record carries, read now: {@link
+     * SnapshotBuilder#ofTrait} for the trait's host and the event it is about
+     * to handle.
+     */
+    String traitState(Object trait, EffectEvent pending) {
+        return snapshots.ofTrait(hostOf(trait), pending).render();
+    }
+
+    /**
+     * The same record on a board read earlier ({@link #traitState}): a
+     * replacement's, read before it ran.
+     */
+    EffectRecord traitRecordOn(
+            CollectorContext context, RecordKind kind, Object trait,
+            ProvenanceKey.Resolved line, String state) {
         return context.newRecord(kind)
-                .actor(controllerOf(source))
+                .actor(controllerOf(hostOf(trait)))
                 .ability(line)
-                .state(snapshots.ofTrait(source, pending).render());
+                .state(state);
+    }
+
+    private static Card hostOf(Object trait) {
+        return trait instanceof CardTraitBase acting ? acting.getHostCard() : null;
     }
 
     /** The printed line a hook's trait argument names, or why it names none. */

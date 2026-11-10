@@ -6,6 +6,7 @@ import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventSpellAbilityCast;
 import forge.game.event.GameEventSpellResolved;
 import forge.game.spellability.SpellAbility;
+import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,8 +51,12 @@ final class ForkEventSink extends BusEventReader {
      * is over, and then the one the cast put on the stack ({@link #castAs}).
      */
     private SpellAbility acting;
-    /** The board at the forced cast, which a resolution no mode of which began is read against. */
+    /** The board at the forced cast: a root half's, where the resolution's start was not told. */
     private Snapshot castState;
+    /** The board as the forced resolution started (FR-042b), a root half's; null until then. */
+    private Snapshot resolutionState;
+    /** Whether the forced spell's own move off the stack has joined its last half. */
+    private boolean movedOffStack;
     /**
      * Whether a card damaged in this fork is damaged in combat: true for a
      * damage-step probe, which deals one combat damage step, and false for an
@@ -80,25 +85,18 @@ final class ForkEventSink extends BusEventReader {
      *
      * <ul>
      *   <li>{@link #PRE_CAST}: from before the forced cast moves its card to
-     *   the stack until its cast event, everything is filed — the static check
-     *   the move and the push set off — as live gives what a card's move onto
-     *   the stack sets off to that cast's bracket. The fork pays no cost, so
-     *   there is no payment to leave out.</li>
-     *   <li>{@link #BEFORE}: between the cast and the resolution, what is
-     *   published while the forced ability is the top of the fork's stack is
-     *   filed, as live files the state-based check before priority into the
-     *   spell's bracket — all but a permanent leaving the battlefield in that
-     *   check, which live sends to no record, since no resolution is held
-     *   and no damage step open (FR-029). While anything sits above it — a cast trigger:
-     *   prowess, a "whenever you cast" or becomes-target trigger, storm,
-     *   cascade — nothing is: that is the item's own record live. What was
-     *   filed before an item was pushed above is kept.</li>
-     *   <li>{@link #ABOVE_AFTERMATH}: as {@link #BEFORE}, but an item above
-     *   the forced ability has resolved, and until the next ability reaches
-     *   the stack or resolves, nothing is filed, though the forced ability is
-     *   the top again: live keeps the deaths for the item's held half and
-     *   sends the rest to no record, since none of it belongs to an ability
-     *   that has not begun to resolve.</li>
+     *   the stack until its cast event, nothing is filed: what the move and
+     *   the push set off precedes the effect half's board, as live counts it
+     *   dropped (FR-042a, FR-042b). The fork pays no cost and writes no cost
+     *   half.</li>
+     *   <li>{@link #BEFORE}: between the cast and the resolution, nothing is
+     *   filed either: the effect half's board is read when the resolution
+     *   starts, and live drops what the forced ability's bracket gathered
+     *   until then. While anything sits above it — a cast trigger: prowess, a
+     *   "whenever you cast" or becomes-target trigger, storm, cascade — that
+     *   is the item's own record live.</li>
+     *   <li>{@link #ABOVE_AFTERMATH}: as {@link #BEFORE}, after an item above
+     *   the forced ability has resolved.</li>
      *   <li>{@link #RESOLVING}: from the first event published while the
      *   forced ability is the one resolving, until its {@code
      *   GameEventSpellResolved}: everything is filed, as live files the open
@@ -110,10 +108,11 @@ final class ForkEventSink extends BusEventReader {
      *   state-based check, a token or counter batch — is filed as an
      *   ordinary event, checked for a repeat in its span, as live files it
      *   into the open bracket.</li>
-     *   <li>{@link #HELD}: only the permanents leaving the battlefield in a
-     *   state-based check, as live holds a resolved half for the deaths it
-     *   caused. A stat change a static makes once the ability is gone, or the
-     *   spell's own card going to the graveyard, is not the ability's.</li>
+     *   <li>{@link #HELD}: the forced spell's own card leaving the stack, the
+     *   last event of its resolution (FR-042b), and the permanents leaving
+     *   the battlefield in a state-based check, as live holds a resolved half
+     *   for both. A stat change a static makes once the ability is gone is
+     *   not the ability's.</li>
      *   <li>{@link #CLOSED}: once the next ability reaches the stack or
      *   resolves, as the next action closes live's held window. A trigger the
      *   resolution caused is that next ability, and has a record of its own
@@ -202,6 +201,17 @@ final class ForkEventSink extends BusEventReader {
         castState = state;
     }
 
+    /**
+     * The forced ability's resolution has started, as the engine's
+     * resolution hook told: its root half is read against this board, and
+     * its stat changes are the ones after it (FR-042b, FR-042f).
+     */
+    void resolutionStarted(Snapshot state) {
+        resolutionState = state;
+        phase = phase.onForcedResolving();
+        rebaselineStats();
+    }
+
     /** A sink for a damage step dealt in a fork, with no ability resolving. */
     static ForkEventSink forProbe(Game fork) {
         return new ForkEventSink(fork, null, true, Phase.BEFORE);
@@ -255,9 +265,9 @@ final class ForkEventSink extends BusEventReader {
     }
 
     /**
-     * A conditional clause of the forced ability is about to resolve: whether
-     * it meets its condition joins the open span's half, as the live
-     * bracket's does (FR-034).
+     * A conditional clause of the forced ability has finished its own
+     * effect: whether it met its condition, as Forge decided it, joins the
+     * open span's half, as the live bracket's does (FR-034).
      */
     void noteCondition(ConditionsMet condition) {
         modes.noteCondition(condition);
@@ -273,7 +283,8 @@ final class ForkEventSink extends BusEventReader {
             // mode's first clause comes to close it.
             modes.close();
             held = new HeldHalves<>();
-            for (ModeSplit.ModeHalf half : modes.halves(castState)) {
+            for (ModeSplit.ModeHalf half
+                    : modes.halves(resolutionState != null ? resolutionState : castState)) {
                 held.add(half, half.events());
             }
             modes.buffer().clear();
@@ -341,22 +352,30 @@ final class ForkEventSink extends BusEventReader {
         }
         noticeResolutionStart();
         return switch (phase) {
-            case PRE_CAST -> true;
-            case BEFORE -> forcedOnTop() && !(move != null && isStateBasedLeave(move));
             // Everything but the payment for a spell the forced ability
             // casts, which is that spell's cost and which live leaves out too.
             case RESOLVING -> !payingForACast(acting);
-            case HELD -> move != null && isStateBasedLeave(move);
-            case ABOVE_AFTERMATH, CLOSED -> false;
+            case HELD -> move != null && (isStateBasedLeave(move) || isOwnMoveOffStack(move));
+            case PRE_CAST, BEFORE, ABOVE_AFTERMATH, CLOSED -> false;
         };
+    }
+
+    /**
+     * The forced spell's own card leaving the stack after its resolution,
+     * the first time it does.
+     */
+    private boolean isOwnMoveOffStack(GameEventCardChangeZone move) {
+        return !movedOffStack && acting.isSpell() && acting.getHostCard() != null
+                && move.card() != null && move.card().getId() == acting.getHostCard().getId()
+                && move.from() != null && move.from().zoneType() == ZoneType.Stack;
     }
 
     /**
      * The forced ability has begun to resolve if it is the top of a stack
      * that is resolving: {@link Phase#RESOLVING} from here.
      *
-     * <p>Noticed at the first event published after it begins, because Forge
-     * publishes nothing when a resolution starts.
+     * <p>Told by the resolution hook ({@link #resolutionStarted}); without
+     * it, noticed at the first event published after it begins.
      */
     private void noticeResolutionStart() {
         if (game.getStack().isResolving() && forcedOnTop()) {
@@ -410,10 +429,23 @@ final class ForkEventSink extends BusEventReader {
         if (!admits(event)) {
             return;
         }
-        if (phase == Phase.HELD) {
+        if (phase == Phase.HELD && isOwnMoveOffStack(event)) {
+            movedOffStack = true;
+            held.fileLast(EventAttribution.stampAt(moved, acting, null, null));
+        } else if (phase == Phase.HELD) {
             held.fileDeath(EventAttribution.stamp(moved, acting, null), Refs.of(event.card()));
         } else {
             file(moved, null);
+        }
+    }
+
+    /**
+     * Mana the forced ability made while resolving — its own mana effect, not
+     * a mana ability's — filed as live files it into the open bracket (C3).
+     */
+    void manaProduced(EffectEvent produced) {
+        if (admits(null)) {
+            file(produced, null);
         }
     }
 

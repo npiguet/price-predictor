@@ -13,6 +13,7 @@ import forge.game.event.GameEventSpellAbilityCast;
 import forge.game.event.GameEventSpellResolved;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.spellability.SpellAbility;
+import forge.game.zone.ZoneType;
 
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -34,14 +35,16 @@ import java.util.Set;
  * rather than from the event, because the event carries a view and the
  * provenance key needs the model object.
  *
- * <p>The cost half is <b>held</b> from the cast until the bracket closes, so it
- * can be stamped with what actually became of the spell. Every other record this
- * class writes goes out at the moment it describes; this one cannot, because
- * {@code outcome} is a field of it and a spell that is countered before it
- * resolves never publishes anything else the collector could attach the answer
- * to. A cast still on the stack when the game ends is dropped rather than given
- * one of the five outcomes it did not have, and counted and named on stderr;
- * see {@link #finishGame}.
+ * <p>Each record describes one moment, its board read just before it (root
+ * spec § 8.14, FR-042a–FR-042f). A cast or an activation writes its cost half
+ * when its costs are paid — at its cast event — on the board read before the
+ * card moved to the stack or the costs were paid ({@link #castHandler}); it
+ * does not wait for the item's fate. The item's resolution writes its effect
+ * half, on the board read when the resolution starts ({@link
+ * #resolutionHandler}), carrying the item's {@code outcome}; a countered item
+ * writes none, its fate being the countering clause's {@code spell_countered}
+ * and the card's move off the stack. A triggered ability and a copy, which
+ * nobody casts, write no cost half.
  *
  * <p>Damage steps get their own brackets, closed at the phase boundary, so a
  * first-strike combat writes two records — the only way a keyword that acts by
@@ -61,8 +64,7 @@ import java.util.Set;
  * <p>This class is the {@code @Subscribe} facade: each handler is the sequence
  * of steps an event means, and the state those steps change is owned by the
  * collaborator named for it — {@link StackBrackets} the stack's brackets and
- * the open one, {@link ActivationLedger} the held cost halves, {@link
- * HeldResolutionWindow} the effect halves waiting for their state-based
+ * the open one, {@link HeldResolutionWindow} the effect halves waiting for their state-based
  * consequences, {@link CombatStepBracket} the damage step's record and
  * {@link CastsUnderWay} the cast on its way onto the stack. What the bus
  * publishes is classified by {@link #classifyNow}.
@@ -86,8 +88,22 @@ public final class BusBracketCollector extends BusEventReader {
     /** The free activations that changed nothing this turn, for the random seat. */
     private final FruitlessActivations fruitless;
 
-    /** The cost halves held until their casts' outcomes are known. */
-    private final ActivationLedger ledger;
+    /**
+     * The board read as a cast or an activation started (FR-042a), until its
+     * cast event writes its cost half; null when no cast is under way.
+     */
+    private PendingCast pendingCast;
+
+    /** A cast's board, read before its card moved or its costs were paid. */
+    private record PendingCast(SpellAbility ability, int hostId, Snapshot board) {
+
+        /** Whether the item a cast event put on the stack is this cast's. */
+        boolean isOf(SpellAbility pushed) {
+            return pushed == ability || pushed.getOriginalAbility() == ability
+                    || (pushed.getHostCard() != null && pushed.getHostCard().getId() == hostId
+                            && pushed.isSpell() == ability.isSpell());
+        }
+    }
 
     /** The damage step's combat record, gathered until the step ends. */
     private final CombatStepBracket combatStep;
@@ -134,25 +150,20 @@ public final class BusBracketCollector extends BusEventReader {
         super(game);
         this.context = context;
         this.snapshots = new SnapshotBuilder(game);
-        this.ledger = new ActivationLedger(context);
         this.fruitless = new FruitlessActivations(game);
         this.heldResolution = new HeldResolutionWindow(context, fruitless);
-        this.castsUnderWay = new CastsUnderWay(game, ledger::holds);
+        this.castsUnderWay = new CastsUnderWay(game, brackets::holds);
         this.combatStep = new CombatStepBracket(
                 game, context, snapshots, heldResolution, onCombatRecord);
         this.turnActions = new TurnActionWindow(game, context, snapshots);
     }
 
     /**
-     * A cast opens a bracket and holds the cost half until its outcome is known.
+     * A cast opens a bracket and writes its cost half (FR-042a).
      *
-     * <p>The costs are read <b>now</b> — {@link PaidCosts} says why
-     * they are unreadable a moment later — but the record cannot be written yet,
-     * because {@code outcome} is a field of the cost half and the answer to it
-     * does not exist until the spell resolves or leaves the stack without
-     * resolving. Written here, every activation would read {@code resolved},
-     * and a fizzled spell would issue a {@code link_id} whose effect half never
-     * comes.
+     * <p>The costs are read <b>now</b> — {@link PaidCosts} says why they are
+     * unreadable a moment later — and the half is written now, its costs
+     * paid: what became of the item is its effect half's to say.
      */
     @Subscribe
     public void onCast(GameEventSpellAbilityCast event) {
@@ -167,11 +178,95 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
+     * The cast hook's listener: a spell's card is about to move to the stack,
+     * or an activated ability's costs are about to be paid (FR-042a). The
+     * cost half's board is read here, before either, and kept until the cast
+     * event writes the half; a cast given up before it is never written.
+     *
+     * <p>Fired for every game on this JVM, a fork's included, so a cast of
+     * another game's is not this one's.
+     */
+    PatchHooks.Listener castHandler() {
+        return PatchHooks.CAST_LISTENER.listener((callback, args) -> {
+            SpellAbility cast = args.get(0, SpellAbility.class);
+            if (cast != null && owns(cast)) {
+                castStarting(cast);
+            }
+        });
+    }
+
+    /**
+     * The half of {@link #castHandler} past the game check: read the board
+     * the cost half describes. Starting a cast at priority is the next
+     * action, so the held resolution's consequences are over; one started by
+     * a resolving ability (cascade, a "you may cast") is part of that
+     * resolution and ends nothing.
+     */
+    void castStarting(SpellAbility cast) {
+        if (!inStateBasedLoop && !game.getStack().isResolving()) {
+            onNextAction();
+        }
+        Card host = cast.getHostCard();
+        pendingCast = new PendingCast(
+                cast, host == null ? -1 : host.getId(), snapshots.ofResolving(cast));
+        rebaselineAtSnapshot();
+    }
+
+    /**
+     * The resolution hook's listener: the stack's top item starts to resolve
+     * (FR-042b). Its effect half's board is read here, before its first
+     * clause; another game's item goes to the fork running on this thread,
+     * if one is ({@link Forks#forkHooks}).
+     */
+    PatchHooks.Listener resolutionHandler() {
+        return PatchHooks.RESOLUTION_LISTENER.listener((callback, args) -> {
+            SpellAbility item = args.get(0, SpellAbility.class);
+            if (item == null) {
+                return;
+            }
+            boolean fizzled = Boolean.TRUE.equals(args.get(1));
+            if (owns(item)) {
+                resolutionStarting(item);
+            } else {
+                Forks.forkHooks().resolutionStarting(item, fizzled);
+            }
+        });
+    }
+
+    /**
+     * The half of {@link #resolutionHandler} past the game check.
+     *
+     * <p>The resolution is the next action: the held resolution's
+     * consequences are over. Its bracket opens, and what it gathered since
+     * its cast — the cast's consequences, the state-based check before
+     * priority — precedes this board and reaches no record: it is counted as
+     * dropped. The stat differ reads the board again (FR-042f).
+     */
+    void resolutionStarting(SpellAbility item) {
+        if (!inStateBasedLoop) {
+            onNextAction();
+        }
+        OpenResolution resolving = brackets.startResolving(item.getId());
+        if (resolving == null) {
+            return;
+        }
+        brackets.countDropped(resolving, DroppedEvents.phaseOf(game));
+        resolving.resolutionStarted(snapshots.ofResolving(resolving.ability));
+        rebaselineAtSnapshot();
+    }
+
+    /** Whether an ability a hook hands over is this game's. */
+    private boolean owns(SpellAbility ability) {
+        Card host = ability.getHostCard();
+        return host != null && game != null && host.getGame() == game;
+    }
+
+    /**
      * Everything a cast does once the ability has been found on the stack.
      *
      * <p>Split from {@link #onCast} at the one line that reads the stack, so the
-     * rules that decide what a cost record eventually says can be exercised
-     * against a real ability without a game in progress.
+     * rules that decide what a cost record says can be exercised against a
+     * real ability without a game in progress.
      */
     void beginBracket(SpellAbility ability) {
         if (inStateBasedLoop) {
@@ -190,11 +285,10 @@ public final class BusBracketCollector extends BusEventReader {
             combatStep.closeWindow();
         }
         if (ability != null) {
-            writeOffEarlierCast(ability.getId());
+            brackets.writeOff(ability.getId());
         }
-        OpenResolution cast = ability == null ? null : new OpenResolution(
-                ability, ProvenanceResolver.resolve(ability), actorOf(ability),
-                snapshots.ofResolving(ability));
+        PendingCast started = startedCast(ability);
+        OpenResolution cast = ability == null ? null : openResolution(ability, started);
         if (game.getStack().isResolving()) {
             // Cast by the resolving ability itself, which keeps the bracket
             // until it ends (StackBrackets).
@@ -203,26 +297,22 @@ public final class BusBracketCollector extends BusEventReader {
                 brackets.waitForResolution(cast);
             }
         } else {
-            if (cast != null) {
-                // The open bracket from here: its stat changes are measured
-                // from its snapshot. Not while an ability resolves, whose
-                // bracket keeps the events, and whose snapshot is older.
+            if (cast != null && started == null) {
+                // Its board was read just now, at the cast event, where no
+                // hook told the cast's start: its stat changes are measured
+                // from here. Not while an ability resolves, whose bracket
+                // keeps the events, and whose snapshot is older.
                 rebaselineAtSnapshot();
             }
             brackets.openCast(cast);
-            // What the card's move onto the stack set off is this cast's.
-            if (cast != null) {
-                castsUnderWay.fileHeldInto(cast.ability, cast.modes.buffer());
-            }
             // Any other card still on its way was given up: one cast at a time.
             castsUnderWay.abandonAll();
         }
-        castsUnderWay.dropHeld();
-        if (cast == null) {
+        if (cast == null || cast.linkId == null) {
             return;
         }
-        PaidCosts paid = ledger.hold(ability, cast.actor, cast.keys, cast.state.render());
-        if (ability.isActivatedAbility() && paid.spentNoManaAndMovedNoCard()) {
+        writeCostHalf(cast, started);
+        if (ability.isActivatedAbility() && cast.costs.spentNoManaAndMovedNoCard()) {
             // Until it resolves, nobody knows whether it changes anything, and
             // the random seat, which keeps priority, would stack another.
             fruitless.pending(ability, cast.keys.key());
@@ -230,29 +320,107 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
-     * A cast of an ability whose earlier cast is still held, written off as
-     * any removal is ({@link ActivationLedger#writeOffEarlierCast}), with the
-     * earlier cast's bracket.
+     * The cast whose start was told for the item a cast event put on the
+     * stack, no longer pending; null when none was told (a copy, a worker
+     * without the cast hook). A started cast the pushed item is not, other
+     * than for a trigger, was given up.
      */
-    private void writeOffEarlierCast(int abilityId) {
-        ledger.writeOffEarlierCast(abilityId);
-        brackets.writeOff(abilityId);
+    private PendingCast startedCast(SpellAbility pushed) {
+        PendingCast started = pendingCast;
+        if (started == null || pushed == null) {
+            return null;
+        }
+        if (started.isOf(pushed)) {
+            pendingCast = null;
+            return started;
+        }
+        if (!pushed.isTrigger()) {
+            pendingCast = null;
+        }
+        return null;
     }
 
     /**
-     * A resolution closes the bracket, stamps the cost half and holds the
-     * effect half until the deaths it causes have happened ({@link
-     * HeldResolutionWindow}).
+     * The bracket of an item a cast event put on the stack. An item somebody
+     * cast or activated — not a triggered ability, not a copy — has a cost
+     * half: its link and what it paid, read now.
      *
-     * <p>A fizzle writes no effect half at all. {@code MagicStack.resolveStack}
-     * skips resolution entirely when the targets are gone, so the alternative is
-     * a record claiming an empty event list for something that never ran — and
-     * a partnerless {@code link_id} on the cost half, which the schema bars.
+     * @param started its cast's start, or null
+     */
+    private OpenResolution openResolution(SpellAbility ability, PendingCast started) {
+        // The board a degraded worker's effect half is read against, the
+        // resolution's start being told only by the hook.
+        Snapshot atCast = started != null ? started.board() : snapshots.ofResolving(ability);
+        if (!hasCostHalf(ability)) {
+            return new OpenResolution(
+                    ability, ProvenanceResolver.resolve(ability), actorOf(ability), atCast);
+        }
+        return new OpenResolution(
+                ability, ProvenanceResolver.resolve(ability), actorOf(ability), atCast,
+                context.gameId() + ".link." + ability.getId(), PaidCosts.of(ability));
+    }
+
+    /**
+     * Whether a stack item has a cost half: something cast or activated.
+     * A triggered ability is not (root § 8.14), nor a copy of a spell or an
+     * ability, which is put on the stack without being cast.
+     */
+    static boolean hasCostHalf(SpellAbility ability) {
+        if (ability.isTrigger() || ability.isCopied()) {
+            return false;
+        }
+        Card host = ability.getHostCard();
+        return !(ability.isSpell() && host != null && host.isCopiedSpell());
+    }
+
+    /**
+     * Write a cast's cost half (FR-042a): the board read as its cast started
+     * — or at the cast, where its start was not told — with the refs block
+     * read now, its targets, modes and X chosen; its events, a spell card's
+     * {@code zone_change} to the stack; and its costs.
+     */
+    private void writeCostHalf(OpenResolution cast, PendingCast started) {
+        Snapshot board = started != null
+                ? started.board().withRefs(RefsJson.render(cast.ability))
+                : cast.state;
+        context.emit(context.newResolution(Moment.ACTIVATION)
+                .actor(cast.actor)
+                .ability(cast.keys)
+                .linkId(cast.linkId)
+                .state(board.render())
+                .payload(RecordPayloads.costPayload(castMove(cast.ability), cast.costs)));
+    }
+
+    /**
+     * A spell's own move to the stack, from the zone the bus said its card
+     * came from (601.2a); nothing for an activated ability, which moves no
+     * card, or a card whose arrival was not seen.
+     */
+    private List<EffectEvent> castMove(SpellAbility ability) {
+        Card host = ability.getHostCard();
+        if (!ability.isSpell() || host == null) {
+            return List.of();
+        }
+        String from = castsUnderWay.arrivedFrom(host.getId());
+        if (from == null) {
+            return List.of();
+        }
+        EffectEvent moved = new EffectEvent(EventType.ZONE_CHANGE)
+                .subject(Refs.of(host))
+                .param("from_zone", from)
+                .param("to_zone", CardSpelling.zoneName(ZoneType.Stack));
+        return List.of(EventAttribution.stampAt(moved, ability, null, null));
+    }
+
+    /**
+     * A resolution closes the bracket and writes or holds its effect half,
+     * which carries the item's {@code outcome} (FR-042b).
      *
-     * <p>A decline writes no effect half either, for the same reason and by the
-     * same rule: {@code declined} is one of the three outcomes the schema calls
-     * partnerless, and the Python loader rejects a {@code declined} activation
-     * that reaches resolution.
+     * <p>A fizzled or declined item did nothing: its effect half is written
+     * now, with no events. Any other is held until the deaths it causes have
+     * happened ({@link HeldResolutionWindow}), and a spell's half takes its
+     * card's move off the stack, which comes after the resolution is
+     * published.
      */
     @Subscribe
     public void onResolved(GameEventSpellResolved event) {
@@ -276,32 +444,26 @@ public final class BusBracketCollector extends BusEventReader {
         // one's state-based check is over: what dies after this is this
         // resolution's doing, or a mix nobody can untangle.
         onNextAction();
-        // An item this collector never saw cast has no bracket, and its cost
-        // half, if any, is still stamped with its real outcome without a link
-        // to a half nobody is going to write.
+        // An item this collector never saw cast has no bracket, and no
+        // effect half.
         OpenResolution resolved = brackets.closeAfterResolution(abilityId);
-        boolean declined = resolved != null && !fizzled && resolved.wasDeclined();
-        boolean writesEffectHalf = resolved != null && !fizzled && !declined;
-
-        ActivationLedger.Settlement settled = ledger.settle(
-                abilityId, fizzled, declined, resolved == null ? null : resolved.ability);
-        String link = settled == null ? null : settled.linkId();
-
-        if (resolved != null) {
-            // The last mode's half closes with the resolution, since no next
-            // mode's first clause comes to close it.
-            resolved.modes.close();
+        if (resolved == null) {
+            return;
         }
-        if (writesEffectHalf) {
-            // Held rather than written: the deaths this resolution causes
-            // have not happened yet.
-            // An activation that paid nothing the game keeps is one the
-            // random seat could repeat at will (research C9).
-            boolean free = settled != null && resolved.ability.isActivatedAbility()
-                    && settled.costs().spentNoManaAndMovedNoCard();
-            heldResolution.hold(resolved, link, free);
+        // The last mode's half closes with the resolution, since no next
+        // mode's first clause comes to close it.
+        resolved.modes.close();
+        ActivationOutcome outcome = resolved.outcome(fizzled);
+        if (outcome == ActivationOutcome.FIZZLED || outcome == ActivationOutcome.DECLINED) {
+            heldResolution.writeEmpty(resolved, outcome);
+            return;
         }
-        castsUnderWay.dropHeld();
+        // Held rather than written: the deaths this resolution causes have
+        // not happened yet. An activation that paid nothing the game keeps is
+        // one the random seat could repeat at will (research C9).
+        boolean free = resolved.costs != null && resolved.ability.isActivatedAbility()
+                && resolved.costs.spentNoManaAndMovedNoCard();
+        heldResolution.hold(resolved, outcome, free);
     }
 
     /**
@@ -363,6 +525,7 @@ public final class BusBracketCollector extends BusEventReader {
     public void onLandPlayed(GameEventLandPlayed event) {
         onNextAction();
         castsUnderWay.abandonAll();
+        pendingCast = null;
     }
 
     /**
@@ -424,6 +587,7 @@ public final class BusBracketCollector extends BusEventReader {
         combatStep.endStep();
         // No cast is under way across a step boundary either.
         castsUnderWay.abandonAll();
+        pendingCast = null;
     }
 
     @Override
@@ -474,6 +638,9 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Override
     void fileMove(GameEventCardChangeZone event, EffectEvent moved) {
+        if (heldResolution.takeMoveOffStack(event, moved)) {
+            return;
+        }
         if (!isStateBasedDeath(event)) {
             record(moved);
         } else if (heldResolution.isHolding()) {
@@ -548,8 +715,9 @@ public final class BusBracketCollector extends BusEventReader {
          * the static check its card's move onto the stack set off ({@code
          * GameAction.changeZone} runs one before the cast is pushed), and the
          * one {@code MagicStack.push} runs after the push and before the cast
-         * event. The cast's own consequence, held for its bracket until its
-         * cast event opens it.
+         * event. Reaches no record, and is counted as dropped: the cost half
+         * records the card's move and the costs alone, and the effect half's
+         * board, read at the resolution's start, already shows it.
          */
         CAST,
         /**
@@ -688,18 +856,16 @@ public final class BusBracketCollector extends BusEventReader {
      */
     private void route(EffectEvent event, String namedCause, Filing filing) {
         Now now = classifyNow();
-        if (now.cause() != Cause.CAST && now.cause() != Cause.PAYMENT) {
-            // The cast under way has been announced or abandoned: what its
-            // window held is taken or dropped.
-            castsUnderWay.dropHeld();
-        }
         switch (now.cause()) {
             case PAYMENT -> {
                 if (!game.getStack().isResolving()) {
                     brackets.closeForAction();
                 }
             }
-            case CAST -> castsUnderWay.hold(now.casting(), event, namedCause);
+            // What a card's move onto the stack set off: after the cost
+            // half's board, which records only the move and the costs, and
+            // before the effect half's (FR-042a, FR-042b).
+            case CAST -> dropped.count(event.type(), DroppedEvents.phaseOf(game));
             case ACTION -> {
                 brackets.closeForAction();
                 dropped.count(event.type(), DroppedEvents.phaseOf(game));
@@ -746,12 +912,14 @@ public final class BusBracketCollector extends BusEventReader {
     @Subscribe
     public void onPriority(GameEventPlayerPriority event) {
         castsUnderWay.abandonAll();
+        // A cast started before priority and never pushed was given up.
+        pendingCast = null;
         turnActions.close();
     }
 
     @Override
-    void onStackArrival(int cardId) {
-        castsUnderWay.onStackArrival(cardId);
+    void onStackArrival(int cardId, String fromZone) {
+        castsUnderWay.onStackArrival(cardId, fromZone);
     }
 
     /**
@@ -792,17 +960,17 @@ public final class BusBracketCollector extends BusEventReader {
      * already shows that Forge had not yet published reaches no record and
      * is counted.
      */
-    private void rebaselineAtSnapshot() {
+    void rebaselineAtSnapshot() {
         for (EffectEvent unreported : rebaselineStats()) {
             dropped.count(unreported.type(), DroppedEvents.phaseOf(game));
         }
     }
 
     /**
-     * Whether a conditional clause about to resolve meets its condition
-     * (FR-034), filed into the half its events will join: called by the
-     * clause hook after {@link #beginMode}, so a mode's first clause files
-     * into its own mode's half. Filed by the test {@link #beginMode} applies:
+     * Whether a conditional clause met its condition (FR-034), as Forge
+     * decided it, filed into the half its events joined: called by the clause
+     * hook when the clause's own effect is over, before a later mode's first
+     * clause begins. Filed by the test {@link #beginMode} applies:
      * a consequence of the open bracket, of a clause on its card; a clause
      * of a mana ability or a special action resolves at an action and is no
      * resolution's.
@@ -829,13 +997,14 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
-     * Write off every held cast that has left the stack without resolving
-     * ({@link ActivationLedger#writeOffRemoved}), asked of the stack itself at
-     * every moment it can have changed. With nothing held there is nothing to
-     * ask.
+     * Drop the bracket of every item that has left the stack without
+     * resolving — countered, exiled off it, swept away by an effect —
+     * asked of the stack itself at every moment it can have changed: no
+     * event tells such a removal from a resolution. With no bracket kept
+     * there is nothing to ask.
      */
     private void reconcilePending() {
-        if (ledger.isEmpty()) {
+        if (brackets.isEmpty()) {
             return;
         }
         writeOffRemoved(idsOnStack());
@@ -854,16 +1023,15 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
-     * The half of {@link #reconcilePending} that has already read the stack.
+     * The half of {@link #reconcilePending} that has already read the stack:
+     * the brackets of the items gone without resolving are removed, and what
+     * they gathered is counted as dropped. Their cost halves were written at
+     * their casts; their fate is the countering clause's effect half.
      *
      * @param onStack the ability ids still on the stack
-     * @return how many held casts were written off
      */
-    int writeOffRemoved(Set<Integer> onStack) {
-        int removed = ledger.writeOffRemoved(onStack);
-        // Their brackets go with them.
-        brackets.removeAbsent(onStack);
-        return removed;
+    void writeOffRemoved(Set<Integer> onStack) {
+        brackets.removeAbsent(onStack, game == null ? null : DroppedEvents.phaseOf(game));
     }
 
     /**
@@ -888,13 +1056,8 @@ public final class BusBracketCollector extends BusEventReader {
      * anything that is not a combat-damage kill), has nowhere left to be
      * flushed to. See {@link #flushOrphanedEvents}.
      *
-     * <p>The <b>held casts</b> split in two, and only one half is writable.
-     * A spell that left the stack since the last reconcile point — countered,
-     * exiled off the stack, swept away by the effect that ended the game — is
-     * written off exactly as it would be at any other moment. What is genuinely
-     * still on the stack is not: it neither resolved nor was removed, and
-     * {@code outcome} has no member for that. Those are counted and named on
-     * stderr rather than stamped with one of the five they did not have.
+     * <p>An item still on the stack had its cost half written at its cast,
+     * and its effect half never comes: nothing is written for it.
      */
     @Subscribe
     public void onGameFinished(GameEventGameFinished event) {
@@ -905,9 +1068,8 @@ public final class BusBracketCollector extends BusEventReader {
      * The half of {@link #onGameFinished} that has already read the stack.
      *
      * @param onStack the ability ids the stack still holds
-     * @return how many held casts were abandoned rather than written
      */
-    long finishGame(Set<Integer> onStack) {
+    void finishGame(Set<Integer> onStack) {
         // A game can end in a step no priority followed: its turn-based
         // actions are written as any other step's. Nothing is held below
         // across the phase event that opened the window.
@@ -921,7 +1083,6 @@ public final class BusBracketCollector extends BusEventReader {
         combatStep.flush();
         flushOrphanedEvents();
         writeOffRemoved(onStack);
-        return ledger.abandonAll();
     }
 
     /**
@@ -1022,6 +1183,7 @@ public final class BusBracketCollector extends BusEventReader {
         context.emit(context.newResolution(Moment.RESOLUTION)
                 .ability(ProvenanceKey.Resolved.UNKNOWN)
                 .state(snapshots.ofBoard().render())
-                .payload(RecordPayloads.resolutionPayload(brackets.drainOrphans(), List.of())));
+                .payload(RecordPayloads.resolutionPayload(
+                        brackets.drainOrphans(), List.of(), null)));
     }
 }

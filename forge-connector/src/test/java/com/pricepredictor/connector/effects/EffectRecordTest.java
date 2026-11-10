@@ -239,15 +239,12 @@ class EffectRecordTest {
     }
 
     @Test
-    void aPartnerlessHalfCarriesNoLinkId() {
+    void aCostHalfCarriesItsEventsAndCostsAndNoOutcome() {
         String json = resolution(Moment.ACTIVATION)
-                // No ability: a countered spell's costs are still readable in
-                // a real game, but the record's shape does not depend on them.
-                .payload(RecordPayloads.costPayload(
-                        PaidCosts.EMPTY, ActivationOutcome.COUNTERED))
+                .payload(RecordPayloads.costPayload(java.util.List.of(), PaidCosts.EMPTY))
                 .toJson();
-        assertTrue(json.contains("\"link_id\":null"), json);
-        assertTrue(json.contains("\"outcome\":\"countered\""), json);
+        assertTrue(json.contains("\"payload\":{\"events\":[],\"costs\":{"), json);
+        assertFalse(json.contains("\"outcome\""), json);
     }
 
     @Test

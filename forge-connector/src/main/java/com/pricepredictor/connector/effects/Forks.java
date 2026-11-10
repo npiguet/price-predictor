@@ -12,7 +12,6 @@ import forge.util.MyRandom;
 import java.util.Optional;
 import java.util.Random;
 import java.util.function.BiFunction;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -96,32 +95,60 @@ final class Forks {
     }
 
     /**
-     * Where a forced resolution's clauses report in, while one is running.
+     * What a forced resolution hears of the hooks while it runs: the
+     * resolutions and clauses of its fork, and the mana its resolutions make.
      *
-     * <p>The clause hook is a JVM static that {@code ClauseOutcomeRouter} owns,
-     * and the live collector drops a fork's clauses on game identity — rightly,
-     * for its own bracket. A fork that splits a modal resolution into per-mode
-     * halves (FR-029f) needs those same clauses, so the live handler hands a
-     * clause it is not keeping to whatever fork is running on its thread, and
-     * {@code InterventionFork.forceResolution} installs the consumer for
-     * exactly the span of its own resolution. Thread-local like
-     * {@link #FORK_RUNNING}, and for the same reason: the engine runs games on
-     * more than one thread.
+     * <p>The hooks are JVM statics that the live game's handlers own, and
+     * each handler drops a fork's callbacks on game identity — rightly, for
+     * its own records. A forced resolution needs the same moments the live
+     * bracket takes: its resolution's start (FR-042b), each chosen mode's
+     * first clause (FR-029f), whether each conditional clause met its
+     * condition (FR-034) and the mana it made (FR-042c). So the live handlers
+     * hand what they are not keeping to whatever fork is running on their
+     * thread, and {@code InterventionFork.forceResolution} installs one for
+     * exactly the span of its own resolution.
      */
-    private static final ThreadLocal<Consumer<SpellAbility>> CLAUSE_LISTENER =
-            new ThreadLocal<>();
+    interface ForkHooks {
+        /** An item of some other game's stack starts to resolve. */
+        default void resolutionStarting(SpellAbility item, boolean fizzled) {
+        }
 
-    /** A clause of some other game is resolving; the running fork may want it. */
-    static void noteClauseResolving(SpellAbility clause) {
-        Consumer<SpellAbility> listener = CLAUSE_LISTENER.get();
-        if (listener != null) {
-            listener.accept(clause);
+        /** A clause of some other game starts to resolve. */
+        default void clauseResolving(SpellAbility clause) {
+        }
+
+        /**
+         * A clause of some other game has finished its own effect.
+         *
+         * @param run the {@code ClauseRun} constant Forge reported, or null
+         */
+        default void clauseResolved(SpellAbility clause, String run) {
+        }
+
+        /** Mana some other game's resolving spell or trigger made, as its event. */
+        default void manaProduced(SpellAbility producer, EffectEvent produced) {
         }
     }
 
-    /** Run {@code action} with {@code listener} receiving the clauses {@link #noteClauseResolving} is handed. */
-    static <T> T listeningForClauses(Consumer<SpellAbility> listener, Supplier<T> action) {
-        return withThreadLocal(CLAUSE_LISTENER, listener, action);
+    /**
+     * The forced resolution's {@link ForkHooks} on this thread, or null.
+     * Thread-local like {@link #FORK_RUNNING}, and for the same reason: the
+     * engine runs games on more than one thread.
+     */
+    private static final ThreadLocal<ForkHooks> FORK_HOOKS = new ThreadLocal<>();
+
+    /** The running fork's {@link ForkHooks}, or a listener that does nothing. */
+    static ForkHooks forkHooks() {
+        ForkHooks hooks = FORK_HOOKS.get();
+        return hooks != null ? hooks : NO_FORK;
+    }
+
+    private static final ForkHooks NO_FORK = new ForkHooks() {
+    };
+
+    /** Run {@code action} with {@code hooks} hearing what {@link #forkHooks} is handed. */
+    static <T> T listeningForHooks(ForkHooks hooks, Supplier<T> action) {
+        return withThreadLocal(FORK_HOOKS, hooks, action);
     }
 
     /**

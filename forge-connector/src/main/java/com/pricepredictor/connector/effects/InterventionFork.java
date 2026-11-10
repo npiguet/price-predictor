@@ -10,7 +10,6 @@ import forge.game.spellability.SpellAbility;
 
 import java.util.List;
 import java.util.Random;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -118,7 +117,7 @@ final class InterventionFork {
             context.emit(forkedHalf(
                     actorId, keys.withOption(half.about().mode().option()),
                     resolution.render(half.about().mode().state(), half.events()),
-                    half.events(), half.about().conditions()));
+                    half.events(), half.about().conditions(), resolution.outcome()));
         }
     }
 
@@ -128,14 +127,15 @@ final class InterventionFork {
      */
     private EffectRecord forkedHalf(
             String actorId, ProvenanceKey.Resolved keys, String state,
-            List<EffectEvent> events, List<ConditionsMet> conditions) {
+            List<EffectEvent> events, List<ConditionsMet> conditions,
+            ActivationOutcome outcome) {
         return context.newResolution(Moment.RESOLUTION)
                 .interventional(true)
                 .fork(true)
                 .actor(actorId)
                 .ability(keys)
                 .state(state)
-                .payload(RecordPayloads.resolutionPayload(events, conditions));
+                .payload(RecordPayloads.resolutionPayload(events, conditions, outcome));
     }
 
     /**
@@ -143,11 +143,16 @@ final class InterventionFork {
      * mode or one for the whole resolution, each with the board it is read
      * against and the deaths it left behind ({@link ForkEventSink#halves}).
      *
-     * @param refs the refs block read as the forced ability finished
-     *             resolving, where the live bracket re-reads it, or null
-     *             when the fork never saw it finish
+     * @param refs    the refs block read as the forced ability finished
+     *                resolving, where the live bracket re-reads it, or null
+     *                when the fork never saw it finish
+     * @param outcome what became of it, as a live effect half says
+     *                (FR-042b): resolved or partially fizzled; a fizzled
+     *                one did nothing and is never written
      */
-    private record ForcedResolution(String refs, List<HeldHalves.Half<ModeSplit.ModeHalf>> halves) {
+    private record ForcedResolution(
+            String refs, List<HeldHalves.Half<ModeSplit.ModeHalf>> halves,
+            ActivationOutcome outcome) {
 
         /**
          * A board this resolution read, paired with its refs as the live
@@ -187,9 +192,10 @@ final class InterventionFork {
      * from the stack, as an observed one does, rather than from the hand.
      *
      * <p>The state is read where the live bracket reads an observed one's
-     * ({@link ForcedCast}): the board at the cast event, the forced ability
-     * on top of the fork's stack, and the refs block re-read as it finishes
-     * resolving. Two differences remain, both from the costs the fork does
+     * ({@link ForcedCast}): the board as the forced ability's resolution
+     * starts (FR-042b), told by the resolution hook, or the board at its
+     * cast event where no hook tells it; and the refs block re-read as it
+     * finishes resolving. Two differences remain, both from the costs the fork does
      * not pay. The board still holds what a cost would have used up: the
      * mana sources a payment would have tapped, the mana it would have
      * spent from the pool, and anything sacrificed, discarded, exiled or
@@ -199,10 +205,9 @@ final class InterventionFork {
      * <p>Resolution drains the whole stack: the cast's own triggers above the
      * forced ability, and the triggers its effect causes after it. Neither is
      * the forced ability's record live, where each has a bracket of its own,
-     * so the sink files what live would put in the forced ability's own
-     * bracket ({@link ForkEventSink}): what happens while it is the top of
-     * the stack before it resolves, except an item above's aftermath; its
-     * resolution; and the deaths of the check that follows it.
+     * so the sink files what live would put in the forced ability's effect
+     * half ({@link ForkEventSink}): its resolution, its spell card's move off
+     * the stack, and the deaths of the check that follows it.
      *
      * <p>The modes, targets and X are drawn at random from the legal options,
      * out of the fork's own seeded source, rather than through the AI. That
@@ -242,32 +247,61 @@ final class InterventionFork {
         // read against the ability the bracket belongs to, and a fork's
         // bracket is exactly this one forced resolution.
         sink.castAs(onStack, cast.state());
-        // A mode's first clause is the boundary between per-mode halves, and
-        // the moment its snapshot is taken (FR-029b, FR-029f). Only this
-        // ability's own modes count: the live clause handler forwards every
-        // clause it drops, and anything else resolving on the fork's stack
-        // may be modal too. Neither the host card nor the key can tell them
-        // apart: a creature spell's own modal enters trigger shares its
-        // host, and a copy of the forced charm a cast trigger made (Double
-        // Vision) shares its key too, so its modes would cut halves the
-        // forced charm's events never reach. The mode's charm must be the
-        // very ability on the stack, the one this record is about.
-        Consumer<SpellAbility> modeStarts = clause -> {
-            CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
-            if (start != null && start.charm() == onStack) {
-                sink.beginMode(start.option(), snapshots.ofResolving(onStack));
+        // The forced ability's own moments, told by the hooks the live
+        // handlers hand a fork's callbacks on to (Forks.forkHooks): its
+        // resolution's start, where its board is read (FR-042b); a mode's
+        // first clause, the boundary between per-mode halves and the moment
+        // its snapshot is taken (FR-029b, FR-029f); each conditional clause's
+        // answer (FR-034); and the mana its own effect makes (C3).
+        //
+        // Only this ability's own modes and clauses count: the live clause
+        // handler forwards every clause it drops, and anything else resolving
+        // on the fork's stack may be modal too. Neither the host card nor the
+        // key can tell them apart: a creature spell's own modal enters
+        // trigger shares its host, and a copy of the forced charm a cast
+        // trigger made (Double Vision) shares its key too, so its modes
+        // would cut halves the forced charm's events never reach. The mode's
+        // charm must be the very ability on the stack, the one this record
+        // is about, and a clause or a producer its chain.
+        boolean[] fizzled = {false};
+        Forks.ForkHooks hooks = new Forks.ForkHooks() {
+            @Override
+            public void resolutionStarting(SpellAbility item, boolean itemFizzled) {
+                if (item.getId() == onStack.getId()) {
+                    fizzled[0] = itemFizzled;
+                    sink.resolutionStarted(snapshots.ofResolving(onStack));
+                }
             }
-            // The forced ability's own clauses only, by the same test: its
-            // chain, the chosen modes included, is rooted in it.
-            if (clause.getRootAbility() == onStack) {
-                sink.noteCondition(ConditionsMet.of(clause));
+
+            @Override
+            public void clauseResolving(SpellAbility clause) {
+                CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
+                if (start != null && start.charm() == onStack) {
+                    sink.beginMode(start.option(), snapshots.ofResolving(onStack));
+                }
+            }
+
+            @Override
+            public void clauseResolved(SpellAbility clause, String run) {
+                if (clause.getRootAbility() == onStack) {
+                    sink.noteCondition(ConditionsMet.of(clause, run));
+                }
+            }
+
+            @Override
+            public void manaProduced(SpellAbility producer, EffectEvent produced) {
+                if (producer.getRootAbility() == onStack) {
+                    sink.manaProduced(produced);
+                }
             }
         };
-        Forks.listeningForClauses(modeStarts, () -> {
+        Forks.listeningForHooks(hooks, () -> {
             GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
             return null;
         });
-        return new ForcedResolution(cast.refs(), sink.halves());
+        ActivationOutcome outcome = fizzled[0] ? ActivationOutcome.FIZZLED
+                : OpenResolution.outcomeOf(cast.targetsAtCast(), onStack);
+        return new ForcedResolution(cast.refs(), sink.halves(), outcome);
     }
 
     /**
@@ -311,13 +345,12 @@ final class InterventionFork {
     }
 
     /**
-     * The forced ability's two moments on the fork's bus, each read where the
-     * live bracket reads an observed resolution's.
+     * The forced ability's two moments on the fork's bus: its cast, which puts
+     * it on the stack, and the end of its resolution.
      *
-     * <p>The live bracket takes its board at the cast event ({@code
-     * BusBracketCollector.beginBracket}): the ability on top of the stack, a
-     * spell's card in the stack zone, priority with the caster, and the cast
-     * not yet counted among the turn's spells. It re-reads the refs block when
+     * <p>The board read at the cast is the effect half's only where no
+     * resolution hook tells the resolution's start, which is where the live
+     * bracket reads its board (FR-042b). The live bracket re-reads the refs block when
      * the ability finishes resolving, because modes, X and a named card are
      * set during the resolution. A state read anywhere else differs from an
      * observed one in exactly those fields, every time, and a difference that
@@ -330,6 +363,7 @@ final class InterventionFork {
         private SpellAbility onStack;
         private Snapshot state;
         private String refs;
+        private int targetsAtCast;
         /**
          * Re-reads the sink's stat differ once the board is taken, so the
          * forced bracket's stat changes are the ones after its snapshot, as
@@ -358,6 +392,7 @@ final class InterventionFork {
             onStack = StackActions.topAbility(fork.getStack());
             if (onStack != null) {
                 state = snapshots.ofResolving(onStack);
+                targetsAtCast = OpenResolution.targetCount(onStack);
                 atSnapshot.run();
             }
         }
@@ -377,6 +412,11 @@ final class InterventionFork {
 
         Snapshot state() {
             return state;
+        }
+
+        /** How many targets the forced ability's root line had when it was pushed. */
+        int targetsAtCast() {
+            return targetsAtCast;
         }
 
         /** The refs read as the forced ability finished resolving, or null. */

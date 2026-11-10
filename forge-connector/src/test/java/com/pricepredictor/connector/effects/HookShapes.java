@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects;
 import forge.game.Game;
 import forge.game.GameEntity;
 import forge.game.ability.AbilityKey;
+import forge.game.ability.ClauseRun;
 import forge.game.card.Card;
 import forge.game.player.Player;
 import forge.game.replacement.ReplacementEffect;
@@ -36,7 +37,7 @@ final class HookShapes {
     interface Clause {
         void onClauseResolving(SpellAbility clause);
 
-        void onClauseResolved(SpellAbility clause, boolean threw);
+        void onClauseResolved(SpellAbility clause, ClauseRun run);
     }
 
     /** {@code EffectRecordOutcomes.EffectRecordOutcomeListener}. */
@@ -65,6 +66,8 @@ final class HookShapes {
 
     /** {@code ReplacementHandler.EffectRecordListener}. */
     interface Replacement {
+        void onReplacing(ReplacementEffect effect, Map<AbilityKey, Object> runParams);
+
         void onReplacement(ReplacementEffect effect, Map<AbilityKey, Object> before,
                 Map<AbilityKey, Object> after, ReplacementResult result,
                 SpellAbility replacedBy);
@@ -101,6 +104,23 @@ final class HookShapes {
         void onPrioritySettled(Game game, Player priorityPlayer);
     }
 
+    /** {@code MagicStack.EffectRecordCastListener}. */
+    interface Cast {
+        void onCastStarting(SpellAbility sa);
+    }
+
+    /** {@code MagicStack.EffectRecordResolutionListener}. */
+    interface Resolution {
+        void onResolutionStarting(SpellAbility sa, boolean fizzled);
+    }
+
+    /** {@code CostPayment.EffectRecordPaymentListener}. */
+    interface Payment {
+        void onPayingCosts(SpellAbility ability, Player payer, boolean effect);
+
+        void onCostsPaid(SpellAbility ability, Player payer, boolean paid);
+    }
+
     /**
      * A listener setter, the stand-in for what it takes, and any older shape a
      * worker still accepts in its place.
@@ -125,7 +145,10 @@ final class HookShapes {
                         List.of(OlderReplacement.class)),
                 new Declared(PatchHooks.CONFIRM_LISTENER, Confirm.class, List.of()),
                 new Declared(PatchHooks.STATE_BASED_LOOP_LISTENER, StateBasedLoop.class, List.of()),
-                new Declared(PatchHooks.PRIORITY_SETTLED_LISTENER, PrioritySettled.class, List.of()));
+                new Declared(PatchHooks.PRIORITY_SETTLED_LISTENER, PrioritySettled.class, List.of()),
+                new Declared(PatchHooks.CAST_LISTENER, Cast.class, List.of()),
+                new Declared(PatchHooks.RESOLUTION_LISTENER, Resolution.class, List.of()),
+                new Declared(PatchHooks.PAYMENT_LISTENER, Payment.class, List.of()));
     }
 
     /** The method {@code shape} declares under {@code name}. */

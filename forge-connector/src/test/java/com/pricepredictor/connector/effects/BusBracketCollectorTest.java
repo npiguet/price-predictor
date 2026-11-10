@@ -97,27 +97,31 @@ class BusBracketCollectorTest {
     // ── outcome ─────────────────────────────────────────────────────────
 
     /**
-     * A cast writes nothing yet, because its outcome is not knowable yet.
-     *
-     * <p>The cost half carries {@code outcome}, and whether a spell resolved,
-     * fizzled or was countered does not exist at the moment it is cast — so a
-     * record written here could only say a literal.
+     * A cast writes its cost half at once, with no outcome (FR-042a): what
+     * becomes of the item is its effect half's to say, so nothing at the
+     * cast waits for it.
      */
     @Test
-    void aCastIsHeldRatherThanWrittenWithAGuessedOutcome() {
+    void aCastWritesItsCostHalfAtOnceWithNoOutcome() throws IOException {
         BusBracketCollector collector = collector();
 
         SpellAbility bolt = damageAbility();
 
         collector.beginBracket(bolt);
 
-        assertFalse(Files.exists(ShardRun.closed(writer)), "the cast wrote a record");
-        assertEquals(1, collector.finishGame(Set.of(bolt.getId())),
-                "the cast is still held, to be abandoned at the end of the game");
+        List<String> records = written();
+        assertEquals(1, records.size(), records.toString());
+        String activation = records.get(0);
+        assertTrue(activation.contains("\"moment\":\"activation\""), activation);
+        assertFalse(activation.contains("\"outcome\""), activation);
+        assertTrue(activation.contains("\"payload\":{\"events\":[],\"costs\":{"), activation);
+        assertTrue(activation.contains("\"link_id\":\"run.0-l1.0.link." + bolt.getId() + "\""),
+                activation);
     }
 
     /**
-     * A resolution stamps the held half and writes both, joined by one link.
+     * A resolution writes the effect half under the cost half's link, and the
+     * effect half carries the item's outcome (FR-042b).
      */
     @Test
     void aResolutionWritesBothHalvesUnderOneLink() throws IOException {
@@ -128,8 +132,9 @@ class BusBracketCollectorTest {
         String activation = records.get(0);
         String resolution = records.get(1);
         assertTrue(activation.contains("\"moment\":\"activation\""), activation);
-        assertTrue(activation.contains("\"outcome\":\"resolved\""), activation);
+        assertFalse(activation.contains("\"outcome\""), activation);
         assertTrue(resolution.contains("\"moment\":\"resolution\""), resolution);
+        assertTrue(resolution.contains("\"outcome\":\"resolved\""), resolution);
 
         String link = "run.0-l1.0.link." + bolt.getId();
         assertTrue(activation.contains("\"link_id\":\"" + link + "\""), activation);
@@ -137,15 +142,12 @@ class BusBracketCollectorTest {
     }
 
     /**
-     * A fizzle writes the cost half alone, and issues no link at all.
-     *
-     * <p>{@code MagicStack.resolveStack} does not resolve a spell whose targets
-     * are all gone, so there is no effect half to link to — and a {@code link_id}
-     * on a fizzled activation would dangle, naming a half no reader can find.
-     * The costs were still paid, so the record itself must still be written.
+     * A fizzle writes an effect half that says so, with no events (FR-042b):
+     * the fizzle is learnable from the board at the resolution's start, which
+     * already shows the target gone.
      */
     @Test
-    void aFizzleWritesThePartnerlessCostHalfAndNoEffectHalf() throws IOException {
+    void aFizzleWritesAnEmptyEffectHalfSayingSo() throws IOException {
         BusBracketCollector collector = collector();
         SpellAbility bolt = damageAbility();
 
@@ -154,36 +156,37 @@ class BusBracketCollectorTest {
         collector.onNextAction();
 
         List<String> records = written();
-        assertEquals(1, records.size(), records.toString());
-        assertTrue(records.get(0).contains("\"outcome\":\"fizzled\""), records.get(0));
-        assertTrue(records.get(0).contains("\"link_id\":null"), records.get(0));
-        assertTrue(records.get(0).contains("\"moment\":\"activation\""), records.get(0));
+        assertEquals(2, records.size(), records.toString());
+        String effect = records.get(1);
+        assertTrue(effect.contains("\"moment\":\"resolution\""), effect);
+        assertTrue(effect.contains("\"outcome\":\"fizzled\""), effect);
+        assertEquals(List.of(), RecordLines.eventTypes(effect), effect);
+        String link = "run.0-l1.0.link." + bolt.getId();
+        assertTrue(effect.contains("\"link_id\":\"" + link + "\""), effect);
     }
 
     /**
-     * A held cast that has left the stack without resolving was countered.
-     *
-     * <p>Forge publishes the same removal event for a spell that resolved and
-     * for one a counterspell took away, so the question is asked of the stack
-     * instead: what is no longer on it and did not resolve was removed.
+     * An item gone from the stack without resolving writes no effect half:
+     * its cost half was written at its cast, and its fate is the countering
+     * clause's (FR-042b).
      */
     @Test
-    void aSpellGoneFromTheStackIsWrittenOffAsCountered() throws IOException {
+    void aSpellGoneFromTheStackWritesNoEffectHalf() throws IOException {
         BusBracketCollector collector = collector();
         SpellAbility survives = damageAbility();
         SpellAbility countered = damageAbility();
 
         collector.beginBracket(survives);
         collector.beginBracket(countered);
-        int written = collector.writeOffRemoved(Set.of(survives.getId()));
+        collector.writeOffRemoved(Set.of(survives.getId()));
+        collector.endBracket(countered.getId(), false);
+        collector.onNextAction();
 
-        assertEquals(1, written);
-        assertEquals(1, collector.finishGame(Set.of(survives.getId())),
-                "the survivor is still held");
         List<String> records = written();
-        assertEquals(1, records.size(), records.toString());
-        assertTrue(records.get(0).contains("\"outcome\":\"countered\""), records.get(0));
-        assertTrue(records.get(0).contains("\"link_id\":null"), records.get(0));
+        assertEquals(2, records.size(), records.toString());
+        for (String record : records) {
+            assertTrue(record.contains("\"moment\":\"activation\""), record);
+        }
     }
 
     private static Zone zone(ZoneType type) {
@@ -375,82 +378,62 @@ class BusBracketCollectorTest {
     // ── the end of the game ─────────────────────────────────────────────
 
     /**
-     * A cast still on the stack when the game ends is counted, not invented.
-     *
-     * <p>It neither resolved nor left the stack, and {@code outcome} has no
-     * member for a game that stopped. Before, it simply vanished: nothing
-     * subscribed {@code GameEventGameFinished}, so one or two casts a game went
-     * unrecorded and uncounted.
+     * A cast still on the stack when the game ends had its cost half written
+     * at its cast, and nothing more is: its effect half never comes.
      */
     @Test
-    void aCastStillOnTheStackAtTheEndIsCountedRatherThanGivenAnOutcome() {
+    void aCastStillOnTheStackAtTheEndWritesNoEffectHalf() throws IOException {
         BusBracketCollector collector = collector();
         SpellAbility bolt = damageAbility();
 
         collector.beginBracket(bolt);
-        long abandoned = collector.finishGame(Set.of(bolt.getId()));
+        collector.finishGame(Set.of(bolt.getId()));
 
-        assertEquals(1, abandoned);
-        assertFalse(Files.exists(ShardRun.closed(writer)), "no record claims one of the five");
+        List<String> records = written();
+        assertEquals(1, records.size(), records.toString());
+        assertTrue(records.get(0).contains("\"moment\":\"activation\""), records.get(0));
     }
 
     /**
-     * The sibling
-     * {@link #aCastStillOnTheStackAtTheEndIsCountedRatherThanGivenAnOutcome}
-     * pins the counting half of this, but never files anything into
-     * {@link BusBracketCollector#bracketEvents} while the bracket is open, so
-     * it cannot catch {@code flushOrphanedEvents()} writing a record anyway.
-     *
-     * <p>Reproduces the real shape: {@code openBracket(bolt)} runs at cast
-     * time, so the bracket stays open on {@code bolt} for as long as it sits on
-     * the stack -- here, until the game ends without it ever resolving (its
-     * own cost payment reaching 0 life, in the shape this stands in for). An
-     * event fires while that bracket is still open, then the game ends with
-     * {@code bolt} still on the stack. The only honest record of {@code bolt}
-     * is "abandoned, never resolved" -- exactly what {@code finishGame}
-     * reports via {@code abandoned} -- not a second, contradictory
-     * {@code kind:resolution} record naming {@code bolt} as having resolved.
+     * The game ends while a bracket is still open on an item that never
+     * resolved (its own cost payment reaching 0 life, in the shape this
+     * stands in for), with an event filed into it: no record claims the
+     * item resolved. {@code flushOrphanedEvents()} writes the orphans only,
+     * never an open bracket's events.
      */
     @Test
-    void aStillOpenBracketAtTheEndIsNotGivenAResolutionItNeverHad() {
+    void aStillOpenBracketAtTheEndIsNotGivenAResolutionItNeverHad() throws IOException {
         BusBracketCollector collector = collector();
         SpellAbility bolt = damageAbility();
         Card victim = TestCards.build("Runeclaw Bear");
 
         collector.beginBracket(bolt);
-        // Filed while bolt's own bracket is still open -- resolving == bolt --
-        // the same as any event its cost payment or its own resolution might
-        // produce before the game is discovered to be over.
         collector.onCardDamaged(new GameEventCardDamaged(
                 victim.getView(), bolt.getHostCard().getView(), 3,
                 GameEventCardDamaged.DamageType.Normal));
-        long abandoned = collector.finishGame(Set.of(bolt.getId()));
+        collector.finishGame(Set.of(bolt.getId()));
 
-        assertEquals(1, abandoned, "bolt never resolved and must still be counted so");
-        assertFalse(Files.exists(ShardRun.closed(writer)),
-                "no record may claim bolt resolved -- it never did, and "
-                        + "writeOffRemoved's abandoned count already says so correctly");
+        List<String> records = written();
+        assertEquals(1, records.size(), records.toString());
+        assertFalse(records.get(0).contains("\"moment\":\"resolution\""),
+                "no record may claim bolt resolved: " + records.get(0));
     }
 
     /**
-     * A cast that had already left the stack is written off as it always was.
-     *
-     * <p>The two halves of what is held at the end are different facts: this
-     * one was removed without resolving, which {@code countered} is the
-     * schema's word for, and only the other has no word at all.
+     * A cast that had already left the stack by the end writes nothing more
+     * than its cost half: no {@code countered} outcome is invented for it.
      */
     @Test
-    void aCastGoneFromTheStackByTheEndIsStillWrittenOff() throws IOException {
+    void aCastGoneFromTheStackByTheEndWritesNothingMore() throws IOException {
         BusBracketCollector collector = collector();
         SpellAbility bolt = damageAbility();
 
         collector.beginBracket(bolt);
-        long abandoned = collector.finishGame(Set.of());
+        collector.finishGame(Set.of());
 
-        assertEquals(0, abandoned);
         List<String> records = written();
         assertEquals(1, records.size(), records.toString());
-        assertTrue(records.get(0).contains("\"outcome\":\"countered\""), records.get(0));
+        assertFalse(records.get(0).contains("countered"), records.get(0));
     }
 
     /**
@@ -627,12 +610,11 @@ class BusBracketCollectorTest {
      * needs saying: the record is otherwise identical to one for an effect
      * that was never offered at all.
      *
-     * <p>Partnerless, like a fizzle: {@code declined} is one of the three
-     * outcomes the schema says has no effect half, and the Python loader
-     * rejects a {@code declined} activation that reaches resolution.
+     * <p>Like a fizzle, its effect half says so and holds no event (FR-042b),
+     * under its cost half's link.
      */
     @Test
-    void anOfferTheControllerRefusedIsDeclinedAndStandsAlone() throws IOException {
+    void anOfferTheControllerRefusedIsADeclinedEffectHalf() throws IOException {
         BusBracketCollector collector = collector();
         SpellAbility bolt = damageAbility();
 
@@ -642,9 +624,10 @@ class BusBracketCollectorTest {
         collector.onNextAction();
 
         List<String> records = written();
-        assertEquals(1, records.size(), records.toString());
-        assertTrue(records.get(0).contains("\"outcome\":\"declined\""), records.get(0));
-        assertTrue(records.get(0).contains("\"link_id\":null"), records.get(0));
+        assertEquals(2, records.size(), records.toString());
+        assertTrue(records.get(1).contains("\"outcome\":\"declined\""), records.get(1));
+        assertEquals(List.of(), RecordLines.eventTypes(records.get(1)), records.get(1));
+        assertEquals(RecordLines.linkOf(records.get(0)), RecordLines.linkOf(records.get(1)));
     }
 
     /**
@@ -671,7 +654,7 @@ class BusBracketCollectorTest {
 
         List<String> records = written();
         assertEquals(2, records.size(), records.toString());
-        assertTrue(records.get(0).contains("\"outcome\":\"resolved\""), records.get(0));
+        assertTrue(records.get(1).contains("\"outcome\":\"resolved\""), records.get(1));
     }
 
     /** A refusal belongs to the bracket it happened in and to no later one. */
@@ -689,10 +672,11 @@ class BusBracketCollectorTest {
         collector.endBracket(answer.getId(), false);
         collector.onNextAction();
 
-        // The refused spell is still held: nothing ever settled it. The
-        // records are the answer's own two halves, and its cost half is first.
+        // The refused spell's cost half, then the answer's two halves: the
+        // answer's effect half is resolved.
         List<String> records = written();
-        assertTrue(records.get(0).contains("\"outcome\":\"resolved\""), records.get(0));
+        assertEquals(3, records.size(), records.toString());
+        assertTrue(records.get(2).contains("\"outcome\":\"resolved\""), records.get(2));
     }
 
     /** A refusal outside any bracket is nobody's, and is dropped. */
@@ -707,7 +691,7 @@ class BusBracketCollectorTest {
         collector.endBracket(bolt.getId(), false);
         collector.onNextAction();
 
-        assertTrue(written().get(0).contains("\"outcome\":\"resolved\""));
+        assertTrue(written().get(1).contains("\"outcome\":\"resolved\""));
     }
 
     /**
@@ -730,7 +714,7 @@ class BusBracketCollectorTest {
         collector.endBracket(bolt.getId(), false);
         collector.onNextAction();
 
-        assertTrue(written().get(0).contains("\"outcome\":\"resolved\""),
+        assertTrue(written().get(1).contains("\"outcome\":\"resolved\""),
                 "an offer taken is described by what it did, not by an outcome");
     }
 
@@ -746,7 +730,7 @@ class BusBracketCollectorTest {
         collector.endBracket(bolt.getId(), false);
         collector.onNextAction();
 
-        assertTrue(written().get(0).contains("\"outcome\":\"declined\""));
+        assertTrue(written().get(1).contains("\"outcome\":\"declined\""));
     }
 
     // ── another game's confirmation ─────────────────────────────────────
@@ -787,7 +771,7 @@ class BusBracketCollectorTest {
         collector.onNextAction();
 
         List<String> written = written();
-        assertTrue(written.get(0).contains("\"outcome\":\"resolved\""),
+        assertTrue(written.get(1).contains("\"outcome\":\"resolved\""),
                 "a fork's own declined confirmation must not mark the live "
                         + "bracket's ability declined: " + written);
     }

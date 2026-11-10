@@ -101,14 +101,24 @@ class StackItemBracketTest {
     }
 
     private static final List<String> DAMAGE = List.of("damage_dealt", "life_change");
+    /** A burn spell's half: its damage, then its card's move off the stack (FR-042b). */
+    private static final List<String> SPELL = List.of("damage_dealt", "life_change", "zone_change");
+
+    /** The effect half through {@code script}, of an item nobody cast: a trigger, a copy. */
+    private static String unlinkedHalf(List<String> all, String script) {
+        String half = only(all, "resolution", script);
+        assertNull(linkOf(half), "no cost half, no link: " + half);
+        return half;
+    }
 
     // ── a trigger above the spell ───────────────────────────────────────
 
     /**
      * A Lightning Bolt cast with Monastery Swiftspear in play: prowess
-     * triggers and resolves above the Bolt. Each writes its own linked
-     * effect half: the pump in the trigger's, the Bolt's damage and the
-     * Bolt's own move to the graveyard nowhere but where they belong.
+     * triggers and resolves above the Bolt. Each writes its own effect half,
+     * the trigger's unlinked, having no cost half: the pump in the trigger's,
+     * the Bolt's damage and the Bolt's own move to the graveyard in the
+     * Bolt's.
      */
     @Test
     void aSpellUnderItsCastTriggerWritesItsOwnHalf() throws Throwable {
@@ -129,18 +139,19 @@ class StackItemBracketTest {
             nextStep(game);
         });
 
-        assertEquals(DAMAGE, eventTypes(linkedHalf(all, BOLT)), all.toString());
+        assertEquals(SPELL, eventTypes(linkedHalf(all, BOLT)), all.toString());
         assertEquals(List.of("pt_change"),
-                eventTypes(linkedHalf(all, SWIFTSPEAR)), all.toString());
+                eventTypes(unlinkedHalf(all, SWIFTSPEAR)), all.toString());
     }
 
     /**
      * Maro's power and toughness are the cards in its controller's hand, so
      * casting the last of them shrinks it as the Bolt leaves the hand, before
-     * prowess goes on the stack. The shrink is the cast's consequence and
-     * stays in the Bolt's half when the trigger goes above it. The 0/0 then
-     * dies in the state-based check with no resolution held and no damage
-     * step open, so that death reaches no record and is counted (FR-029).
+     * prowess goes on the stack. The shrink precedes the Bolt's effect half's
+     * board and is no record's: it is counted as dropped (FR-042a, FR-042b).
+     * The 0/0 then dies in the state-based check with no resolution held and
+     * no damage step open, so that death reaches no record and is counted
+     * (FR-029).
      */
     @Test
     void whatASpellGatheredBeforeATriggerWentAboveItStaysInItsHalf() throws Throwable {
@@ -171,17 +182,15 @@ class StackItemBracketTest {
         });
 
         String boltHalf = linkedHalf(all, BOLT);
-        assertTrue(boltHalf.contains("{\"type\":\"pt_change\",\"subjects\":[\"E"
-                + maro[0].getId() + "\"]"), boltHalf);
-        assertEquals(List.of("pt_change", "damage_dealt", "life_change"), eventTypes(boltHalf),
-                boltHalf);
+        assertEquals(SPELL, eventTypes(boltHalf), boltHalf);
     }
 
     /**
      * Grapeshot cast after a Lightning Bolt: storm copies it once, and the
      * copy resolves above the original. Each Grapeshot writes its own half
-     * with its own damage; the copy ceasing to exist as it leaves the stack
-     * is in neither.
+     * with its own damage; the storm trigger and the copy, nobody's casts,
+     * have no cost half and no link, and the original's half ends with its
+     * card's move to the graveyard.
      */
     @Test
     void aStormCopyAboveItsOriginalLeavesTheOriginalItsOwnHalf() throws Throwable {
@@ -207,11 +216,11 @@ class StackItemBracketTest {
 
         List<String> halves = halvesThrough(all, GRAPESHOT);
         assertEquals(3, halves.size(), "the storm trigger, the copy, the original: " + all);
-        for (String half : halves) {
-            assertNotNull(linkOf(half), half);
-        }
-        assertEquals(DAMAGE, eventTypes(halves.get(1)), "the copy: " + halves.get(1));
-        assertEquals(DAMAGE, eventTypes(halves.get(2)), "the original: " + halves.get(2));
+        assertNull(linkOf(halves.get(0)), "the storm trigger: " + halves.get(0));
+        assertNull(linkOf(halves.get(1)), "the copy: " + halves.get(1));
+        assertNotNull(linkOf(halves.get(2)), "the original: " + halves.get(2));
+        assertEquals(DAMAGE, eventTypes(halves.get(1)).subList(0, 2), "the copy: " + halves.get(1));
+        assertEquals(SPELL, eventTypes(halves.get(2)), "the original: " + halves.get(2));
     }
 
     // ── a response above the spell ──────────────────────────────────────
@@ -219,8 +228,8 @@ class StackItemBracketTest {
     /**
      * Shock, then Lightning Bolt in response, both at the opponent: the Bolt
      * resolves first, and each spell writes its own linked half with its own
-     * damage. The Bolt's move to the graveyard, which comes after its
-     * resolution is published, is the Shock's neither.
+     * damage and its own move to the graveyard, which comes after its
+     * resolution is published.
      */
     @Test
     void aSpellAndTheResponseAboveItEachWriteTheirOwnHalf() throws Throwable {
@@ -239,19 +248,23 @@ class StackItemBracketTest {
         });
 
         String boltHalf = linkedHalf(all, BOLT);
-        assertEquals(DAMAGE, eventTypes(boltHalf), boltHalf);
+        assertEquals(SPELL, eventTypes(boltHalf), boltHalf);
         assertTrue(boltHalf.contains("\"amount\":3"), boltHalf);
         String shockHalf = linkedHalf(all, SHOCK);
-        assertEquals(DAMAGE, eventTypes(shockHalf), shockHalf);
+        assertEquals(SPELL, eventTypes(shockHalf), shockHalf);
+        assertTrue(shockHalf.contains("\"subjects\":[\"E" + shock.getId()
+                + "\"],\"params\":{\"from_zone\":\"stack\""), shockHalf);
+        assertFalse(shockHalf.contains("\"subjects\":[\"E" + bolt.getId() + "\"]"), shockHalf);
         assertTrue(shockHalf.contains("\"amount\":2"), shockHalf);
     }
 
     /**
      * Lightning Bolt, then Shock, then a Counterspell at the Bolt. The
-     * Counterspell resolves and writes its half with the Bolt's counter; the
-     * Bolt, gone from the stack without resolving, is written off as
-     * {@code countered} with no half; the Shock, between them, still writes
-     * its own, with nothing of the Counterspell's.
+     * Counterspell resolves and writes its half with the Bolt's move off the
+     * stack (FR-042b); the Bolt, gone from the stack without resolving, has
+     * its cost half from its cast and writes no effect half; the Shock,
+     * between them, still writes its own, with nothing of the
+     * Counterspell's.
      */
     @Test
     void aCounteredSpellIsWrittenOffAndTheSpellsAroundItKeepTheirHalves() throws Throwable {
@@ -273,15 +286,14 @@ class StackItemBracketTest {
         });
 
         String boltCost = only(all, "activation", BOLT);
-        assertEquals("countered", outcomeOf(boltCost), boltCost);
-        assertNull(linkOf(boltCost), boltCost);
+        assertFalse(RecordLines.payload(boltCost).containsKey("outcome"), boltCost);
         assertTrue(halvesThrough(all, BOLT).isEmpty(), all.toString());
         String counterHalf = linkedHalf(all, COUNTERSPELL);
-        assertEquals(List.of("zone_change"), eventTypes(counterHalf), counterHalf);
+        assertEquals(List.of("zone_change", "zone_change"), eventTypes(counterHalf), counterHalf);
         assertTrue(counterHalf.contains("\"subjects\":[\"E" + bolt.getId()
                 + "\"],\"params\":{\"from_zone\":\"stack\",\"to_zone\":\"graveyard\""),
                 "the countered Bolt going to the graveyard: " + counterHalf);
-        assertEquals(DAMAGE, eventTypes(linkedHalf(all, SHOCK)), all.toString());
+        assertEquals(SPELL, eventTypes(linkedHalf(all, SHOCK)), all.toString());
     }
 
     /**
@@ -309,13 +321,14 @@ class StackItemBracketTest {
         List<String> won = withEventOfType(all, "player_won");
         assertEquals(1, won.size(), "the win is written: " + all);
         assertNull(linkOf(won.get(0)), "an orphan: " + won.get(0));
-        assertEquals(DAMAGE, eventTypes(linkedHalf(all, BOLT)), all.toString());
+        assertEquals(SPELL, eventTypes(linkedHalf(all, BOLT)), all.toString());
     }
 
     /**
-     * The same ability cast twice while its first cast is still held: the
-     * first is written off as {@code countered} when the second arrives, and
-     * the second resolves with its own link. A defensive guard, driven by
+     * The same ability cast twice while its first cast is still on the stack:
+     * each cast writes its cost half, the first's bracket is written off when
+     * the second arrives, and only the second's effect half is written. A
+     * defensive guard, driven by
      * hand because no real game reaches it: a card that leaves the stack is
      * rebuilt by {@code CardCopyService.copyCard} with fresh spell ability
      * ids, so a card cast again always casts a new id.
@@ -336,10 +349,9 @@ class StackItemBracketTest {
 
         List<String> costs = records(all, "activation");
         assertEquals(2, costs.size(), all.toString());
-        assertEquals("countered", outcomeOf(costs.get(0)), costs.get(0));
-        assertNull(linkOf(costs.get(0)), costs.get(0));
-        assertEquals("resolved", outcomeOf(costs.get(1)), costs.get(1));
-        assertEquals(linkOf(costs.get(1)), linkOf(only(all, "resolution", BOLT)));
+        String half = only(all, "resolution", BOLT);
+        assertEquals("resolved", outcomeOf(half), half);
+        assertEquals(linkOf(costs.get(1)), linkOf(half));
     }
 
     /**
@@ -373,8 +385,8 @@ class StackItemBracketTest {
             bracket.onNextAction();
         });
 
-        String shockCost = only(all, "activation", SHOCK);
-        assertEquals("resolved", outcomeOf(shockCost), shockCost);
+        String shockHalf = only(all, "resolution", SHOCK);
+        assertEquals("resolved", outcomeOf(shockHalf), shockHalf);
         assertEquals(List.of("keyword_change"), eventTypes(linkedHalf(all, SHOCK)),
                 "what the Shock gathered, without the Bolt's payment: " + all);
     }
@@ -386,8 +398,9 @@ class StackItemBracketTest {
      * that controller answers a Shock with the Lightning Bolt that is the
      * last of them. Moving the Bolt to the stack zone shrinks Maro before the
      * Bolt is cast — {@code GameAction.changeZone} runs the static check
-     * then — and the 0/0 dies in the check after the cast. The shrink is the
-     * Bolt's consequence, in the Bolt's half; the Shock's is its damage. The
+     * then — and the 0/0 dies in the check after the cast. The shrink
+     * precedes the Bolt's effect half's board and is in neither half
+     * (FR-042a, FR-042b); the Shock's is its damage. The
      * death is a state-based one with no resolution held and no damage step
      * open, so it reaches no record and is counted (FR-029).
      */
@@ -419,13 +432,10 @@ class StackItemBracketTest {
             nextStep(game);
         });
 
-        assertEquals(DAMAGE, eventTypes(linkedHalf(all, SHOCK)), all.toString());
+        assertEquals(SPELL, eventTypes(linkedHalf(all, SHOCK)), all.toString());
         String boltHalf = linkedHalf(all, BOLT);
         String maroRef = "\"subjects\":[\"E" + maro[0].getId() + "\"]";
-        assertTrue(boltHalf.contains("{\"type\":\"pt_change\"," + maroRef),
-                "the shrink as the Bolt left the hand: " + boltHalf);
-        assertEquals(List.of("pt_change", "damage_dealt", "life_change"),
-                eventTypes(boltHalf), boltHalf);
+        assertEquals(SPELL, eventTypes(boltHalf), boltHalf);
         for (String record : all) {
             assertFalse(record.contains("{\"type\":\"zone_change\"," + maroRef
                     + ",\"params\":{\"from_zone\":\"battlefield\""),
@@ -461,7 +471,7 @@ class StackItemBracketTest {
             nextStep(game);
         });
 
-        assertEquals(DAMAGE, eventTypes(linkedHalf(all, SHOCK)), all.toString());
+        assertEquals(SPELL, eventTypes(linkedHalf(all, SHOCK)), all.toString());
     }
 
     /**
@@ -497,7 +507,7 @@ class StackItemBracketTest {
         });
 
         String shockHalf = linkedHalf(all, SHOCK);
-        assertEquals(DAMAGE, eventTypes(shockHalf), shockHalf);
+        assertEquals(SPELL, eventTypes(shockHalf), shockHalf);
         assertEquals(List.of(), eventsNaming(shockHalf, "P0"),
                 "nothing dealt to the Reef's controller: " + shockHalf);
     }
@@ -557,12 +567,12 @@ class StackItemBracketTest {
         });
 
         assertEquals(1, withEventOfType(all, "player_won").size(), "the win is written: " + all);
-        assertEquals(DAMAGE, eventTypes(linkedHalf(all, BOLT)), all.toString());
+        assertEquals(SPELL, eventTypes(linkedHalf(all, BOLT)), all.toString());
     }
 
     /**
      * The Maro response with an abandoned cast's card in the stack zone: the
-     * Bolt's half holds the shrink exactly as it does without it, and the
+     * Bolt's half is exactly as it is without it, and the
      * death is counted rather than swallowed by the stuck card's cast
      * ({@link #whatAResponsesMoveOntoTheStackSetsOffIsTheResponses}).
      */
@@ -594,9 +604,8 @@ class StackItemBracketTest {
             nextStep(game);
         });
 
-        assertEquals(DAMAGE, eventTypes(linkedHalf(all, SHOCK)), all.toString());
-        assertEquals(List.of("pt_change", "damage_dealt", "life_change"),
-                eventTypes(linkedHalf(all, BOLT)), all.toString());
+        assertEquals(SPELL, eventTypes(linkedHalf(all, SHOCK)), all.toString());
+        assertEquals(SPELL, eventTypes(linkedHalf(all, BOLT)), all.toString());
     }
 
     // ── an action is in no record ───────────────────────────────────────
@@ -678,7 +687,7 @@ class StackItemBracketTest {
         String shockHalf = linkedHalf(all, SHOCK);
         assertEquals(List.of(), eventsNaming(shockHalf, "E" + bears[0].getId()),
                 "the Bears' death after the action is not the Shock's: " + shockHalf);
-        assertEquals(DAMAGE, eventTypes(shockHalf), shockHalf);
+        assertEquals(SPELL, eventTypes(shockHalf), shockHalf);
     }
 
     /**
@@ -724,11 +733,12 @@ class StackItemBracketTest {
 
     /**
      * A forced Lightning Bolt cast from the hand of Maro's controller: moving
-     * it to the stack shrinks Maro, and the forced record holds the shrink,
-     * as the live Bolt's half does.
+     * it to the stack shrinks Maro before the forced resolution starts, so
+     * the forced record, read from there, holds no shrink, as the live Bolt's
+     * half holds none (FR-042b).
      */
     @Test
-    void aForcedCastKeepsWhatItsMoveOntoTheStackSetOff() throws Throwable {
+    void aForcedCastsMoveOntoTheStackIsNotItsEffect() throws Throwable {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Card maro = TestBoard.inPlay(game, caster, "Maro");
@@ -741,7 +751,7 @@ class StackItemBracketTest {
         List<String> records = ShardRun.forked(tempDir, game, caps, 5L, bolt).records();
 
         assertEquals(1, records.size(), records.toString());
-        assertTrue(records.get(0).contains(
+        assertFalse(records.get(0).contains(
                         "{\"type\":\"pt_change\",\"subjects\":[\"E" + maro.getId() + "\"]"),
                 "the shrink the forced Bolt's move from hand set off: " + records.get(0));
     }
@@ -752,7 +762,7 @@ class StackItemBracketTest {
      * Kari Zev's Expertise takes a creature and casts the Lightning Bolt in
      * its caster's hand. The Bolt resolves after the Expertise; the
      * Expertise's own move to the graveyard, after its resolution is
-     * published, is in neither half.
+     * published, ends the Expertise's half and is nothing of the Bolt's.
      */
     @Test
     void aSpellCastBySorceryGetsNoneOfTheSorcerysMoveOffTheStack() throws Throwable {
@@ -773,11 +783,15 @@ class StackItemBracketTest {
             nextStep(game);
         });
 
-        assertEquals(DAMAGE, eventTypes(linkedHalf(all, BOLT)),
-                "nothing of the Expertise's is the Bolt's: " + all);
+        String boltHalf = linkedHalf(all, BOLT);
+        assertEquals(SPELL, eventTypes(boltHalf), "nothing of the Expertise's is the Bolt's: " + all);
+        assertFalse(boltHalf.contains("\"subjects\":[\"E" + expertise.getId() + "\"]"), boltHalf);
         String expertiseHalf = linkedHalf(all, EXPERTISE);
-        assertFalse(expertiseHalf.contains("\"subjects\":[\"E" + expertise.getId() + "\"]"),
-                "the Expertise's own move off the stack is nobody's effect: " + expertiseHalf);
+        List<String> types = eventTypes(expertiseHalf);
+        assertEquals("zone_change", types.get(types.size() - 1), expertiseHalf);
+        assertTrue(expertiseHalf.contains("\"subjects\":[\"E" + expertise.getId()
+                + "\"],\"params\":{\"from_zone\":\"stack\",\"to_zone\":\"graveyard\""),
+                "the Expertise's own move off the stack ends its half: " + expertiseHalf);
         assertFalse(eventTypes(expertiseHalf).contains("damage_dealt"), expertiseHalf);
     }
 }

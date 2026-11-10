@@ -157,9 +157,29 @@ class ConditionsMetTest {
         SpellAbility flare = spellOf(TestBoard.card(game, caster, "Kami's Flare"), caster);
         AbilitySub damage = flare.getSubAbility();
 
-        assertNull(ConditionsMet.of(flare), "the root clause is unconditional");
-        ConditionsMet sub = ConditionsMet.of(damage);
+        assertNull(ConditionsMet.of(flare, "RAN"), "the root clause is unconditional");
+        ConditionsMet sub = ConditionsMet.of(damage, "CONDITIONS_UNMET");
         assertEquals("0", sub.segment());
         assertEquals("{\"segment\":\"0\",\"met\":false}", sub.toJson());
+    }
+
+    /**
+     * {@code met} is Forge's own answer, the {@code ClauseRun} the clause hook
+     * reports, never a second {@code metConditions()}: a clause whose unless
+     * cost decided against it still met its condition, and one that threw, or
+     * a jar that reports nothing, gives no entry.
+     */
+    @Test
+    void metIsForgesClauseRun() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        AbilitySub damage =
+                spellOf(TestBoard.card(game, caster, "Kami's Flare"), caster).getSubAbility();
+
+        assertTrue(ConditionsMet.of(damage, "RAN").met());
+        assertTrue(ConditionsMet.of(damage, "UNLESS_COST_DECIDED").met());
+        assertFalse(ConditionsMet.of(damage, "CONDITIONS_UNMET").met());
+        assertNull(ConditionsMet.of(damage, "THREW"));
+        assertNull(ConditionsMet.of(damage, null));
     }
 }

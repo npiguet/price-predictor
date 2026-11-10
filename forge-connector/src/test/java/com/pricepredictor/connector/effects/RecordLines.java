@@ -216,7 +216,7 @@ final class RecordLines {
         return found.get(0);
     }
 
-    /** The outcome a cost half was stamped with. */
+    /** The outcome an effect half carries (FR-042b). */
     static String outcomeOf(String record) {
         Object outcome = payload(record).get("outcome");
         assertTrue(outcome instanceof String, "no outcome in " + record);

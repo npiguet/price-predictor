@@ -112,8 +112,11 @@ final class PatchedCollectors implements AutoCloseable {
         this.channels = Channels.of(game, context, caps, seed, bracket);
         this.everyMode = List.of(bracket.confirmHandler());
         this.patchedOnly = List.of(
+                bracket.castHandler(),
+                bracket.resolutionHandler(),
                 channels.rewrites().handler(),
                 channels.triggers().handler(),
+                channels.mana().paymentHandler(),
                 channels.mana().handler(),
                 channels.playability().legalityHandler(),
                 channels.clauses().clauseHandler(),

@@ -497,10 +497,12 @@ class StateBasedDeathTest {
         String boltHalf = only(records, "resolution", BOLT);
         assertTrue(boltHalf.contains(deathOf(goblin)), "the kill is the Bolt's: " + boltHalf);
         assertFalse(boltHalf.contains(deathOf(elves)), boltHalf);
-        // The trigger's own bracket: a cost half and an effect half, linked.
-        String triggerCost = only(records, "activation", FESTERING_GOBLIN, "trigger");
+        // The trigger's own bracket: an effect half, unlinked, a trigger
+        // having no cost half.
         String triggerHalf = only(records, "resolution", FESTERING_GOBLIN, "trigger");
-        assertEquals(linkOf(triggerCost), linkOf(triggerHalf), triggerHalf);
+        assertEquals(null, linkOf(triggerHalf), triggerHalf);
+        assertTrue(RecordLines.records(records, "activation").stream()
+                .noneMatch(r -> FESTERING_GOBLIN.equals(RecordLines.scriptOf(r))), records.toString());
         for (String record : records) {
             if (FESTERING_GOBLIN.equals(scriptOf(record))) {
                 assertFalse(record.contains(deathOf(goblin)),

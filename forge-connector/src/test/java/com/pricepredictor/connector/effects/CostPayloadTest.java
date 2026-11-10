@@ -33,7 +33,7 @@ class CostPayloadTest {
         return AbilityFactory.getAbility(script, TestCards.build("Fountain of Youth"));
     }
 
-    /** The costs object of a payload, without the outcome around it. */
+    /** The costs object of a payload, without the events beside it. */
     private static String costs(SpellAbility ability) {
         return PaidCosts.of(ability).toJson();
     }
@@ -185,21 +185,22 @@ class CostPayloadTest {
     // ── the payload around them ─────────────────────────────────────────
 
     /**
-     * The costs and the outcome become knowable at different moments.
-     *
-     * <p>What was paid is only readable while the cast is being published; how
-     * the spell ended is only readable later. Holding the {@link PaidCosts} is
-     * what lets one record carry both without holding a {@link SpellAbility}
-     * whose paid lists the next activation overwrites.
+     * A cost half is {@code {events, costs}} and carries no outcome
+     * (FR-042a): what became of the item is its effect half's to say.
      */
     @Test
-    void everyOutcomeRoundTripsThroughTheDeferredForm() {
+    void aCostPayloadIsItsEventsThenItsCostsAndNoOutcome() {
         PaidCosts costs = PaidCosts.of(null);
-        for (ActivationOutcome outcome : ActivationOutcome.values()) {
-            String payload = RecordPayloads.costPayload(costs, outcome);
-            assertTrue(payload.contains("\"outcome\":\"" + outcome.wireName() + "\""), payload);
-            assertTrue(payload.startsWith("{\"costs\":{"), payload);
-        }
+        EffectEvent moved = new EffectEvent(EventType.ZONE_CHANGE)
+                .subject("E7").param("from_zone", "hand").param("to_zone", "stack");
+
+        String spell = RecordPayloads.costPayload(java.util.List.of(moved), costs);
+        String ability = RecordPayloads.costPayload(java.util.List.of(), costs);
+
+        assertTrue(spell.startsWith("{\"events\":[{\"type\":\"zone_change\""), spell);
+        assertTrue(spell.contains("],\"costs\":{"), spell);
+        assertTrue(ability.startsWith("{\"events\":[],\"costs\":{"), ability);
+        assertFalse(spell.contains("outcome"), spell);
     }
 
     /** No ability to read still renders every channel, empty. */

@@ -11,19 +11,19 @@ import java.util.Set;
  * Whether a resolving clause's own condition held: one entry of a
  * resolution payload's {@code conditions_met} (FR-034).
  *
- * <p>Forge asks {@code sa.metConditions()} of every clause just after the
- * clause hook's "resolving" call ({@code AbilityUtils.resolveApiAbility}), and
- * a clause whose condition fails skips its own effect but not the clauses
- * below it. The answer is otherwise discarded, so the collector asks the same
- * question at the hook, on the same state: {@code metConditions} only reads
- * the game. A gift clause's GIFT trigger runs between the hook and Forge's
- * own question; it only queues triggered abilities (no "whenever you give a
- * gift" trigger is static), so it changes nothing a condition reads.
+ * <p>Forge asks {@code sa.metConditions()} of every clause once, in {@code
+ * AbilityUtils.resolveClause}, and tells the clause listener the answer when
+ * the clause's own effect is over ({@code ClauseRun}): {@code
+ * CONDITIONS_UNMET} when the condition failed, {@code RAN} or {@code
+ * UNLESS_COST_DECIDED} when it held. The collector takes that answer rather
+ * than asking again: a second {@code metConditions()} is a second read of a
+ * game the clause's own trigger (a gift's) may already have changed, and
+ * reads nothing Forge acted on.
  *
  * @param segment the clause's chain index, spelled as the {@code attributed_to}
  *                of its events is ({@link EventAttribution#attributedTo}):
  *                {@code root}, or the index down the chain
- * @param met     what {@code metConditions()} answered
+ * @param met     whether Forge found the condition held
  */
 record ConditionsMet(String segment, boolean met) {
 
@@ -47,18 +47,31 @@ record ConditionsMet(String segment, boolean met) {
             "ConditionZone", "OrConditionCheckSVar", "OrOtherConditionSVarCompare");
 
     /**
-     * The clause's entry, or null for a clause with no condition or one whose
-     * chain reaches no line ({@link EventAttribution#UNRESOLVED}).
+     * The clause's entry, or null for a clause with no condition, one whose
+     * chain reaches no line ({@link EventAttribution#UNRESOLVED}), or one
+     * Forge gave no answer for: the clause threw before its condition was
+     * decided, or the jar's listener passes no {@code ClauseRun}.
+     *
+     * @param run the constant name of the {@code ClauseRun} Forge reported
+     *            ({@link PatchHooks#clauseRunName}), or null
      */
-    static ConditionsMet of(SpellAbility clause) {
-        if (clause == null || !isConditional(clause.getMapParams())) {
+    static ConditionsMet of(SpellAbility clause, String run) {
+        if (clause == null || run == null || !isConditional(clause.getMapParams())) {
+            return null;
+        }
+        Boolean met = switch (run) {
+            case "RAN", "UNLESS_COST_DECIDED" -> Boolean.TRUE;
+            case "CONDITIONS_UNMET" -> Boolean.FALSE;
+            default -> null;
+        };
+        if (met == null) {
             return null;
         }
         String segment = EventAttribution.attributedTo(clause);
         if (EventAttribution.UNRESOLVED.equals(segment)) {
             return null;
         }
-        return new ConditionsMet(segment, clause.metConditions());
+        return new ConditionsMet(segment, met);
     }
 
     static boolean isConditional(Map<String, String> params) {

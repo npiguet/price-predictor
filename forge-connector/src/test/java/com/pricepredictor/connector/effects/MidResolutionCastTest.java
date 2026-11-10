@@ -90,8 +90,10 @@ class MidResolutionCastTest {
     /**
      * Tetsuo's trigger, cast mode chosen, casts the Lightning Bolt in its
      * controller's hand. The charm's half acts through the charm's own option
-     * line under the charm's link; the Bolt's half acts through the Bolt's
-     * line, with no option and none of the charm's events.
+     * line, with no cost half and no link, a trigger being nobody's cast; the
+     * Bolt's half acts through the Bolt's line under its cost half's link,
+     * with no option and none of the charm's events, and ends with the Bolt
+     * leaving the stack.
      */
     @Test
     void aCharmThatCastsASpellWritesItsOwnHalfAndTheSpellItsOwn() throws Throwable {
@@ -114,13 +116,14 @@ class MidResolutionCastTest {
                     nextStep(game);
                 });
 
-        String charmCost = only(all, "activation", TETSUO);
         String charmHalf = only(all, "resolution", TETSUO);
         String boltCost = only(all, "activation", BOLT);
         String boltHalf = only(all, "resolution", BOLT);
 
-        assertNotNull(linkOf(charmCost), "the charm's cost half links its effect half: " + charmCost);
-        assertEquals(linkOf(charmCost), linkOf(charmHalf));
+        assertEquals(List.of(), records(all, "activation").stream()
+                .filter(r -> TETSUO.equals(RecordLines.scriptOf(r))).toList(),
+                "a trigger has no cost half");
+        assertNull(linkOf(charmHalf), charmHalf);
         assertTrue(charmHalf.contains("\"option\":" + TETSUO_CAST_MODE + "}"),
                 "the charm's half acts through its cast mode: " + charmHalf);
         // Casting the Bolt moved it to the stack, which no event records,
@@ -131,7 +134,9 @@ class MidResolutionCastTest {
         assertEquals(linkOf(boltCost), linkOf(boltHalf));
         assertFalse(boltHalf.contains("\"option\""),
                 "the Bolt inherits no option of the charm's: " + boltHalf);
-        assertEquals(List.of("damage_dealt", "life_change"), eventTypes(boltHalf), boltHalf);
+        assertEquals(List.of("damage_dealt", "life_change", "zone_change"), eventTypes(boltHalf),
+                boltHalf);
+        assertTrue(boltHalf.contains(zoneChange(bolt, "stack", "graveyard")), boltHalf);
     }
 
     /**
@@ -176,10 +181,10 @@ class MidResolutionCastTest {
         assertEquals(List.of("keyword_change", "counter_change"), eventTypes(charmHalf),
                 "both of the charm's events, before and after the cast, are the charm's: "
                         + charmHalf);
-        String boltCost = only(all, "activation", BOLT);
-        assertTrue(boltCost.contains("\"outcome\":\"declined\""),
-                "the Bolt's refusal is judged on the Bolt's own events: " + boltCost);
-        assertEquals(1, records(all, "resolution").size(), "a refusal writes no half: " + all);
+        String boltHalf = only(all, "resolution", BOLT);
+        assertTrue(boltHalf.contains("\"outcome\":\"declined\""),
+                "the Bolt's refusal is judged on the Bolt's own events: " + boltHalf);
+        assertEquals(List.of(), eventTypes(boltHalf), "a refusal's half holds no event: " + boltHalf);
     }
 
     /**
@@ -212,11 +217,11 @@ class MidResolutionCastTest {
                     nextStep(game);
                 });
 
-        String boltCost = only(all, "activation", BOLT);
-        assertTrue(boltCost.contains("\"outcome\":\"fizzled\""), boltCost);
-        String charmCost = only(all, "activation", TETSUO);
+        String boltHalf = only(all, "resolution", BOLT);
+        assertTrue(boltHalf.contains("\"outcome\":\"fizzled\""), boltHalf);
+        assertEquals(List.of(), eventTypes(boltHalf), boltHalf);
         String charmHalf = only(all, "resolution", TETSUO);
-        assertEquals(linkOf(charmCost), linkOf(charmHalf));
+        assertNull(linkOf(charmHalf), charmHalf);
         assertTrue(charmHalf.contains("\"option\":" + TETSUO_CAST_MODE + "}"), charmHalf);
         assertEquals(List.of(), eventTypes(charmHalf), charmHalf);
     }
@@ -226,8 +231,9 @@ class MidResolutionCastTest {
     /**
      * Bloodbraid Elf's cascade exiles a Mountain and a Lightning Bolt, casts
      * the Bolt and puts the Mountain on the bottom. The trigger writes its own
-     * effect half with all three moves; the Bolt's half holds its damage and
-     * not the Mountain's return, which happened before the Bolt resolved.
+     * effect half with all three moves, unlinked, a trigger having no cost
+     * half; the Bolt's half holds its damage and its own move off the stack,
+     * and not the Mountain's return, which happened before the Bolt resolved.
      */
     @Test
     void aCascadeTriggerKeepsItsHalfAndTheCascadedSpellGetsItsOwn() throws Throwable {
@@ -252,10 +258,8 @@ class MidResolutionCastTest {
             nextStep(game);
         });
 
-        String cascadeCost = only(all, "activation", BLOODBRAID);
         String cascadeHalf = only(all, "resolution", BLOODBRAID);
-        assertNotNull(linkOf(cascadeCost), "the trigger issues its link: " + cascadeCost);
-        assertEquals(linkOf(cascadeCost), linkOf(cascadeHalf));
+        assertNull(linkOf(cascadeHalf), "a trigger issues no link: " + cascadeHalf);
         assertTrue(cascadeHalf.contains(zoneChange(mountain, "library", "exile")), cascadeHalf);
         assertTrue(cascadeHalf.contains(zoneChange(bolt, "library", "exile")), cascadeHalf);
         assertTrue(cascadeHalf.contains(zoneChange(mountain, "exile", "library")),
@@ -264,8 +268,9 @@ class MidResolutionCastTest {
                 eventTypes(cascadeHalf), "the three moves and nothing of the Bolt's: " + cascadeHalf);
 
         String boltHalf = only(all, "resolution", BOLT);
-        assertEquals(List.of("damage_dealt", "life_change"), eventTypes(boltHalf),
+        assertEquals(List.of("damage_dealt", "life_change", "zone_change"), eventTypes(boltHalf),
                 "nothing of the Mountain's is the Bolt's: " + boltHalf);
+        assertTrue(boltHalf.contains(zoneChange(bolt, "stack", "graveyard")), boltHalf);
     }
 
     /**
@@ -299,7 +304,8 @@ class MidResolutionCastTest {
         });
 
         String boltHalf = only(all, "resolution", BOLT);
-        assertEquals(List.of("damage_dealt", "life_change"), eventTypes(boltHalf), boltHalf);
+        assertEquals(List.of("damage_dealt", "life_change", "zone_change"), eventTypes(boltHalf),
+                boltHalf);
     }
 
     /**
@@ -402,9 +408,8 @@ class MidResolutionCastTest {
             bracket.onNextAction();
         });
 
-        String cascadeCost = only(all, "activation", BLOODBRAID);
-        assertEquals("resolved", RecordLines.outcomeOf(cascadeCost), cascadeCost);
-        assertEquals(linkOf(cascadeCost), linkOf(only(all, "resolution", BLOODBRAID)));
+        String cascadeHalf = only(all, "resolution", BLOODBRAID);
+        assertEquals("resolved", RecordLines.outcomeOf(cascadeHalf), cascadeHalf);
     }
 
     // ── the cast spell's own costs ──────────────────────────────────────
@@ -422,7 +427,7 @@ class MidResolutionCastTest {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
-        TestBoard.inPlay(game, caster, "Llanowar Elves");
+        Card elves = TestBoard.inPlay(game, caster, "Llanowar Elves");
         TestBoard.inPlay(game, opponent, "Serra Angel");
         TestBoard.inHand(game, caster, "Bone Splinters");
         SpellAbility expertise = TestBoard.inHand(game, caster, "Kari Zev's Expertise")
@@ -437,7 +442,7 @@ class MidResolutionCastTest {
         assertEquals(1, records.size(), records.toString());
         String record = records.get(0);
         assertTrue(record.contains("\"interventional\":true"), record);
-        assertFalse(record.contains("\"to_zone\":\"graveyard\""),
+        assertFalse(record.contains(zoneChange(elves, "battlefield", "graveyard")),
                 "the sacrifice that paid for the Splinters is not the Expertise's: " + record);
     }
 
@@ -472,7 +477,8 @@ class MidResolutionCastTest {
         String temperCost = only(all, "activation", TEMPER, "spell");
         assertTrue(temperCost.contains("\"mana_by_color\":{\"R\":1}"), temperCost);
         String temperHalf = only(all, "resolution", TEMPER, "spell");
-        assertEquals(List.of("damage_dealt", "life_change"), eventTypes(temperHalf), temperHalf);
+        assertEquals(List.of("damage_dealt", "life_change", "zone_change"), eventTypes(temperHalf),
+                temperHalf);
     }
 
     /**

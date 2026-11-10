@@ -84,6 +84,32 @@ final class StackBrackets {
         return open;
     }
 
+    /** Whether a bracket of this ability id is kept: its cast event has been seen. */
+    boolean holds(int abilityId) {
+        return find(abilityId) != null;
+    }
+
+    /** Whether no item's bracket is kept. */
+    boolean isEmpty() {
+        return items.isEmpty() && waiting.isEmpty();
+    }
+
+    /**
+     * An item's resolution has started, as the engine's resolution hook told
+     * (FR-042b): its bracket is the open one from here, wherever it stood,
+     * and the item the last resolution left on the stack has been taken off.
+     *
+     * @return its bracket, or null for an item this collector never saw cast
+     */
+    OpenResolution startResolving(int abilityId) {
+        OpenResolution item = find(abilityId);
+        if (item != null) {
+            finishing = null;
+            open = item;
+        }
+        return item;
+    }
+
     /** The ability the open bracket attributes to, or null when none is open. */
     SpellAbility resolving() {
         return open == null ? null : open.ability;
@@ -235,19 +261,59 @@ final class StackBrackets {
 
     /**
      * Remove the bracket of every item the stack no longer holds: nothing
-     * they gathered is anyone's. One of them may have been open.
+     * they gathered is anyone's, and each such event is counted as dropped.
+     * One of them may have been open.
+     *
+     * @param phase the engine phase the removal is noticed in
      */
-    void removeAbsent(Set<Integer> onStack) {
-        items.removeIf(item -> !onStack.contains(item.ability.getId()));
-        waiting.removeIf(item -> !onStack.contains(item.ability.getId()));
+    void removeAbsent(Set<Integer> onStack, String phase) {
+        List<OpenResolution> gone = new ArrayList<>();
+        for (List<OpenResolution> list : List.of(items, waiting)) {
+            for (OpenResolution item : list) {
+                if (!onStack.contains(item.ability.getId())) {
+                    gone.add(item);
+                }
+            }
+        }
+        items.removeAll(gone);
+        waiting.removeAll(gone);
+        for (OpenResolution item : gone) {
+            countDropped(item, phase);
+        }
         if (open != null && !items.contains(open) && !waiting.contains(open)) {
             open = null;
+        }
+    }
+
+    /**
+     * What a bracket gathered and no record will write, counted as dropped:
+     * an item removed without resolving, or the consequences of a cast that
+     * precede its resolution's board.
+     */
+    void countDropped(OpenResolution item, String phase) {
+        for (EffectEvent event : item.modes.buffer().drain()) {
+            dropped.count(event.type(), phase);
         }
     }
 
     /** The top item's bracket, or null when no item is on the stack. */
     private OpenResolution top() {
         return items.isEmpty() ? null : items.get(items.size() - 1);
+    }
+
+    /** The bracket of {@code abilityId}, wherever it is, or null. */
+    private OpenResolution find(int abilityId) {
+        for (int i = items.size() - 1; i >= 0; i--) {
+            if (items.get(i).is(abilityId)) {
+                return items.get(i);
+            }
+        }
+        for (int i = waiting.size() - 1; i >= 0; i--) {
+            if (waiting.get(i).is(abilityId)) {
+                return waiting.get(i);
+            }
+        }
+        return null;
     }
 
     /** The bracket of {@code abilityId}, no longer on the stack, or null. */

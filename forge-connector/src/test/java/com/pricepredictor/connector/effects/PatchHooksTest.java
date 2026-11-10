@@ -160,6 +160,12 @@ class PatchHooksTest {
 
         for (PatchHooks.Callback callback : standIn.setter().callbacks()) {
             for (Class<?> shape : accepted) {
+                if (shape != standIn.shape() && Arrays.stream(shape.getMethods())
+                        .noneMatch(m -> m.getName().equals(callback.methodName()))) {
+                    // An older listener that predates the callback is never
+                    // called with it: onReplacing came after onReplacement.
+                    continue;
+                }
                 int passed = HookShapes.method(shape, callback.methodName()).getParameterCount();
                 assertTrue(callback.arity() <= passed,
                         callback + " needs " + callback.arity() + " arguments and "
