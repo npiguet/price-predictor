@@ -33,7 +33,9 @@ import java.util.Set;
  * the live lists are what the engine plays: a creature that lost all its
  * abilities has none, a creature an anthem gave a line has it, and a line a
  * text change rewrote is there as rewritten. A line not printed on the card
- * itself is flagged {@code granted}.
+ * itself is flagged {@code granted}: one another card or a layer-6 change
+ * gave it, and one a type change attached (a Mountain's mana ability on a
+ * nonbasic land under Blood Moon, {@link ProvenanceResolver#addedByTypeChange}).
  *
  * <p>Keywords are lines of their own, one per instance, written with the
  * instance's own fragment ({@code Ward:2}, {@code Protection:Goblin}): a
@@ -233,8 +235,10 @@ final class CardLines {
                     ? chosenModes(onStack) : null;
             List<String> affected = faceUp && trait instanceof StaticAbility stat
                     ? affectedBy(stat) : null;
-            add(new Line(keysOf(key), kind, layerGranted.contains(trait) || notOwn(key),
-                    active, null, chosen, null, affected), key, faceUp);
+            boolean granted = layerGranted.contains(trait) || notOwn(key)
+                    || ProvenanceResolver.addedByTypeChange(trait);
+            add(new Line(keysOf(key), kind, granted, active, null, chosen, null, affected),
+                    key, faceUp);
         }
 
         /**

@@ -2,13 +2,17 @@ package com.pricepredictor.connector.effects;
 
 import com.google.common.collect.Table;
 import com.pricepredictor.connector.effects.ProvenanceKey.Resolved;
+import forge.card.CardTypeView;
 import forge.card.GamePieceType;
+import forge.card.MagicColor;
 import forge.game.CardTraitBase;
 import forge.game.card.Card;
 import forge.game.card.CardState;
 import forge.game.card.CardTraitChanges;
 import forge.game.card.ICardTraitChanges;
+import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
+import forge.game.replacement.ReplacementEffect;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
 import forge.game.trigger.WrappedAbility;
@@ -606,7 +610,10 @@ public final class ProvenanceResolver {
      * board, read without that static, lists it. And a static that takes away
      * only some lines (Blood Sun: lands lose all but their mana abilities)
      * moves every line it leaves up the live slice, where a live index would
-     * name the line printed before it.
+     * name the line printed before it. A type change does both at once: Blood
+     * Moon clears a nonbasic land's lines and adds a Mountain's mana ability
+     * where they stood, and Urborg lists a Forest's Swamp mana ability before
+     * its own, so such a trait is counted past every printed line instead.
      *
      * <p>When Forge's assembly cannot be read, the live slice, then the slice
      * without each static that removes lines from the card.
@@ -627,27 +634,117 @@ public final class ProvenanceResolver {
     }
 
     /**
-     * The kind's slice of {@code state} with every line a trait change took
-     * away back in its printed place and every line one added still appended,
-     * so a printed line stands at the index the sidecar gives it; the live
-     * slice when no change takes a line; null when Forge's assembly cannot be
-     * read ({@link ForgeFields#traitsThrough}).
+     * The kind's slice of {@code state} as the sidecar numbers it: the
+     * printed assembly ({@link #printedChanges}), then every live trait it
+     * lacks — the ones a type change added — so a printed line stands at the
+     * index the sidecar gives it and a runtime one past them all; the live
+     * slice when no change takes a line or changes a type; null when Forge's
+     * assembly cannot be read ({@link ForgeFields#traitsThrough}).
      */
     private static Iterable<? extends CardTraitBase> indexedSlice(CardState state, TraitKind kind) {
+        List<ICardTraitChanges> printed = printedChanges(state, kind);
+        if (printed == null) return kind.slice(state);
+        List<? extends CardTraitBase> assembled = ForgeFields.traitsThrough(state, kind, printed);
+        if (assembled == null) return null;
+        List<CardTraitBase> indexed = new ArrayList<>(assembled);
+        Set<CardTraitBase> listed = Collections.newSetFromMap(new IdentityHashMap<>());
+        listed.addAll(assembled);
+        for (CardTraitBase live : kind.slice(state)) {
+            if (listed.add(live)) indexed.add(live);
+        }
+        return indexed;
+    }
+
+    /**
+     * Whether a trait is one a type change attached at runtime: a basic land
+     * type's mana ability on a land not printed with that type (Blood Moon,
+     * Spreading Seas, Urborg, an {@code Animate} that sets a land type), a
+     * loyalty replacement on a permanent made a planeswalker. Such a trait is
+     * missing from the printed assembly ({@link #printedChanges}), so it is
+     * keyed past every printed line, and its card slot flags it granted. A
+     * line a layer-6 change granted is in that assembly and is not one of
+     * these.
+     */
+    static boolean addedByTypeChange(CardTraitBase trait) {
+        if (trait == null || trait.getKeyword() != null) return false;
+        CardState state = trait.getCardState();
+        TraitKind kind = TraitKind.of(trait);
+        if (state == null || kind == null) return false;
+        List<ICardTraitChanges> printed = printedChanges(state, kind);
+        if (printed == null) return false;
+        List<? extends CardTraitBase> assembled = ForgeFields.traitsThrough(state, kind, printed);
+        if (assembled == null) return false;
+        for (CardTraitBase candidate : assembled) {
+            if (candidate == trait) return false;
+        }
+        return true;
+    }
+
+    /**
+     * The trait changes that assemble the printed list of a kind (the
+     * printed assembly): the card's own, but with every line a change took
+     * away left in place, and layer 4's land traits built from the state's
+     * printed type rather than its live one ({@link PrintedLandTraits}).
+     * Lines a change added stay, appended after the printed ones. Null when
+     * that list is the live one: no change takes a line and no type changed.
+     */
+    private static List<ICardTraitChanges> printedChanges(CardState state, TraitKind kind) {
         Card card = state.getCard();
-        if (card == null || kind == TraitKind.KEYWORD) return kind.slice(state);
-        List<ICardTraitChanges> keeping = new ArrayList<>();
-        boolean removes = false;
+        if (card == null || kind == TraitKind.KEYWORD) return null;
+        boolean differs = card.getChangedCardTypes().iterator().hasNext();
+        List<?> layerFour = state.getLandTraitChanges();
+        List<ICardTraitChanges> printed = new ArrayList<>();
         for (ICardTraitChanges changes : card.getChangedCardTraitsList(state)) {
             if (changes instanceof CardTraitChanges taking && taking.remove() != null) {
-                removes = true;
-                keeping.add(new CardTraitChanges(taking.abilities(), taking.triggers(),
+                differs = true;
+                printed.add(new CardTraitChanges(taking.abilities(), taking.triggers(),
                         taking.replacements(), taking.staticAbilities(), null));
+            } else if (layerFour.contains(changes)) {
+                printed.add(new PrintedLandTraits(state));
             } else {
-                keeping.add(changes);
+                printed.add(changes);
             }
         }
-        return removes ? ForgeFields.traitsThrough(state, kind, keeping) : kind.slice(state);
+        return differs ? printed : null;
+    }
+
+    /**
+     * Layer 4's land traits as the state's printed type builds them, which is
+     * how the converter, reading the card with no game around it, numbered
+     * them: each printed basic land type's mana ability, in Forge's colour
+     * order, and the replacement a printed planeswalker, battle or saga
+     * carries. Unlike Forge's own, it clears nothing: a type change that
+     * removes every land type (Blood Moon) takes the printed lines from the
+     * live list, not from their places.
+     */
+    private record PrintedLandTraits(CardState state) implements ICardTraitChanges {
+
+        @Override
+        public List<SpellAbility> applySpellAbility(List<SpellAbility> list) {
+            CardTypeView type = state.getType();
+            if (!type.isLand()) return list;
+            for (MagicColor.Color colour : MagicColor.Color.values()) {
+                String landType = colour.getBasicLandType();
+                if (landType != null && type.hasSubtype(landType)) {
+                    list.add(state.getLandManaForColor(colour));
+                }
+            }
+            return list;
+        }
+
+        @Override
+        public List<ReplacementEffect> applyReplacementEffect(List<ReplacementEffect> list) {
+            CardTypeView type = state.getType();
+            if (type.isPlaneswalker()) list.add(state.getLoyaltyRep());
+            if (type.isBattle()) list.add(state.getDefenseRep());
+            if (type.isSaga() && !state.hasKeyword(Keyword.READ_AHEAD)) list.add(state.getSagaRep());
+            return list;
+        }
+
+        @Override
+        public ICardTraitChanges copy(Card host, boolean lki) {
+            return this;
+        }
     }
 
     private static int indexIn(Iterable<? extends CardTraitBase> slice, CardTraitBase trait) {

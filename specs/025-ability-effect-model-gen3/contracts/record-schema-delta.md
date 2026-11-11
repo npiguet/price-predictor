@@ -70,7 +70,7 @@ A card's `lines` members:
 |---|---|---|
 | `keys` | list of 0 or 1 provenance key | every line; `[]` when the line resolves to no printed line |
 | `kind` | one of the six kinds | every line |
-| `granted` | bool: the line is not printed on this card (a static's, an attachment's, an effect's, an emblem's or a splice's) | every line |
+| `granted` | bool: the line is not printed on this card (a static's, an attachment's, an effect's, an emblem's or a splice's, or a basic land type's mana ability a type change gave a land not printed with that type, such as a Mountain's under Blood Moon, keyed past every line the land's sidecar declares) | every line |
 | `active` | bool | statics of the face up (`checkConditions()`); `false` on every line of a face not up |
 | `cast_with` | int ≥ 1: times the spell this card was cast as paid the line's cost (1 for an alternative cost or kicker, the count for multikicker) | `keyword` lines of a card on the stack or a permanent cast so |
 | `chosen` | list of `Choices$` positions the ability on the stack chose, in chain order | the line of a modal ability on the stack |
