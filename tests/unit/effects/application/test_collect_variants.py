@@ -824,9 +824,6 @@ class TestOnlyLoadableVariantsAreDecked:
 
         assert LOADABLE_FILE == "loadable.lst"
 
-    @pytest.mark.xfail(strict=True, reason=(
-        "T186's Java half: VariantSidecarMain still writes loadable.txt; drop this "
-        "mark when it writes loadable.lst"))
     def test_the_list_is_the_one_variant_sidecar_main_writes(self):
         import re
 

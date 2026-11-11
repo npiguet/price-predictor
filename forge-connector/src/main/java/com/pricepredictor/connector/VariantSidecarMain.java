@@ -50,8 +50,16 @@ public class VariantSidecarMain {
         });
     }
 
-    /** Where the names Forge's card database accepted are written. */
-    static final String LOADABLE_FILE = "loadable.txt";
+    /**
+     * Where the names Forge's card database accepted are written, in the
+     * variant tree (Python reads it as {@code collect_variants.LOADABLE_FILE}).
+     *
+     * <p>Never a {@code .txt}: the whole tree is staged into Forge's
+     * custom-cards directory on the next run, and Forge reads every
+     * {@code .txt} there as a card script; a list of names has no
+     * {@code Name:} line, and {@code StaticData} throws on it (FR-058b).
+     */
+    public static final String LOADABLE_FILE = "loadable.lst";
 
     /**
      * Write every variant name Forge's card database actually holds.

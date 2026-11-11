@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import com.pricepredictor.connector.VariantSidecarMain;
 import forge.game.card.Card;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,16 +51,23 @@ class VariantRegistryTest {
     @Test
     void aNonScriptFileIsIgnored(@TempDir Path dir) throws IOException {
         write(dir, "bolt_variant_2.txt", "Bolt Variant 2");
-        // Only the extension tells a script from these: each holds a Name: line.
+        // The extension tells a script from these two: each holds a Name: line.
         Files.writeString(dir.resolve("bolt_variant_2.provenance.json"),
                 "Name:Sidecar Not A Script\n");
-        Files.writeString(dir.resolve("loadable.lst"), "Name:Listed Not A Script\n");
+        Files.writeString(dir.resolve(VariantSidecarMain.LOADABLE_FILE),
+                "Name:Listed Not A Script\n");
+        // And a .txt naming no card, as gen-2's loadable.txt was, is no script.
+        Files.writeString(dir.resolve("loadable.txt"), "Bolt Variant 2\nOld Listed Name\n");
 
         VariantRegistry.registerAll(dir);
 
         assertTrue(VariantRegistry.isVariant("Bolt Variant 2"));
         assertFalse(VariantRegistry.isVariant("Listed Not A Script"));
         assertFalse(VariantRegistry.isVariant("Sidecar Not A Script"));
+        assertFalse(VariantRegistry.isVariant("Old Listed Name"));
+        assertTrue(com.pricepredictor.connector.ScriptFiles.under(dir).stream()
+                        .noneMatch(path -> path.getFileName().toString().startsWith("loadable")),
+                "the loadable list is never a script to stage");
     }
 
     @Test

@@ -61,7 +61,7 @@ public class BatchConverter {
         int succeeded = 0;
         List<String> warnings = new ArrayList<>();
 
-        for (Path scriptFile : ScriptFiles.under(cardsPath)) {
+        for (Path scriptFile : ScriptFiles.textFilesUnder(cardsPath)) {
             totalFiles++;
             try {
                 convertOne(cardsPath, scriptFile, outputPath, tree, writeConvertedText);
