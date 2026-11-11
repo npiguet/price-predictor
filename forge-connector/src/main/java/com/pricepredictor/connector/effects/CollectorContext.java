@@ -27,11 +27,12 @@ final class CollectorContext {
      */
     private final String randomSeatPlayerId;
     /**
-     * The rules the run aimed at (FR-009a), or null for a run that aimed at
+     * The rules the game is aimed at (FR-009a), or null for a game aimed at
      * none: a {@code collect-coverage} or {@code collect-variants} run stamps
-     * them, possibly none, on every record it writes; a {@code match-outcomes}
-     * run stamps nothing, and only a directed fork's records carry the rule it
-     * forked for.
+     * its rules, possibly none, on every record it writes, and a game a
+     * steered deck plays stamps its two decks' rules instead (FR-058d,
+     * {@link DeckRules}); a {@code match-outcomes} run stamps nothing, and only
+     * a directed fork's records carry the rule it forked for.
      */
     private final List<String> aimedAt;
     /**
@@ -162,7 +163,7 @@ final class CollectorContext {
     }
 
     /**
-     * Set a fork's flags, stamp {@code random_seat} and the run's
+     * Set a fork's flags, stamp {@code random_seat} and the game's
      * {@code aimed_at}, and write.
      *
      * <p>A record already aimed keeps its own: a directed fork names the one

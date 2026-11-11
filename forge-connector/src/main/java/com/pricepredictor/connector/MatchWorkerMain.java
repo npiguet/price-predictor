@@ -298,7 +298,8 @@ public class MatchWorkerMain {
         }
         caps.aimedAt().ifPresent(rules -> System.out.println(
                 "Aimed at: " + (rules.isEmpty() ? "no rule" : String.join(",", rules))
-                        + " (every record carries aimed_at)"));
+                        + " (every record carries aimed_at; a game a steered deck"
+                        + " plays carries its two decks' rules instead)"));
         if (caps.directedForksEnabled()) {
             announceDirectedForks(caps);
         }

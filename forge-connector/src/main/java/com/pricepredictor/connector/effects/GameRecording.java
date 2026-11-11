@@ -85,8 +85,32 @@ public final class GameRecording implements AutoCloseable {
     public GameRecording(
             Game game, RecordShardWriter writer, String gameId, CollectionCaps caps,
             long seed, String randomSeatPlayerId, ForkSeats forkSeats) {
-        this(game, writer, gameId, caps, seed, randomSeatPlayerId, forkSeats,
+        this(game, writer, gameId, caps, seed, randomSeatPlayerId, forkSeats, DeckRules.NONE);
+    }
+
+    /**
+     * Build one game's collectors, for a game whose decks are aimed at
+     * {@code decks} (FR-058d): when either carries a rule, the game is
+     * steered, and every record it writes carries both decks' rules as
+     * {@code aimed_at} instead of the run's list.
+     */
+    public GameRecording(
+            Game game, RecordShardWriter writer, String gameId, CollectionCaps caps,
+            long seed, String randomSeatPlayerId, ForkSeats forkSeats, DeckRules decks) {
+        this(game, writer, gameId, caps, seed, randomSeatPlayerId, forkSeats, decks,
                 DirectedRules.registered(), DirectedForkTally.lifetime());
+    }
+
+    /**
+     * Build one game's collectors, directed forks taken for {@code
+     * directedRules} and counted in {@code tally}, for decks aimed at no rule.
+     */
+    GameRecording(
+            Game game, RecordShardWriter writer, String gameId, CollectionCaps caps,
+            long seed, String randomSeatPlayerId, ForkSeats forkSeats,
+            DirectedRules directedRules, DirectedForkTally tally) {
+        this(game, writer, gameId, caps, seed, randomSeatPlayerId, forkSeats, DeckRules.NONE,
+                directedRules, tally);
     }
 
     /**
@@ -96,16 +120,17 @@ public final class GameRecording implements AutoCloseable {
      */
     GameRecording(
             Game game, RecordShardWriter writer, String gameId, CollectionCaps caps,
-            long seed, String randomSeatPlayerId, ForkSeats forkSeats,
+            long seed, String randomSeatPlayerId, ForkSeats forkSeats, DeckRules decks,
             DirectedRules directedRules, DirectedForkTally tally) {
         this.game = game;
         this.fork = false;
         this.caps = caps;
         AttributionMode mode = AttributionMode.detect();
+        // The game's aim: the run's list, or a steered game's decks' rules.
+        List<String> aimedAt = decks.aimedAt(caps.aimedAt());
         // One context per collector, because each counts its own records.
         Supplier<CollectorContext> context =
-                () -> new CollectorContext(
-                        writer, gameId, mode, randomSeatPlayerId, caps.aimedAt().orElse(null));
+                () -> new CollectorContext(writer, gameId, mode, randomSeatPlayerId, aimedAt);
         this.envelope = context.get();
         // Stage three. Nothing is copied unless a budget says so, because a
         // fork costs a game copy and a stack resolution, and nothing on a

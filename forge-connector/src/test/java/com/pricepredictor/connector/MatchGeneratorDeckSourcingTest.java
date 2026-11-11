@@ -78,4 +78,40 @@ class MatchGeneratorDeckSourcingTest {
         assertEquals(List.of("Llanowar Elves"), b.cardNames());
         assertNotNull(b.deck(), "the mirror deck must still materialize");
     }
+
+    /**
+     * A steered deck's rule reaches the game (FR-058d): the match is played
+     * with both decks' rules, so its records can carry them as
+     * {@code aimed_at}.
+     */
+    @Test
+    void bothDecksRulesReachThePlayedMatch() {
+        GeneratedDecksIndex.GeneratedDeck steered = new GeneratedDecksIndex.GeneratedDeck(
+                "variant", "COVERAGE", List.of("Llanowar Elves", "Forest"), "704.5f");
+        GeneratedDecksIndex.GeneratedDeck plain = new GeneratedDecksIndex.GeneratedDeck(
+                "variant", "COVERAGE", List.of("Llanowar Elves", "Plains"));
+        MatchGenerator.DeckSource decks = new MatchGenerator.DeckSource.FileSampled(
+                new GeneratedDecksIndex(List.of(steered, plain)));
+        List<com.pricepredictor.connector.effects.DeckRules> played = new java.util.ArrayList<>();
+        GamePlayer capturing = new GamePlayer(1, null,
+                com.pricepredictor.connector.effects.CollectionCaps.defaults()) {
+            @Override
+            public PlayedMatch playMatch(forge.deck.Deck deckA, forge.deck.Deck deckB,
+                    com.pricepredictor.connector.effects.DeckRules rules) {
+                played.add(rules);
+                return new PlayedMatch(
+                        List.of(new GameOutcome(Side.A, Side.A, List.of(), List.of())), 0, false);
+            }
+        };
+        MatchGenerator generator = MatchGenerator.builder(List.of("RVR"), RUN_ID)
+                .sideA(decks).sideB(decks, 1).random(new Random(3)).decksOnly(true)
+                .gamePlayer(capturing).build();
+
+        generator.generateMatch();
+
+        assertEquals(1, played.size());
+        // Two decks of which exactly one is steered, never a mirror of each other.
+        assertEquals(List.of("704.5f"),
+                played.get(0).aimedAt(java.util.Optional.of(List.of())));
+    }
 }

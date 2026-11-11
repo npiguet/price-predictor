@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.GeneratedDecksIndex.GeneratedDeck;
+import com.pricepredictor.connector.effects.DeckRules;
 import forge.deck.Deck;
 import forge.item.PaperCard;
 import forge.item.SealedTemplate;
@@ -237,7 +238,8 @@ public class MatchGenerator {
         DeckSelection a = pickDeckA();
         DeckSelection b = pickDeckB(a.setCode, a.cardNames);
 
-        GamePlayer.PlayedMatch played = gamePlayer.playMatch(a.deck, b.deck);
+        GamePlayer.PlayedMatch played =
+                gamePlayer.playMatch(a.deck, b.deck, DeckRules.of(a.rule, b.rule));
 
         MatchResult matchResult = MatchResult.of(
                 runId, a.setCode, a.method, b.method, a.cardNames, b.cardNames, played);
@@ -383,7 +385,13 @@ public class MatchGenerator {
      * and {@link #pickDeckB} can return both file-sampled and Forge-built
      * decks through a single shape.
      */
-    record DeckSelection(Deck deck, List<String> cardNames, String method, String setCode) {
+    record DeckSelection(
+            Deck deck, List<String> cardNames, String method, String setCode, String rule) {
+
+        /** A deck aimed at no rule: every Forge-built deck. */
+        DeckSelection(Deck deck, List<String> cardNames, String method, String setCode) {
+            this(deck, cardNames, method, setCode, null);
+        }
 
         /**
          * Build a {@code DeckSelection} from a generated-decks-file entry,
@@ -403,7 +411,8 @@ public class MatchGenerator {
                             deck.cardNames(), fileDecks.unresolved, DECKS_ONLY_UNRESOLVED),
                     deck.cardNames(),
                     deck.label(),
-                    setCode);
+                    setCode,
+                    deck.rule());
         }
     }
 }

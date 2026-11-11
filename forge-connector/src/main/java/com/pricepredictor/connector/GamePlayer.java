@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.CollectionCaps;
+import com.pricepredictor.connector.effects.DeckRules;
 import com.pricepredictor.connector.effects.FruitlessActivations;
 import com.pricepredictor.connector.effects.GameRecording;
 import com.pricepredictor.connector.effects.PriorityCandidates;
@@ -178,6 +179,15 @@ public class GamePlayer {
      * {@code cards-played.txt}.
      */
     public PlayedMatch playMatch(Deck deckA, Deck deckB) {
+        return playMatch(deckA, deckB, DeckRules.NONE);
+    }
+
+    /**
+     * {@link #playMatch(Deck, Deck)} for decks aimed at {@code deckRules}: a
+     * steered variant round's decks (FR-058d), whose games' records carry
+     * both decks' rules as {@code aimed_at}.
+     */
+    public PlayedMatch playMatch(Deck deckA, Deck deckB, DeckRules deckRules) {
         long startMillis = System.currentTimeMillis();
         // The match's own seeded source, scrambled for the reason the
         // collectors' sampler is: consecutive matches start milliseconds
@@ -200,7 +210,7 @@ public class GamePlayer {
         long gameSeed = startMillis;
 
         while (!match.isMatchOver()) {
-            playGame(match, gameSeed++).ifPresent(outcomes::add);
+            playGame(match, gameSeed++, deckRules).ifPresent(outcomes::add);
         }
 
         int durationSeconds = (int) ((System.currentTimeMillis() - startMillis) / 1000);
@@ -212,9 +222,10 @@ public class GamePlayer {
      * them.
      *
      * @param gameSeed seeds the game's recording
+     * @param rules    the rules the match's decks are aimed at
      * @return the game's outcome, or empty for a draw or an aborted game
      */
-    private Optional<GameOutcome> playGame(Match match, long gameSeed) {
+    private Optional<GameOutcome> playGame(Match match, long gameSeed, DeckRules rules) {
         var game = match.createGame();
         var collector = new PlayedCardCollector(game);
         game.subscribeToEvents(collector);
@@ -226,7 +237,8 @@ public class GamePlayer {
         Optional<RandomSeatController> seat = randomSeatOf(game);
         GameRecording recording = effectRecords == null ? null : new GameRecording(
                 game, effectRecords, effectRecords.nextGameId(), caps, gameSeed,
-                seat.map(s -> Refs.of(s.getPlayer())).orElse(null), GamePlayer::attachForkSeats);
+                seat.map(s -> Refs.of(s.getPlayer())).orElse(null), GamePlayer::attachForkSeats,
+                rules);
         try {
             // Inside the try: open() installs JVM-static hooks one by one, and
             // a hook left behind by an open() that threw part way would hand
