@@ -91,6 +91,27 @@ class ModalResolutionTest {
         assertNull(CharmModes.modeStartOf(pump), "a sub-ability of a mode opens nothing");
     }
 
+    /**
+     * A mode's clauses are numbered down its own option line, the clone as
+     * its root (A6): the charm's segment is not on that line, and an earlier
+     * mode's clauses are not either.
+     */
+    @Test
+    void aModesClausesAreCountedFromItsOwnClone() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        SpellAbility boros = charmOf(game, game.getPlayers().get(0), "Boros Charm");
+        List<AbilitySub> single = TestBoard.chain(boros, 0, 2);
+        assertEquals(EventAttribution.ROOT, EventAttribution.attributedTo(single.get(0)));
+        assertEquals(EventAttribution.ROOT, EventAttribution.attributedTo(single.get(1)));
+
+        SpellAbility season = charmOf(game, game.getPlayers().get(0), "Season of Gathering");
+        // Mode 0 chains a pump and a cleanup; mode 2 follows them.
+        List<AbilitySub> clones = TestBoard.chain(season, 0, 2);
+        assertEquals(4, clones.size(), clones.toString());
+        assertEquals(List.of(EventAttribution.ROOT, "0", "1", EventAttribution.ROOT),
+                clones.stream().map(EventAttribution::attributedTo).toList());
+    }
+
     /** Spec Story 3 scenario 13: one mode chosen twice gives two clones under one option. */
     @Test
     void aRepeatedModeIsTwoClonesOfOneOption() {

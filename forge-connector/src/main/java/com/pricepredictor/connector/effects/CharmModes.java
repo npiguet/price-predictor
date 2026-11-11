@@ -101,7 +101,7 @@ final class CharmModes {
      * the previous mode's tail, or the charm itself, and reads a different one
      * or none.
      */
-    private static boolean isModeClone(SpellAbility ability) {
+    static boolean isModeClone(SpellAbility ability) {
         if (!(ability instanceof AbilitySub) || ability.getParent() == null) {
             return false;
         }

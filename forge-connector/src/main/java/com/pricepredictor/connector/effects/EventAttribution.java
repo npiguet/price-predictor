@@ -109,6 +109,10 @@ final class EventAttribution {
      * root is not a parameter — Forge resolves a copy of the ability it was
      * handed, so the bracket's root and the pointer are routinely different
      * objects for the same line.
+     *
+     * <p>The line is the one the record keys to. A triggered ability's root
+     * is a parentless sub-ability, and is its line's root; a chosen charm
+     * mode's line is its option line, rooted at the mode's clone.
      */
     static String attributedTo(Object pointer) {
         if (!(pointer instanceof SpellAbility resolvingLine)) {
@@ -116,23 +120,35 @@ final class EventAttribution {
             // absent, or nothing was resolving when the event was published.
             return UNRESOLVED;
         }
-        if (!(resolvingLine instanceof AbilitySub resolving)) {
-            return ROOT;
-        }
         // Counted upward from the resolving clause rather than downward from
         // the acting one. Forge resolves a copy of the ability it was handed,
         // so the bracket's root and the pointer's chain need not be the same
         // objects, and a walk down from the root would match nothing at all.
-        int index = 0;
-        SpellAbility parent = resolving.getParent();
-        while (parent instanceof AbilitySub above) {
-            index++;
-            parent = above.getParent();
+        int hops = 0;
+        for (SpellAbility clause = resolvingLine; ; clause = clause.getParent(), hops++) {
+            if (CharmModes.isModeClone(clause)) {
+                // A chosen mode's clone is the root of its option line, the
+                // line its record keys to: neither the charm's own segment
+                // nor an earlier mode's clauses are on it.
+                return lineIndex(hops);
+            }
+            if (clause.getParent() == null) {
+                // The top of the chain: a line's root, or a triggered or
+                // replacement ability's, which Forge executes as a
+                // parentless sub-ability. Any other parentless sub-ability is
+                // detached: the index counts clauses of a line this
+                // collector never saw, so it names nothing a reader could
+                // join to.
+                boolean root = !(clause instanceof AbilitySub)
+                        || clause.isTrigger() || clause.isReplacementAbility();
+                return root ? lineIndex(hops) : UNRESOLVED;
+            }
         }
-        // A chain that ends in nothing is a detached sub-ability: the index
-        // counts clauses of a line this collector never saw, so it names
-        // nothing a reader could join to.
-        return parent == null ? UNRESOLVED : String.valueOf(index);
+    }
+
+    /** The clause {@code hops} below its line's root: the root, or its index down the chain. */
+    private static String lineIndex(int hops) {
+        return hops == 0 ? ROOT : String.valueOf(hops - 1);
     }
 
     /**
