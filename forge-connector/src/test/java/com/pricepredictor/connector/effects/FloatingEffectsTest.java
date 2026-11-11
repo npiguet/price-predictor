@@ -171,6 +171,7 @@ class FloatingEffectsTest {
     @CsvSource(nullValues = "null", value = {
             "null, end_of_turn",
             "Permanent, permanent",
+            "Perpetual, permanent",
             "UntilEndOfCombat, end_of_turn",
             "UntilYourNextTurn, end_of_turn",
             "UntilHostLeavesPlay, until_leaves",

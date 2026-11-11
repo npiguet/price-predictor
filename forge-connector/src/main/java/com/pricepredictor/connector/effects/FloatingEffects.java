@@ -189,7 +189,9 @@ final class FloatingEffects {
 
     /**
      * A {@code Duration$} as one of three values. {@code permanent} for
-     * {@code Permanent}; {@code until_leaves} for a duration that ends when
+     * {@code Permanent} and {@code Perpetual} (a change that follows the card
+     * into every zone for the rest of the game); {@code until_leaves} for a
+     * duration that ends when
      * an object changes (it leaves play, its control is lost, it untaps or is
      * unattached or turned face down, "as long as"); {@code end_of_turn} for
      * every other, which ends at a step of some turn — absent, which Forge
@@ -200,7 +202,7 @@ final class FloatingEffects {
         if (duration == null || duration.isEmpty()) {
             return "end_of_turn";
         }
-        if (duration.equals("Permanent")) {
+        if (duration.equals("Permanent") || duration.equals("Perpetual")) {
             return "permanent";
         }
         if (duration.endsWith("OrEOT") || duration.endsWith("OrEndOfCombat")) {
