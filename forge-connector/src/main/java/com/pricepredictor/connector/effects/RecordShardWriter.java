@@ -9,6 +9,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.GZIPOutputStream;
@@ -69,8 +71,22 @@ public final class RecordShardWriter implements AutoCloseable {
     private boolean closed;
     private final AtomicLong recordCounter = new AtomicLong();
     private final AtomicLong gameCounter = new AtomicLong();
+    /** The records one game may write before the rest are withheld (FR-041a). */
+    private final int maxRecordsPerGame;
+    /** Each game's records written and withheld, until its recording ends ({@link #endGame}). */
+    private final Map<String, GameRecords> games = new HashMap<>();
 
     public RecordShardWriter(Path directory, String runId, int worker, String lifetime) {
+        this(directory, runId, worker, lifetime, CollectionCaps.DEFAULT_MAX_RECORDS_PER_GAME);
+    }
+
+    /**
+     * @param maxRecordsPerGame the records one game may write, its forks'
+     *                          included; the rest are withheld and counted
+     */
+    public RecordShardWriter(
+            Path directory, String runId, int worker, String lifetime, int maxRecordsPerGame) {
+        this.maxRecordsPerGame = maxRecordsPerGame;
         this.runId = runId;
         this.shard = worker + "-" + lifetime;
         this.path = directory.resolve(runId + "." + shard + SUFFIX);
@@ -129,10 +145,23 @@ public final class RecordShardWriter implements AutoCloseable {
         return Instant.now().toString();
     }
 
-    /** Append one already-rendered record line, flushing a full block. */
+    /**
+     * Append one already-rendered record line, flushing a full block; or,
+     * once its game has written {@code maxRecordsPerGame} records, withhold
+     * it and count it against the game (FR-041a).
+     */
     public synchronized void write(String recordJson) {
         if (closed) {
             throw new IllegalStateException("shard already closed: " + path);
+        }
+        String game = RecordLine.string(recordJson, "game_id");
+        if (game != null) {
+            GameRecords records = games.computeIfAbsent(game, id -> new GameRecords());
+            if (records.written >= maxRecordsPerGame) {
+                records.withhold(recordJson);
+                return;
+            }
+            records.written++;
         }
         block.append(recordJson).append('\n');
         if (++blockRecords >= BLOCK_RECORDS) {
@@ -164,6 +193,94 @@ public final class RecordShardWriter implements AutoCloseable {
         } finally {
             block.setLength(0);
             blockRecords = 0;
+        }
+    }
+
+    /**
+     * A game's recording has ended: if the cap withheld any of its records,
+     * print one line naming the game, how many were withheld, and the turn
+     * and acting card the most of them shared (FR-041a).
+     */
+    public synchronized void endGame(String gameId) {
+        GameRecords records = games.remove(gameId);
+        if (records != null && records.withheld > 0) {
+            System.err.println(records.report(gameId, maxRecordsPerGame));
+        }
+    }
+
+    /** One game's records written, and those withheld past the cap by turn and acting card. */
+    private static final class GameRecords {
+        private int written;
+        private int withheld;
+        private final Map<String, Integer> byTurnAndCard = new HashMap<>();
+
+        void withhold(String recordJson) {
+            withheld++;
+            String turn = RecordLine.number(recordJson, "turn");
+            String card = RecordLine.actingScript(recordJson);
+            byTurnAndCard.merge("turn " + (turn == null ? "?" : turn) + ", acting card "
+                    + (card == null ? "none" : card), 1, Integer::sum);
+        }
+
+        String report(String gameId, int cap) {
+            // The most records; of two as many, the first by turn and card.
+            Map.Entry<String, Integer> most = null;
+            for (Map.Entry<String, Integer> entry : new java.util.TreeMap<>(byTurnAndCard).entrySet()) {
+                if (most == null || entry.getValue() > most.getValue()) {
+                    most = entry;
+                }
+            }
+            return "Effect records: game " + gameId + " reached --max-records-per-game " + cap
+                    + "; withheld " + withheld + " more records, most often (" + most.getValue()
+                    + ") on " + most.getKey();
+        }
+    }
+
+    /**
+     * The first value of a field in a rendered record line, read without
+     * parsing it: the envelope's {@code game_id}, the snapshot's
+     * {@code turn}, the acting line's {@code script_file}.
+     */
+    static final class RecordLine {
+        private RecordLine() {
+        }
+
+        /** The string value of the first {@code "key":"..."} in the line, or null. */
+        static String string(String json, String key) {
+            return string(json, key, 0);
+        }
+
+        /** The same, from {@code from} on. */
+        private static String string(String json, String key, int from) {
+            String marker = "\"" + key + "\":\"";
+            int start = json.indexOf(marker, from);
+            if (start < 0) {
+                return null;
+            }
+            start += marker.length();
+            int end = json.indexOf('"', start);
+            return end < 0 ? null : json.substring(start, end);
+        }
+
+        /** The script file of the record's acting line, its {@code ability}'s first key, or null. */
+        static String actingScript(String json) {
+            int ability = json.indexOf("\"ability\":[{");
+            return ability < 0 ? null : string(json, "script_file", ability);
+        }
+
+        /** The number value of the first {@code "key":N} in the line, or null. */
+        static String number(String json, String key) {
+            String marker = "\"" + key + "\":";
+            int start = json.indexOf(marker);
+            if (start < 0) {
+                return null;
+            }
+            start += marker.length();
+            int end = start;
+            while (end < json.length() && (Character.isDigit(json.charAt(end)) || json.charAt(end) == '-')) {
+                end++;
+            }
+            return end == start ? null : json.substring(start, end);
         }
     }
 

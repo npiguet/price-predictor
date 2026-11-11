@@ -37,6 +37,8 @@ class CollectionCapsTest {
         // A worker started without the property probes nothing; the eight
         // keywords a run probes by default are the supervisor's to send.
         assertTrue(defaults.probeKeywords().isEmpty());
+        // FR-041a: a game writes at most 5000 records.
+        assertEquals(5000, defaults.maxRecordsPerGame());
     }
 
     /**
@@ -55,7 +57,8 @@ class CollectionCapsTest {
                 "effect.plain.candidate.rate", "0.25",
                 "effect.interventions.per.game", "3",
                 "effect.probes.per.game", "4",
-                "effect.probe.keywords", "wither, infect");
+                "effect.probe.keywords", "wither, infect",
+                "effect.max.records.per.game", "12");
         properties.forEach(System::setProperty);
         try {
             CollectionCaps caps = CollectionCaps.fromSystemProperties();
@@ -66,6 +69,7 @@ class CollectionCapsTest {
             assertEquals(3, caps.interventionsPerGame());
             assertEquals(4, caps.probesPerGame());
             assertEquals(List.of("wither", "infect"), caps.probeKeywords());
+            assertEquals(12, caps.maxRecordsPerGame());
         } finally {
             properties.keySet().forEach(System::clearProperty);
         }

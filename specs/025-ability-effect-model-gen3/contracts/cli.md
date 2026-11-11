@@ -75,6 +75,7 @@ gen-1 shard, or mixes generations.
 | `--zone-candidate-rate R` | 0.0001 | share of zone-bucket candidates written, both stages together |
 | `--plain-candidate-rate R` | 0.001 | share of plain-bucket candidates written, both stages together |
 | `--count-dropped-events` | off | count events arriving with no open record, by event type and engine phase; print at the end |
+| `--max-records-per-game N` | 5000 | records one game may write, its forks' included; past it the worker withholds the rest, counts them and prints one line naming the game, the turn and the acting card of the most frequent withheld record (FR-041a); below 1 is refused |
 | `--directed-fork-rules LIST` | none | comma-separated rule ids |
 | `--directed-forks-per-game N` | 2 | directed-fork budget per game, beside the existing fork budgets |
 | `--directed-fork-probability P` | 0.25 | chance a matching boundary forks; must be in (0, 1] |
@@ -87,7 +88,7 @@ Startup, exit 1 naming the rule when a listed rule:
 
 `--directed-fork-probability` outside (0, 1] exits 1. The flags ride the cap properties
 `effect.directed.fork.rules`, `effect.directed.forks.per.game`, `effect.directed.fork.probability`,
-`effect.count.dropped.events`.
+`effect.count.dropped.events`, `effect.max.records.per.game`.
 
 The three sampling rates ride `effect.playability.rate`, `effect.zone.candidate.rate` and
 `effect.plain.candidate.rate`, and are shared with `collect-coverage` and `collect-variants` through
@@ -104,6 +105,7 @@ the same three rates (FR-059a).
 |---|---|---|
 | `--wording-cards PATH` | none | one card name per line; a coverage round over them |
 | `--count-dropped-events` | off | as `match-outcomes` |
+| `--max-records-per-game N` | 5000 | as `match-outcomes` |
 | `--directed-fork-rules LIST` | none | a label only: rule ids written to every record's `aimed_at`; no directed fork runs, and no startup check applies |
 
 `--wording-cards` beside `--only-cards` exits 1. A run with none of `--exclude-cards`,
@@ -111,8 +113,8 @@ the same three rates (FR-059a).
 
 ## `python -m effects collect-variants` (existing)
 
-Takes `--count-dropped-events`, `--directed-fork-rules`, `--directed-forks-per-game` and
-`--directed-fork-probability` as `match-outcomes` does, with the same startup checks and exits.
+Takes `--count-dropped-events`, `--max-records-per-game`, `--directed-fork-rules`,
+`--directed-forks-per-game` and `--directed-fork-probability` as `match-outcomes` does, with the same startup checks and exits.
 Every record carries `aimed_at` (the listed rules, or `[]`; in a steered game, the rules of its
 two decks). A protection keyword line of a source script swaps its quality for another of
 `PROTECTION_QUALITY_WHITELIST` (FR-058) before any other perturbation of that line is tried.

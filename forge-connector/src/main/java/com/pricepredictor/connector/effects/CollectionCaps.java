@@ -30,6 +30,9 @@ import java.util.Optional;
  * @param directedForkProbability the chance a boundary where an enabled
  *                rule's precondition holds forks, in (0, 1]; the supervisor
  *                refuses any other value before a worker starts (FR-014)
+ * @param maxRecordsPerGame the records one game may write, its forks'
+ *                included; the shard writer withholds the rest and names the
+ *                game (FR-041a, {@link RecordShardWriter})
  */
 public record CollectionCaps(
         int manaCap,
@@ -45,7 +48,11 @@ public record CollectionCaps(
         boolean countDroppedEvents,
         List<String> directedForkRules,
         int directedForksPerGame,
-        double directedForkProbability) {
+        double directedForkProbability,
+        int maxRecordsPerGame) {
+
+    /** {@code --max-records-per-game}'s default (FR-041a). */
+    public static final int DEFAULT_MAX_RECORDS_PER_GAME = 5000;
 
     public CollectionCaps {
         directedForkRules = List.copyOf(directedForkRules);
@@ -54,7 +61,7 @@ public record CollectionCaps(
     public static CollectionCaps defaults() {
         return new CollectionCaps(
                 1, 0.01, 0.0001, 0.001, 2, 2, List.of(), 0.0, 0.0, Optional.empty(), false,
-                List.of(), 2, 0.25);
+                List.of(), 2, 0.25, DEFAULT_MAX_RECORDS_PER_GAME);
     }
 
     public static final String MANA_CAP = "effect.mana.cap";
@@ -71,6 +78,7 @@ public record CollectionCaps(
     public static final String DIRECTED_FORK_RULES = "effect.directed.fork.rules";
     public static final String DIRECTED_FORKS_PER_GAME = "effect.directed.forks.per.game";
     public static final String DIRECTED_FORK_PROBABILITY = "effect.directed.fork.probability";
+    public static final String MAX_RECORDS_PER_GAME = "effect.max.records.per.game";
 
     /**
      * Read from the {@code effect.*} system properties the supervisor sets.
@@ -116,7 +124,11 @@ public record CollectionCaps(
                 WorkerProperties.intProperty(
                         DIRECTED_FORKS_PER_GAME, defaults.directedForksPerGame(), policy),
                 WorkerProperties.doubleProperty(
-                        DIRECTED_FORK_PROBABILITY, defaults.directedForkProbability(), policy));
+                        DIRECTED_FORK_PROBABILITY, defaults.directedForkProbability(), policy),
+                // A game whose AIs loop (Chain of Smog's copies, a free
+                // ability re-activated forever) is cut off at the cap.
+                WorkerProperties.intProperty(
+                        MAX_RECORDS_PER_GAME, defaults.maxRecordsPerGame(), policy));
     }
 
     /**

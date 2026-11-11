@@ -273,6 +273,9 @@ public final class GameRecording implements AutoCloseable {
             patched.close();
         } finally {
             appendDroppedEvents();
+            if (!fork) {
+                envelope.endGame();
+            }
         }
     }
 

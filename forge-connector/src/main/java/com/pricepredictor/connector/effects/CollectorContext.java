@@ -75,6 +75,13 @@ final class CollectorContext {
         return new CollectorContext(writer, gameId, mode, randomSeatPlayerId, aimedAt, flags, out);
     }
 
+    /** This game's recording has ended: the shard writer reports what its cap withheld. */
+    void endGame() {
+        if (writer != null) {
+            writer.endGame(gameId);
+        }
+    }
+
     /** Write lines a {@link #forFork fork's} context held, to this context's shard. */
     void writeHeld(List<String> lines) {
         lines.forEach(line -> writer.write(line));

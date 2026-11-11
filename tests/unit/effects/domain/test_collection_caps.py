@@ -21,6 +21,7 @@ from effects.domain.collection_caps import (
     DEFAULT_DIRECTED_FORKS_PER_GAME,
     DEFAULT_INTERVENTIONS_PER_GAME,
     DEFAULT_MANA_CAP,
+    DEFAULT_MAX_RECORDS_PER_GAME,
     DEFAULT_PLAIN_CANDIDATE_RATE,
     DEFAULT_PLAYABILITY_RATE,
     DEFAULT_PROBE_KEYWORDS,
@@ -40,6 +41,7 @@ from sealed.infrastructure.effect_collection_flags import (
     EFFECT_DIRECTED_FORKS_PER_GAME,
     EFFECT_INTERVENTIONS_PER_GAME,
     EFFECT_MANA_CAP,
+    EFFECT_MAX_RECORDS_PER_GAME,
     EFFECT_PLAIN_CANDIDATE_RATE,
     EFFECT_PLAYABILITY_RATE,
     EFFECT_PROBE_KEYWORDS,
@@ -47,6 +49,7 @@ from sealed.infrastructure.effect_collection_flags import (
     EFFECT_RANDOM_SEAT_PROBABILITY,
     EFFECT_RANDOM_SEAT_SHARE,
     EFFECT_ZONE_CANDIDATE_RATE,
+    add_cap_flags,
     announce_probe_state,
 )
 
@@ -98,6 +101,7 @@ class TestTheTwoSidesAgree:
         assert EFFECT_DIRECTED_FORK_RULES == CollectionCaps().directed_fork_rules
         assert EFFECT_DIRECTED_FORKS_PER_GAME == DEFAULT_DIRECTED_FORKS_PER_GAME
         assert EFFECT_DIRECTED_FORK_PROBABILITY == DEFAULT_DIRECTED_FORK_PROBABILITY
+        assert EFFECT_MAX_RECORDS_PER_GAME == DEFAULT_MAX_RECORDS_PER_GAME
 
     def test_the_property_names_match(self):
         """Both sides must spell the -D properties the worker reads identically."""
@@ -231,6 +235,45 @@ class TestDecisionSampling:
         assert properties["effect.plain.candidate.rate"] == "0.25"
 
 
+class TestThePerGameRecordCap:
+    """FR-041a: ``--max-records-per-game`` defaults to 5000 on both sides
+    and in the JVM, and travels as ``effect.max.records.per.game``."""
+
+    def test_the_default_is_5000(self):
+        assert DEFAULT_MAX_RECORDS_PER_GAME == 5000
+        assert CollectionCaps().as_system_properties()[
+            "effect.max.records.per.game"
+        ] == "5000"
+        assert _effect_collection_caps(argparse.Namespace())[
+            "effect.max.records.per.game"
+        ] == "5000"
+
+    def test_the_flag_reaches_the_property_on_both_sides(self):
+        parser = argparse.ArgumentParser()
+        add_cap_flags(parser)
+        args = parser.parse_args(["--max-records-per-game", "250"])
+        assert args.max_records_per_game == 250
+        assert _effect_collection_caps(args)["effect.max.records.per.game"] == "250"
+        assert CollectionCaps(max_records_per_game=250).as_system_properties()[
+            "effect.max.records.per.game"
+        ] == "250"
+
+    def test_a_cap_below_one_is_refused(self):
+        parser = argparse.ArgumentParser()
+        add_cap_flags(parser)
+        with pytest.raises(SystemExit):
+            parser.parse_args(["--max-records-per-game", "0"])
+
+    @pytest.mark.skipif(
+        not _JAVA_CAPS.exists(), reason="the connector source is not checked out"
+    )
+    def test_the_jvm_default_is_the_same(self):
+        source = _JAVA_CAPS.read_text(encoding="utf-8")
+        assert re.search(
+            r"DEFAULT_MAX_RECORDS_PER_GAME = (\d+);", source
+        ).group(1) == str(DEFAULT_MAX_RECORDS_PER_GAME)
+
+
 class TestNoSnapshotDepthKnob:
     """Every record collects all four tiers, so no command can choose a depth."""
 
@@ -310,7 +353,8 @@ class TestTheDirectedForks:
         budget and probability a supervisor would send."""
         source = _JAVA_CAPS.read_text(encoding="utf-8")
         defaults = re.search(
-            r"Optional\.empty\(\), false,\s*List\.of\(\), (\d+), ([0-9.]+)\);", source
+            r"Optional\.empty\(\), false,\s*List\.of\(\), (\d+), ([0-9.]+),"
+            r" DEFAULT_MAX_RECORDS_PER_GAME\);", source
         )
         assert defaults is not None
         assert int(defaults.group(1)) == DEFAULT_DIRECTED_FORKS_PER_GAME

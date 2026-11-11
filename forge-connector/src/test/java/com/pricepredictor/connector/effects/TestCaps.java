@@ -24,6 +24,7 @@ public final class TestCaps {
     private List<String> directedForkRules;
     private int directedForksPerGame;
     private double directedForkProbability;
+    private int maxRecordsPerGame;
 
     private TestCaps(CollectionCaps from) {
         manaCap = from.manaCap();
@@ -40,6 +41,7 @@ public final class TestCaps {
         directedForkRules = from.directedForkRules();
         directedForksPerGame = from.directedForksPerGame();
         directedForkProbability = from.directedForkProbability();
+        maxRecordsPerGame = from.maxRecordsPerGame();
     }
 
     /** {@link CollectionCaps#defaults()}, to be varied. */
@@ -114,11 +116,17 @@ public final class TestCaps {
         return this;
     }
 
+    /** At most {@code max} records a game (FR-041a). */
+    public TestCaps maxRecordsPerGame(int max) {
+        maxRecordsPerGame = max;
+        return this;
+    }
+
     public CollectionCaps build() {
         return new CollectionCaps(manaCap, playabilityRate, zoneCandidateRate,
                 plainCandidateRate, interventions, probes,
                 probeKeywords, randomSeatShare, randomSeatProbability, aimedAt,
                 countDroppedEvents, directedForkRules, directedForksPerGame,
-                directedForkProbability);
+                directedForkProbability, maxRecordsPerGame);
     }
 }

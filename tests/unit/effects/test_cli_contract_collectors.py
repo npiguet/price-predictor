@@ -280,6 +280,27 @@ class TestCountDroppedEventsOnTheCollectors:
         assert caps.as_system_properties()["effect.count.dropped.events"] == "true"
 
 
+class TestMaxRecordsPerGameOnTheCollectors:
+    """FR-041a: both collectors take ``--max-records-per-game`` as
+    ``match-outcomes`` does, 5000 by default, and send it to the worker."""
+
+    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
+    def test_it_is_5000_by_default(self, command):
+        from effects.infrastructure.cli import collection_caps
+
+        caps = collection_caps(parse(command))
+        assert caps.max_records_per_game == 5000
+        assert caps.as_system_properties()["effect.max.records.per.game"] == "5000"
+
+    @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
+    def test_the_flag_reaches_the_worker_property(self, command):
+        from effects.infrastructure.cli import collection_caps
+
+        caps = collection_caps(parse(command, "--max-records-per-game", "300"))
+        assert caps.max_records_per_game == 300
+        assert caps.as_system_properties()["effect.max.records.per.game"] == "300"
+
+
 class TestOneHoldoutSource:
     @COLLECTORS
     def test_two_holdout_sources_are_refused_before_any_worker(

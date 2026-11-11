@@ -22,6 +22,7 @@ from sealed.infrastructure.effect_collection_flags import (
     EFFECT_DIRECTED_FORK_RULES,
     EFFECT_INTERVENTIONS_PER_GAME,
     EFFECT_MANA_CAP,
+    EFFECT_MAX_RECORDS_PER_GAME,
     EFFECT_PLAIN_CANDIDATE_RATE,
     EFFECT_PLAYABILITY_RATE,
     EFFECT_PROBE_KEYWORDS,
@@ -29,6 +30,7 @@ from sealed.infrastructure.effect_collection_flags import (
     EFFECT_RANDOM_SEAT_PROBABILITY,
     EFFECT_RANDOM_SEAT_SHARE,
     EFFECT_ZONE_CANDIDATE_RATE,
+    MAX_RECORDS_PER_GAME_PROPERTY,
     add_cap_flags,
     add_directed_fork_flags,
     announce_probe_state,
@@ -1045,6 +1047,9 @@ def _effect_collection_caps(args: argparse.Namespace) -> dict[str, str]:
             else "false"
         ),
         **directed_fork_properties(args),
+        MAX_RECORDS_PER_GAME_PROPERTY: str(
+            getattr(args, "max_records_per_game", EFFECT_MAX_RECORDS_PER_GAME)
+        ),
     }
 
 

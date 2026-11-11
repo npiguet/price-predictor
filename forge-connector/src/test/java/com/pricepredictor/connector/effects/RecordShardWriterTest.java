@@ -264,4 +264,47 @@ class RecordShardWriterTest {
                     .toList();
         }
     }
+
+    // ── the per-game record cap (FR-041a) ───────────────────────────────
+
+    /** A record line of {@code game} on {@code turn}, acting through {@code script}. */
+    private static String fakeRecord(String id, String game, int turn, String script) {
+        return "{\"record_id\":\"" + id + "\",\"generation\":3,\"game_id\":\"" + game
+                + "\",\"kind\":\"resolution\",\"ability\":[{\"script_file\":\"" + script
+                + "\",\"face\":0}],\"state\":{\"global\":{\"turn\":" + turn
+                + ",\"phase\":\"main1\"},\"players\":[{\"this_turn\":{}}]}}";
+    }
+
+    /**
+     * A game writing past the cap: its first records are written, every one
+     * after is withheld, another game's are not touched, and when the game
+     * ends one line names it, how many were withheld and the turn and acting
+     * card most of them shared.
+     */
+    @Test
+    void aGamePastTheCapIsWithheldAndNamed() throws Throwable {
+        Path shard;
+        String report;
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1", 3)) {
+            shard = writer.path();
+            writer.write(fakeRecord("r0", "g1", 4, "cardsfolder/h/hill_giant.txt"));
+            for (int i = 1; i < 8; i++) {
+                writer.write(fakeRecord("r" + i, "g1", 9, "cardsfolder/c/chain_of_smog.txt"));
+            }
+            writer.write(fakeRecord("r8", "g1", 9, "cardsfolder/f/forest.txt"));
+            writer.write(fakeRecord("r9", "g2", 1, "cardsfolder/f/forest.txt"));
+            report = com.pricepredictor.connector.StdStreams.captureStderr(() -> {
+                writer.endGame("g1");
+                writer.endGame("g2");
+            });
+        }
+
+        List<String> written = ShardRun.readShard(shard);
+        assertEquals(List.of("r0", "r1", "r2", "r9"), written.stream()
+                .map(line -> (String) RecordLines.parse(line).get("record_id")).toList());
+        assertEquals("Effect records: game g1 reached --max-records-per-game 3; withheld 6 more"
+                        + " records, most often (5) on turn 9, acting card"
+                        + " cardsfolder/c/chain_of_smog.txt",
+                report.strip());
+    }
 }

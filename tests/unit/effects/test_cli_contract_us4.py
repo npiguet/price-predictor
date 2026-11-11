@@ -26,7 +26,7 @@ class TestCollectVariants:
         assert records == Path("output/effects/records/")
         assert args.forge_cards_path == Path("../forge/forge-gui/res/cardsfolder/")
         assert args.variant_scripts == Path("output/effects/variant-scripts/")
-        assert args.variant_volume == 0.2
+        assert args.variant_games == 2
         assert args.decks_per_round == 500
 
     def test_it_carries_the_shared_cap_flags(self):

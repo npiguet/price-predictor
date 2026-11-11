@@ -280,7 +280,7 @@ public class MatchWorkerMain {
         }
         RecordShardWriter effectRecords = new RecordShardWriter(
                 config.effectRecordsDir().orElseThrow(), config.runId(), config.workerIndex(),
-                config.workerLifetime());
+                config.workerLifetime(), caps.maxRecordsPerGame());
         System.out.println(
                 "Effect records: " + effectRecords.path()
                         + " [mode=" + AttributionMode.detect().wireName() + "]");

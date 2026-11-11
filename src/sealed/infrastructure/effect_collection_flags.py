@@ -47,6 +47,9 @@ EFFECT_DIRECTED_FORK_PROBABILITY = 0.25
 DIRECTED_FORK_RULES_PROPERTY = "effect.directed.fork.rules"
 DIRECTED_FORKS_PER_GAME_PROPERTY = "effect.directed.forks.per.game"
 DIRECTED_FORK_PROBABILITY_PROPERTY = "effect.directed.fork.probability"
+#: The records one game may write, its forks' included (FR-041a).
+EFFECT_MAX_RECORDS_PER_GAME = 5000
+MAX_RECORDS_PER_GAME_PROPERTY = "effect.max.records.per.game"
 #: The rules catalogue the startup check reads (``rules/README.md``).
 DEFAULT_RULES_DIR = Path("rules")
 #: Prints the rule ids the worker holds a board precondition for.
@@ -124,6 +127,15 @@ def add_cap_flags(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--max-records-per-game", type=positive_int, default=EFFECT_MAX_RECORDS_PER_GAME,
+        help=(
+            "Records one game may write, its forks' included (default: "
+            "%(default)s); past it the worker withholds the rest, counts them "
+            "and prints one line naming the game, the turn and the acting card "
+            "most of them shared"
+        ),
+    )
+    parser.add_argument(
         "--count-dropped-events", action="store_true",
         default=EFFECT_COUNT_DROPPED_EVENTS,
         help=(
@@ -132,6 +144,14 @@ def add_cap_flags(parser: argparse.ArgumentParser) -> None:
             "run ends"
         ),
     )
+
+
+def positive_int(text: str) -> int:
+    """An integer of at least 1, for ``--max-records-per-game``."""
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, got {value}")
+    return value
 
 
 def probe_keyword_list(text: str) -> str:

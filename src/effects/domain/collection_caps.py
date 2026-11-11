@@ -23,6 +23,9 @@ DEFAULT_RANDOM_SEAT_PROBABILITY = 0.0
 #: boundaries where an enabled rule's precondition holds.
 DEFAULT_DIRECTED_FORKS_PER_GAME = 2
 DEFAULT_DIRECTED_FORK_PROBABILITY = 0.25
+#: The records one game may write, its forks' included (FR-041a); past it the
+#: worker withholds the rest and names the game.
+DEFAULT_MAX_RECORDS_PER_GAME = 5000
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +67,9 @@ class CollectionCaps:
     directed_forks_per_game: int = DEFAULT_DIRECTED_FORKS_PER_GAME
     #: The chance a boundary where an enabled rule's precondition holds forks.
     directed_fork_probability: float = DEFAULT_DIRECTED_FORK_PROBABILITY
+    #: The records one game may write (FR-041a): a game whose AIs loop is cut
+    #: off there, its withheld records counted and the game named.
+    max_records_per_game: int = DEFAULT_MAX_RECORDS_PER_GAME
 
     def as_system_properties(self) -> dict[str, str]:
         """The `-D effect.*` properties the worker reads them back from."""
