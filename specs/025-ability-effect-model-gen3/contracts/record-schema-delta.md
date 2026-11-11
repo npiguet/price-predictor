@@ -148,7 +148,7 @@ Appended to `state.entities` after the four tiers, each card once:
 | `mutate_component` | a mutated permanent's merged cards | the card as it is |
 | `last_known` | the pending event's subject as it last existed (the run parameters' `CardLKI`) | id `L<card id>`; `zone` the zone it was last in |
 
-A library card an event names is rendered as it was in the library: `tapped` false, no counters,
+A library card an event names, and each library's top card, is rendered as it was in the library: `tapped` false, no counters,
 no `attached_to`, no `combat`, `controller` its owner, face up, `entered_this_turn` false, nothing
 `chosen`; its name, types and lines are its library face's. A card put onto the battlefield is the
 library's own object, so these fields are not read from it after the move.
@@ -205,9 +205,9 @@ static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of
 
 | Payload | Field | Shape |
 |---|---|---|
-| resolution, cost half | `events` | before `costs`: the cast card's `zone_change` to the stack, from the zone it was cast from; `[]` on an activated ability's cost half. The payload is `{events, costs}` |
-| resolution, effect half | `outcome` | after `conditions_met`: `resolved`, `fizzled`, `partially_fizzled` or `declined`; a `fizzled` or `declined` half has `events: []` |
-| resolution | `conditions_met` | `[{segment, met}]`, after `events`, on every effect half: one entry per conditional clause that resolved in the half, in resolution order; a clause is conditional when it carries a parameter `SpellAbilityCondition.setConditions` reads (`Condition$`, `ConditionPresent$`, `ConditionCheckSVar$`, …; not `ConditionDescription$`); `segment` is spelled as the clause's events' `attributed_to` (`root`, or the chain index as a string), `met` is `metConditions()` read at the clause hook, before the engine reads it; `[]` where no conditional clause resolved, and always on a mana ability's record and the game-end rescue record |
+| resolution, cost half | `events` | before `costs`: the cast card's `zone_change` to the stack, from the zone it was cast from (`attributed_to: unresolved`, `cause` the card); `[]` on an activated ability's cost half. The payload is `{events, costs}`. Every cost half carries `link_id`; a triggered ability and a copy of a spell or ability, which nobody casts, write no cost half, and their effect halves no `link_id` |
+| resolution, effect half | `outcome` | after `conditions_met`: `resolved`, `fizzled`, `partially_fizzled` or `declined`; a `fizzled` or `declined` half has `events: []`; `null` on a mana record and the game-end rescue record, which resolve no stack item |
+| resolution | `conditions_met` | `[{segment, met}]`, after `events`, on every effect half: one entry per conditional clause that resolved in the half, in resolution order; a clause is conditional when it carries a parameter `SpellAbilityCondition.setConditions` reads (`Condition$`, `ConditionPresent$`, `ConditionCheckSVar$`, …; not `ConditionDescription$`); `segment` is spelled as the clause's events' `attributed_to` (`root`, or the chain index as a string), `met` is Forge's own answer, the clause hook's `ClauseRun` read when the clause's own effect is over (`CONDITIONS_UNMET` false, `RAN` and `UNLESS_COST_DECIDED` true; no entry for a clause that threw); `[]` where no conditional clause resolved, and always on a mana ability's record and the game-end rescue record |
 | decision candidate | `verdict.timing` | bool |
 | decision candidate | `failed_checks` | `[{check, responsible_static}]`, after `responsible_static` in the candidate, one entry per failed check in the order listed here; `responsible_static` a key list, one key where a static decided the check (`static_prohibition`), else empty; `check` ∈ `split_second`, `casting_speed`, `whose_turn`, `phase`, `combat`, `activation_limit`, `land_play_limit`, `script_condition`, `zone`, `static_prohibition`, `cost`, `script_restriction` |
 | decision candidate | `land_play` | bool, after `failed_checks`, on every candidate: `true` on a land-play candidate (`SpellAbility.isLandAbility()`), else `false` |
@@ -227,8 +227,8 @@ may carry. `state_flag_change` gains flags outside `DESIGNATIONS`, listed below.
 | Event | Field | Shape |
 |---|---|---|
 | `tapped` | after a `zone_change` onto the battlefield | subjects the card, written when it entered tapped, in the record that moved it |
-| `tapped` | mana record | subjects each permanent the mana ability's cost tapped, before `mana_produced` |
-| `zone_change` off the stack | last event of a spell's effect half | the resolved spell's card to the graveyard, or onto the battlefield for a permanent spell |
+| `tapped` | mana record | subjects each permanent the mana ability's cost tapped, before `mana_produced`. A triggered mana ability (Wild Growth), never paid for, writes no record of its own: its `mana_produced` follows in the record of the activation that set it off |
+| `zone_change` off the stack | last event of a spell's resolution in its effect half | the resolved spell's card to the graveyard (or wherever `finishResolving` puts it), after the resolution's own events and before the state-based deaths the half holds; a permanent spell's move onto the battlefield is made while it resolves. A forced resolution's half takes it too |
 | `zone_change` into a library | `library_position` | int, after `to_zone`: where the card sits in the library as the bus publishes the move (after the add): `0` the top, `-1` the bottom of a library holding other cards, else its index from the top; a card alone in its library is `0`. Absent on every other move, where the card is not found in the library, and on a move into a library that a `library_shuffled` of that library's owner follows in the same event buffer (the shuffle takes it off). Never written for a move out of a library |
 | `pt_change` | `set_pt` | `[power, toughness]`, after `toughness_delta`: the base the change set (`getNetPowerBreakdown().currentValue`, the snapshot's `base_pt`), written when the base moved and the card is a creature after the change: a layer-7b setting effect, a CDA, a face change, an animation of a noncreature. A `pt_change` is written when the base moved even if the total did not (deltas `0`) |
 | `card_looked_at` | `mode` | `Scry` on a scry's look, `Surveil` on a surveil's look (bus events; a surveil keeping every card on top writes no `card_milled`, so only `mode` tells the two apart), `SearchedLibrary` on a search: `subjects` the searching player, `from_zone` `library`, no `count`; written by the `ChangeZone` clause rule when the player's `Player.getLibrarySearched()` rose across the clause, so only a search of one's own library (Forge counts no other) |
@@ -257,6 +257,12 @@ position a card left a library from, and a search of another player's library.
     mode's first clause);
   - a mana record: before the mana ability's costs are paid and its mana is added.
 - A cost half is written when its costs are paid. It does not wait for the stack item's fate.
+- What a card's move onto the stack set off, and what an item's bracket gathered before its
+  resolution started, precede the effect half's board and reach no record: each is counted as
+  dropped.
+- A rewrite record's snapshot is read before the replacement runs (`onReplacing`); replacements
+  nest, and each record takes the board read when its own replacement started.
+- A forced (interventional) resolution reads its board when its resolution starts, as a live one.
 - A countered stack item writes no effect half. The countering clause's effect half holds the
   countered spell's `spell_countered` event and its card's `zone_change` off the stack.
 - A combat record's snapshot precedes every damage event of its step.
