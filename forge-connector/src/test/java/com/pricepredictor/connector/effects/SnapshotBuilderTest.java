@@ -278,6 +278,43 @@ class SnapshotBuilderTest {
             assertFalse(line(lines, "spell").containsKey("cast_with"), lines.toString());
         }
 
+        /**
+         * A spell cast with its gift promised says so on its Gift line: the
+         * optional cost is named "Promise Gift", the keyword "Gift" (B9).
+         */
+        @Test
+        void aSpellCastWithItsGiftPromisedMarksItsGiftLine() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card bears = board.battlefield("Grizzly Bears", board.opponent);
+            Card onStack = board.game.getAction().moveToStack(
+                    board.hand("Blooming Blast", board.you), null);
+            SpellAbility blast = board.spell(onStack, board.you);
+            blast.addOptionalCost(OptionalCost.PromiseGift);
+            blast.resetTargets();
+            blast.getTargets().add(bears);
+            board.game.getStack().add(blast);
+
+            List<Map<String, Object>> lines = linesOf(board, onStack);
+
+            assertEquals(1L, keywordLine(lines, "Gift").get("cast_with"), lines.toString());
+        }
+
+        /**
+         * Every optional cost Forge has is mapped to its keyword or known to
+         * be in no keyword line, so a cost Forge adds is not silently unread.
+         */
+        @Test
+        void everyOptionalCostIsMappedOrKnownToHaveNoLine() {
+            java.util.Set<OptionalCost> noLine = java.util.EnumSet.of(
+                    OptionalCost.ReduceW, OptionalCost.ReduceU, OptionalCost.ReduceB,
+                    OptionalCost.ReduceR, OptionalCost.ReduceG, OptionalCost.AltCost,
+                    OptionalCost.Flash, OptionalCost.Generic);
+            for (OptionalCost cost : OptionalCost.values()) {
+                assertTrue(noLine.contains(cost) != CardLines.OPTIONAL_COST_KEYWORDS.containsKey(cost),
+                        cost.name());
+            }
+        }
+
         /** A charm on the stack names the modes it chose on its own line. */
         @Test
         void aCharmOnTheStackNamesItsChosenModes() {

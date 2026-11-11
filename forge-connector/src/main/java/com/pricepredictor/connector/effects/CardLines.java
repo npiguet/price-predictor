@@ -7,6 +7,7 @@ import forge.game.Game;
 import forge.game.StaticEffect;
 import forge.game.card.Card;
 import forge.game.card.CardState;
+import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.OptionalCost;
 import forge.game.spellability.SpellAbility;
@@ -17,9 +18,11 @@ import forge.game.zone.ZoneType;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -169,8 +172,7 @@ final class CardLines {
             }
             int optional = 0;
             for (OptionalCost cost : root.getOptionalCosts()) {
-                if (!cost.getName().isEmpty()
-                        && cost.getName().equalsIgnoreCase(keyword.getKeyword().toString())) {
+                if (OPTIONAL_COST_KEYWORDS.get(cost) == keyword.getKeyword()) {
                     optional++;
                 }
             }
@@ -353,6 +355,31 @@ final class CardLines {
             }
             return printed;
         }
+    }
+
+    /**
+     * The keyword whose line an optional cost is paid through (B9). By the
+     * enum rather than by name: {@code PromiseGift} is named "Promise Gift"
+     * and its keyword "Gift", {@code Jumpstart} "Jump-start" and its keyword
+     * {@code JUMP_START}. A cost no keyword line offers — a colour
+     * reduction, an alternative cost, a "pay extra for flash", a generic
+     * pseudo-kicker — is in no line.
+     */
+    static final Map<OptionalCost, Keyword> OPTIONAL_COST_KEYWORDS = optionalCostKeywords();
+
+    private static Map<OptionalCost, Keyword> optionalCostKeywords() {
+        Map<OptionalCost, Keyword> byCost = new EnumMap<>(OptionalCost.class);
+        byCost.put(OptionalCost.Bargain, Keyword.BARGAIN);
+        byCost.put(OptionalCost.Buyback, Keyword.BUYBACK);
+        byCost.put(OptionalCost.Entwine, Keyword.ENTWINE);
+        byCost.put(OptionalCost.Kicker1, Keyword.KICKER);
+        byCost.put(OptionalCost.Kicker2, Keyword.KICKER);
+        byCost.put(OptionalCost.PromiseGift, Keyword.GIFT);
+        byCost.put(OptionalCost.Retrace, Keyword.RETRACE);
+        byCost.put(OptionalCost.Jumpstart, Keyword.JUMP_START);
+        byCost.put(OptionalCost.Offering, Keyword.OFFERING);
+        byCost.put(OptionalCost.Teamwork, Keyword.TEAMWORK);
+        return Collections.unmodifiableMap(byCost);
     }
 
     /** The ability hosted by this card that is on the stack, or null. */
