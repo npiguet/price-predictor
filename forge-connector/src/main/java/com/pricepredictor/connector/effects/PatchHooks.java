@@ -287,6 +287,13 @@ public final class PatchHooks {
             "removing the acting static's colours from a continuous snapshot");
     static final Hook KEYWORDS_WITHOUT = new Hook(CARD, "getKeywordsWithout",
             "removing the acting static's keywords from a continuous snapshot");
+    static final Hook PT_WITHOUT = new Hook(CARD, "getNetPowerBreakdownWithout",
+            "removing the acting static's set and boosted power and toughness from a continuous snapshot");
+    static final Hook CONTROLLER_WITHOUT = new Hook(CARD, "getControllerWithout",
+            "removing the acting static's control change from a continuous snapshot");
+    static final Hook TRAITS_WITHOUT = new Hook("forge.game.card.CardState", "getSpellAbilitiesWithout",
+            "removing the lines the acting static granted, and restoring those it removed,"
+                    + " in a continuous snapshot");
     static final Hook CHANGED_NAMES = new Hook(CARD, "getChangedCardNames",
             "a continuous contribution's name");
     static final Hook ASSIGNED_DAMAGE = new Hook(COMBAT, "getAssignedDamage",
@@ -364,6 +371,7 @@ public final class PatchHooks {
             COMBAT_LISTENER, CANT_ATTACK_STATIC,
             CANT_BLOCK_BY_STATIC, MANA_LISTENER, CHANGED_TYPES_BY_STATIC,
             CHANGED_COLORS_BY_STATIC, TYPE_WITHOUT, COLOR_WITHOUT, KEYWORDS_WITHOUT,
+            PT_WITHOUT, CONTROLLER_WITHOUT, TRAITS_WITHOUT,
             CHANGED_NAMES, ASSIGNED_DAMAGE, CONFIRM_LISTENER, OUTCOME_LISTENER,
             PENDING_DELAYED_TRIGGERS, STATE_BASED_LOOP_LISTENER, PRIORITY_SETTLED_LISTENER,
             CAST_LISTENER, RESOLUTION_LISTENER, PAYMENT_LISTENER);

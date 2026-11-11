@@ -156,7 +156,7 @@ class SnapshotLinksTest {
         assertEquals(List.of(link(end(SnapshotLinks.line(anthem, stat)), Refs.of(bears), "affects")),
                 links(board, "affects"));
         assertEquals(List.of(), linksIn(
-                new SnapshotBuilder(board.game).ofBoardWithout((long) stat.getId()).render(),
+                new SnapshotBuilder(board.game).ofBoardWithout(stat).render(),
                 "affects"), "the continuous record's answer");
     }
 

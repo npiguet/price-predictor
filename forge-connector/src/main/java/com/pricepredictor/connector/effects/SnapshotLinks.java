@@ -72,16 +72,17 @@ final class SnapshotLinks {
      *                      for a playability candidate, whose persistent
      *                      ability may hold an earlier evaluation's
      * @param pending       the event a trait is about to handle, or null
-     * @param withoutStatic the static a {@code continuous} record's board
-     *                      removes, or null; such a board carries no
-     *                      {@code affects} from a static, whose answer it is
+     * @param board         the board as it stands, or without one static:
+     *                      a {@code continuous} record's, which carries no
+     *                      {@code affects} from a static, whose answer it is,
+     *                      and names each card's controller on it
      * @param floating      the clause notes the floating effects are read by
      */
     static String render(Game game, Collection<Card> cards, Collection<Card> tiers,
                          SpellAbility acting, boolean actingTargets, EffectEvent pending,
-                         Long withoutStatic, FloatingEffects floating) {
+                         StaticSuppression board, FloatingEffects floating) {
         SnapshotLinks links = new SnapshotLinks(game);
-        links.cardLinks(cards, withoutStatic == null);
+        links.cardLinks(cards, board);
         links.combat(game.getCombat());
         links.stack(acting, actingTargets);
         links.commandZone(cards, tiers, floating);
@@ -100,7 +101,7 @@ final class SnapshotLinks {
     // ── the families ────────────────────────────────────────────────────
 
     /** Every family a card's own fields hold. */
-    private void cardLinks(Collection<Card> cards, boolean withStaticEffects) {
+    private void cardLinks(Collection<Card> cards, StaticSuppression board) {
         for (Card card : cards) {
             mergedWith(card);
             add(LinkFamily.ATTACHED_TO, card(card), card(card.getAttachedTo()));
@@ -111,12 +112,12 @@ final class SnapshotLinks {
             for (Player goader : card.getGoaded()) {
                 add(LinkFamily.GOADED_BY, card(card), player(goader));
             }
-            if (withStaticEffects) {
+            if (board.showsAffected()) {
                 affects(card);
             }
             linkedByText(card);
             boundTo(card);
-            add(LinkFamily.CONTROLS, player(card.getController()), card(card));
+            add(LinkFamily.CONTROLS, player(board.controller(card)), card(card));
             add(LinkFamily.OWNS, player(card.getOwner()), card(card));
             for (Card given : card.getGainControlTargets()) {
                 add(LinkFamily.CONTROL_GRANTED_BY, card(given), card(card));

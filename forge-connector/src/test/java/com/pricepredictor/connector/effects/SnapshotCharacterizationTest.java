@@ -74,7 +74,7 @@ class SnapshotCharacterizationTest {
                 .getStaticAbilities().iterator().next();
 
         Characterization.assertMatches("snapshot-without-static.json",
-                new SnapshotBuilder(board.game).ofBoardWithout(anthem.getId()).render()
+                new SnapshotBuilder(board.game).ofBoardWithout(anthem).render()
                         + "\n");
     }
 

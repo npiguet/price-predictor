@@ -193,12 +193,17 @@ final class FloatingEffects {
      * {@code floating_effects}: one object per effect card in the command
      * zone, then one per timestamp a noted clause wrote on a card in
      * {@code cards}, oldest first.
+     *
+     * @param board the board as it stands, or a {@code continuous} record's
+     *              board without its static, on which an effect card's
+     *              statics name nothing they affect: which permanents a
+     *              static touches is that record's answer
      */
-    String floatingEffectsJson(Game game, Collection<Card> cards) {
+    String floatingEffectsJson(Game game, Collection<Card> cards, StaticSuppression board) {
         List<String> objects = new ArrayList<>();
         for (Card effect : game.getCardsIn(ZoneType.Command)) {
             if (isEffectCard(effect)) {
-                objects.add(effectCardJson(game, effect));
+                objects.add(effectCardJson(game, effect, board));
             }
         }
         for (Timestamped row : timestamped(cards)) {
@@ -250,13 +255,13 @@ final class FloatingEffects {
         return card.isImmutable() && !card.isEmblem() && !card.getType().isDungeon();
     }
 
-    private static String effectCardJson(Game game, Card effect) {
+    private static String effectCardJson(Game game, Card effect, StaticSuppression board) {
         SpellAbility source = effect.getEffectSourceAbility();
         // Every static's cards, then every static's players: Explore's
         // effect card affects its caster, whose land plays it raises.
         Set<String> cards = new LinkedHashSet<>();
         Set<String> players = new LinkedHashSet<>();
-        for (StaticAbility stat : effect.getStaticAbilities()) {
+        for (StaticAbility stat : board.showsAffected() ? effect.getStaticAbilities() : List.<StaticAbility>of()) {
             StaticEffect applied = ForgeFields.staticEffectOf(game, stat);
             if (applied != null) {
                 for (String each : Refs.affectedBy(applied)) {

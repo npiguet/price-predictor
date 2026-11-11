@@ -797,12 +797,25 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
     payload = record.payload
     if not isinstance(payload, ContinuousPayload):
         return
+    entities = {entity.id: entity for entity in record.state.entities}
     for contribution in payload.contributions:
         entry = slot(contribution.entity)
         entry.affected = True
         if contribution.pt_boost != (0, 0):
             entry.add(HeadField.POWER_DELTA, float(contribution.pt_boost[0]))
             entry.add(HeadField.TOUGHNESS_DELTA, float(contribution.pt_boost[1]))
+        if contribution.set_pt is not None:
+            # Against the board without the static, as a resolution's
+            # ``set_pt`` is against its snapshot: no base on a permanent that
+            # was no creature there is a base of 0/0.
+            entity = entities.get(contribution.entity)
+            base = entity.pt.base if entity is not None and entity.pt is not None else (0, 0)
+            for half, field_name in ((0, HeadField.BASE_POWER_DELTA),
+                                     (1, HeadField.BASE_TOUGHNESS_DELTA)):
+                if contribution.set_pt[half] is not None:
+                    entry.set(field_name, float(contribution.set_pt[half]) - base[half])
+        if contribution.controller is not None:
+            entry.set(HeadField.CONTROL_CHANGE, 1)
         keywords = contribution.keyword_changes
         for keyword in keywords.gained:
             _flag_keyword(entry, HeadField.KEYWORDS_GAINED, keyword)

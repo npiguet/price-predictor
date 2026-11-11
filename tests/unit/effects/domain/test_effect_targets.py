@@ -769,6 +769,41 @@ class TestBasePowerAndToughness:
         assert targets["E2"].fields["base_power_delta"] == 4.0
         assert targets["E2"].fields["base_toughness_delta"] == 2.0
 
+    def test_a_continuous_set_base_is_its_change_against_the_board_without_it(self):
+        """A continuous record's board is the board without its static, so
+        Frogify's 1/1 on a 4/4 is a base change of -3/-3, and Ensoul
+        Artifact's 5/5 on a noncreature artifact one of +5/+5."""
+        from effects.domain.state_snapshot import PowerToughness
+
+        angel = _entity("E1", types=("creature",), pt=PowerToughness(base=(4, 4)))
+        artifact = _entity("E2", types=("artifact",))
+        record = _on_board(ContinuousPayload(contributions=(
+            Contribution(entity="E1", set_pt=(1, 1)),
+            Contribution(entity="E2", set_pt=(5, 5)),
+        )), angel, artifact, kind=RecordKind.CONTINUOUS, moment=None)
+        targets = derive_targets(record)
+        assert targets["E1"].fields["base_power_delta"] == -3.0
+        assert targets["E1"].fields["base_toughness_delta"] == -3.0
+        assert targets["E2"].fields["base_power_delta"] == 5.0
+        assert "power_delta" not in targets["E1"].fields
+
+    def test_a_continuous_set_half_says_nothing_of_the_other_half(self):
+        from effects.domain.state_snapshot import PowerToughness
+
+        bears = _entity("E1", types=("creature",), pt=PowerToughness(base=(2, 2)))
+        record = _on_board(ContinuousPayload(contributions=(
+            Contribution(entity="E1", set_pt=(0, None)),
+        )), bears, kind=RecordKind.CONTINUOUS, moment=None)
+        entry = derive_targets(record)["E1"]
+        assert entry.fields["base_power_delta"] == -2.0
+        assert entry.supervised(_spec("base_toughness_delta")) is None
+
+    def test_a_continuous_control_change_is_a_control_change(self):
+        record = _on_board(ContinuousPayload(contributions=(
+            Contribution(entity="E1", controller="P0"),
+        )), _entity("E1", controller="P1"), kind=RecordKind.CONTINUOUS, moment=None)
+        assert derive_targets(record)["E1"].fields["control_change"] == 1
+
     def test_a_pump_says_nothing_of_the_base(self):
         entry = derive_targets(_resolution(
             Event(type=EventType.PT_CHANGE, subjects=("E1",),

@@ -1,10 +1,13 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.collect.Table;
 import com.pricepredictor.connector.effects.ProvenanceKey.Resolved;
 import forge.card.GamePieceType;
 import forge.game.CardTraitBase;
 import forge.game.card.Card;
 import forge.game.card.CardState;
+import forge.game.card.CardTraitChanges;
+import forge.game.card.ICardTraitChanges;
 import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
@@ -595,10 +598,31 @@ public final class ProvenanceResolver {
         return type == GamePieceType.EFFECT || type == GamePieceType.DUNGEON;
     }
 
-    /** Index of {@code trait} within its kind's slice of {@code state}'s trait list. */
+    /**
+     * Index of {@code trait} within its kind's slice of {@code state}'s trait
+     * list.
+     *
+     * <p>A printed line a static took away ("loses all abilities") is in no
+     * live slice, yet a {@code continuous} record's board, read without that
+     * static, lists it: it is found in the slice without each static that
+     * removes lines from the card, at its printed place.
+     */
     private static int indexWithin(CardState state, CardTraitBase trait, TraitKind kind) {
+        int index = indexIn(kind.slice(state), trait);
+        if (index >= 0 || state.getCard() == null) return index;
+        for (Table.Cell<Long, Long, ICardTraitChanges> cell
+                : state.getCard().getChangedCardTraits().cellSet()) {
+            if (cell.getValue() instanceof CardTraitChanges changes && changes.remove() != null) {
+                index = indexIn(kind.sliceWithout(state, cell.getColumnKey()), trait);
+                if (index >= 0) return index;
+            }
+        }
+        return -1;
+    }
+
+    private static int indexIn(Iterable<? extends CardTraitBase> slice, CardTraitBase trait) {
         int index = 0;
-        for (CardTraitBase candidate : kind.slice(state)) {
+        for (CardTraitBase candidate : slice) {
             if (candidate == trait) return index;
             index++;
         }

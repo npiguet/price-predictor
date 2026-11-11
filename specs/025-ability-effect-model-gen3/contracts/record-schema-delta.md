@@ -92,7 +92,13 @@ face_down, real_face, designations, x_paid, chosen, costs_paid, history, order_r
 granted_temporary, lines, stack_extras, role`.
 
 A `continuous` record's board (the board without the record's static) lists no line the removed
-static granted, including a trait built by a keyword instance it granted.
+static granted, including a trait built by a keyword instance it granted, and lists every line it
+removed, keyed to its printed line. Every other entity member reads that board too: `types`,
+`subtypes`, `supertypes`, `colors`, `controller`, `sick`, `base_pt` and `pt_boosts` (its set
+base, layer 7a and 7b, and its boost left out; `null` when the permanent is no creature without
+it), `granted_temporary`. Forge's `...Without` reads (`Card.getTypeWithout`, `getColorWithout`,
+`getKeywordsWithout`, `getNetPowerBreakdownWithout`, `getControllerWithout`;
+`CardState.getSpellAbilitiesWithout` and its three siblings) compute it.
 
 ### A card's facts
 
@@ -123,7 +129,7 @@ static granted, including a trait built by a keyword instance it granted.
 
 | list | one object per | `id` | `source_lines` | `affected` | `remembered` | `duration` | `shield_left` |
 |---|---|---|---|---|---|---|---|
-| `floating_effects` | effect card in a command zone (not an emblem, not a dungeon) | its entity id `E<card id>` | the key of the ability that made it; `[]` when none did (the monarch, the initiative, the city's blessing) | the cards its statics apply to, then the players | its remembered cards and players | its maker's `Duration$`, bucketed; `permanent` when no ability made it | the `Number$` SVar its replacement's `Amount$` spends, else `null` |
+| `floating_effects` | effect card in a command zone (not an emblem, not a dungeon) | its entity id `E<card id>` | the key of the ability that made it; `[]` when none did (the monarch, the initiative, the city's blessing) | the cards its statics apply to, then the players; `[]` on a `continuous` record's board | its remembered cards and players | its maker's `Duration$`, bucketed; `permanent` when no ability made it | the `Number$` SVar its replacement's `Amount$` spends, else `null` |
 | `floating_effects` | timestamp of a static-id-0 layer-table row on a snapshot entity (P/T set and boost, keywords, traits, types, colours, names) drawn while a noted live clause resolved | `F<timestamp>` | the key of that clause | the entities carrying a row of that timestamp | `[]` | the clause's `Duration$`, else its root's, bucketed | `null` |
 | `delayed_triggers` | pending delayed trigger, each once | `D<trigger id>` | the key of the ability that spawned it | `[]` | the trigger's remembered cards and players | `end_of_turn` for a this-turn trigger, else `permanent` | `null` |
 
@@ -216,6 +222,7 @@ static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of
 | decision candidate | `responsible_static` | the key of the static forbidding the play (its `static_prohibition` entry's), else empty |
 | `attackers` | `anchor_attacker`, `legal_defenders`, `must_attack`, `tapped_by_attack?` | one record per creature the attacking player controls, these four first and `legal_attackers`, `forbidden` after them; `anchor_attacker` a card ref; `legal_defenders` the refs (`P`/`E`) of the declaration's defenders (players, planeswalkers, battles) the anchor may attack, in Forge's defender order, `[]` for a creature that may attack none; `must_attack` whether an attack requirement applies to the anchor (`AttackRequirement.hasRequirement`), whether or not it can attack; `tapped_by_attack` on a declared anchor only: whether a `GameEventCardTapped` for it arrived between the engine's first question and `GameEventAttackersDeclared`. `legal_attackers` and `forbidden` keep their gen-2 shape and are the declaration's, the same on each of its records: a creature is legal when it may attack at least one defender, and a forbidden one's `responsible_static` is the first static, in defender order, keeping it from a defender |
 | `blockers` | `must_block` | after `forbidden`: the refs of the listed creatures, legal or forbidden, in candidate order, that a requirement makes block the anchor; a listed creature not in it is false. Requirements: the creature's `getMustBlockCards`, the anchor's `MustBeBlockedBy` (while no creature of that kind blocks it) and `MustBeBlockedByAll`, a lure ("All creatures able to block CARDNAME do so."), and a `MustBlock` static naming the creature (names every attacker); a requirement whose block costs something is none (509.1c); recorded whether or not the creature can obey it |
+| `continuous` | contributions' `set_pt`, `controller` | `set_pt` after `pt_boost`: `[power, toughness]`, the base the static sets (layer 7a, then 7b), a half `null` where it sets only the other; `controller` last: the player ref the static gives control to (a `GainControl$` static, when the permanent's controller without it differs). Each present only when set. A static whose only change is one of these is a `continuous` record |
 | `combat`, observed and probe | damage events' `source` | entity ref, after `cause`: the dealer the bus names as `cause`, else the one source in `assignment_choices` that assigned damage to the event's subject, or among several the one that assigned exactly its amount; absent when none can be named. Written on the observed record too, so a probe branch's damage reads as the record it mirrors |
 
 ## Event additions

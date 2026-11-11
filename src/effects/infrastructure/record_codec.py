@@ -768,21 +768,30 @@ def _rewrite_from_json(data: dict) -> RewritePayload:
 
 
 def _contribution_to_json(contribution: Contribution) -> dict:
-    return {
-        "entity": contribution.entity, "pt_boost": list(contribution.pt_boost),
+    """``set_pt`` and ``controller`` are written only when set, as the
+    collector writes them."""
+    out: dict = {"entity": contribution.entity, "pt_boost": list(contribution.pt_boost)}
+    if contribution.set_pt is not None:
+        out["set_pt"] = list(contribution.set_pt)
+    out.update({
         "keywords": list(contribution.keywords), "types": list(contribution.types),
         "colors": list(contribution.colors), "name": contribution.name,
-    }
+    })
+    if contribution.controller is not None:
+        out["controller"] = contribution.controller
+    return out
 
 
 def _contribution_from_json(data: dict) -> Contribution:
     return Contribution(
         entity=data["entity"],
         pt_boost=tuple(data.get("pt_boost", (0, 0))),
+        set_pt=tuple(data["set_pt"]) if data.get("set_pt") is not None else None,
         keywords=tuple(normalize_keyword(k) for k in data.get("keywords", ())),
         types=tuple(data.get("types", ())),
         colors=tuple(data.get("colors", ())),
         name=data.get("name"),
+        controller=data.get("controller"),
     )
 
 

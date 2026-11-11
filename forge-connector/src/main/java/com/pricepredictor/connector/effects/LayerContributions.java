@@ -9,11 +9,18 @@ import forge.card.ColorSet;
 import forge.card.RemoveType;
 import forge.card.StateChangedType;
 import forge.card.WordChangedType;
+import forge.game.Game;
+import forge.game.StaticEffect;
 import forge.game.card.Card;
 import forge.game.keyword.KeywordInterface;
 import forge.game.keyword.KeywordsChange;
+import forge.game.player.Player;
+import forge.game.staticability.StaticAbility;
+import forge.game.zone.ZoneType;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -47,6 +54,14 @@ final class LayerContributions {
             contribution(cell.getColumnKey(), entity)
                     .boost(cell.getValue().getLeft(), cell.getValue().getRight());
         }
+        // Layer 7a then 7b, so a static writing both ends on the base it set last.
+        for (Table<Long, Long, Pair<Integer, Integer>> layer
+                : List.of(card.getSetPTCharacterDefiningTable(), card.getSetPTTable())) {
+            for (Table.Cell<Long, Long, Pair<Integer, Integer>> cell : layer.cellSet()) {
+                contribution(cell.getColumnKey(), entity)
+                        .setPt(cell.getValue().getLeft(), cell.getValue().getRight());
+            }
+        }
         addNames(card, entity);
         for (Table.Cell<Long, Long, KeywordsChange> cell
                 : card.getChangedCardKeywords().cellSet()) {
@@ -65,6 +80,39 @@ final class LayerContributions {
                 LayerContributions::typeTokens);
         addLayerChanges(card, entity, PatchHooks.CHANGED_COLORS_BY_STATIC,
                 LayerContributions::colorTokens);
+    }
+
+    /**
+     * File each permanent a static gives control of under that static, with
+     * the controller it gives.
+     *
+     * <p>Forge files a static's control change under the static's timestamp
+     * rather than its id ({@code Card.addTempController}), so the static is
+     * found from its side: each {@code GainControl$} static in force and the
+     * permanents its effect applies to. A permanent whose controller is the
+     * same without the static — a later control change overrides it — gets
+     * nothing from it.
+     */
+    void addControl(Game game) {
+        List<Card> hosts = new ArrayList<>(
+                game.getCardsIn(EnumSet.of(ZoneType.Battlefield, ZoneType.Command)));
+        for (Card host : hosts) {
+            for (StaticAbility stat : host.getStaticAbilities()) {
+                if (!stat.hasParam("GainControl")) {
+                    continue;
+                }
+                StaticEffect effect = ForgeFields.staticEffectOf(game, stat);
+                if (effect == null) {
+                    continue;
+                }
+                for (Card affected : effect.getAffectedCards()) {
+                    Player now = affected.getController();
+                    if (affected.isInPlay() && now != affected.getControllerWithout(stat.getTimestamp())) {
+                        contribution((long) stat.getId(), Refs.of(affected)).controller(Refs.of(now));
+                    }
+                }
+            }
+        }
     }
 
     private Contribution contribution(Long staticId, String entity) {
@@ -224,6 +272,11 @@ final class LayerContributions {
         private final String entity;
         private int power;
         private int toughness;
+        // The base a setting effect gives, each half null where the static
+        // sets none; null altogether for a static that sets no base.
+        private List<Integer> setPt;
+        // The controller a static gives, or null for one that changes none.
+        private String controller;
         private final Set<String> keywords = new LinkedHashSet<>();
         // Sets rather than lists: a static that writes to two type layers can
         // name the same type twice, and the second says nothing the first did
@@ -244,6 +297,17 @@ final class LayerContributions {
         void boost(int addPower, int addToughness) {
             power += addPower;
             toughness += addToughness;
+        }
+
+        void setPt(Integer setPower, Integer setToughness) {
+            List<Integer> base = new ArrayList<>(2);
+            base.add(setPower != null ? setPower : setPt == null ? null : setPt.get(0));
+            base.add(setToughness != null ? setToughness : setPt == null ? null : setPt.get(1));
+            setPt = base;
+        }
+
+        void controller(String player) {
+            controller = player;
         }
 
         void keyword(String keyword) {
@@ -270,15 +334,26 @@ final class LayerContributions {
             }
         }
 
+        /**
+         * {@code set_pt} and {@code controller} only where the static sets a
+         * base or gives control: absent says it does neither, as on a record
+         * written before the two members existed.
+         */
         String toJson() {
-            return Json.object()
+            Json.ObjectWriter json = Json.object()
                     .value("entity", entity)
-                    .value("pt_boost", List.of(power, toughness))
-                    .raw("keywords", Json.stringArray(keywords))
+                    .value("pt_boost", List.of(power, toughness));
+            if (setPt != null) {
+                json.value("set_pt", setPt);
+            }
+            json.raw("keywords", Json.stringArray(keywords))
                     .raw("types", Json.stringArray(types))
                     .raw("colors", Json.stringArray(colors))
-                    .value("name", name)
-                    .render();
+                    .value("name", name);
+            if (controller != null) {
+                json.value("controller", controller);
+            }
+            return json.render();
         }
     }
 }

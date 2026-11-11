@@ -4,6 +4,7 @@ import com.pricepredictor.connector.json.Json;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.spellability.SpellAbility;
+import forge.game.staticability.StaticAbility;
 import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
@@ -105,7 +106,7 @@ public final class SnapshotBuilder {
      *                   they sit in (tier 1)
      */
     Snapshot ofAbility(SpellAbility acting, Iterable<Card> referenced) {
-        return snapshot(referenced, null, acting, null, null, true);
+        return snapshot(referenced, StaticSuppression.NONE, acting, null, null, true);
     }
 
     /**
@@ -121,7 +122,8 @@ public final class SnapshotBuilder {
      */
     Snapshot ofCandidate(SpellAbility candidate) {
         Card host = candidate.getHostCard();
-        return snapshot(host == null ? List.of() : List.of(host), null, candidate, host, null, false);
+        return snapshot(host == null ? List.of() : List.of(host), StaticSuppression.NONE,
+                candidate, host, null, false);
     }
 
     /**
@@ -138,16 +140,16 @@ public final class SnapshotBuilder {
      * block is the empty shape.
      */
     Snapshot ofBoard() {
-        return snapshot(List.of(), null, null, null, null, true);
+        return snapshot(List.of(), StaticSuppression.NONE, null, null, null, true);
     }
 
     /**
-     * The board-only snapshot with one static's contributions removed from
-     * every entity: a {@code continuous} record's state, which must not
-     * already contain the answer the record labels.
+     * The board-only snapshot without one static ({@link StaticSuppression}):
+     * a {@code continuous} record's state, which must not already contain
+     * the answer the record labels.
      */
-    Snapshot ofBoardWithout(long staticId) {
-        return snapshot(List.of(), staticId, null, null, null, true);
+    Snapshot ofBoardWithout(StaticAbility stat) {
+        return snapshot(List.of(), StaticSuppression.of(stat), null, null, null, true);
     }
 
     /**
@@ -169,15 +171,15 @@ public final class SnapshotBuilder {
      * @param pending the event as the trait received it
      */
     Snapshot ofTrait(Card source, EffectEvent pending) {
-        return snapshot(source == null ? List.of() : List.of(source), null, null, source, pending, true);
+        return snapshot(source == null ? List.of() : List.of(source), StaticSuppression.NONE,
+                null, source, pending, true);
     }
 
     /**
      * The one assembly behind every call shape, private so that no caller
      * passes the combination of nulls that picks its shape.
      *
-     * @param withoutStatic the id of a static whose changes are removed from
-     *                      every entity, or null to show the board as it stands
+     * @param board         the board as it stands, or without one static
      * @param source        the host of an acting line that is not a spell
      *                      ability, or null
      * @param pending       the event a trait is about to handle, or null
@@ -187,23 +189,23 @@ public final class SnapshotBuilder {
      *                      host alone and whose targets are no links
      */
     private Snapshot snapshot(
-            Iterable<Card> referenced, Long withoutStatic, SpellAbility acting, Card source,
+            Iterable<Card> referenced, StaticSuppression board, SpellAbility acting, Card source,
             EffectEvent pending, boolean chosen) {
         Set<Card> tiers = collectEntities(referenced);
         List<String> entities = new ArrayList<>();
         Set<String> present = new HashSet<>();
         for (Card card : tiers) {
-            entities.add(EntityJson.render(game, card, withoutStatic));
+            entities.add(EntityJson.render(game, card, board));
             present.add(Refs.of(card));
         }
-        LibraryCapture libraries = LibraryCapture.of(game, withoutStatic, present);
+        LibraryCapture libraries = LibraryCapture.of(game, board, present);
         List<Card> cards = new ArrayList<>(tiers);
-        addBeyondTheTiers(entities, present, tiers, cards, withoutStatic, libraries, pending);
+        addBeyondTheTiers(entities, present, tiers, cards, board, libraries, pending);
         String players = Json.array(game.getPlayers(), player -> PlayerJson.render(game, player));
         return new Snapshot(
-                globalToJson(tiers), players, "[" + String.join(",", entities) + "]",
+                globalToJson(tiers, board), players, "[" + String.join(",", entities) + "]",
                 SnapshotLinks.render(
-                        game, cards, tiers, acting, chosen, pending, withoutStatic, floating),
+                        game, cards, tiers, acting, chosen, pending, board, floating),
                 RefsJson.render(chosen ? acting : null, source),
                 pending == null ? "null" : pending.toJson(),
                 libraries);
@@ -229,25 +231,25 @@ public final class SnapshotBuilder {
      */
     private void addBeyondTheTiers(
             List<String> entities, Set<String> present, Set<Card> tiers, List<Card> cards,
-            Long withoutStatic, LibraryCapture libraries, EffectEvent pending) {
+            StaticSuppression board, LibraryCapture libraries, EffectEvent pending) {
         for (var player : game.getPlayers()) {
             Card top = player.getCardsIn(ZoneType.Library).isEmpty()
                     ? null : player.getCardsIn(ZoneType.Library).get(0);
-            addLibraryCard(entities, present, cards, top, 0, withoutStatic);
+            addLibraryCard(entities, present, cards, top, 0, board);
         }
         if (pending != null) {
             for (String subject : pending.subjects()) {
                 LibraryCapture.Slot slot = libraries.byId().get(subject);
                 if (slot != null) {
                     addLibraryCard(entities, present, cards, slot.card(), slot.position(),
-                            withoutStatic);
+                            board);
                 }
             }
         }
         for (Card card : tiers) {
             if (card.isInPlay()) {
                 for (Card exiled : card.getExiledCards()) {
-                    addBeyond(entities, present, cards, exiled, withoutStatic,
+                    addBeyond(entities, present, cards, exiled, board,
                             ROLE_EXILED_WITH);
                 }
             }
@@ -255,7 +257,7 @@ public final class SnapshotBuilder {
         for (Card card : tiers) {
             if (card.isInPlay() && card.isMutated()) {
                 for (Card component : card.getMergedCards()) {
-                    addBeyond(entities, present, cards, component, withoutStatic,
+                    addBeyond(entities, present, cards, component, board,
                             ROLE_MUTATE_COMPONENT);
                 }
             }
@@ -264,7 +266,7 @@ public final class SnapshotBuilder {
         if (lastKnown != null) {
             // A last-known copy is in no zone; it names the one it was in.
             var zone = lastKnown.getZone() != null ? lastKnown.getZone() : lastKnown.getLastKnownZone();
-            entities.add(EntityJson.render(game, lastKnown, withoutStatic, new EntityJson.Beyond(
+            entities.add(EntityJson.render(game, lastKnown, board, new EntityJson.Beyond(
                     "L" + lastKnown.getId(),
                     zone == null ? null : CardSpelling.zoneName(zone.getZoneType()),
                     null, ROLE_LAST_KNOWN)));
@@ -273,10 +275,10 @@ public final class SnapshotBuilder {
 
     private void addBeyond(
             List<String> entities, Set<String> present, List<Card> cards, Card card,
-            Long withoutStatic, String role) {
+            StaticSuppression board, String role) {
         if (card != null && present.add(Refs.of(card))) {
             cards.add(card);
-            entities.add(EntityJson.render(game, card, withoutStatic,
+            entities.add(EntityJson.render(game, card, board,
                     new EntityJson.Beyond(null, null, null, role)));
         }
     }
@@ -289,10 +291,10 @@ public final class SnapshotBuilder {
      */
     private void addLibraryCard(
             List<String> entities, Set<String> present, List<Card> cards, Card card,
-            int position, Long withoutStatic) {
+            int position, StaticSuppression board) {
         if (card != null && present.add(Refs.of(card))) {
             cards.add(card);
-            entities.add(EntityJson.render(game, LibraryCapture.asInLibrary(card), withoutStatic,
+            entities.add(EntityJson.render(game, LibraryCapture.asInLibrary(card), board,
                     new EntityJson.Beyond(null, "library", position, ROLE_LIBRARY_CARD)));
         }
     }
@@ -316,7 +318,7 @@ public final class SnapshotBuilder {
         return entities;
     }
 
-    private String globalToJson(Collection<Card> cards) {
+    private String globalToJson(Collection<Card> cards, StaticSuppression board) {
         var phase = game.getPhaseHandler();
         Boolean night = game.getDayTime();
         return Json.object()
@@ -333,7 +335,7 @@ public final class SnapshotBuilder {
                 // Forge's daytime field is true at night, null for neither.
                 .value("day_night", night == null ? null : night ? "night" : "day")
                 .raw("floating_effects",
-                        floating.floatingEffectsJson(game, cards))
+                        floating.floatingEffectsJson(game, cards, board))
                 .raw("delayed_triggers", FloatingEffects.delayedTriggersJson(game))
                 .raw("dungeons", FloatingEffects.dungeonsJson(game))
                 .render();

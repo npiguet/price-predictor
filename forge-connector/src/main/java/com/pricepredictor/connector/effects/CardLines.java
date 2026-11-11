@@ -1,6 +1,5 @@
 package com.pricepredictor.connector.effects;
 
-import com.google.common.collect.Table;
 import com.pricepredictor.connector.json.Json;
 import forge.card.CardStateName;
 import forge.game.CardTraitBase;
@@ -8,8 +7,6 @@ import forge.game.Game;
 import forge.game.StaticEffect;
 import forge.game.card.Card;
 import forge.game.card.CardState;
-import forge.game.card.CardTraitChanges;
-import forge.game.card.ICardTraitChanges;
 import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.OptionalCost;
 import forge.game.spellability.SpellAbility;
@@ -59,16 +56,11 @@ final class CardLines {
     /**
      * The card's lines as the JSON array a card slot carries.
      *
-     * @param keywords      the keywords the card has now, with an acting
-     *                      static's grants already removed where the snapshot
-     *                      removes one
-     * @param withoutStatic the id of a static whose grants the snapshot
-     *                      removes, or null
+     * @param board the board they are read on: as it stands, or without one
+     *              static, whose grants are gone and whose removals are back
      */
-    static String render(Game game, Card card, Iterable<KeywordInterface> keywords,
-                         Long withoutStatic) {
-        return Json.array(new CardLines.Builder(game, card, withoutStatic).build(keywords),
-                Line::toJson);
+    static String render(Game game, Card card, StaticSuppression board) {
+        return Json.array(new CardLines.Builder(game, card, board).build(), Line::toJson);
     }
 
     /** One line of a card slot. Null members are absent from the JSON. */
@@ -103,12 +95,13 @@ final class CardLines {
     private static final class Builder {
         private final Game game;
         private final Card card;
-        private final Long withoutStatic;
+        private final StaticSuppression board;
         private final String ownScript;
-        /** Lines a layer-6 change appended: a static's, an attachment's, a pump's grant. */
-        private final Set<CardTraitBase> layerGranted = identitySet();
-        /** Lines the removed static granted, which the snapshot must not show. */
-        private final Set<CardTraitBase> suppressed = identitySet();
+        /**
+         * Lines a layer-6 change appended — a static's, an attachment's, a
+         * pump's grant — on this board.
+         */
+        private final Set<CardTraitBase> layerGranted;
         /** The ability of this card on the stack, or null. */
         private final SpellAbility onStack;
         /** The spell this card was cast as, for the cost lines it was cast with. */
@@ -117,29 +110,19 @@ final class CardLines {
         /** Keys already listed, so a face not up repeats none of the face that is. */
         private final Set<ProvenanceKey> listed = new HashSet<>();
 
-        Builder(Game game, Card card, Long withoutStatic) {
+        Builder(Game game, Card card, StaticSuppression board) {
             this.game = game;
             this.card = card;
-            this.withoutStatic = withoutStatic;
+            this.board = board;
             this.ownScript = ScriptLocator.scriptFileOf(card);
-            for (Table.Cell<Long, Long, ICardTraitChanges> cell
-                    : card.getChangedCardTraits().cellSet()) {
-                if (cell.getValue() instanceof CardTraitChanges changes) {
-                    Set<CardTraitBase> into = cell.getColumnKey().equals(withoutStatic)
-                            ? suppressed : layerGranted;
-                    into.addAll(changes.getAbilities());
-                    into.addAll(changes.getTriggers());
-                    into.addAll(changes.getReplacements());
-                    into.addAll(changes.getStaticAbilities());
-                }
-            }
+            this.layerGranted = board.grantedLines(card);
             this.onStack = stackAbilityOf(game, card);
             this.cast = castSpellOf(card, onStack);
         }
 
-        List<Line> build(Iterable<KeywordInterface> keywords) {
+        List<Line> build() {
             CardState up = card.getCurrentState();
-            List<KeywordInterface> shown = sorted(keywords);
+            List<KeywordInterface> shown = sorted(board.keywords(card));
             addTraitLines(up, shown, true);
             addKeywordLines(up, shown, true);
             addSplicedLines();
@@ -205,20 +188,20 @@ final class CardLines {
                 keywordTexts.add(keyword.getOriginal());
             }
             ProvenanceKey stackKey = onStack == null ? null : ProvenanceResolver.of(onStack);
-            for (SpellAbility ability : state.getSpellAbilities()) {
+            for (SpellAbility ability : board.spellAbilities(state)) {
                 if (isRulesSpell(ability)) {
                     continue;
                 }
                 addTrait(ability, ability.isSpell() ? "spell" : "activated",
                         faceUp, keywordLines, keywordTexts, stackKey);
             }
-            for (CardTraitBase trigger : state.getTriggers()) {
+            for (CardTraitBase trigger : board.triggers(state)) {
                 addTrait(trigger, "trigger", faceUp, keywordLines, keywordTexts, stackKey);
             }
-            for (CardTraitBase stat : state.getStaticAbilities()) {
+            for (CardTraitBase stat : board.staticAbilities(state)) {
                 addTrait(stat, "static", faceUp, keywordLines, keywordTexts, stackKey);
             }
-            for (CardTraitBase replacement : state.getReplacementEffects()) {
+            for (CardTraitBase replacement : board.replacementEffects(state)) {
                 addTrait(replacement, "replacement", faceUp, keywordLines, keywordTexts, stackKey);
             }
         }
@@ -226,7 +209,7 @@ final class CardLines {
         private void addTrait(CardTraitBase trait, String kind, boolean faceUp,
                               Set<KeywordInterface> keywordLines, Set<String> keywordTexts,
                               ProvenanceKey stackKey) {
-            if (suppressed.contains(trait) || (!faceUp && layerGranted.contains(trait))) {
+            if (!faceUp && layerGranted.contains(trait)) {
                 return;
             }
             KeywordInterface keyword = trait.getKeyword();
@@ -235,11 +218,7 @@ final class CardLines {
                     // The keyword's own line already stands for it.
                     return;
                 }
-                // A long against Forge's int id: Long.equals(Integer) is
-                // always false, which once let the removed static's flying
-                // back in as the CantBlockBy static it builds.
-                if (withoutStatic != null && keyword.getStatic() != null
-                        && withoutStatic == keyword.getStatic().getId()) {
+                if (board.grantedKeyword(keyword)) {
                     // A trait of the removed static's keyword grant.
                     return;
                 }
@@ -265,7 +244,7 @@ final class CardLines {
          * that static and set apart two records that otherwise say the same.
          */
         private List<String> affectedBy(StaticAbility stat) {
-            if (withoutStatic != null) {
+            if (!board.showsAffected()) {
                 return null;
             }
             StaticEffect effect = ForgeFields.staticEffectOf(game, stat);

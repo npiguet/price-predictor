@@ -35,12 +35,15 @@ final class ContinuousChannel {
      * Whether the engine can say what a card would be without one static.
      *
      * <p>Separate from {@link AttributionMode}, which probes the sub-ability
-     * hook. These three arrived later, so a checkout patched against an older
+     * hook. These arrived later, so a checkout patched against an older
      * revision of the patch reports {@code patched} and still cannot suppress.
      */
     static final boolean CAN_SUPPRESS = PatchHooks.TYPE_WITHOUT.present()
             && PatchHooks.COLOR_WITHOUT.present()
-            && PatchHooks.KEYWORDS_WITHOUT.present();
+            && PatchHooks.KEYWORDS_WITHOUT.present()
+            && PatchHooks.PT_WITHOUT.present()
+            && PatchHooks.CONTROLLER_WITHOUT.present()
+            && PatchHooks.TRAITS_WITHOUT.present();
 
     private final LiveGame live;
     private final CollectorContext context;
@@ -65,6 +68,7 @@ final class ContinuousChannel {
         for (Card card : live.game().getCardsIn(ZoneType.Battlefield)) {
             contributions.addCard(card);
         }
+        contributions.addControl(live.game());
         String boardHash = boardHash();
         for (Map.Entry<Long, Map<String, LayerContributions.Contribution>> entry
                 : contributions.byStatic().entrySet()) {
@@ -90,7 +94,7 @@ final class ContinuousChannel {
         }
         String rendered = Json.array(contributions, LayerContributions.Contribution::toJson);
         ProvenanceKey.Resolved acting = ProvenanceResolver.resolve(source);
-        String state = live.snapshots().ofBoardWithout(staticId).render();
+        String state = live.snapshots().ofBoardWithout(source).render();
         String payload = Json.object()
                 .raw("contributions", rendered)
                 .value("board_hash", boardHash)

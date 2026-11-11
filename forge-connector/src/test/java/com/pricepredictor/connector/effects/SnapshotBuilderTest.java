@@ -11,6 +11,7 @@ import forge.game.mana.Mana;
 import forge.game.phase.PhaseType;
 import forge.game.spellability.OptionalCost;
 import forge.game.spellability.SpellAbility;
+import forge.game.staticability.StaticAbility;
 import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -376,7 +377,7 @@ class SnapshotBuilderTest {
             Card bears = board.battlefield("Grizzly Bears", board.you);
             Card levitation = board.battlefield("Levitation", board.you);
             board.game.getAction().checkStaticAbilities();
-            long levitating = levitation.getStaticAbilities().get(0).getId();
+            StaticAbility levitating = levitation.getStaticAbilities().get(0);
 
             Map<String, Object> without = entityIn(
                     new SnapshotBuilder(board.game).ofBoardWithout(levitating).render(), bears);
@@ -398,7 +399,7 @@ class SnapshotBuilderTest {
             Card bears = board.battlefield("Grizzly Bears", board.you);
             Card levitation = board.battlefield("Levitation", board.you);
             board.game.getAction().checkStaticAbilities();
-            long levitating = levitation.getStaticAbilities().get(0).getId();
+            StaticAbility levitating = levitation.getStaticAbilities().get(0);
 
             Map<String, Object> without = line(lines(entityIn(
                     new SnapshotBuilder(board.game).ofBoardWithout(levitating).render(),
@@ -834,7 +835,7 @@ class SnapshotBuilderTest {
     // ── reading an entity ───────────────────────────────────────────────
 
     private static Map<String, Object> entityOf(CharacterizationBoard board, Card card) {
-        return RecordLines.parse(EntityJson.render(board.game, card, null));
+        return RecordLines.parse(EntityJson.render(board.game, card, StaticSuppression.NONE));
     }
 
     @SuppressWarnings("unchecked")

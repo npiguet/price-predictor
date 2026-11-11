@@ -451,14 +451,23 @@ class Contribution:
 
     Types are spelled as the snapshot spells an entity's own, subtypes and
     supertypes included.
+
+    ``set_pt`` is the base power and toughness the static sets (layer 7a or
+    7b), a half ``None`` where it sets only the other; ``None`` for a static
+    that sets no base. ``controller`` is the player the static gives control
+    to, ``None`` for one that changes no controller. The snapshot beside them
+    is the board without the static, so its base and controller are the ones
+    the static replaces.
     """
 
     entity: str
     pt_boost: tuple[int, int] = (0, 0)
+    set_pt: tuple[int | None, int | None] | None = None
     keywords: tuple[str, ...] = ()
     types: tuple[str, ...] = ()
     colors: tuple[str, ...] = ()
     name: str | None = None
+    controller: str | None = None
 
     @property
     def keyword_changes(self) -> ChannelChange:

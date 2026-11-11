@@ -38,14 +38,14 @@ import java.util.Set;
  * @param present the ids already among the snapshot's entities
  */
 record LibraryCapture(
-        Game game, Long withoutStatic, Map<String, Slot> byId, Set<String> present) {
+        Game game, StaticSuppression board, Map<String, Slot> byId, Set<String> present) {
 
     /** One library card and its position, 0 the top. */
     record Slot(Card card, int position) {
     }
 
     /** Every card of every library as it sits now. */
-    static LibraryCapture of(Game game, Long withoutStatic, Set<String> present) {
+    static LibraryCapture of(Game game, StaticSuppression board, Set<String> present) {
         Map<String, Slot> byId = new LinkedHashMap<>();
         for (Player player : game.getPlayers()) {
             int position = 0;
@@ -53,7 +53,7 @@ record LibraryCapture(
                 byId.put(Refs.of(card), new Slot(card, position++));
             }
         }
-        return new LibraryCapture(game, withoutStatic, byId, present);
+        return new LibraryCapture(game, board, byId, present);
     }
 
     /**
@@ -68,7 +68,7 @@ record LibraryCapture(
             for (String subject : event.subjects()) {
                 Slot slot = byId.get(subject);
                 if (slot != null && added.add(subject)) {
-                    rendered.add(EntityJson.render(game, asInLibrary(slot.card()), withoutStatic,
+                    rendered.add(EntityJson.render(game, asInLibrary(slot.card()), board,
                             new EntityJson.Beyond(null, "library", slot.position(),
                                     SnapshotBuilder.ROLE_LIBRARY_CARD)));
                 }

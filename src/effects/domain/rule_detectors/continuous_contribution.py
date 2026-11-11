@@ -7,7 +7,8 @@ near miss when the static applies to the board and contributes nothing of it.
 
 Parameters:
 
-- ``field`` (required): ``pt``, ``keywords``, ``types`` or ``colors``;
+- ``field`` (required): ``pt`` (a boost or a set base), ``keywords``,
+  ``types`` or ``colors``;
 - ``value``: a keyword, type or colour the contribution must name (``flying``,
   ``artifact``, ``U``), compared without case; a leading ``-`` names a
   removal, a lone ``=`` a characteristic set outright;
@@ -98,7 +99,7 @@ def conditioned_on_counters(script_text: str | None, counter_type: str) -> bool:
 
 def _carries(contribution: Contribution, field: str, value: str | None) -> bool:
     if field == "pt":
-        return contribution.pt_boost != (0, 0)
+        return contribution.pt_boost != (0, 0) or contribution.set_pt is not None
     found = getattr(contribution, field)
     if value is None:
         return bool(found)

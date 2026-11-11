@@ -129,7 +129,7 @@ class LayerContributionsTest {
 
     // ── continuous name channel ──────────────────────────────────────────
 
-    /** {@code "name"} is the last field {@link Contribution#toJson()} writes. */
+    /** {@code "name"} is the last field {@link Contribution#toJson()} writes where it gives no control. */
     private static String nameField(Contribution into) {
         String json = into.toJson();
         int at = json.indexOf("\"name\":");

@@ -724,6 +724,26 @@ class TestTheWireFormIsPinned:
             assert format_record_line(again) == line
 
 
+class TestAContinuousContributionsSetBaseAndControl:
+    """``set_pt`` and ``controller`` are present only where a static sets a
+    base or gives control (B1, L2)."""
+
+    def test_they_read_and_write_back_where_present(self):
+        record = _record(**ALL_KINDS["continuous"])
+        record = replace(record, payload=replace(record.payload, contributions=(
+            Contribution(entity="E13", set_pt=(1, None), controller="P1"),)))
+        written = record_to_dict(record)["payload"]["contributions"][0]
+        assert list(written) == ["entity", "pt_boost", "set_pt", "keywords", "types",
+                                 "colors", "name", "controller"]
+        assert written["set_pt"] == [1, None]
+        assert record_from_dict(record_to_dict(record)) == record
+
+    def test_they_are_absent_where_unset(self):
+        written = record_to_dict(_record(**ALL_KINDS["continuous"]))["payload"]
+        assert "set_pt" not in written["contributions"][0]
+        assert "controller" not in written["contributions"][0]
+
+
 class TestThePayloadCodecs:
     """One codec per payload type, chosen by the record's ``(kind, discriminator)``."""
 

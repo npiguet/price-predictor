@@ -72,4 +72,18 @@ public enum TraitKind implements WireNamed {
             case KEYWORD -> List.of();
         };
     }
+
+    /**
+     * {@link #slice} as it would be without one static's changes: the lines
+     * it granted gone, the lines it took away back in their printed places.
+     */
+    Iterable<? extends CardTraitBase> sliceWithout(CardState state, long staticId) {
+        return switch (this) {
+            case SPELL -> state.getSpellAbilitiesWithout(staticId);
+            case TRIGGER -> state.getTriggersWithout(staticId);
+            case STATIC -> state.getStaticAbilitiesWithout(staticId);
+            case REPLACEMENT -> state.getReplacementEffectsWithout(staticId);
+            case KEYWORD -> List.of();
+        };
+    }
 }

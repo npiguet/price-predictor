@@ -1,10 +1,9 @@
 package com.pricepredictor.connector.effects;
 
-import com.pricepredictor.connector.json.Json;
 import com.google.common.collect.Table;
+import com.pricepredictor.connector.json.Json;
 import forge.card.CardStateName;
 import forge.card.CardTypeView;
-import forge.card.ColorSet;
 import forge.game.CardTraitBase;
 import forge.game.Game;
 import forge.game.GameEntity;
@@ -13,9 +12,7 @@ import forge.game.card.CardCollectionView;
 import forge.game.card.CardTraitChanges;
 import forge.game.card.CounterType;
 import forge.game.card.ICardTraitChanges;
-import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.SpellAbility;
-import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -36,11 +33,11 @@ final class EntityJson {
     /**
      * One entity, as {@code state.entities} carries it.
      *
-     * @param withoutStatic the id of a static whose changes are removed from
-     *                      the entity, or null to show it as it stands
+     * @param board the board it is read on: as it stands, or without one
+     *              static ({@link StaticSuppression})
      */
-    static String render(Game game, Card card, Long withoutStatic) {
-        return render(game, card, withoutStatic, Beyond.NONE);
+    static String render(Game game, Card card, StaticSuppression board) {
+        return render(game, card, board, Beyond.NONE);
     }
 
     /**
@@ -63,9 +60,8 @@ final class EntityJson {
     }
 
     /** One entity, written as {@code beyond} says. */
-    static String render(Game game, Card card, Long withoutStatic, Beyond beyond) {
-        Suppressed without = Suppressed.of(card, withoutStatic);
-        CardTypeView type = without == null ? card.getType() : without.type();
+    static String render(Game game, Card card, StaticSuppression board, Beyond beyond) {
+        CardTypeView type = board.type(card);
         SpellAbility onStack = CardLines.stackAbilityOf(game, card);
         SpellAbility cast = CardLines.castSpellOf(card, onStack);
         return Json.object()
@@ -73,7 +69,7 @@ final class EntityJson {
                 .value("name", card.getName())
                 .value("zone", beyond.zone() != null ? beyond.zone() : zoneName(card))
                 .value("owner", CardFacts.ownerOf(card))
-                .value("controller", Refs.ofNullable(card.getController()))
+                .value("controller", Refs.ofNullable(board.controller(card)))
                 .value("face", faceOf(card))
                 .value("face_state", CardFacts.faceState(card))
                 .value("copy_source", copySourceOf(card))
@@ -81,16 +77,15 @@ final class EntityJson {
                 .raw("types", typeNamesJson(type.getCoreTypes()))
                 .raw("subtypes", typeNamesJson(type.getSubtypes()))
                 .raw("supertypes", typeNamesJson(type.getSupertypes()))
-                .raw("colors", Json.stringArray(CardSpelling.colorLetters(
-                        without == null ? card.getColor() : without.colors())))
+                .raw("colors", Json.stringArray(CardSpelling.colorLetters(board.colors(card))))
                 .value("mana_value", card.getCMC())
                 .raw("mana_cost", CardFacts.manaCostJson(card))
-                .raw("base_pt", basePtJson(card))
-                .raw("pt_boosts", ptBoostsJson(card, without))
+                .raw("base_pt", basePtJson(card, board))
+                .raw("pt_boosts", ptBoostsJson(card, board))
                 .value("printed_loyalty", CardFacts.printedLoyalty(card))
                 .value("printed_defense", CardFacts.printedDefense(card))
                 .value("tapped", card.isTapped())
-                .value("sick", card.isSick())
+                .value("sick", board.sick(card))
                 .value("damage", card.getDamage())
                 .raw("counters", counterJson(card))
                 .raw("combat", combatJson(game, card))
@@ -104,10 +99,8 @@ final class EntityJson {
                 .raw("history", CardFacts.historyJson(game, card))
                 .value("order_rank", beyond.rank() != null
                         ? beyond.rank() : CardFacts.orderRank(game, card))
-                .raw("granted_temporary", grantedTemporaryJson(card, without))
-                .raw("lines", CardLines.render(game, card,
-                        without == null ? card.getKeywords() : without.keywords(),
-                        without == null ? null : withoutStatic))
+                .raw("granted_temporary", grantedTemporaryJson(card, board))
+                .raw("lines", CardLines.render(game, card, board))
                 .raw("stack_extras", stackExtrasJson(onStack))
                 .value("role", beyond.role())
                 .render();
@@ -121,19 +114,18 @@ final class EntityJson {
     /**
      * Power and toughness before boosts: the base the printed value or a
      * setting effect (layer 7b, Ensoul Artifact's 5/5) gives, or null for a
-     * card that is not a creature.
+     * card that is not a creature on this board.
      *
      * <p>Forge's own breakdown of the numbers the creature fights with, so
      * base, boosts and counters add up to its net power and toughness, a
      * switch included.
      */
-    private static String basePtJson(Card card) {
-        if (!card.isCreature()) {
+    private static String basePtJson(Card card, StaticSuppression board) {
+        if (!board.isCreature(card)) {
             return "null";
         }
         return Json.value(List.of(
-                card.getNetPowerBreakdown().currentValue,
-                card.getNetToughnessBreakdown().currentValue));
+                board.power(card).currentValue, board.toughness(card).currentValue));
     }
 
     /**
@@ -142,20 +134,14 @@ final class EntityJson {
      * has to predict which happened. Counters are every counter's
      * contribution (+1/+1, -1/-1, +1/+2, ...), as Forge sums them.
      */
-    private static String ptBoostsJson(Card card, Suppressed without) {
-        if (!card.isCreature()) {
+    private static String ptBoostsJson(Card card, StaticSuppression board) {
+        if (!board.isCreature(card)) {
             return "null";
         }
-        Card.StatBreakdown power = card.getNetPowerBreakdown();
-        Card.StatBreakdown toughness = card.getNetToughnessBreakdown();
-        int boostPower = power.tempBoost;
-        int boostToughness = toughness.tempBoost;
-        if (without != null) {
-            boostPower -= without.power();
-            boostToughness -= without.toughness();
-        }
+        Card.StatBreakdown power = board.power(card);
+        Card.StatBreakdown toughness = board.toughness(card);
         return Json.object()
-                .value("temporary", List.of(boostPower, boostToughness))
+                .value("temporary", List.of(power.tempBoost, toughness.tempBoost))
                 .value("counters", List.of(power.bonusFromCounters, toughness.bonusFromCounters))
                 .render();
     }
@@ -203,11 +189,10 @@ final class EntityJson {
                 .render();
     }
 
-    private static String grantedTemporaryJson(Card card, Suppressed without) {
+    private static String grantedTemporaryJson(Card card, StaticSuppression board) {
         return Json.object()
-                .raw("keywords", Json.stringArray(CardSpelling.keywordNames(
-                        without == null ? card.getKeywords() : without.keywords())))
-                .raw("abilities", ProvenanceKey.toJsonArray(grantedTemporaryAbilities(card)))
+                .raw("keywords", Json.stringArray(CardSpelling.keywordNames(board.keywords(card))))
+                .raw("abilities", ProvenanceKey.toJsonArray(grantedTemporaryAbilities(card, board)))
                 .render();
     }
 
@@ -217,14 +202,15 @@ final class EntityJson {
      *
      * <p>"Gains flying and 'T: draw a card' until end of turn" puts the second
      * half here. {@code lines} lists the same grants among every other line,
-     * flagged {@code granted}; this list keeps them by themselves.
+     * flagged {@code granted}; this list keeps them by themselves. A
+     * suppressed static's grants are not on its board.
      */
-    private static List<ProvenanceKey> grantedTemporaryAbilities(Card card) {
+    private static List<ProvenanceKey> grantedTemporaryAbilities(Card card, StaticSuppression board) {
         Set<ProvenanceKey> keys = new LinkedHashSet<>();
-        for (ICardTraitChanges change : card.getChangedCardTraits().values()) {
+        for (Table.Cell<Long, Long, ICardTraitChanges> cell : card.getChangedCardTraits().cellSet()) {
             // Only the record carries granted lines; a keyword change sharing
             // the table has none to name.
-            if (change instanceof CardTraitChanges granted) {
+            if (cell.getValue() instanceof CardTraitChanges granted && !board.wrote(cell.getColumnKey())) {
                 addKeys(keys, granted.getAbilities());
             }
         }
@@ -302,58 +288,5 @@ final class EntityJson {
             names.add(CardSpelling.typeName(type));
         }
         return Json.stringArray(names);
-    }
-
-
-    /**
-     * One entity's characteristics with an acting static's changes removed.
-     *
-     * <p>A {@code continuous} record's label is what its static does to the
-     * board, so a snapshot that still contains the static's own work hands the
-     * model the answer with the question. Every channel that static wrote has
-     * to come back out.
-     *
-     * <p>Recombined by the engine rather than subtracted here, because
-     * subtraction gets two cases wrong: another static granting the same
-     * keyword or type would go with it, and a static that overwrites a type
-     * line or strips a whole class of type cannot be inverted from what it
-     * contributed. Power and toughness are the exception — boosts are summed
-     * per static, so dropping one term is already exact.
-     */
-    private record Suppressed(
-            CardTypeView type, ColorSet colors,
-            Iterable<KeywordInterface> keywords, int power, int toughness) {
-
-        /**
-         * What the card would be without this static, or null for no change.
-         *
-         * <p>Null when the patch is absent, which is also when a continuous
-         * record is never written — {@link ContinuousChannel#collect}
-         * checks for these three before it collects, so a leaking snapshot is
-         * not reachable by falling back to here.
-         */
-        static Suppressed of(Card card, Long staticId) {
-            if (staticId == null) {
-                return null;
-            }
-            if (!(PatchHooks.TYPE_WITHOUT.read(card, staticId) instanceof CardTypeView type)
-                    || !(PatchHooks.COLOR_WITHOUT.read(card, staticId) instanceof ColorSet colors)
-                    || !(PatchHooks.KEYWORDS_WITHOUT.read(card, staticId)
-                            instanceof Iterable<?> keywords)) {
-                return null;
-            }
-            int power = 0;
-            int toughness = 0;
-            for (Table.Cell<Long, Long, Pair<Integer, Integer>> cell
-                    : card.getPTBoostTable().cellSet()) {
-                if (staticId.equals(cell.getColumnKey())) {
-                    power += cell.getValue().getLeft();
-                    toughness += cell.getValue().getRight();
-                }
-            }
-            @SuppressWarnings("unchecked")
-            Iterable<KeywordInterface> typed = (Iterable<KeywordInterface>) keywords;
-            return new Suppressed(type, colors, typed, power, toughness);
-        }
     }
 }
