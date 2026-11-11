@@ -598,14 +598,22 @@ public final class ProvenanceResolver {
 
     /**
      * Index of {@code trait} within its kind's slice of {@code state}'s trait
-     * list.
+     * list, counted as the sidecar counts it: with every line a trait change
+     * took away back in its printed place ({@link #indexedSlice}).
      *
-     * <p>A printed line a static took away ("loses all abilities") is in no
-     * live slice, yet a {@code continuous} record's board, read without that
-     * static, lists it: it is found in the slice without each static that
-     * removes lines from the card, at its printed place.
+     * <p>Two cases need that. A printed line a static took away ("loses all
+     * abilities") is in no live slice, yet a {@code continuous} record's
+     * board, read without that static, lists it. And a static that takes away
+     * only some lines (Blood Sun: lands lose all but their mana abilities)
+     * moves every line it leaves up the live slice, where a live index would
+     * name the line printed before it.
+     *
+     * <p>When Forge's assembly cannot be read, the live slice, then the slice
+     * without each static that removes lines from the card.
      */
     private static int indexWithin(CardState state, CardTraitBase trait, TraitKind kind) {
+        Iterable<? extends CardTraitBase> printed = indexedSlice(state, kind);
+        if (printed != null) return indexIn(printed, trait);
         int index = indexIn(kind.slice(state), trait);
         if (index >= 0 || state.getCard() == null) return index;
         for (Table.Cell<Long, Long, ICardTraitChanges> cell
@@ -616,6 +624,30 @@ public final class ProvenanceResolver {
             }
         }
         return -1;
+    }
+
+    /**
+     * The kind's slice of {@code state} with every line a trait change took
+     * away back in its printed place and every line one added still appended,
+     * so a printed line stands at the index the sidecar gives it; the live
+     * slice when no change takes a line; null when Forge's assembly cannot be
+     * read ({@link ForgeFields#traitsThrough}).
+     */
+    private static Iterable<? extends CardTraitBase> indexedSlice(CardState state, TraitKind kind) {
+        Card card = state.getCard();
+        if (card == null || kind == TraitKind.KEYWORD) return kind.slice(state);
+        List<ICardTraitChanges> keeping = new ArrayList<>();
+        boolean removes = false;
+        for (ICardTraitChanges changes : card.getChangedCardTraitsList(state)) {
+            if (changes instanceof CardTraitChanges taking && taking.remove() != null) {
+                removes = true;
+                keeping.add(new CardTraitChanges(taking.abilities(), taking.triggers(),
+                        taking.replacements(), taking.staticAbilities(), null));
+            } else {
+                keeping.add(changes);
+            }
+        }
+        return removes ? ForgeFields.traitsThrough(state, kind, keeping) : kind.slice(state);
     }
 
     private static int indexIn(Iterable<? extends CardTraitBase> slice, CardTraitBase trait) {
@@ -641,7 +673,7 @@ public final class ProvenanceResolver {
      * wrong key silently trains the wrong line.
      */
     private static int indexLike(CardState state, CardTraitBase trait, TraitKind kind) {
-        Iterable<? extends CardTraitBase> slice = kind.slice(state);
+        Iterable<? extends CardTraitBase> slice = sliceToCount(state, kind);
         Map<String, String> want = trait.getOriginalMapParams();
         if (want == null || want.isEmpty()) return indexIfUnique(state, trait, kind);
         return soleIndex(slice, candidate -> candidate.getClass() == trait.getClass()
@@ -665,7 +697,13 @@ public final class ProvenanceResolver {
      * payload, while a record with the wrong key silently trains the wrong line.
      */
     private static int indexIfUnique(CardState state, CardTraitBase trait, TraitKind kind) {
-        return soleIndex(kind.slice(state),
+        return soleIndex(sliceToCount(state, kind),
                 candidate -> candidate.getClass() == trait.getClass());
+    }
+
+    /** {@link #indexedSlice}, or the live slice when Forge's assembly cannot be read. */
+    private static Iterable<? extends CardTraitBase> sliceToCount(CardState state, TraitKind kind) {
+        Iterable<? extends CardTraitBase> printed = indexedSlice(state, kind);
+        return printed != null ? printed : kind.slice(state);
     }
 }

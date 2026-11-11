@@ -148,6 +148,111 @@ class StaticSuppressionTest {
         assertEquals(List.of(1L, 1L), contribution.get("pt_boost"));
     }
 
+    /**
+     * A static that takes away only some of a permanent's lines leaves the
+     * rest keyed at their printed places: Blood Sun takes City of Shadows'
+     * storage ability (printed first) and leaves its mana ability (printed
+     * second), which keys to the sidecar's second spell line on the live
+     * board, not to the first because it now stands first in the live list.
+     * On the board without Blood Sun both lines are back, each at its own key.
+     */
+    @Test
+    void aLineAStaticLeavesKeepsItsPrintedKey() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card city = board.battlefield("City of Shadows", board.you);
+        Card bloodSun = board.battlefield("Blood Sun", board.you);
+        board.game.getAction().checkStaticAbilities();
+        Card printed = TestCards.build("City of Shadows");
+        ProvenanceKey printedStorage = ProvenanceResolver.of(ability(printed, false));
+        ProvenanceKey printedMana = ProvenanceResolver.of(ability(printed, true));
+        // The land's play ability stands first in Forge's spell list.
+        assertEquals(List.of(1, 2),
+                List.of(printedStorage.indexWithinKind(), printedMana.indexWithinKind()),
+                "the sidecar's spell lines: the storage ability, then the mana ability");
+        assertTrue(city.getSpellAbilities().stream().noneMatch(
+                        sa -> !sa.isManaAbility() && !sa.isLandAbility()),
+                "Blood Sun left the storage ability in force");
+
+        assertEquals(printedMana, ProvenanceResolver.of(ability(city, true)),
+                "the mana ability Blood Sun leaves");
+        assertEquals(List.of(printedMana.describe()), lineKeys(parse(EntityJson.render(
+                board.game, city, StaticSuppression.NONE))), "the live board's lines");
+
+        assumeSuppression();
+        Map<String, Object> suppressed =
+                entity(continuousRecordOf(board, bloodSun), Refs.of(city));
+        assertEquals(List.of(printedStorage.describe(), printedMana.describe()),
+                lineKeys(suppressed), "the board without Blood Sun's static");
+    }
+
+    /**
+     * A static that takes one printed keyword away leaves the other keyed to
+     * its printed line: Gravity Sphere takes Serra Angel's flying, and its
+     * vigilance keys where the sidecar puts it, on the live board and on the
+     * board without Gravity Sphere, beside flying there.
+     */
+    @Test
+    void aKeywordAStaticLeavesKeepsItsPrintedKey() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card angel = board.battlefield("Serra Angel", board.you);
+        Card sphere = board.battlefield("Gravity Sphere", board.you);
+        board.game.getAction().checkStaticAbilities();
+        Card printed = TestCards.build("Serra Angel");
+        String flying = keywordKey(printed, "Flying");
+        String vigilance = keywordKey(printed, "Vigilance");
+        assertFalse(angel.hasKeyword(forge.game.keyword.Keyword.FLYING), "Gravity Sphere left flying");
+
+        assertEquals(List.of(vigilance), lineKeys(parse(EntityJson.render(
+                board.game, angel, StaticSuppression.NONE)), "keyword"), "the live board's lines");
+
+        assumeSuppression();
+        assertEquals(List.of(flying, vigilance).stream().sorted().toList(),
+                lineKeys(entity(continuousRecordOf(board, sphere), Refs.of(angel)), "keyword")
+                        .stream().sorted().toList(),
+                "the board without Gravity Sphere's static");
+    }
+
+    /** The key of {@code card}'s printed keyword {@code name}, as {@link #lineKeys} spells it. */
+    private static String keywordKey(Card card, String name) {
+        for (forge.game.keyword.KeywordInterface keyword
+                : card.getCurrentState().getIntrinsicKeywords()) {
+            if (name.equals(keyword.getOriginal())) {
+                ProvenanceKey key = ProvenanceResolver.keyOfKeyword(card.getCurrentState(), keyword);
+                return "(" + key.scriptFile() + ") face" + key.face() + "/keyword["
+                        + key.indexWithinKind() + "]";
+            }
+        }
+        throw new AssertionError(card + " prints no " + name);
+    }
+
+    /** City of Shadows' mana ability, or its storage ability. */
+    private static forge.game.spellability.SpellAbility ability(Card card, boolean mana) {
+        return card.getSpellAbilities().stream()
+                .filter(sa -> !sa.isLandAbility() && sa.isManaAbility() == mana)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(card + " has no such ability"));
+    }
+
+    /** Every spell line's keys an entity lists, as {@link ProvenanceKey#describe}, in order. */
+    private static List<String> lineKeys(Map<String, Object> entity) {
+        return lineKeys(entity, "spell");
+    }
+
+    /** Every {@code kind} line's keys an entity lists, as {@link ProvenanceKey#describe}, in order. */
+    private static List<String> lineKeys(Map<String, Object> entity, String kind) {
+        List<String> keys = new ArrayList<>();
+        for (Object line : (List<?>) entity.get("lines")) {
+            for (Object key : (List<?>) asMap(line).getOrDefault("keys", List.of())) {
+                Map<String, Object> map = asMap(key);
+                if (kind.equals(map.get("trait_kind"))) {
+                    keys.add("(" + map.get("script_file") + ") face" + map.get("face")
+                            + "/" + kind + "[" + map.get("index_within_kind") + "]");
+                }
+            }
+        }
+        return keys;
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────
 
     private static void assumeSuppression() {
