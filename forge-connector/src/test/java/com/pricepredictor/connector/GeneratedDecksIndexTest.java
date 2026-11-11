@@ -198,6 +198,40 @@ class GeneratedDecksIndexTest {
                 index.randomDeck(new Random(0)));
     }
 
+    // ── a steered deck's rule column (FR-058d) ──────────────────────────────
+
+    @Test
+    void aThreeFieldLineHasNoRule() throws IOException {
+        GeneratedDecksIndex.GeneratedDeck deck =
+                GeneratedDecksIndex.GeneratedDeck.parse("coverage;COVERAGE;A|B|Forest");
+
+        assertEquals(List.of("A", "B", "Forest"), deck.cardNames());
+        assertNull(deck.rule());
+    }
+
+    @Test
+    void aFourFieldLineHoldsItsRule() throws IOException {
+        GeneratedDecksIndex.GeneratedDeck deck = GeneratedDecksIndex.GeneratedDeck.parse(
+                "variant;COVERAGE;Shock Variant 0a1b2c3d|Mountain;704.5f");
+
+        assertEquals("variant", deck.label());
+        assertEquals("COVERAGE", deck.setCode());
+        assertEquals("704.5f", deck.rule());
+        assertEquals(List.of("Shock Variant 0a1b2c3d", "Mountain"), deck.cardNames(),
+                "the rule never folds into the last card's name");
+    }
+
+    @Test
+    void aSteeredDeckFileLoadsWithItsRules(@TempDir Path tmp) throws IOException {
+        Path file = writeDecks(tmp, List.of("variant;COVERAGE;A|Mountain;702.19b \r"));
+
+        GeneratedDecksIndex.GeneratedDeck deck =
+                GeneratedDecksIndex.load(file).randomDeck(new Random(0));
+
+        assertEquals("702.19b", deck.rule());
+        assertEquals(List.of("A", "Mountain"), deck.cardNames());
+    }
+
     @Test
     void randomDeckFromSetIsEmptyWhenSetAbsent(@TempDir Path tmp) throws IOException {
         Path file = writeDecks(tmp, List.of(deckLine("gen-2", "MH3", "mh3", 40)));

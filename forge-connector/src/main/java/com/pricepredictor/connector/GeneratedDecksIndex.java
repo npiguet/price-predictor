@@ -15,7 +15,9 @@ import java.util.Random;
 /**
  * In-memory index of a generated-decks file for self-play match generation.
  *
- * <p>File format: one deck per line, {@code LABEL;SET_CODE;Card1|Card2|...|Card40}.
+ * <p>File format: one deck per line, {@code LABEL;SET_CODE;Card1|Card2|...|Card40},
+ * and a steered variant round's deck adds the rule it is aimed at as a fourth
+ * field, {@code LABEL;SET_CODE;Card1|...|Card40;RULE} (FR-058d).
  * The {@code LABEL} field is the generation-method tag set by
  * {@code build-decks --label} and used as the {@code method_A} / {@code method_B}
  * value when this deck is sampled into a match.
@@ -33,22 +35,37 @@ public class GeneratedDecksIndex {
      *
      * @param label     Generation-method tag (the line's first {@code ';'}-delimited field)
      * @param setCode   MTG set code (the second {@code ';'}-delimited field)
-     * @param cardNames 40 card names (the pipe-separated tail)
+     * @param cardNames 40 card names (the pipe-separated third field)
+     * @param rule      the rule a steered deck is aimed at (the fourth field),
+     *                  or null for a deck without one
      */
-    public record GeneratedDeck(String label, String setCode, List<String> cardNames) {
+    public record GeneratedDeck(
+            String label, String setCode, List<String> cardNames, String rule) {
+
+        /** A deck aimed at no rule. */
+        public GeneratedDeck(String label, String setCode, List<String> cardNames) {
+            this(label, setCode, cardNames, null);
+        }
 
         /**
-         * One {@code LABEL;SET_CODE;Card1|...} line.
+         * One {@code LABEL;SET_CODE;Card1|...} line, or a steered deck's
+         * {@code LABEL;SET_CODE;Card1|...;RULE}.
+         *
+         * <p>Split into at most four fields: a card name holds no {@code ;},
+         * so a fourth field is the rule, never part of the last card's name.
+         * An empty fourth field is no rule.
          *
          * @throws IOException when the line lacks either separator
          */
         static GeneratedDeck parse(String line) throws IOException {
-            String[] fields = line.split(CardNameList.FIELD_SEPARATOR, 3);
+            String[] fields = line.split(CardNameList.FIELD_SEPARATOR, 4);
             if (fields.length < 3) {
                 throw new IOException(
-                        "Malformed generated-decks line (need 'LABEL;SET_CODE;Cards'): " + line);
+                        "Malformed generated-decks line (need 'LABEL;SET_CODE;Cards[;RULE]'): "
+                                + line);
             }
-            return new GeneratedDeck(fields[0], fields[1], CardNameList.parse(fields[2]));
+            String rule = fields.length == 4 && !fields[3].isBlank() ? fields[3].trim() : null;
+            return new GeneratedDeck(fields[0], fields[1], CardNameList.parse(fields[2]), rule);
         }
 
         /**
