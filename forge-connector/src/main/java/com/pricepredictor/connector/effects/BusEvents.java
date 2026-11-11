@@ -348,6 +348,10 @@ final class BusEvents {
      * <p>The subject is the <b>player</b>, not the card, because that is whose
      * count it is. A zone-change event for the card itself is recorded
      * separately by {@link #cardMoved}.
+     *
+     * <p>A library-to-hand move is only a draw candidate here: a tutor or an
+     * explore moves a card the same way. The reader keeps it only when
+     * Forge's draw counter moved for it ({@link DrawCheck}).
      */
     static EffectEvent libraryMovement(GameEventCardChangeZone event) {
         if (event.card() == null || event.card().getOwner() == null
@@ -410,8 +414,12 @@ final class BusEvents {
     }
 
     /**
-     * Surveil: cards looked at, and however many went to the graveyard. The
-     * look's {@code mode} is {@value #SURVEIL} (see {@link #scry}).
+     * Surveil: cards looked at, and the library reordered. The look's
+     * {@code mode} is {@value #SURVEIL} (see {@link #scry}).
+     *
+     * <p>No mill: each card the surveil bins is its own move from the library
+     * to the graveyard, which {@link #libraryMovement} already tells as one
+     * {@code card_milled}.
      */
     static List<EffectEvent> surveil(GameEventSurveil event) {
         int count = event.toLibrary() + event.toGraveyard();
@@ -424,10 +432,6 @@ final class BusEvents {
                 .subject(player).param("count", count).param("mode", SURVEIL));
         events.add(new EffectEvent(EventType.LIBRARY_REORDERED)
                 .subject(player).param("count", count));
-        if (event.toGraveyard() > 0) {
-            events.add(new EffectEvent(EventType.CARD_MILLED)
-                    .subject(player).param("count", event.toGraveyard()));
-        }
         return events;
     }
 }

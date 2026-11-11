@@ -75,8 +75,10 @@ final class RecordPayloads {
                 .render();
     }
 
+    /** The events that happened, rendered: one filed before it was told apart is left out if it did not. */
     private static String eventArray(List<EffectEvent> events) {
-        return Json.array(events, EffectEvent::toJson);
+        return Json.array(events.stream().filter(EffectEvent::happened).toList(),
+                EffectEvent::toJson);
     }
 
     /**

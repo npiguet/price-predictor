@@ -26,6 +26,8 @@ public final class EffectEvent {
      */
     private forge.game.card.Card lastKnown;
     private String libraryOwner;
+    /** Whether the event happened, where that is told only after it is filed; null when it did. */
+    private java.util.function.BooleanSupplier happened;
 
     public EffectEvent(EventType type) {
         this.type = type;
@@ -115,6 +117,24 @@ public final class EffectEvent {
     /** The player whose library this move went into, or null. */
     String intoLibraryOf() {
         return libraryOwner;
+    }
+
+    /**
+     * Mark this event as one whose happening is told after it is filed: a
+     * record writes it only if {@code happened} answers true by then.
+     *
+     * <p>A card moving from a library to its owner's hand is a draw only when
+     * Forge counts it as one, and Forge counts the draw after publishing the
+     * move ({@link DrawCheck}).
+     */
+    EffectEvent onlyIf(java.util.function.BooleanSupplier happened) {
+        this.happened = happened;
+        return this;
+    }
+
+    /** Whether a record writes this event: true unless {@link #onlyIf} says otherwise. */
+    boolean happened() {
+        return happened == null || happened.getAsBoolean();
     }
 
     public EventType type() {

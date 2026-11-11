@@ -23,6 +23,7 @@ import forge.game.event.GameEventScry;
 import forge.game.event.GameEventShuffle;
 import forge.game.event.GameEventSpeedChanged;
 import forge.game.event.GameEventSurveil;
+import forge.game.event.GameEventTurnPhase;
 import forge.game.event.GameEventZone;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
@@ -70,6 +71,9 @@ abstract class BusEventReader {
      * board's marks as its baseline.
      */
     private final Map<Integer, CommandMarks> marks = new HashMap<>();
+
+    /** The library-to-hand moves filed as draws whose draw counter is still read live. */
+    private final DrawCheck.Pending draws = new DrawCheck.Pending();
 
     /** A player's blessing and completed dungeons. */
     private record CommandMarks(boolean blessed, int dungeonsCompleted) {
@@ -314,12 +318,20 @@ abstract class BusEventReader {
      */
     @Subscribe
     public void onCardChangeZone(GameEventCardChangeZone event) {
+        Player libraryOwner = libraryLeftBy(event);
+        if (libraryOwner != null) {
+            draws.settle(libraryOwner);
+        }
         EffectEvent moved = BusEvents.cardMoved(event);
         if (moved != null) {
             placeInLibrary(event, moved);
             fileMove(event, moved);
         }
-        file(BusEvents.libraryMovement(event), null);
+        EffectEvent movement = BusEvents.libraryMovement(event);
+        if (movement != null && movement.type() == EventType.CARD_DRAWN && libraryOwner != null) {
+            movement.onlyIf(draws.open(libraryOwner)::drawn);
+        }
+        file(movement, null);
         if (event.card() == null) {
             return;
         }
@@ -473,6 +485,25 @@ abstract class BusEventReader {
         for (EffectEvent looked : BusEvents.surveil(event)) {
             fileOutcome(looked, null);
         }
+    }
+
+    /**
+     * A step boundary: no card is still being drawn, and the cleanup step's
+     * reset of the draw counters comes after its boundary, so every draw
+     * check is settled here.
+     */
+    @Subscribe
+    public void onStepBoundary(GameEventTurnPhase event) {
+        draws.settleAll();
+    }
+
+    /** The player whose library this move takes a card out of, or null when it is none or this reader has no game. */
+    private Player libraryLeftBy(GameEventCardChangeZone event) {
+        if (game == null || event.card() == null || event.card().getOwner() == null
+                || event.from() == null || event.from().zoneType() != ZoneType.Library) {
+            return null;
+        }
+        return game.getPlayer(event.card().getOwner());
     }
 
     /** File an outcome a {@link BusEvents} factory may have answered null for. */
