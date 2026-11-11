@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import forge.ai.AiCardMemory;
 import forge.ai.ComputerUtilCost;
 import forge.game.Game;
 import forge.game.ability.AbilityFactory;
@@ -12,10 +13,13 @@ import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
 import forge.game.staticability.StaticAbilityMode;
+import forge.game.zone.ZoneType;
+import forge.util.MyRandom;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.List;
+import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -443,5 +447,70 @@ class PlayabilityVerdictTest {
         assertNull(read.manaCost());
         assertEquals(List.of(), read.legalTargets());
         assertTrue(read.payloadJson().contains("\"land_play\":true"), read.payloadJson());
+    }
+
+    // ── affordability by the rules alone (C5) ───────────────────────────
+
+    /** A's Grizzly Bears in hand and two untapped Forests. */
+    private static Game bearsAndTwoForests() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        TestBoard.inPlay(game, a, "Forest");
+        TestBoard.inPlay(game, a, "Forest");
+        TestBoard.inHand(game, a, "Grizzly Bears");
+        return game;
+    }
+
+    private static SpellAbility bearsSpell(Game game) {
+        return game.getPlayers().get(0).getCardsIn(ZoneType.Hand).get(0).getFirstSpellAbility();
+    }
+
+    /**
+     * Lands the AI holds back for its next spell still pay by the rules: a
+     * reservation is the AI's plan, and the record's label is the game's.
+     */
+    @Test
+    void manaTheAiReservedStillPays() {
+        Game game = bearsAndTwoForests();
+        Player a = game.getPlayers().get(0);
+        for (Card land : a.getLandsInPlay()) {
+            AiCardMemory.rememberCard(a, land, AiCardMemory.MemorySet.HELD_MANA_SOURCES_FOR_NEXT_SPELL);
+        }
+
+        assertTrue(PlayabilityVerdict.of(bearsSpell(game), a).affordable());
+    }
+
+    /**
+     * The check draws nothing from Forge's random stream, which the AI's
+     * payment planner does for every source it considers keeping for its
+     * second main phase, and leaves the AI's card memory as it found it.
+     */
+    @Test
+    void theCheckDrawsNothingFromTheRandomStream() {
+        Game game = bearsAndTwoForests();
+        Player a = game.getPlayers().get(0);
+        Random was = MyRandom.getRandom();
+        MyRandom.setRandom(new Random(7L));
+        Random expected = new Random(7L);
+        try {
+            assertTrue(PlayabilityVerdict.of(bearsSpell(game), a).affordable());
+            assertEquals(expected.nextLong(), MyRandom.getRandom().nextLong(),
+                    "the check drew from MyRandom");
+        } finally {
+            MyRandom.setRandom(was);
+        }
+        assertTrue(AiCardMemory.isMemorySetEmpty(a, AiCardMemory.MemorySet.PAYS_TAP_COST));
+    }
+
+    /** And it still tells mana that cannot pay: two Forests do not cast a Shock. */
+    @Test
+    void manaOfTheWrongColourDoesNotPay() {
+        Game game = bearsAndTwoForests();
+        Player a = game.getPlayers().get(0);
+        SpellAbility shock = TestBoard.inHand(game, a, "Shock").getFirstSpellAbility();
+
+        assertFalse(PlayabilityVerdict.of(shock, a).affordable());
+        TestBoard.inPlay(game, a, "Mountain");
+        assertTrue(PlayabilityVerdict.of(shock, a).affordable());
     }
 }

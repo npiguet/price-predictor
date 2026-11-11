@@ -79,8 +79,8 @@ public record DecisionCandidate(
      * increase and reduction (rule 601.2f), as a cost string; null where it
      * has no costs or the adjustment cannot be computed on this board.
      *
-     * <p>The same two adjustments, in the same order, that the affordability
-     * check makes through {@code ComputerUtilMana.calculateManaCost}: the
+     * <p>The same two adjustments, in the same order, that Forge's payment
+     * makes ({@code ComputerUtilMana.calculateManaCost} in its test mode): the
      * raises applied to the {@code Cost} ({@code CostAdjustment.adjust(Cost)}:
      * commander tax, {@code RaiseCost} statics), then the reductions applied
      * to the mana being paid ({@code CostAdjustment.adjust(ManaCostBeingPaid)}:
@@ -93,6 +93,22 @@ public record DecisionCandidate(
      * reduction keyed on where a spell is cast from applies.
      */
     static String adjustedManaCost(SpellAbility candidate, Player payer) {
+        try {
+            ManaCostBeingPaid charged = charged(candidate, payer);
+            return charged == null ? null : String.valueOf(charged.toManaCost());
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * The mana {@link #adjustedManaCost} spells, as Forge's payment reads it;
+     * null where the candidate has no costs.
+     *
+     * @throws RuntimeException where the adjustment cannot be computed on
+     *                          this board
+     */
+    static ManaCostBeingPaid charged(SpellAbility candidate, Player payer) {
         Cost cost = candidate.getPayCosts();
         if (cost == null) {
             return null;
@@ -110,9 +126,7 @@ public record DecisionCandidate(
                     : part == null ? ManaCost.ZERO : part.getManaCostFor(candidate);
             ManaCostBeingPaid charged = new ManaCostBeingPaid(mana);
             CostAdjustment.adjust(charged, candidate, payer, null, true, false);
-            return String.valueOf(charged.toManaCost());
-        } catch (RuntimeException e) {
-            return null;
+            return charged;
         } finally {
             if (castFromHere) {
                 host.setCastFrom(castFrom);

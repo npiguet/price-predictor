@@ -1,9 +1,9 @@
 package com.pricepredictor.connector.effects;
 
-import forge.ai.ComputerUtilMana;
 import forge.game.card.Card;
 import forge.game.cost.Cost;
 import forge.game.cost.CostPayment;
+import forge.game.mana.ManaCostBeingPaid;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
@@ -24,9 +24,12 @@ import java.util.function.Supplier;
  * random stream; a Ward cost; a Casualty sacrifice) and adds the mana its
  * Nether Void heuristics want, and a candidate's chosen targets are whatever
  * the AI's evaluation left on the ability object, which is nothing when it
- * stopped early and an earlier evaluation's when it did not run at all. So
- * affordability is the mana and additional-cost checks those two delegate to,
- * and target legality counts candidates rather than reading choices.
+ * stopped early and an earlier evaluation's when it did not run at all. The
+ * AI's mana check, {@code ComputerUtilMana.canPayManaCost}, is no rules check
+ * either: it honours the AI's mana reservations and draws from the random
+ * stream. So affordability is a rules-only mana check
+ * ({@link ManaAffordability}) and Forge's additional-cost check, and target
+ * legality counts candidates rather than reading choices.
  *
  * <p>{@code canPlay} is the record's {@code can_play}: Forge's
  * {@code canPlay}, its {@code canCastTiming} and no static forbidding the
@@ -156,13 +159,24 @@ public record PlayabilityVerdict(
         return canPlay && affordable && hasLegalTarget;
     }
 
-    /** Whether the player has the mana and the additional costs, ignoring every AI preference. */
+    /**
+     * Whether the player has the mana and the additional costs, by the rules
+     * alone: no AI reservation, preference or memory, and no draw from
+     * Forge's random stream ({@link ManaAffordability}).
+     */
     static boolean affordable(SpellAbility candidate, Player payer) {
         Cost cost = candidate.getPayCosts();
         if (cost == null) {
             return true;
         }
-        return ComputerUtilMana.canPayManaCost(cost, candidate, payer, 0, false)
+        ManaCostBeingPaid charged;
+        try {
+            charged = DecisionCandidate.charged(candidate, payer);
+        } catch (RuntimeException e) {
+            // The adjustment cannot be read on this board: the printed cost.
+            charged = new ManaCostBeingPaid(cost.getTotalMana());
+        }
+        return ManaAffordability.canPay(candidate, payer, charged)
                 && CostPayment.canPayAdditionalCosts(cost, candidate, false, payer);
     }
 }
