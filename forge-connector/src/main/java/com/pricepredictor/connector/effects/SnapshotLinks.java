@@ -245,24 +245,39 @@ final class SnapshotLinks {
      */
     private void linkedByText(Card card) {
         for (Card exiled : card.getExiledCards()) {
-            add(LinkFamily.LINKED_BY_TEXT, maker(card, exiled), card(exiled));
+            add(LinkFamily.LINKED_BY_TEXT, maker(card, current(exiled)), card(exiled));
         }
         if (card.getExiledWith() != null) {
             add(LinkFamily.LINKED_BY_TEXT, maker(card.getExiledWith(), card), card(card));
         }
         for (Card imprinted : card.getImprintedCards()) {
-            add(LinkFamily.LINKED_BY_TEXT, maker(card, imprinted), card(imprinted));
+            add(LinkFamily.LINKED_BY_TEXT, maker(card, current(imprinted)), card(imprinted));
         }
         for (Card held : card.getUntilLeavesBattlefield()) {
-            add(LinkFamily.LINKED_BY_TEXT, maker(card, held), card(held));
+            add(LinkFamily.LINKED_BY_TEXT, maker(card, current(held)), card(held));
         }
         if (remembersLastingly(card)) {
             for (Object remembered : card.getRemembered()) {
                 if (remembered instanceof Card || remembered instanceof Player) {
-                    add(LinkFamily.LINKED_BY_TEXT, maker(card, remembered), entity(remembered));
+                    add(LinkFamily.LINKED_BY_TEXT, maker(card, current(remembered)), entity(remembered));
                 }
             }
         }
+    }
+
+    /**
+     * The card as the game holds it now, for a card a list kept as it was:
+     * Spell Queller remembers the spell it exiled as the stack's card, which
+     * names nothing that exiled it, while the exiled card does. Read stale,
+     * the one link came out twice, keyed to Spell Queller's line and plain;
+     * a game copy, holding only the exiled card, wrote it once. A last-known
+     * copy, or a card no longer in the game, is kept as it is.
+     */
+    private Object current(Object object) {
+        if (object instanceof Card kept && !kept.isLKI()) {
+            return game.getCardState(kept, kept);
+        }
+        return object;
     }
 
     /**

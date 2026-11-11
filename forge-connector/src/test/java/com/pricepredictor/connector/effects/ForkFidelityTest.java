@@ -174,6 +174,34 @@ class ForkFidelityTest {
         assertEquals(you.getKeywords().toString(), fork.getPlayer(you.getId()).getKeywords().toString());
     }
 
+    /**
+     * Spell Queller exiled a spell from the stack and remembers it as the
+     * stack's card, which names nothing that exiled it: the live snapshot
+     * wrote the one link twice, keyed to Spell Queller's line and plain, the
+     * copy's, holding the exiled card, once.
+     */
+    @Test
+    void aCopyKeepsWhatSpellQuellerExiled() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = live.getPlayers().get(0);
+        Player opponent = live.getPlayers().get(1);
+        forge.game.spellability.SpellAbility shock =
+                TestBoard.cast(live, TestBoard.inHand(live, opponent, "Shock"), opponent, you);
+        Card queller = TestBoard.inPlay(live, you, "Spell Queller");
+        forge.game.spellability.SpellAbility exile = queller.getTriggers().iterator().next().ensureAbility();
+        exile.setActivatingPlayer(you);
+        exile.resetTargets();
+        exile.getTargets().add(shock);
+        live.getStack().add(exile);
+        live.getStack().resolveStack();
+        live.getAction().checkStateEffects(true);
+        assertEquals(1, live.getCardsIn(forge.game.zone.ZoneType.Exile).size(), "Shock was not exiled");
+
+        Game fork = new GameCopier(live).makeCopy();
+
+        assertEquals(List.of(), ForkFidelity.differences(live, fork));
+    }
+
     /** "Target creature blocks this turn if able": the requirement survives the copy. */
     @Test
     void aCopyKeepsACreaturesRequirementToBlock() {
