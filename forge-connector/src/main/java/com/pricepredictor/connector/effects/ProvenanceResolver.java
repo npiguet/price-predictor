@@ -323,16 +323,14 @@ public final class ProvenanceResolver {
     /**
      * The key of the {@code index}-th {@code kind} trait of {@code state}, or
      * null for a negative index, which is how every index search here says it
-     * found nothing.
+     * found nothing, or for a state the converter emitted no face for.
      */
     private static ProvenanceKey keyAt(CardState state, TraitKind kind, int index) {
         if (index < 0) return null;
         Card host = state.getCard();
-        return new ProvenanceKey(
-                ScriptLocator.scriptFileOf(host),
-                FaceOrder.faceIndex(host, state.getStateName()),
-                kind,
-                index);
+        Integer face = FaceOrder.faceIndex(host, state.getStateName());
+        if (face == null) return null;
+        return new ProvenanceKey(ScriptLocator.scriptFileOf(host), face, kind, index);
     }
 
     /**

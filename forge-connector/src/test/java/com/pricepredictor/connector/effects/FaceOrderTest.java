@@ -1,16 +1,23 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import forge.card.CardStateName;
+import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.card.CardState;
 import forge.game.keyword.KeywordInterface;
+import forge.game.phase.PhaseType;
+import forge.game.trigger.Trigger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The keyword ordinal the converter and the collectors both take from {@link FaceOrder}. */
 @ExtendWith(ForgeExtension.class)
@@ -57,5 +64,35 @@ class FaceOrderTest {
         assertEquals(-1,
                 FaceOrder.keywordIndex(bear.getCurrentState(), flashback),
                 "a keyword the card does not print has no ordinal on it");
+    }
+
+    /**
+     * A transform card that has been face down numbers its back face as the
+     * converter does, 1: Forge adds the face-down state to the card's states
+     * the first time it turns face down, and the converter never emits one
+     * (B6).
+     */
+    @Test
+    void aBackFaceIsFaceOneAfterTheCardWasFaceDown() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Card huntmaster = TestBoard.onBattlefield(game, game.getPlayers().get(0),
+                "Huntmaster of the Fells");
+        assertTrue(huntmaster.turnFaceDown(true), "turned face down");
+        assertTrue(huntmaster.turnFaceUp(null), "turned face up");
+        assertTrue(huntmaster.changeCardState("Transform", null, null), "transformed");
+        assertEquals(CardStateName.Backside, huntmaster.getCurrentStateName());
+
+        Trigger ravagers = huntmaster.getCurrentState().getTriggers().get(0);
+
+        assertEquals(1, ProvenanceResolver.of(ravagers).face());
+        assertEquals(List.of(CardStateName.Original, CardStateName.Backside),
+                FaceOrder.faceOrder(huntmaster));
+    }
+
+    /** A state the card does not have has no face ordinal, rather than the front's 0. */
+    @Test
+    void aStateTheCardLacksHasNoFaceIndex() {
+        assertNull(FaceOrder.faceIndex(card("Grizzly Bears"), CardStateName.Backside));
+        assertEquals(0, FaceOrder.faceIndex(card("Grizzly Bears"), CardStateName.Original));
     }
 }

@@ -27,20 +27,29 @@ public final class FaceOrder {
     }
 
     /**
-     * The face ordinal the converter emitted a state under.
+     * The face ordinal the converter emitted a state under, or null for a
+     * state it emitted no face for: no state, one the card lacks, a face-down
+     * or empty-room state.
      *
      * <p>Shared by the converter and the collectors so the two cannot drift:
      * the converter renders a face for each state of {@link #faceOrder} that
-     * has a printed part, in that order.
+     * has a printed part, in that order. Null rather than 0, because 0 names
+     * the front face: a key with it would join the wrong line.
      */
-    public static int faceIndex(Card card, CardStateName state) {
-        if (state == null) return 0;
-        List<CardStateName> order = faceOrder(card);
-        int index = order.indexOf(state);
-        return index < 0 ? 0 : index;
+    public static Integer faceIndex(Card card, CardStateName state) {
+        if (state == null) return null;
+        int index = faceOrder(card).indexOf(state);
+        return index < 0 ? null : index;
     }
 
-    /** The state names in the order the converter emits faces. */
+    /**
+     * The state names in the order the converter emits faces.
+     *
+     * <p>Over the states a printing has, not every state the game card holds:
+     * Forge adds a face-down state the first time a card turns face down,
+     * and an empty-room state to a Room, and either would push every later
+     * face one ordinal on (B6).
+     */
     public static List<CardStateName> faceOrder(Card card) {
         if (card == null) return List.of(CardStateName.Original);
         if (card.getStates().contains(CardStateName.LeftSplit)) {
@@ -49,7 +58,8 @@ public final class FaceOrder {
         List<CardStateName> order = new ArrayList<>();
         order.add(CardStateName.Original);
         for (CardStateName name : card.getStates()) {
-            if (name != CardStateName.Original && !order.contains(name)) {
+            if (name != CardStateName.Original && name != CardStateName.FaceDown
+                    && name != CardStateName.EmptyRoom && !order.contains(name)) {
                 order.add(name);
             }
         }
