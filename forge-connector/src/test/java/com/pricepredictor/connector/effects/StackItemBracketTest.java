@@ -168,6 +168,10 @@ class StackItemBracketTest {
             maro[0] = TestBoard.inPlay(game, caster, "Maro");
             game.getAction().checkStateEffects(false);
             cast(game, bolt, caster, opponent);
+            assertTrue(collector.droppedEvents().counts().getOrDefault(
+                            new DroppedEvents.Key("pt_change", "main1"), 0L) >= 1,
+                    "the cast's shrink is counted as dropped (A4): "
+                            + collector.droppedEvents().counts());
             long movesDroppedBefore = droppedMoves(collector);
             priorityWithTriggers(game);
             assertEquals(ZoneType.Graveyard,
