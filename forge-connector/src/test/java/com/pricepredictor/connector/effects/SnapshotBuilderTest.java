@@ -300,6 +300,37 @@ class SnapshotBuilderTest {
         }
 
         /**
+         * A Clone cast and resolved as a copy of a creature with an enters
+         * trigger, or with a replacement: each of its lines keys to the
+         * original's script, or to no line, never to {@code clone.txt}'s own
+         * trigger or replacement at the copied line's index (B8).
+         */
+        @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+        @org.junit.jupiter.params.provider.CsvSource({
+                "Ravenous Chupacabra, cardsfolder/r/ravenous_chupacabra.txt, trigger",
+                "Dryad Militant, cardsfolder/d/dryad_militant.txt, replacement"})
+        void aClonesLinesKeyToWhatItCopied(String original, String script, String kind) {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            board.battlefield(original, board.opponent);
+            SpellAbility clone = board.spell(board.hand("Clone", board.you), board.you);
+            board.game.getStack().addAndUnfreeze(clone);
+            board.game.getStack().resolveStack();
+            Card copy = board.game.getCardsIn(ZoneType.Battlefield).stream()
+                    .filter(card -> card.getController() == board.you).findFirst().orElseThrow();
+            assertEquals(original, copy.getName(), "the Clone entered as a copy");
+
+            List<Map<String, Object>> lines = linesOf(board, copy);
+
+            assertTrue(lines.stream().anyMatch(line -> kind.equals(line.get("kind"))
+                    && !((List<?>) line.get("keys")).isEmpty()), "the copied " + kind + ": " + lines);
+            for (Map<String, Object> line : lines) {
+                for (Object key : (List<?>) line.get("keys")) {
+                    assertEquals(script, RecordLines.asMap(key).get("script_file"), lines.toString());
+                }
+            }
+        }
+
+        /**
          * Every optional cost Forge has is mapped to its keyword or known to
          * be in no keyword line, so a cost Forge adds is not silently unread.
          */
