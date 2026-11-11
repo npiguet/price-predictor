@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -46,8 +47,12 @@ import java.util.Set;
  * <p>The links are read from the snapshot's cards and the game's combat,
  * stack and command zone; an end the snapshot carries no entity for (a card
  * a cipher encoded in exile, a creature damaged and since exiled) is still
- * named, for the reader to drop. Families the reader builds from its own
- * layout are never written ({@link LinkFamily#collected}).
+ * named, for the reader to drop. A card that has left the game (a token
+ * that died) is no end: Forge's lists may still hold it (a control card's
+ * gain-control targets, a source's damage history), but it describes
+ * nothing on the board, and a game copy, which holds no such card, could
+ * not write the link. Families the reader builds from its own layout are
+ * never written ({@link LinkFamily#collected}).
  *
  * <p>Links are listed by family in the table's order, each once.
  */
@@ -55,9 +60,21 @@ final class SnapshotLinks {
 
     private final Game game;
     private final Map<LinkFamily, Set<String>> byFamily = new EnumMap<>(LinkFamily.class);
+    /** The ref of every card in the game, each a card end may name. */
+    private final Set<String> inGame = new HashSet<>();
 
     private SnapshotLinks(Game game) {
         this.game = game;
+        game.forEachCardInGame(card -> {
+            inGame.add(card(card));
+            return true;
+        });
+        // A mutated permanent's other cards, which Forge's walk leaves out.
+        for (Player player : game.getPlayers()) {
+            for (Card merged : player.getCardsIn(ZoneType.Merged)) {
+                inGame.add(card(merged));
+            }
+        }
     }
 
     /**
@@ -464,19 +481,33 @@ final class SnapshotLinks {
     // ── writing ─────────────────────────────────────────────────────────
 
     private void add(LinkFamily family, String from, String to) {
-        if (from != null && to != null) {
+        if (isEnd(from) && isEnd(to)) {
             byFamily.computeIfAbsent(family, f -> new LinkedHashSet<>()).add(Json.object()
                     .raw("from", from).raw("to", to).value("type", family).render());
         }
     }
 
     private void addTarget(String from, String to, int index) {
-        if (from != null && to != null) {
+        if (isEnd(from) && isEnd(to)) {
             byFamily.computeIfAbsent(LinkFamily.TARGETS, f -> new LinkedHashSet<>()).add(Json.object()
                     .raw("from", from).raw("to", to).value("type", LinkFamily.TARGETS)
                     .value("index", index).render());
         }
     }
+
+    /**
+     * Whether a rendered end names something: not null, and, for a card's
+     * ref, a card still in the game. A line, a player and a command-zone
+     * object's ref are ends as they are.
+     */
+    private boolean isEnd(String end) {
+        if (end == null) {
+            return false;
+        }
+        return !CARD_REF.matcher(end).matches() || inGame.contains(end);
+    }
+
+    private static final java.util.regex.Pattern CARD_REF = java.util.regex.Pattern.compile("\"E\\d+\"");
 
     /** A symmetric family's link, once per pair, from the lower card id. */
     private void pair(LinkFamily family, Card one, Card other) {

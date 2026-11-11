@@ -354,6 +354,29 @@ class SnapshotLinksTest {
                 links(board, "control_granted_by"));
     }
 
+    /**
+     * A token that left the game is no end: Forge keeps it in the control
+     * card's gain-control list and in the damage source's history, but it
+     * describes nothing on the board, and a game copy, which holds no such
+     * card, cannot write it (the fork fidelity audit's control_granted_by
+     * links only in the live board).
+     */
+    @Test
+    void noLinkEndsAtACardThatLeftTheGame() {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN2);
+        Card old = board.battlefield("Old Man of the Sea", board.you);
+        Card giant = board.battlefield("Hill Giant", board.opponent);
+        Card soldier = board.token("w_1_1_soldier", board.opponent);
+        old.addGainControlTarget(giant);
+        old.addGainControlTarget(soldier);
+        old.getDamageHistory().registerDamage(2, false, old, soldier, new HashMap<>());
+        soldier.getZone().remove(soldier);
+
+        assertEquals(List.of(link(giant, old, "control_granted_by")),
+                links(board, "control_granted_by"));
+        assertEquals(List.of(), links(board, "damaged_this_turn"));
+    }
+
     @Test
     void aCloneIsACopyOfWhatItCopied() {
         CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);

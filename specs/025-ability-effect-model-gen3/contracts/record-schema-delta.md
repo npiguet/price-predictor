@@ -172,7 +172,9 @@ once.
 An end is a ref (`E<id>`, `P<id>`, `L<id>`, `F<timestamp>`, `D<id>`) or a line
 `{entity, key}`: a link an ability made ends at that ability's line. Where Forge keeps no record of
 the ability, or the trait keys to no line, the end is the card. An end the snapshot carries no
-entity for is still named.
+entity for is still named. A card that has left the game (a token that died) is no end: a link
+to it is not written, though Forge's lists (`getGainControlTargets`, `getDamageHistory`) may
+still hold it.
 
 | `type` | from | to | Forge source |
 |---|---|---|---|
