@@ -48,7 +48,7 @@ def test_generated_variants_are_scripts_forge_can_read(tmp_path: Path) -> None:
     (source / "test_bolt.txt").write_text(_BOLT, encoding="utf-8")
 
     variants = generate_variants(
-        source, tmp_path / "variants", held_out=frozenset(), limit=3,
+        source, tmp_path / "variants", held_out=frozenset(),
     )
     assert variants, "no variant was generated from a perturbable script"
 
@@ -69,7 +69,7 @@ def test_a_variant_tree_holds_no_converted_text(tmp_path: Path) -> None:
     (source / "test_bolt.txt").write_text(_BOLT, encoding="utf-8")
     output = tmp_path / "variants"
 
-    generate_variants(source, output, held_out=frozenset(), limit=3)
+    generate_variants(source, output, held_out=frozenset())
 
     for path in output.glob("*.txt"):
         text = path.read_text(encoding="utf-8")
@@ -89,7 +89,7 @@ def test_every_variant_script_gets_a_sidecar(tmp_path: Path) -> None:
     output = tmp_path / "variants"
 
     variants = generate_variants(
-        source, output, held_out=frozenset(), limit=3,
+        source, output, held_out=frozenset(),
     )
     assert variants
 
