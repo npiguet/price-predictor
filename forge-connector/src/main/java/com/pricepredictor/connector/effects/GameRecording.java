@@ -147,7 +147,8 @@ public final class GameRecording implements AutoCloseable {
                 ? Optional.of(new InterventionScheduler(
                         game, new InterventionFork(game, forkContext, budget, seed),
                         caps.interventionsPerGame() > 0
-                                ? new ProtectionFork(game, budget, playForward, seed) : null))
+                                ? new ProtectionFork(game, budget, playForward, seed) : null,
+                        decks.steered()))
                 : Optional.empty();
         this.probes = forking
                 ? Optional.of(new ProbeScheduler(

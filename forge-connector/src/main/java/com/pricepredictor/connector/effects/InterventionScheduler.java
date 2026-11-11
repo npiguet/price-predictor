@@ -34,24 +34,55 @@ import java.util.function.Predicate;
  */
 final class InterventionScheduler {
 
+    /**
+     * What forces a line: a fork of the game with the line resolved, under the
+     * game's fork budget ({@link InterventionFork}).
+     */
+    interface Forcing {
+
+        /** Whether the budget lets {@link #intervene} take another fork of this resolution. */
+        boolean mayIntervene(int realResolutionId);
+
+        /**
+         * Fork the game and force {@code ability}, resolved for {@code holder}.
+         *
+         * @return whether a record was written
+         */
+        boolean intervene(SpellAbility ability, int realResolutionId, Player holder);
+    }
+
     private final Game game;
-    private final InterventionFork forks;
+    private final Forcing forks;
     /** Grants the rare protections, or null when the run takes none. */
     private final ProtectionFork protection;
+    /**
+     * Whether either deck of the game carries a rule (FR-058d): a steered
+     * game forces the variant cards its players hold first (FR-058e).
+     */
+    private final boolean steered;
     /** Lines already forced on their holder's own turn, so a redraw does not repeat one. */
     private final Set<String> interveneSeen = new LinkedHashSet<>();
     /** Lines already forced on another player's turn (FR-057), apart from the above. */
     private final Set<String> offTurnSeen = new LinkedHashSet<>();
 
-    InterventionScheduler(Game game, InterventionFork forks) {
-        this(game, forks, null);
+    InterventionScheduler(Game game, Forcing forks) {
+        this(game, forks, null, false);
     }
 
-    /** @param protection grants the rare protections, or null for none */
-    InterventionScheduler(Game game, InterventionFork forks, ProtectionFork protection) {
+    /** An unsteered game's scheduler; @param protection grants the rare protections, or null */
+    InterventionScheduler(Game game, Forcing forks, ProtectionFork protection) {
+        this(game, forks, protection, false);
+    }
+
+    /**
+     * @param protection grants the rare protections, or null for none
+     * @param steered    whether either deck of the game carries a rule
+     */
+    InterventionScheduler(Game game, Forcing forks, ProtectionFork protection, boolean steered) {
         this.game = game;
         this.forks = forks;
         this.protection = protection;
+        this.steered = steered;
     }
 
     /**
@@ -70,9 +101,18 @@ final class InterventionScheduler {
     }
 
     /**
-     * Force what the players hold and nobody would play: first, for every
-     * player but the one whose turn it is, a line whose branch turns on whose
-     * turn it is (FR-057); then everything the player whose turn it is holds.
+     * Force what the players hold and nobody would play: in a steered game,
+     * first the lines of the variant cards each player holds, the player whose
+     * turn it is first (FR-058e); then, for every player but the one whose
+     * turn it is, a line whose branch turns on whose turn it is (FR-057); then
+     * everything the player whose turn it is holds.
+     *
+     * <p>A steered game's variants go first because they are what its decks
+     * were built for: the rule its decks aim at is short of records, and the
+     * passes after spend the budget on whatever else the players hold. A
+     * variant line forced on its holder's turn counts as forced there, and one
+     * forced on another player's turn as forced off-turn, so neither later
+     * pass forces it again.
      *
      * <p>FR-057's lines go first because they are few and a boundary of the
      * other player's turn is the only place they show their other branch: the
@@ -87,6 +127,9 @@ final class InterventionScheduler {
         if (active == null) {
             return;
         }
+        if (steered && !forceVariants(active)) {
+            return;
+        }
         for (Player other : game.getPlayers()) {
             if (other != active && !other.hasLost()
                     && !force(other, offTurnSeen, TurnConditions::branchesOnWhoseTurn)) {
@@ -94,6 +137,30 @@ final class InterventionScheduler {
             }
         }
         force(active, interveneSeen, candidate -> true);
+    }
+
+    /**
+     * The steered game's first pass: the variant cards' lines each player
+     * holds, the active player's on its own turn, the others' off it.
+     *
+     * @return false once the budget refuses a fork, which ends the boundary
+     */
+    private boolean forceVariants(Player active) {
+        if (!force(active, interveneSeen, InterventionScheduler::ofAVariant)) {
+            return false;
+        }
+        for (Player other : game.getPlayers()) {
+            if (other != active && !other.hasLost()
+                    && !force(other, offTurnSeen, InterventionScheduler::ofAVariant)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Whether the line is a staged variant card's ({@link VariantRegistry}). */
+    private static boolean ofAVariant(SpellAbility candidate) {
+        return candidate.getHostCard() != null && ScriptLocator.isVariant(candidate.getHostCard());
     }
 
     /**

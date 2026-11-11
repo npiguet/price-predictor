@@ -71,6 +71,11 @@ final class ScriptLocator {
                 .key();
     }
 
+    /** Whether {@code host} is a staged variant card, face down or not. */
+    static boolean isVariant(Card host) {
+        return variantScriptOf(host).isPresent();
+    }
+
     /**
      * A staged variant's script, named from its card name: nothing else knows
      * it. The name is the one the card shows, else the one its rules declare:

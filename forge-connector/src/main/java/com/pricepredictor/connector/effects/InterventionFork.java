@@ -24,7 +24,7 @@ import java.util.function.Supplier;
  * <b>effect half only</b>: there was no real activation, so there is no cost
  * half to link to.
  */
-final class InterventionFork {
+final class InterventionFork implements InterventionScheduler.Forcing {
 
     private final Game game;
     private final CollectorContext context;
@@ -44,7 +44,8 @@ final class InterventionFork {
     }
 
     /** Whether the budget lets {@link #intervene} take another fork of this resolution. */
-    boolean mayIntervene(int realResolutionId) {
+    @Override
+    public boolean mayIntervene(int realResolutionId) {
         return budget.mayIntervene(realResolutionId);
     }
 
@@ -65,7 +66,8 @@ final class InterventionFork {
      * The same, the ability resolved for {@code holder}: the player whose hand
      * holds it, who need not be the player whose turn it is (FR-057).
      */
-    boolean intervene(SpellAbility ability, int realResolutionId, Player holder) {
+    @Override
+    public boolean intervene(SpellAbility ability, int realResolutionId, Player holder) {
         return intervene(ability, realResolutionId, () -> holder);
     }
 
