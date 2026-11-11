@@ -133,8 +133,23 @@ Avenger, Hidden Predators, Veiled Crocodile) are fixed in 93906a7d.
   Follow-up e3f21a12: a gen-3 continuous `=` names what it displaced (types_lost, colors_lost).
 - WP6-Java done: 16d68d64 … bed1f490, d5258885 (a static removing some printed lines no longer shifts
   the remaining lines' keys). T186, T188, T189, T191 ticked.
-- Running: keying of abilities a static or effect adds (Blood Moon, Animate, Spreading Seas). Then
-  T174's full verification and T181.
+- Keying of abilities a static or effect adds (Blood Moon, Spreading Seas, Urborg) fixed: c7eb660d.
+- T174's verification: unit suite 5487 passed, ruff clean, Forge hook and copier tests pass; the
+  integration suite's two failures were stale test definitions and a flaky suppression measure.
+- T181, first audit (20 min, `output/effects/records-gen3-audit`): 57 of 208 forks differed (27%),
+  against about 5% before the round. Causes and fixes (Forge ec6ff33fbd3 … 7e066965582, connector
+  43a26d98 … 940c0f32): perpetual changes off the battlefield never copied; effect cards built with
+  their front face only (Max Speed!); keywords re-stamped with later timestamps; a player's resolved
+  keywords not copied, so the keyword effect card vanished; effect cards losing their source for
+  flashback, warp, rebound and charm-mode casts; imprinted, encoded, haunting, devoured, exploited and
+  delved cards not copied; a merged card's tapped state; perpetual durations bucketed end of turn.
+  The confirming 10-minute audit (`records-gen3-audit4`) shows 13 of 120 forks differing (10.8%).
+  `validate-corpus` failed only on fired trigger records written at game end by C7's reservoir; the
+  validator now exempts them (40fa4902). `field-coverage`: `rad` and `land_plays_unlimited` constant
+  (rare in sealed; check again after the coverage round).
+- Running: the last gaps (transformed Incubator token faces, `control_granted_by` links to objects gone
+  from the game, a command list that may grow without bound, the flaky suppression integration test),
+  then a confirming audit.
 
 ## Order and gates
 
