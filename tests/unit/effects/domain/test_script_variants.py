@@ -1,5 +1,5 @@
 """Perturbing one script parameter (T138): a whitelisted number shifts or
-doubles, floored at zero, and a selector swaps from a checked-in whitelist."""
+doubles, floored at one, and a selector swaps from a checked-in whitelist."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from effects.domain.script_variants import (
     MAX_NUMERIC_SHIFT,
     SELECTOR_WHITELIST,
     PerturbationKind,
+    double,
     numeric_params,
     perturb,
     script_mana_cost,
@@ -32,12 +33,26 @@ class TestNumericPerturbation:
         for _ in range(50):
             assert abs(shift(10, rng) - 10) <= MAX_NUMERIC_SHIFT
 
-    def test_a_shift_is_floored_at_zero(self):
-        """A negative count is not a smaller effect, it is a script Forge
-        rejects — and a rejected script never reaches a game."""
+    def test_a_shift_never_reaches_zero(self):
+        """A negative count is a script Forge rejects, and a zero one can turn a
+        free ability into one that changes nothing, which the Forge AI activates
+        again without end (T193, Sage of Hours at ``CounterNum$ 0``)."""
         rng = random.Random(0)
-        for _ in range(50):
-            assert shift(1, rng) >= 0
+        for _ in range(200):
+            assert shift(1, rng) >= 1
+
+    def test_doubling_zero_gives_one(self):
+        assert double(0) == 1
+
+    def test_a_free_activation_is_never_perturbed_to_zero(self):
+        script = (
+            "A:AB$ RemoveCounter | Cost$ 0 | CounterType$ P1P1 | CounterNum$ 1 | "
+            "SpellDescription$ Remove a +1/+1 counter."
+        )
+        for seed in range(200):
+            result = perturb(script, random.Random(seed))
+            if result is not None:
+                assert "CounterNum$ 0" not in result[0]
 
     def test_numeric_params_reads_only_whitelisted_numbers(self):
         found = numeric_params(_BOLT_SCRIPT)

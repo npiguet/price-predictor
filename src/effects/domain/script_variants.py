@@ -125,26 +125,28 @@ def selector_params(script_text: str) -> dict[str, str]:
 
 
 def shift(value: int, rng: random.Random) -> int:
-    """Move a number by up to ±3, floored at zero (Forge rejects a negative)."""
+    """Move a number by up to ±3, floored at one (FR-058b): Forge rejects a
+    negative, and a zero can turn a free ability into one that changes
+    nothing, which the Forge AI activates again without end."""
     delta = rng.randint(-MAX_NUMERIC_SHIFT, MAX_NUMERIC_SHIFT)
-    return max(0, value + delta)
+    return max(1, value + delta)
 
 
 def double(value: int) -> int:
-    """Double a number, floored at zero."""
-    return max(0, value * 2)
+    """Double a number, floored at one, as :func:`shift`."""
+    return max(1, value * 2)
 
 
 def _perturbed_number(written: str, kind: PerturbationKind, rng: random.Random) -> str:
-    """``written`` shifted or doubled. An unsigned count is floored at zero; a
-    signed one keeps its sign and a magnitude of at least one, written with
+    """``written`` shifted or doubled, never to zero. An unsigned count is at
+    least one; a signed one keeps its sign and a magnitude of at least one, written with
     the sign, so a +2 pump stays a pump and a -2 debuff a debuff."""
     if written[0] not in "+-":
         value = int(written)
         return str(shift(value, rng) if kind == PerturbationKind.SHIFT else double(value))
     sign, magnitude = written[0], int(written[1:])
     changed = shift(magnitude, rng) if kind == PerturbationKind.SHIFT else double(magnitude)
-    return f"{sign}{max(1, changed)}"
+    return f"{sign}{changed}"
 
 
 def perturb(
