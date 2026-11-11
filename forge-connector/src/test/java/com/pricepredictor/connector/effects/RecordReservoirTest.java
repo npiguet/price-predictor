@@ -8,11 +8,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Which of a game's mana activations survive to be written. */
-class ManaReservoirTest {
+class RecordReservoirTest {
 
     @Test
     void theFirstActivationsFillTheReservoir() {
-        ManaReservoir reservoir = new ManaReservoir(3, new Random(0));
+        RecordReservoir reservoir = new RecordReservoir(3, new Random(0));
         assertEquals(0, reservoir.slot("Mana$ G"));
         assertEquals(1, reservoir.slot("Mana$ G"));
         assertEquals(2, reservoir.slot("Mana$ G"));
@@ -22,14 +22,14 @@ class ManaReservoirTest {
     void theReservoirIsPerUniqueManaAbilityText() {
         // A basic land taps a dozen times a game; a rare mana ability must not
         // be starved by it.
-        ManaReservoir reservoir = new ManaReservoir(1, new Random(0));
+        RecordReservoir reservoir = new RecordReservoir(1, new Random(0));
         assertEquals(0, reservoir.slot("Mana$ G"));
         assertEquals(0, reservoir.slot("Mana$ Any | Amount$ 2"));
     }
 
     @Test
     void aCapOfZeroRecordsNothing() {
-        assertEquals(-1, new ManaReservoir(0, new Random(0)).slot("Mana$ G"));
+        assertEquals(-1, new RecordReservoir(0, new Random(0)).slot("Mana$ G"));
     }
 
     /**
@@ -46,7 +46,7 @@ class ManaReservoirTest {
         int trials = 20000;
         int[] survivors = new int[activations];
         for (int trial = 0; trial < trials; trial++) {
-            ManaReservoir reservoir = new ManaReservoir(1, new Random(GameRecording.scramble(trial)));
+            RecordReservoir reservoir = new RecordReservoir(1, new Random(GameRecording.scramble(trial)));
             int held = -1;
             for (int i = 0; i < activations; i++) {
                 if (reservoir.slot("Mana$ G") >= 0) {

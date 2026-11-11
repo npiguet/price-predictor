@@ -164,21 +164,26 @@ class TriggerNegativeSamplerTest {
         }
     }
 
-    /** One acting line is worth a couple of dozen looks in a game, not hundreds. */
+    /**
+     * One acting line's negatives are worth a couple of dozen looks in a
+     * game, not hundreds; its positives do not spend that cap (their
+     * reservoir bounds them).
+     */
     @Test
-    void oneTriggerLineIsCappedPerGameAndPerVerdict() {
+    void oneTriggerLinesNegativesAreCappedPerGame() {
         TriggerNegativeSampler negatives = negatives();
+        for (int i = 0; i < 100; i++) {
+            negatives.keep("ChangesZone", LINE, true);
+        }
+        assertTrue(negatives.lineHasRoomForNegative(LINE), "positives spend no negative's room");
         int written = 0;
         for (int i = 0; i < 100; i++) {
-            if (negatives.lineHasRoom(LINE, true)) {
-                negatives.keep("ChangesZone", LINE, true);
+            if (negatives.lineHasRoomForNegative(LINE)) {
+                negatives.keep("ChangesZone", LINE, false);
                 written++;
             }
         }
         assertEquals(24, written);
-        // The other verdict has its own budget: "fired" and "did not fire" are
-        // different observations of the same line.
-        assertTrue(negatives.lineHasRoom(LINE, false));
     }
 
     /**
@@ -190,7 +195,7 @@ class TriggerNegativeSamplerTest {
     void askingALinesCapSpendsNothing() {
         TriggerNegativeSampler negatives = negatives();
         for (int i = 0; i < 100; i++) {
-            assertTrue(negatives.lineHasRoom(LINE, true));
+            assertTrue(negatives.lineHasRoomForNegative(LINE));
         }
     }
 }

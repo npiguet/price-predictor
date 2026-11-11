@@ -15,14 +15,17 @@ final class TriggerChannel {
     private final CollectorContext context;
     private final RecordDedup dedup;
     private final TriggerNegativeSampler negatives;
+    /** Each acting line's fired records, held until the game ends. */
+    private final RecordReservoir positives;
 
     TriggerChannel(
             LiveGame live, CollectorContext context, RecordDedup dedup,
-            TriggerNegativeSampler negatives) {
+            TriggerNegativeSampler negatives, RecordReservoir positives) {
         this.live = live;
         this.context = context;
         this.dedup = dedup;
         this.negatives = negatives;
+        this.positives = positives;
     }
 
     /**
@@ -52,10 +55,14 @@ final class TriggerChannel {
             if (!negatives.offer(mode, fired)) {
                 return;
             }
+            ProvenanceKey.Resolved line = LiveGame.lineOf(trait);
+            if (fired) {
+                hold(trait, line, args.get(1), mode);
+                return;
+            }
             // The line's flood cap is asked before the snapshot is built, so
             // a line at its cap costs a key lookup rather than a whole board.
-            ProvenanceKey.Resolved line = LiveGame.lineOf(trait);
-            if (!negatives.lineHasRoom(line.key(), fired)) {
+            if (!negatives.lineHasRoomForNegative(line.key())) {
                 return;
             }
             if (!context.emitDistinct(record(trait, line, args.get(1), fired), dedup)) {
@@ -66,6 +73,33 @@ final class TriggerChannel {
             // the line's cap, and the ratio holds over what reaches the shard.
             negatives.keep(mode, line.key(), fired);
         });
+    }
+
+    /**
+     * Offer a firing to its line's reservoir: built only when it takes a
+     * slot, and a new positive for its mode's balance only when it fills one.
+     */
+    private void hold(Object trait, ProvenanceKey.Resolved line, Object runParams, String mode) {
+        String key = String.valueOf(line.key());
+        int slot = positives.slot(key);
+        if (slot < 0) {
+            return;
+        }
+        boolean fills = positives.held(key) == slot;
+        positives.hold(key, slot, record(trait, line, runParams, true));
+        if (fills) {
+            negatives.keep(mode, line.key(), true);
+        }
+    }
+
+    /**
+     * Write the fired records the reservoirs kept, once the game can fire no
+     * more, each unless it repeats a record already written.
+     */
+    void flush() {
+        for (EffectRecord record : positives.drain()) {
+            context.emitDistinct(record, dedup);
+        }
     }
 
     /**

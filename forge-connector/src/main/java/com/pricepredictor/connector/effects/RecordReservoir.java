@@ -8,7 +8,10 @@ import java.util.Map;
 import java.util.Random;
 
 /**
- * The mana records one game keeps, {@code --mana-cap} per mana ability (FR-037).
+ * The records of one kind one game keeps, a fixed number per key: the mana
+ * records, {@code --mana-cap} per mana ability (FR-037), and the fired
+ * trigger records, {@link TriggerNegativeSampler#POSITIVES_PER_LINE} per
+ * acting line.
  *
  * <p>A Mountain taps a dozen times a game for the same R, and the repeats
  * observe a board that barely moved, so the corpus keeps a few of them per
@@ -24,11 +27,13 @@ import java.util.Random;
  * likely to survive, without knowing in advance how many there will be. The
  * records are therefore held until the game ends.
  *
- * <p>Keyed by the ability's text and the mana it produced, so every Mountain
- * shares one reservoir and a dual land making G and the same land making U
- * each get their own.
+ * <p>The mana records are keyed by the ability's text and the mana it
+ * produced, so every Mountain shares one reservoir and a dual land making G
+ * and the same land making U each get their own; the trigger records by the
+ * acting line, for the same reason: a trigger that fires all game long would
+ * otherwise be recorded on its first boards only.
  */
-final class ManaReservoir {
+final class RecordReservoir {
 
     private final int cap;
     /** The collector's sampler, shared so one seed decides every draw of a game. */
@@ -38,7 +43,7 @@ final class ManaReservoir {
     /** The sampled records per key, in the order the keys first appeared. */
     private final Map<String, List<EffectRecord>> held = new LinkedHashMap<>();
 
-    ManaReservoir(int cap, Random sampler) {
+    RecordReservoir(int cap, Random sampler) {
         this.cap = cap;
         this.sampler = sampler;
     }
@@ -65,6 +70,12 @@ final class ManaReservoir {
         }
         int candidate = sampler.nextInt(n);
         return candidate < cap ? candidate : -1;
+    }
+
+    /** How many records {@code key}'s reservoir holds: the slot the next fill takes. */
+    int held(String key) {
+        List<EffectRecord> records = held.get(key);
+        return records == null ? 0 : records.size();
     }
 
     /** Put a record in the slot {@link #slot} gave it. */

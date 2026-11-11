@@ -41,7 +41,7 @@ final class ManaChannel {
     private final LiveGame live;
     private final CollectorContext context;
     /** The sampled mana records, held until the game ends. */
-    private final ManaReservoir reservoir;
+    private final RecordReservoir reservoir;
     /** Where mana a resolving spell or trigger makes is filed, and whose stat differ re-reads. */
     private final BusBracketCollector bracket;
 
@@ -78,7 +78,7 @@ final class ManaChannel {
     }
 
     ManaChannel(
-            LiveGame live, CollectorContext context, ManaReservoir reservoir,
+            LiveGame live, CollectorContext context, RecordReservoir reservoir,
             BusBracketCollector bracket) {
         this.live = live;
         this.context = context;

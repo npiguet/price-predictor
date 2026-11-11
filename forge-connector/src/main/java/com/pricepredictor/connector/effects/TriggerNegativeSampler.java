@@ -5,8 +5,8 @@ import java.util.Map;
 import java.util.Random;
 
 /**
- * Which trigger evaluations reach the writer: every firing, about as many
- * non-firings per mode, and no flood from one line.
+ * Which trigger evaluations reach the writer: a reservoir of each line's
+ * firings, about as many non-firings per mode, and no flood from one line.
  *
  * <p>Non-fired negatives are what teach the condition; without them the model
  * would learn the base rate of a trigger type firing and nothing about when.
@@ -33,15 +33,21 @@ final class TriggerNegativeSampler {
     private static final int NEGATIVE_OFFERS_AT_FULL_RATE = 4;
     /** No negative is ever kept with probability below this. */
     private static final double MIN_NEGATIVE_RATE = 1.0 / 4096.0;
-    /** Records one acting line may write per verdict in one game. */
-    private static final int TRIGGER_RECORDS_PER_LINE = 24;
+    /**
+     * Fired records one acting line keeps in one game: a reservoir, so every
+     * firing is equally likely to be kept (C7, the mana reservoir's reasoning:
+     * the first firings are the earliest boards).
+     */
+    static final int POSITIVES_PER_LINE = 24;
+    /** Not-fired records one acting line may write in one game, the first ones offered. */
+    private static final int NEGATIVES_PER_LINE = 24;
 
     /** The game's shared sampling stream; see {@link PatchedCollectors}. */
     private final Random sampler;
     /** Each trigger mode's written evaluations and pending offers, this game. */
     private final Map<String, ModeBalance> triggerBalance = new HashMap<>();
-    /** Records written per acting line and verdict, for the flood cap. */
-    private final Map<LineVerdict, Integer> triggerPerLine = new HashMap<>();
+    /** Not-fired records written per acting line, for the flood cap. */
+    private final Map<ProvenanceKey, Integer> negativesPerLine = new HashMap<>();
 
     TriggerNegativeSampler(Random sampler) {
         this.sampler = sampler;
@@ -100,20 +106,25 @@ final class TriggerNegativeSampler {
     }
 
     /**
-     * Count a written evaluation against its mode's balance and its line's
-     * flood cap.
+     * Count a kept evaluation against its mode's balance, and a negative
+     * against its line's flood cap.
      *
-     * <p>Called only for a record that reached the shard, which is what makes
-     * the ratio hold over the corpus rather than over the offers: a negative
-     * refused as a duplicate has not been drawn, and the deficit it leaves
-     * standing is repaid by the next evaluation of its mode. The same goes for
-     * the line's cap, which counts records written, not evaluations looked at.
+     * <p>Called only for a negative that reached the shard, which is what
+     * makes the ratio hold over the corpus rather than over the offers: a
+     * negative refused as a duplicate has not been drawn, and the deficit it
+     * leaves standing is repaid by the next evaluation of its mode. The same
+     * goes for the line's cap, which counts records written, not evaluations
+     * looked at. A positive is counted when it fills a slot of its line's
+     * reservoir: the records the reservoir holds are the positives the
+     * negatives balance, and a firing that only replaces a held one adds
+     * none.
      *
      * @param line the acting line, null where the trigger names none
      */
     void keep(String mode, ProvenanceKey line, boolean fired) {
-        LineVerdict verdict = new LineVerdict(line, fired);
-        triggerPerLine.merge(verdict, 1, Integer::sum);
+        if (!fired) {
+            negativesPerLine.merge(line, 1, Integer::sum);
+        }
         ModeBalance balance = triggerBalance.computeIfAbsent(mode, m -> new ModeBalance());
         if (fired) {
             balance.fired++;
@@ -127,12 +138,13 @@ final class TriggerNegativeSampler {
     }
 
     /**
-     * A flood cap per acting line, beside the duplicate check.
+     * A flood cap on each acting line's negatives, beside the duplicate check.
      *
      * <p>The duplicate check collapses records that say the same thing; this
      * bounds the ones that differ only in a board that moved a little. One
      * line's condition is worth a couple of dozen looks in a game, not the
      * hundreds an aura on a creature that keeps being pumped would write.
+     * Its positives are bounded by their reservoir instead.
      *
      * <p>Read-only, and asked before the record is built: a line at its cap is
      * refused without paying for the snapshot, which on the busiest hook in
@@ -144,9 +156,8 @@ final class TriggerNegativeSampler {
      *
      * @param line the acting line, null where the trigger names none
      */
-    boolean lineHasRoom(ProvenanceKey line, boolean fired) {
-        return triggerPerLine.getOrDefault(new LineVerdict(line, fired), 0)
-                < TRIGGER_RECORDS_PER_LINE;
+    boolean lineHasRoomForNegative(ProvenanceKey line) {
+        return negativesPerLine.getOrDefault(line, 0) < NEGATIVES_PER_LINE;
     }
 
     /** One trigger mode's written evaluations, and the negatives offered since. */
@@ -157,7 +168,4 @@ final class TriggerNegativeSampler {
         private int offersSinceWrite;
     }
 
-    /** One acting line's verdict, the key the flood cap counts by. */
-    private record LineVerdict(ProvenanceKey line, boolean fired) {
-    }
 }

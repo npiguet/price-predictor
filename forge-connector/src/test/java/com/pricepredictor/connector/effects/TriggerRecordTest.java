@@ -4,7 +4,10 @@ import com.pricepredictor.connector.ForgeExtension;
 import forge.game.CardTraitBase;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
+import forge.game.Game;
 import forge.game.card.CounterType;
+import forge.game.phase.PhaseType;
+import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
 import forge.game.zone.ZoneType;
@@ -107,7 +110,9 @@ class TriggerRecordTest {
      * the second condition would be lost.
      *
      * <p>Both fire first so the mode owes two negatives: a non-fired
-     * evaluation is offered only against a deficit.
+     * evaluation is offered only against a deficit. The firings are held in
+     * their lines' reservoirs and written when the game ends, after the
+     * negatives.
      */
     @Test
     void twoSameModeTriggersOnOneCardEachWriteTheirVerdicts() throws Throwable {
@@ -127,7 +132,40 @@ class TriggerRecordTest {
                 .map(line -> RecordLines.abilityKeys(line).get(0).get("index_within_kind")
                         + "/" + RecordLines.payload(line).get("fired"))
                 .toList();
-        assertEquals(List.of("0/true", "1/true", "0/false", "1/false"), written, lines.toString());
+        assertEquals(List.of("0/false", "1/false", "0/true", "1/true"), written, lines.toString());
+    }
+
+    /**
+     * A line that fires all game long keeps a reservoir of its firings, not
+     * its first ones (C7): 100 firings on 100 boards, each a life total
+     * lower, keep 24, and later boards among them.
+     */
+    @Test
+    void aLinesFiringsAreReservoirSampledNotTakenFirst() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        Card paralyze = TestBoard.inPlay(game, you, "Paralyze");
+        Trigger trigger = triggersOf(paralyze).get(0);
+
+        List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) -> {
+            for (int firing = 0; firing < 100; firing++) {
+                you.setLife(1000 - firing, null);
+                collectors.triggers().handler().invoke(null, ON_CONDITION_EVALUATED,
+                        new Object[]{trigger, Map.of(), true});
+            }
+        });
+
+        List<Long> firings = new ArrayList<>();
+        for (String line : lines) {
+            if (Boolean.TRUE.equals(RecordLines.payload(line).get("fired"))) {
+                Map<String, Object> state = RecordLines.asMap(RecordLines.parse(line).get("state"));
+                Map<String, Object> player = RecordLines.asMap(((List<?>) state.get("players")).get(0));
+                firings.add(1000 - ((Number) player.get("life")).longValue());
+            }
+        }
+        assertEquals(TriggerNegativeSampler.POSITIVES_PER_LINE, firings.size(), firings.toString());
+        assertTrue(firings.stream().anyMatch(f -> f >= TriggerNegativeSampler.POSITIVES_PER_LINE),
+                "a firing after the first 24 survived: " + firings);
     }
 
     /**

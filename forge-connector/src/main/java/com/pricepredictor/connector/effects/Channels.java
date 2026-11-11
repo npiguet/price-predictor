@@ -45,11 +45,12 @@ record Channels(
         PriorityCandidates candidates = new PriorityCandidates(live, playability);
         return new Channels(
                 new RewriteChannel(live, context, dedup),
-                new TriggerChannel(live, context, dedup, new TriggerNegativeSampler(sampler)),
+                new TriggerChannel(live, context, dedup, new TriggerNegativeSampler(sampler),
+                        new RecordReservoir(TriggerNegativeSampler.POSITIVES_PER_LINE, sampler)),
                 playability,
                 candidates,
                 new ManaChannel(
-                        live, context, new ManaReservoir(caps.manaCap(), sampler), bracket),
+                        live, context, new RecordReservoir(caps.manaCap(), sampler), bracket),
                 new ClauseOutcomeRouter(live, bracket),
                 new ContinuousChannel(live, context, dedup),
                 new PhaseSignals(live, PhaseSignals.Sink.both(bracket.phaseSink(), candidates.sink())));
@@ -69,7 +70,8 @@ record Channels(
             // A declaration of attackers the game ended before it was made.
             playability.close();
             // This is the last moment the game can be said to have ended, and
-            // the mana reservoir is only decided then.
+            // the reservoirs are only decided then.
+            triggers.flush();
             mana.flush();
         } finally {
             // In the finally: the question the tally answers is about the run,
