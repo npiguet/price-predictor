@@ -132,7 +132,7 @@ final class HeldResolutionWindow {
                 : resolved.modes.halves(resolved.effectState())) {
             // The random results are the half's own, and the library cards
             // its events name join the board they were captured with.
-            String refs = RefsJson.renderResolved(resolved.ability, half.events());
+            String refs = RefsJson.renderResolved(resolved.ability, half.events(), resolved.x());
             halves.add(HalfRecord.of(
                     context.nextRecordId(), resolved.keys.withOption(half.mode().option()),
                     half.mode().state().withRefs(refs).withEventCards(half.events()).render(),
@@ -161,7 +161,7 @@ final class HeldResolutionWindow {
                 conditions.addAll(half.conditions());
             }
         }
-        String refs = RefsJson.renderResolved(resolved.ability, List.of());
+        String refs = RefsJson.renderResolved(resolved.ability, List.of(), resolved.x());
         context.emit(context.newResolution(Moment.RESOLUTION)
                 .actor(resolved.actor)
                 .ability(resolved.keys)

@@ -363,6 +363,8 @@ final class InterventionFork {
         private SpellAbility onStack;
         private Snapshot state;
         private String refs;
+        /** The X the forced ability announced, read at its cast. */
+        private Integer x;
         private int targetsAtCast;
         /**
          * Re-reads the sink's stat differ once the board is taken, so the
@@ -391,6 +393,8 @@ final class InterventionFork {
             // ability goes on as a copy of the line it was handed.
             onStack = StackActions.topAbility(fork.getStack());
             if (onStack != null) {
+                // Read once, cast and paid for, as the live bracket reads it (B3).
+                x = RefsJson.announcedX(onStack);
                 state = snapshots.ofResolving(onStack);
                 targetsAtCast = OpenResolution.targetCount(onStack);
                 atSnapshot.run();
@@ -401,7 +405,7 @@ final class InterventionFork {
         public void onResolved(GameEventSpellResolved event) {
             if (onStack != null && refs == null && event.spell() != null
                     && event.spell().getId() == onStack.getId()) {
-                refs = RefsJson.render(onStack);
+                refs = RefsJson.renderWithX(onStack, x);
             }
         }
 

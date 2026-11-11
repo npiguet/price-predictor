@@ -273,6 +273,11 @@ position a card left a library from, and a search of another player's library.
 - A record's referenced card (tier 1) is the game's own object for it: a dies trigger's host and
   the host of an ability that sacrificed it are the card in the graveyard, written once as
   `E<id>` with its zone; the last-known copy is only the `L<id>` entity.
+- `refs.x` is the X paid into the mana cost, else the ability's `SVar:X` when a parameter of its
+  chain names X (`NumDmg$ X`, `NumAtt$ +X`, `cmcLEX`), else `null`; a `Count$Random` X is never
+  read. It is read once: when a cast item goes on the stack, its costs paid, and when the
+  resolution starts for a triggered ability or a copy. The cost half and every effect half of the
+  item carry that one reading, never one taken after the resolution.
 - A countered stack item writes no effect half. The countering clause's effect half holds the
   countered spell's `spell_countered` event and its card's `zone_change` off the stack.
 - A combat record's snapshot precedes every damage event of its step.

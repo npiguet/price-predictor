@@ -7,6 +7,7 @@ import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * A snapshot's {@code refs} block: targets, source and announced values for
@@ -35,17 +36,29 @@ final class RefsJson {
      *                       an acting ability still names its own host
      */
     static String render(SpellAbility acting, Card sourceOverride) {
-        return render(acting, sourceOverride, "null");
+        return render(acting, sourceOverride, announcedX(acting), "null");
+    }
+
+    /**
+     * The refs block for {@code acting} with an X read earlier: the cast's,
+     * read once when its costs were paid (B3).
+     */
+    static String renderWithX(SpellAbility acting, Integer x) {
+        return render(acting, null, x, "null");
     }
 
     /**
      * The refs block read at the resolution's end, with the die results and
-     * coin flips the resolution's own events report ({@code random}).
+     * coin flips the resolution's own events report ({@code random}), and
+     * the X read before the resolution: at the cast for a cast item, at the
+     * resolution's start otherwise. An X computed now would count the board
+     * the resolution has already changed.
      *
      * @param resolved the events of the resolution (or of one mode's half)
+     * @param x        the X read before the resolution, or null
      */
-    static String renderResolved(SpellAbility acting, List<EffectEvent> resolved) {
-        return render(acting, null, randomJson(resolved));
+    static String renderResolved(SpellAbility acting, List<EffectEvent> resolved, Integer x) {
+        return render(acting, null, x, randomJson(resolved));
     }
 
     /**
@@ -98,10 +111,10 @@ final class RefsJson {
                 .render();
     }
 
-    private static String render(SpellAbility acting, Card sourceOverride, String random) {
+    private static String render(
+            SpellAbility acting, Card sourceOverride, Integer x, String random) {
         List<String> targets = new ArrayList<>();
         String source = Refs.ofNullable(sourceOverride);
-        Integer x = null;
         if (acting != null) {
             if (acting.getHostCard() != null) {
                 source = Refs.of(acting.getHostCard());
@@ -110,10 +123,6 @@ final class RefsJson {
                 for (var target : acting.getTargets()) {
                     Refs.ofAny(target).ifPresent(targets::add);
                 }
-            }
-            x = acting.getXManaCostPaid();
-            if (x == null) {
-                x = announcedX(acting);
             }
         }
         return Json.object()
@@ -127,29 +136,41 @@ final class RefsJson {
     }
 
     /**
-     * X when it was not paid into the mana cost.
-     *
-     * <p>{@code getXManaCostPaid()} answers only for an X the caster paid as
-     * mana, and that is the minority form. The common one is
-     * {@code SVar:X:Count$...} with the parameter key {@code NumDmg} or
-     * {@code Amount} holding the literal {@code X}: the ability has no {@code X}
-     * parameter at all and the announced value lives only in the SVar. So an X
-     * read from the mana payment alone is absent on exactly the cards whose X is
-     * the interesting part of the effect.
-     *
-     * <p>Computed rather than read, because a {@code Count$} SVar is an
-     * expression over the board and only the engine knows what it comes to. One
-     * that cannot be answered from this record's moment is recorded as absent
-     * rather than as zero -- a zero would say the caster announced nothing,
-     * which is a different claim.
+     * A parameter value naming X: the bare variable ({@code NumDmg$ X},
+     * {@code NumAtt$ +X}) or a property comparing against it
+     * ({@code Creature.cmcLEX}).
      */
-    private static Integer announcedX(SpellAbility acting) {
+    private static final Pattern NAMES_X =
+            Pattern.compile("(?<![A-Za-z])X(?![A-Za-z])|(?:LT|LE|EQ|GE|GT|NE)X(?![A-Za-z])");
+
+    /**
+     * The X the acting ability announced, read now; null when it has none.
+     *
+     * <p>The X paid into the mana cost when there is one. Otherwise the
+     * ability's {@code SVar:X}, but only when a parameter of its chain names
+     * X: {@code getSVar} falls back to the card's own SVars, so without the
+     * check every ability of a card whose static defines X — a Cranial
+     * Plating's attach, a trigger, a permanent's cast — would carry that
+     * static's count. Computed rather than read, because a {@code Count$}
+     * SVar is an expression over the board; one that cannot be answered is
+     * absent rather than zero. A {@code Count$Random} X is never evaluated:
+     * each evaluation draws from {@code MyRandom}, so it names no announced
+     * value and would change what the game draws next.
+     */
+    static Integer announcedX(SpellAbility acting) {
+        if (acting == null) {
+            return null;
+        }
+        Integer paid = acting.getXManaCostPaid();
+        if (paid != null) {
+            return paid;
+        }
         Card host = acting.getHostCard();
-        if (host == null) {
+        if (host == null || !chainNamesX(acting)) {
             return null;
         }
         String amount = acting.getSVar("X");
-        if (amount == null || amount.isEmpty()) {
+        if (amount == null || amount.isEmpty() || amount.contains("Random")) {
             return null;
         }
         try {
@@ -157,6 +178,19 @@ final class RefsJson {
         } catch (RuntimeException e) {
             return null;
         }
+    }
+
+    /** Whether a parameter of the ability's root or one of its sub-abilities names X. */
+    private static boolean chainNamesX(SpellAbility acting) {
+        SpellAbility root = acting.getRootAbility() != null ? acting.getRootAbility() : acting;
+        for (SpellAbility clause = root; clause != null; clause = clause.getSubAbility()) {
+            for (String value : clause.getMapParams().values()) {
+                if (value != null && NAMES_X.matcher(value).find()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

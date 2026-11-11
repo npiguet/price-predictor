@@ -45,6 +45,15 @@ final class OpenResolution {
     private Snapshot resolutionState;
 
     /**
+     * The X it announced ({@link RefsJson#announcedX}), read once: when it
+     * was put on the stack, its costs paid, for an item somebody cast; when
+     * its resolution started otherwise. Every refs block of the item carries
+     * this one reading, never one taken after the resolution (B3).
+     */
+    private Integer x;
+    private boolean xRead;
+
+    /**
      * Whether the controller turned something down while this bracket was open.
      *
      * <p>Scoped to the bracket rather than matched against the declined
@@ -73,11 +82,27 @@ final class OpenResolution {
         this.linkId = linkId;
         this.costs = costs;
         this.targetsAtCast = targetCount(ability);
+        if (linkId != null) {
+            readX();
+        }
     }
 
     /** Its resolution has started, on this board (FR-042b). */
     void resolutionStarted(Snapshot board) {
         resolutionState = board;
+        readX();
+    }
+
+    private void readX() {
+        if (!xRead) {
+            x = RefsJson.announcedX(ability);
+            xRead = true;
+        }
+    }
+
+    /** The X it announced, read once; null when it has none or none was read yet. */
+    Integer x() {
+        return x;
     }
 
     /**

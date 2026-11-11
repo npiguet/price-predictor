@@ -650,4 +650,107 @@ class RecordMomentsTest {
         assertEquals("graveyard", after.get(0).get("zone"), effect);
         assertEquals(false, after.get(0).get("tapped"), effect);
     }
+
+    // ── B3: refs.x ──────────────────────────────────────────────────────
+
+    private static Object xOf(String record) {
+        return asMap(asMap(parse(record).get("state")).get("refs")).get("x");
+    }
+
+    /**
+     * Elvish Promenade makes a token for each Elf its caster controls. With
+     * two Elves, both its halves carry x 2, the count before the resolution,
+     * never the four Elves the resolution leaves (B3).
+     */
+    @Test
+    void aForEachSpellsXIsTheCountBeforeItResolves() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        inPlay(game, caster, "Llanowar Elves");
+        inPlay(game, caster, "Llanowar Elves");
+        SpellAbility promenade = spellOf(inHand(game, caster, "Elvish Promenade"), caster);
+
+        List<String> all = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            game.getStack().addAndUnfreeze(promenade);
+            game.getStack().resolveStack();
+            nextStep(game);
+        });
+
+        assertEquals(4, game.getCardsIn(ZoneType.Battlefield).size(), "two tokens made");
+        String script = "cardsfolder/e/elvish_promenade.txt";
+        assertEquals(2L, xOf(only(all, "activation", script)), all.toString());
+        assertEquals(2L, xOf(only(all, "resolution", script)), all.toString());
+    }
+
+    /**
+     * Cranial Plating's X is its static's count of artifacts; its attach
+     * ability names no X, so neither of its halves carries one (B3).
+     */
+    @Test
+    void anAbilityNamingNoXCarriesNoneThoughItsCardDefinesOne() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card plating = inPlay(game, caster, "Cranial Plating");
+        Card bears = inPlay(game, caster, "Grizzly Bears");
+        inPlay(game, caster, "Swamp");
+        inPlay(game, caster, "Swamp");
+        SpellAbility attach = null;
+        for (SpellAbility ability : plating.getSpellAbilities()) {
+            if (ability.getApi() == forge.game.ability.ApiType.Attach && !ability.isEquip()) {
+                attach = ability;
+            }
+        }
+        assertTrue(attach != null, "the plating's B B attach");
+        attach.setActivatingPlayer(caster);
+        attach.resetTargets();
+        attach.getTargets().add(bears);
+        SpellAbility activated = attach;
+
+        List<String> all = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            assertTrue(ComputerUtil.handlePlayingSpellAbility(caster, activated, null),
+                    "the AI activated the attach");
+            game.getStack().resolveStack();
+            nextStep(game);
+        });
+
+        String script = "cardsfolder/c/cranial_plating.txt";
+        assertNull(xOf(only(all, "activation", script)), all.toString());
+        assertNull(xOf(only(all, "resolution", script)), all.toString());
+    }
+
+    /**
+     * Rainbow Knights' pump names X, a {@code Count$Random}: reading its
+     * refs draws nothing from {@code MyRandom} and gives no x (B3).
+     */
+    @Test
+    void aRandomXIsNeverEvaluated() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card knights = inPlay(game, caster, "Rainbow Knights");
+        SpellAbility pump = null;
+        for (SpellAbility ability : knights.getSpellAbilities()) {
+            if ("+X".equals(ability.getParam("NumAtt"))) {
+                pump = ability;
+            }
+        }
+        assertTrue(pump != null, "the knights' +X pump");
+        pump.setActivatingPlayer(caster);
+        java.util.Random previous = forge.util.MyRandom.getRandom();
+        int[] draws = {0};
+        forge.util.MyRandom.setRandom(new java.util.Random(1) {
+            @Override
+            protected int next(int bits) {
+                draws[0]++;
+                return super.next(bits);
+            }
+        });
+        String state;
+        try {
+            state = new SnapshotBuilder(game).ofResolving(pump).render();
+        } finally {
+            forge.util.MyRandom.setRandom(previous);
+        }
+        assertEquals(0, draws[0], "draws from MyRandom");
+        assertNull(asMap(parse(state).get("refs")).get("x"), state);
+    }
 }

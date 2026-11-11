@@ -386,7 +386,7 @@ public final class BusBracketCollector extends BusEventReader {
      */
     private void writeCostHalf(OpenResolution cast, PendingCast started) {
         Snapshot board = started != null
-                ? started.board().withRefs(RefsJson.render(cast.ability))
+                ? started.board().withRefs(RefsJson.renderWithX(cast.ability, cast.x()))
                 : cast.state;
         context.emit(context.newResolution(Moment.ACTIVATION)
                 .actor(cast.actor)
