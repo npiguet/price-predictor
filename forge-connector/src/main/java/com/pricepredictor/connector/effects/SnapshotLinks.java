@@ -68,6 +68,9 @@ final class SnapshotLinks {
      *                      block's timestamped floating effects are read from
      * @param acting        the acting spell ability, whose targets are links
      *                      even before it is on the stack; or null
+     * @param actingTargets whether {@code acting}'s targets are its own: false
+     *                      for a playability candidate, whose persistent
+     *                      ability may hold an earlier evaluation's
      * @param pending       the event a trait is about to handle, or null
      * @param withoutStatic the static a {@code continuous} record's board
      *                      removes, or null; such a board carries no
@@ -75,12 +78,12 @@ final class SnapshotLinks {
      * @param floating      the clause notes the floating effects are read by
      */
     static String render(Game game, Collection<Card> cards, Collection<Card> tiers,
-                         SpellAbility acting, EffectEvent pending, Long withoutStatic,
-                         FloatingEffects floating) {
+                         SpellAbility acting, boolean actingTargets, EffectEvent pending,
+                         Long withoutStatic, FloatingEffects floating) {
         SnapshotLinks links = new SnapshotLinks(game);
         links.cardLinks(cards, withoutStatic == null);
         links.combat(game.getCombat());
-        links.stack(acting);
+        links.stack(acting, actingTargets);
         links.commandZone(cards, tiers, floating);
         if (pending != null && pending.lastKnown() != null) {
             Card lastKnown = pending.lastKnown();
@@ -173,9 +176,10 @@ final class SnapshotLinks {
     /**
      * Each stack object's targets, by index across its chain (the root's
      * first, then each sub-ability's), its source and what triggered it; the
-     * acting ability's too where it is not on the stack yet.
+     * acting ability's too where it is not on the stack yet, its targets only
+     * when they are its own.
      */
-    private void stack(SpellAbility acting) {
+    private void stack(SpellAbility acting, boolean actingTargets) {
         Set<SpellAbility> objects = Collections.newSetFromMap(new IdentityHashMap<>());
         List<SpellAbility> ordered = new ArrayList<>();
         for (SpellAbilityStackInstance instance : game.getStack()) {
@@ -184,6 +188,9 @@ final class SnapshotLinks {
                 ordered.add(ability);
             }
         }
+        // A candidate off the stack: its persistent ability's targets are an
+        // earlier evaluation's, not chosen for this record.
+        boolean staleTargets = acting != null && !actingTargets && !objects.contains(acting);
         if (acting != null && objects.add(acting)) {
             ordered.add(acting);
         }
@@ -191,7 +198,9 @@ final class SnapshotLinks {
             Card host = ability.getHostCard();
             String line = line(host, ability);
             int index = 0;
-            for (SpellAbility clause = ability; clause != null; clause = clause.getSubAbility()) {
+            boolean targets = !(staleTargets && ability == acting);
+            for (SpellAbility clause = ability; targets && clause != null;
+                    clause = clause.getSubAbility()) {
                 if (clause.getTargets() == null) {
                     continue;
                 }

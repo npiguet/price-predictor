@@ -117,13 +117,10 @@ public final class PlayabilityChannel {
      * @param decider the candidate's player, written as {@code actor_player}
      */
     void recordDecision(Player decider, SpellAbility candidate, DecisionCandidate read) {
-        // The candidate goes into the snapshot: without it refs.source is
-        // null on every playability record, and a decision record would not
-        // say which card the candidate is even on except through its key.
-        String state = live.snapshots().ofAbility(
-                candidate,
-                candidate.getHostCard() == null
-                        ? List.of() : List.of(candidate.getHostCard())).render();
+        // The candidate's host goes into the snapshot: without it refs.source
+        // is null on every playability record, and a decision record would
+        // not say which card the candidate is even on except through its key.
+        String state = live.snapshots().ofCandidate(candidate).render();
         // Deduplicated because the same candidate at the next stop on an
         // unchanged board answers the same question the same way. The record
         // names no acting line of its own; the candidate's key is in the

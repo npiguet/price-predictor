@@ -189,6 +189,39 @@ class PriorityCandidatesTest {
                 "A's own stop was left for A");
     }
 
+    // ── the refs of a decision (C4) ─────────────────────────────────────
+
+    /**
+     * A decision record's refs name the candidate's host and nothing else:
+     * a candidate is the card's persistent ability, which an earlier
+     * evaluation or an abandoned cast left targets and an X on, and a
+     * decision is taken before any is chosen.
+     */
+    @Test
+    void aDecisionsRefsNameItsSourceAndNoStaleTargetsOrX() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Player b = game.getPlayers().get(1);
+        TestBoard.inPlay(game, a, "Mountain");
+        Card shock = TestBoard.inHand(game, a, "Shock");
+        SpellAbility persistent = shock.getFirstSpellAbility();
+        persistent.setActivatingPlayer(a);
+        persistent.getTargets().add(b);
+        persistent.setXManaCostPaid(3);
+
+        List<String> records = decisions(ShardRun.records(tempDir, game, EVERY_CANDIDATE,
+                (bracket, collectors) -> settle(collectors, game, a)));
+
+        String decision = recordOf(records, shock);
+        Map<String, Object> refs = RecordLines.asMap(RecordLines.asMap(
+                RecordLines.parse(decision).get("state")).get("refs"));
+        assertEquals(Refs.of(shock), refs.get("source"), decision);
+        assertEquals(List.of(), refs.get("targets"), decision);
+        assertEquals(null, refs.get("x"), decision);
+        assertEquals(List.of(), refs.get("modes"), decision);
+        assertEquals(Map.of(), refs.get("choices"), decision);
+    }
+
     // ── land plays (FR-033a) ────────────────────────────────────────────
 
     /** The decision record whose snapshot's source is {@code card}. */

@@ -102,12 +102,26 @@ public final class SnapshotBuilder {
      *                   legality question with no candidate — whose refs then
      *                   render empty, as {@link #ofBoard}'s do
      * @param referenced the cards the record points at, carried whatever zone
-     *                   they sit in (tier 1) — the host alone for a playability
-     *                   candidate, which has no targets yet; an ability being
-     *                   cast or forced takes {@link #ofResolving} instead
+     *                   they sit in (tier 1)
      */
     Snapshot ofAbility(SpellAbility acting, Iterable<Card> referenced) {
-        return snapshot(referenced, null, acting, null, null);
+        return snapshot(referenced, null, acting, null, null, true);
+    }
+
+    /**
+     * The snapshot for a playability candidate: its host is the one card
+     * referenced and its refs name that host alone (C4).
+     *
+     * <p>A candidate is the card's persistent ability, which keeps whatever
+     * an earlier evaluation or an abandoned cast set on it — the AI's
+     * {@code canPlaySa} chooses targets and X before it asks whether the
+     * cost can be paid. A decision is taken before any of that is chosen, so
+     * targets, X, modes and choices are empty, and no stale target is linked;
+     * the host is still linked as the candidate line's source.
+     */
+    Snapshot ofCandidate(SpellAbility candidate) {
+        Card host = candidate.getHostCard();
+        return snapshot(host == null ? List.of() : List.of(host), null, candidate, host, null, false);
     }
 
     /**
@@ -124,7 +138,7 @@ public final class SnapshotBuilder {
      * block is the empty shape.
      */
     Snapshot ofBoard() {
-        return snapshot(List.of(), null, null, null, null);
+        return snapshot(List.of(), null, null, null, null, true);
     }
 
     /**
@@ -133,7 +147,7 @@ public final class SnapshotBuilder {
      * already contain the answer the record labels.
      */
     Snapshot ofBoardWithout(long staticId) {
-        return snapshot(List.of(), staticId, null, null, null);
+        return snapshot(List.of(), staticId, null, null, null, true);
     }
 
     /**
@@ -155,7 +169,7 @@ public final class SnapshotBuilder {
      * @param pending the event as the trait received it
      */
     Snapshot ofTrait(Card source, EffectEvent pending) {
-        return snapshot(source == null ? List.of() : List.of(source), null, null, source, pending);
+        return snapshot(source == null ? List.of() : List.of(source), null, null, source, pending, true);
     }
 
     /**
@@ -167,10 +181,14 @@ public final class SnapshotBuilder {
      * @param source        the host of an acting line that is not a spell
      *                      ability, or null
      * @param pending       the event a trait is about to handle, or null
+     * @param chosen        whether {@code acting}'s targets and announced
+     *                      values are its own, chosen for this record: false
+     *                      for a playability candidate, whose refs name its
+     *                      host alone and whose targets are no links
      */
     private Snapshot snapshot(
             Iterable<Card> referenced, Long withoutStatic, SpellAbility acting, Card source,
-            EffectEvent pending) {
+            EffectEvent pending, boolean chosen) {
         Set<Card> tiers = collectEntities(referenced);
         List<String> entities = new ArrayList<>();
         Set<String> present = new HashSet<>();
@@ -185,8 +203,9 @@ public final class SnapshotBuilder {
         return new Snapshot(
                 globalToJson(tiers), players, "[" + String.join(",", entities) + "]",
                 SnapshotLinks.render(
-                        game, cards, tiers, acting, pending, withoutStatic, floating),
-                RefsJson.render(acting, source), pending == null ? "null" : pending.toJson(),
+                        game, cards, tiers, acting, chosen, pending, withoutStatic, floating),
+                RefsJson.render(chosen ? acting : null, source),
+                pending == null ? "null" : pending.toJson(),
                 libraries);
     }
 
