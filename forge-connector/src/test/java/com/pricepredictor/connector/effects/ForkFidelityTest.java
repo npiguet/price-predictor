@@ -106,6 +106,74 @@ class ForkFidelityTest {
         assertEquals(List.of(), ForkFidelity.differences(live, fork));
     }
 
+    /**
+     * Sewer Plague's perpetual -2/-2 and upkeep trigger on a creature since
+     * returned to its owner's hand: the copier rebuilt the card in hand from
+     * its rules, so the copy's pt_boosts and lines lacked them.
+     */
+    @Test
+    void aCopyKeepsAPerpetualChangeOffTheBattlefield() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = live.getPlayers().get(0);
+        Player opponent = live.getPlayers().get(1);
+        Card bears = TestBoard.inPlay(live, opponent, "Grizzly Bears");
+        TestBoard.cast(live, TestBoard.inHand(live, you, "Sewer Plague"), you, bears);
+        live.getStack().resolveStack();
+        live.getAction().moveTo(forge.game.zone.ZoneType.Hand, live.getCardState(bears), null, null);
+
+        Game fork = new GameCopier(live).makeCopy();
+
+        assertEquals(List.of(), ForkFidelity.differences(live, fork));
+    }
+
+    /**
+     * A player at max speed: the speed effect card shows its back face, Max
+     * Speed!, its trigger on the front. The copy showed its front, with no
+     * trigger.
+     */
+    @Test
+    void aCopyKeepsTheSpeedEffectCardsFace() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        for (int i = 0; i < 4; i++) {
+            live.getPlayers().get(0).increaseSpeed();
+        }
+
+        Game fork = new GameCopier(live).makeCopy();
+
+        assertEquals(List.of(), ForkFidelity.differences(live, fork));
+    }
+
+    /** A player's keyword from a static (Leyline of Sanctity's hexproof) and its Keyword Effects card. */
+    @Test
+    void aCopyKeepsAPlayersKeywordFromAStatic() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        TestBoard.inPlay(live, live.getPlayers().get(0), "Leyline of Sanctity");
+        live.getAction().checkStateEffects(true);
+
+        Game fork = new GameCopier(live).makeCopy();
+
+        assertEquals(List.of(), ForkFidelity.differences(live, fork));
+    }
+
+    /**
+     * A player's keyword from a resolved spell (Veil of Summer's hexproof
+     * from blue and black, until end of turn) and its Keyword Effects card.
+     */
+    @Test
+    void aCopyKeepsAPlayersKeywordFromAResolvedSpell() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = live.getPlayers().get(0);
+        Card veil = TestBoard.inHand(live, you, "Veil of Summer");
+        Card onStack = live.getAction().moveToStack(veil, null);
+        TestBoard.castAndResolve(live, TestBoard.spellOf(onStack, you));
+        assertTrue(you.getKeywords().toString().contains("Hexproof"), you.getKeywords().toString());
+
+        Game fork = new GameCopier(live).makeCopy();
+
+        assertEquals(List.of(), ForkFidelity.differences(live, fork));
+        assertEquals(you.getKeywords().toString(), fork.getPlayer(you.getId()).getKeywords().toString());
+    }
+
     /** "Target creature blocks this turn if able": the requirement survives the copy. */
     @Test
     void aCopyKeepsACreaturesRequirementToBlock() {
