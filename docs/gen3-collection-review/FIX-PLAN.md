@@ -129,7 +129,12 @@ Avenger, Hidden Predators, Veiled Crocodile) are fixed in 93906a7d.
 - WP3b done: 12 commits ending 4fac6837, Forge 37a7644d8a1 (C11's NPE was stock Forge: a bestow or
   face-down cast's zone-less last-known copy under Coram, the Undertaker's static; it killed the game in
   Forge's own AI enumeration too). T192 (per-game record cap) and T193 (no zero perturbations) done.
-- Running: WP4 (snapshots). Then WP6-Java, then T174's full verification and T181.
+- WP4 done (snapshots): fb6d00ba … 1b08bbae, Forge be4f0145a20 (the "without" reads) and f8e2062d98c.
+  Follow-up e3f21a12: a gen-3 continuous `=` names what it displaced (types_lost, colors_lost).
+- WP6-Java done: 16d68d64 … bed1f490, d5258885 (a static removing some printed lines no longer shifts
+  the remaining lines' keys). T186, T188, T189, T191 ticked.
+- Running: keying of abilities a static or effect adds (Blood Moon, Animate, Spreading Seas). Then
+  T174's full verification and T181.
 
 ## Order and gates
 
