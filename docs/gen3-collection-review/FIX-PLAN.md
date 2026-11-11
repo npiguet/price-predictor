@@ -125,7 +125,11 @@ Avenger, Hidden Predators, Veiled Crocodile) are fixed in 93906a7d.
 - WP2 done: Forge cfb2ae28564; copier API in `WP2-COPIER.md`.
 - WP6 Python and catalogue parts done (T184, T185, T187 ticked; T186, T188 Python halves; 207 of 260
   card-level variants carry a `script_edit`, the rest listed with reasons in the agent's scratchpad).
-- Running: WP3a (record moments, connector side of the new hooks).
+- WP3a done (record moments, T179): 09e28f9c … 8f2eb7c1; no Forge change.
+- WP3b done: 12 commits ending 4fac6837, Forge 37a7644d8a1 (C11's NPE was stock Forge: a bestow or
+  face-down cast's zone-less last-known copy under Coram, the Undertaker's static; it killed the game in
+  Forge's own AI enumeration too). T192 (per-game record cap) and T193 (no zero perturbations) done.
+- Running: WP4 (snapshots). Then WP6-Java, then T174's full verification and T181.
 
 ## Order and gates
 
