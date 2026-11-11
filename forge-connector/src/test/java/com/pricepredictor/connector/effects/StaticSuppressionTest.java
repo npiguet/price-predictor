@@ -50,7 +50,9 @@ class StaticSuppressionTest {
             "Control Magic, Grizzly Bears",
             "Ensoul Artifact, Sol Ring",
             "Frogify, Serra Angel",
-            "Frogify, Prodigal Pyromancer"})
+            "Frogify, Prodigal Pyromancer",
+            "Drake Umbra, Grizzly Bears",
+            "Gryff's Boon, Grizzly Bears"})
     void theBoardWithoutAnAurasStaticIsTheBoardWithoutTheAura(String auraName, String targetName)
             throws Throwable {
         assumeSuppression();
@@ -68,6 +70,33 @@ class StaticSuppressionTest {
 
         assertEquals(List.of(), differences(without, suppressed),
                 auraName + "'s board still shows its own work on " + targetName);
+    }
+
+    /**
+     * An Equipment's static as an Aura's: the equipped creature's entity in
+     * the Equipment's continuous record equals the creature rendered once the
+     * Equipment has left the battlefield.
+     */
+    @Test
+    void theBoardWithoutAnEquipmentsStaticIsTheBoardWithoutTheEquipment() throws Throwable {
+        assumeSuppression();
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card target = board.battlefield("Grizzly Bears", board.you);
+        Card sledge = board.battlefield("Behemoth Sledge", board.you);
+        sledge.attachToEntity(target, null);
+        board.game.getAction().checkStaticAbilities();
+        assertTrue(target.hasKeyword(forge.game.keyword.Keyword.TRAMPLE), "the sledge is not on the bears");
+
+        String record = continuousRecordOf(board, sledge);
+        Map<String, Object> suppressed = entity(record, Refs.of(target));
+
+        board.game.getAction().moveToGraveyard(board.game.getCardState(sledge), null, null);
+        board.game.getAction().checkStaticAbilities();
+        Map<String, Object> without = parse(EntityJson.render(
+                board.game, board.game.getCardState(target), StaticSuppression.NONE));
+
+        assertEquals(List.of(), differences(without, suppressed),
+                "Behemoth Sledge's board still shows its own work on Grizzly Bears");
     }
 
     /**
