@@ -304,12 +304,19 @@ public final class SnapshotBuilder {
      * first tier that reaches it: the referenced cards wherever they sit (1),
      * the battlefield and the command zone's effect cards (2), the stack (3),
      * then hands and graveyards (4).
+     *
+     * <p>A referenced card is the game's own object for it where the game
+     * holds one (B7). A leaves-the-battlefield trigger's host, and the host
+     * of an ability that sacrificed it, is the last-known copy of the
+     * permanent that left, which shares the card's id: kept, it would stand
+     * in for the card in the graveyard with its old battlefield state and no
+     * zone. A last-known copy is written only as the {@code L<id>} entity.
      */
     private Set<Card> collectEntities(Iterable<Card> referenced) {
         Set<Card> entities = new LinkedHashSet<>();
         for (Card card : referenced) {
             if (card != null) {
-                entities.add(card);
+                entities.add(game.getCardState(card, card));
             }
         }
         entities.addAll(game.getCardsIn(EnumSet.of(ZoneType.Battlefield, ZoneType.Command)));

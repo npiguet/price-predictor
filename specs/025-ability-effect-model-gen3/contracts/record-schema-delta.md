@@ -270,6 +270,9 @@ position a card left a library from, and a search of another player's library.
 - A rewrite record's snapshot is read before the replacement runs (`onReplacing`); replacements
   nest, and each record takes the board read when its own replacement started.
 - A forced (interventional) resolution reads its board when its resolution starts, as a live one.
+- A record's referenced card (tier 1) is the game's own object for it: a dies trigger's host and
+  the host of an ability that sacrificed it are the card in the graveyard, written once as
+  `E<id>` with its zone; the last-known copy is only the `L<id>` entity.
 - A countered stack item writes no effect half. The countering clause's effect half holds the
   countered spell's `spell_countered` event and its card's `zone_change` off the stack.
 - A combat record's snapshot precedes every damage event of its step.

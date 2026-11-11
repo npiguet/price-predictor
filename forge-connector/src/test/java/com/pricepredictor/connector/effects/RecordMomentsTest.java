@@ -569,4 +569,85 @@ class RecordMomentsTest {
         assertEquals("declined", payload(trigger).get("outcome"), trigger);
         assertEquals(List.of(), events(trigger), trigger);
     }
+
+    // ── B7: a host that left the battlefield is its card where it is now ─
+
+    /** The entities of a record written under {@code ref}. */
+    private static List<Map<String, Object>> entitiesWithId(String record, String ref) {
+        Map<String, Object> state = asMap(parse(record).get("state"));
+        return ((List<?>) state.get("entities")).stream().map(RecordLines::asMap)
+                .filter(entity -> ref.equals(entity.get("id"))).toList();
+    }
+
+    /**
+     * A Lightning Bolt kills Doomed Dissenter: its dies trigger's records,
+     * the trigger record and the trigger's effect half, carry the Dissenter
+     * once, as the card in the graveyard; the copy the trigger was armed
+     * from is only the {@code L<id>} entity, never {@code E<id>} with no
+     * zone (B7).
+     */
+    @Test
+    void aDyingHostIsItsGraveyardCardInItsDiesTriggersRecords() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card dissenter = inPlay(game, game.getPlayers().get(1), "Doomed Dissenter");
+        SpellAbility bolt = spellOf(inHand(game, caster, "Lightning Bolt"), caster);
+        bolt.resetTargets();
+        bolt.getTargets().add(dissenter);
+        game.getTriggerHandler().resetActiveTriggers(false, null);
+        game.copyLastState();
+
+        List<String> all = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            game.getStack().addAndUnfreeze(bolt);
+            game.getStack().resolveStack();
+            priorityWithTriggers(game);
+            game.getStack().resolveStack();
+            nextStep(game);
+        });
+
+        List<String> dissenters = all.stream()
+                .filter(r -> "cardsfolder/d/doomed_dissenter.txt".equals(scriptOf(r))).toList();
+        assertTrue(dissenters.size() >= 2, "the trigger record and its effect half: " + all);
+        for (String record : dissenters) {
+            List<Map<String, Object>> hosts = entitiesWithId(record, ref(dissenter));
+            assertEquals(1, hosts.size(), record);
+            assertEquals("graveyard", hosts.get(0).get("zone"), record);
+        }
+    }
+
+    /**
+     * Evolving Wilds sacrifices itself to fetch a Forest. Its cost half is
+     * read before the costs are paid, the Wilds on the battlefield untapped;
+     * its effect half has the Wilds once, in the graveyard and untapped, the
+     * card it became rather than the battlefield object the ability still
+     * names as its host (B7, root § 8.14).
+     */
+    @Test
+    void aSacrificedHostIsItsGraveyardCardInItsEffectHalf() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card wilds = inPlay(game, caster, "Evolving Wilds");
+        game.getAction().moveToLibrary(TestBoard.card(game, caster, "Forest"), null, null);
+        SpellAbility fetch = TestBoard.ability(wilds, forge.game.ability.ApiType.ChangeZone);
+        fetch.setActivatingPlayer(caster);
+
+        List<String> all = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            assertTrue(ComputerUtil.handlePlayingSpellAbility(caster, fetch, null),
+                    "the AI activated the Wilds");
+            game.getStack().resolveStack();
+            nextStep(game);
+        });
+
+        String script = "cardsfolder/e/evolving_wilds.txt";
+        String cost = only(all, "activation", script);
+        List<Map<String, Object>> before = entitiesWithId(cost, ref(wilds));
+        assertEquals(1, before.size(), cost);
+        assertEquals("battlefield", before.get(0).get("zone"), cost);
+        assertEquals(false, before.get(0).get("tapped"), cost);
+        String effect = only(all, "resolution", script);
+        List<Map<String, Object>> after = entitiesWithId(effect, ref(wilds));
+        assertEquals(1, after.size(), effect);
+        assertEquals("graveyard", after.get(0).get("zone"), effect);
+        assertEquals(false, after.get(0).get("tapped"), effect);
+    }
 }
