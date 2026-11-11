@@ -202,6 +202,58 @@ class ForkFidelityTest {
         assertEquals(List.of(), ForkFidelity.differences(live, fork));
     }
 
+    /**
+     * Light Up the Stage cast for its mana cost: its effect card names the
+     * card's spell line, in the copy as live. A copy of the cast bound to the
+     * copy's card, in no list of the card's, keyed nothing.
+     */
+    @Test
+    void aCopyKeepsTheSpellThatMadeAnEffect() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = live.getPlayers().get(0);
+        for (int i = 0; i < 3; i++) {
+            live.getAction().moveToLibrary(TestBoard.card(live, you, "Mountain"), null, null);
+        }
+        Card onStack = live.getAction().moveToStack(TestBoard.inHand(live, you, "Light Up the Stage"), null);
+        TestBoard.castAndResolve(live, TestBoard.spellOf(onStack, you));
+        Card effect = live.getCardsIn(forge.game.zone.ZoneType.Command).get(0);
+
+        GameCopier copier = new GameCopier(live);
+        Game fork = copier.makeCopy();
+        forge.game.spellability.SpellAbility forkSource = fork.getCardState(effect).getEffectSourceAbility();
+        String why = "live " + ProvenanceResolver.resolve(effect.getEffectSourceAbility())
+                + "; fork " + ProvenanceResolver.resolve(forkSource);
+
+        assertEquals(List.of(), ForkFidelity.differences(live, fork), why);
+    }
+
+    /**
+     * Moment's Peace cast through flashback: its effect card names the
+     * flashback line, in the copy as live; mapped by its place, the copy's
+     * named the card's own spell line.
+     */
+    @Test
+    void aCopyKeepsTheFlashbackCastThatMadeAnEffect() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = live.getPlayers().get(0);
+        Card peace = TestBoard.inGraveyard(live, you, "Moment's Peace");
+        forge.game.spellability.SpellAbility flashback = forge.game.GameActionUtil.getAlternativeCosts(
+                peace.getFirstSpellAbility(), you, false).stream()
+                .filter(forge.game.spellability.SpellAbility::isFlashback).findFirst().orElseThrow();
+        flashback.setActivatingPlayer(you);
+        flashback.setHostCard(live.getAction().moveToStack(peace, flashback));
+        TestBoard.castAndResolve(live, flashback);
+        Card effect = live.getCardsIn(forge.game.zone.ZoneType.Command).get(0);
+
+        GameCopier copier = new GameCopier(live);
+        Game fork = copier.makeCopy();
+        forge.game.spellability.SpellAbility forkSource = fork.getCardState(effect).getEffectSourceAbility();
+        String why = "live " + ProvenanceResolver.resolve(effect.getEffectSourceAbility())
+                + "; fork " + ProvenanceResolver.resolve(forkSource);
+
+        assertEquals(List.of(), ForkFidelity.differences(live, fork), why);
+    }
+
     /** "Target creature blocks this turn if able": the requirement survives the copy. */
     @Test
     void aCopyKeepsACreaturesRequirementToBlock() {
