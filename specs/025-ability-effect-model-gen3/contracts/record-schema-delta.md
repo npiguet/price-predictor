@@ -135,7 +135,8 @@ it), `granted_temporary`. Forge's `...Without` reads (`Card.getTypeWithout`, `ge
 
 Effect cards come first, then timestamps in ascending order. A timestamped row no noted clause
 covers is not listed. A note is taken at each live clause's `ON_CLAUSE_RESOLVING` and closed at
-its `ON_CLAUSE_RESOLVED`; a fork's snapshot reads the live game's notes. `duration` buckets
+its `ON_CLAUSE_RESOLVED`; a fork's snapshot reads the live game's notes for every timestamp at or
+before the copy, and the notes of its own clauses (a played-forward fork's) after it. `duration` buckets
 `Duration$`: `Permanent` is `permanent`; `UntilHostLeavesPlay`, `UntilLoseControlOfHost`,
 `AsLongAs…`, `…Untaps`, `UntilUnattached` and `UntilFacedown` are `until_leaves`; everything else
 is `end_of_turn`, including an absent `Duration$` and any `…OrEOT` or `…OrEndOfCombat`.

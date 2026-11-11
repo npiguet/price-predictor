@@ -275,6 +275,9 @@ final class Forks {
         } catch (RuntimeException e) {
             return Optional.empty();
         }
+        // Before anything reads the fork: every builder over it, the audit's
+        // and a played-forward recording's, reads the live game's notes too.
+        FloatingEffects.ofFork(fork, live);
         ForkFidelity.report(live, fork, copier.getNoCounterpartTally());
         Player from = perspective.get();
         if (from == null || !scoreCheck(live, copier, fork, from)) {
@@ -341,7 +344,7 @@ final class Forks {
                     return null;
                 }
                 // The fork's own state, read against the live game it came from.
-                SnapshotBuilder snapshots = new SnapshotBuilder(verified.get().fork(), live);
+                SnapshotBuilder snapshots = SnapshotBuilder.forFork(verified.get().fork(), live);
                 R produced;
                 try {
                     produced = body.run(verified.get(), snapshots);

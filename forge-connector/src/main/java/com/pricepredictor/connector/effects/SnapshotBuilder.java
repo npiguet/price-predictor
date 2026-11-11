@@ -54,18 +54,25 @@ public final class SnapshotBuilder {
     /** Whose clause notes join a timestamped floating effect to its line. */
     private final FloatingEffects floating;
 
+    /**
+     * A builder over {@code game}, reading its clause notes: a fork's are
+     * seeded from the live game it was copied from ({@link #forFork}), so
+     * every builder over a fork, its played-forward recording's included,
+     * reads the same notes.
+     */
     public SnapshotBuilder(Game game) {
-        this(game, game);
+        this.game = game;
+        this.floating = FloatingEffects.of(game);
     }
 
     /**
-     * A builder over a fork's copy, reading the live game's clause notes: the
-     * copy keeps the rows' timestamps, and only the live game's clauses were
-     * noted.
+     * A builder over a fork of {@code live}, its clause notes seeded from the
+     * live game's first (B4): the copy keeps the rows' timestamps, and the
+     * rows drawn before the copy were noted by the live game's clauses.
      */
-    SnapshotBuilder(Game game, Game notesOf) {
-        this.game = game;
-        this.floating = FloatingEffects.of(notesOf);
+    static SnapshotBuilder forFork(Game fork, Game live) {
+        FloatingEffects.ofFork(fork, live);
+        return new SnapshotBuilder(fork);
     }
 
     /**

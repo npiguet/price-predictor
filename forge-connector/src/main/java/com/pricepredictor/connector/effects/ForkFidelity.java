@@ -41,7 +41,8 @@ final class ForkFidelity {
     /** Every difference between {@code live}'s board snapshot and {@code fork}'s, as readable lines. */
     static List<String> differences(Game live, Game fork) {
         Snapshot real = new SnapshotBuilder(live).ofBoard();
-        Snapshot copy = new SnapshotBuilder(fork, live).ofBoard();
+        // The builder the fork's own records read through.
+        Snapshot copy = SnapshotBuilder.forFork(fork, live).ofBoard();
         List<String> out = new ArrayList<>();
         compareFields("global", JsonParts.fields(real.global()), JsonParts.fields(copy.global()), out);
         compareById("player", real.players(), copy.players(), out);

@@ -68,7 +68,18 @@ final class FloatingEffects {
 
     /** The notes of {@code game}, made on first use. */
     static FloatingEffects of(Game game) {
-        return BY_GAME.computeIfAbsent(game, g -> new FloatingEffects());
+        return BY_GAME.computeIfAbsent(game, g -> new FloatingEffects(null, 0L));
+    }
+
+    /**
+     * The notes of a fork of {@code live}, made on first use: its own
+     * clauses' notes, and the live game's for every timestamp at or before
+     * the copy point (B4). The copy keeps the live game's timestamps, so a
+     * row drawn before the fork is the live game's to name; a fork's own
+     * notes start empty.
+     */
+    static FloatingEffects ofFork(Game fork, Game live) {
+        return BY_GAME.computeIfAbsent(fork, g -> new FloatingEffects(of(live), fork.getTimestamp()));
     }
 
     /** One live clause's resolution: the timestamps Forge drew while it ran. */
@@ -105,8 +116,14 @@ final class FloatingEffects {
             a[0] != b[0] ? Long.compare(a[0], b[0]) : Long.compare(a[1], b[1]));
     private final Deque<Note> open = new ArrayDeque<>();
     private long noted;
+    /** The live game's notes, for a fork's; null for a live game's own. */
+    private final FloatingEffects copiedFrom;
+    /** The game's timestamp when a fork was copied; the live game's notes cover up to it. */
+    private final long copyPoint;
 
-    private FloatingEffects() {
+    private FloatingEffects(FloatingEffects copiedFrom, long copyPoint) {
+        this.copiedFrom = copiedFrom;
+        this.copyPoint = copyPoint;
     }
 
     // ── bookkeeping at the clause hook ───────────────────────────────
@@ -132,8 +149,18 @@ final class FloatingEffects {
         }
     }
 
-    /** The innermost note that covers a timestamp, or null. */
-    private synchronized Note noteAt(long timestamp) {
+    /**
+     * The innermost note that covers a timestamp, or null: the live game's,
+     * for a fork's timestamp at or before its copy point.
+     */
+    private Note noteAt(long timestamp) {
+        if (copiedFrom != null && timestamp <= copyPoint) {
+            return copiedFrom.noteAt(timestamp);
+        }
+        return ownNoteAt(timestamp);
+    }
+
+    private synchronized Note ownNoteAt(long timestamp) {
         for (Note note : notes.headMap(new long[] {timestamp, Long.MAX_VALUE}, false)
                 .descendingMap().values()) {
             if (note.covers(timestamp)) {

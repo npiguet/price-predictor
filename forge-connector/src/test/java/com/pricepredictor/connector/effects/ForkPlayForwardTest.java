@@ -23,6 +23,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -379,5 +380,73 @@ class ForkPlayForwardTest {
         assertEquals(1, held.size());
         assertTrue(isFork(held.get(0)));
         assertEquals(Boolean.FALSE, parse(held.get(0)).get("interventional"));
+    }
+
+    // ── the fork's floating effects (B4) ────────────────────────────────
+
+    /** The timestamped floating effects a record's global block lists. */
+    private static List<String> timestampedIn(String record) {
+        Object global = RecordLines.asMap(parse(record).get("state")).get("global");
+        List<String> ids = new ArrayList<>();
+        for (Object each : (List<?>) RecordLines.asMap(global).get("floating_effects")) {
+            String id = (String) RecordLines.asMap(each).get("id");
+            if (id.startsWith("F")) {
+                ids.add(id);
+            }
+        }
+        return ids;
+    }
+
+    /** Whether a record's board shows {@code card} with a +3/+3 temporary boost. */
+    private static boolean pumped(String record, Card card) {
+        for (Object each : (List<?>) RecordLines.asMap(parse(record).get("state")).get("entities")) {
+            Map<String, Object> entity = RecordLines.asMap(each);
+            if (("E" + card.getId()).equals(entity.get("id")) && entity.get("pt_boosts") != null) {
+                return List.of(3L, 3L).equals(
+                        RecordLines.asMap(entity.get("pt_boosts")).get("temporary"));
+            }
+        }
+        return false;
+    }
+
+    /**
+     * A Giant Growth resolved in the first main phase is a floating effect
+     * {@code F<ts>} of the live game's records; a fork taken at the declare
+     * attackers step lists it too, on every record whose board shows the
+     * pump: the fork's clause notes start from the live game's (B4).
+     */
+    @Test
+    void aForksRecordsListAPumpResolvedBeforeTheFork() throws Throwable {
+        Game game = board();
+        sneakAttack(game);
+        Player active = game.getPlayers().get(0);
+        Card bears = onBattlefield(game, "Grizzly Bears");
+        SpellAbility growth = TestBoard.spellOf(TestBoard.inHand(game, active, "Giant Growth"), active);
+        growth.resetTargets();
+        growth.getTargets().add(bears);
+        CollectionCaps caps = TestCaps.caps().interventions(0).probes(0).everyDecision().build();
+        RecordShardWriter writer = ShardRun.writer(tempDir);
+        Forker forker;
+        try (GameRecording recording = new GameRecording(game, writer, ShardRun.GAME_ID, caps, 7L, null)) {
+            recording.open();
+            game.getStack().addAndUnfreeze(growth);
+            game.getStack().resolveStack();
+            forker = new Forker(game, recording, PhaseType.COMBAT_DECLARE_ATTACKERS, DIRECTED);
+            game.subscribeToEvents(forker);
+            playTheTurnOut(game);
+        } finally {
+            writer.close();
+        }
+        List<String> all = ShardRun.readShard(writer.path());
+
+        assertNotNull(forker.played, "the fork was played out");
+        List<String> live = liveRecords(all).stream().filter(r -> pumped(r, bears)).toList();
+        assertFalse(live.isEmpty(), "a live record shows the pump");
+        String pump = timestampedIn(live.get(0)).get(0);
+        List<String> forked = forkRecords(all).stream().filter(r -> pumped(r, bears)).toList();
+        assertFalse(forked.isEmpty(), "a fork record shows the pump: " + forkRecords(all));
+        for (String record : forked) {
+            assertTrue(timestampedIn(record).contains(pump), record);
+        }
     }
 }
