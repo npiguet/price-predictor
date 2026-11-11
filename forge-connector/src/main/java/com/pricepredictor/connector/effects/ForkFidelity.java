@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 
 /**
@@ -50,10 +51,15 @@ final class ForkFidelity {
     }
 
     /**
-     * Print {@code fork}'s differences from {@code live}, if it has any. Never
-     * throws: an audit that failed is reported as one, and the fork goes on.
+     * Print {@code fork}'s differences from {@code live}, and what the copier
+     * left without a counterpart, if either is anything. Never throws: an
+     * audit that failed is reported as one, and the fork goes on.
+     *
+     * @param noCounterpart the copier's per-copy tally of references it could
+     *                      not map, by kind ({@code GameCopier.getNoCounterpartTally()}),
+     *                      only the kinds with drops present
      */
-    static void report(Game live, Game fork) {
+    static void report(Game live, Game fork, Map<?, Integer> noCounterpart) {
         List<String> found;
         try {
             found = differences(live, fork);
@@ -61,18 +67,43 @@ final class ForkFidelity {
             System.err.println("Effect records: fork fidelity audit failed (" + e + ")");
             return;
         }
-        if (found.isEmpty()) {
+        String line = line(live, found.size(), noCounterpart);
+        if (line == null) {
             return;
         }
+        StringBuilder out = new StringBuilder(line);
+        for (String difference : found.subList(0, Math.min(MAX_REPORTED, found.size()))) {
+            out.append("\n  ").append(difference);
+        }
+        System.err.println(out);
+    }
+
+    /**
+     * The report's first line, or null when there is nothing to report: the
+     * differences' count, where the fork was taken, and the kinds the copier
+     * dropped references of, with how many.
+     */
+    static String line(Game live, int differences, Map<?, Integer> noCounterpart) {
+        Map<String, Integer> dropped = new TreeMap<>();
+        if (noCounterpart != null) {
+            noCounterpart.forEach((kind, count) -> {
+                if (count != null && count > 0) {
+                    dropped.put(String.valueOf(kind), count);
+                }
+            });
+        }
+        if (differences == 0 && dropped.isEmpty()) {
+            return null;
+        }
         StringBuilder out = new StringBuilder("Effect records: fork fidelity: ")
-                .append(found.size()).append(" difference(s), phase ")
+                .append(differences).append(" difference(s), phase ")
                 .append(live.getPhaseHandler().getPhase())
                 .append(", turn ").append(live.getPhaseHandler().getTurn())
                 .append(", caller ").append(ScoreMismatchReport.caller());
-        for (String line : found.subList(0, Math.min(MAX_REPORTED, found.size()))) {
-            out.append("\n  ").append(line);
+        if (!dropped.isEmpty()) {
+            out.append(", no counterpart ").append(dropped);
         }
-        System.err.println(out);
+        return out.toString();
     }
 
     private static void compareById(String kind, String realArray, String copyArray, List<String> out) {

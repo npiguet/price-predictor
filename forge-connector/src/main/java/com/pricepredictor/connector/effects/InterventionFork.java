@@ -76,7 +76,7 @@ final class InterventionFork {
         Forks.ForkRun run = new Forks.ForkRun(
                 game, () -> budget.spendIntervention(realResolutionId), perspective);
         Boolean written = run.take((verified, snapshots) -> {
-            SpellAbility forked = Forks.findInFork(verified.copier(), ability);
+            SpellAbility forked = Forks.mappedAbility(verified.copier(), ability);
             Player actor = forked == null
                     ? null : Forks.mappedPlayer(verified.copier(), verified.perspective());
             if (forked == null || actor == null) {

@@ -148,4 +148,42 @@ class ForkFidelityTest {
         assertTrue(differences.contains("player " + Refs.of(you) + ".life: live=20 fork=13"),
                 differences.toString());
     }
+
+    // ── the copier's own report and mapper ──────────────────────────────
+
+    /**
+     * The fidelity line names the kinds of reference the copier could not
+     * map, with their counts, and only those: a faithful copy that dropped
+     * nothing reports nothing.
+     */
+    @Test
+    void theFidelityLineNamesWhatTheCopierDropped() {
+        Game live = board();
+        java.util.Map<GameCopier.NoCounterpart, Integer> tally =
+                new java.util.EnumMap<>(GameCopier.NoCounterpart.class);
+        tally.put(GameCopier.NoCounterpart.LINK, 2);
+        tally.put(GameCopier.NoCounterpart.COMMAND, 0);
+
+        String line = ForkFidelity.line(live, 0, tally);
+
+        assertTrue(line != null && line.endsWith(", no counterpart {LINK=2}"), line);
+        assertEquals(null, ForkFidelity.line(live, 0, java.util.Map.of()));
+    }
+
+    /** A live ability maps into the copy through the copier's own mapper, onto the copy's card. */
+    @Test
+    void aLiveAbilityMapsOntoItsCopysCard() {
+        Game live = board();
+        Card bolt = live.getPlayers().get(0).getCardsIn(forge.game.zone.ZoneType.Hand).get(0);
+        GameCopier copier = new GameCopier(live);
+        Game fork = copier.makeCopy();
+
+        forge.game.spellability.SpellAbility mapped =
+                Forks.mappedAbility(copier, bolt.getFirstSpellAbility());
+
+        assertTrue(mapped != null, "the Bolt's spell has a counterpart");
+        assertTrue(mapped.getHostCard().getGame() == fork, "on the copy's card");
+        assertEquals(bolt.getId(), mapped.getHostCard().getId());
+        assertEquals(bolt.getFirstSpellAbility().getDescription(), mapped.getDescription());
+    }
 }

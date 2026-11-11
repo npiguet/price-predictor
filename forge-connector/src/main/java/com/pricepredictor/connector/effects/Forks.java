@@ -47,7 +47,7 @@ final class Forks {
      * resolution or {@code probe}'s {@code Combat.dealAssignedDamage}: the
      * resolving-clause pointer is null for every segment of a fork outside
      * {@code AbilityUtils.resolve} -- the copy, the score check and
-     * {@link #findInFork}, {@code InterventionFork.forceResolution}'s mode,
+     * {@link #mappedAbility}, {@code InterventionFork.forceResolution}'s mode,
      * target and X draws, and {@code GameSimulator.resolveStack}'s own
      * state-based check and trigger pass. A null-ability outcome fired in any
      * of them would otherwise be indistinguishable from the live game's own
@@ -275,7 +275,7 @@ final class Forks {
         } catch (RuntimeException e) {
             return Optional.empty();
         }
-        ForkFidelity.report(live, fork);
+        ForkFidelity.report(live, fork, copier.getNoCounterpartTally());
         Player from = perspective.get();
         if (from == null || !scoreCheck(live, copier, fork, from)) {
             return Optional.empty();
@@ -356,29 +356,17 @@ final class Forks {
     // ── mapping live objects into the copy ──────────────────────────────
 
     /**
-     * The fork's copy of a live ability, or null when it cannot be matched.
-     *
-     * <p>The host card maps directly through the copier. The ability itself
-     * does not, so it is matched by description among the copy's — the same
-     * approach Forge's own simulator takes.
+     * The fork's copy of a live ability, or null when it cannot be matched:
+     * the copier's own structural mapper ({@code GameCopier.counterpartAbility},
+     * by the ability's place on its host), the one every fork maps abilities
+     * through.
      */
-    static SpellAbility findInFork(GameCopier copier, SpellAbility ability) {
-        Card host;
+    static SpellAbility mappedAbility(GameCopier copier, SpellAbility ability) {
         try {
-            host = copier.find(ability.getHostCard());
+            return copier.counterpartAbility(ability);
         } catch (RuntimeException e) {
             return null;
         }
-        if (host == null) {
-            return null;
-        }
-        String description = ability.getDescription();
-        for (SpellAbility candidate : host.getSpellAbilities()) {
-            if (candidate.getDescription().equals(description)) {
-                return candidate;
-            }
-        }
-        return null;
     }
 
     static Player mappedPlayer(GameCopier copier, Player player) {
