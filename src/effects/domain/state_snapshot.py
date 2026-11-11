@@ -680,7 +680,7 @@ class Link:
     """One gen-3 relation between two snapshot objects, written once in its
     family's forward direction (``relation_types.FAMILIES``); the reverse is
     the reader's to take. An end the snapshot carries no entity for is still
-    named."""
+    named; a card that has left the game is no end."""
 
     from_: LinkEnd
     to: LinkEnd
