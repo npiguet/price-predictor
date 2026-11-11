@@ -275,6 +275,11 @@ public final class BusBracketCollector extends BusEventReader {
             // the check goes on: the held half and the damage step's record
             // take its deaths until the loop's end signal.
             stackUsedInLoop = true;
+        } else if (brackets.finishing()) {
+            // A copy the resolution made while it froze the stack, pushed as
+            // Forge finishes that resolution (Chain of Acid's, a "may copy"):
+            // no player acted, and the state-based check still to come is
+            // the resolution's, whose deaths its held half takes.
         } else {
             // A cast, an activation or a trigger reaching the stack is the
             // next action: whatever the held resolution killed has died by
@@ -911,6 +916,7 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Subscribe
     public void onPriority(GameEventPlayerPriority event) {
+        brackets.finished();
         castsUnderWay.abandonAll();
         // A cast started before priority and never pushed was given up.
         pendingCast = null;

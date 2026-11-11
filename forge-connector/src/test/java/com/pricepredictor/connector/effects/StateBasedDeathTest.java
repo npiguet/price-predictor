@@ -679,6 +679,47 @@ class StateBasedDeathTest {
                 "the outcome follows the held half: " + records);
     }
 
+    // ── a copy parked while the stack was frozen ────────────────────────
+
+    /**
+     * Chain of Acid destroys the Glorious Anthem keeping a damaged Grizzly
+     * Bears alive, and the Anthem's controller copies it: the copy, made
+     * while the resolution froze the stack, is pushed as Forge finishes the
+     * resolution, before the state-based check. That push is not the next
+     * action, so the Bears' death still joins Chain of Acid's effect half.
+     */
+    @Test
+    void aCopyPushedAsTheResolutionFinishesKeepsItsDeathInTheHalf() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        TestBoard.inPlay(game, caster, "Mountain");
+        for (int i = 0; i < 4; i++) {
+            TestBoard.inPlay(game, opponent, "Forest");
+        }
+        Card anthem = TestBoard.inPlay(game, opponent, "Glorious Anthem");
+        Card bears = TestBoard.inPlay(game, opponent, "Grizzly Bears");
+        game.getAction().checkStaticAbilities();
+        bears.setDamage(2);
+        SpellAbility chain = targeting(
+                spellOf(TestBoard.inHand(game, caster, "Chain of Acid"), caster), anthem);
+
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, game, "to resolve a spell its target's controller copies", () -> {
+                    castAndResolve(game, chain);
+                    assertFalse(game.getStack().isEmpty(), "the Anthem's controller copied the spell");
+                    assertTrue(game.getCardsIn(ZoneType.Graveyard).stream()
+                            .anyMatch(c -> c.getId() == bears.getId()), "the Bears died");
+                    nextStep(game);
+                });
+
+        List<String> halves = effectHalves(records).stream()
+                .filter(r -> r.contains("chain_of_acid")).toList();
+        assertEquals(1, halves.size(), records.toString());
+        assertTrue(halves.get(0).contains(deathOf(bears)),
+                "the death joins the record: " + halves.get(0));
+    }
+
     // ── a modal resolution ──────────────────────────────────────────────
 
     /** Fiery Confluence in hand, with the modes at these Choices$ positions chosen. */

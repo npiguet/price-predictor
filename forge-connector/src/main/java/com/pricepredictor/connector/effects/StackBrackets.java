@@ -251,6 +251,22 @@ final class StackBrackets {
         open = null;
     }
 
+    /**
+     * Whether a resolution has been published and Forge may still be
+     * finishing it: from {@code GameEventSpellResolved} until the next
+     * priority, cast or resolution. What {@code MagicStack.finishResolving}
+     * pushes then, a copy the resolution made while it froze the stack, is
+     * not a player's next action.
+     */
+    boolean finishing() {
+        return finishing != null;
+    }
+
+    /** Priority has been given: the last resolution is over. */
+    void finished() {
+        finishing = null;
+    }
+
     /** The bracket of {@code abilityId} is written off, and closed if it was open. */
     void writeOff(int abilityId) {
         OpenResolution gone = remove(abilityId);
