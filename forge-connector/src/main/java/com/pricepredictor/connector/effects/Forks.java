@@ -278,7 +278,7 @@ final class Forks {
         // Before anything reads the fork: every builder over it, the audit's
         // and a played-forward recording's, reads the live game's notes too.
         FloatingEffects.ofFork(fork, live);
-        ForkFidelity.report(live, fork, copier.getNoCounterpartTally());
+        ForkFidelity.report(live, fork, copier.getNoCounterpartTally(), copier.getNoCounterpartExamples());
         Player from = perspective.get();
         if (from == null || !scoreCheck(live, copier, fork, from)) {
             return Optional.empty();

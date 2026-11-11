@@ -170,6 +170,23 @@ class ForkFidelityTest {
         assertEquals(null, ForkFidelity.line(live, 0, java.util.Map.of()));
     }
 
+    /** What the copier left out is listed after the differences, one line per example, kind first. */
+    @Test
+    void theReportListsExamplesOfWhatTheCopierLeftOut() {
+        java.util.Map<GameCopier.NoCounterpart, List<String>> examples =
+                new java.util.EnumMap<>(GameCopier.NoCounterpart.class);
+        examples.put(GameCopier.NoCounterpart.COMMAND, List.of("PumpEffect$1: no counterpart for Token (7)"));
+        examples.put(GameCopier.NoCounterpart.ACTIVATION, List.of("Bike (3) crew", "Bike (3) saddle"));
+        examples.put(GameCopier.NoCounterpart.LINK, List.of());
+
+        assertEquals(List.of(
+                "no counterpart ACTIVATION: Bike (3) crew",
+                "no counterpart ACTIVATION: Bike (3) saddle",
+                "no counterpart COMMAND: PumpEffect$1: no counterpart for Token (7)"),
+                ForkFidelity.exampleLines(examples));
+        assertEquals(List.of(), ForkFidelity.exampleLines(null));
+    }
+
     /** A live ability maps into the copy through the copier's own mapper, onto the copy's card. */
     @Test
     void aLiveAbilityMapsOntoItsCopysCard() {

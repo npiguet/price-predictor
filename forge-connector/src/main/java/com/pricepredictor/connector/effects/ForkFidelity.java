@@ -59,8 +59,12 @@ final class ForkFidelity {
      * @param noCounterpart the copier's per-copy tally of references it could
      *                      not map, by kind ({@code GameCopier.getNoCounterpartTally()}),
      *                      only the kinds with drops present
+     * @param examples      a few of what the copier left out, by kind
+     *                      ({@code GameCopier.getNoCounterpartExamples()}),
+     *                      printed after the differences
      */
-    static void report(Game live, Game fork, Map<?, Integer> noCounterpart) {
+    static void report(Game live, Game fork, Map<?, Integer> noCounterpart,
+                       Map<?, ? extends List<String>> examples) {
         List<String> found;
         try {
             found = differences(live, fork);
@@ -76,7 +80,33 @@ final class ForkFidelity {
         for (String difference : found.subList(0, Math.min(MAX_REPORTED, found.size()))) {
             out.append("\n  ").append(difference);
         }
+        for (String example : exampleLines(examples)) {
+            out.append("\n  ").append(example);
+        }
         System.err.println(out);
+    }
+
+    /**
+     * One line per example of what the copier left out, kinds in name order,
+     * each shortened: {@code no counterpart COMMAND: forge...PumpEffect$1: ...}.
+     */
+    static List<String> exampleLines(Map<?, ? extends List<String>> examples) {
+        List<String> lines = new ArrayList<>();
+        if (examples == null) {
+            return lines;
+        }
+        Map<String, List<String>> byKind = new TreeMap<>();
+        examples.forEach((kind, list) -> {
+            if (list != null) {
+                byKind.put(String.valueOf(kind), list);
+            }
+        });
+        byKind.forEach((kind, list) -> {
+            for (String example : list) {
+                lines.add("no counterpart " + kind + ": " + shorten(example));
+            }
+        });
+        return lines;
     }
 
     /**
