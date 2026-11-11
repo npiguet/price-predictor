@@ -32,6 +32,7 @@ from effects.domain.records import (
     PlayabilitySubkind,
     RecordKind,
     ResolutionPayload,
+    TriggerPayload,
     UnresolvedReason,
 )
 
@@ -92,6 +93,24 @@ def _is_deferred_mana_record(record: EffectRecord) -> bool:
     )
 
 
+def _is_deferred_trigger_record(record: EffectRecord) -> bool:
+    """A fired trigger record the per-line reservoir held back until the game
+    ended (connector C7). Its snapshot is from when the trigger fired; an
+    unfired one is written as it is drawn, so a jump on it is still a game
+    boundary."""
+    payload = record.payload
+    return (
+        record.kind is RecordKind.TRIGGER
+        and isinstance(payload, TriggerPayload)
+        and payload.fired
+    )
+
+
+def _is_deferred(record: EffectRecord) -> bool:
+    """A record a reservoir writes at the game's end with an earlier board."""
+    return _is_deferred_mana_record(record) or _is_deferred_trigger_record(record)
+
+
 #: The events a mana record holds: what its cost tapped, then the mana.
 _MANA_RECORD_EVENTS = frozenset({EventType.MANA_PRODUCED, EventType.TAPPED})
 
@@ -146,7 +165,7 @@ class GameBoundaries:
     def add(self, record: EffectRecord) -> None:
         game = self.games[record.game_id]
         game.names.update(entity.name for entity in record.state.entities)
-        if _is_deferred_mana_record(record):
+        if _is_deferred(record):
             # Neither a jump nor a raise of the high-water mark later records
             # are measured against.
             self.mana_flush_exempt += 1
@@ -181,7 +200,7 @@ class GameBoundaries:
                 f"turn jump, {len(crowded)} exceed "
                 f"{limits.max_names_per_game} distinct card names "
                 f"(widest {widest}); {self.mana_flush_exempt} records exempted "
-                "as deferred mana-reservoir flushes"
+                "as deferred reservoir flushes"
             ),
             detail=tuple(detail),
         )

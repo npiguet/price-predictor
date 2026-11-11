@@ -268,6 +268,15 @@ def _healthy() -> list[EffectRecord]:
     return records
 
 
+def _fired_triggers(records: list[EffectRecord]) -> int:
+    return sum(
+        1 for r in records
+        if r.kind is RecordKind.TRIGGER
+        and isinstance(r.payload, TriggerPayload)
+        and r.payload.fired
+    )
+
+
 def _named(findings: list[Finding], fragment: str) -> Finding:
     return next(f for f in findings if fragment in f.name)
 
@@ -882,12 +891,14 @@ class TestTheManaReservoirFlushIsNotAGameBoundary:
         """Silently dropping records from a check is how a check starts lying."""
         records = _healthy() + [_mana(f"run.0-L1.{i}", turn=1) for i in (901, 902)]
         finding = _named(validate_corpus(records), "one game")
-        assert "2 records exempted as deferred mana-reservoir flushes" in (
+        exempted = _fired_triggers(_healthy()) + 2
+        assert f"{exempted} records exempted as deferred reservoir flushes" in (
             finding.measured
         )
 
-    def test_a_healthy_window_reports_zero_exempted(self):
-        assert "0 records exempted" in _named(
+    def test_a_healthy_window_exempts_only_its_fired_triggers(self):
+        """Every fired trigger is written at the game's end (connector C7)."""
+        assert f"{_fired_triggers(_healthy())} records exempted" in _named(
             validate_corpus(_healthy()), "one game"
         ).measured
 
@@ -925,6 +936,29 @@ class TestTheManaReservoirFlushIsNotAGameBoundary:
                     Event(type=EventType.LIFE_CHANGE, subjects=("P0",)),
                 )),
             ),
+        ]
+        assert not _named(validate_corpus(records), "one game").ok
+
+    def test_a_flushed_fired_trigger_does_not_read_as_a_second_game(self):
+        """Fired triggers are reservoir-sampled per line too (connector C7) and
+        written when the game ends, with the board of the turn they fired."""
+        records = _healthy() + [
+            _resolution("run.0-L1.900", state=_snapshot(turn=9)),
+            _trigger("run.0-L1.901", state=_snapshot(turn=2)),
+        ]
+        finding = _named(validate_corpus(records), "one game")
+        assert finding.ok, finding.measured
+        assert (
+            f"{_fired_triggers(_healthy()) + 1} records exempted as deferred reservoir flushes"
+            in finding.measured
+        )
+
+    def test_an_unfired_trigger_is_never_exempt(self):
+        """Negatives are written as they are drawn, so a jump on one is a game
+        boundary."""
+        records = _healthy() + [
+            _resolution("run.0-L1.900", state=_snapshot(turn=9)),
+            _trigger("run.0-L1.901", fired=False, state=_snapshot(turn=2)),
         ]
         assert not _named(validate_corpus(records), "one game").ok
 

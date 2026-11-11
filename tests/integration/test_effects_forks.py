@@ -175,8 +175,12 @@ def test_an_intervention_forces_something_observation_misses(
 
 
 def _only_mana(record: EffectRecord) -> bool:
+    """A mana record: a ``mana_produced``, and otherwise only the ``tapped``
+    events of what its cost tapped (FR-042c)."""
     events = getattr(record.payload, "events", ())
-    return bool(events) and all(event.type is EventType.MANA_PRODUCED for event in events)
+    return any(event.type is EventType.MANA_PRODUCED for event in events) and all(
+        event.type in (EventType.MANA_PRODUCED, EventType.TAPPED) for event in events
+    )
 
 
 _PROBED = "first_strike,trample,deathtouch"
