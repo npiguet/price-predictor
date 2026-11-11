@@ -42,7 +42,6 @@ public final class PatchHooks {
     static final String CARD = "forge.game.card.Card";
     static final String COMBAT = "forge.game.combat.Combat";
     static final String PLAYER_CONTROLLER_AI = "forge.ai.PlayerControllerAi";
-    static final String EFFECT_RECORD_HOOK = "forge.game.ability.EffectRecordHook";
     static final String PHASE_HANDLER = "forge.game.phase.PhaseHandler";
     static final String MAGIC_STACK = "forge.game.zone.MagicStack";
     static final String COST_PAYMENT = "forge.game.cost.CostPayment";
@@ -175,6 +174,9 @@ public final class PatchHooks {
      * fewer arguments than its {@link Callback#arity}, answers null and does
      * nothing, the way an absent hook would: a handler that threw instead
      * would throw out of the engine's own call.
+     *
+     * <p>What the body throws is counted against the hook
+     * ({@link HookFailures}) and goes on to Forge, which contains it.
      */
     record Listener(Hook hook, ListenerBody body) implements InvocationHandler {
 
@@ -183,7 +185,12 @@ public final class PatchHooks {
             for (Callback callback : hook.callbacks()) {
                 if (callback.methodName().equals(invoked.getName())) {
                     if (args != null && args.length >= callback.arity()) {
-                        body.on(callback, new Args(args));
+                        try {
+                            body.on(callback, new Args(args));
+                        } catch (RuntimeException failure) {
+                            HookFailures.count(hook, failure);
+                            throw failure;
+                        }
                     }
                     return null;
                 }
@@ -378,18 +385,6 @@ public final class PatchHooks {
             "a continuous contribution's colours");
     static final Hook NAME_CHANGE_NAME = new Hook(CARD + "$CardChangedName", "newName",
             "a continuous contribution's name");
-
-    /**
-     * The hooks whose listener has thrown in this JVM, which the engine has
-     * since been ignoring: each slot reports its first failure once on
-     * stderr and carries on, so a channel can go quiet mid-run. Empty on an
-     * unpatched checkout.
-     */
-    @SuppressWarnings("unchecked")
-    public static List<String> silencedHooks() {
-        Object failed = readStatic(EFFECT_RECORD_HOOK, "failedHooks");
-        return failed instanceof List<?> names ? (List<String>) names : List.of();
-    }
 
     /** The required hooks this checkout does not have. */
     public static List<Hook> missing() {

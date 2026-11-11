@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -190,5 +191,28 @@ class PatchHooksTest {
             }
         }
         return "";
+    }
+
+    /**
+     * A listener whose body throws is counted, every call of it, against its
+     * hook (C11): Forge contains the failure and keeps calling the listener,
+     * so each failing call loses its records and only the count says how
+     * many. The failure still reaches Forge, which contains it.
+     */
+    @Test
+    void eachCallOfAListenerThatThrowsIsCountedAgainstItsHook() throws Throwable {
+        PatchHooks.Hook hook = PatchHooks.PRIORITY_SETTLED_LISTENER;
+        long before = HookFailures.counts().getOrDefault(hook.toString(), 0L);
+        PatchHooks.Listener failing = hook.listener((callback, args) -> {
+            throw new IllegalStateException("a card this listener cannot read");
+        });
+        Method settled = HookShapes.method(HookShapes.PrioritySettled.class, "onPrioritySettled");
+
+        for (int call = 0; call < 3; call++) {
+            assertThrows(IllegalStateException.class,
+                    () -> failing.invoke(null, settled, new Object[]{null, null}));
+        }
+
+        assertEquals(before + 3, HookFailures.counts().get(hook.toString()));
     }
 }

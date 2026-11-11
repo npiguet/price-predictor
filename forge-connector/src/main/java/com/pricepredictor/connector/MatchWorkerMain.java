@@ -3,12 +3,14 @@ package com.pricepredictor.connector;
 import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.AttributionMode;
 import com.pricepredictor.connector.effects.GameRecording;
+import com.pricepredictor.connector.effects.HookFailures;
 import com.pricepredictor.connector.effects.PatchHooks;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import com.pricepredictor.connector.effects.directed.DirectedRules;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -230,7 +232,7 @@ public class MatchWorkerMain {
         CollectionCaps caps = CollectionCaps.fromSystemProperties();
         RecordShardWriter effectRecords = openEffectRecords(config, caps);
 
-        SilencedHookReport silencedHookReport = new SilencedHookReport();
+        HookFailureReport hookFailureReport = new HookFailureReport();
         MatchGenerator generator = MatchGenerator.builder(eligibleSets, config.runId())
                 .gamePlayer(new GamePlayer(config.bestOf(), effectRecords, caps))
                 .sideA(sideA)
@@ -242,7 +244,7 @@ public class MatchWorkerMain {
         WorkerLoop.runUntilBroken(
                 () -> {
                     recordMatch(generator.generateMatch(), sealedCorpus, progress);
-                    silencedHookReport.afterMatch();
+                    hookFailureReport.afterMatch();
                     return WorkerLoop.Outcome.COMPLETED;
                 },
                 new WorkerLoop.Progress(
@@ -312,23 +314,23 @@ public class MatchWorkerMain {
     }
 
     /**
-     * Names, once per match boundary, each effect-record hook that has gone
-     * quiet since the last one.
+     * Prints, at a match boundary, each effect-record hook's count of listener
+     * calls that threw, whenever the counts changed since the last report.
      *
-     * <p>The engine contains a listener that throws, reports it once on
-     * stderr and stops listening to it, so a channel can empty mid-run while
-     * the worker goes on playing. That one stderr line scrolls away; this
-     * line repeats the channel's name where the match log is read.
+     * <p>The engine contains a listener that throws, reports the slot's first
+     * failure once on stderr and goes on calling it, so a hook that fails now
+     * and then loses each failing call's records while the channel stays
+     * open. The counts say how many calls were lost ({@link HookFailures}).
      */
-    static final class SilencedHookReport {
-        private int reported;
+    static final class HookFailureReport {
+        private Map<String, Long> reported = Map.of();
 
         void afterMatch() {
-            List<String> silenced = PatchHooks.silencedHooks();
-            if (silenced.size() > reported) {
-                System.err.println("effect-record hooks silenced after a listener failure, "
-                        + "their channels now empty: " + silenced);
-                reported = silenced.size();
+            Map<String, Long> counts = HookFailures.counts();
+            if (!counts.equals(reported)) {
+                System.err.println("effect-record hook failures so far, listener calls that threw"
+                        + " and lost their records: " + counts);
+                reported = counts;
             }
         }
     }

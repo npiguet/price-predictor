@@ -222,6 +222,38 @@ class PriorityCandidatesTest {
         assertEquals(Map.of(), refs.get("choices"), decision);
     }
 
+    // ── a bestow cast read through a graveyard static (C11) ─────────────
+
+    /**
+     * A bestow creature milled this turn, under Coram, the Undertaker, which
+     * lets its controller cast it from the graveyard: its bestow cast is read
+     * on a last-known copy of the card, which has no zone, and Coram's "put
+     * there from libraries this turn" asked that copy's zone. The priority
+     * stop enumerates the casts without failing, as the AI's own enumeration
+     * must.
+     */
+    @Test
+    void aBestowCastUnderAGraveyardEntryStaticIsEnumerated() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        TestBoard.inPlay(game, a, "Coram, the Undertaker");
+        for (int i = 0; i < 4; i++) {
+            TestBoard.inPlay(game, a, "Forest");
+        }
+        Card satyr = game.getAction().moveToLibrary(TestBoard.card(game, a, "Boon Satyr"), null, null);
+        satyr = game.getAction().moveToGraveyard(satyr, null);
+        game.getAction().checkStaticAbilities();
+        Card milled = satyr;
+
+        List<String> records = decisions(ShardRun.records(tempDir, game, EVERY_CANDIDATE,
+                (bracket, collectors) -> settle(collectors, game, a)));
+
+        assertTrue(records.stream().filter(r -> Refs.of(milled).equals(RecordLines.asMap(
+                        RecordLines.asMap(RecordLines.parse(r).get("state")).get("refs")).get("source")))
+                        .count() >= 2,
+                "the Satyr's cast and its bestow cast were both recorded: " + records);
+    }
+
     // ── land plays (FR-033a) ────────────────────────────────────────────
 
     /** The decision record whose snapshot's source is {@code card}. */
