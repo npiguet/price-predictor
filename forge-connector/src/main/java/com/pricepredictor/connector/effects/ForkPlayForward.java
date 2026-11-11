@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects;
 import forge.game.Game;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseHandler;
+import forge.game.phase.PhaseType;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -18,8 +19,8 @@ import java.util.function.Consumer;
  * on: both seats choose afresh, as their live controllers would, and what
  * the turn does with the changed fact is the record. So the fork is played
  * the way {@code PhaseHandler.mainGameLoop} plays a game, one
- * {@code mainLoopStep} at a time, until the turn number changes or the game
- * ends.
+ * {@code mainLoopStep} at a time, until its cleanup step leaves nothing to
+ * resolve or the game ends.
  *
  * <p>Recorded by collectors of its own. The fork's bus is its own, so a
  * bracket over the fork hears its events; the engine hooks are JVM statics
@@ -105,19 +106,34 @@ final class ForkPlayForward {
         return new Played(held.size(), fork.isGameOver());
     }
 
-    /** Begin the fork's phase, then step until the turn number changes or the game ends. */
+    /**
+     * Begin the fork's phase, then step until the turn would end or the game
+     * ends.
+     *
+     * <p>The turn ends in the step after a cleanup that leaves the stack
+     * empty, and that one {@code mainLoopStep} also begins the next turn's
+     * untap step: its phase event and its turn-based actions (F10). So the
+     * fork stops before it, in the cleanup step, its own actions done.
+     */
     private static void playToTheEndOfTheTurn(Game fork) {
         PhaseHandler phases = fork.getPhaseHandler();
         int turn = phases.getTurn();
         PhaseStart.begin(phases);
         int steps = 0;
-        while (!fork.isGameOver() && phases.getTurn() == turn) {
+        while (!fork.isGameOver() && phases.getTurn() == turn && !turnWouldEnd(fork)) {
             if (++steps > MAX_STEPS) {
                 throw new IllegalStateException(
                         "fork took " + MAX_STEPS + " steps without ending turn " + turn);
             }
             phases.mainLoopStep();
         }
+    }
+
+    /** Whether the next main-loop step ends the turn: a cleanup step with nothing left to resolve. */
+    static boolean turnWouldEnd(Game fork) {
+        return fork.getPhaseHandler().is(PhaseType.CLEANUP)
+                && fork.getStack().isEmpty()
+                && !fork.getStack().hasSimultaneousStackEntries();
     }
 
     /**

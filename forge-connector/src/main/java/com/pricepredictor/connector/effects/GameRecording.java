@@ -262,6 +262,12 @@ public final class GameRecording implements AutoCloseable {
     @Override
     public void close() {
         try {
+            if (fork) {
+                // A fork played on stops where no event closes its last
+                // records: the turn's end, or the game's, which a fork never
+                // publishes.
+                bracket.stopPlaying();
+            }
             patched.close();
         } finally {
             appendDroppedEvents();

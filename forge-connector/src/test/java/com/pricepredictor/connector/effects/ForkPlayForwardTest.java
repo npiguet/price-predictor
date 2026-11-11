@@ -266,6 +266,62 @@ class ForkPlayForwardTest {
         assertFalse(liveRecords(all).isEmpty(), "the live game recorded on");
     }
 
+    /**
+     * A fork whose attack wins the game writes what the live game would:
+     * its lethal combat record, and the game's outcome (C1). Forge publishes
+     * the game's end only from a match, which a fork has none of.
+     */
+    @Test
+    void aForkThatEndsTheGameWritesItsLethalCombatAndTheOutcome() throws Throwable {
+        Game game = board();
+        game.getPlayers().get(1).setLife(1, null);
+        Forker[] forker = new Forker[1];
+
+        List<String> forked = forkRecords(
+                forkAt(game, PhaseType.COMBAT_DECLARE_ATTACKERS, DIRECTED, forker));
+
+        assertNotNull(forker[0].played, "the fork was played out");
+        assertTrue(forker[0].played.gameOver(), "the fork's attack won the game");
+        assertTrue(forked.stream().anyMatch(record -> "combat".equals(parse(record).get("kind"))),
+                "the lethal damage step wrote its combat record: " + forked);
+        assertEquals(1, RecordLines.withEventOfType(forked, "player_won").size(),
+                "the outcome reached the fork's records: " + forked);
+    }
+
+    /**
+     * A fork played on from the second main phase stops as its turn ends
+     * (F10): nothing of the next turn is recorded, neither its turn-based
+     * actions nor a record read at its first step's boundary. The Bears'
+     * pump wears off in the cleanup step, so a Glorious Anthem's board
+     * differs at the next turn's untap boundary and would be recorded there.
+     */
+    @Test
+    void aForkPlayedFromTheSecondMainPhaseStopsAtTheEndOfItsTurn() throws Throwable {
+        Game game = board();
+        sneakAttack(game);
+        Player active = game.getPlayers().get(0);
+        TestBoard.inPlay(game, active, "Glorious Anthem");
+        Card growth = TestBoard.inHand(game, active, "Giant Growth");
+        SpellAbility pump = TestBoard.spellOf(game.getAction().moveToStack(growth, null), active);
+        pump.resetTargets();
+        pump.getTargets().add(onBattlefield(game, "Grizzly Bears"));
+        TestBoard.castAndResolve(game, pump);
+        Forker[] forker = new Forker[1];
+
+        List<String> forked = forkRecords(forkAt(game, PhaseType.MAIN2, DIRECTED, forker));
+
+        assertNotNull(forker[0].played, "the fork was played out");
+        assertFalse(forked.isEmpty(), "the fork recorded its turn");
+        for (String record : forked) {
+            Object subkind = parse(record).get("subkind");
+            assertFalse(subkind != null && List.of("untap", "phasing", "day_night").contains(subkind),
+                    record);
+            Object turn = RecordLines.asMap(RecordLines.asMap(parse(record).get("state")).get("global"))
+                    .get("turn");
+            assertEquals(3L, turn, "a record of the next turn: " + record);
+        }
+    }
+
     // ── the seats ───────────────────────────────────────────────────────
 
     /**

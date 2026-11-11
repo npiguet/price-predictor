@@ -1071,6 +1071,24 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
+     * A fork played on has stopped: at its turn's end, or at the game's end,
+     * which Forge publishes only from a match and a fork has none (C1).
+     *
+     * <p>At the game's end it writes what the game's end writes: the held
+     * half, the lethal damage step's record and the outcome. At the turn's
+     * end, the last step's turn-based actions and the held half, which no
+     * next step or action will close.
+     */
+    void stopPlaying() {
+        if (game.isGameOver()) {
+            finishGame(idsOnStack());
+            return;
+        }
+        turnActions.close();
+        onNextAction();
+    }
+
+    /**
      * The half of {@link #onGameFinished} that has already read the stack.
      *
      * @param onStack the ability ids the stack still holds
