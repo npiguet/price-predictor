@@ -115,4 +115,26 @@ class GameRecordingTest {
                 .findFirst()
                 .orElseThrow();
     }
+
+    /**
+     * A phase boundary's collection steps are guarded each on its own (C6): a
+     * step that throws costs its own records at that boundary, and every
+     * step after it still runs.
+     */
+    @Test
+    void aBoundaryStepThatThrowsLeavesTheStepsAfterItRunning() {
+        java.util.List<String> ran = new java.util.ArrayList<>();
+
+        GameRecording.eachGuarded(
+                new GameRecording.BoundaryStep("continuous", () -> {
+                    ran.add("continuous");
+                    throw new IllegalStateException("a static this board cannot render");
+                }),
+                new GameRecording.BoundaryStep("interventions", () -> ran.add("interventions")),
+                new GameRecording.BoundaryStep("probes", () -> ran.add("probes")),
+                new GameRecording.BoundaryStep("directed forks", () -> ran.add("directed forks")));
+
+        org.junit.jupiter.api.Assertions.assertEquals(
+                java.util.List.of("continuous", "interventions", "probes", "directed forks"), ran);
+    }
 }

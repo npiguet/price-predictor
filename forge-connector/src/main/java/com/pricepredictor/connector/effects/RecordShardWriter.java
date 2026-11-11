@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.GZIPOutputStream;
 
 /**
@@ -66,8 +67,8 @@ public final class RecordShardWriter implements AutoCloseable {
     private final StringBuilder block = new StringBuilder();
     private int blockRecords;
     private boolean closed;
-    private long recordCounter;
-    private long gameCounter;
+    private final AtomicLong recordCounter = new AtomicLong();
+    private final AtomicLong gameCounter = new AtomicLong();
 
     public RecordShardWriter(Path directory, String runId, int worker, String lifetime) {
         this.runId = runId;
@@ -94,12 +95,12 @@ public final class RecordShardWriter implements AutoCloseable {
 
     /** Start a new game; returns its {@code game_id}. */
     public String nextGameId() {
-        return runId + "." + shard + "." + gameCounter++;
+        return runId + "." + shard + "." + gameCounter.getAndIncrement();
     }
 
     /** The next {@code record_id}, unique across this run's shards. */
     public String nextRecordId() {
-        return runId + "." + shard + "." + recordCounter++;
+        return runId + "." + shard + "." + recordCounter.getAndIncrement();
     }
 
     public String runId() {

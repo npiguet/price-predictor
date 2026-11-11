@@ -8,7 +8,9 @@ import forge.game.event.GameEventTurnPhase;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -315,17 +317,51 @@ public final class GameRecording implements AutoCloseable {
         private PhaseBridge() {
         }
 
+        /**
+         * Each step of the boundary's collection, guarded on its own: a step
+         * that throws costs that step's records at this boundary and not the
+         * steps after it (C6).
+         */
         @Subscribe
         public void onPhase(GameEventTurnPhase event) {
-            patched.continuous().collect();
-            interventions.ifPresent(scheduler -> scheduler.collect(event.phase()));
-            // Before the turn-based action that deals the damage: the phase
-            // event fires ahead of it, which is the only moment a probe can
-            // fork from a board where nothing has been dealt yet.
-            probes.ifPresent(ProbeScheduler::collect);
-            // Last: a directed fork plays the turn on, and the boundary's
-            // other collection reads the live board before any fork is taken.
-            directed.ifPresent(scheduler -> scheduler.collect(event.phase()));
+            eachGuarded(
+                    new BoundaryStep("continuous", () -> patched.continuous().collect()),
+                    new BoundaryStep("interventions", () -> interventions.ifPresent(
+                            scheduler -> scheduler.collect(event.phase()))),
+                    // Before the turn-based action that deals the damage: the
+                    // phase event fires ahead of it, which is the only moment
+                    // a probe can fork from a board where nothing has been
+                    // dealt yet.
+                    new BoundaryStep("probes", () -> probes.ifPresent(ProbeScheduler::collect)),
+                    // Last: a directed fork plays the turn on, and the
+                    // boundary's other collection reads the live board before
+                    // any fork is taken.
+                    new BoundaryStep("directed forks", () -> directed.ifPresent(
+                            scheduler -> scheduler.collect(event.phase()))));
+        }
+    }
+
+    /** One named step of a phase boundary's collection. */
+    record BoundaryStep(String name, Runnable body) {
+    }
+
+    /** Each step's first failure, reported once per JVM. */
+    private static final Map<String, OnceWarning> BOUNDARY_STEP_FAILED = new ConcurrentHashMap<>();
+
+    /**
+     * Run every step in order, each whatever the ones before it threw; a
+     * step's first failure is printed once.
+     */
+    static void eachGuarded(BoundaryStep... steps) {
+        for (BoundaryStep step : steps) {
+            try {
+                step.body().run();
+            } catch (RuntimeException failure) {
+                BOUNDARY_STEP_FAILED.computeIfAbsent(step.name(), name -> new OnceWarning())
+                        .raise(() -> "Effect records: the phase boundary's " + step.name()
+                                + " step threw, and lost its records at that boundary"
+                                + " (later failures of this step are not printed): " + failure);
+            }
         }
     }
 }

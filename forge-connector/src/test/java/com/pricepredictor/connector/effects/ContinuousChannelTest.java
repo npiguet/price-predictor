@@ -1,7 +1,10 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import forge.game.ability.AbilityFactory;
+import forge.game.card.Card;
 import forge.game.phase.PhaseType;
+import forge.game.spellability.SpellAbility;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -82,6 +85,39 @@ class ContinuousChannelTest {
         RecordDedup dedup = new RecordDedup();
         assertTrue(dedup.allowDistinct(anthem(0, "{+1/+1}", "{board}")));
         assertTrue(dedup.allowDistinct(anthem(1, "{+1/+1}", "{board}")));
+    }
+
+    /**
+     * A static an Animate grants is found at the first boundary after it is
+     * granted, though an earlier boundary looked its card over without it
+     * (C12): the static lookup caches what it found by id, and must not have
+     * cached the card's want of it.
+     */
+    @Test
+    void aStaticAnAnimateGrantsIsFoundAtTheNextBoundary() throws Throwable {
+        Assumptions.assumeTrue(ContinuousChannel.CAN_SUPPRESS,
+                "../forge cannot remove one static's contributions");
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card host = board.battlefield("Ornithopter", board.you);
+        board.battlefield("Grizzly Bears", board.you);
+        host.setSVar("Anthem", "Mode$ Continuous | Affected$ Creature.YouCtrl+Other"
+                + " | AddPower$ 1 | Description$ Other creatures you control get +1/+0.");
+        SpellAbility animate = AbilityFactory.getAbility(
+                "AB$ Animate | Cost$ 0 | Defined$ Self | staticAbilities$ Anthem"
+                        + " | Duration$ Permanent", host);
+        animate.setActivatingPlayer(board.you);
+        board.game.getAction().checkStaticAbilities();
+
+        List<String> records = ShardRun.records(tempDir, board.game, (bracket, collectors) -> {
+            collectors.continuous().collect();
+            animate.resolve();
+            board.game.getAction().checkStaticAbilities();
+            collectors.continuous().collect();
+        });
+
+        assertEquals(1, records.stream()
+                .filter(r -> "continuous".equals(RecordLines.parse(r).get("kind"))).count(),
+                String.valueOf(records));
     }
 
     /** A continuous record of the {@code index}-th static line of one anthem card. */
