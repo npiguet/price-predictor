@@ -551,6 +551,9 @@ keyed as `attributed_to` spells the segment; `[]` where none resolved.
 - The random seat does not repeat a free activation whose resolution changes nothing.
 - Under `--count-dropped-events`, the collector counts each event that arrives while no
   record is open, by event type and engine phase.
+- A game writes at most `--max-records-per-game` records. Past the cap the collector writes
+  no further record of that game, counts the records it withheld, and prints one line naming
+  the game, the turn and the acting card of the most frequent withheld record.
 - The first gen-3 pilot runs with the dropped-event count on, and reports the number of
   `mana_produced` events whose `mana_by_color` map is empty.
 
@@ -587,7 +590,7 @@ its events and payload are what the moment changed. No board after the moment is
 |---|---|---|---|
 | cost half of a spell | casting | before the card moves to the stack (601.2a): the card where it was cast from, its costs unpaid | the card's `zone_change` to the stack; the costs paid |
 | cost half of an activated ability | activation | before its costs are paid | the costs paid |
-| effect half | resolution | when the resolution starts, before its first clause; a modal resolution's half, before its mode's first clause | the resolution's events; for a spell, the card's own move off the stack last: to the graveyard, or onto the battlefield for a permanent spell |
+| effect half | resolution | when the resolution starts, before its first clause; a modal resolution's half, before its mode's first clause | the resolution's events; for a spell, the card's own move off the stack after them and before the state-based check's deaths: to the graveyard, or onto the battlefield for a permanent spell |
 | mana record | a mana ability's activation | before its costs are paid and its mana is added | a `tapped` event for each permanent its cost tapped, then `mana_produced` |
 
 - The cost half carries no outcome. It is written when its costs are paid.
@@ -595,7 +598,8 @@ its events and payload are what the moment changed. No board after the moment is
   declined. A fizzled or declined resolution writes an effect half with no events.
 - A countered stack item writes no effect half. The countering ability's effect half holds the
   countered spell's events: `spell_countered` and its card's move off the stack.
-- A triggered ability has no cost half. Its effect half follows the effect-half row.
+- A triggered ability and a copy of a spell or ability have no cost half. Their effect halves
+  follow the effect-half row.
 - A record's stat changes are measured from its own snapshot, at the moment the table gives.
 - A permanent that enters the battlefield tapped gets a `tapped` event after its `zone_change`, in
   the record that moved it.
@@ -629,6 +633,8 @@ Both rounds
 - A variant is named `<card> Variant <h>`, `h` the first eight hex digits of the SHA-256 of
   its perturbed script. A variant whose file already exists is the same script and is
   reused, so a repeated or resumed round never rewrites a variant under its name.
+- A numeric perturbation never sets a parameter to 0, because a zero amount can turn a free
+  ability into one that changes nothing, which the Forge AI activates again without end.
 - Every `.txt` file in the variant tree is a variant script, because Forge loads every
   `.txt` file staged into its custom-cards directory as a card. The list of variants Forge
   loaded is written under another extension.
@@ -1258,6 +1264,7 @@ python -m sealed match-outcomes
     [--zone-candidate-rate R]            default 0.0001; share of zone candidates written, both stages
     [--plain-candidate-rate R]           default 0.001; share of plain candidates written, both stages
     [--count-dropped-events]             off; counts events arriving with no open record
+    [--max-records-per-game N]           default 5000; records a game may write (§ 8.12)
     [--directed-fork-rules LIST]         default none; rule ids whose directed forks run
     [--directed-forks-per-game N]        default 2
     [--directed-fork-probability P]      default 0.25, in (0, 1]; chance a matching boundary forks
@@ -1283,7 +1290,7 @@ python -m effects train-effect-model
     [--patience N]                       default 5; epochs without a new best control score
 ```
 
-`collect-coverage` and `collect-variants` take `--count-dropped-events`,
+`collect-coverage` and `collect-variants` take `--count-dropped-events`, `--max-records-per-game`,
 `--playability-rate`, `--zone-candidate-rate` and `--plain-candidate-rate` as
 `match-outcomes` does, the held-out coverage round included (§ 12.4).
 

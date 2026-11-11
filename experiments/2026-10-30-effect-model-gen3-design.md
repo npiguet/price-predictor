@@ -2294,6 +2294,16 @@ Gaps that turn on a choice, a timing or the turn structure stay with directed fo
 and interventions. In a steered game the interventions force the aimed variants' lines first, so a
 variant the Forge AI never plays still resolves.
 
+A game now writes at most a fixed number of records, and the Forge AI's own loops are left in place.
+Gen-2's variant run held a game of more than fifty thousand records of one Chain of Smog variant. With
+both hands empty, the two Forge AIs copied the spell back to each other until the worker was
+recycled. The printed card loops the same way in stock Forge, so the loop is the Forge AI's piloting
+and not a collection defect. Other runaway variants had a free ability perturbed into one that
+changes nothing, such as Sage of Hours removing zero counters, and the Forge AI activated it again
+without end. Those perturbations are no longer generated: a numeric parameter is never set to zero.
+The cap is several times the largest game in gen-3's first records, so it only stops a game that
+repeats itself.
+
 ### The deviance floor is 0.04 nats, where gen-2's output fields turn noisy
 
 **Below a constant-prediction loss of about 0.04 nats, nearly every output field's explained

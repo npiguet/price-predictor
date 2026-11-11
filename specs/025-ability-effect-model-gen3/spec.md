@@ -870,6 +870,10 @@ and that the reporting half never enters the control score.
 - **FR-041**: Under `--count-dropped-events` (`match-outcomes`, `collect-coverage`,
   `collect-variants`; default off), the collector MUST count each event that arrives while no
   record is open, by event type and engine phase, and print the counts when the run ends.
+- **FR-041a**: Every collecting command MUST take `--max-records-per-game N` (default 5000; root
+  § 8.12): past the cap the collector writes no further record of that game, counts the records
+  withheld, and prints one line naming the game, the turn and the acting card of the most frequent
+  withheld record. The cap rides a cap property shared by both CLIs and pinned like the others.
 - **FR-042**: `validate-corpus` and `field-coverage` MUST cover every new field of root § 8.13,
   and a field's coverage MUST be checked before any figure computed from that field is published.
 
@@ -884,7 +888,8 @@ and that the reporting half never enters the control score.
   clause resolves (a modal half: before its mode's first clause), through a Forge hook at the start
   of `MagicStack.resolveStack`'s resolution. It MUST carry `outcome` (`resolved`, `fizzled`,
   `partially_fizzled`, `declined`); a fizzled or declined resolution writes an effect half with
-  `events: []`. A spell's effect half MUST end with its card's `zone_change` off the stack. A
+  `events: []`. A spell's effect half MUST hold its card's `zone_change` off the stack after the resolution's own
+  events and before the state-based check's deaths. A copy of a spell or ability writes no cost half. A
   countered stack item MUST write no effect half; the countering clause's effect half MUST hold the
   countered spell's `spell_countered` and its card's move off the stack.
 - **FR-042c**: A mana record MUST take its snapshot before the mana ability's costs are paid and its
@@ -1020,7 +1025,8 @@ and that the reporting half never enters the control score.
   SHA-256 of its perturbed script; an existing file of that name MUST be reused, never rewritten.
   Every variant of either round MUST be written to the variant tree with its sidecar before any deck
   holds it and MUST stay there (its records join it by key and training encodes its text from it);
-  only a variant printing a held-out text is deleted, and only before any deck holds it.
+  only a variant printing a held-out text is deleted, and only before any deck holds it. A numeric
+  perturbation MUST NOT set a parameter to 0.
   Only variant scripts may end in `.txt` in the variant tree: the loadable list MUST be written
   under another extension on both the Java and the Python side. A round MUST remove its staged
   variants from Forge's custom-cards directory when it ends.
