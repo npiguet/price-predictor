@@ -383,9 +383,9 @@ class TestPayloadKinds:
     def test_a_replacement_reports_what_it_sets_and_no_loss(self):
         """``=`` says the static overwrites the line.
 
-        What it displaced is not in the record — the snapshot beside it is the
-        board *after* the static applied — so the lost field stays unset rather
-        than being guessed at.
+        Before gen-3 what it displaced is not in the record, so the lost field
+        stays unset rather than being guessed at; a gen-3 record names it
+        (``test_a_gen3_static_that_sets_a_line_loses_what_the_board_without_it_had``).
         """
         record = _record(
             ContinuousPayload(contributions=(
@@ -797,6 +797,32 @@ class TestBasePowerAndToughness:
         entry = derive_targets(record)["E1"]
         assert entry.fields["base_power_delta"] == -2.0
         assert entry.supervised(_spec("base_toughness_delta")) is None
+
+    def test_a_gen3_static_that_sets_a_line_loses_what_the_board_without_it_had(self):
+        """Imprisoned in the Moon makes a green creature a colourless land. A
+        gen-3 continuous record's board is the board without the static
+        (FR-042, ``StaticSuppression``), so what the ``=`` displaced is the
+        entity's own types and colours there: creature and green are lost."""
+        bears = _entity("E1", types=("creature",), colors=("G",))
+        record = _on_board(ContinuousPayload(contributions=(
+            Contribution(entity="E1", colors=("=", "C"), types=("=", "land")),
+        )), bears, kind=RecordKind.CONTINUOUS, moment=None, generation=3)
+        entry = derive_targets(record)["E1"]
+        assert entry.fields["types_lost"] == [
+            1.0 if name == "creature" else 0.0 for name in CARD_TYPES
+        ]
+        assert entry.fields["colors_lost"] == [
+            1.0 if name == "G" else 0.0 for name in COLORS
+        ]
+        assert "types_lost" not in entry.unknown and "colors_lost" not in entry.unknown
+
+    def test_a_gen3_set_line_the_board_already_had_loses_nothing(self):
+        land = _entity("E1", types=("land",))
+        record = _on_board(ContinuousPayload(contributions=(
+            Contribution(entity="E1", types=("=", "land")),
+        )), land, kind=RecordKind.CONTINUOUS, moment=None, generation=3)
+        entry = derive_targets(record)["E1"]
+        assert entry.fields["types_lost"] == [0.0] * len(CARD_TYPES)
 
     def test_a_continuous_control_change_is_a_control_change(self):
         record = _on_board(ContinuousPayload(contributions=(

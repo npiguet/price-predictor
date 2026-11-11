@@ -312,6 +312,20 @@ def _apply_type_change(entry: EntityTargets, event: Event) -> None:
     _apply_duration(entry, HeadField.TYPE_COLOR_DURATION, event.duration)
 
 
+def _displaceable(record: EffectRecord, entity) -> dict[str, tuple[str, ...]] | None:
+    """Each lost field's values on the board a continuous record's static
+    displaces, keyed by the lost field; None where that board is not the one
+    without the static (before gen-3) or the entity is not on it."""
+    if entity is None or record.generation is None or record.generation < 3:
+        return None
+    return {
+        HeadField.TYPES_LOST: entity.types,
+        HeadField.SUBTYPES_LOST: entity.subtypes,
+        HeadField.SUPERTYPES_LOST: entity.supertypes,
+        HeadField.COLORS_LOST: entity.colors,
+    }
+
+
 #: A type change's three readings: the card types, the subtypes of the
 #: closed list and the supertypes, each a gained and a lost field.
 _TYPE_CHANNELS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
@@ -822,6 +836,8 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
         for keyword in keywords.lost:
             _flag_keyword(entry, HeadField.KEYWORDS_LOST, keyword)
         # Whole-class tokens (``all-creature-types``) match no slot and drop.
+        entity = entities.get(contribution.entity)
+        before = _displaceable(record, entity)
         channels = [
             (contribution.type_changes, vocabulary, gained, lost)
             for gained, lost, vocabulary in _TYPE_CHANNELS
@@ -830,7 +846,18 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
         for change, vocabulary, gained_field, lost_field in channels:
             _apply_multi(entry, gained_field, change.gained, vocabulary)
             _apply_multi(entry, lost_field, change.lost, vocabulary)
-            # The displaced values cannot be named, so the lost field is
-            # unknown rather than silently empty.
-            if change.sets_outright and lost_field not in entry.fields:
-                entry.unknown.add(lost_field)
+            if not change.sets_outright:
+                continue
+            if before is None:
+                # The displaced values cannot be named, so the lost field is
+                # unknown rather than silently empty.
+                if lost_field not in entry.fields:
+                    entry.unknown.add(lost_field)
+                continue
+            # What the line held on the board without the static, less what
+            # the static sets it to, is what it displaced.
+            entry.flag(lost_field, -1, len(vocabulary))
+            kept = {str(value) for value in change.gained}
+            _apply_multi(entry, lost_field,
+                         [value for value in before[lost_field] if value not in kept],
+                         vocabulary)

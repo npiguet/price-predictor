@@ -772,9 +772,10 @@ Types are spelled as the snapshot spells an entity's own, and include subtypes a
 `types_gained` / `types_lost` cover the core types only, so the rest stay in the record without
 reaching a head field.
 
-A `=` reports what it sets and nothing lost. The displaced types are not in the record — the snapshot
-beside it is the board after the static applied — so `types_lost` / `colors_lost` go unset, which reads
-as "this record does not say" rather than as an empty set.
+A `=` reports what it sets and nothing lost. Before gen-3 the displaced types are not in the record, so
+`types_lost` / `colors_lost` go unset, which reads as "this record does not say" rather than as an
+empty set. On a gen-3 record the snapshot is the board without the static (delta contract), so the lost
+fields are the entity's own types and colours there, less what the `=` sets.
 
 ## Gen-3
 

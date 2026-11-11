@@ -415,8 +415,8 @@ class ChannelChange:
     gained: tuple[str, ...] = ()
     #: Each removed value, its leading ``-`` dropped.
     lost: tuple[str, ...] = ()
-    #: A lone ``=``: the static sets the line outright, so what it displaced is
-    #: not named (the snapshot is the board after the static).
+    #: A lone ``=``: the static sets the line outright. The record names nothing
+    #: it displaced; on gen-3, targets read it off the board without the static.
     sets_outright: bool = False
 
     @classmethod
