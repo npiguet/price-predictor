@@ -37,7 +37,7 @@ class Clock:
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     root = tmp_path / "repo"
-    root.mkdir()
+    (root / "run").mkdir(parents=True)  # an existing run directory, kept on failure
     return root
 
 
@@ -177,6 +177,41 @@ class TestFinish:
         assert (document["status"], document["outcome"]) == ("failed", "exit 3")
 
 
+class TestNothingWritten:
+    """A command that fails having written nothing leaves no trace."""
+
+    def test_a_refused_command_takes_back_its_manifest_and_directories(self, repo: Path):
+        run = manifest(repo / "output" / "sealed" / "gen1" / "decks", repo)
+        run.start(command="c", inputs=[])
+        run.finish(exit_code=2)
+        assert not (repo / "output").exists()
+
+    def test_an_interrupt_before_any_output_leaves_nothing(self, repo: Path):
+        run = manifest(repo / "fresh", repo)
+        run.start(command="c", inputs=[])
+        run.finish(exit_code=130, error=KeyboardInterrupt())
+        assert not (repo / "fresh").exists()
+
+    def test_a_failure_that_wrote_something_is_recorded(self, repo: Path):
+        run = manifest(repo / "fresh", repo)
+        run.start(command="c", inputs=[])
+        (repo / "fresh" / "partial.txt").write_text("x", encoding="utf-8")
+        run.finish(exit_code=1, error=RuntimeError("worker crashed"))
+        assert read(repo / "fresh")["status"] == "failed"
+
+    def test_a_success_that_wrote_nothing_is_recorded(self, repo: Path):
+        run = manifest(repo / "fresh", repo)
+        run.start(command="c", inputs=[])
+        run.finish(exit_code=0)
+        assert read(repo / "fresh")["status"] == "finished"
+
+    def test_an_existing_run_directory_keeps_its_failed_manifest(self, repo: Path):
+        run = manifest(repo / "run", repo)
+        run.start(command="c", inputs=[])
+        run.finish(exit_code=2)
+        assert read(repo / "run")["status"] == "failed"
+
+
 class TestResume:
     def test_appends_the_command_and_runs_again(self, repo: Path):
         first = manifest(repo / "run", repo)
@@ -204,7 +239,6 @@ class TestResume:
         assert resumed["inputs"] == ["a.txt", "b.txt"]
 
     def test_an_unreadable_manifest_is_left_alone(self, repo: Path, caplog):
-        (repo / "run").mkdir()
         (repo / "run" / MANIFEST_NAME).write_text("{not json", encoding="utf-8")
 
         run = manifest(repo / "run", repo)

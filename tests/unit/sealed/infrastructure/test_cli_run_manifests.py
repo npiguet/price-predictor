@@ -54,9 +54,14 @@ def test_build_decks_writes_its_manifest_beside_the_decks(tmp_path: Path, monkey
     assert document["purpose"] is None and document["continues"] == []
 
 
-def test_a_failing_command_is_recorded_failed(tmp_path: Path, monkeypatch):
+def test_a_command_failing_part_way_is_recorded_failed(tmp_path: Path, monkeypatch):
     out = tmp_path / "decks-run" / "generated-decks.txt"
-    monkeypatch.setattr(cli, "run_build_decks", lambda _args: 2)
+
+    def build_decks(args):
+        Path(args.output).write_text("gen-2;RVR;A|B\n", encoding="utf-8")
+        return 2
+
+    monkeypatch.setattr(cli, "run_build_decks", build_decks)
     monkeypatch.setattr(sys, "argv", ["sealed", "build-decks", "--pools-path", "p",
                                       "--label", "x", "--output", str(out)])
 
@@ -66,6 +71,18 @@ def test_a_failing_command_is_recorded_failed(tmp_path: Path, monkeypatch):
     assert exit_.value.code == 2
     document = json.loads((out.parent / "run.json").read_text(encoding="utf-8"))
     assert (document["status"], document["outcome"]) == ("failed", "exit 2")
+
+
+def test_a_refused_command_leaves_no_run_directory(tmp_path: Path, monkeypatch):
+    out = tmp_path / "decks-run" / "generated-decks.txt"
+    monkeypatch.setattr(cli, "run_build_decks", lambda _args: 2)
+    monkeypatch.setattr(sys, "argv", ["sealed", "build-decks", "--pools-path", "p",
+                                      "--label", "x", "--output", str(out)])
+
+    with pytest.raises(SystemExit):
+        cli.main()
+
+    assert not out.parent.exists()
 
 
 def test_match_outcomes_records_in_its_effect_records_directory():

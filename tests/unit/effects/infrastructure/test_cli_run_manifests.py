@@ -61,7 +61,8 @@ def test_holdout_cards_writes_its_manifest(tmp_path: Path, monkeypatch):
 def test_an_exception_is_recorded_and_still_raised(tmp_path: Path, monkeypatch):
     out = tmp_path / "corpus-run"
 
-    def build_corpus(_args):
+    def build_corpus(args):
+        (Path(args.output) / "manifest.previous.json").write_text("{}", encoding="utf-8")
         raise RuntimeError("a shard holds a mixed generation")
 
     monkeypatch.setattr(cli, "run_build_corpus", build_corpus)

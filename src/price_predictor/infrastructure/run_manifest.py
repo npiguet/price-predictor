@@ -9,7 +9,9 @@ end with ``finished`` or ``failed``, and on a resumed or restarted command
 than replaced. ``purpose``, ``continues``, ``superseded_by`` and the
 operator's statuses (``keep``, ``scratch``, ``superseded``) belong to the
 operator: a command never writes them, and closing a run re-reads the file
-so an edit made while it ran survives.
+so an edit made while it ran survives. A command that fails having written
+nothing — a flag refused at startup, a missing input — leaves no trace: the
+manifest goes, and so do the directories made for it.
 
 The manifest is bookkeeping, never a reason to stop: every failure to read
 or write it is logged as a warning and the command goes on. Writes go to a
@@ -139,6 +141,8 @@ class RunManifest:
         self.run_dir = run_dir if run_dir.is_absolute() else self._cwd / run_dir
         self.path = self.run_dir / MANIFEST_NAME
         self._document: dict[str, Any] | None = None
+        #: The directories made for the manifest, deepest first.
+        self._created: list[Path] = []
 
     def start(
         self, *, command: str, inputs: Iterable[PathLike | None] = (), create: bool = True,
@@ -161,10 +165,13 @@ class RunManifest:
         ended — the exit code, and the exception's or ``message``'s first line."""
         if self._document is None:
             return
+        ok = exit_code == 0 and error is None
         try:
+            if not ok and self._wrote_nothing():
+                self._remove()
+                return
             document = self._read() or self._document
             if document.get("status") in COMMAND_STATUSES or "status" not in document:
-                ok = exit_code == 0 and error is None
                 document["status"] = "finished" if ok else "failed"
             document["ended"] = self._now()
             document["outcome"] = _outcome(exit_code, error, message)
@@ -184,6 +191,10 @@ class RunManifest:
             return None
         if not self.run_dir.is_dir() and not create:
             return None
+        self._created = [
+            directory for directory in (self.run_dir, *self.run_dir.parents)
+            if not directory.exists()
+        ]
         self.run_dir.mkdir(parents=True, exist_ok=True)
         listed = self._relative_all(inputs)
         if self.path.exists():
@@ -214,6 +225,21 @@ class RunManifest:
             }
         self._write(document)
         return document
+
+    def _wrote_nothing(self) -> bool:
+        """Whether this run made the run directory and put nothing but the manifest in it."""
+        return bool(self._created) and all(
+            entry.name == MANIFEST_NAME for entry in self.run_dir.iterdir()
+        )
+
+    def _remove(self) -> None:
+        """Take back the manifest and the directories made for it."""
+        self.path.unlink(missing_ok=True)
+        for directory in self._created:
+            try:
+                directory.rmdir()
+            except OSError:
+                break
 
     def _commits(self) -> dict[str, Any]:
         try:
