@@ -147,9 +147,11 @@ Avenger, Hidden Predators, Veiled Crocodile) are fixed in 93906a7d.
   `validate-corpus` failed only on fired trigger records written at game end by C7's reservoir; the
   validator now exempts them (40fa4902). `field-coverage`: `rad` and `land_plays_unlimited` constant
   (rare in sealed; check again after the coverage round).
-- Running: the last gaps (transformed Incubator token faces, `control_granted_by` links to objects gone
-  from the game, a command list that may grow without bound, the flaky suppression integration test),
-  then a confirming audit.
+- The last gaps: a transformed token copied with one face (Forge 64e26521b16); links to cards that
+  left the game no longer written (bdecb164); the suppression integration test measures line keys,
+  not values (0706bbab); a fizzled or declined charm writes a half per chosen mode (d84bab69). The
+  final 10-minute audit (`records-gen3-audit5`) shows 6 of 112 forks differing (5.4%).
+- Next: the user's review pass, then the re-collection (HANDOFF.md).
 
 ## Order and gates
 
