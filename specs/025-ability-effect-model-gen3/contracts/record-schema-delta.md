@@ -122,6 +122,7 @@ it), `granted_temporary`. Forge's `...Without` reads (`Card.getTypeWithout`, `ge
 |---|---|
 | `max_land_plays` | int: the land plays this player's turn allows, Forge's `Player.getMaxLandPlays()` (1 plus every `AdjustLandPlays$` raise in force); `null` when `getMaxLandPlaysInfinite()` holds. Written right after `this_turn`, whose `lands_played` it bounds |
 | `speed`, `rad` | int |
+| `untapped_production` | changed meaning: per mana symbol, what the player's untapped permanents' mana abilities that can be activated now produce, each ability read with that player as its activator; a summoning-sick creature's {T} ability and an ability whose restrictions forbid activation count for nothing |
 | `city_blessing`, `monarch`, `initiative` | bool |
 | `turn_counts` | `{cards_drawn, life_gained, life_lost, damage_taken, permanents_to_graveyard, spells_cast_last_turn, dungeons_completed, descended}`, ints. `permanents_to_graveyard` counts cards put into this player's graveyard from the battlefield this turn; `descended` and `dungeons_completed` are whole-game counts, as Forge keeps them |
 
