@@ -551,6 +551,10 @@ keyed as `attributed_to` spells the segment; `[]` where none resolved.
 - The random seat does not repeat a free activation whose resolution changes nothing.
 - Under `--count-dropped-events`, the collector counts each event that arrives while no
   record is open, by event type and engine phase.
+- At the untap boundary the collector writes no `continuous` record and forces no
+  resolution, because no player gets priority in the untap step (502.4) and the live game has
+  not re-applied its statics for the new turn there. Turn-based-action records and directed
+  forks still run there.
 - A game writes at most `--max-records-per-game` records. Past the cap the collector writes
   no further record of that game, counts the records it withheld, and prints one line naming
   the game, the turn and the acting card of the most frequent withheld record.

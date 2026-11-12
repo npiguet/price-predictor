@@ -870,6 +870,10 @@ and that the reporting half never enters the control score.
 - **FR-041**: Under `--count-dropped-events` (`match-outcomes`, `collect-coverage`,
   `collect-variants`; default off), the collector MUST count each event that arrives while no
   record is open, by event type and engine phase, and print the counts when the run ends.
+- **FR-041b**: At the UNTAP phase boundary the collector MUST NOT write a `continuous` record nor
+  force a resolution (no player gets priority in the untap step, 502.4, and the live game has not
+  re-applied its statics for the new turn there); `turn_action` records and directed forks still run
+  at that boundary.
 - **FR-041a**: Every collecting command MUST take `--max-records-per-game N` (default 5000; root
   § 8.12): past the cap the collector writes no further record of that game, counts the records
   withheld, and prints one line naming the game, the turn and the acting card of the most frequent
