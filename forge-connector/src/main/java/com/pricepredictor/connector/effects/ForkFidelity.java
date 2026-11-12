@@ -23,7 +23,10 @@ import java.util.TreeSet;
  * rendered as a fork renders it, reading the live game's clause notes —
  * with the live game's: the global block field by field, each player and each
  * entity by id and field, and the links as a multiset. The copier keeps every
- * card's and player's id, so a faithful copy renders the same text.
+ * card's and player's id, so a faithful copy renders the same text, up to the
+ * order of a list of keywords or of ability lines: those compare as
+ * multisets wherever they appear, since their order never matters and a
+ * repeat (bushido, flanking, rampage) does.
  *
  * <p>A report, never a verdict: {@link #report} prints what differs beside
  * the fork and keeps it, as collection-time checks do.
@@ -35,6 +38,16 @@ final class ForkFidelity {
     /** At most this many characters of a value printed. */
     static final int MAX_VALUE = 600;
 
+    /**
+     * The members holding a list of keywords or of ability lines, whose order
+     * never matters: an entity's {@code granted_temporary.keywords} and
+     * {@code abilities}, its {@code lines} and each line's {@code keys}, the
+     * global block's {@code emblems} and each floating effect's
+     * {@code source_lines}.
+     */
+    private static final Set<String> UNORDERED =
+            Set.of("keywords", "abilities", "lines", "keys", "emblems", "source_lines");
+
     private ForkFidelity() {
     }
 
@@ -45,8 +58,8 @@ final class ForkFidelity {
         Snapshot copy = SnapshotBuilder.forFork(fork, live).ofBoard();
         List<String> out = new ArrayList<>();
         compareFields("global", JsonParts.fields(real.global()), JsonParts.fields(copy.global()), out);
-        compareById("player", real.players(), copy.players(), out);
-        compareById("entity", real.entities(), copy.entities(), out);
+        out.addAll(differencesById("player", real.players(), copy.players()));
+        out.addAll(differencesById("entity", real.entities(), copy.entities()));
         compareMultiset("link", real.links(), copy.links(), out);
         return out;
     }
@@ -137,7 +150,13 @@ final class ForkFidelity {
         return out.toString();
     }
 
-    private static void compareById(String kind, String realArray, String copyArray, List<String> out) {
+    /**
+     * Every difference between two arrays of players or entities, matched by
+     * id, field by field: {@code kind id (name).field: live=... fork=...}, or
+     * an id only one side has.
+     */
+    static List<String> differencesById(String kind, String realArray, String copyArray) {
+        List<String> out = new ArrayList<>();
         Map<String, Map<String, String>> real = byId(realArray);
         Map<String, Map<String, String>> copy = byId(copyArray);
         Set<String> ids = new TreeSet<>(real.keySet());
@@ -154,6 +173,7 @@ final class ForkFidelity {
                 compareFields(label, left, right, out);
             }
         }
+        return out;
     }
 
     private static Map<String, Map<String, String>> byId(String array) {
@@ -172,11 +192,39 @@ final class ForkFidelity {
         for (String name : names) {
             String left = real.get(name);
             String right = copy.get(name);
-            if (left == null ? right != null : !left.equals(right)) {
+            if (left == null ? right != null : !canonical(name, left).equals(canonical(name, right))) {
                 out.add(label + "." + name + ": live=" + shorten(left) + " fork=" + shorten(right));
             }
         }
     }
+
+    /**
+     * {@code value}, a member named {@code name}, written so that two values
+     * differing only in the order of a list of keywords or of ability lines
+     * read the same: the elements of every such list, at any depth, sorted
+     * (repeats kept, as some keywords stack), every other list in its order.
+     */
+    static String canonical(String name, String value) {
+        String text = value.strip();
+        if (text.startsWith("{")) {
+            List<String> members = new ArrayList<>();
+            JsonParts.fields(text).forEach((member, inner) ->
+                    members.add("\"" + member + "\":" + canonical(member, inner)));
+            return "{" + String.join(",", members) + "}";
+        }
+        if (text.startsWith("[")) {
+            List<String> elements = new ArrayList<>();
+            for (String element : JsonParts.elements(text)) {
+                elements.add(canonical(null, element));
+            }
+            if (name != null && UNORDERED.contains(name)) {
+                elements.sort(null);
+            }
+            return "[" + String.join(",", elements) + "]";
+        }
+        return text;
+    }
+
 
     private static void compareMultiset(String kind, String realArray, String copyArray, List<String> out) {
         Map<String, Integer> left = new HashMap<>();

@@ -320,6 +320,62 @@ class ForkFidelityTest {
                 differences.toString());
     }
 
+    // ── keyword and ability lists compare as multisets ──────────────────
+
+    private static final String BUSHIDO_LINE = "{\"keys\":[],\"kind\":\"keyword\",\"granted\":true,"
+            + "\"fragment\":\"Bushido:1\"}";
+    private static final String FLYING_LINE = "{\"keys\":[{\"script_file\":\"cardsfolder/s/serra_angel.txt\","
+            + "\"face\":0,\"trait_kind\":\"keyword\",\"index_within_kind\":0}],\"kind\":\"keyword\","
+            + "\"granted\":false,\"fragment\":\"Flying\"}";
+
+    private static String entity(String keywords, String lines, String blocking) {
+        return "[{\"id\":\"E7\",\"name\":\"Samurai\",\"combat\":{\"blocking\":" + blocking + "},"
+                + "\"granted_temporary\":{\"keywords\":" + keywords + ",\"abilities\":[]},"
+                + "\"lines\":" + lines + "}]";
+    }
+
+    /** Keywords and lines in another order are the same entity: order never matters. */
+    @Test
+    void keywordsAndLinesInAnotherOrderCompareEqual() {
+        String live = entity("[\"bushido:1\",\"flying\"]", "[" + BUSHIDO_LINE + "," + FLYING_LINE + "]",
+                "[\"E1\",\"E2\"]");
+        String fork = entity("[\"flying\",\"bushido:1\"]", "[" + FLYING_LINE + "," + BUSHIDO_LINE + "]",
+                "[\"E1\",\"E2\"]");
+
+        assertEquals(List.of(), ForkFidelity.differencesById("entity", live, fork));
+    }
+
+    /** A keyword that stacks, granted twice in one and once in the other, differs. */
+    @Test
+    void aRepeatedKeywordDiffers() {
+        String lines = "[" + BUSHIDO_LINE + "]";
+        String live = entity("[\"bushido:1\",\"bushido:1\",\"flying\"]", lines, "[]");
+        String fork = entity("[\"flying\",\"bushido:1\"]", lines, "[]");
+        String twice = entity("[]", "[" + BUSHIDO_LINE + "," + BUSHIDO_LINE + "]", "[]");
+        String once = entity("[]", "[" + BUSHIDO_LINE + "]", "[]");
+
+        List<String> keywords = ForkFidelity.differencesById("entity", live, fork);
+        List<String> repeatedLine = ForkFidelity.differencesById("entity", twice, once);
+
+        assertEquals(1, keywords.size(), keywords.toString());
+        assertTrue(keywords.get(0).startsWith("entity E7 (Samurai).granted_temporary: "), keywords.toString());
+        assertEquals(1, repeatedLine.size(), repeatedLine.toString());
+        assertTrue(repeatedLine.get(0).startsWith("entity E7 (Samurai).lines: "), repeatedLine.toString());
+    }
+
+    /** Every other list keeps its order: the creatures blocked in another order differ. */
+    @Test
+    void anyOtherListStillComparesInOrder() {
+        String lines = "[" + FLYING_LINE + "]";
+        String live = entity("[]", lines, "[\"E1\",\"E2\"]");
+        String fork = entity("[]", lines, "[\"E2\",\"E1\"]");
+
+        List<String> differences = ForkFidelity.differencesById("entity", live, fork);
+
+        assertEquals(1, differences.size(), differences.toString());
+        assertTrue(differences.get(0).startsWith("entity E7 (Samurai).combat: "), differences.toString());
+    }
+
     // ── the copier's own report and mapper ──────────────────────────────
 
     /**
