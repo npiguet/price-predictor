@@ -543,6 +543,7 @@ class SnapshotBuilderTest {
         void aManaAbilityReadingTheBoardMakesItsControllersColours() {
             CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
             Card tender = board.battlefield("Bloom Tender", board.you);
+            tender.setSickness(false);
             board.battlefield("Walking Corpse", board.you);
             board.battlefield("Serra Angel", board.opponent);
             forge.ai.ComputerUtilAbility.getSpellAbilities(
@@ -557,6 +558,73 @@ class SnapshotBuilderTest {
             assertEquals(Map.of("W", 0L, "U", 0L, "B", 1L, "R", 0L, "G", 1L, "C", 0L), production);
             assertEquals(board.opponent, mana.getActivatingPlayer());
             assertEquals(choice, mana.getManaPart().getExpressChoice());
+        }
+
+        /**
+         * Only mana abilities that can be activated now count: Llanowar Elves
+         * that came in this turn cannot pay its {T}, a Forest that did can.
+         */
+        @Test
+        void aSummoningSickCreaturesManaAbilityMakesNothing() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card elves = board.battlefield("Llanowar Elves", board.you);
+            assertTrue(elves.hasSickness());
+
+            assertEquals(0L, production(board).get("G"), "the sick elves make nothing");
+
+            board.battlefield("Forest", board.you);
+            assertEquals(1L, production(board).get("G"), "an untapped land counts");
+
+            elves.setSickness(false);
+            assertEquals(2L, production(board).get("G"), "the elves count once they may tap");
+        }
+
+        /**
+         * An ability its own restrictions forbid counts nothing: Mana Bloom's
+         * "activate only once each turn" once activated this turn, or with no
+         * charge counter to remove; Ashnod's Altar with no creature to
+         * sacrifice.
+         */
+        @Test
+        void aManaAbilityItsRestrictionsForbidMakesNothing() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card bloom = board.battlefield("Mana Bloom", board.you);
+            board.battlefield("Ashnod's Altar", board.you);
+            Map<String, Object> none = Map.of("W", 0L, "U", 0L, "B", 0L, "R", 0L, "G", 0L, "C", 0L);
+
+            assertEquals(none, production(board), "no charge counter, no creature to sacrifice");
+
+            bloom.addCounterInternal(CounterEnumType.CHARGE, 2, board.you, false, null, new java.util.HashMap<>());
+            board.battlefield("Walking Corpse", board.you);
+            assertEquals(Map.of("W", 1L, "U", 1L, "B", 1L, "R", 1L, "G", 1L, "C", 1L), production(board));
+
+            bloom.addAbilityActivated(bloom.getManaAbilities().get(0));
+            assertEquals(Map.of("W", 0L, "U", 0L, "B", 0L, "R", 0L, "G", 0L, "C", 1L), production(board),
+                    "Mana Bloom was activated this turn; the altar still has a creature to sacrifice");
+        }
+
+        /** Reading what a player could make draws nothing from Forge's global random stream. */
+        @Test
+        void untappedProductionDrawsNothingFromTheRandomStream() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            board.battlefield("Forest", board.you);
+            board.battlefield("Llanowar Elves", board.you).setSickness(false);
+            board.battlefield("Bloom Tender", board.you);
+            board.battlefield("Ashnod's Altar", board.you);
+            java.util.Random was = forge.util.MyRandom.getRandom();
+            forge.util.MyRandom.setRandom(new java.util.Random(7L));
+            java.util.Random expected = new java.util.Random(7L);
+            try {
+                assertEquals(2L, production(board).get("G"));
+                assertEquals(expected.nextLong(), forge.util.MyRandom.getRandom().nextLong(),
+                        "the read drew from MyRandom");
+            } finally {
+                forge.util.MyRandom.setRandom(was);
+            }
+        }
+
+        private Map<String, Object> production(CharacterizationBoard board) {
+            return RecordLines.asMap(playerOf(board, 0).get("untapped_production"));
         }
 
         /** One land play a turn, written right after the turn's tallies it bounds. */

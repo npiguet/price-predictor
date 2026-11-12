@@ -5,6 +5,7 @@ import forge.card.MagicColor;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.card.CounterEnumType;
+import forge.game.cost.CostPayment;
 import forge.game.player.Player;
 import forge.game.spellability.AbilityManaPart;
 import forge.game.spellability.SpellAbility;
@@ -86,9 +87,13 @@ final class PlayerJson {
     /**
      * How much of each colour this player could still make, per colour.
      *
-     * <p>Counted over untapped permanents' mana abilities, one per ability that
-     * can produce the colour. It is what separates a board that can answer a
-     * threat from one that only looks like it can.
+     * <p>Counted over untapped permanents' mana abilities that can be
+     * activated now, one per ability that can produce the colour. It is what
+     * separates a board that can answer a threat from one that only looks
+     * like it can: a summoning-sick creature's {T} ability, or one its
+     * restrictions forbid (once each turn and already activated, a phase it
+     * may not be activated in, a condition, a sacrifice with nothing to
+     * sacrifice), counts nothing.
      *
      * <p>An ability that makes one mana of any colour counts once for each, so
      * the numbers are an upper bound rather than a sum that can be spent.
@@ -116,7 +121,7 @@ final class PlayerJson {
      * read as it was left, Bloom Tender's "each colour among permanents you
      * control" counted the opponent's colours. Reading a special mana ability
      * also writes its express choice. Both are put back, so the read changes
-     * nothing in the game.
+     * nothing in the game. None when the player cannot activate it now.
      */
     private static List<Byte> producibleBy(SpellAbility ability, Player player) {
         AbilityManaPart part = ability.getManaPart();
@@ -124,6 +129,9 @@ final class PlayerJson {
         String choice = part.getExpressChoice();
         ability.setActivatingPlayer(player);
         try {
+            if (!activatableNow(ability, player)) {
+                return List.of();
+            }
             List<Byte> colors = new ArrayList<>();
             for (byte symbol : MagicColor.WUBRGC) {
                 if (part.canProduce(ManaCounts.letter(symbol), ability)) {
@@ -135,6 +143,22 @@ final class PlayerJson {
             ability.setActivatingPlayer(activator);
             part.setExpressChoice(choice);
         }
+    }
+
+    /**
+     * Whether {@code player}, set as the ability's activator, could activate
+     * it now by the rules alone: Forge's own checks of its restrictions
+     * (activation limits, {@code ActivationPhases$}, conditions), of the
+     * statics forbidding activation, and of its non-mana costs ({T} on a
+     * summoning-sick creature, a sacrifice or counter with nothing to pay it
+     * with), as {@link ManaAffordability} reads a source. No AI check, no AI
+     * card memory, no draw from {@code MyRandom}. The ability's own mana cost
+     * is not checked: other sources pay it.
+     */
+    private static boolean activatableNow(SpellAbility ability, Player player) {
+        return ability.canPlay() && ability.checkRestrictions(player)
+                && CostPayment.canPayAdditionalCosts(ability.getPayCosts(), ability, false, player)
+                && ability.metConditions();
     }
 
     /**
