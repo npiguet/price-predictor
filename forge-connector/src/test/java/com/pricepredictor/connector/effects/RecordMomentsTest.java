@@ -449,6 +449,50 @@ class RecordMomentsTest {
         assertEquals(List.of("DBCantStatic"), layersCreated(second), second);
     }
 
+    /**
+     * A Kolaghan's Command whose two chosen modes — destroy target artifact,
+     * 2 damage to target creature — both lost their targets before it
+     * resolved fizzles as a whole (608.2b), and Forge resolves none of its
+     * clauses, so no mode's first clause ever opens a half. Each chosen mode
+     * still writes its own empty half through its option line, saying
+     * fizzled, under the cost half's link (FR-029a, FR-029c, FR-042b); none
+     * acts through the bare root.
+     */
+    @Test
+    void aFizzledCharmWritesAnEmptyHalfPerChosenMode() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card ornithopter = inPlay(game, game.getPlayers().get(1), "Ornithopter");
+        Card bears = inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+        SpellAbility charm = TestBoard.charmOf(inHand(game, caster, "Kolaghan's Command"), caster);
+        List<AbilitySub> clones = TestBoard.chain(charm, 2, 3);
+        for (AbilitySub clause : clones) {
+            clause.setActivatingPlayer(caster);
+        }
+        clones.get(0).getTargets().add(ornithopter);
+        clones.get(1).getTargets().add(bears);
+
+        List<String> all = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            game.getStack().addAndUnfreeze(charm);
+            game.getAction().moveToGraveyard(ornithopter, null);
+            game.getAction().moveToGraveyard(bears, null);
+            game.getStack().resolveStack();
+            nextStep(game);
+        });
+
+        String script = "cardsfolder/k/kolaghans_command.txt";
+        String cost = only(all, "activation", script);
+        List<String> halves = through(all, "resolution", script);
+        assertEquals(2, halves.size(), all.toString());
+        assertEquals(List.of(2L, 3L), halves.stream().map(RecordLines::optionOf).toList(),
+                "one half per chosen mode, through its option line: " + halves);
+        for (String half : halves) {
+            assertEquals("fizzled", payload(half).get("outcome"), half);
+            assertEquals(List.of(), events(half), half);
+            assertEquals(linkOf(cost), linkOf(half), half);
+        }
+    }
+
     /** The {@code layers} of each {@code continuous_effect_created} in a record. */
     private static List<Object> layersCreated(String record) {
         return events(record).stream()

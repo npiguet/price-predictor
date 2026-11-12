@@ -228,6 +228,39 @@ class ModalResolutionTest {
     }
 
     /**
+     * A charm whose controller turned down what its modes offered, and that
+     * did nothing else, is declined, mode by mode: one empty half per chosen
+     * mode through its option line, each saying declined, and none through
+     * the bare root (FR-029c, FR-042b).
+     */
+    @Test
+    void aDeclinedCharmWritesAnEmptyHalfPerChosenMode() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        SpellAbility charm = charmOf(game, game.getPlayers().get(0), "Boros Charm");
+        List<AbilitySub> clones = TestBoard.chain(charm, 0, 2);
+
+        List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
+            bracket.beginBracket(charm);
+            for (AbilitySub clone : clones) {
+                collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{clone});
+                bracket.noteDeclined();
+            }
+            bracket.endBracket(charm.getId(), false);
+            bracket.onNextAction();
+        });
+
+        assertEquals(3, records.size(), records.toString());
+        for (int i = 1; i < 3; i++) {
+            String half = records.get(i);
+            assertTrue(half.contains("\"outcome\":\"declined\""), half);
+            assertEquals(List.of(), eventTypes(half), half);
+            assertEquals(linkOf(records.get(0)), linkOf(half), half);
+        }
+        assertEquals(0L, optionOf(records.get(1)), records.get(1));
+        assertEquals(2L, optionOf(records.get(2)), records.get(2));
+    }
+
+    /**
      * Spec Story 3 scenario 14: a degraded worker has no clause hook, so no
      * mode ever opens and the one effect half acts through the root line with
      * every chosen mode's events (FR-029e). Disabling the hook is exactly
@@ -255,6 +288,30 @@ class ModalResolutionTest {
         assertTrue(effect.contains("damage_dealt") && effect.contains("keyword_change"), effect);
         assertNotNull(linkOf(effect), effect);
         assertEquals(linkOf(records.get(0)), linkOf(effect));
+    }
+
+    /**
+     * A degraded worker is never told a resolution started, so a fizzled
+     * charm's modes are never split either: its one half acts through the
+     * root line, says fizzled and holds no event (FR-029e, FR-042b).
+     */
+    @Test
+    void aDegradedWorkersFizzledCharmWritesOneRootHalf() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        SpellAbility charm = charmOf(game, game.getPlayers().get(0), "Boros Charm");
+        TestBoard.chain(charm, 0, 2);
+
+        List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
+            bracket.beginBracket(charm);
+            bracket.endBracket(charm.getId(), true);
+            bracket.onNextAction();
+        });
+
+        assertEquals(2, records.size(), records.toString());
+        String effect = records.get(1);
+        assertFalse(effect.contains("\"option\""), "the root line acts: " + effect);
+        assertTrue(effect.contains("\"outcome\":\"fizzled\""), effect);
+        assertEquals(List.of(), eventTypes(effect), effect);
     }
 
     /**

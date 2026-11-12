@@ -6,6 +6,7 @@ import forge.game.ability.ApiType;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -71,6 +72,26 @@ final class CharmModes {
             return null;
         }
         return new ModeStart(charm, clause, optionWithin(charm, clause));
+    }
+
+    /**
+     * The options of every mode chained onto {@code item}'s abilities, in
+     * the order they would resolve; empty for an item with no chosen mode.
+     *
+     * <p>Read for a resolution whose clauses never run — one that fizzled as
+     * a whole — where no clause hook tells a mode's start. Each entry is what
+     * {@link #modeStartOf} would have given that mode's clone, a null where a
+     * mode cannot be placed.
+     */
+    static List<Integer> chosenOptions(SpellAbility item) {
+        List<Integer> options = new ArrayList<>();
+        for (SpellAbility t = item; t != null; t = t.getSubAbility()) {
+            ModeStart start = modeStartOf(t);
+            if (start != null) {
+                options.add(start.option());
+            }
+        }
+        return options;
     }
 
     /**

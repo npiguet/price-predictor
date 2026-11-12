@@ -226,7 +226,7 @@ public final class BusBracketCollector extends BusEventReader {
             }
             boolean fizzled = Boolean.TRUE.equals(args.get(1));
             if (owns(item)) {
-                resolutionStarting(item);
+                resolutionStarting(item, fizzled);
             } else {
                 Forks.forkHooks().resolutionStarting(item, fizzled);
             }
@@ -241,8 +241,17 @@ public final class BusBracketCollector extends BusEventReader {
      * its cast — the cast's consequences, the state-based check before
      * priority — precedes this board and reaches no record: it is counted as
      * dropped. The stat differ reads the board again (FR-042f).
+     *
+     * <p>A modal item that fizzled as a whole resolves none of its clauses,
+     * so no mode's first clause will cut its halves: each chosen mode's half
+     * opens and closes here, on the board read now, and stays empty
+     * (FR-029c). A degraded worker, never told this moment, keeps its one
+     * root half (FR-029e).
+     *
+     * @param fizzled whether Forge found no legal target left, in which case
+     *                none of the item's clauses will run
      */
-    void resolutionStarting(SpellAbility item) {
+    void resolutionStarting(SpellAbility item, boolean fizzled) {
         if (!inStateBasedLoop) {
             onNextAction();
         }
@@ -251,7 +260,14 @@ public final class BusBracketCollector extends BusEventReader {
             return;
         }
         brackets.countDropped(resolving, DroppedEvents.phaseOf(game));
-        resolving.resolutionStarted(snapshots.ofResolving(resolving.ability));
+        Snapshot board = snapshots.ofResolving(resolving.ability);
+        resolving.resolutionStarted(board);
+        if (fizzled) {
+            for (Integer option : CharmModes.chosenOptions(item)) {
+                resolving.modes.begin(option, board);
+            }
+            resolving.modes.close();
+        }
         rebaselineAtSnapshot();
     }
 

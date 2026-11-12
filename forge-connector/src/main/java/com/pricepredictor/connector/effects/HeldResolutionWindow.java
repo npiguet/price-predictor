@@ -146,28 +146,28 @@ final class HeldResolutionWindow {
 
     /**
      * Write the effect half of an item that did nothing (FR-042b): one that
-     * fizzled, or whose controller declined what it offered. Its one root
-     * half has no events, and nothing joins it: a fizzled spell's move off
-     * the stack and anything after go to no record. A declined half keeps
-     * the conditions Forge decided on its way; a fizzled one decided none.
+     * fizzled, or whose controller declined what it offered. Its halves
+     * have no events, and nothing joins them: a fizzled spell's move off
+     * the stack and anything after go to no record. They are split as a
+     * resolved item's are: one root half, or on a patched worker one per
+     * chosen mode of a modal item, through the mode's option line, under the
+     * cost half's link (FR-029a, FR-029c). A declined half keeps the
+     * conditions Forge decided on its way; a fizzled one decided none.
      *
      * @param outcome {@link ActivationOutcome#FIZZLED} or {@link ActivationOutcome#DECLINED}
      */
     void writeEmpty(OpenResolution resolved, ActivationOutcome outcome) {
-        List<ConditionsMet> conditions = List.of();
-        if (outcome == ActivationOutcome.DECLINED) {
-            conditions = new java.util.ArrayList<>();
-            for (ModeSplit.ModeHalf half : resolved.modes.halves(resolved.effectState())) {
-                conditions.addAll(half.conditions());
-            }
-        }
         String refs = RefsJson.renderResolved(resolved.ability, List.of(), resolved.x());
-        context.emit(context.newResolution(Moment.RESOLUTION)
-                .actor(resolved.actor)
-                .ability(resolved.keys)
-                .linkId(resolved.linkId)
-                .state(resolved.effectState().withRefs(refs).render())
-                .payload(RecordPayloads.resolutionPayload(List.of(), conditions, outcome)));
+        for (ModeSplit.ModeHalf half : resolved.modes.halves(resolved.effectState())) {
+            List<ConditionsMet> conditions = outcome == ActivationOutcome.DECLINED
+                    ? half.conditions() : List.of();
+            context.emit(context.newResolution(Moment.RESOLUTION)
+                    .actor(resolved.actor)
+                    .ability(resolved.keys.withOption(half.mode().option()))
+                    .linkId(resolved.linkId)
+                    .state(half.mode().state().withRefs(refs).render())
+                    .payload(RecordPayloads.resolutionPayload(List.of(), conditions, outcome)));
+        }
     }
 
     /**
