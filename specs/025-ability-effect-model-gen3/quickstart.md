@@ -73,6 +73,23 @@ Check: the rules newly learnable are printed and committed with the change.
 
 ## Stage 5 — full collection, coverage and variants
 
+Long runs are launched from PowerShell. There the interpreter is `.venv\Scripts\python.exe` (a bare
+`python` is the system interpreter, without the project's dependencies), and the directed-fork list
+is built first, as its own step, then passed as `--directed-fork-rules $rules`:
+
+```powershell
+$rules = (Get-Content rules/directed-fork-rules.txt | Where-Object { $_.Trim() -and -not $_.StartsWith('#') }) -join ','
+```
+
+Before the first long run, the fork fidelity audit (T181): collect for 20 minutes into a scratch run
+directory, stop the run, and count the console's `fork fidelity:` lines by field.
+
+```powershell
+.venv\Scripts\python.exe -u -m sealed match-outcomes --workers 6 --effect-records <scratch run dir> --random-seat-share 0.25 --random-seat-probability 0.5 --interventions-per-game 4 --probes-per-game 4 --directed-fork-rules $rules --count-dropped-events
+```
+
+The collection itself:
+
 ```bash
 python -u -m sealed match-outcomes --effect-records --directed-fork-rules "$(paste -sd, rules/directed-fork-rules.txt)" <run flags>
 python -u -m effects collect-coverage --wording-cards <any-target cards> --exclude-cards <holdout list> <run flags>

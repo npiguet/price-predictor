@@ -2305,6 +2305,61 @@ without end. Those perturbations are no longer generated: a numeric parameter is
 The cap is several times the largest game in gen-3's first records, so it only stops a game that
 repeats itself.
 
+#### Four in five held-out texts got enough games for gate 1, and no extra coverage round could reach more than a few of the rest
+
+**The first held-out coverage round gave 594 of the 744 held-out texts at least five games.** Gate 1
+can only score a held-out text that some game resolves, so it scores about four texts in five, and
+its report says so.
+
+| held-out texts (744), by games that resolve the text | texts |
+|---|---:|
+| 5 or more | 594 |
+| 1 to 4 | 8 |
+| none | 142 |
+
+**The round's own report showed only half its texts covered, because it aimed at lines the holdout
+does not withhold.** The round aimed at the 1,229 texts printed only on held-out cards
+([Background](#the-held-out-coverage-round-covers-more-than-the-held-out-texts)). The holdout
+withholds a text by its template: the text with its numbers and card names masked. For 485 of those
+lines, the template is also printed on cards outside the holdout, so they are not held-out texts. The
+round credited a game only to a held-out text, so these lines never gained one. The round kept
+dealing their cards until it gave up on each of them. It now aims only at held-out texts.
+
+**Most of the 142 texts without a game can never get one.** A static ability or a replacement effect
+writes no resolution record, and gate 1 reads only resolution records. Interventions now force the
+activated abilities of permanents and graveyard cards, not only cards in hand, so the re-collection
+can reach the activated abilities left at zero. The triggers remain, and whether one fires depends
+on the other cards in the game.
+
+| held-out texts without a game, by kind | texts, about |
+|---|---:|
+| static abilities and replacement effects | 78 |
+| activated abilities | 21 |
+| triggered abilities, mostly "enters" and "dies" with a condition | 19 |
+| not classified | 24 |
+
+**Two further ways to reach the triggers were rejected.** A held-out coverage deck holds many copies
+of its one target card plus basic lands. A trigger such as "whenever you cast an instant" therefore
+has nothing to react to.
+- Mixed coverage decks would replace some copies with other held-out cards of the same colours. At
+  most about 19 texts could gain games from it, too few for a change to how the round builds decks.
+- Forcing a trigger would put its effect on a fork's stack as if it had fired. It is a larger change
+  to Forge, and a trigger forced where its condition does not hold would write a record of a game
+  the rules never produce.
+
+#### The first collection sets the size of the re-collection
+
+**The first collection's depleted run took about two days for 99,000 games, and the full-strength
+run is planned at about ten hours at the same rate.** The figures come from the first gen-3
+collection, before the fixes above, and the re-collection's rate may differ.
+
+| run of the first gen-3 collection | figure |
+|---|---|
+| depleted run | about 2,050 games an hour, about 388 KB a game |
+| depleted run, 99,000 games | 36.7 GB |
+| held-out coverage round | 9.4 hours over 9 rounds, 9.2 GB |
+| full-strength run, planned | about 20,000 games, about 10 hours |
+
 #### Four known limits stay in the re-collection
 
 The re-collection starts with four limits that were found and left in place:
