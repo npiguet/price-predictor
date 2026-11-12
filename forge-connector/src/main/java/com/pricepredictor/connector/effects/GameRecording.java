@@ -4,6 +4,7 @@ import com.google.common.eventbus.Subscribe;
 import com.pricepredictor.connector.effects.directed.DirectedRules;
 import forge.game.Game;
 import forge.game.event.GameEventTurnPhase;
+import forge.game.phase.PhaseType;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -353,10 +354,18 @@ public final class GameRecording implements AutoCloseable {
          */
         @Subscribe
         public void onPhase(GameEventTurnPhase event) {
+            boolean collecting = collectsTheBoard(event.phase());
             eachGuarded(
-                    new BoundaryStep("continuous", () -> patched.continuous().collect()),
-                    new BoundaryStep("interventions", () -> interventions.ifPresent(
-                            scheduler -> scheduler.collect(event.phase()))),
+                    new BoundaryStep("continuous", () -> {
+                        if (collecting) {
+                            patched.continuous().collect();
+                        }
+                    }),
+                    new BoundaryStep("interventions", () -> interventions.ifPresent(scheduler -> {
+                        if (collecting) {
+                            scheduler.collect(event.phase());
+                        }
+                    })),
                     // Before the turn-based action that deals the damage: the
                     // phase event fires ahead of it, which is the only moment
                     // a probe can fork from a board where nothing has been
@@ -368,6 +377,21 @@ public final class GameRecording implements AutoCloseable {
                     new BoundaryStep("directed forks", () -> directed.ifPresent(
                             scheduler -> scheduler.collect(event.phase()))));
         }
+    }
+
+    /**
+     * Whether the boundary beginning {@code phase} reads the board for
+     * continuous records and forces resolutions: everywhere but the untap
+     * step. No player gets priority there (CR 502.4), and the live game has
+     * not yet re-applied its statics for the new turn (a "during your turn"
+     * keyword), so a continuous record could describe a board the rules do
+     * not hold, and a forced resolution would spend the budget at a step
+     * nobody can act in; upkeep reads the same statics again. The untap
+     * step's turn_action records and its directed forks (a stun counter, a
+     * skipped upkeep trigger) are taken there all the same.
+     */
+    static boolean collectsTheBoard(PhaseType phase) {
+        return phase != PhaseType.UNTAP;
     }
 
     /** One named step of a phase boundary's collection. */

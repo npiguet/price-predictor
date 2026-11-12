@@ -176,6 +176,78 @@ class GameRecordingTest {
     }
 
     /**
+     * No player gets priority in the untap step (CR 502.4), and the live game
+     * has not re-applied its statics for the new turn there: the UNTAP
+     * boundary writes no continuous record and forces no resolution, while
+     * upkeep's does both. A directed rule bound at UNTAP still forks there.
+     */
+    @Test
+    void theUntapBoundaryWritesNoContinuousRecordAndForcesNothingButStillDirects() throws Throwable {
+        Assumptions.assumeTrue(AttributionMode.detect() == AttributionMode.PATCHED,
+                "../forge has no hooks, so nothing is forked");
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.UNTAP);
+        Player active = game.getPhaseHandler().getPlayerTurn();
+        TestBoard.inPlay(game, active, "Glorious Anthem");
+        forge.game.card.Card bears = TestBoard.inPlay(game, active, "Grizzly Bears");
+        TestBoard.inHand(game, active, "Giant Growth");
+        game.getAction().checkStaticAbilities();
+        com.pricepredictor.connector.effects.directed.DirectedRule atUntap =
+                com.pricepredictor.connector.effects.directed.DirectedRule.of("A", "A-1",
+                        live -> live.getPhaseHandler().getPhase() == forge.game.phase.PhaseType.UNTAP
+                                ? java.util.Optional.of(com.pricepredictor.connector.effects.directed.Binding
+                                        .empty().with("creature", bears))
+                                : java.util.Optional.empty(),
+                        "tapped", new com.pricepredictor.connector.effects.directed.Application(
+                                com.pricepredictor.connector.effects.directed.ForkOperation.TAP,
+                                binding -> new com.pricepredictor.connector.effects.directed.operations
+                                        .TapOperation(binding.card("creature"), true)));
+        CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(4).probes(0)
+                .directed(1, 1.0, "A").build();
+        DirectedForkTally tally = new DirectedForkTally();
+        RecordShardWriter writer = ShardRun.writer(tempDir);
+        try (GameRecording recording = new GameRecording(game, writer, ShardRun.GAME_ID, caps, 7L, null,
+                ForkSeats.NONE, com.pricepredictor.connector.effects.directed.DirectedRules.of(atUntap), tally)) {
+            recording.open();
+            TestBoard.enterStep(game, forge.game.phase.PhaseType.UNTAP);
+            assertEquals(1, tally.taken("A"), "the directed rule bound at UNTAP forked there");
+
+            game.getPhaseHandler().devModeSet(forge.game.phase.PhaseType.UPKEEP, active);
+            TestBoard.enterStep(game, forge.game.phase.PhaseType.UPKEEP);
+        } finally {
+            writer.close();
+        }
+        java.util.List<String> all = ShardRun.readShard(writer.path());
+
+        assertEquals(java.util.List.of(), liveContinuous(all, "untap"), "a continuous record at UNTAP");
+        assertEquals(java.util.List.of(), interventional(all, "untap"), "a forced resolution at UNTAP");
+        assertFalse(liveContinuous(all, "upkeep").isEmpty(), "upkeep wrote no continuous record: " + all);
+        assertFalse(interventional(all, "upkeep").isEmpty(), "upkeep forced nothing: " + all);
+    }
+
+    /** The phase a record's board was read in. */
+    private static Object phaseOf(String record) {
+        Object state = RecordLines.parse(record).get("state");
+        return state == null ? null : RecordLines.asMap(RecordLines.asMap(state).get("global")).get("phase");
+    }
+
+    /** The live game's continuous records read in {@code phase}. */
+    private static java.util.List<String> liveContinuous(java.util.List<String> records, String phase) {
+        return records.stream()
+                .filter(record -> "continuous".equals(RecordLines.parse(record).get("kind"))
+                        && Boolean.FALSE.equals(RecordLines.parse(record).get("fork"))
+                        && phase.equals(phaseOf(record)))
+                .toList();
+    }
+
+    /** The forced resolutions' records read in {@code phase}. */
+    private static java.util.List<String> interventional(java.util.List<String> records, String phase) {
+        return records.stream()
+                .filter(record -> Boolean.TRUE.equals(RecordLines.parse(record).get("interventional"))
+                        && phase.equals(phaseOf(record)))
+                .toList();
+    }
+
+    /**
      * A phase boundary's collection steps are guarded each on its own (C6): a
      * step that throws costs its own records at that boundary, and every
      * step after it still runs.
