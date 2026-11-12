@@ -24,7 +24,7 @@ The price transformer's price encoder is the alternate card encoder the sealed p
 
 ## Shared infrastructure
 
-Other packages also import this package's general-purpose infrastructure: `forge_jvm` (classpath assembly, JVM launch, the Forge worker pool), `torch_checkpoint`, `torch_training`, `append_only` (readers that tolerate a trailing partial line), `ridge_probes` (the linear-probe harness over card embeddings) and `dataclass_defaults.field_default`.
+Other packages also import this package's general-purpose infrastructure: `forge_jvm` (classpath assembly, JVM launch, the Forge worker pool), `torch_checkpoint`, `torch_training`, `append_only` (readers that tolerate a trailing partial line), `ridge_probes` (the linear-probe harness over card embeddings), `dataclass_defaults.field_default`, and the run manifest: `run_manifest` writes the `run.json` every file-writing command and script keeps in its run directory (`.claude/skills/artifact-layout/SKILL.md`), and `cli_run_manifest` wires it to a CLI through one table per CLI, `RUN_MANIFESTS` (subcommand → output argument and inputs, or read-only), dispatched from `main`; this package's own table is in `infrastructure/cli.py`.
 
 ## Inputs on disk
 

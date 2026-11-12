@@ -4,6 +4,8 @@ Entry point: `python -m effects <subcommand>` (see `src/effects/__main__.py` and
 
 The record schema is fixed within a generation before that generation's first record is collected, so a later capability widens the corpus without invalidating what came before; a new generation may change a field's meaning, and every consumer but `rule-counts` reads gen-3 records only. Collection also runs on stock Forge, through the public event bus and a bracket around stack resolution, stamping every record `degraded`; what gen 3 collects beyond that needs the hooks of the `effect-record-hooks` branch (§ The engine hooks). The three generations are three features: 023 (`specs/023-ability-effect-model/`), 024 (§ Generation 2) and 025 (§ Generation 3).
 
+Every subcommand that writes files keeps a `run.json` run manifest in its run directory (`.claude/skills/artifact-layout/SKILL.md`), declared in `RUN_MANIFESTS` in `infrastructure/cli.py` (a collector's is its shard directory, `evaluate-effect-model`'s the `<checkpoint stem>.evaluation/` it draws into; `validate-corpus`, `field-coverage` and `build-corpus --verify` write none); no shard, sidecar or cache reader takes it for data, since each finds its files by suffix.
+
 Subcommands:
 
 - **`extract-keyword-definitions`** — spawns Java `KeywordDefinitionMain` to write keyword → reminder-text template for every Forge keyword to `--output` (default `output/effects/keyword-definitions.json`). The encoder expands an *unknown* keyword unconditionally, so this file is what makes a set the vocabulary predates readable rather than a bare `[UNK]`.

@@ -21,6 +21,7 @@ The four Python packages are each laid out in hexagonal (ports-and-adapters) sty
 - `rules/` — the rules catalogue the effects package reads.
 - `output/` — generated data, never committed: converted cards (`cardsfolder/`, `tokenscripts/`) and one directory per package (`sealed/`, `draft/`, `effects/`). Its corpora are append-only and cannot easily be rebuilt.
 - `models/{price-predictor,sealed,draft,effects}/` — checkpoints, never committed; every trainer writes a `{timestamp}` file plus a rolling `latest`.
+- Where a run's outputs go under `output/` and `models/`, how runs are named, and the `run.json` manifest every file-writing command keeps in its run directory: the **artifact-layout** skill (`.claude/skills/artifact-layout/SKILL.md`).
 - `scripts/` — analysis and probe scripts, run by path.
 - `tests/` — unit and integration tests.
 - `experiments/*.md` — experiment records: what happened and why; the **only** home for benchmark numbers, run logs and rejected alternatives.
