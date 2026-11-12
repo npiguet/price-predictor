@@ -13,6 +13,8 @@ The fat JAR is built with `mvn install -DskipTests` → `target/forge-connector-
 
 These workers import `forge-game` / `forge-core` from the sibling `../forge` checkout (classpath assembled by `build_forge_classpath` in `src/price_predictor/infrastructure/forge_jvm.py`). `ForgeEnvironmentInitializer` bootstraps Forge's static state in each JVM.
 
+No worker has a per-game timeout, and none should get one. A game that does not finish in reasonable time, whether long or hung, ends with its JVM: the worker crashes, or `ForgeWorkerPool` recycles it, and the supervisor restarts it. Why the workers are short-lived by design is in `src/effects/CLAUDE.md` ("Why the workers are short-lived").
+
 ## Build
 
 ```bash

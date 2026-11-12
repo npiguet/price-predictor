@@ -101,7 +101,7 @@ The play score's counterpart over the games the card's side drew first.
 _Avoid_: win rate on the draw
 
 **Played rate**:
-The share of the games with the card in its deck in which the card was played.
+The share of the games with the card in its deck in which the card was played. It measures the Forge AI as well as the card: some cards are never played whatever their mana cost, because the Forge AI cannot handle them.
 _Avoid_: cast rate, play rate
 
 **Cast lift**:
