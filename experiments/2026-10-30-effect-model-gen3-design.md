@@ -2189,12 +2189,11 @@ pilot should count them.
 
 ### Gen-3's first records are set aside, because forks misdescribed the game and several records put their answer in the input
 
-**The records collected so far are set aside, and gen-3 is collected again once the defects below
-are fixed.** Two checks run before the full collection found them. A comparison of every fork's
+**The records collected so far are set aside, and gen-3 is collected again with the defects below
+fixed.** Two checks run before the full collection found them. A comparison of every fork's
 copy against the live board showed that the copies often described a different game. A review of
 the collectors and of the Forge branch then found records whose input already showed their outcome,
-and events filed to the wrong record. The findings, with their evidence and the test that pins
-each one, are in [`docs/gen3-collection-review/`](../docs/gen3-collection-review/README.md).
+and events filed to the wrong record. Every finding was fixed test-first before the re-collection.
 
 #### A fork's copy differed from the live board in more than a quarter of forks, and the score check could not see it
 
@@ -2213,25 +2212,16 @@ had forgotten:
 - the players' per-turn counts, such as surveils;
 - what effect cards do, so a regeneration shield did nothing and the monarch drew no card.
 
-Each fix was checked by the next audit run.
+Each fix was checked by the next audit run, and the fixing round that followed the review closed
+the rest.
 
 | fork fidelity audit | share of forks whose board differs from the live game |
 |---|---:|
 | first audit run | 28% |
-| after two rounds of copier fixes | 5% |
+| after the copier fixes and the fixing round | about 5% |
 
-**The forks still differing are mostly damage-step probes.** The review traced most of the remaining
-differences to card state the copier does not carry:
-- class levels;
-- transformed faces;
-- mutated permanents;
-- dungeons;
-- designations such as bestowed and unearthed;
-- "once each turn" limits, which reset in every fork.
-
-It also found a defect the audit cannot see. A copied combat forgets which creatures already dealt
-first-strike damage, so in a regular-damage-step probe every first striker deals its damage a
-second time.
+Each audit draws different cards and turns up a few rare gaps, so the `fork fidelity:` lines stay on
+in every collection and the re-collection's logs show any gap left.
 
 #### Every record now describes one moment, with the board read just before it
 
@@ -2264,6 +2254,14 @@ answer or described a board other than the one the ability acted on:
 every fizzle, because a spell fizzles almost only when its target becomes illegal in response. With
 the board read at resolution start, a fizzle follows from the input: the target is already gone.
 
+**The untap step writes no continuous record and forces no resolution**
+([FR-041b](../specs/025-ability-effect-model-gen3/spec.md)). No player gets priority in the untap
+step (rule 502.4). Forge has also not yet re-applied its statics for the new turn there. Razorkin
+Needlehead has first strike during its controller's turn, and at that turn's untap step Forge does
+not show it yet. A continuous record written at that step could describe a board the rules do not
+hold. A forced resolution there spent fork budget at a step where nobody can act. Turn-based action records and
+directed forks still run at the untap step, and the upkeep reads the same statics again.
+
 #### The re-collection keeps the random seat's held-out games, samples every stratum alike, and collects variants in two rounds
 
 The card-disjoint stratum now keeps the games in which a random seat meets a held-out card. Until
@@ -2277,8 +2275,11 @@ Every collecting run now samples decision candidates at the same rates, the held
 included. That round evaluated every candidate, so its special decision records were about a hundred
 times denser than training's. A validation stratum whose mix of records differs from training's
 scores the model on a different task from the one it trained on. The sampling itself stays, because
-most zone and plain candidates repeat what the corpus already holds. Whether `build-corpus` gives each
-validation stratum the training stratum's class mix is not yet checked.
+most zone and plain candidates repeat what the corpus already holds.
+
+`build-corpus` writes every validation stratum in the training stratum's class mix. It repeats
+the records of a stratum's under-represented classes toward the mix, at most `--reuse-cap` times a
+record, and drops none.
 
 Variants are collected in two rounds instead of one fixed round. Gen-2's single round played most of
 its variants, with a median of 13 records each, and one variant alone wrote over a hundred thousand
@@ -2303,6 +2304,21 @@ changes nothing, such as Sage of Hours removing zero counters, and the Forge AI 
 without end. Those perturbations are no longer generated: a numeric parameter is never set to zero.
 The cap is several times the largest game in gen-3's first records, so it only stops a game that
 repeats itself.
+
+#### Four known limits stay in the re-collection
+
+The re-collection starts with four limits that were found and left in place:
+- The untapped mana production counts a mana ability with a mana cost of its own, such as a filter
+  land's, without checking that its {1} can be paid.
+- The affordability check that decides whether a decision candidate's mana cost can be paid counts
+  no such ability. It also lets each card make one activation's mana, which slightly undercounts a
+  card with several mana abilities that need no tap.
+- Two stock Forge mechanics make forks slower without changing what they record. A static with
+  `IgnoreEffectCost`, such as Lost in Thought's, adds a command on every static check, and
+  Reconfigure adds a leaves-play command each time it attaches.
+- `field-coverage` found two snapshot fields constant on the audit shards. A player's rad counters
+  come only from Fallout cards, which sealed pools do not hold, and unlimited land plays are rare.
+  Both are checked again after the coverage round.
 
 ### The deviance floor is 0.04 nats, where gen-2's output fields turn noisy
 
@@ -2349,9 +2365,8 @@ line gives every field's card-disjoint explained deviance, and each run's "Const
 
 **The next steps turn the catalogue and the map into collection and training.**
 
-- **Fix the collection review's findings and build the record moments of root spec § 8.14**, check
-  the copies with the fork fidelity audit, and collect gen-3 again from scratch, ending with the
-  two variant rounds of root spec § 8.15.
+- **Review the collection code again from scratch**, without the first review's findings, then
+  collect gen-3 again from scratch, ending with the two variant rounds of root spec § 8.15.
 
 - **Rerun the map against master's targets**, then make the input and output changes in the order
   the Description sets, rerunning the map after each to count what it made learnable.

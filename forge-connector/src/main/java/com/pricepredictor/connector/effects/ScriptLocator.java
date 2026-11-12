@@ -58,7 +58,9 @@ final class ScriptLocator {
      * names a stem the token database does not know falls through the same
      * way a token copy of a printed card does, landing on a name-derived
      * {@code cardsfolder} path rather than an unresolved result; that is a
-     * known limitation (see the token-access audit note).
+     * known limitation. The Endure tokens {@code w_2_2_spirit} and
+     * {@code w_3_3_spirit} are such a case: the database registers them under
+     * {@code w_x_x_spirit}, a script with no abilities, so no text is lost.
      */
     static String scriptFileOf(Card host) {
         return variantScriptOf(host)

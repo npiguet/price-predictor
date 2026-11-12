@@ -7,7 +7,8 @@ resolution record: whether the acting ability has text, and for the ones
 that do not, which scripts they act through.
 
 Run before and after a reconversion or a corpus rebuild. The numbers this was
-written against are in docs/superpowers/specs/2026-09-17-textless-abilities.md.
+written against are in docs/superpowers/specs/2026-09-17-textless-abilities.md,
+in git history up to commit e475ab70.
 """
 
 from __future__ import annotations
