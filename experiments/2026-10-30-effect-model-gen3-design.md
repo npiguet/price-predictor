@@ -2317,19 +2317,8 @@ its report says so.
 | 1 to 4 | 8 |
 | none | 142 |
 
-**The round's own report showed only half its texts covered, because it aimed at lines the holdout
-does not withhold.** The round aimed at the 1,229 texts printed only on held-out cards
-([Background](#the-held-out-coverage-round-covers-more-than-the-held-out-texts)). The holdout
-withholds a text by its template: the text with its numbers and card names masked. For 485 of those
-lines, the template is also printed on cards outside the holdout, so they are not held-out texts. The
-round credited a game only to a held-out text, so these lines never gained one. The round kept
-dealing their cards until it gave up on each of them. It now aims only at held-out texts.
-
 **Most of the 142 texts without a game can never get one.** A static ability or a replacement effect
-writes no resolution record, and gate 1 reads only resolution records. Interventions now force the
-activated abilities of permanents and graveyard cards, not only cards in hand, so the re-collection
-can reach the activated abilities left at zero. The triggers remain, and whether one fires depends
-on the other cards in the game.
+writes no resolution record, and gate 1 reads only resolution records.
 
 | held-out texts without a game, by kind | texts, about |
 |---|---:|
@@ -2351,7 +2340,7 @@ has nothing to react to.
 
 **The first collection's depleted run took about two days for 99,000 games, and the full-strength
 run is planned at about ten hours at the same rate.** The figures come from the first gen-3
-collection, before the fixes above, and the re-collection's rate may differ.
+collection, and the re-collection's rate may differ.
 
 | run of the first gen-3 collection | figure |
 |---|---|
