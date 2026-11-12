@@ -531,6 +531,34 @@ class SnapshotBuilderTest {
                     "descended"), you.keySet());
         }
 
+        /**
+         * Bloom Tender makes one mana of each colour among its controller's
+         * permanents. The opponent's AI lists every battlefield's abilities
+         * as its own candidates, which leaves the opponent as the activating
+         * player of Bloom Tender's mana ability: read that way, its
+         * production counted the opponent's colours. The read changes
+         * nothing on the ability.
+         */
+        @Test
+        void aManaAbilityReadingTheBoardMakesItsControllersColours() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card tender = board.battlefield("Bloom Tender", board.you);
+            board.battlefield("Walking Corpse", board.you);
+            board.battlefield("Serra Angel", board.opponent);
+            forge.ai.ComputerUtilAbility.getSpellAbilities(
+                    forge.ai.ComputerUtilAbility.getAvailableCards(board.game, board.opponent),
+                    board.opponent);
+            SpellAbility mana = tender.getManaAbilities().get(0);
+            assertEquals(board.opponent, mana.getActivatingPlayer(), "the AI's scan left the opponent");
+            String choice = mana.getManaPart().getExpressChoice();
+
+            Map<String, Object> production = RecordLines.asMap(playerOf(board, 0).get("untapped_production"));
+
+            assertEquals(Map.of("W", 0L, "U", 0L, "B", 1L, "R", 0L, "G", 1L, "C", 0L), production);
+            assertEquals(board.opponent, mana.getActivatingPlayer());
+            assertEquals(choice, mana.getManaPart().getExpressChoice());
+        }
+
         /** One land play a turn, written right after the turn's tallies it bounds. */
         @Test
         void oneLandPlayWithoutARaiseRightAfterThisTurn() {

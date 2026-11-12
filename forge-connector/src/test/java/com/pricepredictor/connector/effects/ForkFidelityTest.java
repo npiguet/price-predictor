@@ -267,6 +267,29 @@ class ForkFidelityTest {
         assertEquals(List.of(), ForkFidelity.differences(live, fork));
     }
 
+    /**
+     * Bloom Tender ("for each colour among permanents you control") after the
+     * opponent's AI listed every battlefield's abilities as its own
+     * candidates: the live ability's activating player was the opponent, the
+     * copy's none, so the live production counted the opponent's colours and
+     * the copy's its controller's.
+     */
+    @Test
+    void aCopyAgreesOnWhatAManaAbilityReadingTheBoardMakes() {
+        Game live = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = live.getPlayers().get(0);
+        Player opponent = live.getPlayers().get(1);
+        TestBoard.inPlay(live, you, "Bloom Tender");
+        TestBoard.inPlay(live, you, "Walking Corpse");
+        TestBoard.inPlay(live, opponent, "Serra Angel");
+        forge.ai.ComputerUtilAbility.getSpellAbilities(
+                forge.ai.ComputerUtilAbility.getAvailableCards(live, opponent), opponent);
+
+        Game fork = new GameCopier(live).makeCopy();
+
+        assertEquals(List.of(), ForkFidelity.differences(live, fork));
+    }
+
     @Test
     void aCopyThatDiffersIsNamedByEntityAndField() {
         Game live = board();

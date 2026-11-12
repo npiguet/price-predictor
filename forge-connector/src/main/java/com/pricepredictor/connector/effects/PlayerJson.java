@@ -6,6 +6,7 @@ import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.card.CounterEnumType;
 import forge.game.player.Player;
+import forge.game.spellability.AbilityManaPart;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 
@@ -99,18 +100,41 @@ final class PlayerJson {
                 continue;
             }
             for (SpellAbility ability : card.getManaAbilities()) {
-                var part = ability.getManaPart();
-                if (part == null) {
-                    continue;
-                }
-                for (byte symbol : MagicColor.WUBRGC) {
-                    if (part.canProduce(ManaCounts.letter(symbol), ability)) {
-                        producible.add(symbol);
-                    }
+                if (ability.getManaPart() != null) {
+                    producible.addAll(producibleBy(ability, player));
                 }
             }
         }
         return ManaCounts.tally(producible);
+    }
+
+    /**
+     * The colours one mana ability can make when {@code player} activates it.
+     *
+     * <p>An ability's activating player is whoever last looked at it, and the
+     * opponent's AI lists every battlefield's abilities as its own candidates:
+     * read as it was left, Bloom Tender's "each colour among permanents you
+     * control" counted the opponent's colours. Reading a special mana ability
+     * also writes its express choice. Both are put back, so the read changes
+     * nothing in the game.
+     */
+    private static List<Byte> producibleBy(SpellAbility ability, Player player) {
+        AbilityManaPart part = ability.getManaPart();
+        Player activator = ability.getActivatingPlayer();
+        String choice = part.getExpressChoice();
+        ability.setActivatingPlayer(player);
+        try {
+            List<Byte> colors = new ArrayList<>();
+            for (byte symbol : MagicColor.WUBRGC) {
+                if (part.canProduce(ManaCounts.letter(symbol), ability)) {
+                    colors.add(symbol);
+                }
+            }
+            return colors;
+        } finally {
+            ability.setActivatingPlayer(activator);
+            part.setExpressChoice(choice);
+        }
     }
 
     /**
