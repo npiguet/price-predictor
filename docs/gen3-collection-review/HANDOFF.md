@@ -19,12 +19,21 @@ says where the work stands and what comes next.
   - the Forge AI's own loops (Chain of Smog copying forever, free no-op activations) are left alone;
     a per-game record cap (`--max-records-per-game`, 5000) and no zero perturbations contain them.
 - Verification (2026-11-12): ruff clean; unit suite 5489 passed; Forge hook and copier tests pass;
-  connector `mvn test` 1649 passed; integration suite 64 passed and 4 skipped (missing checkpoints,
+  connector `mvn test` 1658 passed; integration suite 65 passed and 4 skipped (missing checkpoints,
   opt-in forks), its last failure fixed in d84bab69 (a charm that fizzled or was declined as a whole
   now writes one empty half per chosen mode); `validate-corpus` passes on the audit shards.
-- Fork fidelity audit (T181): the final 10-minute audit (`output/effects/records-gen3-audit5`) shows
-  6 of 112 forks differing (5.4%). Left: a keyword order on Trained Pronghorn, statics the live game
-  has not re-applied at the untap boundary, one W/G source's colour in `untapped_production`.
+- Fork fidelity audit (T181): audits ran until the user stopped them (2026-11-12). The last
+  (`output/effects/records-gen3-audit6`, 10 min) showed 6 of 103 forks differing (5.8%), from three
+  rare copier gaps since fixed (a delayed trigger's remembered token that left the game, an emblem
+  copied as a floating effect, a face-down card's hidden-face keywords: Forge d44cf28493c,
+  936a41d719d, c9a71fb0650). Each audit draws different cards and turns up a few rare gaps; the
+  `fork fidelity:` lines stay on in every collection, so the re-collection's logs show any left.
+  The audit compares keyword, ability and line lists as multisets (order never matters, repeats do).
+- Also changed after the first handoff, by user decision: no `continuous` record and no forced
+  resolution at the untap boundary (FR-041b; `turn_action` records stay as they are);
+  `untapped_production` counts only mana abilities that can be activated now, read as their
+  controller's (delta contract; 74621cdb, 06210fe2). Not checked there: the ability's own mana cost
+  (a filter land's {1}).
 - `field-coverage`: `players[].rad` (Fallout, not in sealed pools) and `land_plays_unlimited` (rare)
   stay constant; check them again after the coverage round.
 - Stock Forge, not fixed (fork cost only): statics with `IgnoreEffectCost` (Lost in Thought) add a
