@@ -12,6 +12,15 @@ import argparse
 import sys
 from pathlib import Path
 
+from price_predictor.infrastructure.cli_run_manifest import (
+    READ_ONLY,
+    ManifestTable,
+    Writes,
+    dispatch,
+    labelled_paths,
+    tag_subcommands,
+)
+
 # Architecture flags forbidden alongside --resume / --checkpoint (SC-006); they
 # register with default=None so "was it supplied?" is detectable.
 _TRAIN_AGENT_ARCHITECTURE_FLAGS: tuple[str, ...] = (
@@ -1159,10 +1168,64 @@ def _has_playable_pair(rows, *, include_mirrors: bool) -> bool:
     return False
 
 
+# ── run manifests ─────────────────────────────────────────────────────
+
+#: Where the offline trainers write their checkpoints; no flag moves it.
+_AGENT_CHECKPOINT_DIR = Path("models") / "draft" / "agent"
+
+
+def _offline_training_inputs(args: argparse.Namespace) -> list[str | Path | None]:
+    """What an offline trainer reads; a resume reads its recorded paths unless overridden."""
+    from draft.application.train_draft_agent import TrainDraftAgentConfig
+    from sealed.infrastructure.cli_resume import dataclass_default
+
+    def path(name: str) -> str | Path | None:
+        given = getattr(args, name)
+        if given is not None or args.resume is not None:
+            return given
+        return dataclass_default(TrainDraftAgentConfig, name)
+
+    return [path("drafts_path"), path("cards_path"), args.resume, args.checkpoint]
+
+
+#: Each subcommand's run manifest (``.claude/skills/artifact-layout``): the
+#: argument naming its output and the ones it reads.
+RUN_MANIFESTS: ManifestTable = {
+    "generate-draft-data": Writes(
+        "output_path", file=True,
+        inputs=(
+            "scorer_checkpoint", "picker_checkpoint", "cards_path",
+            lambda args: labelled_paths(args.agent_checkpoints),
+        ),
+    ),
+    "train-draft-agent": Writes(
+        lambda _args: _AGENT_CHECKPOINT_DIR, inputs=(_offline_training_inputs,),
+    ),
+    "train-draft-agent-rl": Writes(
+        lambda _args: _AGENT_CHECKPOINT_DIR,
+        inputs=(_offline_training_inputs, "critic_corpus"),
+    ),
+    # Its checkpoints go to models/draft/agent/, which no flag moves; the
+    # drafts it streams go to --output-path, its one output argument.
+    "train-draft-agent-online": Writes(
+        "output_path", file=True,
+        inputs=(
+            lambda args: labelled_paths(args.learner),
+            lambda args: labelled_paths(args.frozen),
+            "scorer_checkpoint", "picker_checkpoint", "cards_path",
+        ),
+    ),
+    "validate-builder": READ_ONLY,
+    "analyze-generated-decks": READ_ONLY,
+    "play-draft-games": Writes("output_path", file=True, inputs=("drafts_path",)),
+}
+
+
 def main() -> None:
     parser = build_parser()
+    tag_subcommands(parser)
     args = parser.parse_args()
     if not getattr(args, "func", None):
         parser.print_help()
         sys.exit(0)
-    sys.exit(args.func(args))
+    sys.exit(dispatch(args, RUN_MANIFESTS, module="draft"))

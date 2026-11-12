@@ -4,9 +4,17 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from price_predictor.infrastructure.cli_helpers import add_dataclass_arg
+from price_predictor.infrastructure.cli_run_manifest import (
+    READ_ONLY,
+    ManifestTable,
+    Writes,
+    dispatch,
+    tag_subcommands,
+)
 from sealed.application.encode_cards import EncodeCardsConfig
 from sealed.application.evaluate_scorer import EvaluateScorerConfig
 from sealed.application.train_scorer import TrainScorerConfig
@@ -1882,10 +1890,105 @@ def run_analyze_generated_decks(args: argparse.Namespace) -> int:
     return 0
 
 
+# ── run manifests ─────────────────────────────────────────────────────
+
+
+def _pools_dir(args: argparse.Namespace) -> Path:
+    """``generate-pools``' output directory, resolved as ``run_generate_pools`` does."""
+    if args.pools_path is None:
+        root = Path("output") / "sealed" / "pools"
+        return root if args.set_code is None else root / args.set_code
+    return Path(args.pools_path.replace("{set}", args.set_code) if args.set_code
+                else args.pools_path)
+
+
+def _checkpoint_dir(default: str) -> Callable[[argparse.Namespace], Path]:
+    """A trainer's checkpoint directory: ``--checkpoint-dir``, else the one
+    ``--resume``'s checkpoint sits in (where the resumed run writes), else
+    the default."""
+    def resolve(args: argparse.Namespace) -> Path:
+        if args.checkpoint_dir is not None:
+            return Path(args.checkpoint_dir)
+        return Path(args.resume).parent if args.resume is not None else Path(default)
+    return resolve
+
+
+def _encode_cards_encoder(args: argparse.Namespace) -> str | None:
+    if args.scorer_checkpoint is not None:
+        return None
+    return args.encoder_checkpoint or _ENCODE_CARDS_DEFAULT_ENCODER
+
+
+def _train_scorer_inputs(args: argparse.Namespace) -> list[str | None]:
+    """What a scorer run reads; a resume reads its recorded paths unless overridden."""
+    defaults = {} if args.resume is not None else _REQUIRED_FIELD_CLI_DEFAULTS
+    return [
+        args.outcomes_path or defaults.get("outcomes_path"),
+        args.cards_path or defaults.get("cards_path"),
+        args.resume, args.scorer_checkpoint, args.encoder_checkpoint,
+    ]
+
+
+def _train_picker_inputs(args: argparse.Namespace) -> list[str | Path | None]:
+    """What a picker run reads; a resume reads its recorded paths unless overridden."""
+    from sealed.application.train_picker import TrainPickerConfig
+
+    def path(name: str) -> str | Path | None:
+        given = getattr(args, name)
+        if given is not None or args.resume is not None:
+            return given
+        return dataclass_default(TrainPickerConfig, name)
+
+    return [
+        args.pools_path, path("scorer_checkpoint"), args.auditor_scorer_checkpoint,
+        path("cards_path"), args.resume, args.picker_checkpoint,
+    ]
+
+
+#: Each subcommand's run manifest (``.claude/skills/artifact-layout``): the
+#: argument naming its output and the ones it reads.
+RUN_MANIFESTS: ManifestTable = {
+    # The embeddings land beside the cards, in a tree it never creates.
+    "encode-cards": Writes(
+        "cards_path", create=False,
+        inputs=(_encode_cards_encoder, "scorer_checkpoint", "vocab_path", "cards_path"),
+    ),
+    "generate-pools": Writes(_pools_dir, inputs=("exclude_cards",)),
+    "build-decks": Writes(
+        "output", file=True, inputs=("pools_path", "checkpoint", "cards_path"),
+    ),
+    "train-scorer": Writes(
+        _checkpoint_dir(_REQUIRED_FIELD_CLI_DEFAULTS["checkpoint_dir"]),
+        inputs=(_train_scorer_inputs,),
+    ),
+    # Without --work-dir the evaluation works in a temporary directory.
+    "evaluate-scorer": Writes("work_dir", inputs=("checkpoint", "cards_path")),
+    # The match outcomes have no output flag: they append to output/sealed/,
+    # and a collection run's shards go to --effect-records.
+    "match-outcomes": Writes(
+        lambda args: args.effect_records or Path("output") / "sealed",
+        inputs=("side_a_decks", "side_b_decks", "exclude_cards"),
+    ),
+    "train-encoder": Writes(
+        "model_output", inputs=("cards_played_path", "cards_folder", "vocab_path"),
+    ),
+    "build-vocab": Writes("vocab_path", file=True, inputs=("cards_folder",)),
+    "train-picker": Writes(
+        _checkpoint_dir("models/sealed/picker/"),
+        inputs=(_train_picker_inputs,),
+    ),
+    "pick-decks": Writes(
+        "output", file=True, inputs=("pools_path", "picker_checkpoint", "cards_path"),
+    ),
+    "analyze-generated-decks": READ_ONLY,
+}
+
+
 def main() -> None:
     parser = build_parser()
+    tag_subcommands(parser)
     args = parser.parse_args()
     if not getattr(args, "func", None):
         parser.print_help()
         sys.exit(0)
-    sys.exit(args.func(args))
+    sys.exit(dispatch(args, RUN_MANIFESTS, module="sealed"))

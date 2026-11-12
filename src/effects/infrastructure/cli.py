@@ -58,6 +58,13 @@ from effects.domain.shard_generation import MixedGenerationsError, UnacceptedGen
 from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
 from price_predictor.domain.dataclass_defaults import field_default
+from price_predictor.infrastructure.cli_run_manifest import (
+    READ_ONLY,
+    ManifestTable,
+    Writes,
+    dispatch,
+    tag_subcommands,
+)
 from sealed.infrastructure.effect_collection_flags import (
     add_cap_flags,
     add_directed_fork_flags,
@@ -1059,6 +1066,102 @@ def write_output_as_utf8(*streams) -> None:
             reconfigure(encoding="utf-8")
 
 
+# ── run manifests ───────────────────────────────────────────────────────
+
+
+def _collection_dir(args: argparse.Namespace) -> Path:
+    """A collector's shard directory, as ``collection_target`` resolves it."""
+    if args.training_corpus is not None:
+        return Path(args.training_corpus)
+    return Path(args.effect_records or DEFAULT_RECORDS_DIR)
+
+
+def _collection_inputs(args: argparse.Namespace) -> list[Path | None]:
+    """The lists and the checkpoint a collector reads its holdout from."""
+    corpus_list = (
+        Path(args.training_corpus) / HOLDOUT_LIST_NAME
+        if args.training_corpus is not None else None
+    )
+    return [
+        args.exclude_cards, args.split_from, corpus_list, getattr(args, "only_cards", None),
+        getattr(args, "wording_cards", None),
+    ]
+
+
+def _vocab_output(args: argparse.Namespace) -> Path:
+    from effects.application.build_vocab import BuildVocabConfig
+
+    return config_from_args(BuildVocabConfig, args).resolved_vocab_path()
+
+
+def _model_output(args: argparse.Namespace) -> Path:
+    """``--model-output``, else the directory ``--variant`` trains into."""
+    if args.model_output is not None:
+        return Path(args.model_output)
+    from effects.infrastructure.effect_model_store import model_output_for
+
+    return model_output_for(args.variant)
+
+
+def _encoded_checkpoint(args: argparse.Namespace) -> Path:
+    """The checkpoint ``encode-abilities`` reads: ``--checkpoint``, else ``--variant``'s."""
+    from effects.application.encode_abilities import EncodeAbilitiesConfig
+
+    return config_from_args(EncodeAbilitiesConfig, args).resolved_checkpoint()
+
+
+def _evaluation_dir(args: argparse.Namespace) -> Path:
+    """Where the evaluation's pictures go: ``<checkpoint stem>.evaluation/``."""
+    checkpoint = Path(args.checkpoint)
+    return checkpoint.parent / f"{checkpoint.stem}.evaluation"
+
+
+_SOURCE_TREES = ("cards_folders", "variant_scripts")
+_TOKENIZER_PATHS = ("vocab_path", "keyword_definitions")
+
+#: Each subcommand's run manifest (``.claude/skills/artifact-layout``): the
+#: argument naming its output and the ones it reads.
+RUN_MANIFESTS: ManifestTable = {
+    "build-vocab": Writes(
+        _vocab_output, file=True, inputs=("cards_folders", "keyword_definitions"),
+    ),
+    "extract-keyword-definitions": Writes("output", file=True),
+    "collect-coverage": Writes(
+        _collection_dir, inputs=("cards_folders", _collection_inputs),
+    ),
+    "build-corpus": Writes(
+        "output", when=lambda args: not args.verify,
+        inputs=("records_dir", *_SOURCE_TREES, *_TOKENIZER_PATHS),
+    ),
+    "field-coverage": READ_ONLY,
+    "rule-counts": Writes(
+        "output", file=True, inputs=("records_dir", *_SOURCE_TREES, "rules_dir"),
+    ),
+    "holdout-cards": Writes("out", file=True, inputs=("cards_folders", "printings_path")),
+    "validate-corpus": READ_ONLY,
+    # The variant scripts it writes go to --variant-scripts, beside the shards.
+    "collect-variants": Writes(
+        _collection_dir,
+        inputs=("forge_cards_path", "rule_counts", "cards_folders", _collection_inputs),
+    ),
+    "train-effect-model": Writes(
+        _model_output,
+        inputs=("corpus", *_SOURCE_TREES, *_TOKENIZER_PATHS, "reports_dir"),
+    ),
+    "encode-abilities": Writes(
+        "output_root", inputs=(_encoded_checkpoint, *_SOURCE_TREES, *_TOKENIZER_PATHS),
+    ),
+    "evaluate-effect-model": Writes(
+        _evaluation_dir,
+        inputs=(
+            "checkpoint",
+            lambda args: [path for _name, path in (args.baseline_checkpoints or [])],
+            *_SOURCE_TREES, *_TOKENIZER_PATHS, "corpus", "abilities_root", "win_rates",
+        ),
+    ),
+}
+
+
 def main() -> None:
     write_output_as_utf8(sys.stdout, sys.stderr)
     # Stamped, because these commands run for hours: a progress line without a
@@ -1067,8 +1170,9 @@ def main() -> None:
         level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S",
     )
     parser = build_parser()
+    tag_subcommands(parser)
     args = parser.parse_args()
     if not getattr(args, "func", None):
         parser.print_help()
         sys.exit(0)
-    sys.exit(args.func(args))
+    sys.exit(dispatch(args, RUN_MANIFESTS, module="effects"))

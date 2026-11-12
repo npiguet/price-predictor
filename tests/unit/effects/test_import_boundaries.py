@@ -43,6 +43,11 @@ _ALLOWED: dict[str, set[str] | None] = {
     # One reading of a dataclass field's default, shared with the price and
     # sealed CLIs rather than spelled again per package.
     "price_predictor.domain.dataclass_defaults": {"field_default"},
+    # The run manifest every writing command keeps (artifact-layout skill),
+    # wired by one table per CLI, the same for all four packages.
+    "price_predictor.infrastructure.cli_run_manifest": {
+        "READ_ONLY", "ManifestTable", "Writes", "dispatch", "tag_subcommands",
+    },
     "sealed.domain.manabase": {"compute_basic_lands"},
     "sealed.infrastructure.converted_card_locator": {"ConvertedCardLocator"},
     # The cap flags every collecting supervisor carries, one definition for

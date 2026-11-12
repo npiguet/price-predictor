@@ -8,6 +8,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from price_predictor.infrastructure.cli_run_manifest import READ_ONLY, ManifestTable, Writes
+
 logger = logging.getLogger(__name__)
 
 
@@ -774,3 +776,35 @@ def run_evaluate_transformer(args: argparse.Namespace) -> int:
         print(result.format_per_bucket_table())
 
     return 0
+
+
+# ── run manifests ─────────────────────────────────────────────────────
+
+
+def _converted_root(args: argparse.Namespace) -> Path:
+    """``convert``'s run directory: the one holding both converted trees
+    (``converted/`` beside ``cardsfolder/`` and ``tokenscripts/``), else the
+    card tree's own when the two trees are not siblings."""
+    cards, tokens = Path(args.output_path), Path(args.tokens_output_path)
+    return cards.parent if cards.parent.resolve() == tokens.parent.resolve() else cards
+
+
+_DATASET_INPUTS = ("output_dir", "prices_path", "printings_path")
+
+#: Each subcommand's run manifest (``.claude/skills/artifact-layout``): the
+#: argument naming its output and the ones it reads.
+RUN_MANIFESTS: ManifestTable = {
+    "train sklearn": Writes("model_output", inputs=_DATASET_INPUTS),
+    "train transformer": Writes("model_output", inputs=(*_DATASET_INPUTS, "vocab_path")),
+    "predict sklearn": READ_ONLY,
+    "predict transformer": READ_ONLY,
+    "evaluate sklearn": Writes(
+        "output_csv", file=True, inputs=("model_path", *_DATASET_INPUTS),
+    ),
+    "evaluate transformer": READ_ONLY,
+    "serve": READ_ONLY,
+    "vocabulary": Writes("output_dir", inputs=("cards_path", "printings_path")),
+    "convert": Writes(_converted_root, inputs=("cards_path", "tokens_path")),
+    # Its report lands in the converted tree it checks, which it never creates.
+    "check-convert": Writes("output_path", create=False, inputs=("output_path", "cards_path")),
+}
