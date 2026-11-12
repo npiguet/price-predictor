@@ -46,7 +46,7 @@ checkpoint are not inside it: they go to `output/<module>/<gen>/cache/<run>/` an
   four words saying what the run is (`2026-11-13-full-strength`, `2026-11-20-e256-rule-mask-soft`,
   `2026-11-21-knowledge-probes`).
 - The slug names the run's purpose or its one varied setting, never its history. A continuation, a
-  re-run or a fix is a new run with its own date and slug; its manifest names the run it continues.
+  re-run or a fix is a new run with its own date and slug; its manifest names the run it continues (`continues` in `run.json`).
   Suffix chains (`-ext20-last`, `-lr0.1-best`) are not used.
 - Two runs started the same day with the same slug take `-2`, `-3`.
 - One run is one logical job: a collection across all its worker restarts, a training run across its
@@ -56,16 +56,35 @@ checkpoint are not inside it: they go to `output/<module>/<gen>/cache/<run>/` an
 
 | file | written | content |
 |---|---|---|
-| `RUN.md` | at start, completed at the end | purpose (one sentence); status; the exact command line(s); repo commit and `../forge` commit (and "dirty" if either tree had changes); the input paths it read; the run(s) it continues; start and end time; one line on how it ended |
+| `run.json` | at start, completed at the end | the run manifest below |
 | `console.log` | throughout | the command's stdout and stderr, unbuffered (`python -u … 2>&1 \| tee console.log`), its first line the command |
 | `logs/` | throughout | every other log: Forge worker logs, per-process logs, supervisor logs |
 | the artifacts | — | whatever the run produces, in the layout its command defines |
 
-`status` in `RUN.md` is one of `running`, `keep`, `scratch`, `failed`, `superseded by <run path>`.
-A run that never reaches `keep` belongs under `scratch`.
+`run.json` is one JSON object, read and edited by scripts as well as by hand:
 
-`RUN.md` is the provenance record: anything a later reader needs to reproduce or trust the run is
-there or in `console.log`, never only in a chat or a commit message.
+```json
+{
+  "run": "output/effects/gen3/records/2026-11-13-full-strength",
+  "purpose": "Full-strength collection for the card-disjoint stratum.",
+  "status": "running",
+  "superseded_by": null,
+  "commands": ["python -u -m sealed match-outcomes --workers 6 ..."],
+  "commits": {"repo": "7bb254d3", "forge": "d44cf28493c", "dirty": false},
+  "inputs": ["output/price-predictor/gen1/inputs/2026-11-13-convert"],
+  "continues": [],
+  "started": "2026-11-13T09:12:00+01:00",
+  "ended": null,
+  "outcome": null
+}
+```
+
+- `status` is one of `running`, `keep`, `scratch`, `failed`, `superseded`; `superseded_by` names the
+  replacing run's path when `superseded`. A run that never reaches `keep` belongs under `scratch`.
+- `inputs` and `continues` hold run paths relative to the repository root.
+- `outcome` is one line on how the run ended.
+- `run.json` is the provenance record: anything a later reader needs to reproduce or trust the run
+  is there or in `console.log`, never only in a chat or a commit message.
 
 ## Rules
 
@@ -74,8 +93,8 @@ there or in `console.log`, never only in a chat or a commit message.
    directory; a reusable one lives in `scripts/`.
 2. A path is passed explicitly on the command line whenever the command's default would put the
    file elsewhere than this layout. Defaults that disagree with this skill are a bug to fix.
-3. A run reads other runs by their full path and never copies their files. Its `RUN.md` lists every
-   path it read.
+3. A run reads other runs by their full path and never copies their files. Its `run.json` lists
+   every path it read.
 4. Anything a `keep` run reads is `keep` too. Nothing outside `scratch` reads from `scratch`.
 5. A generation's directories are not edited once the next generation starts, except to mark runs
    `superseded`.
@@ -87,13 +106,13 @@ there or in `console.log`, never only in a chat or a commit message.
 The NAS (`Y:\Nicolas\mtg\mtg-models-data\`) mirrors the same tree: a run moves from
 `output/effects/gen2/records/2026-10-08-depleted/` to
 `Y:\Nicolas\mtg\mtg-models-data\output\effects\gen2\records\2026-10-08-depleted\`, unchanged. A path
-in a `RUN.md` stays valid by swapping the root. Moving a run never renames it.
+in a `run.json` stays valid by swapping the root. Moving a run never renames it.
 
 ## Checklist before starting a run
 
 1. Module, generation, kind (or model) and slug chosen; the run path is
    `output/<module>/<gen>/<kind>/<YYYY-MM-DD-slug>/` or `models/<module>/<gen>/<model>/<YYYY-MM-DD-slug>/`.
-2. `RUN.md` written with purpose, status `running` (or `scratch`), command, commits and inputs.
+2. `run.json` written with purpose, status `running` (or `scratch`), command, commits and inputs.
 3. The command writes its artifacts inside the run directory, its console to `console.log`, its other
    logs under `logs/`.
-4. At the end: `RUN.md` gets its end time, how it ended, and its final status.
+4. At the end: `run.json` gets its end time, its outcome and its final status.
