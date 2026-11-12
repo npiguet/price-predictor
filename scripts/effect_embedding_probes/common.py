@@ -27,7 +27,9 @@ from __future__ import annotations
 import argparse
 import datetime
 import re
+import sys
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -186,7 +188,6 @@ def paths_for(
     from effects.domain.ability_encoder import surface_of
 
     checkpoint = Path(checkpoint)
-    date = (today or datetime.date.today()).strftime("%Y%m%d")
     folders = tuple(Path(f) for f in (
         cards_folders or recorded_folders or DEFAULT_CARDS_FOLDERS
     ))
@@ -195,13 +196,41 @@ def paths_for(
     return ProbePaths(
         checkpoint=checkpoint,
         abilities_root=Path(abilities_root),
-        out=(Path(reports_dir) if reports_dir else REPORTS)
-        / f"embedding-probes-{checkpoint_label(checkpoint)}-{date}",
+        out=report_dir(checkpoint, reports_dir, today),
         cards_folders=folders,
         surface=surface_of(Path(provenance.vocab_path)),
         e_width=cache_e_width(abilities_root),
         manifest=manifest,
     )
+
+
+def report_dir(
+    checkpoint: Path, reports_dir: Path | None = None, today: datetime.date | None = None,
+) -> Path:
+    """``<reports-dir>/embedding-probes-<checkpoint>-<date>/``, the run's report directory."""
+    date = (today or datetime.date.today()).strftime("%Y%m%d")
+    return (Path(reports_dir) if reports_dir else REPORTS) / (
+        f"embedding-probes-{checkpoint_label(Path(checkpoint))}-{date}"
+    )
+
+
+def main_with_manifest(main: Callable[[], object], script: str) -> None:
+    """Run a probe script's ``main`` inside its report directory's run manifest.
+
+    The battery's scripts share one report directory, so its manifest lists
+    each script run as one more command. The common flags are read here once
+    more, ahead of ``main``, for the directory; ``--help`` runs bare.
+    """
+    from price_predictor.infrastructure.run_manifest import run_script
+
+    if {"-h", "--help"} & set(sys.argv[1:]):
+        main()
+        return
+    args, _ = add_probe_arguments(argparse.ArgumentParser(add_help=False)).parse_known_args()
+    raise SystemExit(run_script(
+        report_dir(args.checkpoint, args.reports_dir), main, script=script,
+        inputs=[args.checkpoint, args.abilities_root, *(args.cards_folders or ())],
+    ))
 
 
 def resolve_paths(args: argparse.Namespace) -> ProbePaths:

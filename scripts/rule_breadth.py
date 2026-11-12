@@ -25,6 +25,7 @@ from effects.application.rule_breadth import breadth
 from effects.domain.default_paths import DEFAULT_CARDS_FOLDER_PATHS, DEFAULT_VARIANT_SCRIPTS
 from effects.domain.rule_breadth import flagged_rows
 from effects.infrastructure.converted_trees import SourceTrees
+from price_predictor.infrastructure.run_manifest import run_script
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -47,8 +48,15 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = build_parser().parse_args(argv)
-    roots = SourceTrees.of(args.cards_folders or DEFAULT_CARDS_FOLDER_PATHS,
-                           args.variant_scripts).sidecar_roots()
+    cards_folders = args.cards_folders or DEFAULT_CARDS_FOLDER_PATHS
+    return run_script(
+        args.output.parent, lambda: _run(args, cards_folders), script=__file__, argv=argv,
+        inputs=[args.records_dir, args.rules_dir, *cards_folders, args.variant_scripts],
+    )
+
+
+def _run(args: argparse.Namespace, cards_folders) -> int:
+    roots = SourceTrees.of(cards_folders, args.variant_scripts).sidecar_roots()
     rows, records = breadth(args.records_dir, args.rules_dir, roots, args.workers)
     flagged = flagged_rows(rows, args.min_pool, args.max_share)
     document = {

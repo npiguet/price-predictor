@@ -284,3 +284,18 @@ def run_recorded(
         raise
     manifest.finish(exit_code=code or 0)
     return code
+
+
+def run_script(
+    run_dir: PathLike | None, body: Callable[[], int | None], *, script: PathLike,
+    argv: Sequence[str] | None = None, inputs: Iterable[PathLike | None] = (),
+    create: bool = True,
+) -> int | None:
+    """:func:`run_recorded` for a script run by path (``python scripts/….py``):
+    ``argv`` its arguments (``sys.argv[1:]`` when None); a ``run_dir`` of
+    None, an invocation writing nothing, runs ``body`` bare."""
+    if run_dir is None:
+        return body()
+    return run_recorded(
+        run_dir, body, command=command_line(argv, script=script), inputs=inputs, create=create,
+    )

@@ -11,7 +11,9 @@ pass by assuming 64.
 from __future__ import annotations
 
 import datetime
+import json
 import shutil
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -179,6 +181,27 @@ class TestCheckpointLabel:
 
     def test_a_timestamped_checkpoint_keeps_its_stem(self):
         assert common.checkpoint_label(Path("runs/a/20261008-1200.pt")) == "20261008-1200"
+
+
+class TestRunManifest:
+    """Every script of the battery records itself in the report directory's run.json."""
+
+    def test_a_script_run_is_recorded_in_its_report_directory(self, tmp_path, monkeypatch):
+        checkpoint = tmp_path / "arm" / "latest.pt"
+        argv = ["--checkpoint", str(checkpoint), "--reports-dir", str(tmp_path / "reports")]
+        monkeypatch.setattr(sys, "argv", ["build_texts.py", *argv])
+
+        with pytest.raises(SystemExit) as exit_:
+            common.main_with_manifest(lambda: None, "scripts/effect_embedding_probes/x.py")
+
+        assert exit_.value.code is None
+        out = common.report_dir(checkpoint, tmp_path / "reports")
+        manifest = json.loads((out / "run.json").read_text(encoding="utf-8"))
+        assert manifest["commands"] == [
+            "python scripts/effect_embedding_probes/x.py " + " ".join(argv),
+        ]
+        assert manifest["status"] == "finished"
+        assert out.name == f"embedding-probes-arm-latest-{datetime.date.today():%Y%m%d}"
 
 
 # ── effect profiles ─────────────────────────────────────────────────────

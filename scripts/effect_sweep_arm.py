@@ -173,6 +173,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.from_step == "train" and not train_args:
         print("pass the arm's train-effect-model flags after --", file=sys.stderr)
         return 2
+    from price_predictor.infrastructure.run_manifest import run_script
+
+    # Every step's command writes into this directory too and appends itself
+    # to the same manifest: the arm is one run.
+    return run_script(
+        run_dir, lambda: _run(args, train_args, argv), script=__file__, argv=argv,
+        inputs=[args.corpus, args.probe_set_dir],
+    )
+
+
+def _run(args: argparse.Namespace, train_args: list[str], argv: list[str]) -> int:
+    run_dir: Path = args.run_dir
     run_dir.mkdir(parents=True, exist_ok=True)
     arm_log = run_dir / "arm.log"
     with arm_log.open("a", encoding="utf-8") as out:

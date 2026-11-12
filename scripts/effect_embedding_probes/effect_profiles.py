@@ -358,4 +358,6 @@ def derive(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-    main()
+    from effect_embedding_probes.common import main_with_manifest
+
+    main_with_manifest(main, __file__)

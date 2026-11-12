@@ -16,6 +16,7 @@ from price_predictor.infrastructure.run_manifest import (
     command_line,
     read_commits,
     run_recorded,
+    run_script,
 )
 
 COMMITS = {"repo": "abc1234", "forge": None, "dirty": False}
@@ -307,6 +308,18 @@ class TestRunRecorded:
             run_recorded(repo / "run", body, command="c", inputs=[], repo_root=repo)
         document = read(repo / "run")
         assert (document["status"], document["outcome"]) == (status, outcome)
+
+
+class TestRunScript:
+    def test_records_the_script_s_command(self, repo: Path, monkeypatch):
+        monkeypatch.setattr(run_manifest, "repository_root", lambda: repo)
+        code = run_script(repo / "run", lambda: 0, script=repo / "scripts" / "probe.py",
+                          argv=["--output", "x"])
+        assert code == 0
+        assert read(repo / "run")["commands"] == ["python scripts/probe.py --output x"]
+
+    def test_no_run_directory_runs_the_body_bare(self, repo: Path):
+        assert run_script(None, lambda: 3, script="s.py", argv=[]) == 3
 
 
 class TestCommandLine:

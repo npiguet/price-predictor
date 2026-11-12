@@ -71,6 +71,7 @@ from effect_knowledge_probes import (  # noqa: E402
 )
 from effect_knowledge_probes import board as board_probe  # noqa: E402
 from effect_knowledge_probes.scorecard import Scorecard  # noqa: E402
+from price_predictor.infrastructure.run_manifest import run_script  # noqa: E402
 
 
 def progress(message: str) -> None:
@@ -851,14 +852,31 @@ def freeze_selection(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    if args.freeze_probe_set:
+        # Its output is the selection set, in the probe-set directory.
+        return run_script(
+            args.probe_set_dir or args.reports_dir, lambda: freeze_selection(args),
+            script=__file__, argv=argv, inputs=[args.corpus, *(args.cards_folder or ())],
+        )
+    # The report directory is named for today, as the scorecard is dated.
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    return run_script(
+        report_dir(args.reports_dir, args.checkpoint, today), lambda: _probe_run(args),
+        script=__file__, argv=argv,
+        inputs=[
+            args.checkpoint, args.corpus, *(args.cards_folder or ()), args.abilities_root,
+            args.vocab_path, args.keyword_definitions, args.probe_set_dir or args.reports_dir,
+        ],
+    )
+
+
+def _probe_run(args: argparse.Namespace) -> int:
     from effects.domain.shard_generation import (
         MixedGenerationsError,
         UnacceptedGenerationError,
     )
 
-    args = parse_args(argv)
-    if args.freeze_probe_set:
-        return freeze_selection(args)
     context = common.probe_context(
         args.checkpoint, corpus=args.corpus, cards_folders=args.cards_folder)
     selection = halves.load_selection(context, args.probe_set_dir or args.reports_dir)

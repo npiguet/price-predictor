@@ -767,6 +767,13 @@ class TestCompare:
         text = out.read_text(encoding="utf-8")
         assert "## magnitudes" in text and "a linear" in text and "b mlp" in text
         assert "Ranking on rung 1" in text
+        manifest = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))
+        assert manifest["commands"] == [" ".join([
+            "python", "scripts/effect_knowledge_probes/compare.py", *map(str, paths),
+            "--output", str(out),
+        ])]
+        assert manifest["inputs"] == [p.resolve().as_posix() for p in paths]
+        assert (manifest["status"], manifest["outcome"]) == ("finished", "exit 0")
 
     def test_the_table_prints_to_a_cp1252_stdout(self, tmp_path, monkeypatch):
         path = tmp_path / "a.json"
@@ -774,6 +781,7 @@ class TestCompare:
         stdout = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
         monkeypatch.setattr(sys, "stdout", stdout)
         assert compare.main([str(path)]) == 0
+        assert not (tmp_path / "run.json").exists()  # printing writes no file
         stdout.flush()
         assert "rung 1 − rung 1w" in stdout.buffer.getvalue().decode("utf-8")
 

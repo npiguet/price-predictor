@@ -38,6 +38,7 @@ from pathlib import Path
 
 import torch
 
+from price_predictor.infrastructure.run_manifest import run_script
 from sealed.application.build_decks import BuildDecksConfig, BuildDecksUseCase
 from sealed.application.deck_assembly import load_pool_embeddings
 from sealed.application.evaluate_scorer import format_decks_for_display, score_decks
@@ -156,6 +157,14 @@ def main(argv: list[str]) -> int:
     if args.output_dir is None:
         args.output_dir = Path("output") / f"decks_{secrets.token_hex(4)}"
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    return run_script(
+        args.output_dir, lambda: _run(args), script=__file__, argv=argv,
+        inputs=[args.scorer_checkpoint, args.picker_checkpoint, args.cards_path,
+                args.pools_path],
+    )
+
+
+def _run(args: argparse.Namespace) -> int:
     _log(f"Output dir: {args.output_dir}")
     locator = ConvertedCardLocator(args.cards_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -152,6 +153,22 @@ class TestResume:
         monkeypatch.setattr(arm, "run_logged", lambda command, log: 1)
         arm.main(["--run-dir", str(tmp_path), "--corpus", "c", "--", "--e-dim", "64"])
         assert "continue with --resume" in (tmp_path / "arm.log").read_text(encoding="utf-8")
+
+    def test_the_arm_keeps_one_run_manifest(self, tmp_path, monkeypatch):
+        """The arm is one run: its manifest lists the arm, and each step's own
+        command appends itself to the same file."""
+        monkeypatch.setattr(arm, "run_logged", lambda command, log: 0)
+        arm.main(["--run-dir", str(tmp_path), "--corpus", "c", "--", "--e-dim", "64"])
+        manifest = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))
+        assert manifest["commands"] == [
+            "python scripts/effect_sweep_arm.py --run-dir "
+            f"{tmp_path} --corpus c -- --e-dim 64",
+        ]
+        assert (manifest["status"], manifest["outcome"]) == ("finished", "exit 0")
+
+    def test_a_refused_arm_writes_no_manifest(self, tmp_path):
+        assert arm.main(["--run-dir", str(tmp_path / "a"), "--corpus", "c"]) == 2
+        assert not (tmp_path / "a").exists()
 
     def test_the_arm_log_records_the_arguments_main_was_given(self, tmp_path, monkeypatch):
         """A caller passing argv (a test, a driver script) is what ran, not sys.argv."""

@@ -651,6 +651,16 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = build_parser().parse_args(argv)
+    from price_predictor.infrastructure.run_manifest import run_script
+
+    return run_script(
+        args.output, lambda: _run(args), script=__file__, argv=argv,
+        inputs=[args.manifest or args.corpus / "manifest.json",
+                args.records_dir or args.corpus, args.rules_dir, *(args.cards_folders or ())],
+    )
+
+
+def _run(args: argparse.Namespace) -> int:
     from effects.infrastructure.converted_trees import SourceTrees, process_sidecars
     from effects.infrastructure.rules_catalogue_io import load_scenarios
 

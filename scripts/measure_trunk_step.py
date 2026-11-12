@@ -55,6 +55,7 @@ from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.relation_types import RELATION_TYPES
 from effects.domain.surface_collation import collate_surfaces, entity_index
 from effects.infrastructure.shard_io import read_shard
+from price_predictor.infrastructure.run_manifest import run_script
 
 
 class _EveryKeyLookup:
@@ -200,6 +201,13 @@ def read_records(shard: Path, needed: int) -> list[EffectRecord]:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    return run_script(
+        args.output.parent if args.output is not None else None, lambda: _run(args),
+        script=__file__, argv=argv, inputs=[args.shard],
+    )
+
+
+def _run(args: argparse.Namespace) -> int:
     device = torch.device(args.device)
     records = read_records(args.shard, (args.steps + args.warmup) * args.batch_size)
     print(f"{len(records)} records read from {args.shard}", flush=True)
