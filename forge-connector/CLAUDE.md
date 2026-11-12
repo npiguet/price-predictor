@@ -20,7 +20,7 @@ These workers import `forge-game` / `forge-core` from the sibling `../forge` che
 cd forge-connector && mvn install -DskipTests
 ```
 
-Build with `install`, never `package`, and rebuild `../forge` with `mvn install -DskipTests` first whenever Forge changed.
+Build with `install`, never `package`, and rebuild `../forge` with `mvn install -DskipTests` first whenever Forge changed: the connector compiles against Forge's installed artifacts, so `package` alone can bundle stale Forge code. Installing and smoke-running the fresh JAR needs no go-ahead, except while collection workers are running, because they restart from the installed JARs.
 
 ## Files the workers write
 
