@@ -12,6 +12,7 @@ written anywhere else, and nothing is written at a level above its run directory
 ## The tree
 
 ```
+output/<module>/<gen>/converted/{cardsfolder,tokenscripts}/...
 output/<module>/<gen>/<kind>/<run>/...
 models/<module>/<gen>/<model>/<run>/...
 ```
@@ -30,10 +31,17 @@ Kinds under `output/<module>/<gen>/`:
 |---|---|---|
 | `records` | raw collected corpora (shards, match outcomes, draft transcripts): append-only and expensive to rebuild | never deleted; archived to the NAS when superseded |
 | `corpus` | curated datasets built from records (`build-corpus` output, generated pools, generated decks) | kept while a checkpoint references it |
-| `inputs` | small generated files other steps read: holdout lists, keyword definitions, rule counts, variant scripts, converted cards | kept while anything reads them |
+| `inputs` | small generated files other steps read: holdout lists, keyword definitions, rule counts, variant scripts | kept while anything reads them |
 | `cache` | derived and rebuildable from a checkpoint or a corpus: ability caches, encodings | deletable at any time |
 | `reports` | evaluations, probes, audits worth keeping, analysis outputs, charts | kept; the experiment record links them |
 | `scratch` | pilots, smoke runs, debugging collections, throwaway audits | deletable at any time; nothing outside `scratch` may read from it |
+
+`converted/` is the generation's converted card and token trees, with their provenance sidecars,
+shared by every run of that generation. It has no run level: `converted/` itself holds the
+conversion's `run.json`, `console.log`, `cardsfolder/` and `tokenscripts/`. A generation is
+converted once, before its first record is collected, because records name their abilities by
+provenance keys that join against these sidecars: a reconversion after records exist starts a new
+generation, or is archived together with every record that joined against the old one.
 
 A run directory under `models/<module>/<gen>/<model>/` holds the checkpoints (`{timestamp}.pt`,
 `latest.pt`, `resume.pt`, …) of one training run. The ability cache and the reports computed from a
