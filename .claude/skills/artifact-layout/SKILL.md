@@ -64,7 +64,7 @@ checkpoint are not inside it: they go to `output/<module>/<gen>/cache/<run>/` an
 
 | file | written | content |
 |---|---|---|
-| `run.json` | at start, completed at the end | the run manifest below |
+| `run.json` | by the command itself: at start, completed at the end | the run manifest below |
 | `console.log` | throughout | the command's stdout and stderr, unbuffered (`python -u … 2>&1 \| tee console.log`), its first line the command |
 | `logs/` | throughout | every other log: Forge worker logs, per-process logs, supervisor logs |
 | the artifacts | — | whatever the run produces, in the layout its command defines |
@@ -87,8 +87,13 @@ checkpoint are not inside it: they go to `output/<module>/<gen>/cache/<run>/` an
 }
 ```
 
-- `status` is one of `running`, `keep`, `scratch`, `failed`, `superseded`; `superseded_by` names the
+- The command writes `status` `running` at start and `finished` or `failed` at the end; the operator
+  then sets `keep`, `scratch` or `superseded`, and fills `purpose`. `superseded_by` names the
   replacing run's path when `superseded`. A run that never reaches `keep` belongs under `scratch`.
+- A resumed or restarted command appends its command line to `commands` and sets `status` back to
+  `running`.
+- The run directory is the command's output directory argument, or the directory holding its output
+  file argument.
 - `inputs` and `continues` hold run paths relative to the repository root.
 - `outcome` is one line on how the run ended.
 - `run.json` is the provenance record: anything a later reader needs to reproduce or trust the run
@@ -99,8 +104,8 @@ checkpoint are not inside it: they go to `output/<module>/<gen>/cache/<run>/` an
 1. Nothing is written directly under `output/`, `models/`, a module or a generation directory: no
    logs, no scripts, no loose JSON. A one-off shell script a run used is copied into that run's
    directory; a reusable one lives in `scripts/`.
-2. A path is passed explicitly on the command line whenever the command's default would put the
-   file elsewhere than this layout. Defaults that disagree with this skill are a bug to fix.
+2. Every input and output path is passed explicitly on the command line, wired to this layout.
+   No run relies on a command's default path.
 3. A run reads other runs by their full path and never copies their files. Its `run.json` lists
    every path it read.
 4. Anything a `keep` run reads is `keep` too. Nothing outside `scratch` reads from `scratch`.
@@ -120,7 +125,9 @@ in a `run.json` stays valid by swapping the root. Moving a run never renames it.
 
 1. Module, generation, kind (or model) and slug chosen; the run path is
    `output/<module>/<gen>/<kind>/<YYYY-MM-DD-slug>/` or `models/<module>/<gen>/<model>/<YYYY-MM-DD-slug>/`.
-2. `run.json` written with purpose, status `running` (or `scratch`), command, commits and inputs.
-3. The command writes its artifacts inside the run directory, its console to `console.log`, its other
-   logs under `logs/`.
-4. At the end: `run.json` gets its end time, its outcome and its final status.
+2. Every input and output path on the command line points into this layout; the output points into
+   the run directory.
+3. The console goes to `console.log` in the run directory (`python -u … 2>&1 | tee …/console.log`),
+   other logs under `logs/`.
+4. At the end: in `run.json`, the operator fills `purpose` and sets `keep`, `scratch` or
+   `superseded`.
