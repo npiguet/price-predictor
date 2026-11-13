@@ -191,9 +191,12 @@ def perturb(
 
 
 def _apply(script_text: str, perturbation: Perturbation) -> str:
-    """Rewrite one ``Key$ Value`` pair, leaving the rest of the line alone."""
+    """Rewrite one ``Key$ Value`` pair, leaving the rest of the line alone.
+
+    The key starts at a word boundary, so ``Num$`` never rewrites an earlier
+    ``CounterNum$`` holding the same value."""
     pattern = re.compile(
-        rf"({re.escape(perturbation.key)}\$\s*){re.escape(perturbation.original)}"
+        rf"(?<!\w)({re.escape(perturbation.key)}\$\s*){re.escape(perturbation.original)}"
         rf"(?=\s*\||\s*$)"
     )
     return pattern.sub(rf"\g<1>{perturbation.replacement}", script_text, count=1)

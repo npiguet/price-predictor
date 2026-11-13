@@ -27,6 +27,12 @@ _BOLT_SCRIPT = (
 )
 
 
+def _params(line: str) -> dict[str, str]:
+    """``Key -> value`` of every ``Key$ value`` pair of a script line."""
+    pairs = (part.split("$", 1) for part in line.split("|") if "$" in part)
+    return {key.strip().split(":")[-1]: value.strip() for key, value in pairs}
+
+
 class TestNumericPerturbation:
     def test_a_shift_moves_the_value_by_at_most_three(self):
         rng = random.Random(0)
@@ -63,11 +69,27 @@ class TestNumericPerturbation:
         result = perturb(_BOLT_SCRIPT, rng)
         assert result is not None
         perturbed, perturbation = result
-        assert perturbed != _BOLT_SCRIPT
         assert perturbation.key == "NumDmg"
-        # Every other parameter survives untouched.
-        assert "ValidTgts$ Any" in perturbed
-        assert "Cost$ R" in perturbed
+        before, after = _params(_BOLT_SCRIPT), _params(perturbed)
+        assert before.keys() == after.keys()
+        assert {key for key in before if before[key] != after[key]} == {"NumDmg"}
+        assert after["NumDmg"] == str(perturbation.replacement)
+
+    @pytest.mark.parametrize(("line", "key"), [
+        ("A:AB$ PutCounter | CounterNum$ 2 | CounterType$ P1P1 | Num$ 2", "Num"),
+        ("A:SP$ GainLife | LifeAmount$ 4 | Defined$ You | Amount$ 4", "Amount"),
+    ])
+    def test_a_key_never_edits_a_longer_key_ending_in_it(self, line, key):
+        """V4 #7: ``Num$`` must not rewrite an earlier ``CounterNum$`` of the
+        same value, nor ``Amount$`` an earlier ``LifeAmount$``."""
+        for seed in range(40):
+            result = perturb(line, random.Random(seed))
+            if result is None or result[1].key != key:
+                continue
+            before, after = _params(line), _params(result[0])
+            assert {k for k in before if before[k] != after[k]} == {key}
+            return
+        pytest.fail(f"no seed perturbed {key}")
 
     def test_a_line_with_nothing_to_perturb_is_skipped(self):
         assert perturb("Name:Lightning Bolt", random.Random(0)) is None
@@ -104,15 +126,18 @@ class TestSelectorPerturbation:
     def test_a_swap_produces_a_selector_forge_recognises(self):
         script = "Mode$ Continuous | Affected$ Creature | AddPower$ 1"
         rng = random.Random(7)
+        swaps = 0
         for _ in range(20):
             result = perturb(script, rng)
             if result is None:
                 continue
             perturbed, perturbation = result
             if perturbation.kind == PerturbationKind.SELECTOR:
+                swaps += 1
                 assert perturbation.replacement in SELECTOR_WHITELIST
                 assert perturbation.replacement != perturbation.original
-                assert perturbation.replacement in perturbed
+                assert _params(perturbed)["Affected"] == perturbation.replacement
+        assert swaps > 0, "no draw swapped the selector"
 
 
 def test_variant_name_derives_from_its_source_and_its_script_s_digest():
