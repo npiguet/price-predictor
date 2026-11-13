@@ -455,4 +455,39 @@ class TraitScriptChainTest {
             assertTrue(keys.contains(new ProvenanceKey(file, 0, TraitKind.TRIGGER, 1, i)), keys.toString());
         }
     }
+
+    // ── the other chain keys Forge parses (C2 #10, V2 #19) ──────────────
+
+    /**
+     * Every parameter Forge parses into an ability of the chain ({@code
+     * AbilityFactory.additionalAbilityKeys}) is a link the renderer follows.
+     */
+    @Test
+    void everyChainKeyForgeParsesIsFollowed() {
+        java.util.Set<String> followed = TraitScript.chainKeys();
+        java.util.List<String> missing = forge.game.ability.AbilityFactory.additionalAbilityKeys
+                .stream().filter(key -> !followed.contains(key)).toList();
+        assertEquals(List.of(), missing);
+    }
+
+    /** A coin flip's win and lose abilities are segments of its chain. */
+    @Test
+    void aCoinFlipsOutcomesAreSegmentsOfItsChain() {
+        Converted coin = convertInline("t/test_coin.txt", String.join("\n",
+                "Name:Test Coin",
+                "ManaCost:1 R",
+                "Types:Instant",
+                "A:SP$ FlipCoin | WinSubAbility$ DBDraw | LoseSubAbility$ DBDamage | SpellDescription$ Flip a coin.",
+                "SVar:DBDraw:DB$ Draw | NumCards$ 1",
+                "SVar:DBDamage:DB$ DealDamage | Defined$ You | NumDmg$ 1",
+                "Oracle:Flip a coin."));
+        String text = onlyLineOfKind(coin, "spell").script().scriptText();
+
+        assertTrue(text.contains("LoseSubAbility$ SV") && text.contains("WinSubAbility$ SV"), text);
+        assertTrue(text.contains("DB$ Draw") && text.contains("DB$ DealDamage"), text);
+        assertEquals(2, RecordLines.count(text, "[SEG]"), text);
+        assertFalse(text.contains("DBDraw") || text.contains("DBDamage"),
+                "no author label survives: " + text);
+        assertTrue(coin.report().drain().isEmpty(), "nothing is reported missing");
+    }
 }
