@@ -149,6 +149,21 @@ class TestProtectionQuality:
         assert quality == ProtectionQuality(kind, value)
         assert quality.fragment == fragment and quality.keyword == keyword
 
+    def test_every_whitelisted_quality_round_trips_through_its_keyword(self):
+        """A keyword list carries ``quality.keyword``; reading it back gives
+        the quality for every one a protection copy or fork can grant."""
+        from effects.application.collect_variants import PROTECTION_QUALITY_WHITELIST
+
+        for fragment in PROTECTION_QUALITY_WHITELIST:
+            quality = ProtectionQuality.parse(fragment)
+            assert ProtectionQuality.of_keyword(quality.keyword) == quality, fragment
+
+    @pytest.mark.parametrize("keyword", [
+        "protection_from_creatures", "protection_from_player", "protection",
+    ])
+    def test_a_keyword_naming_no_quality_reads_as_none(self, keyword):
+        assert ProtectionQuality.of_keyword(keyword) is None
+
     @pytest.mark.parametrize("fragment", [
         "Flying", "Protection:Player.Opponent:each of your opponents",
         "Protection:Card.ChosenColor:chosenColor", "Protection:Creature.Legendary:legendary",

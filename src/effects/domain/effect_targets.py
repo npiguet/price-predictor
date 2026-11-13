@@ -41,7 +41,7 @@ from effects.domain.effect_head_layout import (
     mana_field,
 )
 from effects.domain.event_schema import Event, EventType, signed_delta
-from effects.domain.keyword_names import overlay_keyword
+from effects.domain.keyword_names import changed_keyword
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.records import (
     ContinuousPayload,
@@ -138,8 +138,9 @@ _STATE_FLAG_FIELDS: dict[str, HeadField] = {
 
 
 def keyword_index(raw: str) -> int | None:
-    """The keyword-output column a keyword, in any spelling Forge writes, sets."""
-    return vocabulary_slot(overlay_keyword(raw), KEYWORDS_CHANGED)
+    """The keyword-output column a keyword, in any spelling Forge writes,
+    sets (:func:`~effects.domain.keyword_names.changed_keyword`)."""
+    return vocabulary_slot(changed_keyword(raw), KEYWORDS_CHANGED)
 
 
 @dataclass

@@ -36,15 +36,19 @@ def normalize_keyword(raw: str) -> str:
     ``Hexproof:Card.Black:black`` read ``protection_from_goblin`` and
     ``hexproof_from_black``, as the printed ``Protection from blue`` reads
     ``protection_from_blue``; the quality is the text Forge describes it by
-    (a third part), else its second part.
+    (a third part), else its second part less a selector's type prefix
+    (``Creature.Goblin`` reads ``goblin``).
     """
     name, colon, rest = raw.partition(":")
     name = _spelled(name)
     if colon and name in QUALITY_KEYWORDS:
         parts = rest.split(":")
-        quality = _spelled(parts[1] if len(parts) > 1 and parts[1].strip() else parts[0])
+        if len(parts) > 1 and parts[1].strip():
+            quality = _spelled(parts[1])
+        else:
+            quality = _spelled(parts[0].rsplit(".", 1)[-1])
         if quality:
-            return f"{name}_from_{quality.removeprefix('card.')}"
+            return f"{name}_from_{quality}"
     return name
 
 
@@ -53,3 +57,15 @@ def overlay_keyword(raw: str) -> str:
     overlay's one ``protection`` slot."""
     name = normalize_keyword(raw)
     return "protection" if name.startswith(PROTECTION_FROM) else name
+
+
+HEXPROOF_FROM = "hexproof_from_"
+
+
+def changed_keyword(raw: str) -> str:
+    """:func:`overlay_keyword` as the keywords-gained and -lost outputs read
+    it: a hexproof from a quality also folds onto ``hexproof``, so gaining or
+    losing one is a hexproof change, while the input's flag for full hexproof
+    stays off for it."""
+    name = overlay_keyword(raw)
+    return "hexproof" if name.startswith(HEXPROOF_FROM) else name

@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import NamedTuple
 
+from effects.domain.forge_vocabularies import SUBTYPES
 from effects.domain.keyword_names import PROTECTION_FROM, normalize_keyword
 from effects.domain.state_snapshot import EntityState
 
@@ -174,6 +175,8 @@ CONDITIONS: dict[str, _Condition] = {
     #: 702.16h: one protection per colour, so any coloured object.
     "each color": _Condition("Protection from each color", lambda c: bool(c.colours)),
 }
+#: Forge's subtypes, the creature types a keyword list's quality may name.
+_SUBTYPES = frozenset(SUBTYPES)
 _CONDITION_BY_FRAGMENT = {
     condition.fragment.lower(): name for name, condition in CONDITIONS.items()
 }
@@ -252,8 +255,10 @@ class ProtectionQuality:
 
     @classmethod
     def of_keyword(cls, keyword: str) -> ProtectionQuality | None:
-        """The quality a keyword list's ``protection_from_<x>`` names; None for
-        bare ``protection``, whose quality only its line's fragment states."""
+        """The quality a keyword list's ``protection_from_<x>`` names: a colour,
+        a card type, a creature type (one of Forge's subtypes), a condition or
+        everything; None for bare ``protection``, whose quality only its line's
+        fragment states, and for a quality none of those reads."""
         if not keyword.startswith(PROTECTION_FROM):
             return None
         value = keyword.removeprefix(PROTECTION_FROM).replace("_", " ")
@@ -263,6 +268,10 @@ class ProtectionQuality:
             return cls(QualityKind.COLOUR, value)
         if value in CONDITIONS:
             return cls(QualityKind.CONDITION, value)
+        if value in CARD_TYPES:
+            return cls(QualityKind.CARD_TYPE, value)
+        if value in _SUBTYPES:
+            return cls(QualityKind.CREATURE_TYPE, value)
         return None
 
 

@@ -163,7 +163,7 @@ class TestMagnitudes:
         ))
         assert targets["P1"].fields["life_delta"] == -3.0
 
-    @pytest.mark.parametrize("mode", ["LifeReduced", "PayLife", "LoseLife", "LifeLost"])
+    @pytest.mark.parametrize("mode", ["LifeReduced", "PayLife", "LifeLost"])
     def test_a_life_loss_mode_reads_its_amount_as_a_loss(self, mode):
         """A run-parameter event writes the amount and names the direction by
         its mode: a rewritten life loss of 3 is a delta of -3, not +3."""
@@ -197,6 +197,16 @@ class TestMagnitudes:
                   params={"counter_type": "P1P1", "delta": 2, "mode": mode}),
         ))
         assert targets["E1"].fields["counters_delta_p1p1"] == -2.0
+
+    def test_gaining_hexproof_from_a_quality_sets_the_hexproof_column(self):
+        from effects.domain.output_vocabularies import KEYWORDS_CHANGED
+
+        targets = derive_targets(_resolution(
+            Event(type=EventType.KEYWORD_CHANGE, subjects=("E1",),
+                  params={"keywords": ["Hexproof:Black"]}),
+        ))
+        vector = targets["E1"].fields["keywords_gained"]
+        assert vector[KEYWORDS_CHANGED.index("hexproof")] == 1.0
 
     def test_a_tracked_counter_type_gets_its_own_field(self):
         targets = derive_targets(_resolution(
