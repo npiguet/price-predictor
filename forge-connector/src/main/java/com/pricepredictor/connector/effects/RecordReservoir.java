@@ -78,10 +78,17 @@ final class RecordReservoir {
         return records == null ? 0 : records.size();
     }
 
-    /** Put a record in the slot {@link #slot} gave it. */
+    /**
+     * Put a record in the slot {@link #slot} gave it.
+     *
+     * <p>A slot past the records held is filled at the end: a slot given out
+     * for a record whose building threw never got one, so the reservoir holds
+     * fewer records than activations it counted, and the next record takes
+     * the first free place rather than failing for the rest of the game.
+     */
     void hold(String key, int slot, EffectRecord record) {
         List<EffectRecord> records = held.computeIfAbsent(key, k -> new ArrayList<>());
-        if (slot == records.size()) {
+        if (slot >= records.size()) {
             records.add(record);
         } else {
             records.set(slot, record);

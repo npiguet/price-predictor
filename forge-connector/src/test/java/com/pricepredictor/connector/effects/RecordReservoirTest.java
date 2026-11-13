@@ -63,4 +63,41 @@ class RecordReservoirTest {
                             + " times, expected about " + expected);
         }
     }
+
+    private static EffectRecord record() {
+        return RecordDedupTest.ofKind(RecordKind.TRIGGER,
+                new ProvenanceKey("cardsfolder/p/paralyze.txt", 0, TraitKind.TRIGGER, 0, null),
+                "{}", "{}");
+    }
+
+    /** Held records are drained once, in slot order, and the reservoir starts over. */
+    @Test
+    void heldRecordsAreDrainedOnce() {
+        RecordReservoir reservoir = new RecordReservoir(2, new Random(0));
+        EffectRecord first = record();
+        EffectRecord second = record();
+        reservoir.hold("line", reservoir.slot("line"), first);
+        reservoir.hold("line", reservoir.slot("line"), second);
+        assertEquals(2, reservoir.held("line"));
+
+        assertEquals(java.util.List.of(first, second), reservoir.drain());
+        assertEquals(java.util.List.of(), reservoir.drain());
+        assertEquals(0, reservoir.slot("line"), "the next game's first activation fills again");
+    }
+
+    /**
+     * A slot whose record was never built (its builder threw) leaves the
+     * reservoir usable: the next record is held, not an IndexOutOfBounds
+     * for the rest of the game (C2 #13, V2 #17).
+     */
+    @Test
+    void aSlotWhoseRecordNeverCameLeavesTheReservoirUsable() {
+        RecordReservoir reservoir = new RecordReservoir(3, new Random(0));
+        assertEquals(0, reservoir.slot("line"));
+        // The record for slot 0 threw while it was built: never held.
+        EffectRecord next = record();
+        reservoir.hold("line", reservoir.slot("line"), next);
+
+        assertEquals(java.util.List.of(next), reservoir.drain());
+    }
 }
