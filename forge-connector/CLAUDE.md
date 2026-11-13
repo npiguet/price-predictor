@@ -15,9 +15,13 @@ These workers import `forge-game` / `forge-core` from the sibling `../forge` che
 
 No worker has a per-game timeout, and none should get one. A game that does not finish in reasonable time, whether long or hung, ends with its JVM: the worker crashes, or `ForgeWorkerPool` recycles it, and the supervisor restarts it. Why the workers are short-lived by design is in `src/effects/CLAUDE.md` ("Why the workers are short-lived").
 
+`MatchWorkerMain` also stops gracefully at a game end (`WorkerStop`): when the file named by `-Dworker.stop.file` exists (the worker never creates or deletes it), or once its JVM has run `-Dworker.recycle.seconds`. It asks before each match and at each game end, after the game's recording is closed and its game-end marker written; it then closes its shard, prints `Worker: stopped at a game end (<reason>); <n> matches generated in this JVM; output closed, exiting 0` and exits 0. The match in progress records no row. The full protocol and what the supervisor does: `specs/025-ability-effect-model-gen3/contracts/cli.md` § Match worker stop protocol. A match that threw prints `Error generating match: <message>`, the message starting `[random-seat match] ` when the match had a random seat.
+
+Every main runs under `ToolMain.guard` or `ToolMain.run`: `ToolMain.exit` and `badConfig` return a `ToolMain.Exit` (an `Error`) for the caller to throw, and the guard turns it into the exit status, so an exit path is testable by catching it (`ToolMainExitTest` checks every main).
+
 ## Engine hooks
 
-The effect collectors reach the patched engine's hooks by name, through `PatchHooks`, and compile against stock Forge. Forge widens a listener by adding `void` default methods or same-name overloads with appended arguments, which an unaware proxy answers with nothing. The listener methods Forge declares and no collector reads yet are listed in `PatchHooksTest.NOT_CONSUMED_YET`: `onTriggerRun`, `onBufferedAbilityStarting` and `onBufferedAbilityFinished`. The argument not read yet is `onReplacement`'s sixth (`buffered`). The accessors not read yet are `StaticAbilityCantAttackBlock.cantBlockStatic` and `EffectRecordHook.failureCounts()`. What each one says is in `src/effects/CLAUDE.md` § The engine hooks.
+The effect collectors reach the patched engine's hooks by name, through `PatchHooks`, and compile against stock Forge. Forge widens a listener by adding `void` default methods or same-name overloads with appended arguments, which an unaware proxy answers with nothing. The listener methods Forge declares and no collector reads yet are listed in `PatchHooksTest.NOT_CONSUMED_YET`, empty today: every listener method, argument and accessor the branch offers is read. What each one says is in `src/effects/CLAUDE.md` § The engine hooks.
 
 ## Build
 

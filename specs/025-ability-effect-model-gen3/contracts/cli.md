@@ -212,6 +212,48 @@ and start time both matching (a reused PID is no owner), every other command lea
 place and prints that it did. A staging list that cannot be read is reported and stops nothing; an
 entry that resolves outside the custom-cards directory is never deleted.
 
+## Match worker stop protocol (`MatchWorkerMain`, every collecting command)
+
+A match worker stops at a game end when asked, so the game it is playing ends normally, writes its
+game-end marker, and its shard is closed whole. The request is a file, not a console signal.
+
+| `-D` property | Value | Meaning |
+|---|---|---|
+| `worker.stop.file` | a path | the worker stops once a file exists at this path; its content is ignored; the worker never creates or deletes it |
+| `worker.recycle.seconds` | integer, at least 0 | the worker stops at the first game end after its JVM has run this many seconds; absent: never; malformed or negative: exit 2 at startup |
+
+- The worker asks before each match and at the end of each game, once the game's recording is
+  closed and its marker written. A request is honoured within the remainder of the game in progress
+  (or before the next match starts, between matches). No game starts after it.
+- Stopping mid-match leaves the match unfinished: no `match-outcomes.txt`, `cards-played.txt` or
+  progress-file line for it; the games it finished keep their records and markers.
+- On stopping the worker closes its shard (the last block written), prints one stdout line and
+  exits 0:
+  `Worker: stopped at a game end (<reason>); <n> matches generated in this JVM; output closed, exiting 0`,
+  `<reason>` being `stop file <path>` or `recycling after <seconds> s`. The line matches no
+  worker-failure pattern.
+- With either property set the worker prints at startup
+  `Graceful stop: at a game end, when <path> exists[ or ]the JVM has run <seconds> s`.
+- A game has no time bound of its own: a worker that has not exited within the supervisor's
+  timeout after the request is killed (`taskkill /F /T`) as before, and the game it was playing
+  has no marker.
+
+What the supervisor does:
+
+- Give each worker its own stop-file path (for example `logs/<run id>.<slot>.stop`), deleted
+  before the worker is spawned.
+- To stop a worker (the run's end, recycling, a round's end): create the file, then wait for the
+  process to exit; after the timeout, kill it.
+- To recycle without killing: pass `worker.recycle.seconds` and restart a worker that exited 0
+  after printing the stop line while the run continues; keep the hard kill only as the backstop for
+  a worker past its recycle time by more than the timeout.
+- Read exit 0 with the stop line as a normal end, never as a failure or a crash.
+- Finish every graceful stop before the supervisor exits: the job object kills the workers when
+  the supervisor's process ends.
+
+A match that threw prints `Error generating match: <message>` with its stack trace, as before;
+when the match had a random seat, `<message>` starts with `[random-seat match] `.
+
 ## `python -m effects collect-variants` (existing)
 
 Takes `--count-dropped-events`, `--max-records-per-game`, `--directed-fork-rules`,

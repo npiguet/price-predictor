@@ -44,7 +44,24 @@ when none was open.
 ## Kinds
 
 `turn_action`, with `subkind` one of `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`,
-`lore_counter`; payload `{"events": [...]}`. No `ability`. Never written to a curated stratum.
+`lore_counter`, `game_end`; payload `{"events": [...]}`. No `ability`. Never written to a curated
+stratum.
+
+`turn_action` / `game_end` is the game-end marker:
+
+- One per game, written as the game's last record: after the bracket's end-of-game records, the
+  trigger and mana reservoirs' records, the rewrite records still waiting on a buffered ability,
+  and every kept fork's records.
+- Written only for a game that ended (`Game.isGameOver()`) with every end-of-game write done. A game
+  that threw mid-match, a game whose end-of-game writes threw, and a game cut by a killed worker
+  have none.
+- Never withheld by `--max-records-per-game`.
+- Payload `{"events": [], "records_withheld": n}`: `records_withheld` the records of the game the
+  cap kept out of the shard (`0` for none).
+- `actor_player` the player whose turn the game ended in, else the first registered player;
+  `state` the board at the game's end.
+- Readers treat a game whose `game_id` has no marker in its shard as cut: its records are
+  incomplete (no fired-trigger or mana records, possibly a missing tail).
 
 ## Snapshot additions
 
@@ -238,9 +255,13 @@ static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of
 | decision candidate | `legal_targets` | union over every targeting clause, uncapped |
 | decision candidate | `responsible_static` | the key of the static forbidding the play (its `static_prohibition` entry's), else empty |
 | `attackers` | `anchor_attacker`, `legal_defenders`, `must_attack`, `tapped_by_attack?` | one record per creature the attacking player controls, these four first and `legal_attackers`, `forbidden` after them; `anchor_attacker` a card ref; `legal_defenders` the refs (`P`/`E`) of the declaration's defenders (players, planeswalkers, battles) the anchor may attack, in Forge's defender order, `[]` for a creature that may attack none; `must_attack` whether an attack requirement applies to the anchor (`AttackRequirement.hasRequirement`), whether or not it can attack; `tapped_by_attack` on a declared anchor only: whether a `GameEventCardTapped` for it arrived between the engine's first question and `GameEventAttackersDeclared`. `legal_attackers` and `forbidden` keep their gen-2 shape and are the declaration's, the same on each of its records: a creature is legal when it may attack at least one defender, and a forbidden one's `responsible_static` is the first static, in defender order, keeping it from a defender |
+| `blockers` | `forbidden` entries | `{entity, responsible_static, required_elsewhere?}`: `responsible_static` the static keeping the creature from blocking the anchor (`cantBlockByStatic`), else the static keeping it from blocking at all (`cantBlockStatic`: Pacifism), else empty; `required_elsewhere: true`, last, when a requirement makes the creature block another attacker of the combat and none makes it block the anchor (a lure, 509.1c), absent otherwise |
 | `blockers` | `must_block` | after `forbidden`: the refs of the listed creatures, legal or forbidden, in candidate order, that a requirement makes block the anchor; a listed creature not in it is false. Requirements: the creature's `getMustBlockCards`, the anchor's `MustBeBlockedBy` (while no creature of that kind blocks it) and `MustBeBlockedByAll`, a lure ("All creatures able to block CARDNAME do so."), and a `MustBlock` static naming the creature (names every attacker); a requirement whose block costs something is none (509.1c); recorded whether or not the creature can obey it |
 | `continuous` | contributions' `abilities`, `hidden_keywords` | after `colors`, on every contribution: `abilities` a token per layer-6 change the static makes to the entity, a granted ability's line key as `ProvenanceKey.describe` spells it (`(cardsfolder/c/cryptolith_rite.txt) face0/static[0]`; `runtime` for one that keys to no line), and `-` before the key of an ability it takes away; `hidden_keywords` the hidden keywords the static grants (`AddHiddenKeyword$`), as Forge writes them. A static whose only change is one of these is a `continuous` record. `keywords` starts with a lone `=` when the static removes every keyword (`RemoveAllAbilities$`), as `types` and `colors` mark a line set outright |
 | `continuous` | contributions' `set_pt`, `controller` | `set_pt` after `pt_boost`: `[power, toughness]`, the base the static sets (layer 7a, then 7b), a half `null` where it sets only the other; `controller` last: the player ref the static gives control to (a `GainControl$` static, when the permanent's controller without it differs). Each present only when set. A static whose only change is one of these is a `continuous` record |
+| `rewrite` | `incoming_unknown` | after `replaced_by`, only when true: Forge could not copy the event as it arrived (`before` null); `incoming` is then the event as it left and `outgoing` is `null`, which says nothing about an in-place edit |
+| `rewrite` | `buffered`, `buffered_ran`, `buffered_events` | after `replaced_by` (and `incoming_unknown`), only on a damage replacement that set an ability aside (Forge's buffered ability: Swans of Bryn Argoll's draw, Rock Hydra's counter removal, a `Prevent$ True` rider): `buffered` the ability's provenance keys (`[]` where it keys to no printed line); `buffered_ran` whether Forge ran it; `buffered_events` the events published during its run that this record took, each with `attributed_to` counted on the buffered ability's chain. Forge sums the damage of several replacements naming one ability into one run: the oldest record waiting on that ability takes the run's events, the others carry `buffered_ran: true` and `buffered_events: []`. A record whose ability never ran carries `buffered_ran: false` and `buffered_events: []` |
+| resolution, mana record | `events` | `tapped` per permanent its cost tapped; then the other events its own payment published (a creature sacrificed for mana: `sacrificed`, `zone_change`); then `mana_produced`; then the events its own sub-abilities published (a pain land's `damage_dealt` and `life_change` to its controller), `attributed_to` counted on the mana ability's chain |
 | `combat`, observed and probe | damage events' `source` | entity ref, after `cause`: the dealer the bus names as `cause`, else the one source in `assignment_choices` that assigned damage to the event's subject, or among several the one that assigned exactly its amount; absent when none can be named. Written on the observed record too, so a probe branch's damage reads as the record it mirrors |
 
 ## Event additions
@@ -305,17 +326,26 @@ position a card left a library from, and a search of another player's library.
 - A rewrite record's `replaced_by` names only an ability that ran in the event's place during the
   replacement. A damage replacement whose ability Forge buffers until every replacement of the
   damage event has applied (Swans of Bryn Argoll's draw, Rock Hydra's counter removal, a
-  `Prevent$ True` rider such as Gatta and Luzzu's) writes `replaced_by: []` with result `replaced`,
-  `updated` or `prevented`: the ability has not run when the record is written, and it may never
-  run.
+  `Prevent$ True` rider such as Gatta and Luzzu's) writes `replaced_by: []` and names the ability in
+  `buffered`. Its record is held until the ability's run ends, or until the state-based loop next
+  begins or the game ends when it never runs; its board is still the one read before the
+  replacement ran. The events of the run are the record's `buffered_events` and reach no other
+  record.
+- A `trigger` record with `fired: true` is a trigger Forge ran (`onTriggerRun`): its condition held
+  and the trigger went on the stack, or a static trigger's ability was played. Its board is read
+  when the condition was evaluated. An evaluation whose condition held and that Forge never ran
+  writes no record. Several runs of one evaluation (Panharmonicon) write one record.
+- A game's fired `trigger` records and its mana records are written at its end, after its other
+  records and before its marker, and are never withheld by `--max-records-per-game`.
 - A `coin_flipped` event names the player who flipped as its subject. No coin flipped writes no
   event. Forge's outcome hook also reports the coins a cost flips (cumulative upkeep): one flipped
   paying an unless cost while the asking ability resolves is that resolution's event, one flipped
   paying for a cast or an activation is the payment's.
-- An event a cost payment publishes (a tap, a sacrifice, a pain land's damage, a counter removed)
-  reaches no record and is counted as dropped. What was paid is read off the payment itself: the
-  cost half's `costs`, and a mana record's `tapped` and `mana_produced`. What else a payment does,
-  such as a pain land's damage to its controller, is in no record.
+- An event a spell's or an activated ability's cost payment publishes (a tap, a sacrifice, a
+  counter removed) reaches no record and is counted as dropped; what was paid is read off the
+  payment itself, the cost half's `costs`. A mana ability's activation is its mana record's: the
+  events its own payment publishes (a tap as its `tapped` events, a sacrifice as `sacrificed` and
+  `zone_change`) and those its own sub-abilities publish (a pain land's damage to its controller).
 - A bestowed Aura spell or a mutating creature spell whose target is illegal when it resolves
   resolves as a creature spell (702.103e, 702.140b): its effect half reads `resolved` and holds its
   events, the permanent's arrival included.
@@ -356,6 +386,14 @@ position a card left a library from, and a search of another player's library.
   item carry that one reading, never one taken after the resolution.
 - A countered stack item writes no effect half. The countering clause's effect half holds the
   countered spell's `spell_countered` event and its card's `zone_change` off the stack.
+- An effect half's `targets` links from the acting line are its targets as cast, the refs
+  `refs.targets_at_cast` lists, in that order (an `L<id>` ref for one that ceased to exist), never
+  those left after Forge's check for illegal targets. A cost half and any other record read the
+  acting chain's clauses.
+- Forge deals a chain's damage from one damage map when its last clause resolves (Arc Trail's
+  `DamageResolve`). A `damage_dealt` whose subject the resolving clause does not target, but an
+  earlier link of its chain does, carries that link's `attributed_to`; so does every other event
+  a `DamageResolve` clause publishes about such a subject (the damaged player's `life_change`).
 - A combat record's snapshot precedes every damage event of its step.
 - An attackers record's snapshot is the board before the declaration, and the record is written when
   the declaration is made, at the next declaration, or at the game's end; only the first gives

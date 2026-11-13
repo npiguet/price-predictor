@@ -123,7 +123,7 @@ declaration speaks for it; absent from both is not "not countable".
 | `generation` | int, `3` | all | absent: gen-1 or gen-2 (feature 024's rule); any other value is refused |
 | `aimed_at` | list of rule ids | all, aimed records only | directed fork: `[rule]`; `collect-coverage` / `collect-variants`: the run's `--directed-fork-rules`, possibly `[]`; absent on every other record |
 | `directed` | `{variant, operation}` | all, directed-fork records only | `operation` a `ForkOperation` |
-| `kind` | adds `turn_action` | | subkinds `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter` |
+| `kind` | adds `turn_action` | | subkinds `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter`, `game_end` (the game-end marker: one per game that ended, its last record, never withheld) |
 
 `generation`, `aimed_at`, `directed` are collection metadata; `test_schema_compatibility.py` checks that
 flipping them leaves `SurfaceBuilder.build` unchanged.
@@ -170,13 +170,20 @@ players. Shapes as
 | playability `decision` candidate | `verdict.timing`, `failed_checks: [{check, responsible_static}]`, `legal_targets` (all clauses, no cap), `land_play` | `timing = false` ⇒ a `casting_speed` entry; a land-play candidate (`land_play = true`, FR-033a) fails only `whose_turn`, `casting_speed`, `zone`, `static_prohibition` or `land_play_limit` |
 | `attackers` | `anchor_attacker`, `legal_defenders`, `must_attack`, `tapped_by_attack?` | one record per creature the attacking player controls, a tapped one included; `tapped_by_attack` only when the anchor was declared; gen-2's `legal_attackers` and `forbidden` kept; no `what_if` |
 | `blockers` | `must_block` | the refs of the listed creatures a requirement makes block the anchor |
+| `blockers` | `forbidden[].responsible_static`, `forbidden[].required_elsewhere?` | the static keeping the creature from blocking the anchor, else from blocking at all (`cantBlockStatic`); `required_elsewhere: true` when a requirement makes it block another attacker instead (a lure) |
 | `turn_action` | `events` | |
+| `turn_action` / `game_end` | `events: []`, `records_withheld` | the records `--max-records-per-game` kept out for the game; a game with no marker is cut |
+| `rewrite` | `incoming_unknown?`, `buffered?`, `buffered_ran?`, `buffered_events?` | `incoming_unknown: true` when Forge could not copy the incoming event (then `outgoing` null); on a damage replacement that set an ability aside, its keys, whether it ran, and the events of its run |
+| `trigger` | `fired` | true only for a trigger Forge ran; an evaluation that held and never ran writes nothing |
+| resolution, mana record | `events` | `tapped`, the other events of its own payment, `mana_produced`, the events of its own sub-abilities |
 | `combat` | snapshot at the start of the damage step | shape at the first damage event |
 | `combat`, observed and probe | damage events carry `source` | the bus's `cause`, else from `assignment_choices` |
 | decision candidate | `cost_after_adjustment` | the cost after Forge's cost adjustment |
 | events | `pt_change.set_pt`, zone changes' `library_position`, `card_looked_at.mode`, `token_created` controller and counters, `ability_change` subjects, new `state_flag_change` flags, `damage_dealt.damage_type`, `attached.attached_to` and `unattached.detached_from` on bus events, `destroyed`, `sacrificed` and `face_change` (FaceState `to_state`) on resolution and combat records, `player_lost` on the record the game's outcome is written in (a `LosesGame` or `WinsGame` effect half that ended the game, else the game-end record), `card_revealed.from_zone` and `card_made.to_zone` lower-cased, `choice_made.choice_kind` by API, run-parameter events read per Forge mode with signed `delta` (a loss negative) and FaceState `to_state`, `keyword_change` sorted with `hidden` on a hidden keyword's, `ability_change` from stat changes | wire shapes in [contracts/record-schema-delta.md](contracts/record-schema-delta.md) |
 | resolution, effect half | `events` of a fizzled or declined spell | exactly its card's `zone_change` off the stack; `[]` on a fizzled or declined ability's half and a copy of a spell's |
 | refs | `targets_on_stack`; `L<id>` in `targets_at_cast` | the targets that are spells or abilities on the stack, by their cards; a target as cast gone or a new object named as it last existed |
+| links | `targets` on an effect half | the acting line's targets as cast (`refs.targets_at_cast`), not those left after the illegal-target check |
+| events | `attributed_to` of a chain's damage | a damage, and every event a `DamageResolve` clause publishes, whose subject an earlier link targets carries that link's index |
 | events | `name_change`, `mana_cost_change` | new types, from stat changes with no face change and no copy effect |
 | `continuous` | contributions' `abilities`, `hidden_keywords`; `=` in `keywords` | layer-6 grants by line key, removals as `-key`; a static's hidden keywords; a static removing every keyword |
 
