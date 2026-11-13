@@ -123,7 +123,7 @@ What earlier packages found that a later package's brief must include.
 
 Send each to the package's own implementer (resume it), in this order, once no other Opus agent runs.
 
-**Order of the queue:** full unit suite + connector suite (running) -> the Python wire follow-up (WP9 second part: read what WP3 and WP4 now write; one Python test is red until then) -> WP3 gaps -> WP4 -> WP7 -> WP5 -> WP6 (each: implementer, suites, verifier, gaps) -> WP11 verifier and WP10 second round between connector packages as convenient -> WP9/WP10/WP11/WP8 wire-dependent parts -> WP12 -> WP13.
+**Order of the queue** (as of the Python wire follow-up landing): WP11 verifier (running) -> WP11 gaps and follow-up (turns the Python suite green: five tests are red) -> full unit suite -> WP10 second round -> WP7 -> WP5 -> WP6 (each: implementer, suites, verifier, gaps) -> the Python and WP8 parts that wait for WP7 (game-end marker, stop protocol) -> WP12 -> WP13.
 
 **Python wire follow-up** (after WP4's gaps land; the decoding implementer is agent `abde700f90d384534`): make Python read what WP3 and WP4 write. From the WP4 verification, what the decoder does today:
 - `keyword_change.hidden` is REFUSED: `Event.__post_init__` (`event_schema.py:275-282`) raises on the unknown parameter, so every record with a hidden-keyword change fails to decode. Add `hidden` to `EVENT_PARAMS[KEYWORD_CHANGE]` (`:153`); then `_apply_keywords` (`effect_targets.py:364-373`) maps no target for Forge's text: choose one (e.g. a can't-block restriction) or ignore it explicitly.
