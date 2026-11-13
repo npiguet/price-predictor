@@ -6,8 +6,11 @@ file argument — as ``.claude/skills/artifact-layout/SKILL.md`` lays it out:
 written at the command's start with ``status: "running"``, completed at its
 end with ``finished`` or ``failed``, and on a resumed or restarted command
 (a ``run.json`` already there) extended with the new command line rather
-than replaced. ``purpose``, ``continues``, ``superseded_by`` and the
-operator's statuses (``keep``, ``scratch``, ``superseded``) belong to the
+than replaced. ``invocations`` keeps one entry per command line in
+``commands``: its own commits, start, end and outcome, and whatever the
+command adds while it runs (:func:`annotate_run`); the top-level ``commits``
+and ``started`` stay the run's first command's. ``purpose``, ``continues``,
+``superseded_by`` and the operator's statuses (``keep``, ``scratch``, ``superseded``) belong to the
 operator: a command never writes them, and closing a run re-reads the file
 so an edit made while it ran survives. A command that fails having written
 nothing — a flag refused at startup, a missing input — leaves no trace: the
@@ -25,6 +28,7 @@ import logging
 import os
 import subprocess
 import sys
+import threading
 from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime
 from pathlib import Path
@@ -143,6 +147,8 @@ class RunManifest:
         self._document: dict[str, Any] | None = None
         #: The directories made for the manifest, deepest first.
         self._created: list[Path] = []
+        #: This command's entry in ``invocations``.
+        self._invocation: int | None = None
 
     def start(
         self, *, command: str, inputs: Iterable[PathLike | None] = (), create: bool = True,
@@ -175,11 +181,48 @@ class RunManifest:
                 document["status"] = "finished" if ok else "failed"
             document["ended"] = self._now()
             document["outcome"] = _outcome(exit_code, error, message)
+            entry = self._entry(document)
+            if entry is not None:
+                entry["ended"], entry["outcome"] = document["ended"], document["outcome"]
             self._write(document)
         except Exception as failure:  # noqa: BLE001 — bookkeeping never stops a run
             logger.warning("%s not completed: %s", self._label(), failure)
 
+    def annotate(self, **fields: Any) -> bool:
+        """Add ``fields`` to this command's invocation entry; True when written.
+        The file is re-read first, so an operator's edit survives."""
+        if self._document is None:
+            return False
+        try:
+            document = self._read() or self._document
+            entry = self._entry(document)
+            if entry is None:
+                return False
+            entry.update(fields)
+            self._write(document)
+            self._document = document
+        except Exception as failure:  # noqa: BLE001 — bookkeeping never stops a run
+            logger.warning("%s not annotated: %s", self._label(), failure)
+            return False
+        return True
+
     # ── internals ───────────────────────────────────────────────────────
+
+    def _entry(self, document: dict[str, Any]) -> dict[str, Any] | None:
+        """This command's invocation entry in ``document``, if it is there."""
+        invocations = document.get("invocations")
+        if self._invocation is None or not isinstance(invocations, list):
+            return None
+        if self._invocation >= len(invocations):
+            return None
+        entry = invocations[self._invocation]
+        return entry if isinstance(entry, dict) else None
+
+    def _new_invocation(self, command: str, commits: dict[str, Any], started: str) -> dict:
+        return {
+            "command": command, "commits": commits, "started": started,
+            "ended": None, "outcome": None,
+        }
 
     def _start(
         self, command: str, inputs: Iterable[PathLike | None], create: bool,
@@ -205,24 +248,35 @@ class RunManifest:
                     self._label(),
                 )
                 return None
-            document.setdefault("commands", []).append(command)
+            commands = document.setdefault("commands", [])
+            invocations = document.setdefault("invocations", [])
+            # A manifest older than ``invocations``: one bare entry per command.
+            invocations.extend(
+                {"command": earlier} for earlier in commands[len(invocations):]
+            )
+            commands.append(command)
+            invocations.append(self._new_invocation(command, self._commits(), self._now()))
+            self._invocation = len(invocations) - 1
             document["status"] = "running"
             known = document.setdefault("inputs", [])
             known.extend(path for path in listed if path not in known)
         else:
+            commits, started = self._commits(), self._now()
             document = {
                 "run": self._relative(self.run_dir),
                 "purpose": None,
                 "status": "running",
                 "superseded_by": None,
                 "commands": [command],
-                "commits": self._commits(),
+                "commits": commits,
                 "inputs": listed,
                 "continues": [],
-                "started": self._now(),
+                "started": started,
                 "ended": None,
                 "outcome": None,
+                "invocations": [self._new_invocation(command, commits, started)],
             }
+            self._invocation = 0
         self._write(document)
         return document
 
@@ -284,15 +338,53 @@ class RunManifest:
         return f"run manifest {self.path}"
 
 
+_active_lock = threading.Lock()
+#: The manifests of the commands running in this process, innermost last.
+_active: list[RunManifest] = []
+
+
+def annotate_run(run_dir: PathLike, **fields: Any) -> bool:
+    """Add ``fields`` to the invocation entry of the command running in this
+    process with ``run_dir`` as its run directory; True when written.
+
+    The code that knows a fact worth keeping (a collector's supervisor run id,
+    its resolved caps, the failures its workers logged) is not the code that
+    opened the manifest, and never sees it: it names its run directory, and
+    a command with no manifest there (a test, a script calling it bare)
+    writes nothing. Never raises.
+    """
+    try:
+        wanted = Path(run_dir).resolve()
+        with _active_lock:
+            manifests = list(_active)
+        for manifest in reversed(manifests):
+            if manifest.run_dir.resolve() == wanted:
+                return manifest.annotate(**fields)
+    except Exception as failure:  # noqa: BLE001 — bookkeeping never stops a run
+        logger.warning("run manifest of %s not annotated: %s", run_dir, failure)
+    return False
+
+
 def run_recorded(
     run_dir: PathLike, body: Callable[[], int | None], *, command: str,
     inputs: Iterable[PathLike | None] = (), create: bool = True, **manifest_options: Any,
 ) -> int | None:
     """Run ``body`` with ``run_dir``'s manifest open around it, closed on
     every way out — a return, an exception, ``sys.exit`` and Ctrl-C — and
-    hand back whatever ``body`` returned or raised."""
+    hand back whatever ``body`` returned or raised. While ``body`` runs,
+    :func:`annotate_run` on ``run_dir`` writes into this command's entry."""
     manifest = RunManifest(run_dir, **manifest_options)
     manifest.start(command=command, inputs=inputs, create=create)
+    with _active_lock:
+        _active.append(manifest)
+    try:
+        return _run_body(manifest, body)
+    finally:
+        with _active_lock:
+            _active.remove(manifest)
+
+
+def _run_body(manifest: RunManifest, body: Callable[[], int | None]) -> int | None:
     try:
         code = body()
     except KeyboardInterrupt as interrupt:

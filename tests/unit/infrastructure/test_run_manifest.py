@@ -13,6 +13,7 @@ from price_predictor.infrastructure import run_manifest
 from price_predictor.infrastructure.run_manifest import (
     MANIFEST_NAME,
     RunManifest,
+    annotate_run,
     command_line,
     read_commits,
     run_recorded,
@@ -67,7 +68,7 @@ class TestStart:
         document = read(run_dir)
         assert list(document) == [
             "run", "purpose", "status", "superseded_by", "commands", "commits",
-            "inputs", "continues", "started", "ended", "outcome",
+            "inputs", "continues", "started", "ended", "outcome", "invocations",
         ]
         assert document["run"] == "output/effects/gen3/records/2026-11-13-full"
         assert document["purpose"] is None
@@ -80,6 +81,13 @@ class TestStart:
         assert document["started"] == "2026-11-13T09:13:00+01:00"
         assert document["ended"] is None
         assert document["outcome"] is None
+        assert document["invocations"] == [{
+            "command": "python -m sealed match-outcomes --workers 6",
+            "commits": COMMITS,
+            "started": "2026-11-13T09:13:00+01:00",
+            "ended": None,
+            "outcome": None,
+        }]
 
     def test_a_path_outside_the_repository_stays_absolute(self, repo: Path, tmp_path: Path):
         elsewhere = tmp_path / "elsewhere"
@@ -110,6 +118,10 @@ class TestFinish:
         assert document["status"] == "finished"
         assert document["ended"] == "2026-11-13T09:14:00+01:00"
         assert document["outcome"] == "exit 0"
+        invocation = document["invocations"][0]
+        assert (invocation["ended"], invocation["outcome"]) == (
+            "2026-11-13T09:14:00+01:00", "exit 0",
+        )
 
     def test_a_nonzero_exit_fails(self, repo: Path):
         run = manifest(repo / "run", repo)
@@ -213,7 +225,7 @@ class TestNothingWritten:
 
 
 class TestResume:
-    def test_appends_the_command_and_runs_again(self, repo: Path):
+    def test_appends_the_command_and_runs_again(self, repo: Path, monkeypatch):
         first = manifest(repo / "run", repo)
         first.start(command="python -m effects train-effect-model", inputs=["a.txt"])
         first.finish(exit_code=130, error=KeyboardInterrupt())
@@ -223,7 +235,12 @@ class TestResume:
         document["continues"] = ["models/effects/gen3/effect-model/2026-11-01-base"]
         (repo / "run" / MANIFEST_NAME).write_text(json.dumps(document), encoding="utf-8")
 
-        manifest(repo / "run", repo).start(
+        later = {"repo": "def5678", "forge": "0123abc", "dirty": True}
+        monkeypatch.setattr(run_manifest, "read_commits", lambda *_a, **_k: dict(later))
+        an_hour_later = Clock()
+        an_hour_later.now += timedelta(hours=1)
+        resume = RunManifest(repo / "run", repo_root=repo, cwd=repo, clock=an_hour_later)
+        resume.start(
             command="python -m effects train-effect-model --resume", inputs=["a.txt", "b.txt"],
         )
 
@@ -235,8 +252,37 @@ class TestResume:
         assert resumed["status"] == "running"
         assert resumed["purpose"] == "Gen-3 arm."
         assert resumed["continues"] == ["models/effects/gen3/effect-model/2026-11-01-base"]
-        assert resumed["started"] == document["started"]
         assert resumed["inputs"] == ["a.txt", "b.txt"]
+        # V4 #4: the run's own start and commits stay the first command's;
+        # each command keeps its own start, commits and ending beside them.
+        assert resumed["started"] == document["started"]
+        assert resumed["commits"] == COMMITS
+        first, second = resumed["invocations"]
+        assert first["command"] == "python -m effects train-effect-model"
+        assert (first["commits"], first["outcome"]) == (COMMITS, "interrupted")
+        assert second["command"] == "python -m effects train-effect-model --resume"
+        assert second["commits"] == later
+        assert second["started"] == "2026-11-13T10:13:00+01:00"
+        assert (second["ended"], second["outcome"]) == (None, None)
+
+        resume.finish(exit_code=0)
+
+        first, second = read(repo / "run")["invocations"]
+        assert first["outcome"] == "interrupted"
+        assert second["outcome"] == "exit 0"
+
+    def test_a_manifest_from_before_invocations_gets_one_per_command(self, repo: Path):
+        (repo / "run" / MANIFEST_NAME).write_text(json.dumps({
+            "run": "run", "status": "failed", "commands": ["old one", "old two"],
+            "commits": COMMITS, "inputs": [], "continues": [],
+        }), encoding="utf-8")
+
+        manifest(repo / "run", repo).start(command="new", inputs=[])
+
+        invocations = read(repo / "run")["invocations"]
+        assert [entry["command"] for entry in invocations] == ["old one", "old two", "new"]
+        assert invocations[0] == {"command": "old one"}
+        assert invocations[2]["commits"] == COMMITS
 
     def test_an_unreadable_manifest_is_left_alone(self, repo: Path, caplog):
         (repo / "run" / MANIFEST_NAME).write_text("{not json", encoding="utf-8")
@@ -424,3 +470,47 @@ class TestReadCommits:
     def test_not_a_repository(self, tmp_path: Path):
         (tmp_path / "plain").mkdir()
         assert read_commits(tmp_path / "plain") == {"repo": None, "forge": None, "dirty": False}
+
+
+class TestAnnotateRun:
+    """What a command adds to its own invocation while it runs: the collector's
+    supervisor run id, resolved caps and worker-log failures (V4 #3, #4)."""
+
+    def test_fields_land_on_the_running_command_s_invocation(self, repo: Path):
+        def body():
+            assert annotate_run(repo / "run", run_id="u-1", caps={"probes_per_game": 4})
+            assert annotate_run(repo / "run", worker_failures={"match_error": 2})
+            return 0
+
+        run_recorded(repo / "run", body, command="c", inputs=[], repo_root=repo, clock=Clock())
+
+        invocation = read(repo / "run")["invocations"][0]
+        assert invocation["run_id"] == "u-1"
+        assert invocation["caps"] == {"probes_per_game": 4}
+        assert invocation["worker_failures"] == {"match_error": 2}
+        assert invocation["outcome"] == "exit 0"
+
+    def test_a_second_command_annotates_its_own_entry(self, repo: Path):
+        for run_id in ("u-1", "u-2"):
+            run_recorded(
+                repo / "run", lambda run_id=run_id: annotate_run(repo / "run", run_id=run_id) and 0,
+                command=f"c {run_id}", inputs=[], repo_root=repo, clock=Clock(),
+            )
+
+        assert [entry["run_id"] for entry in read(repo / "run")["invocations"]] == ["u-1", "u-2"]
+
+    def test_without_a_running_manifest_nothing_is_written(self, repo: Path):
+        assert annotate_run(repo / "run", run_id="u") is False
+        assert not (repo / "run" / MANIFEST_NAME).exists()
+
+    def test_another_run_directory_is_never_written(self, repo: Path):
+        other = repo / "other"
+
+        def body():
+            assert annotate_run(other, run_id="u") is False
+            return 0
+
+        run_recorded(repo / "run", body, command="c", inputs=[], repo_root=repo, clock=Clock())
+
+        assert not (other / MANIFEST_NAME).exists()
+        assert "run_id" not in read(repo / "run")["invocations"][0]
