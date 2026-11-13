@@ -115,10 +115,12 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         // option line and with the board as it stood when that mode's
         // first clause began. Events before the first mode's clause — the
         // charm's own, of which there are none — ride with the first.
-        for (HeldHalves.Half<ModeSplit.ModeHalf> half : resolution.halves()) {
+        List<HeldHalves.Half<ModeSplit.ModeHalf>> halves = resolution.halves();
+        for (int index = 0; index < halves.size(); index++) {
+            HeldHalves.Half<ModeSplit.ModeHalf> half = halves.get(index);
             context.emit(forkedHalf(
                     actorId, keys.withOption(half.about().mode().option()),
-                    resolution.render(half.about().mode().state(), half.events()),
+                    resolution.render(half.about().mode(), half.events(), index, halves.size()),
                     half.events(), half.about().conditions(), resolution.outcome()));
         }
     }
@@ -154,16 +156,26 @@ final class InterventionFork implements InterventionScheduler.Forcing {
      */
     private record ForcedResolution(
             String refs, List<HeldHalves.Half<ModeSplit.ModeHalf>> halves,
-            ActivationOutcome outcome) {
+            ActivationOutcome outcome, ChainTargets resolving, ChainTargets atCast) {
 
         /**
-         * A board this resolution read, paired with its refs as the live
-         * bracket pairs them: the half's random results in the refs, and the
-         * library cards its events name among the entities.
+         * A half's board, paired with its refs as the live bracket pairs
+         * them: the half's random results and its own links' targets, as
+         * its resolution started and as cast, in the refs, and the library
+         * cards its events name among the entities.
          */
-        String render(Snapshot board, List<EffectEvent> events) {
-            Snapshot read = refs == null ? board : board.withRefs(RefsJson.withRandom(refs, events));
-            return read.withEventCards(events).render();
+        String render(ModeSplit.Mode mode, List<EffectEvent> events, int index, int count) {
+            Snapshot board = mode.state();
+            if (refs == null) {
+                return board.withEventCards(events).render();
+            }
+            String read = RefsJson.withRandom(refs, events);
+            if (resolving != null) {
+                read = RefsJson.withTargets(read,
+                        resolving.ofHalf(index, count, mode.option()),
+                        atCast == null ? null : atCast.ofHalf(index, count, mode.option()));
+            }
+            return board.withRefs(read).withEventCards(events).render();
         }
 
         /** Whether no half holds an event: the forced ability did nothing observable. */
@@ -266,12 +278,24 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         // charm must be the very ability on the stack, the one this record
         // is about, and a clause or a producer its chain.
         boolean[] fizzled = {false};
+        // The forced item's targets as its resolution started and as cast,
+        // read as the live bracket reads them.
+        ChainTargets[] targets = {null, null};
         Forks.ForkHooks hooks = new Forks.ForkHooks() {
             @Override
             public void resolutionStarting(SpellAbility item, boolean itemFizzled) {
+                resolutionStarting(item, itemFizzled, null);
+            }
+
+            @Override
+            public void resolutionStarting(
+                    SpellAbility item, boolean itemFizzled, Object targetsAtCast) {
                 if (item.getId() == onStack.getId()) {
                     fizzled[0] = itemFizzled;
-                    sink.resolutionStarted(snapshots.ofResolving(onStack));
+                    targets[0] = ChainTargets.now(item);
+                    targets[1] = ChainTargets.atCast(item, targetsAtCast);
+                    sink.resolutionStarted(snapshots.ofResolving(onStack,
+                            targets[1] == null ? List.of() : targets[1].cards()));
                 }
             }
 
@@ -303,7 +327,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         });
         ActivationOutcome outcome = fizzled[0] ? ActivationOutcome.FIZZLED
                 : OpenResolution.outcomeOf(cast.targetsAtCast(), onStack);
-        return new ForcedResolution(cast.refs(), sink.halves(), outcome);
+        return new ForcedResolution(cast.refs(), sink.halves(), outcome, targets[0], targets[1]);
     }
 
     /**

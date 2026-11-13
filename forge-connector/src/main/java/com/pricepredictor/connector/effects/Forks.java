@@ -113,6 +113,14 @@ final class Forks {
         default void resolutionStarting(SpellAbility item, boolean fizzled) {
         }
 
+        /**
+         * The same, with the hook's third argument: each chain link's
+         * targets before Forge's check for illegal targets, or null.
+         */
+        default void resolutionStarting(SpellAbility item, boolean fizzled, Object targetsAtCast) {
+            resolutionStarting(item, fizzled);
+        }
+
         /** A clause of some other game starts to resolve. */
         default void clauseResolving(SpellAbility clause) {
         }

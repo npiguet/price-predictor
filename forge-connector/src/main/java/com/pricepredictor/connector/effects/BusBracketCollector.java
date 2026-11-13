@@ -249,7 +249,7 @@ public final class BusBracketCollector extends BusEventReader {
             if (owns(item)) {
                 resolutionStarting(item, fizzled, args.optional(2));
             } else {
-                Forks.forkHooks().resolutionStarting(item, fizzled);
+                Forks.forkHooks().resolutionStarting(item, fizzled, args.optional(2));
             }
         });
     }

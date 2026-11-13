@@ -219,7 +219,8 @@ class MidResolutionCastTest {
 
         String boltHalf = only(all, "resolution", BOLT);
         assertTrue(boltHalf.contains("\"outcome\":\"fizzled\""), boltHalf);
-        assertEquals(List.of(), eventTypes(boltHalf), boltHalf);
+        // Its own card's move off the stack, and nothing else (608.2b).
+        assertEquals(List.of("zone_change"), eventTypes(boltHalf), boltHalf);
         String charmHalf = only(all, "resolution", TETSUO);
         assertNull(linkOf(charmHalf), charmHalf);
         assertTrue(charmHalf.contains("\"option\":" + TETSUO_CAST_MODE + "}"), charmHalf);

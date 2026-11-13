@@ -23,6 +23,7 @@ import java.util.Map;
 
 import static com.pricepredictor.connector.effects.RecordLines.asMap;
 import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
+import static com.pricepredictor.connector.effects.RecordLines.params;
 import static com.pricepredictor.connector.effects.RecordLines.events;
 import static com.pricepredictor.connector.effects.RecordLines.linkOf;
 import static com.pricepredictor.connector.effects.RecordLines.only;
@@ -257,10 +258,11 @@ class RecordMomentsTest {
 
     /**
      * A Bolt whose target died before it resolved: its effect half says
-     * fizzled and holds no event (FR-042b), under the cost half's link.
+     * fizzled and holds one event, its card's move off the stack to the
+     * graveyard (608.2b, FR-042b), under the cost half's link.
      */
     @Test
-    void aFizzledSpellWritesAnEmptyEffectHalf() throws Throwable {
+    void aFizzledSpellsEffectHalfHoldsItsMoveOffTheStack() throws Throwable {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Card bears = inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
@@ -278,7 +280,9 @@ class RecordMomentsTest {
         String cost = only(all, "activation", BOLT);
         String effect = only(all, "resolution", BOLT);
         assertEquals("fizzled", payload(effect).get("outcome"), effect);
-        assertEquals(List.of(), events(effect), effect);
+        assertEquals(1, events(effect).size(), effect);
+        assertEquals("zone_change", events(effect).get(0).get("type"), effect);
+        assertEquals("graveyard", params(events(effect).get(0)).get("to_zone"), effect);
         assertEquals(linkOf(cost), linkOf(effect));
     }
 
@@ -456,9 +460,10 @@ class RecordMomentsTest {
      * 2 damage to target creature — both lost their targets before it
      * resolved fizzles as a whole (608.2b), and Forge resolves none of its
      * clauses, so no mode's first clause ever opens a half. Each chosen mode
-     * still writes its own empty half through its option line, saying
-     * fizzled, under the cost half's link (FR-029a, FR-029c, FR-042b); none
-     * acts through the bare root.
+     * still writes its own half through its option line, saying fizzled,
+     * under the cost half's link (FR-029a, FR-029c, FR-042b); none acts
+     * through the bare root. The last half takes the card's move off the
+     * stack (608.2b), the others are empty.
      */
     @Test
     void aFizzledCharmWritesAnEmptyHalfPerChosenMode() throws Throwable {
@@ -490,9 +495,10 @@ class RecordMomentsTest {
                 "one half per chosen mode, through its option line: " + halves);
         for (String half : halves) {
             assertEquals("fizzled", payload(half).get("outcome"), half);
-            assertEquals(List.of(), events(half), half);
             assertEquals(linkOf(cost), linkOf(half), half);
         }
+        assertEquals(List.of(), events(halves.get(0)), halves.get(0));
+        assertEquals(List.of("zone_change"), eventTypes(halves.get(1)), halves.get(1));
     }
 
     /** The {@code layers} of each {@code continuous_effect_created} in a record. */
