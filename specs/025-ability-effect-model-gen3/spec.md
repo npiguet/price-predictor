@@ -592,6 +592,25 @@ and that the reporting half never enters the control score.
   detector looks for, and the near miss its contrasting variant gives; or `none`, with a reason,
   where no record field or event shows the outcome. `rules_catalogue.py validate` MUST fail on a
   scenario with neither.
+- **FR-002b**: Each rule's declaration MUST tell its records from every other rule's: no two
+  scenarios of different rules may share one declaration (family, record kind and parameters), and
+  a test over the whole real catalogue MUST fail on one. A scenario stating the same observable fact
+  as another (a restatement, a redundant-instances rule, a general rule one mechanism shows)
+  MUST declare `{"same_as": scenario id or [ids], "reason": …}`, a list naming the scenarios whose
+  union it states: it tags nothing, its rules are counted once, under the named scenarios' rules,
+  and `rule-counts` lists it under them. A rule whose own condition the record cannot show, or that
+  no family parameter tells apart, MUST declare `none` with its reason. The blocking and targeting
+  rules name the rule that excludes an entity (`legality_membership`'s `restriction`, decided by
+  `rule_outcomes.blocking_restrictions` and `targeting_restrictions`); the timing rules narrow the
+  candidates by kind, card type, keyword, designation or sorcery speed (`verdict_bit`).
+- **FR-002c**: Building the detector index (`DetectorIndex.of`) MUST refuse, naming the scenario, a
+  parameter its family does not declare and a value the family cannot read. A declaration asking
+  its record kind for an event the collector never writes on that kind (the per-kind table
+  `rule_detectors.emittable_events`, kept by the event's connector source), or asking a
+  resolution acting through a line for the game's end (filed in the game-end record), MUST be set
+  aside as untaggable with its reason: it tags nothing and `rule-counts` lists it. On a degraded
+  worker's record, and on a forced resolution (an interventional fork), a missing event only the
+  engine hooks build MUST read as unknown: neither an absence's `fires` side nor a near miss.
 - **FR-002a**: Rule 305's land-play scenarios MUST declare detectors over land-play candidates
   (FR-033a): the land-play limit through the `land_play_limit` check, and the turn and timing
   restrictions on candidates with `land_play = true`.
@@ -630,7 +649,10 @@ and that the reporting half never enters the control score.
   games, natural records of games between two Forge AIs, and aimed records (those carrying
   `aimed_at`, FR-009a, whatever their game). It MUST write them to `--output` (default
   `output/effects/rule-counts.json`) and print them. It reads gen-2 and gen-3 records; a gen-2
-  record carries no `aimed_at` and counts as natural.
+  record carries no `aimed_at` and counts as natural. Beside the counts it MUST list the rules a
+  taggable declaration speaks for that no record tags (`declared_zero`), the untaggable scenarios
+  with their reasons (FR-002c) and the `same_as` scenarios with the scenarios and rules they are
+  counted under (FR-002b): no declared rule is left out silently.
 - **FR-009**: Records from directed forks and from collection aimed at a rule MUST be identifiable
   as such in every downstream reader, from the record alone, so they never become rule-test records
   wherever their game is placed. A record is aimed when it carries the envelope field `aimed_at`
@@ -880,6 +902,16 @@ and that the reporting half never enters the control score.
   withheld record. The cap rides a cap property shared by both CLIs and pinned like the others.
 - **FR-042**: `validate-corpus` and `field-coverage` MUST cover every new field of root § 8.13,
   and a field's coverage MUST be checked before any figure computed from that field is published.
+  `validate-corpus` MUST also fail a gen-3 window of at least `--min-presence-records` (1000)
+  records lacking a kind every game writes (cost and effect halves, trigger, combat, the three
+  playability subkinds, the draw step's turn action), a window whose trigger records hold fewer
+  than `--min-trigger-fired-share` (0.05) positives, and a window of at least
+  `--min-cost-evidence` gen-3 cost halves none of which meets its effect half (a lone one is
+  counted, and the countered ones named); report an undecodable shard line as a failed finding
+  naming the shard and line and read the other shards on; report the decode tally as watched
+  figures; read the variant tree through `--variant-scripts`, failing the keyword-join check on a
+  key in a tree it was not given. `field-coverage` MUST give each event parameter a cell of its own
+  and list the ones never written.
 
 #### Collection: record moments (root § 8.14)
 

@@ -263,6 +263,25 @@ two.
   rule's API or keyword are kept), and lists the detectors tagging under 1% of a pool of 200 or more
   records. A flag is a question, not a verdict: a rule about a rare situation looks the same.
 
+  Each rule's declaration tells its records from every other rule's: no two scenarios of
+  different rules share one declaration (family, record kind and parameters), and a test over the
+  whole catalogue fails on one. A scenario stating the same observable fact as another (a
+  restatement, a redundant-instances rule, a general rule one mechanism shows) declares itself a
+  duplicate instead:
+
+  ```json
+  "detector": {"same_as": "702.9b-1", "reason": "Both state that a flier can't be blocked except by flying or reach."}
+  ```
+
+  `same_as` names a scenario that declares a detector, or a list of them whose union the scenario
+  states (117.1a's noninstant spells beside each card type's own casting rule). The duplicate tags
+  nothing; its rules are counted once, under the named scenarios' rules, and `rule-counts` lists
+  it there. A rule whose own condition the record cannot show, or that no family parameter tells
+  apart, declares `none`, and its reason says which ("Could not express: …" where a record field
+  holds it and no parameter reads it). A declaration asking its record kind for an event the
+  collector never writes there (`rule_detectors/emittable_events.py`) is untaggable: it tags
+  nothing and `rule-counts` lists it with its reason.
+
   A detector reads `observed`, whether the rule's outcome happened, from the record it tags. Where
   the collector files the outcome in another record, the outcome is unreadable and the record goes
   on no review list: a non-combat kill's game end is written in the game-end record after the

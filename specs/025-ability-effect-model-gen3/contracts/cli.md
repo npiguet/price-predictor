@@ -59,8 +59,10 @@ the polarity its counts lack first and starred.
 
 Prints one line per rule, grouped by unit: `fires` and `does_not_fire` counts, each split
 `random_seat / forge_ai / aimed`; then the rules declared `none` with their reasons, the rules not
-countable on the records' generation, and the size of the review list. The counts file omits a rule
-no record tags. The counts file also holds `generation` (`gen-2` or `gen-3`, the records' generation)
+countable on the records' generation, and the size of the review list; before them the rules
+declared with zero records, the untaggable scenarios with their reasons and the `same_as` scenarios
+with what they are counted under. The counts file lists a rule no record tags under
+`declared_zero`, beside `untaggable` and `same_as`, and also holds `generation` (`gen-2` or `gen-3`, the records' generation)
 and `carriers`: per rule, the script files of the cards whose lines are its tags' condition
 entities, each with the line keys its tags act through and its record count, read by the steered
 variant round (FR-058f), as `rule -> [{script_file, records, lines: [{key, records}]}]`, a key

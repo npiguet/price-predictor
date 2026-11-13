@@ -15,7 +15,7 @@ File `rules/scenarios/<unit>.json`, keys as `rules/README.md` specifies, plus:
 
 | Field | Type | Rule |
 |---|---|---|
-| `detector` | `DetectorDeclaration` or `{"none": reason}` | required on every scenario (FR-002) |
+| `detector` | `DetectorDeclaration`, `{"none": reason}` or `{"same_as": id or [ids], "reason": …}` | required on every scenario (FR-002); `same_as` names scenarios declaring a detector (FR-002b) |
 | `departure` | `Departure`, optional | absent means no departure recorded |
 | `variants[].operation` | `ForkOperation` or `{"unclassifiable": reason}` | required on every non-base variant (FR-003) |
 
@@ -31,7 +31,9 @@ File `rules/scenarios/<unit>.json`, keys as `rules/README.md` specifies, plus:
 | `needs` | list of field names | gen-3 fields the detector reads; empty when it runs on gen-2 records |
 
 Validation: `rules_catalogue.py validate` fails on an unknown family, on parameters the family does not
-declare, and on a scenario with neither `detector` form.
+declare, and on a scenario with no `detector` form; `DetectorIndex.of` also refuses a value the
+family cannot read and sets aside an untaggable declaration (FR-002c). No two scenarios of
+different rules share one `(family, record_kind, params)` (FR-002b).
 
 ### Departure (new)
 
@@ -104,10 +106,13 @@ carries `aimed_at`). A gen-2 record is natural.
 ### RuleCounts (new; `rule-counts.json` and the manifest)
 
 ```
-records: n, rules: rule → { polarity → { source → count } }, not_countable: [rule], none: {rule → reason}, review: [{record_id, scenario}]
+records: n, rules: rule → { polarity → { source → count } }, declared_zero: [rule], not_countable: [rule],
+none: {rule → reason}, untaggable: {scenario → {rules, reason}},
+same_as: {scenario → {rules, same_as: [scenario], counted_under: [rule]}}, review: [{record_id, scenario}]
 ```
 
-A rule no record tags is absent from `rules`; absent is not "not countable".
+A rule no record tags is absent from `rules` and listed in `declared_zero` when a taggable
+declaration speaks for it; absent from both is not "not countable".
 
 ## Records
 

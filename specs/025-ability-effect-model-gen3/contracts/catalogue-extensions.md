@@ -23,7 +23,16 @@ or
 "detector": {"none": "The layer order shows only in the continuous record's result, which no field separates by layer."}
 ```
 
+or, for a scenario stating another's observable fact (FR-002b),
+
+```json
+"detector": {"same_as": "702.9b-1", "reason": "Both state that a flier can't be blocked except by flying or reach."}
+"detector": {"same_as": ["301.1-1", "302.1-1"], "reason": "The union of each card type's own rule."}
+```
+
 - `family` names a module of `effects.domain.rule_detectors`, which declares its `params`.
+- No two scenarios of different rules share one declaration; a `same_as` names scenarios that
+  declare a detector, and its rules are counted under theirs.
 - `needs` lists gen-3 field names; on a gen-2 record the rule is not countable.
 
 ## Variant `operation`
