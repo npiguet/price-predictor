@@ -16,6 +16,7 @@ import shutil
 import zlib
 from collections import Counter, defaultdict
 from collections.abc import Callable, Collection, Iterable, Iterator, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, NamedTuple
 
@@ -198,27 +199,130 @@ SHARD_GLOBS: tuple[str, ...] = ("*.jsonl.gz", "*.jsonl")
 
 
 class CorruptShardError(ValueError):
-    """A gzip member before a shard's last one does not decompress.
+    """A gzip member that does not decompress, with a member after it.
 
-    A killed worker can only cut the last member short; damage before it
-    would silently drop every member after it, so the read stops loudly.
+    A killed worker can only cut the last member short; damage before the
+    last would silently drop every member after it, so the read stops loudly.
     """
 
 
 class RecordDecodeError(ValueError):
-    """A shard line that does not parse into a record, located by shard and line."""
+    """A shard line that does not parse into a record, located by shard and line.
 
-    def __init__(self, path: Path, line: int, cause: Exception) -> None:
-        super().__init__(
-            f"{path}, line {line}: the record does not decode "
-            f"({type(cause).__name__}: {cause})"
-        )
-        self.path = Path(path)
+    Pickles with its location, so a pool or prefetch worker hands it over whole.
+    """
+
+    def __init__(self, message: str, path: Path | None = None, line: int | None = None) -> None:
+        super().__init__(message)
+        self.path = None if path is None else Path(path)
         self.line = line
+
+    @classmethod
+    def at(cls, path: Path, line: int, cause: Exception) -> RecordDecodeError:
+        return cls(
+            f"{path}, line {line}: the record does not decode "
+            f"({type(cause).__name__}: {cause})", path, line,
+        )
+
+    def __reduce__(self):
+        return type(self), (self.args[0], self.path, self.line)
+
+
+#: What ends one shard's read early while leaving the records before it
+#: usable: a reader that must not stop on one damaged shard catches these.
+SHARD_DAMAGE: tuple[type[ValueError], ...] = (CorruptShardError, RecordDecodeError)
+
+
+@dataclass
+class DecodeTally:
+    """What reading shards met without stopping: each value outside its
+    member's closed list (``(member, repr of the value) -> times read``) and
+    each shard whose last gzip member was damaged, which ends its read.
+
+    One per process (:func:`take_decode_tally`); a caller whose workers read
+    shards sums what each hands back (:meth:`merge`).
+    """
+
+    off_list: Counter = field(default_factory=Counter)
+    damaged_tails: list[str] = field(default_factory=list)
+
+    def merge(self, other: DecodeTally) -> None:
+        self.off_list.update(other.off_list)
+        self.damaged_tails.extend(other.damaged_tails)
+
+    def __bool__(self) -> bool:
+        return bool(self.off_list or self.damaged_tails)
+
+    def report_lines(self) -> list[str]:
+        """The tally as printed lines; none when it is empty."""
+        if not self:
+            return []
+        lines = [f"values outside the wire's closed lists: {sum(self.off_list.values())}"]
+        lines += [f"  {member} {value}: {count}"
+                  for (member, value), count in sorted(self.off_list.items())]
+        if self.damaged_tails:
+            lines.append("shards whose damaged last gzip member ended the read: "
+                         f"{len(self.damaged_tails)}")
+            lines += [f"  {where}" for where in self.damaged_tails]
+        return lines
+
+
+#: This process's tally since it was last taken.
+_TALLY = DecodeTally()
+#: ``(member, repr of the value)`` this process has warned of, so each is
+#: logged once whether or not its tally has been taken since.
+_WARNED: set[tuple[str, str]] = set()
+
+
+def decode_tally() -> DecodeTally:
+    """A copy of what this process's reads have tallied since the last take."""
+    return DecodeTally(Counter(_TALLY.off_list), list(_TALLY.damaged_tails))
+
+
+def take_decode_tally() -> DecodeTally:
+    """This process's tally, emptied: a pool worker returns it with each
+    shard's result, and the caller sums them (:meth:`DecodeTally.merge`)."""
+    taken = decode_tally()
+    reset_decode_tally()
+    return taken
+
+
+def absorb_decode_tally(tally: DecodeTally) -> None:
+    """Add a tally a worker handed back to this process's."""
+    _TALLY.merge(tally)
+
+
+def reset_decode_tally() -> None:
+    _TALLY.off_list.clear()
+    _TALLY.damaged_tails.clear()
 
 
 #: Compressed bytes read at a time.
 _GZIP_CHUNK = 1 << 20
+#: A gzip member's first bytes: its magic and the deflate method.
+_GZIP_MAGIC = b"\x1f\x8b\x08"
+#: Compressed bytes tried at each place a member may start.
+_MEMBER_PROBE = 1 << 16
+
+
+def _member_follows(path: Path, after: int) -> bool:
+    """Whether a gzip member that decompresses starts past byte ``after``:
+    every place its magic recurs is tried, since deflate data can hold the
+    three bytes by chance."""
+    with Path(path).open("rb") as handle:
+        handle.seek(after + 1)
+        rest = handle.read()
+    at = rest.find(_GZIP_MAGIC)
+    while at >= 0:
+        probe = zlib.decompressobj(31)
+        try:
+            out = probe.decompress(rest[at:at + _MEMBER_PROBE])
+        except zlib.error:
+            out = None
+        if out is not None and (out or probe.eof):
+            return True
+        at = rest.find(_GZIP_MAGIC, at + 1)
+    return False
 
 
 def _gzip_numbered_lines(path: Path) -> Iterator[tuple[int, str]]:
@@ -226,9 +330,12 @@ def _gzip_numbered_lines(path: Path) -> Iterator[tuple[int, str]]:
     with its 1-based line number, terminator stripped.
 
     A last member cut short (a killed worker) ends the stream quietly with
-    the lines it completed; a member that does not decompress, or whose
-    check sum fails, raises :class:`CorruptShardError` naming the byte it
-    starts at, since every member after it would be lost unsaid.
+    the lines it completed. A member that does not decompress, or whose
+    check sum fails, ends it too, with a warning and a tally entry, when no
+    member follows it (a damaged tail: the lines it completed are kept);
+    with one after it, it raises :class:`CorruptShardError` naming the byte
+    it starts at, since every later member would be lost unsaid. A line that
+    is no UTF-8 raises :class:`RecordDecodeError`.
     """
     number = 0
     pending = b""
@@ -251,10 +358,16 @@ def _gzip_numbered_lines(path: Path) -> Iterator[tuple[int, str]]:
                 try:
                     out = decoder.decompress(data)
                 except zlib.error as exc:
-                    raise CorruptShardError(
-                        f"{path}: the gzip member starting at byte {member_start} is "
-                        f"corrupt ({exc}); the shard is read no further, past line {number}"
-                    ) from exc
+                    where = (f"{path}: the gzip member starting at byte {member_start} "
+                             f"is corrupt ({exc})")
+                    if _member_follows(path, member_start):
+                        raise CorruptShardError(
+                            f"{where}; a member follows it, so the shard is read no "
+                            f"further, past line {number}") from exc
+                    logger.warning("%s; it is the shard's last, so its read ends there, "
+                                   "past line %d", where, number)
+                    _TALLY.damaged_tails.append(f"{path}, byte {member_start}")
+                    return
                 rest = decoder.unused_data if decoder.eof else b""
                 consumed += len(data) - len(rest)
                 data = rest
@@ -264,17 +377,28 @@ def _gzip_numbered_lines(path: Path) -> Iterator[tuple[int, str]]:
                 *lines, pending = pending.split(b"\n")
                 for line in lines:
                     number += 1
-                    yield number, line.decode("utf-8").removesuffix("\r")
+                    try:
+                        text = line.decode("utf-8")
+                    except UnicodeDecodeError as exc:
+                        raise RecordDecodeError.at(path, number, exc) from exc
+                    yield number, text.removesuffix("\r")
+
+
+def _plain_numbered_lines(path: Path) -> Iterator[tuple[int, str]]:
+    number = 0
+    try:
+        for number, line in enumerate(iter_complete_lines(path), start=1):  # noqa: B007
+            yield number, line
+    except UnicodeDecodeError as exc:
+        # Read in blocks: the bad byte is on the line after the last read, or later.
+        raise RecordDecodeError.at(path, number + 1, exc) from exc
 
 
 def _numbered_lines(path: Path) -> Iterator[tuple[int, str]]:
     """Every complete, non-blank line of a shard with its 1-based number in
     the file, blank lines counted."""
     path = Path(path)
-    lines = (
-        enumerate(iter_complete_lines(path), start=1) if path.suffix != ".gz"
-        else _gzip_numbered_lines(path)
-    )
+    lines = _gzip_numbered_lines(path) if path.suffix == ".gz" else _plain_numbered_lines(path)
     for number, line in lines:
         if line.strip():
             yield number, line
@@ -286,9 +410,9 @@ def iter_shard_lines(path: Path) -> Iterator[str]:
     One shape for both spellings, so a caller that writes lines back adds the
     newline itself whichever spelling it read. Blank lines are skipped: every
     reader ignores them, and a copy that kept them would be the one place
-    they survived. A truncated final gzip member, or a trailing partial line,
-    ends the stream; a damaged member before the last raises
-    :class:`CorruptShardError`.
+    they survived. A truncated final gzip member, a damaged one with no
+    member after it, or a trailing partial line, ends the stream; a damaged
+    member before the last raises :class:`CorruptShardError`.
     """
     for _number, line in _numbered_lines(path):
         yield line
@@ -305,18 +429,15 @@ def _decode[T, R](path: Path, number: int, value: T, parse: Callable[[T], R]) ->
     except UnacceptedGenerationError as exc:
         raise type(exc)(f"{path}, line {number}: {exc}") from exc
     except Exception as exc:
-        raise RecordDecodeError(path, number, exc) from exc
+        raise RecordDecodeError.at(path, number, exc) from exc
 
 
-#: ``(member, value) -> times read`` for every value outside its member's
-#: closed list (``wire_closed_lists``) this process has read.
-_OFF_LIST: Counter[tuple[str, str]] = Counter()
-
-
-def off_list_counts() -> dict[tuple[str, str], int]:
-    """Every value outside the wire's closed lists this process has read, by
-    ``(member, repr of the value)``, with how often."""
-    return dict(_OFF_LIST)
+def _parse_object(line: str) -> dict:
+    """One shard line as the JSON object it must be."""
+    data = parse_record_line(line)
+    if not isinstance(data, dict):
+        raise TypeError(f"a record is a JSON object, not {type(data).__name__}")
+    return data
 
 
 def _check_closed_lists(path: Path, number: int, data: dict) -> None:
@@ -324,23 +445,25 @@ def _check_closed_lists(path: Path, number: int, data: dict) -> None:
     the first time this process reads it; the record still decodes."""
     for member, value in off_list_values(data):
         seen = (member, repr(value))
-        if seen not in _OFF_LIST:
+        if seen not in _WARNED:
+            _WARNED.add(seen)
             logger.warning(
                 "%s, line %d: %s %r is outside the wire's closed list; read as "
                 "written, its later sightings only counted", path, number, member, value,
             )
-        _OFF_LIST[seen] += 1
+        _TALLY.off_list[seen] += 1
 
 
-def _decoded(path: Path, number: int, data: dict) -> EffectRecord:
-    """One raw record checked against the closed lists and decoded, any
-    failure located."""
-    _check_closed_lists(path, number, data)
-    return _decode(path, number, data, record_from_dict)
+def _checked(path: Path, number: int, line: str) -> dict:
+    """One line parsed and checked against the closed lists, any failure
+    (no JSON object, a malformed member) located."""
+    data = _decode(path, number, line, _parse_object)
+    _decode(path, number, data, lambda raw: _check_closed_lists(path, number, raw))
+    return data
 
 
 def _record_at(path: Path, number: int, line: str) -> EffectRecord:
-    return _decoded(path, number, _decode(path, number, line, parse_record_line))
+    return _decode(path, number, _checked(path, number, line), record_from_dict)
 
 
 def iter_record_dicts(path: Path) -> Iterator[dict]:
@@ -349,7 +472,7 @@ def iter_record_dicts(path: Path) -> Iterator[dict]:
     For a caller that needs the raw JSON, such as a generation check.
     """
     for number, line in _numbered_lines(path):
-        yield _decode(path, number, line, parse_record_line)
+        yield _decode(path, number, line, _parse_object)
 
 
 
@@ -370,10 +493,10 @@ def read_window(
     for shard in list_shards(root) if shards is None else shards:
         path = shard.path(root)
         for number, line in _numbered_lines(path):
-            data = _decode(path, number, line, parse_record_line)
+            data = _checked(path, number, line)
             if observe is not None:
                 observe(shard.name, data)
-            yield _decoded(path, number, data)
+            yield _decode(path, number, data, record_from_dict)
             seen += 1
             if limit and seen >= limit:
                 return
@@ -559,7 +682,7 @@ def shard_generation(path: Path) -> ShardGeneration | None:
     records disagree.
     """
     for number, line in _numbered_lines(path):
-        data = _decode(path, number, line, parse_record_line)
+        data = _decode(path, number, line, _parse_object)
         return _decode(path, number, data, ShardGeneration.of)
     return None
 

@@ -182,9 +182,11 @@ class TestCompressedShards:
 
 class TestDamagedShards:
     """A killed worker can only cut the last member short, which ends the read
-    quietly; damage anywhere before it would silently drop every later
-    member, so it stops the read naming the shard and the byte the damaged
-    member starts at. A line that does not decode names its shard and line."""
+    quietly. Damage in the last member (power lost mid-write, a flipped bit)
+    ends it too, with a warning and a tally entry, since nothing follows to
+    lose; damage before the last would silently drop every later member, so
+    it stops the read naming the shard and the byte the damaged member starts
+    at. A line that does not decode names its shard and line."""
 
     def _line(self, record_id: str) -> str:
         return format_record_line(_record(record_id=record_id))
@@ -237,6 +239,76 @@ class TestDamagedShards:
             with pytest.raises(RecordDecodeError,
                                match=r"run\.0-L1\.jsonl\.gz, line 3: .*no_such_kind"):
                 read()
+
+    def _ends_quietly(self, path, caplog, expected):
+        from effects.infrastructure import shard_io
+
+        shard_io.reset_decode_tally()
+        with caplog.at_level("WARNING", logger=shard_io.__name__):
+            assert list(iter_shard_lines(path)) == expected
+        assert shard_io.take_decode_tally().damaged_tails == [f"{path}, byte {self._at}"]
+        assert any("is corrupt" in r.getMessage() and str(path) in r.getMessage()
+                   for r in caplog.records)
+
+    def test_a_flipped_check_sum_in_the_last_member_ends_the_read_quietly(
+            self, tmp_path, caplog):
+        first, second = self._members("r.1", "r.2")
+        damaged = bytearray(second)
+        damaged[len(damaged) - 6] ^= 0x01  # inside the CRC-32 trailer
+        path = tmp_path / "run.0-L1.jsonl.gz"
+        path.write_bytes(first + bytes(damaged))
+        self._at = len(first)
+        self._ends_quietly(path, caplog, [self._line("r.1")])
+
+    def test_garbage_after_the_last_member_ends_the_read_quietly(self, tmp_path, caplog):
+        """Power lost mid-write can leave anything at the end of the file."""
+        first, second = self._members("r.1", "r.2")
+        path = tmp_path / "run.0-L1.jsonl.gz"
+        path.write_bytes(first + second + b"\xffgarbage\x01\x02")
+        self._at = len(first) + len(second)
+        self._ends_quietly(path, caplog, [self._line("r.1"), self._line("r.2")])
+
+    def test_a_bad_header_on_the_last_member_ends_the_read_quietly(self, tmp_path, caplog):
+        first, second = self._members("r.1", "r.2")
+        path = tmp_path / "run.0-L1.jsonl.gz"
+        path.write_bytes(first + b"XX" + second[2:])
+        self._at = len(first)
+        self._ends_quietly(path, caplog, [self._line("r.1")])
+
+    def test_the_corrupt_shard_error_pickles_with_its_location(self):
+        import pickle
+
+        from effects.infrastructure.shard_io import RecordDecodeError
+
+        error = RecordDecodeError.at(Path("s.jsonl.gz"), 7, KeyError("kind"))
+        back = pickle.loads(pickle.dumps(error))
+        assert (str(back), back.path, back.line) == (str(error), Path("s.jsonl.gz"), 7)
+
+    @pytest.mark.parametrize("line", [
+        "[1, 2]", '"a string"',
+        None,  # an entity that is a string: built below
+    ])
+    def test_a_malformed_shape_names_its_shard_and_line(self, tmp_path, line):
+        from effects.infrastructure.shard_io import RecordDecodeError
+
+        if line is None:
+            raw = record_to_dict(_record(record_id="r.2"))
+            raw["state"]["entities"] = ["E1"]
+            line = json.dumps(raw)
+        path = tmp_path / "run.0-L1.jsonl"
+        path.write_text(f"{self._line('r.1')}\n{line}\n", encoding="utf-8")
+        for read in (lambda: list(read_shard(path)), lambda: list(read_window(tmp_path))):
+            with pytest.raises(RecordDecodeError, match=r"run\.0-L1\.jsonl, line 2"):
+                read()
+
+    def test_a_line_of_bad_utf8_in_a_gzip_shard_names_its_shard_and_line(self, tmp_path):
+        from effects.infrastructure.shard_io import RecordDecodeError
+
+        path = tmp_path / "run.0-L1.jsonl.gz"
+        body = (self._line("r.1") + "\n").encode("utf-8") + b'{"record_id": "\xff\xfe"}\n'
+        path.write_bytes(gzip.compress(body))
+        with pytest.raises(RecordDecodeError, match=r"run\.0-L1\.jsonl\.gz, line 2"):
+            list(read_shard(path))
 
     def test_a_line_that_is_no_json_names_its_shard_and_line(self, tmp_path):
         from effects.infrastructure.shard_io import RecordDecodeError
@@ -646,10 +718,30 @@ class TestValuesOutsideTheClosedLists:
         line = json.dumps(raw)
         path = tmp_path / "run.0-L1.jsonl"
         path.write_text(f"{line}\n{line}\n", encoding="utf-8")
-        before = shard_io.off_list_counts().get(("entity.zone", "'nowhere-zone'"), 0)
+        shard_io.reset_decode_tally()
         with caplog.at_level("WARNING", logger=shard_io.__name__):
             records = list(read_shard(path))
         assert [r.state.entities[0].zone for r in records] == ["nowhere-zone"] * 2
-        assert shard_io.off_list_counts()[("entity.zone", "'nowhere-zone'")] == before + 2
+        assert shard_io.decode_tally().off_list[("entity.zone", "'nowhere-zone'")] == 2
         warned = [r.getMessage() for r in caplog.records if "nowhere-zone" in r.getMessage()]
         assert len(warned) == 1 and "run.0-L1.jsonl, line 1: entity.zone" in warned[0]
+
+    def test_a_taken_tally_travels_and_sums(self, tmp_path):
+        """What a pool worker hands back with a shard's result, its caller adds
+        to its own: the tally is per process, emptied when taken."""
+        from effects.infrastructure import shard_io
+
+        raw = record_to_dict(_record(record_id="r.1", generation=3))
+        raw["state"]["entities"][0]["zone"] = "elsewhere-zone"
+        path = tmp_path / "run.0-L1.jsonl"
+        path.write_text(json.dumps(raw) + "\n", encoding="utf-8")
+        shard_io.reset_decode_tally()
+        list(read_shard(path))
+        taken = shard_io.take_decode_tally()
+        assert not shard_io.decode_tally()
+        shard_io.absorb_decode_tally(taken)
+        shard_io.absorb_decode_tally(taken)
+        total = shard_io.decode_tally()
+        assert total.off_list[("entity.zone", "'elsewhere-zone'")] == 2
+        assert "  entity.zone 'elsewhere-zone': 2" in total.report_lines()
+        shard_io.reset_decode_tally()
