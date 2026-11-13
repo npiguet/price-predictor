@@ -24,6 +24,30 @@ class TestKeywordSpelling:
         reaches the model through the ability line rather than the overlay."""
         assert normalize_keyword("ward:2") == "ward"
         assert normalize_keyword("landwalk:forest") == "landwalk"
+        assert normalize_keyword("Equip:1:Detective.YouCtrl:Detective") == "equip"
+
+    def test_a_protection_keeps_its_quality_in_either_spelling(self):
+        """What a protection protects from is which keyword it is: Forge's
+        colon form reads as the printed form does."""
+        assert normalize_keyword("Protection from blue") == "protection_from_blue"
+        assert normalize_keyword("Protection:Goblin") == "protection_from_goblin"
+        assert normalize_keyword("Protection:Card.MultiColor:multicolored") == (
+            "protection_from_multicolored")
+        assert normalize_keyword("Protection:Creature.Legendary:legendary creatures") == (
+            "protection_from_legendary_creatures")
+
+    def test_a_hexproof_from_a_quality_is_no_plain_hexproof(self):
+        """Hexproof from black leaves the card a legal target of every other
+        colour's spells, so it never reads as hexproof."""
+        assert normalize_keyword("Hexproof") == "hexproof"
+        assert normalize_keyword("Hexproof:Black") == "hexproof_from_black"
+        assert normalize_keyword("hexproof:card.black:black") == "hexproof_from_black"
+        assert normalize_keyword("Hexproof:Card.MonoColor:monocolored") == (
+            "hexproof_from_monocolored")
+
+    def test_a_quality_spelling_is_a_fixed_point(self):
+        for raw in ("Protection:Goblin", "Hexproof:Black", "Protection from red"):
+            assert normalize_keyword(normalize_keyword(raw)) == normalize_keyword(raw)
 
     def test_case_and_padding_do_not_matter(self):
         assert normalize_keyword("  First Strike  ") == "first_strike"
@@ -47,6 +71,13 @@ class TestOverlaySpelling:
     def test_every_protection_is_the_one_protection_slot(self):
         assert overlay_keyword("protection from blue") == "protection"
         assert overlay_keyword("Protection from creatures") == "protection"
+
+    def test_a_colon_form_protection_is_the_protection_slot_too(self):
+        assert overlay_keyword("Protection:Goblin") == "protection"
+
+    def test_a_hexproof_from_a_quality_is_not_the_hexproof_slot(self):
+        assert overlay_keyword("Hexproof") == "hexproof"
+        assert overlay_keyword("Hexproof:Black") != "hexproof"
 
     def test_any_other_keyword_is_its_normalized_name(self):
         assert overlay_keyword("Ward:2") == "ward"

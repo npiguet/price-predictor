@@ -135,13 +135,14 @@ class TestProtectionQuality:
         ("Protection from everything", QualityKind.EVERYTHING, "", "protection_from_everything"),
         ("Protection from each color", QualityKind.CONDITION, "each color",
          "protection_from_each_color"),
-        ("Protection:Artifact", QualityKind.CARD_TYPE, "artifact", "protection"),
-        ("Protection:Goblin", QualityKind.CREATURE_TYPE, "goblin", "protection"),
-        ("Protection:Assembly-Worker", QualityKind.CREATURE_TYPE, "assembly-worker", "protection"),
+        ("Protection:Artifact", QualityKind.CARD_TYPE, "artifact", "protection_from_artifact"),
+        ("Protection:Goblin", QualityKind.CREATURE_TYPE, "goblin", "protection_from_goblin"),
+        ("Protection:Assembly-Worker", QualityKind.CREATURE_TYPE, "assembly-worker",
+         "protection_from_assembly-worker"),
         ("Protection:Card.MultiColor:multicolored", QualityKind.CONDITION, "multicolored",
-         "protection"),
+         "protection_from_multicolored"),
         ("Protection:Card.cmcLE3:mana value 3 or less", QualityKind.CONDITION,
-         "mana value 3 or less", "protection"),
+         "mana value 3 or less", "protection_from_mana_value_3_or_less"),
     ])
     def test_forge_s_fragment_round_trips(self, fragment, kind, value, keyword):
         quality = ProtectionQuality.parse(fragment)

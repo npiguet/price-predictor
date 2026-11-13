@@ -212,8 +212,8 @@ class ProtectionQuality:
     @property
     def keyword(self) -> str:
         """The keyword in the package's spelling, as a snapshot's keyword list
-        carries it: ``protection_from_red``, ``protection_from_everything``, or
-        bare ``protection`` where Forge writes the quality after a colon."""
+        carries it: ``protection_from_red``, ``protection_from_everything``,
+        ``protection_from_goblin`` for Forge's ``Protection:Goblin``."""
         return normalize_keyword(self.fragment)
 
     def covers(self, obj: Characteristics) -> bool:

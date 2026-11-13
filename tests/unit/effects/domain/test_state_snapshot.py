@@ -150,7 +150,9 @@ class TestAGen3EntityReadsAsTheGen2ReadersExpect:
     def test_a_keyword_line_reads_its_keyword_without_the_value(self):
         assert _line("a", "keyword", fragment="Ward:2").keyword == "ward"
         assert _line("a", "keyword", fragment="First Strike").keyword == "first_strike"
-        assert _line("a", "keyword", fragment="Protection:Goblin").keyword == "protection"
+        assert _line("a", "keyword", fragment="Protection:Goblin").keyword == (
+            "protection_from_goblin")
+        assert _line("a", "keyword", fragment="Hexproof:Black").keyword == "hexproof_from_black"
         assert _line("a", "static").keyword is None
 
     def test_only_keyword_lines_are_keyword_lines(self):
