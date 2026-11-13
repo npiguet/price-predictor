@@ -212,17 +212,29 @@ SIGNATURE_CLASSES: frozenset[SamplingClass] = frozenset({
 })
 
 
+#: The signature's zone part where a record's targets leave the zone outcome unknown.
+UNKNOWN_ZONE_OUTCOME = "unknown"
+
+
 def outcome_signature(record) -> frozenset[tuple[str, bool]]:
     """The distinct ``(zone outcome, changed)`` pairs over a record's entities,
     from the targets the head trains on.
 
     A set, not a multiset, so a wipe of three and a wipe of seven share a
     signature rather than splitting one rule by board size (FR-049 step 2).
+    An entity whose zone outcome is unknown (a move to a destination no
+    outcome names: the stack, the sideboard, merged) reads
+    :data:`UNKNOWN_ZONE_OUTCOME`, never stayed.
     """
     pairs = set()
     for entry in derive_targets(record).values():
         zone = entry.fields.get(HeadField.ZONE_OUTCOME)
-        outcome = ZONE_OUTCOMES[zone] if zone is not None else ZoneOutcome.STAYED
+        if zone is not None:
+            outcome = ZONE_OUTCOMES[zone]
+        elif HeadField.ZONE_OUTCOME in entry.unknown:
+            outcome = UNKNOWN_ZONE_OUTCOME
+        else:
+            outcome = ZoneOutcome.STAYED
         pairs.add((outcome, entry.affected))
     return frozenset(pairs)
 

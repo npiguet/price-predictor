@@ -230,6 +230,8 @@ def _clean_pair(record, attacker_id: str, blocker_id: str, keywords_of: Keywords
     expected = step_deaths(side_of(before, attacker_id)[0], side_of(before, blocker_id)[0])
     for entity_id, should_die in zip((attacker_id, blocker_id), expected):
         entry = targets.get(entity_id)
+        if entry is not None and HeadField.ZONE_OUTCOME in entry.unknown:
+            return False  # moved where no zone outcome names: not "stayed"
         observed = entry is not None and entry.fields.get(HeadField.ZONE_OUTCOME) == died
         if observed != should_die:
             return False

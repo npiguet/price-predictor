@@ -127,6 +127,13 @@ class TestQualify:
         text = BOLT + " | SubAbility$ SV1 [SEG] SV1: DB$ Draw | NumCards$ 1"
         assert _qualify(record, text) is not None
 
+    def test_a_hit_creature_moved_where_no_zone_outcome_names_is_not_copied(self):
+        """Its outcome is unknown, never "stayed": the rule cannot be checked."""
+        onto_stack = Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
+                           params={"from_zone": "battlefield", "to_zone": "stack"})
+        record = _record([_damage("E1", 3), onto_stack], [_creature("E1", 5)])
+        assert _qualify(record) is None
+
     def test_a_second_effect_on_the_hit_creature_is_not_copied(self):
         tapped = Event(type=EventType.TAPPED, subjects=("E1",), params={})
         record = _record([_damage("E1", 3), tapped], [_creature("E1", 5)])

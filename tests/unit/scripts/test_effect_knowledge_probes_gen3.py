@@ -278,7 +278,7 @@ class TestAnthem:
         from effects.domain.effect_head_layout import ZONE_OUTCOMES
 
         record, found, creature = _anthem_board(records, sidecars)
-        died = SimpleNamespace(fields={"zone_outcome": ZONE_OUTCOMES.index("died")})
+        died = SimpleNamespace(fields={"zone_outcome": ZONE_OUTCOMES.index("died")}, unknown=set())
         monkeypatch.setattr(effect_targets, "derive_targets", lambda r: {creature: died})
         assert anthem.chosen(record, sidecars) is None
 
@@ -324,7 +324,8 @@ def _two_pairs(records, monkeypatch):
         deaths = combat_grid.step_deaths(combat_grid.side_of(record, a)[0],
                                          combat_grid.side_of(record, b)[0])
         for entity, dies in zip((a, b), deaths):
-            outcome[entity] = SimpleNamespace(fields={"zone_outcome": died} if dies else {})
+            outcome[entity] = SimpleNamespace(
+                fields={"zone_outcome": died} if dies else {}, unknown=set())
     monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
     return record, (attacker, blocker), (a2, b2)
 
@@ -347,7 +348,8 @@ class TestSeveralBlocks:
         record, first, second = _two_pairs(records, monkeypatch)
         outcome = dict(effect_targets.derive_targets(record))
         flipped = "zone_outcome" not in outcome[second[1]].fields
-        outcome[second[1]] = SimpleNamespace(fields={"zone_outcome": 1} if flipped else {})
+        outcome[second[1]] = SimpleNamespace(
+            fields={"zone_outcome": 1} if flipped else {}, unknown=set())
         monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
         assert combat_grid.several_blocks(record, _plain_keywords) is None
 

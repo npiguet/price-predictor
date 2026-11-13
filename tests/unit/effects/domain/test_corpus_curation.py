@@ -221,10 +221,24 @@ class TestOutcomeSignature:
             ("died", True),
         })
 
-    def test_a_real_effect_halfs_signature_is_stable(self):
+    def test_a_move_no_zone_outcome_names_is_its_own_signature_never_stayed(self):
+        """A permanent put onto the stack (or the sideboard, or merged) moved,
+        so its outcome is unknown: it shares no cell with a creature that
+        stayed."""
+        import dataclasses
+
+        from effects.domain.event_schema import Event, EventType
+
         record = self._effect()
-        assert outcome_signature(record) == outcome_signature(record)
-        assert signature_label(outcome_signature(record))
+        moved = Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
+                      params={"from_zone": "battlefield", "to_zone": "stack"})
+        tapped = Event(type=EventType.TAPPED, subjects=("E1",), params={})
+        def with_events(*events):
+            return dataclasses.replace(record, payload=dataclasses.replace(
+                record.payload, events=events))
+
+        assert outcome_signature(with_events(moved)) == frozenset({("unknown", True)})
+        assert outcome_signature(with_events(tapped)) == frozenset({("stayed", True)})
 
     def test_the_label_is_sorted_and_readable(self):
         assert signature_label(frozenset({("stayed", True), ("died", True)})) == (

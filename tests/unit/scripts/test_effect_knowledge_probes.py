@@ -1012,7 +1012,7 @@ def _outcome_by_the_rule(monkeypatch, record, attacker: str, blocker: str) -> di
     a, _ = combat_grid.side_of(record, attacker)
     b, _ = combat_grid.side_of(record, blocker)
     died = ZONE_OUTCOMES.index("died")
-    outcome = {e: SimpleNamespace(fields={"zone_outcome": died} if dies else {})
+    outcome = {e: SimpleNamespace(fields={"zone_outcome": died} if dies else {}, unknown=set())
                for e, dies in zip((attacker, blocker), combat_grid.step_deaths(a, b))}
     monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
     return outcome
@@ -1061,7 +1061,7 @@ class TestCombatGrid:
         assert combat_grid.single_block(record, _keywords) == (attacker, blocker)
         dies = bool(outcome[blocker].fields)
         outcome[blocker] = SimpleNamespace(
-            fields={} if dies else {"zone_outcome": ZONE_OUTCOMES.index("died")})
+            fields={} if dies else {"zone_outcome": ZONE_OUTCOMES.index("died")}, unknown=set())
         assert combat_grid.single_block(record, _keywords) is None
 
     def test_a_probe_fork_or_two_blockers_never_qualify(self, records):

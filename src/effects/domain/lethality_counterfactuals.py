@@ -258,15 +258,19 @@ def _player_hit(fields: dict, found: StatedEffect) -> _Hit:
     return _Hit.HIT
 
 
-def _creature_hit(entity: EntityState | None, fields: dict, found: StatedEffect,
+def _creature_hit(entity: EntityState | None, entry: EntityTargets, found: StatedEffect,
                   keywords_of: KeywordsOf, attached: set[str]) -> _Hit:
     if entity is None or not entity.on_battlefield:
         return _Hit.MISSED
     rules = _RULES[found.kind]
+    fields = entry.fields
     took = fields.get(rules.field)
     if not took:
         return _Hit.MISSED
     if took != found.amount * rules.sign:
+        return _Hit.REFUSED
+    if HeadField.ZONE_OUTCOME in entry.unknown:
+        # Moved where no zone outcome names (the stack, merged): not "stayed".
         return _Hit.REFUSED
     if not entity.is_creature or entity.pt is None:
         return _Hit.REFUSED
@@ -322,7 +326,7 @@ def _subjects_hit(state: StateSnapshot, targets: dict[str, EntityTargets], found
             verdict, into = _player_hit(entry.fields, found), hit_players
         else:
             verdict = _creature_hit(
-                entities.get(subject), entry.fields, found, keywords_of, attached,
+                entities.get(subject), entry, found, keywords_of, attached,
             )
             into = hit
         if verdict is _Hit.REFUSED:

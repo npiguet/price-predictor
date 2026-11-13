@@ -211,3 +211,39 @@ class TestTheEvasionGridsPair:
         qualified = EvasionGrid(_no_keywords).qualify(record)
         assert qualified is not None and qualified.entities == ("A", "B")
         assert len(qualified.outcomes) == len(ATTACKER_KEYWORDS) * len(BLOCKER_TRAITS)
+
+
+class TestTheCombatGridsPair:
+    def _combat(self, *extra_events):
+        from effects.domain.event_schema import Event, EventType
+        from effects.domain.records import CombatPayload, RecordKind
+        from effects.domain.state_snapshot import CombatStatus
+
+        attacker = replace(_creature("A", power=2, toughness=3),
+                           combat=CombatStatus(attacking="P1", blocked_by=("B",)))
+        blocker = replace(_creature("B", power=2, toughness=3),
+                          combat=CombatStatus(blocking=("A",)))
+        events = (Event(type=EventType.DAMAGE_DEALT, subjects=("B",), params={"amount": 2}),
+                  Event(type=EventType.DAMAGE_DEALT, subjects=("A",), params={"amount": 2}),
+                  *extra_events)
+        state = make_snapshot(
+            global_=GlobalState(turn=3, phase="combat_damage", active="P0", priority="P0",
+                                stack_size=0, combat_substep="regular"),
+            entities=(attacker, blocker))
+        return make_record(kind=RecordKind.COMBAT, state=state,
+                           payload=CombatPayload(attackers=("A",), blocks={"A": ("B",)},
+                                                 events=events))
+
+    def test_a_block_both_creatures_survive_qualifies(self):
+        from effects.domain.grid_edits import grid_block
+
+        assert grid_block(self._combat(), _no_keywords, "one") == ("A", "B")
+
+    def test_a_creature_moved_where_no_zone_outcome_names_is_no_grid_pair(self):
+        """Its outcome is unknown, never "stayed", so the rule cannot be checked."""
+        from effects.domain.event_schema import Event, EventType
+        from effects.domain.grid_edits import grid_block
+
+        moved = Event(type=EventType.ZONE_CHANGE, subjects=("B",),
+                      params={"from_zone": "battlefield", "to_zone": "stack"})
+        assert grid_block(self._combat(moved), _no_keywords, "one") is None
