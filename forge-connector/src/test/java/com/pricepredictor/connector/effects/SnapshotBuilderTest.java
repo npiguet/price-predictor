@@ -954,6 +954,27 @@ class SnapshotBuilderTest {
             assertFalse(idsIn(state).contains(Refs.of(bottom)), state);
         }
 
+        /**
+         * Rendering a library card as it was in the library builds it from
+         * its printing once per card: a snapshot taken again parses nothing,
+         * so Forge's trait id counter, which every parsed ability advances,
+         * moves no further (C2 #14).
+         */
+        @Test
+        void aLibraryCardIsBuiltFromItsPrintingOnce() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card top = board.game.getAction().moveToLibrary(
+                    board.card("Prodigal Sorcerer", board.you), 0, null, null);
+            SnapshotBuilder snapshots = new SnapshotBuilder(board.game);
+            snapshots.ofBoard().render();
+
+            int before = forge.game.ability.AbilityFactory.getAbility("DB$ Draw", top).getId();
+            snapshots.ofBoard().render();
+            int after = forge.game.ability.AbilityFactory.getAbility("DB$ Draw", top).getId();
+
+            assertEquals(before + 1, after, "the second snapshot parsed no card");
+        }
+
         /** A library card the record's events name joins at the write, where it sat. */
         @Test
         void aLibraryCardTheEventsNameJoinsWhereItSat() {
