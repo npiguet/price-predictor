@@ -712,7 +712,11 @@ def run(
     """Freeze ``corpus``'s selection set into ``reports_dir``: 0 once written,
     1 after naming every miss. ``deviance`` builds the loss reader from the
     manifest, and is called only once every half holds its games."""
-    from effects.domain.selection_set import selection_set_path, write_selection_set
+    from effects.domain.selection_set import (
+        SelectionSetError,
+        selection_set_path,
+        write_selection_set,
+    )
     from effects.domain.strata import VALIDATION_STRATA
     from effects.infrastructure.corpus_store import CorpusStore
     from effects.infrastructure.rules_catalogue_io import load_scenarios
@@ -740,7 +744,11 @@ def run(
             for line in left_out_lines(refused.selection):
                 echo(f"  {line}")
         return 1
-    path = write_selection_set(selection_set_path(reports_dir, manifest.digest()), selection)
+    try:
+        path = write_selection_set(selection_set_path(reports_dir, manifest.digest()), selection)
+    except SelectionSetError as refused:
+        echo(f"selection set not written for {corpus}: {refused}")
+        return 1
     rule_tests = sum(len(rules) for by_half in selection.rule_tests.values()
                      for rules in by_half.values())
     echo(f"froze {rule_tests} rule test(s), "
