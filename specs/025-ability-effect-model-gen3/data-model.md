@@ -152,7 +152,8 @@ holds the half's dice and coin flips. `refs.targets` holds every target of the a
 (root, sub-abilities, a charm's modes; an effect half: its own links' as its resolution started), and
 `refs.targets_at_cast` an effect half's targets before Forge's illegal-target check (null where
 unknown and on every other refs block). `granted_temporary.hidden_keywords` lists Forge's hidden
-keywords. A phased-out permanent is an entity; `copy_source` names what a copy copies; a
+keywords. A phased-out permanent is an entity that no reader takes for a permanent on the
+battlefield (702.26b); `copy_source` names what a copy copies; a
 candidate's or cost half's host off the battlefield and the stack shows its acting ability's face. Gen-2's `printed`, `granted_attached` and `pt` are gone.
 Relations: `links: [{from, to, type, index?}]` with the § 10.3 family names, each link written once in
 its forward direction, `index` on `targets` only; the four families the reader builds (`line_of`,
@@ -244,7 +245,10 @@ Deterministic for a given corpus; not stable across corpus growth (R3).
 each forward and reverse, `targets` per index 0, 1, 2 and 3+; 68 types). Collated as a `(N, 4)` long
 tensor `[batch, from, to, type]`. Built after context dropout and gate-2 stripping, from the record's
 `links`, the four reader-built families and `[ACT]`'s `targets` and `source_of`; a line end with no
-slot reads its card's, and a link to an object with no slot is dropped.
+slot reads its card's, and a link to an object with no slot is dropped. `[ACT]`'s `targets`, its
+target count and every card's and player's targeted bit read the targets as cast:
+`refs.targets_at_cast`, else `refs.targets` where it is null; a card `refs.targets_on_stack` names
+outside the stack (a permanent whose ability is targeted) is not itself targeted.
 
 ### Card slot (extended)
 
