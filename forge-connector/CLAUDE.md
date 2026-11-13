@@ -28,7 +28,8 @@ Build with `install`, never `package`, and rebuild `../forge` with `mvn install 
 
 The workers write append-only corpora whose formats are documented beside their readers:
 
-- `ConvertMain` — converted cards and their provenance sidecars: `src/price_predictor/CLAUDE.md`, `src/effects/CLAUDE.md` § File formats.
+- `ConvertMain` — converted cards and their provenance sidecars: `src/price_predictor/CLAUDE.md`, `src/effects/docs/text-encoding.md` § Provenance sidecars.
 - `PoolMain`, `MatchWorkerMain` — pools, match outcomes, cards played: `src/sealed/CLAUDE.md` § Corpus file formats.
-- `MatchWorkerMain` under `--effect-records` — effect-record shards and dropped-event counts: `src/effects/CLAUDE.md` § File formats.
+- `MatchWorkerMain` under `--effect-records` — effect-record shards and dropped-event counts: `src/effects/docs/record-format.md`.
+- The effect-record collectors under `connector/effects/` — before changing a collector, a hook or a cap, read `src/effects/docs/collection-internals.md`; before changing a fork or a directed rule, read `src/effects/docs/forks.md`. Neither loads by itself.
 - `DraftWorkerMain`, `DraftGameWorkerMain` — draft transcripts and draft games: `src/draft/CLAUDE.md` § Corpus file formats.

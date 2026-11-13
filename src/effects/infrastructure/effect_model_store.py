@@ -1,5 +1,5 @@
 """Saving and loading effect-model checkpoints: weights plus the provenance
-``src/effects/CLAUDE.md`` § Model artifacts lists, and the resume file."""
+``src/effects/docs/checkpoints.md`` lists, and the resume file."""
 
 from __future__ import annotations
 
