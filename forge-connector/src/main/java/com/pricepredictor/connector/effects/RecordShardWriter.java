@@ -157,7 +157,7 @@ public final class RecordShardWriter implements AutoCloseable {
         String game = RecordLine.string(recordJson, "game_id");
         if (game != null) {
             GameRecords records = games.computeIfAbsent(game, id -> new GameRecords());
-            if (records.written >= maxRecordsPerGame) {
+            if (records.written >= maxRecordsPerGame && !holdsTheOutcome(recordJson)) {
                 records.withhold(recordJson);
                 return;
             }
@@ -167,6 +167,16 @@ public final class RecordShardWriter implements AutoCloseable {
         if (++blockRecords >= BLOCK_RECORDS) {
             flushBlock();
         }
+    }
+
+    /**
+     * Whether a record holds the game's outcome ({@code player_lost},
+     * {@code player_won}): written once per game, so past the cap too, or a
+     * capped game would keep its marker and lose its result.
+     */
+    static boolean holdsTheOutcome(String recordJson) {
+        return recordJson.contains("\"type\":\"player_lost\"")
+                || recordJson.contains("\"type\":\"player_won\"");
     }
 
     /**

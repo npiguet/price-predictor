@@ -106,7 +106,8 @@ public class MatchWorkerMain {
             int workerIndex,
             String workerLifetime,
             boolean decksOnly,
-            Optional<Path> progressFile) {
+            Optional<Path> progressFile,
+            WorkerStop stop) {
 
         /**
          * Records-only: no sealed corpus is written at all.
@@ -133,7 +134,9 @@ public class MatchWorkerMain {
 
     /** The worker itself; an exit it requests ends the process through {@link ToolMain#guard}. */
     static void work(String[] args) {
-        WorkerConfig config = parseConfig();
+        // The recycle time counts from here, before Forge is initialised.
+        long started = System.nanoTime();
+        WorkerConfig config = parseConfig(started);
         initializeForge(config);
         runForever(config);
     }
@@ -144,6 +147,14 @@ public class MatchWorkerMain {
      * {@link ExitCode#BAD_CONFIG} on any malformed input.
      */
     static WorkerConfig parseConfig() {
+        return parseConfig(System.nanoTime());
+    }
+
+    /**
+     * {@link #parseConfig()}, the stop's recycle time counted from
+     * {@code startedNanos}.
+     */
+    static WorkerConfig parseConfig(long startedNanos) {
         Optional<Path> outputFile = WorkerProperties.optionalPath(OUTPUT_FILE);
         Optional<Path> effectRecordsDir = WorkerProperties.optionalPath(EFFECT_RECORDS_DIR);
         if (outputFile.isEmpty() && effectRecordsDir.isEmpty()) {
@@ -198,9 +209,13 @@ public class MatchWorkerMain {
         // Javadoc entry for this property).
         Optional<Path> progressFile = WorkerProperties.optionalPath(PROGRESS_FILE);
 
+        // Read with the rest, before Forge is initialised, so a malformed
+        // value exits at once.
+        WorkerStop stop = WorkerStop.fromSystemProperties(startedNanos);
+
         return new WorkerConfig(
                 outputFile, runId, bestOf, sideADecks, sideBDecks, sideBWeight,
-                effectRecordsDir, workerIndex, workerLifetime, decksOnly, progressFile);
+                effectRecordsDir, workerIndex, workerLifetime, decksOnly, progressFile, stop);
     }
 
     private static void initializeForge(WorkerConfig config) {
@@ -238,7 +253,9 @@ public class MatchWorkerMain {
         RecordShardWriter effectRecords = openEffectRecords(config, caps);
 
         HookFailureReport hookFailureReport = new HookFailureReport();
-        WorkerStop stop = WorkerStop.fromSystemProperties();
+        // A stop file already there, or a recycle time already past, stops
+        // the worker before its first match, once Forge is initialised.
+        WorkerStop stop = config.stop();
         stop.describe().ifPresent(System.out::println);
         MatchGenerator generator = MatchGenerator.builder(eligibleSets, config.runId())
                 .gamePlayer(new GamePlayer(

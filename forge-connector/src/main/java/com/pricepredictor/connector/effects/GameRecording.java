@@ -311,12 +311,36 @@ public final class GameRecording implements AutoCloseable {
                     // ended with all of them written: one that threw
                     // mid-match, or whose flush threw, gets none (D2).
                     if (flushed && game.isGameOver()) {
-                        GameEndMarker.write(game, envelope);
+                        writeMarker(envelope.gameId(), () -> GameEndMarker.write(game, envelope));
                     }
                 } finally {
                     envelope.endGame();
                 }
             }
+        }
+    }
+
+    /** The first marker that could not be written, printed once per worker. */
+    private static final OnceWarning MARKER_UNWRITTEN = new OnceWarning();
+
+    /**
+     * Write a game's marker, or count the failure and go on: the game then
+     * has no marker and reads as cut, and the match and its later games are
+     * played on. The failure is counted in {@link HookFailures} as
+     * {@code "game-end marker"} and its first one printed.
+     *
+     * @return whether the marker was written
+     */
+    static boolean writeMarker(String gameId, Runnable write) {
+        try {
+            write.run();
+            return true;
+        } catch (RuntimeException failure) {
+            HookFailures.countContained("game-end marker");
+            MARKER_UNWRITTEN.raise(() -> "Effect records: the game-end marker of game " + gameId
+                    + " could not be written, so the game reads as cut (later failures are"
+                    + " counted, not printed): " + failure);
+            return false;
         }
     }
 

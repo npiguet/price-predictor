@@ -269,6 +269,61 @@ class PlayabilityChannelTest {
     }
 
     /**
+     * A lured creature the restrictions keep from the anchor anyway is not
+     * required elsewhere (509.1c): a ground creature against a flying
+     * anchor, while a lure attacks too, is forbidden by the flying alone.
+     */
+    @Test
+    void aLuredBlockerAFlyerShutsOutIsNotRequiredElsewhere() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_BLOCKERS);
+        Player attacking = game.getPlayers().get(0);
+        Player blocking = game.getPlayers().get(1);
+        Card drake = TestBoard.inPlay(game, attacking, "Wind Drake");
+        Card unicorn = TestBoard.inPlay(game, attacking, "Prized Unicorn");
+        Card blocker = TestBoard.inPlay(game, blocking, "Hill Giant");
+        Combat combat = new Combat(attacking);
+        combat.addAttacker(drake, blocking);
+        combat.addAttacker(unicorn, blocking);
+        game.getPhaseHandler().setCombat(combat);
+
+        List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) ->
+                collectors.playability().legalityHandler().invoke(null, ON_BLOCKERS_DECLARABLE,
+                        new Object[]{blocking, drake, List.of(blocker), List.of(), 1}));
+
+        String record = recordsOf(lines).get(0);
+        assertFalse(record.contains("required_elsewhere"), record);
+        assertTrue(record.contains("\"responsible_static\":[{\"script_file\":\"cardsfolder/w/wind_drake.txt\""),
+                "the flyer's keyword line keeps the blocker out: " + record);
+    }
+
+    /**
+     * A creature kept from blocking by a "can't block this turn" effect
+     * (Panic's hidden keyword, no static) is forbidden with an empty
+     * {@code responsible_static}: no static is to blame.
+     */
+    @Test
+    void aBlockerACantBlockEffectStopsNamesNoStatic() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_BLOCKERS);
+        Player attacking = game.getPlayers().get(0);
+        Player blocking = game.getPlayers().get(1);
+        Card attacker = TestBoard.inPlay(game, attacking, "Grizzly Bears");
+        Card blocker = TestBoard.inPlay(game, blocking, "Hill Giant");
+        blocker.addHiddenExtrinsicKeywords(game.getNextTimestamp(), 0,
+                List.of("CARDNAME can't block."));
+        Combat combat = new Combat(attacking);
+        combat.addAttacker(attacker, blocking);
+        game.getPhaseHandler().setCombat(combat);
+
+        List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) ->
+                collectors.playability().legalityHandler().invoke(null, ON_BLOCKERS_DECLARABLE,
+                        new Object[]{blocking, attacker, List.of(blocker), List.of(), 1}));
+
+        String record = recordsOf(lines).get(0);
+        assertTrue(record.contains("\"responsible_static\":[]"), record);
+        assertFalse(record.contains("required_elsewhere"), record);
+    }
+
+    /**
      * Every declaration on a board that moved is written, and the same
      * declaration on an unchanged board is written once (FR-028). A defender
      * asked about a second time is a new declaration.

@@ -38,23 +38,35 @@ final class WorkerStop {
     private final long startedNanos;
 
     WorkerStop(Path stopFile, long recycleSeconds, LongSupplier clock) {
-        this.stopFile = stopFile;
-        this.recycleNanos = recycleSeconds < 0 ? -1 : recycleSeconds * 1_000_000_000L;
-        this.clock = clock;
-        this.startedNanos = clock.getAsLong();
+        this(stopFile, recycleSeconds, clock, clock.getAsLong());
     }
 
     /**
-     * The stop the JVM's system properties ask for. A malformed
-     * {@value #RECYCLE_SECONDS} ends the worker with
-     * {@link ExitCode#BAD_CONFIG}.
+     * @param startedNanos the {@code clock} reading the recycle time counts
+     *                     from: the worker's {@code main} start, before Forge
+     *                     is initialised
      */
-    static WorkerStop fromSystemProperties() {
+    WorkerStop(Path stopFile, long recycleSeconds, LongSupplier clock, long startedNanos) {
+        this.stopFile = stopFile;
+        this.recycleNanos = recycleSeconds < 0 ? -1 : recycleSeconds * 1_000_000_000L;
+        this.clock = clock;
+        this.startedNanos = startedNanos;
+    }
+
+    /**
+     * The stop the JVM's system properties ask for, the recycle time counted
+     * from {@code startedNanos} ({@link System#nanoTime} at the worker's
+     * {@code main} start). Read before Forge is initialised: a malformed
+     * {@value #RECYCLE_SECONDS}, or one below 1, ends the worker at once with
+     * {@link ExitCode#BAD_CONFIG}. Zero is refused because a worker that stops
+     * before its first match, restarted on its exit 0, would loop forever.
+     */
+    static WorkerStop fromSystemProperties(long startedNanos) {
         Path file = WorkerProperties.optionalPath(STOP_FILE).orElse(null);
         long seconds = WorkerProperties.optional(RECYCLE_SECONDS).isEmpty() ? -1
                 : WorkerProperties.intProperty(RECYCLE_SECONDS, -1,
-                        WorkerProperties.OnMalformed.EXIT, v -> v >= 0, "must be >= 0");
-        return new WorkerStop(file, seconds, System::nanoTime);
+                        WorkerProperties.OnMalformed.EXIT, v -> v >= 1, "must be >= 1");
+        return new WorkerStop(file, seconds, System::nanoTime, startedNanos);
     }
 
     /** Why the worker is to stop now, or empty to go on. */

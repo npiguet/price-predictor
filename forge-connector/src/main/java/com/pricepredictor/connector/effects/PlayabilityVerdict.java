@@ -164,10 +164,24 @@ public record PlayabilityVerdict(
      * alone: no AI reservation, preference or memory, and no draw from
      * Forge's random stream ({@link ManaAffordability}).
      */
+    /**
+     * Whether the cost cannot be paid at all: a spell whose mana cost is
+     * "no cost" (Ancestral Vision), cast other than through an effect that
+     * lets it be cast without paying it (118.6), as Forge's own
+     * {@code Spell.canPlay} reads it.
+     */
+    static boolean unpayable(SpellAbility candidate, Cost cost) {
+        return candidate.isSpell() && !candidate.isCastFromPlayEffect() && cost.hasManaCost()
+                && cost.getCostMana().getMana().isNoCost();
+    }
+
     static boolean affordable(SpellAbility candidate, Player payer) {
         Cost cost = candidate.getPayCosts();
         if (cost == null) {
             return true;
+        }
+        if (unpayable(candidate, cost)) {
+            return false;
         }
         ManaCostBeingPaid charged;
         try {

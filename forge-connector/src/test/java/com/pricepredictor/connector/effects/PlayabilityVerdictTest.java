@@ -226,6 +226,23 @@ class PlayabilityVerdictTest {
         assertTrue(PlayabilityChecks.ignoresSplitSecond(landPlayOf(TestBoard.inHand(game, b, "Forest"))));
     }
 
+    /**
+     * A spell whose mana cost is "no cost" cannot be paid for (118.6):
+     * Ancestral Vision's spell is unaffordable, where it read affordable.
+     */
+    @Test
+    void aNoCostSpellIsUnaffordable() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        TestBoard.inPlay(game, a, "Island");
+        SpellAbility vision = TestBoard.inHand(game, a, "Ancestral Vision").getFirstSpellAbility();
+
+        PlayabilityVerdict verdict = PlayabilityVerdict.of(vision, a);
+
+        assertFalse(verdict.canPlay());
+        assertFalse(verdict.affordable(), verdict.toString());
+    }
+
     private static SpellAbility special(Card card, java.util.function.Predicate<SpellAbility> kind) {
         return card.getSpellAbilities().stream().filter(kind).findFirst()
                 .orElseThrow(() -> new AssertionError(card + " has no such special action"));

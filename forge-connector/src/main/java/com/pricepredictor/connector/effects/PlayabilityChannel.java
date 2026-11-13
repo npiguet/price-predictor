@@ -296,11 +296,16 @@ public final class PlayabilityChannel {
 
     /**
      * Whether {@code blocker} must block another attacker of the combat and
-     * not {@code attacker}: Forge then refuses its block of {@code attacker}
-     * (a lure), which is a requirement elsewhere, not a prohibition.
+     * not {@code attacker}, though the restrictions alone would let it block
+     * {@code attacker}: Forge then refuses that block (a lure), and the
+     * requirement elsewhere, not a prohibition, is why (509.1c: requirements
+     * bind only within what the restrictions allow). A blocker the
+     * restrictions keep from {@code attacker} anyway (it flies, the blocker
+     * does not) is not.
      */
     static boolean requiredElsewhere(Card blocker, Card attacker, Combat combat) {
-        if (combat == null || MustBlock.required(blocker, attacker, combat)) {
+        if (combat == null || MustBlock.required(blocker, attacker, combat)
+                || !forge.game.combat.CombatUtil.canBlock(attacker, blocker)) {
             return false;
         }
         for (Card other : combat.getAttackers()) {

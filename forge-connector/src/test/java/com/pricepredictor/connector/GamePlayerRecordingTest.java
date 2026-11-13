@@ -132,6 +132,31 @@ class GamePlayerRecordingTest {
         }
     }
 
+    /**
+     * A game past {@code --max-records-per-game} keeps its outcome record and
+     * its marker, the marker counting what the cap withheld: the record
+     * holding {@code player_won} / {@code player_lost} passes the cap.
+     */
+    @Test
+    void aGameAtTheCapKeepsItsOutcomeAndItsMarker() throws IOException {
+        RecordShardWriter writer = new RecordShardWriter(dir, "run", 0, "l1", 12);
+        GamePlayer player = new GamePlayer(3, writer, caps(), WorkerStop.NEVER, Match::startGame);
+
+        player.playMatch(burn(), burn());
+        writer.close();
+
+        Map<String, List<String>> games = byGame(lines(writer.path()));
+        assertFalse(games.isEmpty());
+        for (Map.Entry<String, List<String>> game : games.entrySet()) {
+            List<String> records = game.getValue();
+            String marker = records.get(records.size() - 1);
+            assertTrue(isMarker(marker), game.getKey());
+            assertFalse(marker.contains("\"records_withheld\":0"), "the cap withheld some: " + marker);
+            assertTrue(records.stream().anyMatch(r -> r.contains("\"type\":\"player_won\"")),
+                    game.getKey() + " kept the record holding its outcome");
+        }
+    }
+
     @Test
     void aStopAskedMidGameEndsTheMatchAtThatGamesEnd() throws IOException {
         RecordShardWriter writer = writer();
