@@ -63,7 +63,7 @@ def test_a_pt_set_alone_fires_value_equals(by_kind):
     assert FAMILY.match(set_base, None, {"field": "pt", "value": "+"}).polarity is (
         Polarity.DOES_NOT_FIRE)
     with pytest.raises(ValueError):
-        FAMILY.match(record, None, {"field": "pt", "value": "flying"})
+        FAMILY.validate({"field": "pt", "value": "flying"})
 
 
 def test_a_tokens_static_shows_by_the_tokens_kind(by_kind):

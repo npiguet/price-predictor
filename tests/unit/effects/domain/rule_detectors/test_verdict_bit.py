@@ -163,7 +163,7 @@ def test_other_subkinds_show_nothing_and_a_bad_bit_is_refused(by_kind):
     blockers = by_kind("playability", "blockers")[0]
     assert FAMILY.match(blockers, None, {"bit": "affordable"}) is None
     with pytest.raises(ValueError, match="unknown bit"):
-        FAMILY.match(blockers, None, {"bit": "mana_value"})
+        FAMILY.validate({"bit": "mana_value"})
 
 
 class TestLandPlays:
@@ -238,8 +238,7 @@ class TestLandPlays:
         assert FAMILY.needs(self.LIMIT) == {"failed_checks", "land_play"}
         assert FAMILY.needs({"bit": "timing", "land_play": True}) == {"timing", "land_play"}
         with pytest.raises(ValueError, match="names its check"):
-            FAMILY.match(_unaffordable(by_kind), None,
-                         {"bit": "failed_check", "check": "land_limit"})
+            FAMILY.validate({"bit": "failed_check", "check": "land_limit"})
 
     def test_rule_305_s_declarations_read_the_fixture_s_land_plays(self):
         """Each declared 305 scenario finds both sides among the land plays."""
@@ -277,4 +276,4 @@ class TestCandidateFace:
         assert FAMILY.match(on_front, None, declared) is None
         assert FAMILY.match(on_front, None, {**declared, "candidate_face": "front"}) is not None
         with pytest.raises(ValueError, match="candidate_face"):
-            FAMILY.match(record, None, {**declared, "candidate_face": "back"})
+            FAMILY.validate({**declared, "candidate_face": "back"})

@@ -20,9 +20,10 @@ Parameters:
 - ``outcome`` (required): the outcome on the ``fires`` side;
 - ``near``: the outcomes of the near miss, ``["resolved"]`` by default;
 - ``targeted``: true to count only stack objects that had a target, so a
-  fizzle rule's near miss is a targeted spell that resolved. On a gen-3 effect
-  half the targets read at resolution have lost the illegal ones, so a
-  fizzled half counts as targeted by definition.
+  fizzle rule's near miss is a targeted spell that resolved. The targets are
+  read as cast (``Refs.as_cast``: ``targets_at_cast``, else ``targets``); a
+  fizzled half of a record without ``targets_at_cast``, whose ``targets`` lost
+  the illegal ones, counts as targeted by definition.
 
 The condition entities are the stack object (``refs.source``, or the
 countered object) and its targets, whose legality a fizzle reads; the outcome
@@ -48,6 +49,7 @@ from effects.domain.records import (
 )
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import declared_values as dv
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,8 +70,8 @@ def _observed(record: EffectRecord, countered_asked: bool) -> _Observed | None:
         outcome = getattr(record.payload, "outcome", None)
         if outcome is None:
             return None
-        return _Observed(outcome, tuple(dict.fromkeys((*source, *refs.targets))), source,
-                         bool(refs.targets))
+        return _Observed(outcome, tuple(dict.fromkeys((*source, *refs.as_cast))), source,
+                         bool(refs.as_cast))
     payload = record.payload
     if not isinstance(payload, ResolutionPayload):
         return None
@@ -81,8 +83,11 @@ def _observed(record: EffectRecord, countered_asked: bool) -> _Observed | None:
             return _Observed(ResolutionOutcome.COUNTERED, countered, countered, True)
     if payload.outcome is None:
         return None
-    targeted = bool(refs.targets) or payload.outcome is ResolutionOutcome.FIZZLED
-    return _Observed(payload.outcome, tuple(dict.fromkeys((*source, *refs.targets))), source,
+    # The targets as cast (V5 #25); a fizzled half with no targets_at_cast
+    # (an older record) had a target by definition.
+    targeted = bool(refs.as_cast) or (
+        refs.targets_at_cast is None and payload.outcome is ResolutionOutcome.FIZZLED)
+    return _Observed(payload.outcome, tuple(dict.fromkeys((*source, *refs.as_cast))), source,
                      targeted)
 
 
@@ -99,6 +104,7 @@ class ResolutionOutcomeFamily:
         ResolutionOutcome(params["outcome"])
         for near in params.get("near", ["resolved"]):
             ResolutionOutcome(near)
+        dv.check(self.id, params, {"targeted": dv.boolean})
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:

@@ -131,9 +131,10 @@ from typing import Any
 from effects.domain.effect_targets import placed_subjects
 from effects.domain.event_schema import EVENT_PARAMS, Event, EventType
 from effects.domain.provenance import SidecarLine, SidecarLookup
-from effects.domain.records import EffectRecord, Moment, RecordKind
+from effects.domain.records import EffectRecord, Moment, RecordKind, ResolutionOutcome
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
     acting_line,
     card_has_keyword,
@@ -154,6 +155,7 @@ from effects.domain.rule_detectors.entity_facts import (
 from effects.domain.script_text import api_of, segments
 from effects.domain.script_text import params as params_of
 from effects.domain.state_snapshot import EntityState, StateSnapshot, normalize_counter_type
+from effects.domain.wire_closed_lists import DAMAGE_TYPES, GAME_LOSS_REASONS
 
 __all__ = ["EVENT_FILTERS", "FAMILY", "SUBJECT_QUALIFIERS", "SUBJECT_QUALIFIER_NEEDS",
            "acting_api", "declared_events", "event_filters", "source_is_token_of_kind",
@@ -169,6 +171,29 @@ _UNFILTERABLE = frozenset({
     "defender", "called", "options", "piles", "mana_by_color", "name", "mana_cost"})
 EVENT_FILTERS = frozenset(
     name for names in EVENT_PARAMS.values() for name in names) - _UNFILTERABLE
+
+
+#: The checks an event filter's value passes (``declared_values``).
+EVENT_FILTER_CHECKS = {
+    "from_zone": dv.zone, "to_zone": dv.zone, "counter_type": dv.counter_type,
+    "to_state": dv.face_state, "damage_type": dv.one_of(*DAMAGE_TYPES),
+    "reason": dv.one_of(*GAME_LOSS_REASONS),
+}
+#: The checks the subject qualifiers' values pass.
+QUALIFIER_CHECKS = {
+    "subject_in_combat": dv.boolean, "subject_is_token": dv.boolean,
+    "controller_is_owner": dv.boolean, "subject_is_source": dv.boolean,
+    "subject_is_copy": dv.boolean, "subject_merged": dv.boolean,
+    "subject_face_state": dv.face_state, "subject_designation": dv.designation,
+}
+_CHECKS = {
+    **EVENT_FILTER_CHECKS, **QUALIFIER_CHECKS,
+    "api": dv.api, "keyword": dv.keyword, "source_keyword": dv.keyword,
+    "source_token_kind": dv.token_kind, "token_kind": dv.token_kind, "min_count": dv.integer,
+    "absent": dv.boolean, "api_in_chain": dv.boolean, "script_param": dv.script_param,
+    "chain_param": dv.script_param, "source_type": dv.card_type,
+    "target_face_state": dv.face_state,
+}
 
 
 def _flag(read):
@@ -224,7 +249,8 @@ _LINE_PARAMS = frozenset({"api", "keyword", "source_keyword", "script_param", "c
                           "target_face_state"})
 _QUALIFIERS = frozenset(SUBJECT_QUALIFIERS) | _RECORD_QUALIFIERS
 #: Record filters read off the acting source and its targets (D4).
-_SOURCE_FILTERS = frozenset({"source_type", "acting_face", "target_face_state"})
+_SOURCE_FILTERS = frozenset({"source_type", "acting_face", "target_face_state",
+                             "half_outcome"})
 _OWN = frozenset({"event", "min_count", "api", "api_in_chain", "keyword", "source_keyword",
                   "script_param", "chain_param", "absent", "token_kind",
                   "source_token_kind"}) | _QUALIFIERS | _SOURCE_FILTERS
@@ -365,6 +391,7 @@ class OutcomeEvent:
 
     def validate(self, params: Mapping[str, Any]) -> None:
         self._filters(EventType(params["event"]), params)
+        dv.check(self.id, params, _CHECKS)
         scoped = any(params.get(name) is not None
                      for name in ("api", "keyword", "source_keyword"))
         absent = bool(params.get("absent"))
@@ -376,10 +403,11 @@ class OutcomeEvent:
                              "which absent says did not")
         if params.get("acting_face", "front") not in ("front", "alternative"):
             raise ValueError("outcome_event: acting_face is front or alternative")
+        if "half_outcome" in params:
+            ResolutionOutcome(params["half_outcome"])
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        self.validate(params)
         event = EventType(params["event"])
         filters = self._filters(event, params)
         api, keyword = params.get("api"), params.get("keyword")
@@ -465,8 +493,10 @@ def _source_fits(record: EffectRecord, params: Mapping[str, Any]) -> bool:
     ``source_type`` (the source card, as the snapshot shows it, has this card
     type), ``acting_face`` (``front`` for an acting key on its card's first
     face, ``alternative`` for another: an Adventure, a back face, a split
-    half) and ``target_face_state`` (a target of the acting ability is in
-    this gen-3 face state). A record none can be read on fits none."""
+    half), ``target_face_state`` (a target of the acting ability is in
+    this gen-3 face state) and ``half_outcome`` (the effect half's own outcome:
+    a fizzled or declined spell's half holds its card's move off the stack).
+    A record none can be read on fits none."""
     if "source_type" in params:
         wanted = params["source_type"].lower()
         if not any(wanted in {t.lower() for t in e.types}
@@ -476,8 +506,11 @@ def _source_fits(record: EffectRecord, params: Mapping[str, Any]) -> bool:
         keys = record.ability or ()
         if not keys or (keys[0].face != 0) != (params["acting_face"] == "alternative"):
             return False
+    if "half_outcome" in params and getattr(record.payload, "outcome", None) != (
+            ResolutionOutcome(params["half_outcome"])):
+        return False
     if "target_face_state" in params:
-        targets = [record.state.entity(t) for t in record.state.refs.targets]
+        targets = [record.state.entity(t) for t in record.state.refs.as_cast]
         if not any(t is not None and has_face_state(t, params["target_face_state"])
                    for t in targets):
             return False
@@ -487,7 +520,7 @@ def _source_fits(record: EffectRecord, params: Mapping[str, Any]) -> bool:
 def _condition(record: EffectRecord) -> tuple[str, ...]:
     """The acting ability's source, its targets and its controller."""
     actor = (record.actor_player,) if record.actor_player else ()
-    return tuple(dict.fromkeys((*source_ids(record), *record.state.refs.targets, *actor)))
+    return tuple(dict.fromkeys((*source_ids(record), *record.state.refs.as_cast, *actor)))
 
 
 _OWNED_ZONES = frozenset({"hand", "library"})

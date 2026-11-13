@@ -53,7 +53,7 @@ def test_poison_reads_its_own_counter(by_kind):
 
 def test_an_unknown_check_is_refused(by_kind):
     with pytest.raises(ValueError, match="unknown check"):
-        FAMILY.match(by_kind("combat")[0], None, {"check": "commander_damage"})
+        FAMILY.validate({"check": "commander_damage"})
 
 
 def _record(gen2_records, record_id):

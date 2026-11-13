@@ -146,7 +146,9 @@
         "params": {
           "bit": "has_legal_target",
           "fires_when": true,
-          "keyword": "Cleave"
+          "script_param": {
+            "PrecostDesc": "Cleave"
+          }
         },
         "needs": []
       }

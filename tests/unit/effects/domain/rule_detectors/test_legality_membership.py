@@ -111,8 +111,7 @@ class TestUniverse:
 
     def test_an_unknown_universe_is_refused(self, by_kind):
         with pytest.raises(ValueError, match="universe"):
-            FAMILY.match(by_kind("playability", "attackers")[0], None,
-                         {"list": "legal_attackers", "universe": "graveyard"})
+            FAMILY.validate({"list": "legal_attackers", "universe": "graveyard"})
 
 
 def test_the_list_must_match_the_subkind(by_kind):
@@ -299,8 +298,7 @@ class TestAnchorLists:
 
     def test_at_least_reads_only_min_blockers(self, by_kind):
         with pytest.raises(ValueError, match="at_least"):
-            FAMILY.match(by_kind("playability", "blockers")[0], None,
-                         {"list": "legal_blockers", "at_least": 2})
+            FAMILY.validate({"list": "legal_blockers", "at_least": 2})
 
 
 class TestJudgedKind:

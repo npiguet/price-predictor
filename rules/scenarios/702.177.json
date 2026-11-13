@@ -70,7 +70,9 @@
           "bit": "failed_check",
           "check": "activation_limit",
           "fires_when": true,
-          "keyword": "Exhaust"
+          "script_param": {
+            "Exhaust": "True"
+          }
         },
         "needs": [
           "failed_checks"

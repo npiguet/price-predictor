@@ -55,13 +55,12 @@ def test_without_the_sidecars_no_mode_can_be_read(by_kind):
 
 def test_a_declaration_without_a_mode_is_refused(by_kind, gen2_sidecars):
     with pytest.raises(ValueError, match="mode"):
-        FAMILY.match(by_kind("trigger")[0], gen2_sidecars, {})
+        FAMILY.validate({})
 
 
 def test_a_selector_naming_a_card_is_refused(by_kind, gen2_sidecars):
     with pytest.raises(ValueError, match="naming a card"):
-        FAMILY.match(by_kind("trigger")[0], gen2_sidecars,
-                     {"mode": "ChangesZone", "selector": "Card.namedGoblin King"})
+        FAMILY.validate({"mode": "ChangesZone", "selector": "Card.namedGoblin King"})
 
 
 def _keyword_trigger(by_kind, sidecars, fired):
@@ -92,8 +91,7 @@ class TestKeyword:
 
     def test_a_keyword_takes_no_script_parameter(self, by_kind, gen2_sidecars):
         with pytest.raises(ValueError, match="no script parameters"):
-            FAMILY.match(by_kind("trigger")[0], gen2_sidecars,
-                         {"keyword": "exalted", "mode": "Attacks"})
+            FAMILY.validate({"keyword": "exalted", "mode": "Attacks"})
 
 
 def _phase_trigger(by_kind, sidecars, fired=True):
@@ -123,7 +121,7 @@ class TestT030Parameters:
         other = next(p for p in ("cleanup", "untap") if p != step)
         assert FAMILY.match(record, gen2_sidecars, {"step": other}) is None
         with pytest.raises(ValueError, match="step"):
-            FAMILY.match(record, gen2_sidecars, {"step": "EndCombat"})
+            FAMILY.validate({"step": "EndCombat"})
 
     @staticmethod
     def _sourced(by_kind, fired=True):
@@ -178,4 +176,4 @@ class TestT030Parameters:
         printed = replace(record, ability=(replace(spell, trait_kind="trigger"),))
         assert FAMILY.match(printed, Lines(), declared) is None
         with pytest.raises(ValueError, match="spawned_by"):
-            FAMILY.match(record, Lines(), {"spawned_by": "Effect"})
+            FAMILY.validate({"spawned_by": "Effect"})

@@ -159,7 +159,9 @@
           "bit": "failed_check",
           "check": "activation_limit",
           "fires_when": true,
-          "keyword": "Boast"
+          "script_param": {
+            "Boast": "True"
+          }
         },
         "needs": [
           "failed_checks"

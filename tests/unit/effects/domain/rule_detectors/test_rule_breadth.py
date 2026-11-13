@@ -63,7 +63,7 @@ def test_a_move_to_another_zone_is_in_the_pool_and_not_tagged(gen2_records, gen2
         ("1.2-1", declaration("outcome_event", "resolution", event="zone_change", api=api,
                               to_zone=elsewhere)),
         ("1.3-1", declaration("outcome_event", "resolution", event="zone_change",
-                              api=api + "Elsewhere")))
+                              api="Mill" if api != "Mill" else "Draw")))
     found = breadth_counts(record, index, gen2_sidecars)
     assert found[("1.1-1", POOL)] == found[("1.1-1", TAGGED)] == 1
     assert found[("1.2-1", POOL)] == 1 and found[("1.2-1", TAGGED)] == 0
@@ -79,7 +79,7 @@ def test_a_declaration_needing_a_gen3_field_is_skipped_on_gen2(gen2_records, gen
 
 def test_rows_carry_every_declared_scenario_and_what_it_dropped():
     index = _index(
-        ("1.1-1", declaration("outcome_event", "resolution", event="zone_change", api="X",
+        ("1.1-1", declaration("outcome_event", "resolution", event="zone_change", api="Draw",
                               to_zone="exile")),
         ("1.2-1", declaration("sba_zone_move", "resolution", check="toughness_zero")))
     rows = {row.scenario: row for row in breadth_rows(

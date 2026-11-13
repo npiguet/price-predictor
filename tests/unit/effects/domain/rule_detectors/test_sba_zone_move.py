@@ -91,7 +91,7 @@ def test_lethal_damage_tags_a_real_damage_death(gen2_records):
 
 def test_an_unknown_check_is_refused():
     with pytest.raises(ValueError, match="unknown check"):
-        FAMILY.match(None, None, {"check": "legend_rule_typo"})
+        FAMILY.validate({"check": "legend_rule_typo"})
 
 
 def test_the_family_runs_on_gen2_records():

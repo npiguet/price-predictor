@@ -85,6 +85,7 @@ from effects.domain.records import (
 )
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
     card_has_keyword,
     is_keyword_line,
@@ -277,12 +278,17 @@ class VerdictBit:
             raise ValueError(f"verdict_bit: candidate_face is one of {sorted(CANDIDATE_FACES)}")
         if params.get("candidate", "cast") not in CANDIDATE_KINDS:
             raise ValueError(f"verdict_bit: candidate is one of {sorted(CANDIDATE_KINDS)}")
+        dv.check(self.id, params, {
+            "fires_when": dv.boolean, "responsible_static": dv.boolean,
+            "land_play": dv.boolean, "sorcery_speed": dv.boolean, "keyword": dv.keyword,
+            "source_keyword": dv.keyword, "cost_symbol": dv.cost_symbol,
+            "script_param": dv.script_param, "source_type": dv.card_type,
+            "source_designation": dv.designation, "phase_listed": dv.boolean})
         if "check" in params and bit != "failed_check":
             raise ValueError("verdict_bit: check names a failed_check declaration's check")
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        self.validate(params)
         bit = params.get("bit")
         if record.kind is not RecordKind.PLAYABILITY or (
                 record.subkind is not PlayabilitySubkind.DECISION):

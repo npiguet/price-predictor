@@ -61,9 +61,12 @@ from effects.domain.provenance import SidecarLine, SidecarLookup
 from effects.domain.records import EffectRecord, RecordKind, RewriteResult
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import acting_line, is_keyword_line, source_ids
 from effects.domain.rule_detectors.outcome_event import (
+    EVENT_FILTER_CHECKS,
     EVENT_FILTERS,
+    QUALIFIER_CHECKS,
     SUBJECT_QUALIFIER_NEEDS,
     SUBJECT_QUALIFIERS,
     event_filters,
@@ -109,12 +112,14 @@ class RewriteEvent:
 
     def validate(self, params: Mapping[str, Any]) -> None:
         event_filters(self.id, EventType(params["event"]), params, _OWN)
+        dv.check(self.id, params, {**EVENT_FILTER_CHECKS, **QUALIFIER_CHECKS,
+                                   "keyword": dv.keyword, "prevention": dv.boolean,
+                                   "mode": dv.mode_of_rewrite})
         if "result" in params:
             _results(params["result"])
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        self.validate(params)
         event = EventType(params["event"])
         filters = event_filters(self.id, event, params, _OWN)
         prevention = bool(params.get("prevention"))

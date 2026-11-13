@@ -262,7 +262,7 @@ def test_a_first_striker_dealing_regular_damage_gained_it_late():
 ])
 def test_parameters_outside_the_family_are_refused(params):
     with pytest.raises(ValueError):
-        FAMILY.match(_combat([]), None, params)
+        FAMILY.validate(params)
 
 
 def test_a_probe_shows_nothing():

@@ -60,7 +60,6 @@ class KeywordCombat:
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        self.validate(params)
         keyword = params.get("keyword")
         if record.kind is not RecordKind.COMBAT:
             return None

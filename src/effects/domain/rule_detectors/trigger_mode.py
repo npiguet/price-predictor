@@ -72,6 +72,7 @@ from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
     acting_line,
     acting_root_params,
@@ -82,6 +83,7 @@ from effects.domain.rule_detectors.acting_line import (
 )
 from effects.domain.rule_detectors.entity_facts import has_designation, is_copy
 from effects.domain.rule_detectors.outcome_event import (
+    QUALIFIER_CHECKS,
     SUBJECT_QUALIFIER_NEEDS,
     SUBJECT_QUALIFIERS,
     subject_verdict,
@@ -147,10 +149,14 @@ class TriggerMode:
             raise ValueError(f"trigger_mode: step {step!r} is none of {PHASE_ORDER}")
         if "named" in str(params.get("selector", "")).lower():
             raise ValueError("trigger_mode: a selector naming a card fixes one scenario's board")
+        dv.check(self.id, params, {
+            **QUALIFIER_CHECKS, "mode": dv.trigger_mode, "origin": dv.zone,
+            "destination": dv.zone, "phase": dv.forge_phase, "keyword": dv.keyword,
+            "source_designation": dv.designation, "source_subtype": dv.subtype,
+            "source_is_copy": dv.boolean, "script_param": dv.script_param})
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        self.validate(params)
         keyword = params.get("keyword")
         spawned_by, step = params.get("spawned_by"), params.get("step")
         if record.kind is not RecordKind.TRIGGER:

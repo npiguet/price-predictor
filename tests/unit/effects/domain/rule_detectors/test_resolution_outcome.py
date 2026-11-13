@@ -84,3 +84,24 @@ def test_a_gen3_cost_half_shows_nothing(by_kind):
     cost = next(r for r in by_kind("resolution") if r.moment.value == "activation")
     gen3 = replace(cost, payload=ActivationPayload(costs=Costs(), events=()))
     assert FAMILY.match(gen3, None, {"outcome": "resolved", "near": ["fizzled"]}) is None
+
+
+def test_a_fizzled_half_reads_its_targets_as_cast():
+    """V5 #25: an effect half's ``targets`` lose the illegal targets; the
+    targets it was cast with are ``targets_at_cast`` (``Refs.as_cast``)."""
+    from effects.domain.records import ResolutionPayload
+    from effects.domain.state_snapshot import Refs
+    from tests.unit.effects.builders import make_record, make_snapshot
+
+    def half(outcome, targets, at_cast):
+        state = make_snapshot(refs=Refs(source="E1", targets=targets, targets_at_cast=at_cast))
+        return make_record(state=state, payload=ResolutionPayload(outcome=outcome),
+                           generation=3)
+
+    params = {"outcome": "fizzled", "targeted": True}
+    fizzled = FAMILY.match(half(ResolutionOutcome.FIZZLED, (), ("E2",)), None, params)
+    assert fizzled.polarity is Polarity.FIRES and fizzled.condition == ("E1", "E2")
+    untargeted = half(ResolutionOutcome.RESOLVED, (), ())
+    assert FAMILY.match(untargeted, None, params) is None
+    resolved = FAMILY.match(half(ResolutionOutcome.RESOLVED, ("E2",), ("E2",)), None, params)
+    assert resolved.polarity is Polarity.DOES_NOT_FIRE

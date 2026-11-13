@@ -46,7 +46,8 @@ def test_the_same_resolution_edited_to_create_nothing_is_the_near_miss_of_its_ap
 
 
 @pytest.mark.parametrize("hookless", [
-    {"mode": CollectionMode.DEGRADED}, {"interventional": True, "fork": True}])
+    {"mode": CollectionMode.DEGRADED},
+    {"interventional": True, "fork": True, "link_id": None}])
 def test_a_hookless_record_without_a_hook_event_shows_no_side(by_kind, gen2_sidecars, hookless):
     """V5 #15: a degraded worker hears no hook, and a forced resolution none but
     its start, modes, conditions and mana, so a missing ``token_created`` (an
@@ -107,9 +108,9 @@ class TestEventParameters:
 
     def test_a_parameter_the_event_does_not_carry_is_refused(self, gen2_records):
         with pytest.raises(ValueError, match="no parameter"):
-            FAMILY.match(gen2_records[0], None, {"event": "zone_change", "counter_type": "x"})
+            FAMILY.validate({"event": "zone_change", "counter_type": "x"})
         with pytest.raises(ValueError, match="no parameter"):
-            FAMILY.match(gen2_records[0], None, {"event": "zone_change", "cause": "E1"})
+            FAMILY.validate({"event": "zone_change", "cause": "E1"})
 
 
 class TestAbsent:
@@ -128,7 +129,7 @@ class TestAbsent:
 
     def test_absent_needs_an_api(self, gen2_records):
         with pytest.raises(ValueError, match="needs api"):
-            FAMILY.match(gen2_records[0], None, {"event": "token_created", "absent": True})
+            FAMILY.validate({"event": "token_created", "absent": True})
 
 
 class TestTokenKinds:
@@ -145,7 +146,7 @@ class TestTokenKinds:
 
     def test_token_kind_reads_token_created_only(self, gen2_records):
         with pytest.raises(ValueError, match="token_kind"):
-            FAMILY.match(gen2_records[0], None, {"event": "zone_change", "token_kind": "Food"})
+            FAMILY.validate({"event": "zone_change", "token_kind": "Food"})
 
     def test_an_ability_of_a_predefined_token_shows_by_its_source(self, gen2_records):
         record, kind = next(
@@ -238,7 +239,7 @@ class TestScriptParam:
     def test_a_malformed_parameter_is_refused(self, by_kind, gen2_sidecars):
         record, _, _, event = self._with_param(by_kind, gen2_sidecars)
         with pytest.raises(ValueError, match="script_param"):
-            FAMILY.match(record, gen2_sidecars, {"event": event, "script_param": ["a"]})
+            FAMILY.validate({"event": event, "script_param": ["a"]})
 
 
 def _in_combat(record, subject):
@@ -297,7 +298,7 @@ class TestQualifiers:
 
     def test_a_qualifier_and_absent_are_refused_together(self, gen2_records):
         with pytest.raises(ValueError, match="qualifier"):
-            FAMILY.match(gen2_records[0], None, {"event": "zone_change", "api": "Draw",
+            FAMILY.validate({"event": "zone_change", "api": "Draw",
                                                  "absent": True, "subject_is_token": True})
 
 
@@ -356,7 +357,7 @@ class TestT036Shapes:
         declared["with_event"] = {**declared["with_event"], "to_zone": "nowhere"}
         assert FAMILY.match(record, None, declared).polarity is Polarity.DOES_NOT_FIRE
         with pytest.raises(ValueError, match="no parameter"):
-            FAMILY.match(record, None, {"event": other.type.value,
+            FAMILY.validate({"event": other.type.value,
                                         "with_event": {"event": "zone_change", "amount": 1}})
 
 

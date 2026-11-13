@@ -198,14 +198,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "The when-you-do trigger linked to an optional attack cost (exert) is evaluated and fires after the cost is paid.",
-        "near_miss": "The same linked trigger is evaluated and does not fire.",
-        "params": {
-          "mode": "OptionalAttackCost"
-        },
-        "needs": []
+        "none": "Could not express: the exert static's linked when-you-do ability is spawned through the static's Trigger$ parameter, and no trigger_mode parameter tells its trigger record apart from any other spawned trigger."
       }
     }
   ]

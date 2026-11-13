@@ -61,7 +61,6 @@ from effects.application.corpus_validation.presence import FieldPresence
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord
 
-
 logger = logging.getLogger(__name__)
 
 

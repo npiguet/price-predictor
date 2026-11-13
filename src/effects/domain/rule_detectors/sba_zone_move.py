@@ -97,6 +97,7 @@ from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, Moment, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import is_rescued_orphans
 from effects.domain.rule_outcomes import damage_lethal
 from effects.domain.state_snapshot import EntityState, normalize_counter_type
@@ -346,7 +347,7 @@ AURA_CAUSES = frozenset({"left", "protection"})
 def _aura_checks(record, touched, keywords, cause: str | None = None
                  ) -> tuple[list, list, list]:
     fires, spared, observed = [], [], []
-    acted_on = {record.state.refs.source, *record.state.refs.targets}
+    acted_on = {record.state.refs.source, *record.state.refs.as_cast}
     for aura in record.state.entities:
         if ("aura" not in {s.lower() for s in aura.subtypes} or not aura.attached_to
                 or not aura.on_battlefield or aura.id in acted_on
@@ -387,6 +388,7 @@ class SbaZoneMove:
         check = params.get("check")
         if check not in CHECKS:
             raise ValueError(f"sba_zone_move: unknown check {check!r}; known: {sorted(CHECKS)}")
+        dv.check(self.id, params, {"marked_before": dv.boolean})
         if "marked_before" in params and check != "lethal_damage":
             raise ValueError("sba_zone_move: marked_before reads lethal_damage")
         if "aura_cause" in params and (check != "aura_illegal"
@@ -396,7 +398,6 @@ class SbaZoneMove:
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        self.validate(params)
         check = params.get("check")
         if (record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION
                 or is_rescued_orphans(record) or game_ends(record)):

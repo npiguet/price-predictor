@@ -52,7 +52,7 @@ def test_the_carrier_edited_out_of_combat_shows_nothing(by_kind, gen2_sidecars):
 
 def test_a_keyword_outside_gate_two_s_table_is_refused(by_kind):
     with pytest.raises(ValueError, match="not a damage-step keyword"):
-        FAMILY.match(by_kind("combat")[0], None, {"keyword": "flying"})
+        FAMILY.validate({"keyword": "flying"})
 
 
 

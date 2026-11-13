@@ -20,13 +20,8 @@ from effects.infrastructure.rules_catalogue_io import load_scenarios
 RULES = Path(__file__).parents[5] / "rules"
 
 #: The declarations no record can show (V5 #14), each reported, none tagging:
-#: an event no collector writes on its kind, or the game's end asked of a
-#: resolution acting through a line (it is filed in the game-end record).
-#: The bus-side ``face_change``, ``destroyed``, ``sacrificed`` and
-#: ``player_lost`` (025 WP3) took the other nineteen of V5 #14's off this list.
+#: an event no collector writes on the kind they ask.
 UNTAGGABLE = {
-    # the game's end, asked of a resolution scoped to its API
-    "104.2b-1", "104.3e-1",
     # game_drawn: no collector writes it
     "104.4a-1", "104.4c-1",
     # removed_from_combat on a combat record: a clause hook's alone

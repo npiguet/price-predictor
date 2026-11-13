@@ -99,6 +99,7 @@ from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, PlayabilitySubkind, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import card_has_keyword, is_keyword_line, line_of
 from effects.domain.rule_detectors.entity_facts import (
     card_type_count,
@@ -352,10 +353,14 @@ class LegalityMembership:
                 raise ValueError(f"legality_membership: {name} reads legal_targets")
         if params.get("judged", "permanent") not in JUDGED:
             raise ValueError(f"legality_membership: judged is one of {sorted(JUDGED)}")
+        dv.check(self.id, params, {
+            "responsible_static": dv.boolean, "keyword": dv.keyword,
+            "source_keyword": dv.keyword, "candidate_keyword": dv.keyword,
+            "counter_type": dv.counter_type, "at_least": dv.integer, "min_types": dv.integer,
+            "judged_type": dv.card_type, "designation": dv.designation})
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        self.validate(params)
         listed = params.get("list")
         fires_when = params.get("fires_when", "outside")
         universe = params.get("universe")

@@ -1,4 +1,4 @@
-"""Which event types each record kind can carry, as the Java collector writes them today.
+"""Which event types each record kind can carry, as the Java collector writes them.
 
 A detector declaration that asks a record kind for an event the collector
 never writes there reads every record of that kind as the event's absence: an
@@ -9,13 +9,15 @@ agreeing so no review list catches it (V5 #14). Such a declaration is
 ``rule-counts`` lists it, rather than letting it tag.
 
 The table is built by the event's source in the connector
-(``forge-connector/.../effects/``), so a source gaining an event is one line:
+(``forge-connector/.../effects/``), so a source gaining an event is one line,
+and ``test_emittable_events`` reads the sources to keep it so:
 
 - :data:`BUS`: built from Forge's event bus (``BusEvents``, ``BusEventReader``,
   ``StatDiffer``) and filed wherever the bus event lands: a resolution's effect
-  half, the open combat damage step, or the turn-based action under way; the
-  game's end (:data:`GAME_END`) is filed in the game-end record alone, a combat
-  or the game-end rescue record, which acts through no line;
+  half, the open combat damage step, or the turn-based action under way. The
+  game's end (:data:`GAME_END`) is filed in the game-end record: a combat, the
+  game-end rescue record after a state-based check, or the effect half of the
+  ability that ended the game outright (a ``WinsGame`` or ``LosesGame`` line);
 - :data:`CLAUSE_HOOKS`: built by a resolving clause's hooks (``ApiEvents``,
   ``ClauseOutcomeRouter``'s outcome hook, ``ManaChannel``) into the effect
   half of the resolution it belongs to;
@@ -25,17 +27,15 @@ The table is built by the event's source in the connector
   replacement's run parameters, the trigger record's ``event`` and the rewrite
   record's ``incoming``/``outgoing``.
 
-``face_change``, ``destroyed``, ``sacrificed`` and ``player_lost`` were
-:data:`RUN_PARAMS` alone until the connector wrote them from the bus too
-(025 WP3); a source gaining an event is one line in its set.
-
 A second fact decides whether an event's *absence* is readable on one
 record: the hook-derived events (:data:`HOOK_DERIVED`) need the engine
 hooks, which a degraded worker lacks, and which a forced resolution (an
-``interventional`` fork) does not hear apart from its resolution start, its
-modes, its conditions and its mana (``InterventionFork``'s ``ForkHooks``). On
-such a record a hook-derived event that is missing may have happened
-(:func:`absence_readable`).
+``interventional`` fork's lone effect half) does not hear apart from its
+resolution start, its modes, its conditions and its mana
+(``InterventionFork``'s ``ForkHooks``). On such a record a hook-derived event
+that is missing may have happened (:func:`absence_readable`). A protection
+fork's records, played forward with the hooks routed to them, are read as
+any record is.
 
 Torch-free.
 """
@@ -43,23 +43,18 @@ Torch-free.
 from __future__ import annotations
 
 from effects.domain.event_schema import EventType as E
-from effects.domain.records import CollectionMode, EffectRecord, RecordKind
+from effects.domain.records import CollectionMode, EffectRecord, Moment, RecordKind
 
 #: Built from the event bus (``BusEvents``, ``BusEventReader``, ``StatDiffer``).
 BUS: frozenset[E] = frozenset({
     E.ZONE_CHANGE, E.DAMAGE_DEALT, E.LIFE_CHANGE, E.COUNTER_CHANGE, E.POISON_CHANGE,
     E.TAPPED, E.UNTAPPED, E.CARD_DRAWN, E.CARD_DISCARDED, E.CARD_MILLED, E.PHASED,
     E.DAY_NIGHT_CHANGED, E.ATTACHED, E.UNATTACHED, E.CARD_LOOKED_AT, E.LIBRARY_SHUFFLED,
-    E.LIBRARY_REORDERED, E.PLAYER_WON, E.ENERGY_CHANGE, E.RADIATION_CHANGE, E.SPEED_CHANGED,
-    E.REGENERATED, E.PT_CHANGE, E.TYPE_CHANGE, E.COLOR_CHANGE, E.CONTROL_CHANGE,
-    E.KEYWORD_CHANGE, E.STATE_FLAG_CHANGE,
-    E.FACE_CHANGE, E.DESTROYED, E.SACRIFICED, E.PLAYER_LOST,
+    E.LIBRARY_REORDERED, E.PLAYER_WON, E.PLAYER_LOST, E.ENERGY_CHANGE, E.RADIATION_CHANGE,
+    E.SPEED_CHANGED, E.REGENERATED, E.PT_CHANGE, E.TYPE_CHANGE, E.COLOR_CHANGE,
+    E.CONTROL_CHANGE, E.KEYWORD_CHANGE, E.ABILITY_CHANGE, E.NAME_CHANGE, E.MANA_COST_CHANGE,
+    E.STATE_FLAG_CHANGE, E.FACE_CHANGE, E.DESTROYED, E.SACRIFICED,
 })
-#: The game's end: filed in the game-end record alone (a combat's damage step,
-#: or the game-end rescue record after a resolution), never in an effect half
-#: that acts through a line, since the state-based check that ends the game
-#: runs after the half is closed.
-GAME_END: frozenset[E] = frozenset({E.PLAYER_WON, E.PLAYER_LOST})
 #: Built by a resolving clause's hooks into its resolution's effect half.
 CLAUSE_HOOKS: frozenset[E] = frozenset({
     # ApiEvents
@@ -82,13 +77,17 @@ CHOKE_POINTS: frozenset[E] = frozenset({E.CARD_REVEALED, E.DAMAGE_PREVENTED})
 #: ``state_flag_change``).
 RUN_PARAMS: frozenset[E] = frozenset({
     E.ZONE_CHANGE, E.DAMAGE_DEALT, E.DAMAGE_PREVENTED, E.CARD_DRAWN, E.CARD_DISCARDED,
-    E.CARD_MILLED, E.LIFE_CHANGE, E.POISON_CHANGE, E.COUNTER_CHANGE, E.TAPPED, E.UNTAPPED,
+    E.CARD_MILLED, E.LIFE_CHANGE, E.COUNTER_CHANGE, E.TAPPED, E.UNTAPPED,
     E.MANA_PRODUCED, E.ATTACHED, E.UNATTACHED, E.SPELL_CAST, E.SPELL_COUNTERED,
     E.SPELL_COPIED, E.TOKEN_CREATED, E.ATTACKERS_DECLARED, E.BLOCKERS_DECLARED,
     E.BECAME_BLOCKED, E.LIBRARY_SHUFFLED, E.CARD_LOOKED_AT, E.PHASED, E.MANA_LOST,
     E.DICE_ROLLED, E.PLAYER_WON, E.FACE_CHANGE, E.DESTROYED, E.SACRIFICED, E.PLAYER_LOST,
     E.STATE_FLAG_CHANGE,
 })
+#: The game's end, filed in the game-end record (module docstring).
+GAME_END: frozenset[E] = frozenset({E.PLAYER_WON, E.PLAYER_LOST})
+#: The APIs whose own resolution ends the game, so their effect half holds its end.
+GAME_ENDING_APIS: frozenset[str] = frozenset({"WinsGame", "LosesGame"})
 
 #: The event types a record of each kind can list. A resolution's cost half
 #: lists its spell's move to the stack alone, and no detector reads it as an
@@ -107,29 +106,38 @@ EMITTABLE: dict[RecordKind, frozenset[E]] = {
 #: worker's records whatever happened.
 HOOK_DERIVED: frozenset[E] = CLAUSE_HOOKS - BUS
 #: The hook-derived events a forced resolution still hears (``ForkHooks``:
-#: resolution start, mode starts, conditions, mana). The connector package that
-#: forwards the clause and outcome hooks to forced resolutions (WP5) empties
-#: :data:`_FORCED_MISSING` below.
+#: resolution start, mode starts, conditions, mana); the rest it misses until
+#: the connector forwards the clause and outcome hooks to it.
 _FORCED_HEARD: frozenset[E] = frozenset({E.MANA_PRODUCED})
 _FORCED_MISSING: frozenset[E] = HOOK_DERIVED - _FORCED_HEARD
 
 
-def carries(kind: RecordKind | str, event: E | str, *, acting_line: bool = False) -> bool:
+def carries(kind: RecordKind | str, event: E | str, *, acting_line: bool = False,
+            api: str | None = None) -> bool:
     """Whether a record of ``kind`` can list an event of type ``event``; with
-    ``acting_line``, a record acting through a line, which a resolution
-    holding the game's end never does."""
+    ``acting_line``, a record acting through a line (of the API ``api`` where
+    one is named), which holds the game's end only when its own API ends the
+    game."""
     kind, event = RecordKind(kind), E(event)
-    if acting_line and kind is RecordKind.RESOLUTION and event in GAME_END:
+    if (acting_line and kind is RecordKind.RESOLUTION and event in GAME_END
+            and api not in GAME_ENDING_APIS):
         return False
     return event in EMITTABLE.get(kind, frozenset())
+
+
+def is_forced_resolution(record: EffectRecord) -> bool:
+    """A forced resolution: an interventional fork's effect half, written
+    alone with no ``link_id`` (a protection fork's halves link)."""
+    return (record.interventional and record.kind is RecordKind.RESOLUTION
+            and record.moment is Moment.RESOLUTION and record.link_id is None)
 
 
 def absence_readable(record: EffectRecord, event: E) -> bool:
     """Whether ``record`` lacking an ``event`` means it did not happen: false
     for a hook-derived event on a degraded worker's record or a forced
-    resolution's (an interventional fork), which no hook told of it."""
+    resolution, which no hook told of it."""
     if record.mode is CollectionMode.DEGRADED:
         return event not in HOOK_DERIVED
-    if record.interventional:
+    if is_forced_resolution(record):
         return event not in _FORCED_MISSING
     return True

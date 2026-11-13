@@ -50,7 +50,7 @@ def test_the_mode_and_any_incoming_parameter_narrow_the_event(by_kind):
         assert found.polarity is Polarity.FIRES, declared
     assert FAMILY.match(record, None, {"event": "zone_change", "mode": "BeginPhase"}) is None
     with pytest.raises(ValueError, match="no parameter"):
-        FAMILY.match(record, None, {"event": "zone_change", "counter_type": "P1P1"})
+        FAMILY.validate({"event": "zone_change", "counter_type": "P1P1"})
 
 
 def test_a_result_list_names_every_fires_result(by_kind):

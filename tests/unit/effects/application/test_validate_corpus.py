@@ -2266,3 +2266,32 @@ class TestEmptyMana:
         assert finding.watched
         assert finding.measured.startswith("3/4 mana_produced events have an empty")
         assert finding.detail == ("resolution: 3",)
+
+
+class TestACopyKeysItsLinesIntoTheCopiedCard:
+    """A Clone copying a creature carries the creature's printed lines, so its
+    keyword lines key into the copied card's file (copiable values, 707.2);
+    one keyed into the copy's own file is the Clone-key gap (watched)."""
+
+    @staticmethod
+    def _board(copy_key_file: str):
+        from effects.domain.state_snapshot import CardLine
+
+        bears = ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "keyword", 0)
+        copy_key = ProvenanceKey(copy_key_file, 0, "keyword", 0)
+        original = make_entity("E1", "serra angel", lines=(
+            CardLine(keys=(bears,), kind="keyword", granted=False),))
+        clone = make_entity("E2", "serra angel", copy_source="E1", lines=(
+            CardLine(keys=(copy_key,), kind="keyword", granted=False),))
+        state = replace(_snapshot(), entities=(original, clone))
+        return _resolution("run.0-L1.960", state=state, generation=3)
+
+    def test_a_copy_keying_into_the_copied_card_holds(self):
+        record = self._board("cardsfolder/s/serra_angel.txt")
+        finding = _named(validate_corpus([*_healthy(), record]), "copied card")
+        assert finding.watched and "0/1" in finding.measured
+
+    def test_a_copy_keying_into_its_own_card_is_named(self):
+        record = self._board("cardsfolder/c/clone.txt")
+        finding = _named(validate_corpus([*_healthy(), record]), "copied card")
+        assert "1/1" in finding.measured and any("E2" in line for line in finding.detail)

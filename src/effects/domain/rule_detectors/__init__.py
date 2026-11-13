@@ -297,12 +297,13 @@ def _untaggable(declaration: DetectorDeclaration, family: DetectorFamily) -> str
         return f"a {kind} record never lists {', '.join(missing)} (emittable_events)"
     reads_line = getattr(family, "reads_acting_line", lambda params: False)
     if reads_line(declaration.params):
+        api = declaration.params.get("api")
         filed = sorted(e.value for e in events(declaration.params)
-                       if not carries(kind, e, acting_line=True))
+                       if not carries(kind, e, acting_line=True, api=api))
         if filed:
-            return (f"{', '.join(filed)} is filed in the game-end record, which acts "
-                    "through no line, never in a resolution acting through one "
-                    "(emittable_events)")
+            return (f"{', '.join(filed)} is filed in the game-end record, never in a "
+                    "resolution acting through a line other than one ending the game "
+                    "outright (WinsGame, LosesGame; emittable_events)")
     return None
 
 

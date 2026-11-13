@@ -58,6 +58,7 @@ from effects.domain.provenance import SidecarLookup
 from effects.domain.records import Contribution, EffectRecord, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_detectors.acting_line import (
     acting_line,
     acting_root_params,
@@ -119,6 +120,29 @@ def _carries(contribution: Contribution, field: str, value: str | None) -> bool:
     return value.lower() in {f.lower() for f in found}
 
 
+#: What a contribution's flat lists may name beside a type or colour: a line
+#: set outright, and a whole class at once (``Contribution``'s docstring).
+_LIST_TOKENS = frozenset({"=", "all-creature-types", "all-land-types", "all-artifact-types",
+                          "all-enchantment-types", "all-types"})
+_COLOURS = frozenset("WUBRGC")
+
+
+def _value_check(field: str):
+    """The check a ``value`` of ``field`` passes; a leading ``-`` names a removal."""
+    def check(family: str, name: str, value: Any) -> None:
+        bare = value[1:] if isinstance(value, str) and value.startswith("-") else value
+        if field == "keywords":
+            dv.keyword(family, name, bare)
+        elif field == "colors":
+            if bare not in _COLOURS and bare not in _LIST_TOKENS:
+                raise ValueError(f"{family}: {name} {value!r} is no colour")
+        elif not (isinstance(bare, str) and (bare.lower() in _LIST_TOKENS
+                                             or bare.lower() in dv.DECLARED_CARD_TYPES
+                                             or bare.lower() in dv.SUPERTYPES)):
+            dv.subtype(family, name, bare)
+    return check
+
+
 @dataclass(frozen=True, slots=True)
 class ContinuousContribution:
     id: str = "continuous_contribution"
@@ -141,10 +165,15 @@ class ContinuousContribution:
             raise ValueError(f"continuous_contribution: unknown field {field!r}")
         if field == "pt" and params.get("value", "=") not in PT_VALUES:
             raise ValueError(f"continuous_contribution: a pt value is one of {sorted(PT_VALUES)}")
+        if "value" in params and field != "pt":
+            _value_check(field)(self.id, "value", params["value"])
+        dv.check(self.id, params, {
+            "source_token_kind": dv.token_kind, "counter_condition": dv.counter_type,
+            "source_keyword": dv.keyword, "script_param": dv.script_param,
+            "affected_face_state": dv.face_state, "designation": dv.designation})
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        self.validate(params)
         field = params.get("field")
         if record.kind is not RecordKind.CONTINUOUS:
             return None

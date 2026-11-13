@@ -79,7 +79,9 @@
           "bit": "failed_check",
           "check": "zone",
           "fires_when": true,
-          "keyword": "Forecast"
+          "script_param": {
+            "Forecast": "True"
+          }
         },
         "needs": [
           "failed_checks"
@@ -163,7 +165,9 @@
           "bit": "failed_check",
           "check": "phase",
           "fires_when": true,
-          "keyword": "Forecast"
+          "script_param": {
+            "Forecast": "True"
+          }
         },
         "needs": [
           "failed_checks"
@@ -240,7 +244,9 @@
           "bit": "failed_check",
           "check": "activation_limit",
           "fires_when": true,
-          "keyword": "Forecast"
+          "script_param": {
+            "Forecast": "True"
+          }
         },
         "needs": [
           "failed_checks"

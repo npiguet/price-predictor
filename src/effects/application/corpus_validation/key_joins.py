@@ -76,6 +76,9 @@ _OTHER_JOIN = "non-keyword provenance keys join their sidecar"
 _OUTSIDE_JOIN = "provenance keys outside every declared range"
 
 
+_COPY_JOIN = "a copy keys its keyword lines into the copied card's file"
+
+
 class KeyJoins:
     """Every provenance key the window names resolves in its own sidecar.
 
@@ -97,9 +100,38 @@ class KeyJoins:
         self.sidecars = sidecars
         #: Every distinct printed-line key the window named, joined once.
         self.keys: set[ProvenanceKey] = set()
+        #: Copies whose copied card the snapshot shows, and those keying a
+        #: printed keyword line into a file other than the copied card's.
+        self.copies = 0
+        self.miskeyed_copies = 0
+        self.copy_examples: list[str] = []
 
     def add(self, record: EffectRecord) -> None:
         self.keys.update(key_sites(record))
+        for entity in record.state.entities:
+            if entity.copy_source is None or entity.lines is None:
+                continue
+            copied = record.state.entity(entity.copy_source)
+            files = {key.script_file for key in copied.line_keys} if copied else set()
+            keys = [key for line in entity.lines if line.kind == "keyword" and not line.granted
+                    for key in line.keys]
+            if not files or not keys:
+                continue
+            self.copies += 1
+            if any(key.script_file not in files for key in keys):
+                self.miskeyed_copies += 1
+                keep_example(self.copy_examples, f"{record.record_id}: {entity.id} copies "
+                             f"{entity.copy_source} and keys {keys[0].label}")
+
+    def copy_finding(self) -> Finding:
+        """A copy has the copied card's printed lines (707.2), so its keyword
+        lines key into that card's file; watched, its healthy rate unmeasured."""
+        return Finding.watch(
+            name=_COPY_JOIN,
+            measured=(f"{self.miskeyed_copies}/{self.copies} copies key a printed keyword "
+                      "line into a file other than the copied card's (watched, no ceiling)"),
+            detail=tuple(self.copy_examples),
+        )
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         if self.sidecars is None:
@@ -113,6 +145,7 @@ class KeyJoins:
             yield unchecked
             yield replace(unchecked, name=_OTHER_JOIN)
             yield replace(unchecked, name=_OUTSIDE_JOIN)
+            yield self.copy_finding()
             return
         tally = _JoinTally()
         ordered = sorted(
@@ -124,6 +157,7 @@ class KeyJoins:
         yield tally.keyword_finding()
         yield tally.other_finding()
         yield tally.outside_finding()
+        yield self.copy_finding()
 
 
 @dataclass(slots=True)

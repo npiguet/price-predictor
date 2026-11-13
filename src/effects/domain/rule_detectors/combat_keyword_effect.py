@@ -81,6 +81,7 @@ from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
+from effects.domain.rule_detectors import declared_values as dv
 from effects.domain.rule_outcomes import strikes_in_step
 from effects.domain.state_snapshot import (
     CombatSubstep,
@@ -325,12 +326,12 @@ class CombatKeywordEffect:
                                      or params["defender"] not in (_PLANESWALKER, _GONE)):
             raise ValueError(f"combat_keyword_effect: defender {params['defender']!r} "
                              f"does not apply to {keyword!r}")
+        dv.check(self.id, params, {"tapped": dv.boolean})
         if "tapped" in params and keyword != "vigilance":
             raise ValueError(f"combat_keyword_effect: tapped does not apply to {keyword!r}")
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
-        self.validate(params)
         keyword = params.get("keyword")
         shape = _SHAPES[keyword]
         fires_when = params.get("fires_when", _CARRIED)
