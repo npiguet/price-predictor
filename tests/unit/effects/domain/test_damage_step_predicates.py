@@ -695,6 +695,59 @@ class TestTheTableIsTheSingleSource:
         assert _observable(keyword, *_unblocked_attacker(substep="first_strike")) == []
 
 
+class TestWhatTheHitReaches:
+    """Damage the carrier deals reaches what it is fighting only where the
+    rules let it: a blocked attacker whose blockers all left deals none
+    without trample (509.1h, 510.1c), and protection prevents damage from a
+    source with its quality (702.16e)."""
+
+    def _blockerless(self, *keywords: str):
+        carrier = _creature("A", 3, 3, keywords=keywords, combat=CombatStatus(
+            attacking=_PLAYER_DEFENDER, blocked_by=(), became_blocked=True))
+        return _board(carrier), carrier
+
+    @pytest.mark.parametrize("keyword", ["lifelink", "infect", "wither"])
+    def test_a_blocked_attacker_whose_blockers_left_deals_no_damage(self, keyword):
+        assert not _qualifies(keyword, *self._blockerless(keyword))
+
+    def test_a_blockerless_trampler_assigns_its_damage_to_the_player(self):
+        """702.19e."""
+        assert _qualifies("trample", *self._blockerless("trample"))
+
+    @pytest.mark.parametrize("keyword", ["lifelink", "deathtouch", "wither", "infect"])
+    def test_a_blocker_protected_from_the_carrier_takes_no_damage(self, keyword):
+        state, carrier = _attacker_and_blockers(
+            attacker=(1, 2), blockers=((1, 3),), attacker_keywords=(keyword,),
+            blocker_keywords=("protection_from_red",))
+        carrier = dataclasses.replace(carrier, colors=("R",))
+        state = dataclasses.replace(state, entities=(carrier, *state.entities[1:]))
+        assert not _qualifies(keyword, state, carrier)
+        unprotected = dataclasses.replace(carrier, colors=("G",))
+        state = dataclasses.replace(state, entities=(unprotected, *state.entities[1:]))
+        assert _qualifies(keyword, state, unprotected)
+
+    def test_an_indestructible_carrier_is_not_threatened_by_damage_it_is_protected_from(self):
+        state, carrier = _attacker_and_blockers(
+            attacker=(2, 2), blockers=((3, 3),),
+            attacker_keywords=("indestructible", "protection_from_green"))
+        blocker = dataclasses.replace(state.entities[1], colors=("G",))
+        state = dataclasses.replace(state, entities=(carrier, blocker))
+        assert not _qualifies("indestructible", state, carrier)
+
+    def test_a_phased_out_blocker_is_no_opponent_and_a_last_known_copy_no_carrier(self):
+        """702.26b: a phased-out permanent is treated as though it does not
+        exist; a last-known copy (no zone) is no creature in the combat."""
+        state, carrier = _attacker_and_blockers(attacker=(2, 2), blockers=((1, 3),),
+                                                attacker_keywords=("lifelink",))
+        gone = dataclasses.replace(state.entities[1], designations=("phased_out",))
+        state = dataclasses.replace(state, entities=(carrier, gone))
+        assert combat_participant(state, carrier).opponents == ()
+        ghost = dataclasses.replace(carrier, id="L9", zone=None)
+        record = _combat_record(dataclasses.replace(state, entities=(ghost,)))
+        assert qualifying_observations(record, (KEYWORDS_BY_NAME["lifelink"],),
+                                       KeywordResolver()) == []
+
+
 class TestTheCarriersOwnStep:
     """The rows besides the strike-first ones read the damage the carrier deals,
     or takes, in the record's step (rules 510.4, 702.7b, 702.4b)."""
@@ -734,7 +787,7 @@ class TestTheCarriersOwnStep:
             assert _qualifies("trample", state, carrier) is strikes, substep
 
     def test_a_deathtouch_trampler_needs_assign_only_one_damage_a_blocker(self):
-        """702.19c: with deathtouch one damage is lethal, so a 2-power trampler
+        """702.2c with 702.19b: with deathtouch one damage is lethal, so a 2-power trampler
         runs over a 1/3 blocker."""
         plain = _attacker_and_blockers(
             attacker=(2, 2), blockers=((1, 3),), attacker_keywords=("trample",))

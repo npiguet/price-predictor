@@ -119,6 +119,21 @@ def test_a_combat_family_is_the_sorted_keyword_set(records, sidecars):
     assert effect_family(edited, sidecars) == "first_strike,trample"
 
 
+def test_a_phased_out_or_last_known_participant_names_no_combat_family(records, sidecars):
+    """702.26b: a phased-out creature takes no part in combat, and a last-known
+    copy (no zone) is no creature on the battlefield."""
+    record = _first(records, RecordKind.COMBAT, test=lambda r: not r.fork)
+    for gone in ({"designations": ("phased_out",)}, {"zone": None}):
+        entities = tuple(
+            dataclasses.replace(entity, granted_temporary=GrantedTemporary(
+                keywords=("trample",)), **gone) if entity.combat is not None else entity
+            for entity in record.state.entities
+        )
+        edited = dataclasses.replace(
+            record, state=dataclasses.replace(record.state, entities=entities))
+        assert effect_family(edited, sidecars) == FamilySentinel.NONE, gone
+
+
 def test_a_keyword_acting_line_is_its_keywords_family(records):
     """Spec Story 4 scenario 7 / FR-048: whatever the kind."""
     record = _first(records, RecordKind.TRIGGER)

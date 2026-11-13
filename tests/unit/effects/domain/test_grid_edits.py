@@ -24,7 +24,13 @@ from effects.domain.grid_edits import (
 )
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import ResolutionPayload
-from effects.domain.state_snapshot import GlobalState, PlayerState, PowerToughness, Refs
+from effects.domain.state_snapshot import (
+    GlobalState,
+    GrantedTemporary,
+    PlayerState,
+    PowerToughness,
+    Refs,
+)
 from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 BOLT = ("NumDmg$ 3 | SP$ DealDamage | SpellDescription$ CARDNAME deals 3 damage to "
@@ -202,6 +208,26 @@ class TestTheEvasionGridsPair:
         attacker = replace(_creature("A", colors=("W",)), subtypes=OTHER_CREATURE_TYPES)
         record = _blockers_record(attacker, _creature("B", colors=("G",)))
         assert EvasionGrid(_no_keywords).qualify(record) is None
+
+    def test_a_changeling_blocker_is_no_evasion_pair(self):
+        """702.73a: a changeling has every creature type, so protection from a
+        creature type covers it (702.16f) though its subtypes list none."""
+        from effects.domain.grid_edits import EvasionGrid
+
+        blocker = replace(_creature("B", colors=("G",)),
+                          granted_temporary=GrantedTemporary(keywords=("changeling",)))
+        record = _blockers_record(_creature("A", colors=("W",)), blocker)
+        assert EvasionGrid(_no_keywords).qualify(record) is None
+
+    def test_a_phased_out_blocker_or_a_last_known_attacker_is_no_evasion_pair(self):
+        from effects.domain.grid_edits import EvasionGrid
+
+        attacker, blocker = _creature("A", colors=("W",)), _creature("B", colors=("G",))
+        assert EvasionGrid(_no_keywords).qualify(_blockers_record(attacker, blocker))
+        for record in (
+                _blockers_record(attacker, replace(blocker, designations=("phased_out",))),
+                _blockers_record(replace(attacker, zone=None), blocker)):
+            assert EvasionGrid(_no_keywords).qualify(record) is None
 
     def test_a_pair_with_a_spare_colour_fills_every_cell(self):
         from effects.domain.grid_edits import EvasionGrid

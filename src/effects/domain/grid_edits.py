@@ -48,6 +48,7 @@ from effects.domain.rule_outcomes import (
     COLOUR_WORDS,
     ProtectionQuality,
     QualityKind,
+    has_changeling,
     may_block,
     step_deaths,
     strikes_in_step,
@@ -370,8 +371,10 @@ def evasion_cell(record, attacker_id: str, blocker_id: str, row: str | None,
 def evasion_pair(record, keywords_of: KeywordsOf) -> tuple[str, str] | None:
     """``(attacker, blocker)`` for the first qualifying legal blocker of a
     real block-legality record: a legal coloured non-artifact creature, not
-    black and sharing no colour with an attacker that has a colour other than
-    black, neither carrying an evasion keyword or protection, and the pair
+    black, no changeling (it has every creature type, 702.73a) and sharing no
+    colour with an attacker that has a colour other than black, both on the
+    battlefield (not phased out, not a last-known copy), neither carrying an
+    evasion keyword or protection, and the pair
     leaving a colour and a spare creature type neither has, which the
     ``-other`` protection rows grant (an Esper attacker against a red-green
     blocker leaves no colour)."""
@@ -383,7 +386,7 @@ def evasion_pair(record, keywords_of: KeywordsOf) -> tuple[str, str] | None:
     if getattr(record, "what_if", False):
         return None
     attacker = record.state.entity(payload.anchor_attacker)
-    if attacker is None or "creature" not in attacker.types:
+    if attacker is None or "creature" not in attacker.types or not attacker.on_battlefield:
         return None
     if keywords_of(attacker) & EVASION_KEYWORDS or any(
             k.startswith("protection") for k in keywords_of(attacker)):
@@ -392,7 +395,12 @@ def evasion_pair(record, keywords_of: KeywordsOf) -> tuple[str, str] | None:
         return None
     for blocker_id in payload.legal_blockers:
         blocker = record.state.entity(blocker_id)
-        if blocker is None or "creature" not in blocker.types or "artifact" in blocker.types:
+        if (blocker is None or not blocker.on_battlefield or "creature" not in blocker.types
+                or "artifact" in blocker.types):
+            continue
+        if has_changeling(blocker):
+            # Every creature type (702.73a): protection from any creature type
+            # covers it (702.16f), which no row's label reads.
             continue
         colours = [c for c in blocker.colors if c in COLOUR_WORDS]
         if not colours or "B" in colours or set(colours) & set(attacker.colors):

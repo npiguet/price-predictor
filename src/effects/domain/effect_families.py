@@ -134,7 +134,8 @@ def combat_family(record: EffectRecord, resolver: KeywordResolver) -> str:
     """The sorted set of damage-step keywords the participants carry."""
     found: set[str] = set()
     for entity in record.state.entities:
-        if entity.combat is None:
+        # A last-known copy or a phased-out creature takes no part (702.26b).
+        if entity.combat is None or not entity.on_battlefield:
             continue
         found |= resolver.keywords_of(entity) & KEYWORDS_BY_NAME.keys()
     return ",".join(sorted(found)) if found else FamilySentinel.NONE
