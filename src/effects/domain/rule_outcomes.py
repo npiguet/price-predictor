@@ -465,9 +465,11 @@ def sorcery_timing(*, own_turn: bool, phase: str, stack_size: int) -> bool:
     return own_turn and phase in MAIN_PHASES and stack_size == 0
 
 
-def split_second_forbids(*, split_second_on_stack: bool, land_play: bool) -> bool:
+def split_second_forbids(*, split_second_on_stack: bool, land_play: bool,
+                         special_action: bool = False) -> bool:
     """Whether split second forbids a candidate: a spell with split second is
-    on the stack and the candidate is a spell or a non-mana ability, which
-    every candidate but a land play is (702.61a; mana abilities are never
-    candidates)."""
-    return split_second_on_stack and not land_play
+    on the stack and the candidate is a spell or a non-mana ability (702.61a;
+    mana abilities are never candidates). A land play and the other special
+    actions (turning a face-down permanent face up, suspending a card) stay
+    legal (702.61b); the caller says which candidate is one."""
+    return split_second_on_stack and not land_play and not special_action

@@ -215,3 +215,9 @@ class TestTurnStructure:
         assert split_second_forbids(split_second_on_stack=True, land_play=False)
         assert not split_second_forbids(split_second_on_stack=True, land_play=True)
         assert not split_second_forbids(split_second_on_stack=False, land_play=False)
+
+    def test_split_second_allows_a_special_action(self):
+        """702.61b: turning a face-down creature face up, suspending a card and
+        the other special actions stay legal (TP4's suspected expected value)."""
+        assert not split_second_forbids(split_second_on_stack=True, land_play=False,
+                                        special_action=True)
