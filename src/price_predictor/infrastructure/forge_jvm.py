@@ -325,6 +325,10 @@ def _waited(proc: subprocess.Popen, timeout: float) -> bool:
 _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
 _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
 
+#: The real ``Popen`` class, taken at import: a test that patches
+#: ``subprocess.Popen`` still hands back instances of it.
+_POPEN = subprocess.Popen
+
 _job_lock = threading.Lock()
 #: This process's job handle, made on first use and never closed: Windows
 #: closes it when this process ends, however it ends, and then kills every
@@ -398,14 +402,16 @@ def bind_to_this_process(proc: subprocess.Popen) -> bool:
     it keeps appending records under a run whose manifest says the run
     ended. The binding is a job object with kill-on-close, whose one handle
     this process holds until it exits. Only a real ``Popen`` is bound, by its
-    own process handle, never by PID: a test's fake process carries a
-    made-up PID that could name an unrelated process. Elsewhere than on
-    Windows nothing is bound, and a failure to bind is reported and leaves
-    the worker running unbound.
+    own process handle, never by PID: a test's fake or mock process carries a
+    made-up PID or handle that could name an unrelated process or handle.
+    Elsewhere than on Windows nothing is bound, and a failure to bind is
+    reported and leaves the worker running unbound.
     """
     global _job_handle, _job_unavailable
+    if not isinstance(proc, _POPEN) or platform.system() != "Windows":
+        return False
     handle = getattr(proc, "_handle", None)
-    if platform.system() != "Windows" or handle is None:
+    if handle is None:
         return False
     import ctypes
     from ctypes import wintypes
@@ -672,8 +678,9 @@ class ForgeWorkerPool:
         self._killed: set[subprocess.Popen] = set()
         self._failed_starts: dict[int, int] = {}
         self._start_failure: str | None = None
-        #: PIDs of workers the pool's kill could not end.
-        self._survivors: list[int] = []
+        #: Every worker the pool has killed or tried to, in order: each is
+        #: killed once, however often the pool terminates.
+        self._kill_attempted: list[subprocess.Popen] = []
 
     @property
     def interrupted(self) -> bool:
@@ -686,13 +693,16 @@ class ForgeWorkerPool:
 
     @property
     def survivors(self) -> list[int]:
-        """PIDs of the workers a kill could not end, recycled or at shutdown.
+        """PIDs of the workers the pool killed, recycled or at shutdown, that
+        are still running when asked.
 
         Each may still append to its shard and to the progress file it was
-        started with, so a caller counting either as final should say so.
+        started with, so a caller counting either as final should say so. A
+        kill that timed out on a process that ended later leaves no survivor.
         """
         with self._processes_lock:
-            return list(self._survivors)
+            attempted = list(self._kill_attempted)
+        return [proc.pid for proc in attempted if proc.poll() is None]
 
     def run(self) -> None:
         """Start all workers and block until shutdown.
@@ -772,7 +782,7 @@ class ForgeWorkerPool:
             # worker spawned while the pool shuts down is killed here, or it
             # outlives the run.
             if self._shutdown_event.is_set():
-                kill_process_tree(proc)
+                self._kill(proc)
 
             try:
                 proc.wait()
@@ -954,11 +964,14 @@ class ForgeWorkerPool:
             self._kill(proc)
 
     def _kill(self, proc: subprocess.Popen) -> None:
-        """Kill one worker's tree, keeping its PID when the kill could not end it."""
-        if kill_process_tree(proc) is False:
-            with self._processes_lock:
-                if proc.pid not in self._survivors:
-                    self._survivors.append(proc.pid)
+        """Kill one worker's tree, once: a second call for the same worker
+        (the loop's shutdown, then ``run``'s ``finally``) does nothing, so a
+        survivor's timed-out kill is not waited out twice."""
+        with self._processes_lock:
+            if any(proc is attempted for attempted in self._kill_attempted):
+                return
+            self._kill_attempted.append(proc)
+        kill_process_tree(proc)
 
     def _handle_signal(self, signum, frame) -> None:
         """Signal handler: set shutdown event to stop workers."""

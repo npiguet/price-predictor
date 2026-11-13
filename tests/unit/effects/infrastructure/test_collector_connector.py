@@ -286,7 +286,10 @@ class TestTheRoundReportsItsWorkerLogs:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 with open(path, "ab") as handle:
                     handle.write("".join(f"{line}\n" for line in lines).encode("utf-8"))
-            pool._survivors.extend(survivors)
+            # A worker the pool killed that is still running at the round's end.
+            pool._kill_attempted.extend(
+                MagicMock(pid=pid, poll=MagicMock(return_value=None)) for pid in survivors
+            )
 
         with patch.object(ForgeWorkerPool, "run", _fake_run):
             supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)

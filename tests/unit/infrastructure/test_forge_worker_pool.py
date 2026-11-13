@@ -351,9 +351,10 @@ class TestARunThatRaises:
 
 
 class TestSurvivors:
-    """V4 #8: a worker the kill could not end was counted as ended."""
+    """V4 #8: a worker the kill could not end was counted as ended; and a
+    worker is killed once, a survivor being one still alive at the end."""
 
-    def test_a_worker_the_kill_cannot_end_is_reported(self, tmp_path, capsys):
+    def test_a_worker_the_kill_cannot_end_is_reported(self, tmp_path):
         pool = _pool(tmp_path / "out.txt", worker_count=1)
         pool._processes = [_FakeProc(77)]
 
@@ -362,14 +363,47 @@ class TestSurvivors:
 
         assert pool.survivors == [77]
 
-    def test_ended_workers_leave_no_survivor(self, tmp_path):
+    def test_a_worker_dead_by_the_end_is_no_survivor(self, tmp_path):
+        """The kill timed out, but the process ended before anyone asked."""
         pool = _pool(tmp_path / "out.txt", worker_count=1)
-        pool._processes = [_FakeProc(77)]
+        slow = _FakeProc(77)
+        pool._processes = [slow]
 
-        with patch(KILL, return_value=True):
+        with patch(KILL, return_value=False):
             pool._terminate_all()
+        slow._alive = False
 
         assert pool.survivors == []
+
+    def test_each_worker_is_killed_once_however_often_the_pool_terminates(self, tmp_path):
+        """``_supervisor_loop`` and ``run``'s ``finally`` both terminate; a
+        survivor's 20 s kill ran twice."""
+        pool = _pool(tmp_path / "out.txt", worker_count=1)
+        worker = _FakeProc(77)
+        pool._processes = [worker]
+
+        with patch(KILL, return_value=False) as killer:
+            pool._terminate_all()
+            pool._terminate_all()
+
+        assert killer.call_count == 1
+
+    def test_a_worker_spawned_during_shutdown_is_killed_through_the_pool(self, tmp_path):
+        """The late-spawn kill ignored the kill's answer: its survivor went
+        unrecorded."""
+        class Waitable(_FakeProc):
+            def wait(self, timeout=None):
+                return None
+
+        def spawn(worker_id):
+            pool.request_shutdown()
+            return Waitable(4000)
+
+        pool = _pool(tmp_path / "out.txt", worker_count=1, spawn_worker=spawn)
+        with patch(KILL, return_value=False):
+            pool._monitor_worker(0)
+
+        assert pool.survivors == [4000]
 
 
 class TestEveryWorkerIsBound:

@@ -31,9 +31,9 @@ from price_predictor.infrastructure.forge_jvm import (
 )
 from tests.unit.infrastructure.real_processes import (
     SLEEPER,
-    is_alive,
-    reap,
+    OwnedProcess,
     start_with_grandchild,
+    wait_for_file,
 )
 
 
@@ -456,10 +456,10 @@ class TestKillProcessTree:
         try:
             assert forge_jvm.kill_process_tree(child) is True
             assert child.poll() is not None
-            assert not is_alive(grandchild, within=10)
+            assert not grandchild.is_alive(within=10)
         finally:
             child.kill()
-            reap(grandchild)
+            grandchild.end()
 
     def test_a_process_already_gone_counts_as_killed(self):
         class Exited:
@@ -527,13 +527,14 @@ class TestWorkersDieWithTheirParent:
             [sys.executable, "-c", self._PARENT, str(out)],
             env=env, cwd=forge_jvm.project_root(),
         )
-        deadline = time.monotonic() + 30
-        while not out.exists():
-            assert parent.poll() is None, "the stand-in supervisor died at startup"
-            assert time.monotonic() < deadline, "the stand-in supervisor never started its worker"
-            time.sleep(0.05)
-        pid, bound = out.read_text(encoding="utf-8").split()
-        return parent, int(pid), bound == "True"
+        try:
+            pid, bound = wait_for_file(out, parent).split()
+            worker = OwnedProcess(int(pid))
+        except BaseException:
+            parent.kill()
+            parent.wait()
+            raise
+        return parent, worker, bound == "True"
 
     def test_a_hard_killed_parent_takes_its_bound_worker_with_it(self, tmp_path):
         parent, worker, bound = self._start_parent(tmp_path)
@@ -541,10 +542,10 @@ class TestWorkersDieWithTheirParent:
             assert bound
             parent.kill()  # TerminateProcess: no finally, no handler runs
             parent.wait(timeout=10)
-            assert not is_alive(worker, within=10)
+            assert not worker.is_alive(within=10)
         finally:
             parent.kill()
-            reap(worker)
+            worker.end()
 
     def test_a_process_without_a_handle_is_left_unbound(self):
         """A test's fake process has a made-up PID: binding by PID could put
@@ -554,6 +555,14 @@ class TestWorkersDieWithTheirParent:
             pid = 1000
 
         assert forge_jvm.bind_to_this_process(Fake()) is False
+
+    def test_a_mock_process_is_left_unbound(self, capsys):
+        """A ``MagicMock`` answers ``_handle`` with a made-up value too, which
+        could name one of this process's own handles: it is never tried."""
+        from unittest.mock import MagicMock
+
+        assert forge_jvm.bind_to_this_process(MagicMock(pid=1000)) is False
+        assert "Could not bind" not in capsys.readouterr().out
 
 
 class TestOneShotTimeout:

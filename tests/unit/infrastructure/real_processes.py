@@ -1,9 +1,13 @@
 """Real child processes a test starts and owns, for the few tests that must
-see a process die: a sleeping child, one with a grandchild, and a liveness
-probe by PID that never signals anything.
+see a process die: a sleeping child, one with a grandchild, and a handle on
+a process the test did not start directly (a grandchild) through which it is
+watched and ended.
 
-Every PID these helpers name belongs to a process the calling test started;
-:func:`reap` ends a leftover one so no test leaves a process behind.
+A grandchild is known only by the PID its parent reports. The handle is
+opened at once, while the grandchild is certainly running (it sleeps for a
+minute), and every later wait or termination goes through that handle,
+never through the PID again: once the process ends, Windows may hand its PID
+to an unrelated process, and the handle still names the one the test owns.
 """
 
 from __future__ import annotations
@@ -32,54 +36,73 @@ _WITH_GRANDCHILD = (
 )
 
 
-def is_alive(pid: int, *, within: float = 0.0) -> bool:
-    """Whether ``pid`` is still running after waiting up to ``within`` seconds
-    for it to end. Opens the process for waiting only; sends nothing."""
-    if os.name != "nt":
-        deadline = time.monotonic() + within
-        while True:
-            try:
-                os.waitpid(pid, os.WNOHANG)
-            except ChildProcessError:
-                pass
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
-                return False
-            if time.monotonic() >= deadline:
-                return True
-            time.sleep(0.05)
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    handle = kernel32.OpenProcess(_SYNCHRONIZE | _QUERY_LIMITED, False, pid)
-    if not handle:
-        return False
-    try:
-        return kernel32.WaitForSingleObject(handle, int(within * 1000)) == _WAIT_TIMEOUT
-    finally:
-        kernel32.CloseHandle(handle)
+class OwnedProcess:
+    """A process the test started indirectly, held by a handle opened while
+    it was known to be running. Windows only; elsewhere, by PID through
+    ``os.kill`` with signal 0, which tests nothing but existence."""
+
+    def __init__(self, pid: int) -> None:
+        self.pid = pid
+        self._handle = None
+        if os.name == "nt":
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            self._handle = kernel32.OpenProcess(
+                _SYNCHRONIZE | _PROCESS_TERMINATE | _QUERY_LIMITED, False, pid,
+            )
+            if not self._handle:
+                raise RuntimeError(f"PID {pid} is not running; nothing to own")
+
+    def is_alive(self, *, within: float = 0.0) -> bool:
+        """Whether the process is still running after waiting up to ``within``
+        seconds for it to end."""
+        if self._handle is None:
+            deadline = time.monotonic() + within
+            while True:
+                try:
+                    os.kill(self.pid, 0)
+                except ProcessLookupError:
+                    return False
+                if time.monotonic() >= deadline:
+                    return True
+                time.sleep(0.05)
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        return kernel32.WaitForSingleObject(self._handle, int(within * 1000)) == _WAIT_TIMEOUT
+
+    def end(self) -> None:
+        """End the process if it still runs, and release the handle."""
+        if self._handle is None:
+            if self.is_alive():
+                os.kill(self.pid, 9)
+            return
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        if self.is_alive():
+            kernel32.TerminateProcess(self._handle, 1)
+        kernel32.CloseHandle(self._handle)
+        self._handle = None
 
 
-def reap(pid: int) -> None:
-    """End ``pid``, a process the test started, if it is still running."""
-    if not is_alive(pid):
-        return
-    if os.name != "nt":
-        os.kill(pid, 9)
-        return
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    handle = kernel32.OpenProcess(_PROCESS_TERMINATE, False, pid)
-    if handle:
-        kernel32.TerminateProcess(handle, 1)
-        kernel32.CloseHandle(handle)
-
-
-def start_with_grandchild(pid_file: Path, **popen) -> tuple[subprocess.Popen, int]:
-    """A child holding a sleeping grandchild; returns both, the grandchild by PID."""
-    child = subprocess.Popen([sys.executable, "-c", _WITH_GRANDCHILD, str(pid_file)], **popen)
-    deadline = time.monotonic() + 30
-    while not pid_file.exists():
-        if child.poll() is not None or time.monotonic() > deadline:
-            child.kill()
-            raise RuntimeError("the child never started its grandchild")
+def wait_for_file(path: Path, owner: subprocess.Popen, *, seconds: float = 30) -> str:
+    """The text ``owner`` writes to ``path``; ``owner`` killed and an error
+    raised when it dies or the wait runs out first."""
+    deadline = time.monotonic() + seconds
+    while not path.exists():
+        if owner.poll() is not None or time.monotonic() > deadline:
+            owner.kill()
+            owner.wait()
+            raise RuntimeError(f"{owner.args!r} never wrote {path}")
         time.sleep(0.05)
-    return child, int(pid_file.read_text(encoding="utf-8"))
+    return path.read_text(encoding="utf-8")
+
+
+def start_with_grandchild(pid_file: Path, **popen) -> tuple[subprocess.Popen, OwnedProcess]:
+    """A child holding a sleeping grandchild; returns both, the grandchild owned
+    through a handle opened while it runs. On any failure here the child is
+    killed before the error propagates."""
+    child = subprocess.Popen([sys.executable, "-c", _WITH_GRANDCHILD, str(pid_file)], **popen)
+    try:
+        grandchild = OwnedProcess(int(wait_for_file(pid_file, child)))
+    except BaseException:
+        child.kill()
+        child.wait()
+        raise
+    return child, grandchild
