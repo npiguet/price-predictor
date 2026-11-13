@@ -1197,3 +1197,104 @@ class TestEveryFixtureTargetFitsItsField:
                     seen.add(name)
         assert {"target_legal", "attack_target_legal", "combat_requirement",
                 "game_lost", "face_after"} <= seen
+
+
+class TestTheWp4Wire:
+    """What the targets read of the gen-3 wire WP3 and WP4 write
+    (``record-schema-delta.md``): each decision is stated in
+    ``src/effects/CLAUDE.md`` § Losses."""
+
+    def test_a_hidden_keyword_change_sets_no_keyword_column_and_is_counted(self):
+        """Forge's text (``CARDNAME can't block.``) names no keyword column: the
+        entity is affected, its keyword fields keep their silent value, and the
+        record counts the change as not supervised."""
+        targets = derive_targets(_resolution(
+            Event(type=EventType.KEYWORD_CHANGE, subjects=("E1",),
+                  params={"keywords": ["CARDNAME can't block."], "removed": False,
+                          "hidden": True}),
+        ))
+        assert targets["E1"].affected
+        assert "keywords_gained" not in targets["E1"].fields
+        assert targets.unsupervised == {"hidden_keyword_change": 1}
+
+    @pytest.mark.parametrize(("event_type", "params"), [
+        (EventType.NAME_CHANGE, {"name": "Lord of Tresserhorn"}),
+        (EventType.MANA_COST_CHANGE, {"mana_cost": {"generic": 2}, "mana_value": 2}),
+    ])
+    def test_a_name_or_mana_cost_change_has_no_column_and_is_counted(self, event_type, params):
+        targets = derive_targets(_resolution(
+            Event(type=event_type, subjects=("E1",), params=params)))
+        assert targets["E1"].affected and targets["E1"].fields == {}
+        assert targets.unsupervised == {event_type.value: 1}
+
+    def test_wither_damage_is_no_marked_damage(self):
+        """The -1/-1 counters arrive as the record's own ``counter_change``."""
+        targets = derive_targets(_resolution(
+            Event(type=EventType.DAMAGE_DEALT, subjects=("E1",),
+                  params={"amount": 2, "combat": True, "damage_type": "m1m1_counters"}),
+            Event(type=EventType.COUNTER_CHANGE, subjects=("E1",),
+                  params={"counter_type": "M1M1", "delta": 2}),
+        ))
+        fields = targets["E1"].fields
+        assert "damage_taken" not in fields and fields["counters_delta_m1m1"] == 2.0
+
+    def test_a_deathtouch_witherer_s_damage_is_counted_once(self):
+        """Forge reads ``deathtouch`` for a deathtouch source with wither: the
+        hit's counters arrive as a ``counter_change`` of its amount, so the
+        damage is not marked as well."""
+        targets = derive_targets(_resolution(
+            Event(type=EventType.DAMAGE_DEALT, subjects=("E1",),
+                  params={"amount": 3, "combat": True, "damage_type": "deathtouch"}),
+            Event(type=EventType.COUNTER_CHANGE, subjects=("E1",),
+                  params={"counter_type": "M1M1", "delta": 3}),
+            Event(type=EventType.DAMAGE_DEALT, subjects=("E2",),
+                  params={"amount": 1, "combat": True, "damage_type": "deathtouch"}),
+        ))
+        assert targets["E1"].fields.get("damage_taken", 0) == 0
+        assert targets["E2"].fields["damage_taken"] == 1.0
+
+    def test_a_destruction_a_replacement_turns_into_exile_reads_as_exiled(self):
+        """The bus writes ``destroyed`` just before the permanent's real move."""
+        targets = derive_targets(_resolution(
+            Event(type=EventType.DESTROYED, subjects=("E1",)),
+            Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
+                  params={"from_zone": "battlefield", "to_zone": "exile"}),
+        ))
+        assert targets["E1"].fields["zone_outcome"] == _zone("exiled")
+
+    def test_a_loses_game_effect_half_names_the_loser_and_the_winner(self):
+        targets = derive_targets(_on_board(ResolutionPayload(events=(
+            Event(type=EventType.PLAYER_LOST, subjects=("P1",), params={"reason": "SpellEffect"}),
+            Event(type=EventType.PLAYER_WON, subjects=("P0",)),
+        ))))
+        assert targets["P1"].fields["game_lost"] == 1
+        assert targets["P0"].fields["game_lost"] == 0
+
+    def test_a_fizzled_spell_s_card_reads_its_real_move(self):
+        """Its half holds exactly its card's move off the stack; a copy's holds none."""
+        fizzled = derive_targets(_resolution(
+            Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
+                  params={"from_zone": "stack", "to_zone": "graveyard"}),
+        ))
+        assert fizzled["E1"].affected
+        assert fizzled["E1"].fields["zone_outcome"] == _zone("died")
+        assert derive_targets(_resolution()) == {}
+
+    def test_a_batch_move_places_each_card(self):
+        """A ``ChangesZoneAll`` batch names several subjects; a resolution's
+        move of several cards places each, a trigger's event none."""
+        move = Event(type=EventType.ZONE_CHANGE, subjects=("E1", "E2"),
+                     params={"from_zone": "battlefield", "to_zone": "exile"})
+        targets = derive_targets(_resolution(move))
+        assert {s: t.fields["zone_outcome"] for s, t in targets.items()} == {
+            "E1": _zone("exiled"), "E2": _zone("exiled")}
+        trigger = _record(TriggerPayload(event=move, fired=True), kind=RecordKind.TRIGGER,
+                          moment=None)
+        assert all(not t.affected for t in derive_targets(trigger).values())
+
+    def test_a_face_change_names_the_face_now_up(self):
+        from effects.domain.effect_head_input import FACE_STATES
+
+        targets = derive_targets(_resolution(
+            Event(type=EventType.FACE_CHANGE, subjects=("E1",), params={"to_state": "back"})))
+        assert targets["E1"].fields["face_after"] == FACE_STATES.index("back")

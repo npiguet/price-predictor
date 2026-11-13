@@ -42,3 +42,15 @@ def test_every_loss_mode_is_a_forge_trigger_or_replacement_mode():
 def test_a_life_change_reads_its_sign_from_its_mode(mode, delta):
     params = {"delta": 3} if mode is None else {"delta": 3, "mode": mode}
     assert signed_delta(Event(type=EventType.LIFE_CHANGE, params=params)) == delta
+
+
+@pytest.mark.parametrize(("mode", "delta", "read"), [
+    ("CounterRemovedOnce", -3, -3.0), ("CounterRemovedOnce", 3, -3.0),
+    ("CounterRemoved", -1, -1.0), ("RemoveCounter", 0, 0.0), ("CounterAddedOnce", 2, 2.0),
+])
+def test_a_counter_change_reads_its_sign_from_its_mode(mode, delta, read):
+    """The collector writes each mode's delta signed; the loss modes read
+    negative whatever sign the amount carries."""
+    event = Event(type=EventType.COUNTER_CHANGE,
+                  params={"counter_type": "P1P1", "delta": delta, "mode": mode})
+    assert signed_delta(event) == read

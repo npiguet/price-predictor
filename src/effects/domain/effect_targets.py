@@ -14,7 +14,7 @@ fields train on every entity they name whether or not the gate's target fires.
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
@@ -88,7 +88,6 @@ _LIBRARY_EVENT_BY_TYPE: dict[EventType, LibraryEvent] = {
 
 #: ``type -> (field, parameter, default when absent, sign)``.
 _ADDITIVE: dict[EventType, tuple[str, str, float, float]] = {
-    EventType.DAMAGE_DEALT: (HeadField.DAMAGE_TAKEN, "amount", 0, 1.0),
     EventType.DAMAGE_HEALED: (HeadField.DAMAGE_TAKEN, "amount", 0, -1.0),
     EventType.DAMAGE_PREVENTED: (HeadField.DAMAGE_PREVENTED, "amount", 0, 1.0),
     EventType.POISON_CHANGE: (HeadField.POISON_DELTA, "delta", 0, 1.0),
@@ -188,11 +187,29 @@ class EntityTargets:
 
 class RecordTargets(dict[str, EntityTargets]):
     """``entity or player id -> EntityTargets`` for one record, and whether
-    the record trains the affected gate (a playability record does not)."""
+    the record trains the affected gate (a playability record does not).
+
+    ``unsupervised`` counts, by kind, the events the record carries that no
+    output column reads (:func:`unsupervised_kind`): their subjects are
+    affected, and nothing else is written for them.
+    """
 
     def __init__(self, *, gated: bool = True) -> None:
         super().__init__()
         self.gated = gated
+        self.unsupervised: Counter[str] = Counter()
+
+
+def unsupervised_kind(event: Event) -> str | None:
+    """The kind an event is counted under when no output column reads it,
+    else None: a change of Forge's hidden keywords (its text, ``CARDNAME can't
+    block.``, names no keyword column), a name change and a mana cost change
+    (no column in the gen-3 layout)."""
+    if event.type is EventType.KEYWORD_CHANGE and event.params.get("hidden"):
+        return "hidden_keyword_change"
+    if event.type in (EventType.NAME_CHANGE, EventType.MANA_COST_CHANGE):
+        return event.type.value
+    return None
 
 
 def derive_targets(record: EffectRecord) -> RecordTargets:
@@ -212,6 +229,9 @@ def derive_targets(record: EffectRecord) -> RecordTargets:
 
     events = _target_events(record)
     for event in events:
+        kind = unsupervised_kind(event)
+        if kind is not None:
+            targets.unsupervised[kind] += 1
         for subject in event.subjects:
             entry = slot(subject)
             entry.affected = True
@@ -288,6 +308,19 @@ def _apply_life_change(entry: EntityTargets, event: Event) -> None:
     entry.add(HeadField.LIFE_DELTA, signed_delta(event))
 
 
+#: Damage dealt as -1/-1 counters (wither, infect to a creature): the record's
+#: own ``counter_change`` adds them, and no damage is marked.
+_COUNTERS_DAMAGE = "m1m1_counters"
+
+
+def _apply_damage_dealt(entry: EntityTargets, event: Event) -> None:
+    """Marked damage, never the damage dealt as -1/-1 counters
+    (:meth:`_RecordPass._damage_as_counters` takes a deathtouch witherer's out)."""
+    if event.params.get("damage_type") == _COUNTERS_DAMAGE:
+        return
+    entry.add(HeadField.DAMAGE_TAKEN, float(event.params.get("amount", 0)))
+
+
 def _apply_counter_change(entry: EntityTargets, event: Event) -> None:
     counter = normalize_counter_type(str(event.params.get("counter_type", OTHER_COUNTER)))
     name = (
@@ -362,6 +395,10 @@ def _apply_multi(
 
 
 def _apply_keywords(entry: EntityTargets, params: dict) -> None:
+    """Keywords gained or lost; a hidden keyword's text names no column
+    (:func:`unsupervised_kind`)."""
+    if params.get("hidden"):
+        return
     name = HeadField.KEYWORDS_LOST if params.get("removed") else HeadField.KEYWORDS_GAINED
     for keyword in params.get("keywords") or ():
         _flag_keyword(entry, name, str(keyword))
@@ -460,6 +497,7 @@ def _appliers() -> dict[EventType, Callable[[EntityTargets, Event], None]]:
 #: The events no table above states, each read off its own parameters.
 _PARAMETER_APPLIERS: dict[EventType, Callable[[EntityTargets, Event], None]] = {
     EventType.ZONE_CHANGE: _apply_zone_change,
+    EventType.DAMAGE_DEALT: _apply_damage_dealt,
     EventType.LIFE_CHANGE: _apply_life_change,
     EventType.COUNTER_CHANGE: _apply_counter_change,
     EventType.PT_CHANGE: _apply_pt_change,
@@ -508,6 +546,7 @@ class _RecordPass:
         self.unknown: set[str] = set()
 
     def run(self) -> None:
+        self._damage_as_counters()
         self._zone_outcomes()
         self._library_events()
         self._base_pt()
@@ -517,6 +556,28 @@ class _RecordPass:
         for name in self.unknown:
             for entry in self.targets.values():
                 entry.forget(name)
+
+    # ── damage dealt as counters ──
+
+    def _damage_as_counters(self) -> None:
+        """A deathtouch source with wither or infect reads ``deathtouch``
+        (Forge's damage type), yet its damage to a creature is -1/-1 counters,
+        which the record's ``counter_change`` adds: each such hit matched by a
+        -1/-1 counter change of its amount on its subject is taken back out of
+        the marked damage."""
+        counters: dict[str, list[float]] = defaultdict(list)
+        for event in self.by_type[EventType.COUNTER_CHANGE]:
+            if normalize_counter_type(str(event.params.get("counter_type", ""))) == "M1M1":
+                for subject in event.subjects:
+                    counters[subject].append(signed_delta(event))
+        for event in self.by_type[EventType.DAMAGE_DEALT]:
+            if event.params.get("damage_type") != "deathtouch":
+                continue
+            amount = float(event.params.get("amount", 0))
+            for subject in event.subjects:
+                if amount and amount in counters[subject]:
+                    counters[subject].remove(amount)
+                    self.targets[subject].add(HeadField.DAMAGE_TAKEN, -amount)
 
     # ── zone outcomes ──
 
