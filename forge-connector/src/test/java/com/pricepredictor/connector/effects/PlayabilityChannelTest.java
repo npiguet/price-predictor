@@ -214,6 +214,61 @@ class PlayabilityChannelTest {
     }
 
     /**
+     * A blocker Pacifism keeps from blocking at all is forbidden by that
+     * static, named through Forge's {@code cantBlockStatic} (F3 #2): the
+     * pair-wise lookup finds no static for it.
+     */
+    @Test
+    void aPacifiedBlockerNamesPacifismAsItsResponsibleStatic() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_BLOCKERS);
+        Player attacking = game.getPlayers().get(0);
+        Player blocking = game.getPlayers().get(1);
+        Card attacker = TestBoard.inPlay(game, attacking, "Grizzly Bears");
+        Card blocker = TestBoard.inPlay(game, blocking, "Hill Giant");
+        Card pacifism = TestBoard.inPlay(game, attacking, "Pacifism");
+        pacifism.attachToEntity(blocker, null);
+        Combat combat = new Combat(attacking);
+        combat.addAttacker(attacker, blocking);
+        game.getPhaseHandler().setCombat(combat);
+
+        List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) ->
+                collectors.playability().legalityHandler().invoke(null, ON_BLOCKERS_DECLARABLE,
+                        new Object[]{blocking, attacker, List.of(blocker), List.of(), 1}));
+
+        String record = recordsOf(lines).get(0);
+        assertTrue(record.contains("\"responsible_static\":[{\"script_file\":\"cardsfolder/p/pacifism.txt\""),
+                record);
+        assertFalse(record.contains("required_elsewhere"), record);
+    }
+
+    /**
+     * A blocker a lure makes block another attacker is kept from blocking
+     * this one by a requirement, not a prohibition (F3 #7): its forbidden
+     * entry says {@code required_elsewhere}.
+     */
+    @Test
+    void aBlockerALureCallsElsewhereIsRequiredElsewhere() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_BLOCKERS);
+        Player attacking = game.getPlayers().get(0);
+        Player blocking = game.getPlayers().get(1);
+        Card bears = TestBoard.inPlay(game, attacking, "Grizzly Bears");
+        Card unicorn = TestBoard.inPlay(game, attacking, "Prized Unicorn");
+        Card blocker = TestBoard.inPlay(game, blocking, "Hill Giant");
+        Combat combat = new Combat(attacking);
+        combat.addAttacker(bears, blocking);
+        combat.addAttacker(unicorn, blocking);
+        game.getPhaseHandler().setCombat(combat);
+
+        List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) ->
+                collectors.playability().legalityHandler().invoke(null, ON_BLOCKERS_DECLARABLE,
+                        new Object[]{blocking, bears, List.of(blocker), List.of(), 1}));
+
+        String record = recordsOf(lines).get(0);
+        assertTrue(record.contains("\"required_elsewhere\":true"), record);
+        assertTrue(record.contains("\"responsible_static\":[]"), record);
+    }
+
+    /**
      * Every declaration on a board that moved is written, and the same
      * declaration on an unchanged board is written once (FR-028). A defender
      * asked about a second time is a new declaration.

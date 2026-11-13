@@ -142,6 +142,48 @@ class TriggerRecordTest {
     }
 
     /**
+     * A condition that held is a firing only once Forge runs the trigger
+     * (WP2's {@code onTriggerRun}): an evaluation never run writes nothing,
+     * and two runs of one evaluation (Panharmonicon) write one record.
+     */
+    @Test
+    void aFiringIsHeldOnlyOnceForgeRunsItAndOnceHowEverManyRuns() throws Throwable {
+        List<Trigger> triggers = triggersOf(TestCards.build("Garruk's Uprising"));
+        Map<?, ?> notRun = new java.util.HashMap<>();
+        Map<?, ?> runTwice = new java.util.HashMap<>();
+
+        List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            var handler = collectors.triggers().handler();
+            handler.invoke(null, ON_CONDITION_EVALUATED, new Object[]{triggers.get(0), notRun, true});
+            handler.invoke(null, ON_CONDITION_EVALUATED, new Object[]{triggers.get(1), runTwice, true});
+            handler.invoke(null, ON_TRIGGER_RUN, new Object[]{triggers.get(1), runTwice, null});
+            handler.invoke(null, ON_TRIGGER_RUN, new Object[]{triggers.get(1), runTwice, null});
+        });
+
+        assertEquals(1, lines.size(), lines.toString());
+        assertEquals(1L, ((Number) RecordLines.abilityKeys(lines.get(0)).get(0)
+                .get("index_within_kind")).longValue(), "the run one, once");
+        assertEquals(true, RecordLines.payload(lines.get(0)).get("fired"));
+    }
+
+    /**
+     * Two triggers that key to no printed line keep a reservoir and a
+     * negative cap each (C2 #16): their keys differ, where both were "null".
+     */
+    @Test
+    void unresolvedLinesAreKeyedApart() {
+        List<Trigger> uprising = triggersOf(TestCards.build("Garruk's Uprising"));
+        Trigger paralyze = triggersOf(TestCards.build("Paralyze")).get(0);
+        ProvenanceKey.Resolved none = new ProvenanceKey.Resolved(null, UnresolvedReason.GRANTED_TRAIT);
+
+        String first = TriggerChannel.lineKey(uprising.get(0), none, "ChangesZone");
+        String second = TriggerChannel.lineKey(uprising.get(1), none, "ChangesZone");
+        String third = TriggerChannel.lineKey(paralyze, none, "Phase");
+
+        assertEquals(3, java.util.Set.of(first, second, third).size(), first + " / " + second);
+    }
+
+    /**
      * A line that fires all game long keeps a reservoir of its firings, not
      * its first ones (C7): 100 firings on 100 boards, each a life total
      * lower, keep 24, and later boards among them.

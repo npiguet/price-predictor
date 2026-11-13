@@ -120,6 +120,33 @@ class ContinuousChannelTest {
                 String.valueOf(records));
     }
 
+    /**
+     * A static whose contribution changes on a board alike in ids, names
+     * and P/T writes again (V3 #6): the coalescing key holds what the
+     * static contributes, not the board hash alone.
+     */
+    @Test
+    void aStaticContributingSomethingElseOnAnAlikeBoardIsWrittenAgain() throws Throwable {
+        Assumptions.assumeTrue(ContinuousChannel.CAN_SUPPRESS,
+                "../forge cannot remove one static's contributions");
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card servant = board.battlefield("Painter's Servant", board.you);
+        board.battlefield("Grizzly Bears", board.you);
+
+        List<String> records = ShardRun.records(tempDir, board.game, (bracket, collectors) -> {
+            for (String color : List.of("blue", "red")) {
+                servant.setChosenColors(List.of(color));
+                board.game.getAction().checkStaticAbilities();
+                collectors.continuous().collect();
+            }
+        });
+
+        assertEquals(2, records.stream()
+                .filter(r -> "continuous".equals(RecordLines.parse(r).get("kind")))
+                .filter(r -> r.contains("painters_servant")).count(),
+                String.valueOf(records));
+    }
+
     // ── what a contribution says ────────────────────────────────────────
 
     /** The continuous records {@code board}'s statics write now. */

@@ -195,6 +195,42 @@ class PlayabilityVerdictTest {
         assertEquals(List.of(PlayabilityCheck.SPLIT_SECOND), checks(verdict));
     }
 
+    /**
+     * Split second leaves mana abilities and special actions legal (702.61b,
+     * 116.2): a land play, foretelling, plotting and suspending a card are
+     * never refused for it, whatever else they fail.
+     */
+    @Test
+    void aSplitSecondSpellOnTheStackRefusesNoSpecialAction() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player a = game.getPlayers().get(0);
+        Player b = game.getPlayers().get(1);
+        for (int i = 0; i < 4; i++) {
+            TestBoard.inPlay(game, b, "Mountain");
+        }
+        List<SpellAbility> specialActions = new java.util.ArrayList<>();
+        specialActions.add(landPlayOf(TestBoard.inHand(game, b, "Mountain")));
+        specialActions.add(special(TestBoard.inHand(game, b, "Saw It Coming"),
+                SpellAbility::isForetelling));
+        specialActions.add(special(TestBoard.inHand(game, b, "Slickshot Show-Off"),
+                SpellAbility::isPlotting));
+        specialActions.add(special(TestBoard.inHand(game, b, "Rift Bolt"),
+                sa -> sa.isKeyword(forge.game.keyword.Keyword.SUSPEND)));
+        TestBoard.cast(game, TestBoard.inHand(game, a, "Sudden Shock"), a, b);
+        assertTrue(game.getStack().isSplitSecondOnStack(), "the board under test");
+
+        for (SpellAbility action : specialActions) {
+            assertFalse(PlayabilityVerdict.of(action, b).failed(PlayabilityCheck.SPLIT_SECOND),
+                    action + " is a special action");
+        }
+        assertTrue(PlayabilityChecks.ignoresSplitSecond(landPlayOf(TestBoard.inHand(game, b, "Forest"))));
+    }
+
+    private static SpellAbility special(Card card, java.util.function.Predicate<SpellAbility> kind) {
+        return card.getSpellAbilities().stream().filter(kind).findFirst()
+                .orElseThrow(() -> new AssertionError(card + " has no such special action"));
+    }
+
     private static StaticAbility staticOf(Card card, StaticAbilityMode mode) {
         return card.getStaticAbilities().stream()
                 .filter(st -> st.checkMode(mode)).findFirst().orElseThrow();
