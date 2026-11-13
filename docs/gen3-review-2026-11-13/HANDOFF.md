@@ -89,8 +89,8 @@ After WP1-WP11: the fork fidelity audit (tasks.md T181, quickstart stage 5), a s
 | WP5 | not started | | |
 | WP6 | not started | | |
 | WP7 | not started | | |
-| WP8 | Java-independent part implemented (unit suite 5690 passed; verifier found eleven gaps, implementer closing them); stop-protocol part (`V4 #1`, `P1 #1`) waits for WP7 | `de0acbab`, `fc191cfb`, `df1a29b7`, `5bfd62ca` | `P1 #13`, `P1 #14` did not reproduce. New: `--count-from`, `--continues`, `run.json` `invocations`, logs under `logs/`, decks under `decks/`, per-round progress files, job-object binding of worker JVMs, zero-record exit 1. Not done: counting crashed random-seat matches |
-| WP9 | not started | | |
+| WP8 | Java-independent part done; verified twice, third round closes the last six verifier items (not re-verified). Stop-protocol part (`V4 #1`, `P1 #1`) waits for WP7 | `de0acbab`..`5bfd62ca`, `12acf627`..`c2f1488b`, `37a7d08e`, `d7704ae8`, `a971c664`, `527bbf1e`, `386e13e8` | Unit suite 5731 passed on `c2f1488b`. `P1 #13`, `P1 #14` did not reproduce. New: `--count-from`, `--continues`, `run.json` `invocations`, logs under `logs/` (collectors and `match-outcomes`), decks under `decks/`, per-round progress files, job-object binding of worker JVMs, zero-record exit 1, worker-log scan in `price_predictor`, stale-staging cleanup with an owner file, every Forge `--workers` 1 to 12, FR-058h. Handed to WP7 (needs Java): the worker's match-error line must name a random-seat match so Python can count crashed random-seat matches and so `collected_nothing` sees a random-seat-only run. For the stop round: `ForgeWorkerPool._kill` is the single kill path; `on_status` is where a periodic stop check goes; a graceful stop must finish before the supervisor exits (job object kills on close) |
+| WP9 | wire-independent part: implementer running; the rest waits for WP3/WP4 | | |
 | WP10 | not started | | |
 | WP11 | not started | | |
 | WP12 | not started | | |
