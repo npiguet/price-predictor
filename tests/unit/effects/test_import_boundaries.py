@@ -51,6 +51,9 @@ _ALLOWED: dict[str, set[str] | None] = {
     # A collector's supervisor writes its run id, resolved caps and worker-log
     # failures into the running command's run.json entry (V4 #3, #4).
     "price_predictor.infrastructure.run_manifest": {"annotate_run"},
+    # The worker-log scan, shared with sealed match-outcomes (V4 #3).
+    "price_predictor.domain.worker_failures": {"WorkerFailures"},
+    "price_predictor.infrastructure.worker_log_scan": {"WorkerLogReport"},
     "sealed.domain.manabase": {"compute_basic_lands"},
     "sealed.infrastructure.converted_card_locator": {"ConvertedCardLocator"},
     # The cap flags every collecting supervisor carries, one definition for

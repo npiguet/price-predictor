@@ -13,7 +13,6 @@ import math
 import random
 import re
 import shutil
-import zlib
 from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Iterator, Sequence
 from pathlib import Path
@@ -35,6 +34,7 @@ from effects.infrastructure.record_codec import (
 from price_predictor.infrastructure.append_only import (
     count_complete_lines,
     iter_complete_lines,
+    iter_gzip_complete_lines,
 )
 
 logger = logging.getLogger(__name__)
@@ -212,14 +212,9 @@ def iter_shard_lines(path: Path) -> Iterator[str]:
                 yield line
         return
 
-    try:
-        with gzip.open(path, "rt", encoding="utf-8") as handle:
-            for line in handle:
-                # A line without its newline can only be a member cut short.
-                if line.endswith("\n") and line.strip():
-                    yield line[:-1]
-    except (EOFError, gzip.BadGzipFile, zlib.error):
-        return
+    for line in iter_gzip_complete_lines(path):
+        if line.strip():
+            yield line
 
 
 def iter_record_dicts(path: Path) -> Iterator[dict]:

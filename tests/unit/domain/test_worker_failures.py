@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from effects.domain.worker_failures import (
+from price_predictor.domain.worker_failures import (
     FAILURE_PATTERNS,
     WorkerFailure,
     WorkerFailures,
@@ -17,7 +17,7 @@ from effects.domain.worker_failures import (
 )
 
 _CONNECTOR_SOURCES = (
-    Path(__file__).resolve().parents[4] / "forge-connector" / "src" / "main" / "java"
+    Path(__file__).resolve().parents[3] / "forge-connector" / "src" / "main" / "java"
 )
 
 

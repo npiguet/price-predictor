@@ -14,8 +14,12 @@ from __future__ import annotations
 import os
 from collections.abc import Iterable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from effects.domain.worker_failures import WorkerFailure, WorkerFailures
+from price_predictor.domain.worker_failures import WorkerFailure, WorkerFailures
+
+if TYPE_CHECKING:
+    from price_predictor.infrastructure.forge_jvm import WorkerLogFiles
 
 
 class WorkerLogScan:
@@ -58,6 +62,34 @@ class WorkerLogScan:
                     _read_lines(rotated, 0, failures)
             offset = 0
         self._read[path] = (identity, _read_lines(path, offset, failures))
+
+
+class WorkerLogReport:
+    """A worker pool's logs, scanned on demand: what each scan found new,
+    and the run's totals."""
+
+    def __init__(self, logs: WorkerLogFiles, worker_count: int) -> None:
+        self._logs = logs
+        self._worker_count = worker_count
+        self._scan = WorkerLogScan()
+        #: Every failure line found so far, by kind.
+        self.totals = WorkerFailures()
+
+    def scan(self) -> WorkerFailures:
+        """The failure lines every slot's log gained since the last scan,
+        added to :attr:`totals`."""
+        found = self._scan.scan(
+            self._logs.path_for(slot) for slot in range(self._worker_count)
+        )
+        self.totals.merge(found)
+        return found
+
+    def manifest_fields(self) -> dict:
+        """The totals as ``run.json`` records them."""
+        return {
+            "worker_failures": self.totals.as_dict(),
+            "worker_failure_examples": dict(self.totals.examples),
+        }
 
 
 def _read_lines(path: Path, offset: int, failures: WorkerFailures) -> int:

@@ -317,3 +317,32 @@ class TestProbeKeywordSpelling:
             ["collect-coverage", "--probe-keywords", "Double Strike"],
         )
         assert args.probe_keywords == "double_strike"
+
+
+class TestWorkersAndTheEnd:
+    """V4 #9 on match-outcomes: ``--workers`` is 1 to 12; and a run collecting
+    effect records that completed matches and recorded nothing exits 1."""
+
+    @pytest.mark.parametrize("workers", ["0", "13", "-1"])
+    def test_an_out_of_range_worker_count_is_a_usage_error(self, workers):
+        with pytest.raises(SystemExit):
+            parse("match-outcomes", "--workers", workers)
+
+    def test_the_edges_are_accepted(self):
+        assert parse("match-outcomes", "--workers", "1").workers == 1
+        assert parse("match-outcomes", "--workers", "12").workers == 12
+
+    @pytest.mark.parametrize(("collected_nothing", "code"), [(True, 1), (False, 0)])
+    def test_a_run_that_recorded_nothing_exits_1(self, monkeypatch, collected_nothing, code):
+        from unittest.mock import MagicMock
+
+        import sealed.application.match_outcomes as module
+        from price_predictor.infrastructure import forge_jvm
+
+        supervisor = MagicMock(collected_nothing=collected_nothing)
+        monkeypatch.setattr(module, "MatchOutcomeSupervisor", lambda **_: supervisor)
+        monkeypatch.setattr(forge_jvm, "check_worker_prerequisites", lambda **_: None)
+        args = parse("match-outcomes", "--effect-records", "records", "--workers", "1")
+
+        assert run_match_outcomes(args) == code
+        supervisor.run.assert_called_once()

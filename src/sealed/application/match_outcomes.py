@@ -8,7 +8,10 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 
+from price_predictor.infrastructure.append_only import count_shard_records
 from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool, WorkerLogFiles
+from price_predictor.infrastructure.run_manifest import annotate_run
+from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
 from sealed.infrastructure.effect_collection_flags import (
     COUNT_DROPPED_EVENTS_PROPERTY,
     dropped_events_report,
@@ -17,6 +20,9 @@ from sealed.infrastructure.match_worker_connector import (
     DEFAULT_SIDE_B_DECKS_WEIGHT,
     MatchWorkerConnector,
 )
+
+#: Under the run directory: every worker log.
+LOGS_DIR = "logs"
 
 
 class MatchOutcomeSupervisor:
@@ -66,16 +72,26 @@ class MatchOutcomeSupervisor:
         # effect-record failure reporters (ApiEvents.reportEmitterFailure and
         # its siblings) behind EffectRecordOutcomes.isObserved() -- true only
         # once effect-record collection is on (F4).
+        # Under the run directory's logs/ (.claude/skills/artifact-layout),
+        # scanned for failure lines at every status line and at the end.
         self._worker_logs = (
-            WorkerLogFiles(effect_records_dir, self._run_id)
+            WorkerLogFiles(Path(effect_records_dir) / LOGS_DIR, self._run_id)
             if effect_records_dir is not None else None
         )
+        self._log_report = (
+            WorkerLogReport(self._worker_logs, worker_count)
+            if self._worker_logs is not None else None
+        )
+        #: Matches this run completed and records it wrote, once it has run.
+        self._matches = 0
+        self._records = 0
         # The lambda re-reads self._start_worker per spawn so tests (and any
         # caller) can patch it after construction.
         self._pool = ForgeWorkerPool(
             worker_count=worker_count,
             spawn_worker=lambda worker_id: self._start_worker(worker_id),
             output_path=output_path,
+            on_status=self._report_worker_logs if self._log_report is not None else None,
         )
 
     @property
@@ -91,16 +107,65 @@ class MatchOutcomeSupervisor:
         """
         return self._run_id
 
+    @property
+    def worker_failures(self):
+        """Every failure line the run's workers logged, by kind (none
+        without ``--effect-records``)."""
+        from price_predictor.domain.worker_failures import WorkerFailures
+
+        return self._log_report.totals if self._log_report is not None else WorkerFailures()
+
+    @property
+    def collected_nothing(self) -> bool:
+        """Whether a run collecting effect records completed matches and wrote
+        no record: every match failing to record, which the shards alone
+        cannot tell from a short run."""
+        return self._effect_records_dir is not None and self._matches > 0 and self._records == 0
+
     def run(self) -> None:
-        """Start all workers and block until shutdown, then print the
-        dropped-event table when the run counted dropped events (FR-041)."""
+        """Start all workers and block until shutdown, then report the
+        workers' failure lines and print the dropped-event table when the run
+        counted dropped events (FR-041)."""
+        baseline = self._pool.output_line_count()
         try:
             self._pool.run()
         finally:
             if self._worker_logs is not None:
                 self._worker_logs.close_all()
+            self._matches = self._pool.output_line_count() - baseline
+            if self._effect_records_dir is not None:
+                self._finish_effect_records()
         if self._counts_dropped_events():
             print(dropped_events_report(self._effect_records_dir, self._run_id))
+
+    def _report_worker_logs(self) -> None:
+        """Print the failure lines the workers logged since the last look."""
+        found = self._log_report.scan()
+        if found:
+            print(f"Worker logs: {found.render()} (under {self._worker_logs_dir})")
+
+    @property
+    def _worker_logs_dir(self) -> Path:
+        return Path(self._effect_records_dir) / LOGS_DIR
+
+    def _finish_effect_records(self) -> None:
+        """The run's worker-log totals and record count, printed and kept in
+        ``run.json``; an error line when matches recorded nothing."""
+        self._report_worker_logs()
+        self._records = count_shard_records(self._effect_records_dir, self._run_id)
+        print(f"Worker logs over the run: {self._log_report.totals.render()}")
+        annotate_run(
+            self._effect_records_dir, run_id=self._run_id,
+            effect_records=self._records, matches=self._matches,
+            **self._log_report.manifest_fields(),
+            worker_survivors=self._pool.survivors,
+        )
+        if self.collected_nothing:
+            print(
+                f"Error: {self._matches} match(es) completed and no effect record "
+                f"was written under {self._effect_records_dir}; the worker logs "
+                f"under {self._worker_logs_dir} say why"
+            )
 
     def _counts_dropped_events(self) -> bool:
         """Whether the workers were told to count, read off what they were sent."""

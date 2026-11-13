@@ -21,6 +21,7 @@ from effects.domain import default_paths
 from effects.domain.card_names import fold_card_name
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.split import HoldoutRule
+from price_predictor.infrastructure.forge_jvm import MAX_WORKERS, worker_count
 from sealed.domain.manabase import compute_basic_lands
 
 if TYPE_CHECKING:
@@ -28,11 +29,9 @@ if TYPE_CHECKING:
     from effects.infrastructure.collector_connector import CollectorSupervisor
     from effects.infrastructure.converted_trees import SourceTrees
 
-#: Java worker processes, for both collectors, and the most a run may take:
-#: the machine runs at most twelve CPU-busy processes, and a collector's
-#: workers and its shard counters each run that many.
+#: Java worker processes, for both collectors; the most a run may take is
+#: ``forge_jvm.MAX_WORKERS``, which its shard counters also run.
 DEFAULT_WORKERS = 12
-MAX_WORKERS = 12
 DEFAULT_DECKS_PER_ROUND = 500
 
 
@@ -53,15 +52,6 @@ def non_negative_int(text: str) -> int:
     return value
 
 
-def worker_count(text: str) -> int:
-    """``--workers``: 1 to :data:`MAX_WORKERS`. With none the pool never
-    starts a worker and never stops; past the cap the machine is oversubscribed."""
-    value = int(text)
-    if not 1 <= value <= MAX_WORKERS:
-        raise argparse.ArgumentTypeError(
-            f"must be between 1 and {MAX_WORKERS}, got {value}"
-        )
-    return value
 
 #: Seeds both collectors' deck draws, and the variant collector's perturbations.
 RANDOM_SEED = 42

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from effects.infrastructure.worker_log_scan import WorkerLogScan
+from price_predictor.infrastructure.worker_log_scan import WorkerLogScan
 
 
 def _append(path: Path, text: str) -> None:

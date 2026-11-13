@@ -407,7 +407,8 @@ class TestSupervisorWorkerLogs:
         log_file = fake_connector.start.call_args.kwargs.get("log_file")
         assert log_file is not None
         assert log_file.closed is False
-        assert (records / f"{supervisor.run_id}.0.log").exists()
+        assert (records / "logs" / f"{supervisor.run_id}.0.log").exists()
+        assert not list(records.glob("*.log")), "never beside the shards"
 
     def test_a_respawned_slot_reuses_the_same_log_file(self, tmp_path):
         records = tmp_path / "records"
@@ -498,3 +499,64 @@ class TestSupervisorStatusLineFormat:
             worker_count=1, output_path=tmp_path / "out.txt", best_of=3,
         )
         assert supervisor.STATUS_INTERVAL == 60
+
+
+class TestTheRunReportsWhatItsWorkersLogged:
+    """V4 #3 on match-outcomes: worker failure lines went to the logs and
+    nowhere else, and a run that recorded nothing said nothing."""
+
+    def _run(self, tmp_path, *, matches: int, record_lines: int, log_lines=()):
+        records = tmp_path / "records"
+        output_file = tmp_path / "match-outcomes.txt"
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=1, output_path=output_file, best_of=3,
+            effect_records_dir=records,
+        )
+
+        def fake_start_worker(worker_id):
+            log = supervisor._worker_logs.get(worker_id)
+            log.write("".join(f"{line}\n" for line in log_lines).encode("utf-8"))
+            log.flush()
+            with open(output_file, "a", encoding="utf-8") as out:
+                out.write("row\n" * matches)
+            if record_lines:
+                shard = records / f"{supervisor.run_id}.0-abc.jsonl"
+                shard.write_text("{}\n" * record_lines, encoding="utf-8")
+            supervisor._shutdown_event.set()
+            return FakeProcess(pid=1000, returncode=0)
+
+        supervisor._start_worker = fake_start_worker
+        supervisor.run()
+        return supervisor
+
+    def test_the_failure_lines_are_printed_by_kind(self, tmp_path, capsys):
+        supervisor = self._run(
+            tmp_path, matches=1, record_lines=3,
+            log_lines=["Worker: 10 matches generated", "Error generating match: boom"],
+        )
+
+        assert supervisor.worker_failures.as_dict() == {"match_error": 1}
+        assert "Worker logs over the run: 1 match_error" in capsys.readouterr().out
+
+    def test_a_run_that_played_matches_and_recorded_nothing_collected_nothing(self, tmp_path):
+        assert self._run(tmp_path, matches=2, record_lines=0).collected_nothing is True
+
+    def test_records_of_this_run_are_something(self, tmp_path):
+        assert self._run(tmp_path, matches=2, record_lines=3).collected_nothing is False
+
+    def test_no_match_played_is_no_verdict(self, tmp_path):
+        assert self._run(tmp_path, matches=0, record_lines=0).collected_nothing is False
+
+    def test_the_pool_scans_the_logs_at_every_status_line(self, tmp_path):
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=1, output_path=tmp_path / "out.txt", best_of=3,
+            effect_records_dir=tmp_path / "records",
+        )
+        assert supervisor._pool._on_status is not None
+
+    def test_without_effect_records_nothing_is_scanned(self, tmp_path):
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=1, output_path=tmp_path / "out.txt", best_of=3,
+        )
+        assert supervisor._pool._on_status is None
+        assert supervisor.collected_nothing is False

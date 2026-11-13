@@ -555,13 +555,12 @@ class WorkerLogFiles:
     def path_for(self, worker_id: int) -> Path:
         """Where this worker's current log lives, whether or not it exists yet.
 
-        ``{run_id}.{worker}.log``, deliberately one component short of a
-        shard's own ``{run_id}.{worker}-{lifetime}.jsonl``: the lifetime
-        token is minted inside the JVM, so a file
-        this class opens before spawning it can never carry one. Landing in
-        the same directory as the shards it corresponds to, under a name the
-        shard pattern makes recognisable at a glance, is what makes it
-        findable after the fact without knowing in advance that it exists.
+        ``{run_id}.{worker}.log`` in the directory this class was given,
+        which every caller makes its run directory's ``logs/``
+        (``.claude/skills/artifact-layout/SKILL.md``). One component short of
+        a shard's own ``{run_id}.{worker}-{lifetime}``: the lifetime token is
+        minted inside the JVM, so a file opened before spawning it can never
+        carry one.
         """
         return self._directory / f"{self._run_id}.{worker_id}.log"
 
@@ -645,6 +644,25 @@ class WorkerLogFiles:
         self._open.clear()
 
 
+#: The most workers a pool may run: the machine runs at most twelve CPU-busy
+#: processes, and a Forge worker is one.
+MAX_WORKERS = 12
+
+
+def worker_count(text: str) -> int:
+    """``--workers`` as argparse reads it: 1 to :data:`MAX_WORKERS`. With
+    none the pool never starts a worker and never stops; past the cap the
+    machine is oversubscribed."""
+    import argparse
+
+    value = int(text)
+    if not 1 <= value <= MAX_WORKERS:
+        raise argparse.ArgumentTypeError(
+            f"must be between 1 and {MAX_WORKERS}, got {value}"
+        )
+    return value
+
+
 class WorkerStartError(RuntimeError):
     """Every slot of a :class:`ForgeWorkerPool` failed to start a worker
     ``max_failed_starts`` times in a row: the run cannot collect anything."""
@@ -701,6 +719,7 @@ class ForgeWorkerPool:
         output_path: Path,
         status_interval: int | None = None,
         should_stop: Callable[[int], bool] | None = None,
+        on_status: Callable[[], None] | None = None,
         max_failed_starts: int | None = None,
         restart_backoff: float | None = None,
         quick_exit_seconds: float | None = None,
@@ -713,6 +732,8 @@ class ForgeWorkerPool:
             status_interval: seconds between status lines (default 60).
             should_stop: called with the current line count after each status
                 line; returning True ends the run. None means run until signalled.
+            on_status: called after each status line (a log scan); what it
+                raises is printed and the run goes on.
             max_failed_starts, restart_backoff, quick_exit_seconds: the
                 failed-start rule (class docstring); default the class constants.
         """
@@ -723,6 +744,7 @@ class ForgeWorkerPool:
             self.STATUS_INTERVAL if status_interval is None else status_interval
         )
         self._should_stop = should_stop
+        self._on_status = on_status
         self._shutdown_event = threading.Event()
         self._interrupted = False
         self._processes: list[subprocess.Popen] = []
@@ -941,6 +963,11 @@ class ForgeWorkerPool:
             last_count, last_time = self._report_status(
                 start_time, now, last_count, last_time, baseline,
             )
+            if self._on_status is not None:
+                try:
+                    self._on_status()
+                except Exception as exc:  # noqa: BLE001 — a report never stops a run
+                    print(f"Status report failed: {exc}")
             next_status = now + self._status_interval
             if self._should_stop is not None and self._should_stop(last_count):
                 self._shutdown_event.set()

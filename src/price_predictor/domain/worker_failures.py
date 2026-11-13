@@ -1,18 +1,20 @@
-"""The failure lines a collection worker writes to its log, by kind.
+"""The failure lines a Forge worker writes to its log, by kind.
 
 A Forge worker reports what went wrong on stderr and goes on playing: a match
 that could not be generated, a hook listener that threw, records withheld past
 the per-game cap, a fork discarded for a score mismatch. Each is a line in the
 slot's worker log and nothing else, so a run that lost half its records looks,
-from its shards, like a run that played half as many games. The collectors
-scan their workers' logs after every round and report these lines by kind
-(``collector_connector.CollectorSupervisor``).
+from its shards, like a run that played half as many games. Every supervisor
+that gives its workers a log scans it and reports these lines by kind: the
+effects collectors after every round, ``sealed match-outcomes
+--effect-records`` at every status line
+(``price_predictor.infrastructure.worker_log_scan.WorkerLogReport``).
 
 Each kind is recognised by the text the Java side prints, found anywhere in
 a line: a worker's stdout and stderr share one log and interleave mid-line,
 so a failure line can begin after another stream's unfinished text. The
 fragment each pattern is built from is checked against the connector's
-sources by ``tests/unit/effects/domain/test_worker_failures.py``, and the
+sources by ``tests/unit/domain/test_worker_failures.py``, and the
 same tests hold routine worker output to no match.
 """
 

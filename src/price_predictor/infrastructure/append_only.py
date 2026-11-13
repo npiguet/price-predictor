@@ -17,6 +17,39 @@ from collections.abc import Iterator
 from pathlib import Path
 
 
+def iter_gzip_complete_lines(path: Path) -> Iterator[str]:
+    """Each newline-terminated line of a gzip file of concatenated members,
+    terminator stripped. A member cut short by a killed writer, or a corrupt
+    one, ends the stream there: the lines before it are kept."""
+    import gzip
+    import zlib
+
+    try:
+        with gzip.open(path, "rt", encoding="utf-8") as handle:
+            for line in handle:
+                # A line without its newline can only be a member cut short.
+                if line.endswith("\n"):
+                    yield line[:-1]
+    except (EOFError, gzip.BadGzipFile, zlib.error):
+        return
+
+
+def count_shard_records(directory: Path, run_id: str) -> int:
+    """Complete, non-blank lines in the effect-record shards of run
+    ``run_id`` at the top of ``directory`` (``{run_id}.*.jsonl`` and
+    ``.jsonl.gz``): the records a run wrote, counted without parsing."""
+    total = 0
+    for shard in sorted(Path(directory).glob(f"{run_id}.*.jsonl*")):
+        if shard.name.endswith(".jsonl.gz"):
+            lines = iter_gzip_complete_lines(shard)
+        elif shard.name.endswith(".jsonl"):
+            lines = iter_complete_lines(shard)
+        else:
+            continue
+        total += sum(1 for line in lines if line.strip())
+    return total
+
+
 def iter_complete_lines(path: Path) -> Iterator[str]:
     """Yield each newline-terminated line of ``path``, terminator stripped.
 

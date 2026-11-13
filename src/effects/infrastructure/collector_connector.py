@@ -15,11 +15,11 @@ import subprocess
 from pathlib import Path
 
 from effects.domain.collection_caps import CollectionCaps
-from effects.domain.worker_failures import WorkerFailures
 from effects.infrastructure.deck_file import write_deck_file
-from effects.infrastructure.worker_log_scan import WorkerLogScan
+from price_predictor.domain.worker_failures import WorkerFailures
 from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool, WorkerLogFiles
 from price_predictor.infrastructure.run_manifest import annotate_run
+from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
 from sealed.infrastructure.effect_collection_flags import dropped_events_report
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 
@@ -70,9 +70,7 @@ class CollectorSupervisor:
         # A real log destination, or the JVM's latched emitter-failure reports
         # vanish into DEVNULL and look like a mechanic that never occurred.
         self._worker_logs = WorkerLogFiles(self.logs_dir, self._run_id)
-        self._log_scan = WorkerLogScan()
-        #: Every failure line the run's workers logged, by kind.
-        self.worker_failures = WorkerFailures()
+        self._log_report = WorkerLogReport(self._worker_logs, worker_count)
         #: PIDs of workers a round's kill could not end.
         self.survivors: list[int] = []
         self._rounds = 0
@@ -81,6 +79,11 @@ class CollectorSupervisor:
     @property
     def run_id(self) -> str:
         return self._run_id
+
+    @property
+    def worker_failures(self) -> WorkerFailures:
+        """Every failure line the run's workers logged, by kind."""
+        return self._log_report.totals
 
     @property
     def rounds(self) -> int:
@@ -174,10 +177,7 @@ class CollectorSupervisor:
     def _report_round(self, pool: ForgeWorkerPool) -> None:
         """Say what the round's workers logged and which outlived the kill,
         and record the run's totals in ``run.json``."""
-        failures = self._log_scan.scan(
-            self._worker_logs.path_for(slot) for slot in range(self._worker_count)
-        )
-        self.worker_failures.merge(failures)
+        failures = self._log_report.scan()
         if failures:
             logger.warning(
                 "Round %d worker logs: %s (under %s)",
@@ -196,8 +196,7 @@ class CollectorSupervisor:
         annotate_run(
             self._effect_records,
             rounds=self._rounds,
-            worker_failures=self.worker_failures.as_dict(),
-            worker_failure_examples=dict(self.worker_failures.examples),
+            **self._log_report.manifest_fields(),
             worker_survivors=list(self.survivors),
         )
 

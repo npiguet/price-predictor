@@ -15,6 +15,7 @@ from price_predictor.infrastructure.cli_run_manifest import (
     dispatch,
     tag_subcommands,
 )
+from price_predictor.infrastructure.forge_jvm import worker_count as forge_worker_count
 from sealed.application.encode_cards import EncodeCardsConfig
 from sealed.application.evaluate_scorer import EvaluateScorerConfig
 from sealed.application.train_scorer import TrainScorerConfig
@@ -951,9 +952,9 @@ def _build_match_outcomes_parser(subparsers) -> None:
     )
     match_parser.add_argument(
         "--workers",
-        type=int,
+        type=forge_worker_count,
         default=12,
-        help="Number of parallel Java worker processes to spawn (default: 12)",
+        help="Number of parallel Java worker processes to spawn, 1 to 12 (default: 12)",
     )
     match_parser.add_argument(
         "--side-a-decks",
@@ -1857,7 +1858,8 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
 
-    return 0
+    # Matches played and no effect record written: the run's output is unusable.
+    return 1 if supervisor.collected_nothing else 0
 
 
 def run_analyze_generated_decks(args: argparse.Namespace) -> int:
