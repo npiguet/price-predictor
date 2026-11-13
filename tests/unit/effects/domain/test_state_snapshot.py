@@ -248,8 +248,11 @@ class TestTheGen3FactsRead:
         assert all(e.owner in ("P0", "P1") for e in entities)
         assert all(e.face_state in set(FaceState) for e in entities)
         assert all(isinstance(e.history, CardHistory) for e in entities)
-        assert all(e.chosen == CardChoices() and e.role is None and e.in_tiers
-                   for e in entities)
+        tiered = [e for e in entities if e.role is None]
+        assert all(e.chosen == CardChoices() and e.in_tiers for e in tiered)
+        # A target as cast that has ceased to exist since: no zone, no rank.
+        gone = [e for e in entities if e.role == "last_known"]
+        assert gone and all(e.zone is None and e.order_rank is None for e in gone)
         assert any(e.history.entered_this_turn for e in entities)
 
     def test_a_mana_cost_counts_its_symbols_and_a_land_has_none(self):
@@ -326,8 +329,10 @@ class TestTheGen3FactsRead:
     def test_links_end_at_refs_or_lines(self):
         links = [link for state in self._states() for link in state.links]
         targets = [link for link in links if link.type == "targets"]
-        assert targets and all(isinstance(link.from_, LineRef) and link.index == 0
+        assert targets and all(isinstance(link.from_, LineRef) and link.index >= 0
                                for link in targets)
+        # Arc Trail's second target sits at index 1 across its chain.
+        assert any(link.index == 1 for link in targets)
         assert all(link.index is None for link in links if link.type != "targets")
         assert {"controls", "owns", "attacks", "blocks"} <= {link.type for link in links}
 

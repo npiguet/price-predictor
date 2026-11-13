@@ -466,6 +466,12 @@ class Contribution:
     keywords: tuple[str, ...] = ()
     types: tuple[str, ...] = ()
     colors: tuple[str, ...] = ()
+    #: Gen-3: a token per layer-6 change, a granted line's key as
+    #: ``ProvenanceKey.describe`` spells it (``runtime`` for none), ``-`` before
+    #: one taken away; None on a record written before the member existed.
+    abilities: tuple[str, ...] | None = None
+    #: Gen-3: the hidden keywords the static grants, as Forge writes them.
+    hidden_keywords: tuple[str, ...] | None = None
     name: str | None = None
     controller: str | None = None
 

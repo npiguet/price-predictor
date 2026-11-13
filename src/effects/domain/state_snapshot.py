@@ -259,6 +259,10 @@ class GrantedTemporary:
 
     keywords: tuple[str, ...] = ()
     abilities: tuple[ProvenanceKey, ...] = ()
+    #: Gen-3: Forge's hidden keywords on the card as Forge writes them
+    #: (``CARDNAME can't block.``), in timestamp order; None on a record
+    #: written before the member existed.
+    hidden_keywords: tuple[str, ...] | None = None
 
 
 def normalize_counter_type(raw: str) -> str:
@@ -643,7 +647,17 @@ class EntityState:
 class Refs:
     """What the acting ability points at, and what was chosen for it."""
 
+    #: Every target the acting item's chain holds, root first; on an effect
+    #: half, its links' targets left after Forge's illegal-target check.
     targets: tuple[str, ...] = ()
+    #: Gen-3, a resolution's effect half: the same links' targets before that
+    #: check (608.2b), a target gone since as ``L<id>``; ``()`` for none, None
+    #: where unknown (no hook, another refs block, an older record).
+    targets_at_cast: tuple[str, ...] | None = None
+    #: Gen-3: the refs of ``targets`` and ``targets_at_cast`` that name a
+    #: spell or an ability on the stack, by its host card; None on a record
+    #: written before the member existed.
+    targets_on_stack: tuple[str, ...] | None = None
     source: str | None = None
     modes: tuple[str, ...] = ()
     x: int | None = None

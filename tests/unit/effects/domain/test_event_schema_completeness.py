@@ -498,11 +498,42 @@ class TestSupersededTypes:
 
     ``cost_adjusted`` is the playability decision's ``cost_after_adjustment``,
     ``damage_assignment_ordered`` is the combat payload's
-    ``assignment_choices``, and a name change is a continuous effect's ``name``
-    contribution. Emitting them as events would give one fact two spellings and
-    let a reader believe a corpus without them was incomplete.
+    ``assignment_choices``. Emitting them as events would give one fact two
+    spellings and let a reader believe a corpus without them was incomplete. A
+    name change is an event again (``name_change``, from a stat change): a
+    continuous effect's ``name`` contribution is the static's, and a resolved
+    ``Animate`` naming a permanent has no other record.
     """
 
     def test_the_superseded_types_are_out_of_the_vocabulary(self):
-        for retired in ("cost_adjusted", "damage_assignment_ordered", "name_change"):
+        for retired in ("cost_adjusted", "damage_assignment_ordered"):
             assert retired not in EVENT_PARAMS
+
+
+class TestTheJavaVocabularyBothWays:
+    """The writer's vocabulary and the reader's are one list. A type or a
+    parameter the connector writes and Python lacks fails every record that
+    carries it at decode (``Event.__post_init__`` refuses an unknown
+    parameter); the existing reachability scan above only looks the other way.
+    """
+
+    def test_every_java_event_type_is_a_python_one_and_back(self):
+        header = (_CONNECTOR_EFFECTS / "EventType.java").read_text(encoding="utf-8")
+        java = set(re.findall(r'^\s*[A-Z_]+\("([a-z_]+)"\)[,;]', header, re.MULTILINE))
+        python = {event_type.value for event_type in EventType}
+        assert java <= python
+        # Python declares a few the connector has no constant for: each is
+        # recorded as never emitted, with its reason.
+        assert python - java <= set(KNOWN_UNEMITTED)
+
+    def test_every_parameter_the_connector_writes_is_one_python_reads(self):
+        """Read off every ``.param("name", …)`` call in the connector: no call
+        names a parameter outside ``EVENT_PARAMS`` and the provenance pair.
+        Which type each name rides cannot be read off the source; that was
+        checked by hand against the contract's tables."""
+        root = _CONNECTOR_EFFECTS.parent
+        written = {name for path in root.rglob("*.java")
+                   for name in re.findall(r'\.param\("([a-z_]+)"',
+                                          path.read_text(encoding="utf-8"))}
+        known = {name for names in EVENT_PARAMS.values() for name in names}
+        assert written and not written - known - Event.PROVENANCE_PARAMS

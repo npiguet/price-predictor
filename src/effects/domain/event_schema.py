@@ -54,12 +54,18 @@ class EventType(StrEnum):
     TYPE_CHANGE = "type_change"
     COLOR_CHANGE = "color_change"
     TEXT_CHANGE = "text_change"
+    #: A permanent's name changed with no face change or copy effect
+    #: (an ``Animate``'s ``Name$``, a ``SetName$`` static).
+    NAME_CHANGE = "name_change"
     ABILITY_CHANGE = "ability_change"
     CONTROL_CHANGE = "control_change"
     OWNERSHIP_CHANGE = "ownership_change"
     ATTACHED = "attached"
     UNATTACHED = "unattached"
     FACE_CHANGE = "face_change"
+    #: A permanent's mana cost changed with no face change or copy effect
+    #: (a perpetual ``ManaCost$``, an ``Incorporate$``).
+    MANA_COST_CHANGE = "mana_cost_change"
     TAPPED = "tapped"
     UNTAPPED = "untapped"
     STATE_FLAG_CHANGE = "state_flag_change"
@@ -150,7 +156,12 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     EventType.LIBRARY_REORDERED: ("count",),
     EventType.COUNTER_CHANGE: ("counter_type", "delta"),
     EventType.PT_CHANGE: ("power_delta", "toughness_delta", "set_pt"),
-    EventType.KEYWORD_CHANGE: ("keywords", "removed"),
+    # hidden: a change of Forge's hidden keywords, whose ``keywords`` are
+    # Forge's own text (``CARDNAME can't block.``).
+    EventType.KEYWORD_CHANGE: ("keywords", "removed", "hidden"),
+    EventType.NAME_CHANGE: ("name",),
+    # mana_cost as an entity's ``mana_cost`` spells it, absent for no cost.
+    EventType.MANA_COST_CHANGE: ("mana_cost", "mana_value"),
     EventType.TYPE_CHANGE: ("types_added", "types_removed", "overwrite"),
     EventType.COLOR_CHANGE: ("colors", "colors_removed", "overwrite"),
     EventType.ABILITY_CHANGE: ("abilities", "removed"),

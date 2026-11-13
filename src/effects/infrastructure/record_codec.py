@@ -322,16 +322,22 @@ def _combat_status_from_json(data: dict) -> CombatStatus:
 
 
 def _granted_temporary_to_json(granted: GrantedTemporary) -> dict:
-    return {
+    out = {
         "keywords": list(granted.keywords),
         "abilities": _keys_to_json(granted.abilities),
     }
+    if granted.hidden_keywords is not None:
+        out["hidden_keywords"] = list(granted.hidden_keywords)
+    return out
 
 
 def _granted_temporary_from_json(data: dict) -> GrantedTemporary:
+    """Keywords in the package's spelling; hidden keywords as Forge writes
+    them, which name no keyword."""
     return GrantedTemporary(
         keywords=tuple(normalize_keyword(k) for k in data.get("keywords", ())),
         abilities=_keys_from_json(data.get("abilities")),
+        hidden_keywords=_tuple_or_none(data.get("hidden_keywords")),
     )
 
 
@@ -598,8 +604,12 @@ def _random_from_json(data: dict) -> RandomResults:
 
 
 def _refs_to_json(refs: Refs, gen3: bool) -> dict:
-    out = {
-        "targets": list(refs.targets),
+    out: dict = {"targets": list(refs.targets)}
+    # Both or neither, as the collector writes them since it wrote either.
+    if refs.targets_on_stack is not None or refs.targets_at_cast is not None:
+        out["targets_at_cast"] = _list_or_none(refs.targets_at_cast)
+        out["targets_on_stack"] = list(refs.targets_on_stack or ())
+    out |= {
         "source": refs.source,
         "modes": list(refs.modes),
         "x": refs.x,
@@ -613,6 +623,8 @@ def _refs_to_json(refs: Refs, gen3: bool) -> dict:
 def _refs_from_json(data: dict) -> Refs:
     return Refs(
         targets=tuple(data.get("targets", ())),
+        targets_at_cast=_tuple_or_none(data.get("targets_at_cast")),
+        targets_on_stack=_tuple_or_none(data.get("targets_on_stack")),
         source=data.get("source"),
         modes=tuple(data.get("modes", ())),
         x=data.get("x"),
@@ -776,8 +788,13 @@ def _contribution_to_json(contribution: Contribution) -> dict:
         out["set_pt"] = list(contribution.set_pt)
     out.update({
         "keywords": list(contribution.keywords), "types": list(contribution.types),
-        "colors": list(contribution.colors), "name": contribution.name,
+        "colors": list(contribution.colors),
     })
+    if contribution.abilities is not None:
+        out["abilities"] = list(contribution.abilities)
+    if contribution.hidden_keywords is not None:
+        out["hidden_keywords"] = list(contribution.hidden_keywords)
+    out["name"] = contribution.name
     if contribution.controller is not None:
         out["controller"] = contribution.controller
     return out
@@ -791,6 +808,8 @@ def _contribution_from_json(data: dict) -> Contribution:
         keywords=tuple(normalize_keyword(k) for k in data.get("keywords", ())),
         types=tuple(data.get("types", ())),
         colors=tuple(data.get("colors", ())),
+        abilities=_tuple_or_none(data.get("abilities")),
+        hidden_keywords=_tuple_or_none(data.get("hidden_keywords")),
         name=data.get("name"),
         controller=data.get("controller"),
     )
