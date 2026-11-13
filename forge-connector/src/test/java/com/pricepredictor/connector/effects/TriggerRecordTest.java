@@ -305,12 +305,17 @@ class TriggerRecordTest {
                 event.toString());
     }
 
-    /** Prevention arrives through the damage keys and is not damage dealt. */
+    /**
+     * Prevention is its own mode, {@code DamagePreventedOnce}, whose map
+     * spells the prevented amount as {@code DamageAmount}: it is a
+     * prevention of that amount, not damage dealt.
+     */
     @Test
     void preventedDamageIsNotRecordedAsDamageDealt() {
-        Map<String, Object> event = eventOf(triggerOfMode("DamageDone"), Map.of(
-                "PreventedAmount", 2,
-                "Affected", TestCards.build("Mountain")));
+        Map<String, Object> event = eventOf(triggerOfMode("DamagePreventedOnce"), Map.of(
+                "DamageAmount", 2,
+                "IsCombatDamage", Boolean.FALSE,
+                "DamageTarget", TestCards.build("Mountain")));
 
         assertEquals("damage_prevented", event.get("type"), event.toString());
         assertEquals(2L, params(event).get("amount"), event.toString());
@@ -328,7 +333,9 @@ class TriggerRecordTest {
         com.google.common.collect.Multiset<CounterType> counters =
                 com.google.common.collect.LinkedHashMultiset.create();
         counters.add(CounterType.getType("P1P1"), 2);
-        Map<String, Object> event = eventOf(triggerOfMode("CounterAdded"), Map.of(
+        // The AddCounter replacement's shape (GameEntityCounterTable); the
+        // CounterAdded trigger fires once per counter and carries no map.
+        Map<String, Object> event = eventOf(replacementOfMode("AddCounter"), Map.of(
                 "CounterMap", Map.of(Optional.empty(), counters),
                 "Affected", TestCards.build("Mountain")));
 
@@ -340,14 +347,17 @@ class TriggerRecordTest {
         assertEquals(2L, params(event).get("delta"), event.toString());
     }
 
-    /** The replacement side's word for a life total is read as one. */
+    /**
+     * The replacement side's word for a life total is read as one, signed
+     * as the bus signs a life change: a loss negative.
+     */
     @Test
     void theReplacementSpellingOfALifeAmountIsStillADelta() {
         Map<String, Object> event = eventOf(replacementOfMode("LifeReduced"), Map.of(
                 "Affected", TestCards.build("Mountain"), "Amount", 4));
 
         assertEquals("life_change", event.get("type"), event.toString());
-        assertEquals(4L, params(event).get("delta"), event.toString());
+        assertEquals(-4L, params(event).get("delta"), event.toString());
     }
 
     // ── the cause channel ───────────────────────────────────────────────
@@ -521,7 +531,10 @@ class TriggerRecordTest {
         assertFalse(params(event).containsKey("mana_by_color"), event.toString());
     }
 
-    /** Turning a card face up is a face change, and it says which face. */
+    /**
+     * Turning a card face up is a face change, and it says which face, in
+     * an entity's {@code face_state} spelling: the face the card shows.
+     */
     @Test
     void turningACardFaceUpNamesTheFaceItTurnedTo() {
         Card card = TestCards.build("Sol Ring");
@@ -529,7 +542,7 @@ class TriggerRecordTest {
         Map<String, Object> event = eventOf(triggerOfMode("TurnFaceUp"), Map.of("Card", card));
 
         assertEquals("face_change", event.get("type"), event.toString());
-        assertEquals("face_up", params(event).get("to_state"), event.toString());
+        assertEquals("front", params(event).get("to_state"), event.toString());
     }
 
     /**

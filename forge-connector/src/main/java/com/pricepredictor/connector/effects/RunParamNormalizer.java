@@ -1,10 +1,14 @@
 package com.pricepredictor.connector.effects;
 
+import forge.game.GameEntity;
+import forge.game.card.Card;
+import forge.game.card.CounterType;
 import forge.game.replacement.ReplacementEffect;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -17,7 +21,15 @@ import java.util.Set;
  *
  * <p>A replacement's and a trigger's parameter maps are the only place those
  * records say what they are about. Stateless: the reading depends on the trait's
- * mode and the map alone, never on the game it came from.
+ * side (trigger or replacement), its mode and the map alone, never on the game
+ * it came from — save the {@code RemoveCounter} replacement's removal, which
+ * reads the affected card's count, and a face change, which reads the face the
+ * card shows.
+ *
+ * <p>Each mode is read by its own row ({@link #TRIGGER_MODES},
+ * {@link #REPLACEMENT_MODES}): Forge spells the same quantity differently per
+ * mode, and a key one mode fills with an amount another fills with an
+ * ordinal or a running total.
  */
 final class RunParamNormalizer {
 
@@ -45,7 +57,8 @@ final class RunParamNormalizer {
     static EffectEvent describeParams(Object trait, Object params) {
         String mode = modeOf(trait);
         Map<String, Object> byName = paramsByName(params);
-        EffectEvent event = new EffectEvent(typeOf(mode, byName));
+        Reading reading = readingOf(trait, mode);
+        EffectEvent event = new EffectEvent(reading.type());
         // The engine's own name for what happened, kept whether or not the
         // vocabulary has a member for it. Forge has some two hundred trigger
         // modes and the vocabulary is a closed set of outcomes, so mapping
@@ -60,9 +73,9 @@ final class RunParamNormalizer {
         for (String subject : subjectsOf(byName)) {
             event.subject(subject);
         }
-        normalizeParams(event, mode, byName);
+        normalizeParams(event, mode, reading, byName);
         event.cause(causeOf(byName));
-        if (byName.get("CardLKI") instanceof forge.game.card.Card lastKnown) {
+        if (byName.get("CardLKI") instanceof Card lastKnown) {
             event.lastKnown(lastKnown);
         }
         return event;
@@ -101,29 +114,20 @@ final class RunParamNormalizer {
     }
 
     /**
-     * Which outcome this is, before any parameter is read into it.
+     * How this trait's mode is read: its own row of the trigger table or of
+     * the replacement table, else the generic type with nothing read.
      *
-     * <p>Almost always the mode's own mapping. The exception is prevention:
-     * Forge reports it through the damage keys, and an event that says
-     * {@code damage_dealt} with no amount is not what happened.
+     * <p>Checked for null before the lookup: a trait whose {@code getMode()}
+     * is absent — a hook whose signature drifted, so the argument is not the
+     * trait we expect — must not take an NPE inside a dynamic proxy, which the
+     * engine would surface as an {@code UndeclaredThrowableException} in the
+     * middle of {@code canRunTrigger}.
      */
-    private static EventType typeOf(String mode, Map<String, Object> byName) {
-        // Checked before the lookup rather than left to getOrDefault:
-        // EVENT_BY_MODE is a Map.of, which throws on a null key instead of
-        // answering the default. A trait whose getMode() is absent -- a hook
-        // whose signature drifted, so the argument is not the trait we expect --
-        // would take that NPE inside a dynamic proxy, and the engine would
-        // surface it as an UndeclaredThrowableException in the middle of
-        // canRunTrigger.
-        EventType type = mode == null
-                ? EventType.STATE_FLAG_CHANGE
-                : EVENT_BY_MODE.getOrDefault(mode, EventType.STATE_FLAG_CHANGE);
-        if (type == EventType.DAMAGE_DEALT
-                && !byName.containsKey("DamageAmount")
-                && byName.containsKey("PreventedAmount")) {
-            return EventType.DAMAGE_PREVENTED;
-        }
-        return type;
+    private static Reading readingOf(Object trait, String mode) {
+        Map<String, Reading> table = trait instanceof ReplacementEffect
+                ? REPLACEMENT_MODES : TRIGGER_MODES;
+        Reading reading = mode == null ? null : table.get(mode);
+        return reading != null ? reading : GENERIC;
     }
 
     /**
@@ -144,6 +148,9 @@ final class RunParamNormalizer {
             // map holds only the collection. Without these three, every one of
             // them would name no subject at all.
             "Blocker", "Attackers", "Attached",
+            // The Aura or Equipment an Attached or Unattached trigger is
+            // about; AttachTarget and Object name what it hangs or hung on.
+            "AttachSource",
             // Last, and only as a last resort. CardLKI is a copy of the card as
             // it was, so wherever the live object is also in the map one of the
             // keys above names it and this is never reached. Where it is not --
@@ -242,7 +249,8 @@ final class RunParamNormalizer {
     }
 
     /**
-     * Fill the slots this event type declares, from the values the map holds.
+     * Fill the slots this event type declares, from the values the map holds,
+     * as the mode's row reads them.
      *
      * <p>Per type and no wider: the vocabulary normalizes an outcome so that the
      * same thing from two different script APIs lands in the same slots, and a
@@ -251,7 +259,7 @@ final class RunParamNormalizer {
      * else, claiming no more than it read.
      */
     private static void normalizeParams(
-            EffectEvent event, String mode, Map<String, Object> byName) {
+            EffectEvent event, String mode, Reading reading, Map<String, Object> byName) {
         switch (event.type()) {
             case ZONE_CHANGE -> {
                 event.param("from_zone", CardSpelling.zoneName(byName.get("Origin")));
@@ -264,22 +272,21 @@ final class RunParamNormalizer {
                         ? combat : boolOf(byName.get("IsCombat")));
                 event.param("source", subjectOf(byName.get("DamageSource")));
             }
+            // DamagePreventedOnce (CardDamageTable): the damage prevented, as
+            // DamageAmount.
             case DAMAGE_PREVENTED -> {
-                event.param("amount", intOf(byName.get("PreventedAmount")));
+                event.param("amount", intOf(byName.get("DamageAmount")));
                 event.param("source", subjectOf(byName.get("DamageSource")));
             }
             case DESTROYED ->
                     event.param("regenerable", boolOf(byName.get("Regeneration")));
-            case COUNTER_CHANGE -> counterParams(event, byName);
-            // "Amount" last: it is how the replacement side spells the same
-            // quantity the trigger side calls LifeAmount, and without it a
-            // life-total replacement carries no number to differ in.
-            case LIFE_CHANGE -> event.param(
-                    "delta",
-                    firstInt(byName, "LifeAmount", "LifeGained", "Amount"));
-            case CARD_DRAWN, CARD_MILLED,
-                    CARD_DISCARDED ->
-                    event.param("count", firstInt(byName, "Number", "Num"));
+            case COUNTER_CHANGE -> counterParams(event, reading, byName);
+            // LifeAmount on the triggers, LifeGained on the GainLife
+            // replacement, Amount on LifeReduced and PayLife's.
+            case LIFE_CHANGE -> event.param("delta", signed(
+                    reading, firstInt(byName, "LifeAmount", "LifeGained", "Amount")));
+            case CARD_DRAWN, CARD_MILLED, CARD_DISCARDED, TOKEN_CREATED, SPELL_COPIED ->
+                    event.param("count", reading.amount().read(byName));
             // Scry and Surveil each spell their own count, and neither is
             // Number: read under the general names alone this type carried no
             // count at all.
@@ -288,8 +295,6 @@ final class RunParamNormalizer {
                         byName, "ScryNum", "SurveilNum", "Number", "Num"));
                 event.param("from_zone", CardSpelling.zoneName(byName.get("Origin")));
             }
-            case POISON_CHANGE -> event.param(
-                    "delta", firstInt(byName, "Amount", "Num", "Number"));
             case MANA_PRODUCED, MANA_LOST ->
                     event.param("mana_by_color", manaOf(byName));
             case PHASED ->
@@ -297,11 +302,10 @@ final class RunParamNormalizer {
                     // the difference between them.
                     event.param("out", !"PhaseIn".equals(mode));
             case ATTACHED ->
-                    event.param("attached_to", firstRef(
-                            byName, "AttachTarget", "Attached", "Card"));
+                    event.param("attached_to", firstRef(byName, "AttachTarget"));
+            // Card.unattachFromEntity: the permanent or player it left, as Object.
             case UNATTACHED ->
-                    event.param("detached_from", firstRef(
-                            byName, "AttachTarget", "Attached", "Card"));
+                    event.param("detached_from", firstRef(byName, "Object"));
             case ATTACKERS_DECLARED ->
                     // Attacked first: CombatUtil.checkDeclaredAttacker spells
                     // the entity this creature attacked that way and no other.
@@ -314,43 +318,60 @@ final class RunParamNormalizer {
             case BECAME_BLOCKED ->
                     event.param("blockers", refList(byName, "Blockers", "Blocker"));
             case FACE_CHANGE ->
-                    event.param("to_state", faceState(mode));
+                    event.param("to_state", faceState(byName));
             case PLAYER_LOST ->
                     event.param("reason", textOf(byName.get("LoseReason")));
-            case SPELL_COPIED ->
-                    event.param("count", firstInt(byName, "Number", "Num"));
-            case TOKEN_CREATED -> event.param(
-                    "count", firstInt(byName, "TokenNum", "Number", "Num"));
             default -> {
-                // Tapped, untapped, phased, spell_cast and the generic outcome
-                // all carry their subject and their mode, which is everything
+                // Tapped, untapped, spell_cast and the generic outcome all
+                // carry their subject and their mode, which is everything
                 // the vocabulary declares for them.
             }
         }
     }
 
     /**
-     * Which counter moved and by how much.
+     * A magnitude read off the map, signed the way its mode moves it: a loss
+     * mode's amount negative, a gain mode's positive, and a mode of sign 0
+     * the amount as read.
+     */
+    private static Integer signed(Reading reading, Integer amount) {
+        if (amount == null || reading.sign() == 0) {
+            return amount;
+        }
+        int size = Math.abs(amount);
+        return reading.sign() < 0 ? -size : size;
+    }
+
+    /**
+     * Which counter moved and by how much, signed: positive for counters put
+     * on, negative for counters removed.
      *
-     * <p>Forge says it two ways. The plain one names the type and the number.
-     * The other hands over {@code CounterMap}, a per-player multiset that a
-     * counter-replacement rewrites <b>in place</b> — which is also why the
-     * engine-side copy of the parameter map has to reach inside it, or both
-     * halves of the record read the same however carefully this reads them.
+     * <p>Forge says it three ways. {@code CounterAdded} and {@code
+     * CounterRemoved} fire once per counter, their {@code CounterAmount} and
+     * {@code NewCounterAmount} the count after that one counter moved, so each
+     * is one counter. {@code CounterAddedOnce} and {@code CounterRemovedOnce}
+     * carry the number moved as {@code CounterAmount}. The {@code AddCounter}
+     * replacement hands over {@code CounterMap}, a per-player multiset that it
+     * rewrites <b>in place</b> — which is also why the engine-side copy of the
+     * parameter map has to reach inside it, or both halves of the record read
+     * the same however carefully this reads them. The {@code RemoveCounter}
+     * replacement carries the count the removal would leave ({@code Result}),
+     * so what it removes is that count less the card's count now
+     * ({@link #removalOf}).
      *
      * <p>A map naming several counter types at once has one delta and no single
      * type: the total is the honest answer and a joined type name would be a
      * value no reader could match.
      */
-    private static void counterParams(EffectEvent event, Map<String, Object> byName) {
+    private static void counterParams(
+            EffectEvent event, Reading reading, Map<String, Object> byName) {
         Object type = byName.get("CounterType");
-        Integer delta = firstInt(
-                byName, "CounterNum", "CounterAmount", "NewCounterAmount");
         if (type != null) {
             event.param("counter_type", CardSpelling.counterName(type));
         }
-        if (delta != null) {
-            event.param("delta", delta);
+        Integer amount = reading.amount().read(byName);
+        if (amount != null) {
+            event.param("delta", signed(reading, amount));
             return;
         }
         Map<String, Integer> total = counterMapTotals(byName.get("CounterMap"));
@@ -364,7 +385,23 @@ final class RunParamNormalizer {
         for (Integer count : total.values()) {
             sum += count;
         }
-        event.param("delta", sum);
+        event.param("delta", signed(reading, sum));
+    }
+
+    /**
+     * What a {@code RemoveCounter} replacement's removal comes to, as a
+     * signed change: the count it would leave ({@code Result}, never below 0)
+     * less the affected object's count of that type now, the removal not
+     * having happened yet; null where either is unreadable.
+     */
+    private static Integer removalOf(Map<String, Object> byName) {
+        Integer result = intOf(byName.get("Result"));
+        if (result == null
+                || !(byName.get("CounterType") instanceof CounterType counterType)
+                || !(byName.get("Affected") instanceof GameEntity affected)) {
+            return null;
+        }
+        return Math.max(result, 0) - affected.getCounters(counterType);
     }
 
     /**
@@ -413,17 +450,23 @@ final class RunParamNormalizer {
     }
 
     /**
-     * Which face a card turned to.
+     * Which face a card turned to: the face it shows now, in an entity's
+     * {@code face_state} spelling ({@code front}, {@code back},
+     * {@code flipped}, {@code melded}, {@code face_down}).
      *
-     * <p>Read from the mode rather than from a parameter, because the two modes
-     * that reach this type each mean exactly one direction and neither map
-     * carries a usable state name: {@code AbilityKey.CardState} exists but is a
-     * {@code CardState} object put there by door unlocking alone
-     * ({@code Card.unlockRoom}), and rendering it would fill the slot with an
-     * object's {@code toString} instead of a face.
+     * <p>Read off the card rather than the mode: Forge runs the {@code
+     * Transform} and {@code TurnFaceUp} replacements and the {@code
+     * Transformed} and {@code TurnFaceUp} triggers once the card has turned
+     * (a transform lands on either face), and no map carries a usable state
+     * name: {@code AbilityKey.CardState} is a {@code CardState} object only
+     * door unlocking puts there ({@code Card.unlockRoom}).
      */
-    private static String faceState(String mode) {
-        return "TurnFaceUp".equals(mode) ? "face_up" : "transformed";
+    private static String faceState(Map<String, Object> byName) {
+        Object card = byName.get("Card");
+        if (!(card instanceof Card)) {
+            card = byName.get("Affected");
+        }
+        return card instanceof Card turned ? CardFacts.faceState(turned) : null;
     }
 
     /** The first of these keys that names an entity, single or collection. */
@@ -520,93 +563,154 @@ final class RunParamNormalizer {
         return mode == null ? null : String.valueOf(mode);
     }
 
+    /** How a mode's amount is read off its map; null where the map holds none. */
+    @FunctionalInterface
+    interface Amount {
+        Integer read(Map<String, Object> byName);
+
+        /** Nothing read here: the event type's own reading applies. */
+        Amount NONE = byName -> null;
+        /** One: a mode Forge fires once per card or per counter. */
+        Amount ONE = byName -> 1;
+
+        /** The first of these keys holding a number. */
+        static Amount key(String... keys) {
+            return byName -> firstInt(byName, keys);
+        }
+
+        /** How many objects the collection under {@code key} holds. */
+        static Amount sizeOf(String key) {
+            return byName -> byName.get(key) instanceof Collection<?> many ? many.size() : null;
+        }
+    }
+
     /**
-     * Forge modes that have a counterpart in the event vocabulary.
+     * One mode's reading: its event type, how its amount is read, and the
+     * direction it moves a life total or a counter count: {@code 1} a gain
+     * (written positive), {@code -1} a loss (written negative), {@code 0}
+     * the amount as read, already signed.
+     */
+    record Reading(EventType type, Amount amount, int sign) {
+
+        static Reading of(EventType type) {
+            return new Reading(type, Amount.NONE, 1);
+        }
+
+        static Reading of(EventType type, Amount amount) {
+            return new Reading(type, amount, 1);
+        }
+
+        static Reading loss(EventType type, Amount amount) {
+            return new Reading(type, amount, -1);
+        }
+    }
+
+    /** A mode with no row: the generic type, carrying its mode and nothing read. */
+    private static final Reading GENERIC = Reading.of(EventType.STATE_FLAG_CHANGE);
+
+    /**
+     * Forge's trigger modes ({@code TriggerType} names) that have a
+     * counterpart in the event vocabulary, each read as its own run
+     * parameters hold it.
      *
      * <p>Deliberately partial. The vocabulary names observable outcomes and
      * Forge names engine hooks, so only some pairs are the same thing; the rest
      * carry their mode as a parameter and take the generic type.
      */
-    private static final Map<String, EventType> EVENT_BY_MODE = Map.ofEntries(
-            Map.entry("ChangesZone", EventType.ZONE_CHANGE),
-            Map.entry("Destroyed", EventType.DESTROYED),
-            Map.entry("Sacrificed", EventType.SACRIFICED),
-            Map.entry("DamageDone", EventType.DAMAGE_DEALT),
-            Map.entry("DamageDealtOnce", EventType.DAMAGE_DEALT),
-            Map.entry("DamageAll", EventType.DAMAGE_DEALT),
-            Map.entry("Drawn", EventType.CARD_DRAWN),
-            Map.entry("Discarded", EventType.CARD_DISCARDED),
-            Map.entry("Milled", EventType.CARD_MILLED),
-            Map.entry("LifeGained", EventType.LIFE_CHANGE),
-            Map.entry("LifeLost", EventType.LIFE_CHANGE),
-            Map.entry("LoseLife", EventType.LIFE_CHANGE),
-            Map.entry("PayLife", EventType.LIFE_CHANGE),
-            Map.entry("Poisoned", EventType.POISON_CHANGE),
-            Map.entry("CounterAdded", EventType.COUNTER_CHANGE),
-            Map.entry("CounterAddedOnce", EventType.COUNTER_CHANGE),
-            Map.entry("CounterRemoved", EventType.COUNTER_CHANGE),
-            Map.entry("Taps", EventType.TAPPED),
-            Map.entry("TapsForMana", EventType.MANA_PRODUCED),
-            Map.entry("Untaps", EventType.UNTAPPED),
-            Map.entry("Attached", EventType.ATTACHED),
-            Map.entry("Unattach", EventType.UNATTACHED),
-            Map.entry("SpellCast", EventType.SPELL_CAST),
-            Map.entry("SpellAbilityCast", EventType.SPELL_CAST),
-            Map.entry("Countered", EventType.SPELL_COUNTERED),
-            Map.entry("TokenCreated", EventType.TOKEN_CREATED),
-            Map.entry("TokenCreatedOnce", EventType.TOKEN_CREATED),
-            Map.entry("Attackers", EventType.ATTACKERS_DECLARED),
-            Map.entry("AttackersDeclared", EventType.ATTACKERS_DECLARED),
+    static final Map<String, Reading> TRIGGER_MODES = Map.ofEntries(
+            Map.entry("ChangesZone", Reading.of(EventType.ZONE_CHANGE)),
+            Map.entry("Destroyed", Reading.of(EventType.DESTROYED)),
+            Map.entry("Sacrificed", Reading.of(EventType.SACRIFICED)),
+            Map.entry("DamageDone", Reading.of(EventType.DAMAGE_DEALT)),
+            Map.entry("DamageDealtOnce", Reading.of(EventType.DAMAGE_DEALT)),
+            Map.entry("DamageAll", Reading.of(EventType.DAMAGE_DEALT)),
+            Map.entry("DamagePreventedOnce", Reading.of(EventType.DAMAGE_PREVENTED)),
+            // Drawn, Discarded, Milled and TokenCreated fire once per card;
+            // Drawn's Number and TokenCreated's Num are the turn's ordinals,
+            // not counts.
+            Map.entry("Drawn", Reading.of(EventType.CARD_DRAWN, Amount.ONE)),
+            Map.entry("Discarded", Reading.of(EventType.CARD_DISCARDED, Amount.ONE)),
+            Map.entry("Milled", Reading.of(EventType.CARD_MILLED, Amount.ONE)),
+            Map.entry("LifeGained", Reading.of(EventType.LIFE_CHANGE)),
+            Map.entry("LifeLost", Reading.loss(EventType.LIFE_CHANGE, Amount.NONE)),
+            Map.entry("PayLife", Reading.loss(EventType.LIFE_CHANGE, Amount.NONE)),
+            Map.entry("CounterAdded", Reading.of(EventType.COUNTER_CHANGE, Amount.ONE)),
+            Map.entry("CounterAddedOnce",
+                    Reading.of(EventType.COUNTER_CHANGE, Amount.key("CounterAmount"))),
+            Map.entry("CounterRemoved", Reading.loss(EventType.COUNTER_CHANGE, Amount.ONE)),
+            Map.entry("CounterRemovedOnce",
+                    Reading.loss(EventType.COUNTER_CHANGE, Amount.key("CounterAmount"))),
+            Map.entry("Taps", Reading.of(EventType.TAPPED)),
+            Map.entry("TapsForMana", Reading.of(EventType.MANA_PRODUCED)),
+            Map.entry("Untaps", Reading.of(EventType.UNTAPPED)),
+            Map.entry("Attached", Reading.of(EventType.ATTACHED)),
+            Map.entry("Unattached", Reading.of(EventType.UNATTACHED)),
+            Map.entry("SpellCast", Reading.of(EventType.SPELL_CAST)),
+            Map.entry("SpellAbilityCast", Reading.of(EventType.SPELL_CAST)),
+            Map.entry("Countered", Reading.of(EventType.SPELL_COUNTERED)),
+            Map.entry("TokenCreated", Reading.of(EventType.TOKEN_CREATED, Amount.ONE)),
+            Map.entry("TokenCreatedOnce",
+                    Reading.of(EventType.TOKEN_CREATED, Amount.sizeOf("Cards"))),
+            Map.entry("AttackersDeclared", Reading.of(EventType.ATTACKERS_DECLARED)),
             // Attacks is one creature being declared as an attacker, which is
             // exactly what attackers_declared names, and one of the heaviest
             // trait-derived modes. Under the generic type it would carry
             // nothing but its own name; as attackers_declared it carries the
             // defender.
-            Map.entry("Attacks", EventType.ATTACKERS_DECLARED),
-            Map.entry("Blocks", EventType.BLOCKERS_DECLARED),
+            Map.entry("Attacks", Reading.of(EventType.ATTACKERS_DECLARED)),
+            Map.entry("Blocks", Reading.of(EventType.BLOCKERS_DECLARED)),
             // Retargeted: the subject of an AttackerBlocked event is the
             // attacker, not the blocker, so blockers_declared would put the wrong
             // creature in the slot named "blocked". became_blocked is the type
             // whose subject is the attacker and whose param is the blockers.
-            Map.entry("AttackerBlocked", EventType.BECAME_BLOCKED),
-            Map.entry("AttackerBlockedByCreature", EventType.BECAME_BLOCKED),
-            Map.entry("TurnFaceUp", EventType.FACE_CHANGE),
-            Map.entry("Shuffled", EventType.LIBRARY_SHUFFLED),
-            Map.entry("Scry", EventType.CARD_LOOKED_AT),
-            Map.entry("Surveil", EventType.CARD_LOOKED_AT),
-            Map.entry("PhaseOut", EventType.PHASED),
-            Map.entry("PhaseIn", EventType.PHASED),
-            // ── the replacement side's own spellings ────────────────────
-            // ReplacementType names its modes differently from TriggerType,
-            // and the entries above follow the trigger vocabulary; a mode both
-            // enums share is listed there once. A replacement mode with no
-            // entry here takes the generic type and carries nothing but its
-            // mode -- and an event with no value in it cannot differ from
-            // itself, so the record reads as a rewrite of nothing however much
-            // the replacement changed: a rewrite that halved a draw would be
-            // dropped as an identity pair.
-            Map.entry("Moved", EventType.ZONE_CHANGE),
-            Map.entry("Destroy", EventType.DESTROYED),
-            Map.entry("Draw", EventType.CARD_DRAWN),
-            Map.entry("DrawCards", EventType.CARD_DRAWN),
-            Map.entry("Mill", EventType.CARD_MILLED),
-            Map.entry("GainLife", EventType.LIFE_CHANGE),
-            Map.entry("LifeReduced", EventType.LIFE_CHANGE),
-            Map.entry("AddCounter", EventType.COUNTER_CHANGE),
-            Map.entry("RemoveCounter", EventType.COUNTER_CHANGE),
-            Map.entry("CreateToken", EventType.TOKEN_CREATED),
-            Map.entry("Untap", EventType.UNTAPPED),
-            Map.entry("Tap", EventType.TAPPED),
-            Map.entry("DealtDamage", EventType.DAMAGE_DEALT),
-            Map.entry("Counter", EventType.SPELL_COUNTERED),
-            Map.entry("CopySpell", EventType.SPELL_COPIED),
-            Map.entry("ProduceMana", EventType.MANA_PRODUCED),
-            Map.entry("LoseMana", EventType.MANA_LOST),
-            Map.entry("Transform", EventType.FACE_CHANGE),
-            Map.entry("DeclareBlocker", EventType.BLOCKERS_DECLARED),
-            Map.entry("RollDice", EventType.DICE_ROLLED),
-            Map.entry("GameWin", EventType.PLAYER_WON),
-            Map.entry("GameLoss", EventType.PLAYER_LOST));
+            Map.entry("AttackerBlocked", Reading.of(EventType.BECAME_BLOCKED)),
+            Map.entry("AttackerBlockedByCreature", Reading.of(EventType.BECAME_BLOCKED)),
+            Map.entry("TurnFaceUp", Reading.of(EventType.FACE_CHANGE)),
+            Map.entry("Transformed", Reading.of(EventType.FACE_CHANGE)),
+            Map.entry("Shuffled", Reading.of(EventType.LIBRARY_SHUFFLED)),
+            Map.entry("Scry", Reading.of(EventType.CARD_LOOKED_AT)),
+            Map.entry("Surveil", Reading.of(EventType.CARD_LOOKED_AT)),
+            Map.entry("PhaseOut", Reading.of(EventType.PHASED)),
+            Map.entry("PhaseIn", Reading.of(EventType.PHASED)));
+
+    /**
+     * Forge's replacement modes ({@code ReplacementType} names) that have a
+     * counterpart in the event vocabulary, read the same way.
+     *
+     * <p>A replacement mode with no row takes the generic type and carries
+     * nothing but its mode -- and an event with no value in it cannot differ
+     * from itself, so the record reads as a rewrite of nothing however much
+     * the replacement changed: a rewrite that halved a draw would be dropped
+     * as an identity pair.
+     */
+    static final Map<String, Reading> REPLACEMENT_MODES = Map.ofEntries(
+            Map.entry("Moved", Reading.of(EventType.ZONE_CHANGE)),
+            Map.entry("Destroy", Reading.of(EventType.DESTROYED)),
+            Map.entry("DamageDone", Reading.of(EventType.DAMAGE_DEALT)),
+            Map.entry("DealtDamage", Reading.of(EventType.DAMAGE_DEALT)),
+            Map.entry("Draw", Reading.of(EventType.CARD_DRAWN, Amount.ONE)),
+            Map.entry("DrawCards", Reading.of(EventType.CARD_DRAWN, Amount.key("Number"))),
+            Map.entry("Mill", Reading.of(EventType.CARD_MILLED, Amount.key("Number"))),
+            Map.entry("GainLife", Reading.of(EventType.LIFE_CHANGE)),
+            Map.entry("LifeReduced", Reading.loss(EventType.LIFE_CHANGE, Amount.NONE)),
+            Map.entry("PayLife", Reading.loss(EventType.LIFE_CHANGE, Amount.NONE)),
+            Map.entry("AddCounter", Reading.of(EventType.COUNTER_CHANGE)),
+            Map.entry("RemoveCounter", new Reading(
+                    EventType.COUNTER_CHANGE, RunParamNormalizer::removalOf, 0)),
+            Map.entry("CreateToken", Reading.of(EventType.TOKEN_CREATED)),
+            Map.entry("Untap", Reading.of(EventType.UNTAPPED)),
+            Map.entry("Tap", Reading.of(EventType.TAPPED)),
+            Map.entry("Counter", Reading.of(EventType.SPELL_COUNTERED)),
+            Map.entry("CopySpell", Reading.of(EventType.SPELL_COPIED, Amount.key("Amount"))),
+            Map.entry("ProduceMana", Reading.of(EventType.MANA_PRODUCED)),
+            Map.entry("LoseMana", Reading.of(EventType.MANA_LOST)),
+            Map.entry("Attached", Reading.of(EventType.ATTACHED)),
+            Map.entry("Transform", Reading.of(EventType.FACE_CHANGE)),
+            Map.entry("TurnFaceUp", Reading.of(EventType.FACE_CHANGE)),
+            Map.entry("DeclareBlocker", Reading.of(EventType.BLOCKERS_DECLARED)),
+            Map.entry("RollDice", Reading.of(EventType.DICE_ROLLED)),
+            Map.entry("GameWin", Reading.of(EventType.PLAYER_WON)),
+            Map.entry("GameLoss", Reading.of(EventType.PLAYER_LOST)));
 
     /**
      * Forge's produced-mana string as counts per colour letter.
