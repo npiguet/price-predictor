@@ -28,10 +28,11 @@ import java.util.Map;
  * cast" mana trigger — is not a mana ability's: its {@code mana_produced}
  * goes into that resolution's effect half, and no mana record is written
  * (C3). A triggered mana ability (Wild Growth's "whenever enchanted land is
- * tapped for mana") is never paid for, so it has no board of its own: its
- * mana joins the record of the mana ability whose activation set it off,
- * which is still being built when it arrives, so the land's record reads
- * "tapping it made {G}{G}"; with no such record, its mana reaches none.
+ * tapped for mana") whose payment the hook reports is an activation of its
+ * own: its mana is a mana record keyed to its own line (the Aura's), read
+ * before its own payment. One whose payment the hook does not report joins
+ * the record of the activation that set it off, while that record is still
+ * being built; with no such record, its mana reaches none.
  *
  * <p>A mana ability's own other effects are its record's too, taken from the
  * bracket ({@link BusBracketCollector.EventTap}) rather than dropped as a

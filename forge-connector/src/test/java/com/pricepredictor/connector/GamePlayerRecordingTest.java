@@ -246,6 +246,35 @@ class GamePlayerRecordingTest {
         assertTrue(isMarker(next.get(next.size() - 1)), "the next game records to its marker");
     }
 
+    /**
+     * An Error in a random-seat match is never caught and ends the worker;
+     * the match is named a random-seat one on stderr first, in the worker
+     * loop's own words.
+     */
+    @Test
+    void aRandomSeatMatchEndedByAnErrorSaysItWasOne() {
+        RecordShardWriter writer = writer();
+        CollectionCaps randomSeat = TestCaps.caps().interventions(0).probes(0)
+                .randomSeat(1.0, 0.5).build();
+        GamePlayer player = new GamePlayer(1, writer, randomSeat, WorkerStop.NEVER,
+                (match, game) -> {
+                    throw new StackOverflowError("deep");
+                });
+        java.io.PrintStream err = System.err;
+        ByteArrayOutputStream printed = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(printed, true, StandardCharsets.UTF_8));
+        try {
+            assertThrows(StackOverflowError.class, () -> player.playMatch(burn(), burn()));
+        } finally {
+            System.setErr(err);
+            writer.close();
+        }
+
+        assertTrue(printed.toString(StandardCharsets.UTF_8).contains(
+                "Error generating match: [random-seat match] java.lang.StackOverflowError: deep"),
+                printed.toString(StandardCharsets.UTF_8));
+    }
+
     @Test
     void aRandomSeatMatchThatThrowsSaysItWasOne() {
         RecordShardWriter writer = writer();

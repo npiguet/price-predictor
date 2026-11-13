@@ -220,20 +220,20 @@ public class GamePlayer {
         java.util.Random matchRandom =
                 new java.util.Random(GameRecording.scramble(startMillis));
         Optional<Side> randomSeat = drawRandomSeat(caps, matchRandom);
-        var players = registeredPlayers(
-                deckA, deckB, randomSeat, caps.randomSeatProbability(), matchRandom);
-
-        var rules = new GameRules(GameType.Sealed);
-        rules.setGamesPerMatch(gamesPerMatch);
-
-        var match = new Match(rules, players, "sealed-match");
-
         List<GameOutcome> outcomes = new ArrayList<>();
         // Seeds each game's recording, so a worker's games sample
         // independently of one another rather than all alike.
         long gameSeed = startMillis;
 
+        // From the seat's draw on, whatever fails is a random-seat match's
+        // failure when the match has one: setting the match up, playing a
+        // game, closing its recording.
         try {
+            var players = registeredPlayers(
+                    deckA, deckB, randomSeat, caps.randomSeatProbability(), matchRandom);
+            var rules = new GameRules(GameType.Sealed);
+            rules.setGamesPerMatch(gamesPerMatch);
+            var match = new Match(rules, players, "sealed-match");
             while (!match.isMatchOver()) {
                 playGame(match, gameSeed++, deckRules).ifPresent(outcomes::add);
                 // At the game end, its records and marker written: the match
@@ -250,6 +250,15 @@ public class GamePlayer {
                 throw new RandomSeatMatchFailed(failure);
             }
             throw failure;
+        } catch (Error error) {
+            // An Error is never caught: it ends the worker. Named here first,
+            // in the worker loop's own words, so a random-seat match it cut is
+            // counted as one.
+            if (randomSeat.isPresent()) {
+                System.err.println("Error generating match: " + RandomSeatMatchFailed.MARK + error);
+                System.err.flush();
+            }
+            throw error;
         }
 
         int durationSeconds = (int) ((System.currentTimeMillis() - startMillis) / 1000);

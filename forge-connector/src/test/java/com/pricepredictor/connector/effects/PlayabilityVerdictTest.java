@@ -198,10 +198,13 @@ class PlayabilityVerdictTest {
     /**
      * Split second leaves mana abilities and special actions legal (702.61b,
      * 116.2): a land play, foretelling, plotting and suspending a card are
-     * never refused for it, whatever else they fail.
+     * never refused for it, whatever else they fail. A pin: the land play
+     * takes its own verdict path and the other three are Forge's
+     * {@code AbilityStatic}, so the check exempted them before
+     * {@link PlayabilityChecks#ignoresSplitSecond} named the rule.
      */
     @Test
-    void aSplitSecondSpellOnTheStackRefusesNoSpecialAction() {
+    void pinASplitSecondSpellOnTheStackRefusesNoSpecialAction() {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player a = game.getPlayers().get(0);
         Player b = game.getPlayers().get(1);

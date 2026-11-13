@@ -271,15 +271,8 @@ public class MatchWorkerMain {
         WorkerLoop.Ending ending;
         try {
             ending = WorkerLoop.runUntilBroken(
-                    () -> {
-                        try {
-                            recordMatch(generator.generateMatch(), sealedCorpus, progress);
-                        } finally {
-                            // A match that threw counts its hooks' failures too.
-                            hookFailureReport.afterMatch();
-                        }
-                        return WorkerLoop.Outcome.COMPLETED;
-                    },
+                    () -> oneMatch(generator::generateMatch, sealedCorpus, progress,
+                            hookFailureReport),
                     matches, stop);
         } finally {
             // Whatever ended the loop, the counts so far are printed: a
@@ -287,6 +280,22 @@ public class MatchWorkerMain {
             hookFailureReport.afterMatch();
         }
         throw stopGracefully(ending, matches, effectRecords);
+    }
+
+    /**
+     * One match: played, recorded, and the hooks' failure counts reported
+     * however it ended, a match that threw included.
+     */
+    static WorkerLoop.Outcome oneMatch(
+            java.util.function.Supplier<MatchGenerationResult> match,
+            Optional<SealedCorpus> sealedCorpus, Optional<ProgressWriter> progress,
+            HookFailureReport report) {
+        try {
+            recordMatch(match.get(), sealedCorpus, progress);
+        } finally {
+            report.afterMatch();
+        }
+        return WorkerLoop.Outcome.COMPLETED;
     }
 
     /**
