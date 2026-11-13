@@ -317,6 +317,9 @@ class SidecarCache:
         #: ``script_file -> times asked`` for keys :meth:`line_or_none` read as
         #: no line although the sidecar exists and does not describe them.
         self.undescribed: dict[str, int] = {}
+        #: ``tree -> times asked`` for keys :meth:`line_or_none` read as no
+        #: line because this run configured no root for their source tree.
+        self.unconfigured: dict[str, int] = {}
 
     def path_for(self, script_file: str) -> Path:
         tree, relative = split_script_file(script_file)
@@ -357,11 +360,19 @@ class SidecarCache:
 
         For readers that read keys off a board rather than train on them. A
         key the sidecar does not describe, which :meth:`line_for` raises on, is
-        tallied in :attr:`undescribed`.
+        tallied in :attr:`undescribed`; one of a source tree this run has no
+        root for in :attr:`unconfigured`, the first of each tree logged.
         """
         try:
             return self.line_for(key)
         except UnconfiguredTree:
+            tree, _ = split_script_file(key.script_file)
+            if tree not in self.unconfigured:
+                logger.warning(
+                    "keys under source tree %r read as no line: this run configured "
+                    "no root for it (known trees: %s); later ones only counted",
+                    tree, sorted(self._roots))
+            self.unconfigured[tree] = self.unconfigured.get(tree, 0) + 1
             return None
         except KeyError:
             self.undescribed[key.script_file] = (

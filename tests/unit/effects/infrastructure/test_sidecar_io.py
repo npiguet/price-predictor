@@ -243,6 +243,19 @@ class TestSidecarCache:
         ):
             assert cache.line_or_none(key) is None
 
+    def test_line_or_none_counts_the_keys_of_a_tree_the_run_has_no_root_for(
+            self, tmp_path, caplog):
+        """Read as no line, yet never hidden: counted by tree, the first
+        reported, since a run missing a tree's root reads all its texts as none."""
+        cache = self._write_trees(tmp_path)
+        key = ProvenanceKey("variant-scripts/shock_variant.txt", 0, "spell", 0)
+        with caplog.at_level("WARNING"):
+            for _ in range(3):
+                assert cache.line_or_none(key) is None
+        assert cache.unconfigured == {"variant-scripts": 3}
+        warned = [r.getMessage() for r in caplog.records if "variant-scripts" in r.getMessage()]
+        assert len(warned) == 1
+
     def test_line_or_none_counts_the_keys_a_sidecar_does_not_describe(self, tmp_path):
         """That case is the join's fail-loudly one: tolerated here, never hidden."""
         cache = self._write_trees(tmp_path)
