@@ -67,9 +67,13 @@ class RecordCharacterizationTest {
     // ── resolution ──────────────────────────────────────────────────────
 
     /**
-     * Both moments, through the engine: a two-colour spell that kills its
-     * target, a spell that fizzles, a tap ability, and an ability hosted on an
-     * engine-built effect card, which keys to the line that made the effect.
+     * Both moments, through the engine with every hook installed, as a
+     * patched worker records them: a two-colour spell that kills its target,
+     * a spell that fizzles (its targets as cast), a tap ability, an ability
+     * hosted on an engine-built effect card, which keys to the line that made
+     * the effect, a "can't block" pump (a hidden keyword), Arc Trail losing
+     * one of its two targets (partially fizzled, its targets as cast apart
+     * from those left) and Cryptolith Rite entering (an ability granted).
      */
     @Test
     void resolutionRecords() throws Throwable {
@@ -82,10 +86,12 @@ class RecordCharacterizationTest {
         pyromancer.setSickness(false);
         Card bears = board.battlefield("Grizzly Bears", opponent);
         Card giant = board.battlefield("Hill Giant", opponent);
+        Card elves = board.battlefield("Llanowar Elves", opponent);
+        Card ogre = board.battlefield("Gray Ogre", opponent);
+        Card wall = board.battlefield("Wall of Wood", you);
 
-        List<String> records = ShardRun.records(tempDir, board.game, CAPS, (bracket, collectors) -> {
-            board.game.subscribeToEvents(bracket);
-
+        RecordShardWriter writer = ShardRun.recordedWithClauseHook(tempDir, board.game, CAPS,
+                "for the resolution hook's targets as cast", () -> {
             SpellAbility helix = board.spell(
                     board.game.getAction().moveToStack(board.card("Lightning Helix", you), null),
                     you);
@@ -114,8 +120,30 @@ class RecordCharacterizationTest {
             gain.setActivatingPlayer(you);
             board.castAndResolve(gain);
 
+            board.cast(board.card("Abandon the Post", you), you, elves);
+            board.game.getStack().resolveStack();
+            board.game.getAction().checkStateEffects(false);
+
+            SpellAbility arcTrail = board.spell(
+                    board.game.getAction().moveToStack(board.card("Arc Trail", you), null), you);
+            arcTrail.resetTargets();
+            arcTrail.getTargets().add(ogre);
+            arcTrail.getSubAbility().getTargets().add(opponent);
+            board.game.getStack().add(arcTrail);
+            board.game.getAction().exile(ogre, null, null);
+            board.game.getStack().resolveStack();
+            board.game.getAction().checkStateEffects(false);
+
+            SpellAbility rite = board.spell(
+                    board.game.getAction().moveToStack(board.card("Cryptolith Rite", you), null), you);
+            board.castAndResolve(rite);
+
             board.nextStep();
         });
+        List<String> records = ShardRun.readShard(writer.path()).stream()
+                .filter(record -> "resolution".equals(RecordLines.parse(record).get("kind")))
+                .toList();
+        assertTrue(wall.isInPlay());
 
         Characterization.assertMatches(
                 "record-resolution.jsonl", Characterization.recordLines(records));
@@ -239,6 +267,32 @@ class RecordCharacterizationTest {
                 "record-trigger.jsonl", Characterization.recordLines(records));
     }
 
+    /**
+     * Triggers the engine runs, with every hook installed: Exquisite Blood
+     * seeing an opponent lose 3 life (a loss written negative), Bloodcrazed
+     * Hoplite seeing a +1/+1 counter put on it, one per counter.
+     */
+    @Test
+    void playedTriggerRecords() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        board.battlefield("Exquisite Blood", board.you);
+        Card hoplite = board.battlefield("Bloodcrazed Hoplite", board.you);
+        board.game.getTriggerHandler().resetActiveTriggers();
+
+        List<String> records = ShardRun.readShard(ShardRun.recordedWithClauseHook(
+                tempDir, board.game, CAPS, "for the trigger hook", () -> {
+                    board.opponent.loseLife(3, false, false, null);
+                    forge.game.GameEntityCounterTable table = new forge.game.GameEntityCounterTable();
+                    hoplite.addCounter(forge.game.card.CounterType.getType("P1P1"), 1, board.you, table);
+                    table.replaceCounterEffect(board.game, null);
+                }).path()).stream()
+                .filter(record -> "trigger".equals(RecordLines.parse(record).get("kind")))
+                .toList();
+
+        Characterization.assertMatches(
+                "record-trigger-played.jsonl", Characterization.recordLines(records));
+    }
+
     // ── continuous ──────────────────────────────────────────────────────
 
     /** One record per static: a P/T boost, a granted keyword, a type and a colour change. */
@@ -259,6 +313,31 @@ class RecordCharacterizationTest {
 
         Characterization.assertMatches(
                 "record-continuous.jsonl", Characterization.recordLines(records));
+    }
+
+    /**
+     * Statics that change abilities and hidden keywords: Humility (every
+     * keyword and ability of Prodigal Sorcerer taken away), Cryptolith Rite
+     * (an ability granted) and Errantry (a hidden keyword granted).
+     */
+    @Test
+    void continuousRecordsOfAbilities() throws Throwable {
+        Assumptions.assumeTrue(ContinuousChannel.CAN_SUPPRESS,
+                "../forge cannot remove one static's contributions");
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        board.battlefield("Cryptolith Rite", board.you);
+        Card bears = board.battlefield("Grizzly Bears", board.you);
+        Card errantry = board.battlefield("Errantry", board.you);
+        errantry.attachToEntity(bears, null);
+        board.battlefield("Humility", board.opponent);
+        board.battlefield("Prodigal Sorcerer", board.opponent);
+        board.game.getAction().checkStaticAbilities();
+
+        List<String> records = ShardRun.records(tempDir, board.game, CAPS,
+                (bracket, collectors) -> collectors.continuous().collect());
+
+        Characterization.assertMatches(
+                "record-continuous-abilities.jsonl", Characterization.recordLines(records));
     }
 
     // ── playability ─────────────────────────────────────────────────────
