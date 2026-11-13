@@ -224,10 +224,27 @@ final class EntityJson {
         return state == null || state == CardStateName.Original ? 0 : 1;
     }
 
-    /** What this permanent is copying, or null when it is itself. */
+    /**
+     * What this card is a copy of, or null when it is itself: the permanent
+     * or spell a copy was made from ({@code getCopiedPermanent}), else the
+     * card a copy effect (a Clone's) copied, its latest clone state's
+     * origin, as the {@code copy_of} link names them. Not {@code
+     * getCloner()}, which is the copy effect's host: the Clone itself.
+     */
     private static String copySourceOf(Card card) {
         Card copied = card.getCopiedPermanent();
-        return copied != null ? Refs.of(copied) : Refs.ofNullable(card.getCloner());
+        if (copied != null && copied.getId() != card.getId()) {
+            return Refs.of(copied);
+        }
+        if (card.isCloned() && card.getCloneStates()
+                instanceof java.util.NavigableMap<Long, forge.game.card.CardCloneStates> states
+                && !states.isEmpty()) {
+            Card origin = states.lastEntry().getValue().getOrigin();
+            if (origin != null && origin.getId() != card.getId()) {
+                return Refs.of(origin);
+            }
+        }
+        return null;
     }
 
     /**

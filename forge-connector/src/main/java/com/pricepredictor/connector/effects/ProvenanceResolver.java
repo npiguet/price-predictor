@@ -295,8 +295,16 @@ public final class ProvenanceResolver {
         if (host == null) return null;
         if (isScriptless(host)) return null;
         if (trait.getKeyword() != null) {
-            return keyAt(state, TraitKind.KEYWORD,
-                    FaceOrder.keywordIndex(state, trait.getKeyword()));
+            return keyOfPrinted(state, trait.getKeyword(), 0);
+        }
+        forge.game.card.CardCloneStates cloned = copyStatesOf(state);
+        if (cloned != null) {
+            // A trait the copy itself holds, not one copied from what it
+            // copies (a copied trait keeps the original's state): the copy
+            // effect added it (AddTriggers$, AddAbilities$), so it is the
+            // line that made the copy's.
+            return cloned.getSource() == null || cloned.getSource() == trait
+                    ? null : of(cloned.getSource());
         }
         TraitKind kind = TraitKind.of(trait);
         if (kind == null) return null;
@@ -317,11 +325,56 @@ public final class ProvenanceResolver {
         if (state == null || keyword == null) return null;
         Card host = state.getCard();
         if (host != null && !isScriptless(host)) {
-            ProvenanceKey printed = keyAt(state, TraitKind.KEYWORD,
-                    FaceOrder.keywordIndex(state, keyword));
+            ProvenanceKey printed = keyOfPrinted(state, keyword, 0);
             if (printed != null) return printed;
         }
         return keyword.getStatic() == null ? null : of(keyword.getStatic());
+    }
+
+    /** How many copies of copies are followed before giving up. */
+    private static final int MAX_COPY_DEPTH = 8;
+
+    /**
+     * The keyword line {@code state} prints for {@code keyword}, or null.
+     *
+     * <p>A copy's state (a Clone's, a Phantasmal Image's) is read through
+     * what it copies: its keywords are the original's, keyed into the
+     * original's script file; one the copy effect added has the line that
+     * made the copy, and is no keyword line of the copier's own file.
+     */
+    private static ProvenanceKey keyOfPrinted(CardState state, KeywordInterface keyword, int depth) {
+        forge.game.card.CardCloneStates cloned = copyStatesOf(state);
+        if (cloned == null) {
+            return keyAt(state, TraitKind.KEYWORD, FaceOrder.keywordIndex(state, keyword));
+        }
+        Card origin = cloned.getOrigin();
+        CardState original = origin == null ? null : origin.getState(state.getStateName());
+        if (original != null && original != state && depth < MAX_COPY_DEPTH
+                && FaceOrder.keywordIndex(original, keyword) >= 0) {
+            return keyOfPrinted(original, keyword, depth + 1);
+        }
+        return cloned.getSource() == null ? null : of(cloned.getSource());
+    }
+
+    /**
+     * The copy effect's states {@code state} is one of: its card's latest
+     * clone states when the card is a copy ({@code Card.isCloned}, which a
+     * mutation or a prototype is not), else null.
+     */
+    static forge.game.card.CardCloneStates copyStatesOf(CardState state) {
+        Card host = state == null ? null : state.getCard();
+        if (host == null || !host.isCloned()
+                || !(host.getCloneStates() instanceof java.util.NavigableMap<Long,
+                        forge.game.card.CardCloneStates> states) || states.isEmpty()) {
+            return null;
+        }
+        forge.game.card.CardCloneStates latest = states.lastEntry().getValue();
+        for (CardState each : latest.values()) {
+            if (each == state) {
+                return latest;
+            }
+        }
+        return null;
     }
 
     /**

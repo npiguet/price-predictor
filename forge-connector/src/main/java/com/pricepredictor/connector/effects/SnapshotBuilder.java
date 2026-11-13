@@ -337,7 +337,10 @@ public final class SnapshotBuilder {
                 entities.add(game.getCardState(card, card));
             }
         }
-        entities.addAll(game.getCardsIn(EnumSet.of(ZoneType.Battlefield, ZoneType.Command)));
+        // Phased-out permanents too, which getCardsIn leaves out: they are
+        // still on the battlefield (702.26d), and a phasing record names them.
+        entities.addAll(game.getCardsIncludePhasingIn(ZoneType.Battlefield));
+        entities.addAll(game.getCardsIn(ZoneType.Command));
         entities.addAll(game.getCardsIn(ZoneType.Stack));
         entities.addAll(game.getCardsIn(EnumSet.of(ZoneType.Hand, ZoneType.Graveyard)));
         return entities;

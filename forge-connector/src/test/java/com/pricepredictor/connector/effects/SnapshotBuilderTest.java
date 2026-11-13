@@ -54,7 +54,7 @@ class SnapshotBuilderTest {
     @Test
     void refsRenderTheirFullShapeWithNoActingLine() {
         assertEquals(
-                "{\"targets\":[],\"source\":null,\"modes\":[],\"x\":null,"
+                "{\"targets\":[],\"targets_at_cast\":null,\"source\":null,\"modes\":[],\"x\":null,"
                         + "\"choices\":{},\"random\":null}",
                 RefsJson.render(null));
     }
@@ -308,7 +308,8 @@ class SnapshotBuilderTest {
         @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
         @org.junit.jupiter.params.provider.CsvSource({
                 "Ravenous Chupacabra, cardsfolder/r/ravenous_chupacabra.txt, trigger",
-                "Dryad Militant, cardsfolder/d/dryad_militant.txt, replacement"})
+                "Dryad Militant, cardsfolder/d/dryad_militant.txt, replacement",
+                "Serra Angel, cardsfolder/s/serra_angel.txt, keyword"})
         void aClonesLinesKeyToWhatItCopied(String original, String script, String kind) {
             CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
             board.battlefield(original, board.opponent);
@@ -328,6 +329,60 @@ class SnapshotBuilderTest {
                     assertEquals(script, RecordLines.asMap(key).get("script_file"), lines.toString());
                 }
             }
+        }
+
+        /**
+         * A Clone's {@code copy_source} is the creature it copied, never the
+         * Clone itself (C2 #11, V2 #18).
+         */
+        @Test
+        void aClonesCopySourceIsWhatItCopied() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card angel = board.battlefield("Serra Angel", board.opponent);
+            SpellAbility clone = board.spell(board.hand("Clone", board.you), board.you);
+            board.game.getStack().addAndUnfreeze(clone);
+            board.game.getStack().resolveStack();
+            Card copy = board.game.getCardsIn(ZoneType.Battlefield).stream()
+                    .filter(card -> card.getController() == board.you).findFirst().orElseThrow();
+
+            assertEquals(Refs.of(angel), entityOf(board, copy).get("copy_source"));
+            assertEquals(null, entityOf(board, angel).get("copy_source"));
+        }
+
+        /**
+         * Phantasmal Image's copy keeps the copied creature's lines keyed to
+         * it, and the trigger the copy effect adds ({@code AddTriggers$}) keys
+         * to the Image's own line that made the copy, never to a trigger
+         * index of the Image's file, which prints none (X1 #6, C2 #2).
+         */
+        @Test
+        void aCopyEffectsAddedTriggerKeysToTheLineThatCopied() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            board.battlefield("Serra Angel", board.opponent);
+            SpellAbility image = board.spell(board.hand("Phantasmal Image", board.you), board.you);
+            board.game.getStack().addAndUnfreeze(image);
+            board.game.getStack().resolveStack();
+            Card copy = board.game.getCardsIn(ZoneType.Battlefield).stream()
+                    .filter(card -> card.getController() == board.you).findFirst().orElseThrow();
+            assertEquals("Serra Angel", copy.getName(), "the Image entered as a copy");
+
+            List<Map<String, Object>> lines = linesOf(board, copy);
+
+            List<Map<String, Object>> keys = new java.util.ArrayList<>();
+            for (Map<String, Object> line : lines) {
+                for (Object key : (List<?>) line.get("keys")) {
+                    keys.add(RecordLines.asMap(key));
+                }
+            }
+            assertTrue(keys.stream().anyMatch(key -> "cardsfolder/s/serra_angel.txt".equals(
+                    key.get("script_file")) && "keyword".equals(key.get("trait_kind"))), lines.toString());
+            assertTrue(lines.stream().anyMatch(line -> "trigger".equals(line.get("kind"))
+                    && ((List<?>) line.get("keys")).stream().map(RecordLines::asMap).anyMatch(key ->
+                            "cardsfolder/p/phantasmal_image.txt".equals(key.get("script_file")))),
+                    "the added trigger keys to the Image: " + lines);
+            assertTrue(keys.stream().noneMatch(key -> "cardsfolder/p/phantasmal_image.txt".equals(
+                    key.get("script_file")) && "trigger".equals(key.get("trait_kind"))),
+                    "no trigger index of the Image's file: " + lines);
         }
 
         /**
@@ -702,6 +757,24 @@ class SnapshotBuilderTest {
     @Nested
     @ExtendWith(ForgeExtension.class)
     class CardFactsOfASlot {
+
+        /**
+         * A phased-out permanent is still on the battlefield and in the
+         * snapshot, marked phased out (C2 #12, V2 #18).
+         */
+        @Test
+        void aPhasedOutPermanentIsAnEntity() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card bears = board.battlefield("Grizzly Bears", board.you);
+            bears.phase(false);
+            assertTrue(bears.isPhasedOut());
+
+            Map<String, Object> entity = entitiesIn(new SnapshotBuilder(board.game).ofBoard().render())
+                    .stream().filter(e -> Refs.of(bears).equals(e.get("id")))
+                    .findFirst().orElseThrow(() -> new AssertionError("no phased-out bears"));
+            assertEquals(List.of("phased_out"), entity.get("designations"));
+        }
+
 
         @Test
         void faceStateNamesTheFaceUp() {
