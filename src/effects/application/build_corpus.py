@@ -12,6 +12,7 @@ and ``rules/scenarios/`` are read once, here (FR-060a).
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import logging
 import shutil
@@ -692,7 +693,7 @@ def build(config: BuildCorpusConfig) -> int:
         return _verify(config, store)
 
     _require_generation(config.records_dir)
-    rules = RuleCatalogue.read(config.rules_dir)
+    rules = _read_rules(config.rules_dir)
     roots = config.source_trees.sidecar_roots()
     trees = _converted_trees(config, roots)
     held_out = _select_holdout(config, trees)
@@ -704,17 +705,22 @@ def build(config: BuildCorpusConfig) -> int:
         catalogue=rules.scenarios,
         rule_outputs={rule: tuple(entry.outputs) for rule, entry in rules.heads.items()},
     )
-    survey = _survey(config, read, rules)
+    with _unreadable_shards("nothing under --output was touched"):
+        survey = _survey(config, read, rules)
     decisions = _decide_or_refuse(config, survey, trees, surface, held_out, rules)
+    _warn_on_resized_shards(config.records_dir, survey)
 
     # Before the first output shard, and only on a real build: a rebuild
     # replaces the dataset rather than layering over it (FR-144).
     store.clear_outputs()
-    written = run_write_pass(
-        decisions.write_tasks(survey),
-        config=WriteConfig(read=read, plan=decisions.write_plan(store)),
-        workers=config.workers,
-    )
+    with _unreadable_shards(
+            "the shard changed after the survey read it whole; the dataset under "
+            "--output was already cleared (its manifest is manifest.previous.json)"):
+        written = run_write_pass(
+            decisions.write_tasks(survey),
+            config=WriteConfig(read=read, plan=decisions.write_plan(store)),
+            workers=config.workers,
+        )
     report_write_pass(survey, written)
     _repack_outputs(store, written, shard_records=config.shard_records, seed=config.seed)
     _write_validation_samples(config, store, WorkerContext(read))
@@ -822,10 +828,58 @@ def _require_generation(records_dir: Path) -> None:
     """Gen-3 only, before any record is read (FR-018, FR-020)."""
     from effects.infrastructure.shard_io import iter_shards, require_generation
 
+    with _unreadable_shards("nothing under --output was touched"):
+        try:
+            require_generation(iter_shards(records_dir), ShardGeneration.GEN_3)
+        except (MixedGenerationsError, UnacceptedGenerationError) as exc:
+            raise BuildCorpusError(str(exc)) from exc
+
+
+@contextlib.contextmanager
+def _unreadable_shards(consequence: str) -> Iterator[None]:
+    """A shard that cannot be read whole (a corrupt gzip member before the
+    last, a line that does not decode, a ``generation`` naming none) makes the
+    dataset unusable: the build stops with exit 1, naming the shard and line
+    the error names, and saying what became of ``--output``."""
+    from effects.domain.shard_generation import UnknownGenerationError
+    from effects.infrastructure.shard_io import CorruptShardError, RecordDecodeError
+
     try:
-        require_generation(iter_shards(records_dir), ShardGeneration.GEN_3)
-    except (MixedGenerationsError, UnacceptedGenerationError) as exc:
-        raise BuildCorpusError(str(exc)) from exc
+        yield
+    except (CorruptShardError, RecordDecodeError, UnknownGenerationError) as exc:
+        raise BuildCorpusError(f"a raw shard cannot be read: {exc}; {consequence}.") from exc
+
+
+def _read_rules(rules_dir: Path) -> RuleCatalogue:
+    """The rules catalogue, refused when it holds no scenario or no heads line:
+    a build over it would tag and budget nothing and fail only at the
+    precision exit, after replacing the dataset (FR-060a)."""
+    rules = RuleCatalogue.read(rules_dir)
+    if not rules.scenarios.scenarios or not rules.heads:
+        raise BuildCorpusError(
+            f"the rules catalogue under {Path(rules_dir).resolve()} holds "
+            f"{len(rules.scenarios.scenarios)} scenario(s) and {len(rules.heads)} heads "
+            "line(s): a build reads rules/scenarios/*.json and rules/heads/*.jsonl, "
+            "relative to the working directory, and tags and budgets nothing without "
+            "them. Run from the repository root."
+        )
+    return rules
+
+
+def _warn_on_resized_shards(records_dir: Path, survey: Survey) -> None:
+    """Shards whose size moved since the survey read them, counted and named:
+    the write pass reads the grown part too, and drops any game the survey
+    never saw (``dropped-unsurveyed``)."""
+    def size(shard) -> int | None:
+        path = Path(records_dir) / shard.name
+        return path.stat().st_size if path.exists() else None
+
+    moved = [shard.name for shard in survey.shards if size(shard) != shard.size]
+    if moved:
+        logger.warning(
+            "%d raw shard(s) changed size since the survey read them (a collection "
+            "still writing under --records-dir?), e.g. %s; records of games the "
+            "survey never saw are written to no stratum.", len(moved), ", ".join(moved[:5]))
 
 
 def _known_keywords(definitions: Path | None) -> frozenset[str]:

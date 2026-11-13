@@ -66,6 +66,7 @@ from effects.domain.protection_copies import (
 )
 from effects.domain.record_quality import QualityDefect, record_refusal
 from effects.domain.records import (
+    CollectionMode,
     EffectRecord,
     RecordKind,
     acting_keys,
@@ -321,6 +322,17 @@ class ShardSurvey:
     #: The closed lists' names (FR-052, FR-053), read off every kept record.
     subtypes: set[str] = field(default_factory=set)
     keywords: set[str] = field(default_factory=set)
+    #: ``(class, flag) -> kept records`` for the collection flags
+    #: (:data:`RECORD_FLAGS`): how the class's records were collected.
+    flags: Counter[tuple[str, str]] = field(default_factory=Counter)
+    #: What reading the shard met without stopping (``shard_io.DecodeTally``):
+    #: ``(member, repr of the value) -> times read`` for each value outside
+    #: the wire's closed lists, and each shard a damaged last member ended.
+    off_list: Counter[tuple[str, str]] = field(default_factory=Counter)
+    damaged_tails: list[str] = field(default_factory=list)
+    #: ``source tree -> keys`` read as no line for want of the tree's root
+    #: (``SidecarCache.unconfigured``).
+    unconfigured: Counter[str] = field(default_factory=Counter)
 
 
 @dataclass(frozen=True, slots=True)
@@ -368,6 +380,22 @@ class SurveyConfig:
     known_keywords: frozenset[str] = frozenset()
 
 
+#: The collection flags the manifest counts per class (``record_flags``).
+RECORD_FLAGS: tuple[str, ...] = ("fork", "interventional", "directed", "aimed", "degraded")
+
+
+def record_flags(record: EffectRecord) -> tuple[str, ...]:
+    """The collection flags ``record`` carries, of :data:`RECORD_FLAGS`."""
+    held = {
+        "fork": record.fork,
+        "interventional": record.interventional,
+        "directed": record.directed is not None,
+        "aimed": record.aimed_at is not None,
+        "degraded": record.mode is CollectionMode.DEGRADED,
+    }
+    return tuple(flag for flag in RECORD_FLAGS if held[flag])
+
+
 class SurveyWorker:
     """One process's survey side: the config, and the read context every shard
     it surveys shares. Built once per process by :func:`run_parallel`."""
@@ -377,13 +405,23 @@ class SurveyWorker:
         self.context = WorkerContext(config.read)
 
     def survey(self, shard: SourceShard) -> ShardSurvey:
-        """One shard's survey, its games split at the end of the shard."""
+        """One shard's survey, its games split at the end of the shard, with
+        what reading it met without stopping."""
+        from effects.infrastructure.shard_io import take_decode_tally
+
+        take_decode_tally()
+        unconfigured = Counter(self.context.sidecars.unconfigured)
         surveyor = _ShardSurveyor(self.config, self.context, ShardSurvey(
             shard=shard, supply=TrainingSupply(self.config.heap_cap),
         ))
         for record in self.context.records(shard):
             surveyor.observe(record)
-        return surveyor.finish()
+        out = surveyor.finish()
+        tally = take_decode_tally()
+        out.off_list.update(tally.off_list)
+        out.damaged_tails.extend(tally.damaged_tails)
+        out.unconfigured = Counter(self.context.sidecars.unconfigured) - unconfigured
+        return out
 
 
 class _Fate(StrEnum):
@@ -442,6 +480,7 @@ class _ShardSurveyor:
         if klass is None:
             return
         self.out.kept[klass] += 1
+        self.out.flags.update((str(klass), flag) for flag in record_flags(record))
         self.pending.append(self._kept(record, klass, found))
 
     def _note_game_properties(self, record: EffectRecord) -> None:

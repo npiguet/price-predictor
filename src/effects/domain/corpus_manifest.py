@@ -414,6 +414,39 @@ class CorpusManifest:
     halves: dict[str, dict[str, tuple[str, ...]]] = field(
         default_factory=dict, metadata=_gen1_implied(_nested_tuple_map),
     )
+    #: ``validation stratum -> class -> rule -> polarity -> RuleRow``: each
+    #: validation stratum's rule budgets, as ``rules`` holds the training
+    #: stratum's (FR-068a).
+    validation_rules: dict[str, dict[str, dict[str, dict[str, RuleRow]]]] = field(
+        default_factory=dict, metadata=_gen1_implied(
+            lambda values: {stratum: _rule_rows(rows) for stratum, rows in values.items()}),
+    )
+    #: ``class -> collection flag -> kept records`` over the records read
+    #: (``fork``, ``interventional``, ``directed``, ``aimed``, ``degraded``);
+    #: a flag no record of the class carries is left out.
+    record_flags: dict[str, dict[str, int]] = field(
+        default_factory=dict, metadata=_gen1_implied(_nested_int_map),
+    )
+    #: Placement's precision thresholds (research E5), config fields with no
+    #: flag: ``min_games_per_half``, ``max_item_error``, ``max_component_error``
+    #: (None where infinite).
+    placement_thresholds: dict[str, float | None] = field(
+        default_factory=dict, metadata=_gen1_implied(dict),
+    )
+    #: sha256 of the keyword-definition file the build read; "" without one.
+    keyword_definitions_digest: str = field(default="", metadata=_gen1_implied(str))
+    #: ``"<member> <repr of the value>" -> times read`` for every value of a
+    #: raw record outside the wire's closed lists (``shard_io.off_list_counts``).
+    decode_off_list: dict[str, int] = field(
+        default_factory=dict, metadata=_gen1_implied(_int_map),
+    )
+    #: Each raw shard whose damaged last gzip member ended its read.
+    damaged_tails: tuple[str, ...] = field(default=(), metadata=_gen1_implied(tuple))
+    #: ``source tree -> keys`` read as no line because the build configured no
+    #: root for the tree (``SidecarCache.unconfigured``).
+    unconfigured_trees: dict[str, int] = field(
+        default_factory=dict, metadata=_gen1_implied(_int_map),
+    )
 
     @property
     def budgeted_rules(self) -> frozenset[str]:
@@ -465,6 +498,12 @@ class CorpusManifest:
         data["rule_map"] = {
             rule: {"verdict": str(entry.verdict), "outputs": list(entry.outputs)}
             for rule, entry in self.rule_map.items()
+        }
+        data["validation_rules"] = {
+            stratum: {klass: {rule: {polarity: row.as_dict() for polarity, row in rows.items()}
+                              for rule, rows in by_rule.items()}
+                      for klass, by_rule in by_class.items()}
+            for stratum, by_class in self.validation_rules.items()
         }
         for name, default in _GEN1_DEFAULTS.items():
             if getattr(self, name) == default:

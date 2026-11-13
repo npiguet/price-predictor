@@ -240,7 +240,7 @@ def test_the_gen1_corpus_still_matches_the_digest_its_checkpoint_recorded():
 
 
 def test_gen2_fields_are_left_out_at_their_gen1_values(manifest_dict):
-    assert len(_GEN1_DEFAULTS) == 28
+    assert len(_GEN1_DEFAULTS) == 35
     for name in _GEN1_DEFAULTS:
         if name != "game_disjoint_target":
             assert name not in manifest_dict
@@ -382,3 +382,23 @@ def test_a_gen2_manifest_writes_no_gen3_field(manifest_dict):
     gen3 = set(_gen3_fields())
     assert gen3 <= set(_GEN1_DEFAULTS)
     assert not gen3 & set(manifest_dict)
+
+
+def test_the_collection_fields_round_trip():
+    """P3a #17: a validation stratum's rule rows, the collection flags, the
+    thresholds the build ran under and what reading met all read back."""
+    from effects.domain.rule_budgets import RuleRow
+
+    row = RuleRow(available={"forge_ai": 2}, share=4, written={"forge_ai": 3},
+                  added={"forge_ai": 1}, shortfall=1)
+    built = manifest(
+        game_disjoint_target=None,
+        validation_rules={"card-disjoint": {"resolution-effect": {"702.2b": {"fires": row}}}},
+        record_flags={"combat": {"fork": 1}},
+        placement_thresholds={"min_games_per_half": 300, "max_item_error": 0.1,
+                              "max_component_error": None},
+        keyword_definitions_digest="ab", decode_off_list={"global.phase 'x'": 2},
+        damaged_tails=("run.0-a.jsonl.gz",), unconfigured_trees={"variant-scripts": 3},
+    )
+    back = CorpusManifest.from_dict(json.loads(json.dumps(built.as_dict())))
+    assert back == built

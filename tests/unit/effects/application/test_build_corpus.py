@@ -225,10 +225,12 @@ def _rewrite(
     )
 
 
-#: A rules directory that does not exist: no scenario tags a record and no
-#: heads line budgets a rule, so these hand-built corpora show gen-2's
-#: curation alone; the gen-3 fixture's tests below read the real ``rules/``.
-_NO_RULES = Path(__file__).with_name("no-rules")
+#: A catalogue of one scenario declared without a detector and one heads line
+#: the map does not mark ``trained``: no scenario tags a record and no rule is
+#: budgeted, so these hand-built corpora show gen-2's curation alone (a build
+#: refuses a catalogue with no scenario or no heads line); the gen-3
+#: fixture's tests below read the real ``rules/``.
+_NO_RULES = Path(__file__).parents[3] / "fixtures" / "effects" / "minimal-rules"
 
 #: Feature 023's rules, which most of this file was written against: the held-out
 #: text above is held out under the ``text`` unit, ``0.16`` places exactly one
@@ -559,6 +561,150 @@ def test_build_refuses_an_empty_corpus(tmp_path, a_corpus):
     empty.mkdir()
     with pytest.raises(ValueError, match="no shards"):
         a_corpus.build(tmp_path / "out", records_dir=empty)
+
+
+# ── a build stops before it clears a dataset it could not replace ─────
+
+
+def _dataset(out: Path) -> dict[str, bytes]:
+    """Every file of a built dataset, by its path under ``out``."""
+    return {str(path.relative_to(out)): path.read_bytes()
+            for path in sorted(out.rglob("*")) if path.is_file()}
+
+
+def test_a_build_with_no_rules_catalogue_refuses_before_clearing_the_dataset(
+    tmp_path, a_corpus,
+):
+    """A rules directory with no scenario or no heads line would tag and budget
+    nothing and only fail at the precision exit, after the dataset was
+    replaced: it is refused before the survey, the earlier dataset intact."""
+    out = tmp_path / "curated"
+    a_corpus.build(out)
+    before = _dataset(out)
+    with pytest.raises(BuildCorpusError, match="rules catalogue"):
+        build(a_corpus.config(out, rules_dir=tmp_path / "nowhere"))
+    assert _dataset(out) == before
+
+
+def _raw_shard(path: Path, *members: bytes) -> None:
+    """A shard of the given gzip members, as a worker appends them."""
+    import gzip
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as handle:
+        for member in members:
+            handle.write(gzip.compress(member))
+
+
+def _line(record: EffectRecord) -> bytes:
+    import json
+
+    from effects.infrastructure.record_codec import record_to_dict
+
+    return (json.dumps(record_to_dict(record)) + "\n").encode("utf-8")
+
+
+@pytest.mark.parametrize("damage", ["undecodable line", "corrupt member", "unknown generation"])
+def test_a_damaged_shard_stops_the_build_naming_it_before_anything_is_cleared(
+    tmp_path, a_corpus, damage,
+):
+    """A shard the survey cannot read whole makes the dataset unusable: the build
+    exits 1 naming the shard, and the earlier dataset under --output survives."""
+    import gzip
+    import json
+
+    from effects.infrastructure.record_codec import record_to_dict
+
+    out = tmp_path / "curated"
+    a_corpus.build(out)
+    before = _dataset(out)
+    good = _line(CorpusFixture.resolution("g-damaged.1", game="g-damaged"))
+    shard = a_corpus.records / "full-strength" / "run.0-damaged.jsonl.gz"
+    if damage == "undecodable line":
+        _raw_shard(shard, good + b"{not json\n")
+    elif damage == "corrupt member":
+        with open(shard, "wb") as handle:
+            handle.write(gzip.compress(good))
+            handle.write(gzip.compress(good)[:12] + bytes(40))
+            handle.write(gzip.compress(good))
+    else:
+        data = record_to_dict(CorpusFixture.resolution("g-damaged.2", game="g-damaged"))
+        data["generation"] = 4
+        _raw_shard(shard, good + (json.dumps(data) + "\n").encode("utf-8"))
+
+    with pytest.raises(BuildCorpusError, match="run.0-damaged.jsonl.gz"):
+        build(a_corpus.config(out))
+    assert _dataset(out) == before
+
+
+def test_a_game_a_shard_gains_between_the_passes_is_written_nowhere(
+    tmp_path, a_corpus, monkeypatch, caplog,
+):
+    """A collection still appending under --records-dir: a game the survey
+    never saw was never placed, and may name a held-out card, so the write
+    pass trains it nowhere and counts it (V5 #1)."""
+    import gzip
+
+    from effects.application import build_corpus as module
+
+    shard = a_corpus.records / "full-strength" / "run.0-a.jsonl.gz"
+    late = _resolution("g-late.1", "g-late", ability=(_BOLT_KEY,),
+                       entity_names=(_HELD_OUT_CARD,))
+    decide = module._decide_or_refuse
+
+    def decide_then_grow(*args, **kwargs):
+        decided = decide(*args, **kwargs)
+        with open(shard, "ab") as handle:
+            handle.write(gzip.compress(_line(late)))
+        return decided
+
+    monkeypatch.setattr(module, "_decide_or_refuse", decide_then_grow)
+    store = a_corpus.build(tmp_path / "curated")
+    manifest = store.load()
+    assert manifest.per_stratum[Stratum.DROPPED_UNSURVEYED] == 1
+    assert all(record.game_id != "g-late" for record in _written(store))
+    assert "changed size since the survey" in caplog.text
+
+
+def test_the_manifest_records_how_its_records_were_collected_and_read(
+    tmp_path, a_corpus,
+):
+    """P3a #17: per class, the kept records collected as forks, interventions,
+    directed forks, aimed or degraded; the placement thresholds and the
+    keyword table the build ran under; and what reading met without stopping:
+    values outside the wire's closed lists and keys of a tree with no root."""
+    import gzip
+    import hashlib
+    import json
+
+    from effects.infrastructure.record_codec import record_to_dict
+
+    definitions = tmp_path / "keyword-definitions.json"
+    definitions.write_text("{}", encoding="utf-8")
+    odd = record_to_dict(CorpusFixture.resolution("g-clean-1.odd", game="g-clean-1"))
+    odd["state"]["global"]["combat_substep"] = "third_strike"
+    variant = ProvenanceKey("variant-scripts/x_variant.txt", 0, "spell", 0)
+    # An attacker printing a line of the variant tree, which this build has no
+    # root for: the survey's keyword read finds no line for it.
+    from effects.domain.state_snapshot import CombatStatus
+
+    unrooted = _combat("g-clean-1.variant", "g-clean-1")
+    unrooted = replace(unrooted, state=replace(unrooted.state, entities=(
+        make_entity("E0", "x variant", printed=(variant,),
+                    combat=CombatStatus(attacking="p2")),)))
+    with open(a_corpus.records / "full-strength" / "run.0-extra.jsonl.gz", "wb") as handle:
+        handle.write(gzip.compress((json.dumps(odd) + "\n").encode("utf-8") + _line(unrooted)))
+
+    manifest = a_corpus.build(tmp_path / "curated", keyword_definitions=definitions).load()
+
+    assert manifest.record_flags["combat"]["fork"] == 1
+    assert manifest.placement_thresholds == {
+        "min_games_per_half": 0, "max_item_error": MAX_ITEM_ERROR, "max_component_error": None}
+    assert manifest.keyword_definitions_digest == hashlib.sha256(b"{}").hexdigest()
+    assert manifest.decode_off_list == {"global.combat_substep 'third_strike'": 1}
+    assert manifest.unconfigured_trees == {"variant-scripts": 1}
+    data = json.loads((tmp_path / "curated" / "manifest.json").read_text(encoding="utf-8"))
+    assert "damaged_tails" not in data
 
 
 # ── fix round 1: _output_name must be injective (review Finding 1) ─────
@@ -1904,6 +2050,9 @@ def test_protection_copies_are_written_as_their_rules_draw_them(tmp_path):
     rules = tmp_path / "rules"
     (rules / "scenarios").mkdir(parents=True)
     (rules / "heads").mkdir()
+    # A scenario no record can tag: a build refuses a catalogue with none.
+    (rules / "scenarios" / "103.json").write_bytes(
+        (_NO_RULES / "scenarios" / "103.json").read_bytes())
     (rules / "heads" / "702.jsonl").write_text("".join(
         json.dumps({"id": rule, "output": "trained", "outputs": []}) + "\n"
         for rule in sorted(PROTECTION_RULES)), encoding="utf-8")

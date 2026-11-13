@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from collections.abc import Iterable, Mapping
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from effects.application.corpus_survey import RefusalTally, Survey
@@ -277,7 +278,42 @@ def build_manifest(
         game_disjoint_keywords=tuple(config.game_disjoint_keywords),
         reuse_cap=config.reuse_cap,
         **decisions.rule_fields,
+        **_collection_fields(config, survey, decisions),
     )
+
+
+def _collection_fields(
+    config: BuildCorpusConfig, survey: Survey, decisions: Decisions,
+) -> dict:
+    """How the records were collected and read, and what the build ran under
+    (P3a #17): the manifest's ``validation_rules``, ``record_flags``,
+    ``placement_thresholds``, ``keyword_definitions_digest``,
+    ``decode_off_list``, ``damaged_tails`` and ``unconfigured_trees``."""
+    import hashlib
+    import math
+
+    totals = survey.totals
+    flags: dict[str, dict[str, int]] = {}
+    for (klass, flag), count in sorted(totals.flags.items()):
+        flags.setdefault(klass, {})[flag] = count
+    definitions = config.keyword_definitions
+    digest = (hashlib.sha256(Path(definitions).read_bytes()).hexdigest()
+              if definitions is not None and Path(definitions).exists() else "")
+    return {
+        "validation_rules": {str(stratum): planned.rows
+                             for stratum, planned in sorted(decisions.validation_budgets.items())},
+        "record_flags": flags,
+        "placement_thresholds": {
+            name: None if math.isinf(value) else value
+            for name, value in (("min_games_per_half", config.min_games_per_half),
+                                ("max_item_error", config.max_item_error),
+                                ("max_component_error", config.max_component_error))},
+        "keyword_definitions_digest": digest,
+        "decode_off_list": {f"{member} {value}": count
+                            for (member, value), count in sorted(totals.off_list.items())},
+        "damaged_tails": tuple(totals.damaged_tails),
+        "unconfigured_trees": dict(sorted(totals.unconfigured.items())),
+    }
 
 
 def log_report(
@@ -296,6 +332,7 @@ def log_report(
         len(manifest.held_out_texts_under_five_games), HELD_OUT_GAME_FLOOR,
     )
     _log_rules(manifest, decisions, written)
+    _log_reading(manifest)
 
 
 def _log_rules(manifest: CorpusManifest, decisions: Decisions, written: WriteResult) -> None:
@@ -327,6 +364,23 @@ def _log_rules(manifest: CorpusManifest, decisions: Decisions, written: WriteRes
         "turn_action record(s) written nowhere: %s",
         dict(manifest.turn_action_left_out) or "none",
     )
+
+
+def _log_reading(manifest: CorpusManifest) -> None:
+    """What reading the raw shards met without stopping: reported, never fatal."""
+    if manifest.decode_off_list:
+        logger.warning(
+            "%d value(s) outside the wire's closed lists were read as written "
+            "(manifest decode_off_list): %s", sum(manifest.decode_off_list.values()),
+            ", ".join(f"{k}: {v}" for k, v in list(manifest.decode_off_list.items())[:5]))
+    if manifest.damaged_tails:
+        logger.warning(
+            "%d raw shard(s) ended at a damaged last gzip member (manifest "
+            "damaged_tails), e.g. %s", len(manifest.damaged_tails), manifest.damaged_tails[0])
+    if manifest.unconfigured_trees:
+        logger.warning(
+            "keys read as no line for want of their tree's root (manifest "
+            "unconfigured_trees): %s", manifest.unconfigured_trees)
 
 
 def _log_counts(manifest: CorpusManifest) -> None:
