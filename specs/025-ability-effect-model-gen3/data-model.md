@@ -148,7 +148,12 @@ Global: `day_night` (`day` | `night` | null). Command zone: `floating_effects` a
 room}`). Extra card entities are appended to `entities` after the tiers, each with its `role`:
 `library_card` (top card plus every one the events name, with position), `exiled_with`,
 `mutate_component`, `last_known` (the pending event's subject, under id `L<card id>`). `refs.random`
-holds the half's dice and coin flips. Gen-2's `printed`, `granted_attached` and `pt` are gone.
+holds the half's dice and coin flips. `refs.targets` holds every target of the acting item's chain
+(root, sub-abilities, a charm's modes; an effect half: its own links' as its resolution started), and
+`refs.targets_at_cast` an effect half's targets before Forge's illegal-target check (null where
+unknown and on every other refs block). `granted_temporary.hidden_keywords` lists Forge's hidden
+keywords. A phased-out permanent is an entity; `copy_source` names what a copy copies; a
+candidate's or cost half's host off the battlefield and the stack shows its acting ability's face. Gen-2's `printed`, `granted_attached` and `pt` are gone.
 Relations: `links: [{from, to, type, index?}]` with the § 10.3 family names, each link written once in
 its forward direction, `index` on `targets` only; the four families the reader builds (`line_of`,
 `line_of_the_same_card`, `mode_of`, `has_the_same_name`) are not collected; an `affects` link ends at
@@ -168,7 +173,9 @@ players. Shapes as
 | `combat` | snapshot at the start of the damage step | shape at the first damage event |
 | `combat`, observed and probe | damage events carry `source` | the bus's `cause`, else from `assignment_choices` |
 | decision candidate | `cost_after_adjustment` | the cost after Forge's cost adjustment |
-| events | `pt_change.set_pt`, zone changes' `library_position`, `card_looked_at.mode`, `token_created` controller and counters, `ability_change` subjects, new `state_flag_change` flags, `damage_dealt.damage_type`, `attached.attached_to` and `unattached.detached_from` on bus events, `destroyed`, `sacrificed` and `face_change` (FaceState `to_state`) on resolution and combat records, `player_lost` on the record the game's outcome is written in (a `LosesGame` or `WinsGame` effect half that ended the game, else the game-end record), `card_revealed.from_zone` and `card_made.to_zone` lower-cased, `choice_made.choice_kind` by API | wire shapes in [contracts/record-schema-delta.md](contracts/record-schema-delta.md) |
+| events | `pt_change.set_pt`, zone changes' `library_position`, `card_looked_at.mode`, `token_created` controller and counters, `ability_change` subjects, new `state_flag_change` flags, `damage_dealt.damage_type`, `attached.attached_to` and `unattached.detached_from` on bus events, `destroyed`, `sacrificed` and `face_change` (FaceState `to_state`) on resolution and combat records, `player_lost` on the record the game's outcome is written in (a `LosesGame` or `WinsGame` effect half that ended the game, else the game-end record), `card_revealed.from_zone` and `card_made.to_zone` lower-cased, `choice_made.choice_kind` by API, run-parameter events read per Forge mode with signed `delta` (a loss negative) and FaceState `to_state`, `keyword_change` sorted with `hidden` on a hidden keyword's, `ability_change` from stat changes | wire shapes in [contracts/record-schema-delta.md](contracts/record-schema-delta.md) |
+| resolution, effect half | `events` of a fizzled spell | exactly its card's `zone_change` off the stack; `[]` on a fizzled ability's and a declined half |
+| `continuous` | contributions' `abilities`, `hidden_keywords`; `=` in `keywords` | layer-6 grants by line key, removals as `-key`; a static's hidden keywords; a static removing every keyword |
 
 ## Curation
 

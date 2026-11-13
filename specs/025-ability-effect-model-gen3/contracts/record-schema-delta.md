@@ -63,7 +63,10 @@ Shapes follow `rules/gen3-fields.json`; the collector writes the field names bel
 | global | `day_night` | `"day"` \| `"night"` \| `null` |
 | global | `floating_effects`, `delayed_triggers` | `{id, source_lines, affected, remembered, duration, shield_left}`; `duration` ∈ `end_of_turn`, `until_leaves`, `permanent` (below, "Command-zone objects") |
 | global | `dungeons` | `{player, dungeon, room}` |
+| refs | `targets` | changed meaning: every target the acting item's chain holds (the root, each sub-ability, a charm's chosen modes), root first, each ref once; a targeted spell or ability by its card's `E` ref. On an effect half, the targets of the half's own links (the root's and, on a mode's half, its mode's) as its resolution started, after Forge's check for illegal targets removed the illegal ones |
+| refs | `targets_at_cast` | after `targets`: on a live resolution's effect half, the same links' targets before that check (608.2b), spelled as `targets`; `null` where Forge could not copy them, on a worker without the resolution hook, on an interventional half, and on every other refs block. Each card in it is an entity of the half's board |
 | refs | `random` | `{dice: [n, …], coin_flips: {won, lost}}` on a resolution's effect half, live or interventional; `null` on every other refs block |
+| card | `granted_temporary.hidden_keywords` | after `abilities`: Forge's hidden keywords on the card as Forge writes them (`CARDNAME can't block.`, `This card doesn't untap during your next untap step.`), in timestamp order; a `continuous` record's board leaves out its static's |
 | snapshot | `links` | `[{from, to, type, index?}]`; `type` a § 10.3 family name; `index` only for `targets` (below, "Links") |
 
 A card's `lines` members:
@@ -80,7 +83,10 @@ A card's `lines` members:
 | `affected` | list of refs: the permanents the static applies to, then the players (`P…`), from Forge's static effect (`StaticEffect.getAffectedCards`, `getAffectedPlayers`) | statics of the face up that Forge applies as a continuous effect; absent on every line of a `continuous` record's board, whose answer it would be |
 
 A `keyword` line's keys name the keyword line the card prints, else the static that granted the
-keyword; a keyword a resolved effect granted has `keys: []` and is read by its `fragment`. The
+keyword; a keyword a resolved effect granted has `keys: []` and is read by its `fragment`. A copy
+(a Clone's, a Phantasmal Image's) prints what it copies: its keyword lines key into the copied
+card's script file, through a copy of a copy to the original; a keyword, trigger or ability the copy
+effect itself adds (`AddTriggers$`, `AddAbilities$`) keys to the line that made the copy. The
 triggers, statics and abilities a keyword instance builds are its line, not lines of their own; a
 `Secondary$ True` trait is listed under its own key and joins its primary's line through the
 sidecar. A land's play and a permanent's plain cast are not lines. A face not up (a face-down
@@ -133,7 +139,7 @@ it), `granted_temporary`. Forge's `...Without` reads (`Card.getTypeWithout`, `ge
 | list | one object per | `id` | `source_lines` | `affected` | `remembered` | `duration` | `shield_left` |
 |---|---|---|---|---|---|---|---|
 | `floating_effects` | effect card in a command zone (not an emblem, not a dungeon) | its entity id `E<card id>` | the key of the ability that made it; `[]` when none did (the monarch, the initiative, the city's blessing) | the cards its statics apply to, then the players; `[]` on a `continuous` record's board | its remembered cards and players | its maker's `Duration$`, bucketed; `permanent` when no ability made it | the `Number$` SVar its replacement's `Amount$` spends, else `null` |
-| `floating_effects` | timestamp of a static-id-0 layer-table row on a snapshot entity (P/T set and boost, keywords, traits, types, colours, names) drawn while a noted live clause resolved | `F<timestamp>` | the key of that clause | the entities carrying a row of that timestamp | `[]` | the clause's `Duration$`, else its root's, bucketed | `null` |
+| `floating_effects` | timestamp of a static-id-0 layer-table row on a snapshot entity (P/T set and boost, keywords, hidden keywords, traits, types, colours, names) drawn while a noted live clause resolved | `F<timestamp>` | the key of that clause | the entities carrying a row of that timestamp | `[]` | the clause's `Duration$`, else its root's, bucketed | `null` |
 | `delayed_triggers` | pending delayed trigger, each once | `D<trigger id>` | the key of the ability that spawned it | `[]` | the trigger's remembered cards and players | `end_of_turn` for a this-turn trigger, else `permanent` | `null` |
 
 Effect cards come first, then timestamps in ascending order. A timestamped row no noted clause
@@ -218,7 +224,7 @@ static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of
 | Payload | Field | Shape |
 |---|---|---|
 | resolution, cost half | `events` | before `costs`: the cast card's `zone_change` to the stack, from the zone it was cast from (`attributed_to: unresolved`, `cause` the card); `[]` on an activated ability's cost half. The payload is `{events, costs}`. Every cost half carries `link_id`; a triggered ability and a copy of a spell or ability, which nobody casts, write no cost half, and their effect halves no `link_id` |
-| resolution, effect half | `outcome` | after `conditions_met`: `resolved`, `fizzled`, `partially_fizzled` or `declined`; a `fizzled` or `declined` half has `events: []`; `null` on a mana record and the game-end rescue record, which resolve no stack item |
+| resolution, effect half | `outcome` | after `conditions_met`: `resolved`, `fizzled`, `partially_fizzled` or `declined`; a `declined` half, and a `fizzled` ability's, has `events: []`; a `fizzled` spell's half holds exactly one event, its card's `zone_change` off the stack to wherever Forge puts it (608.2b; the last half of a modal spell takes it); `partially_fizzled` when some of the targets of the item's chain, every link's counted, became illegal and some remain; `null` on a mana record and the game-end rescue record, which resolve no stack item |
 | resolution | `conditions_met` | `[{segment, met}]`, after `events`, on every effect half: one entry per conditional clause that resolved in the half, in resolution order; a clause is conditional when it carries a parameter `SpellAbilityCondition.setConditions` reads (`Condition$`, `ConditionPresent$`, `ConditionCheckSVar$`, …; not `ConditionDescription$`); `segment` is spelled as the clause's events' `attributed_to` (`root`, or the chain index as a string, counted down the line the record keys to: a triggered ability's root clause is `root`, and a chosen charm mode's clauses are counted down its option line, the mode's own first clause `root`), `met` is Forge's own answer, the clause hook's `ClauseRun` read when the clause's own effect is over (`CONDITIONS_UNMET` false, `RAN` and `UNLESS_COST_DECIDED` true; no entry for a clause that threw); `[]` where no conditional clause resolved, and always on a mana ability's record and the game-end rescue record |
 | decision candidate | `verdict.timing` | bool |
 | decision candidate | `failed_checks` | `[{check, responsible_static}]`, after `responsible_static` in the candidate, one entry per failed check in the order listed here; `responsible_static` a key list, one key where a static decided the check (`static_prohibition`), else empty; `check` ∈ `split_second`, `casting_speed`, `whose_turn`, `phase`, `combat`, `activation_limit`, `land_play_limit`, `script_condition`, `zone`, `static_prohibition`, `cost`, `script_restriction` |
@@ -228,13 +234,14 @@ static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of
 | decision candidate | `responsible_static` | the key of the static forbidding the play (its `static_prohibition` entry's), else empty |
 | `attackers` | `anchor_attacker`, `legal_defenders`, `must_attack`, `tapped_by_attack?` | one record per creature the attacking player controls, these four first and `legal_attackers`, `forbidden` after them; `anchor_attacker` a card ref; `legal_defenders` the refs (`P`/`E`) of the declaration's defenders (players, planeswalkers, battles) the anchor may attack, in Forge's defender order, `[]` for a creature that may attack none; `must_attack` whether an attack requirement applies to the anchor (`AttackRequirement.hasRequirement`), whether or not it can attack; `tapped_by_attack` on a declared anchor only: whether a `GameEventCardTapped` for it arrived between the engine's first question and `GameEventAttackersDeclared`. `legal_attackers` and `forbidden` keep their gen-2 shape and are the declaration's, the same on each of its records: a creature is legal when it may attack at least one defender, and a forbidden one's `responsible_static` is the first static, in defender order, keeping it from a defender |
 | `blockers` | `must_block` | after `forbidden`: the refs of the listed creatures, legal or forbidden, in candidate order, that a requirement makes block the anchor; a listed creature not in it is false. Requirements: the creature's `getMustBlockCards`, the anchor's `MustBeBlockedBy` (while no creature of that kind blocks it) and `MustBeBlockedByAll`, a lure ("All creatures able to block CARDNAME do so."), and a `MustBlock` static naming the creature (names every attacker); a requirement whose block costs something is none (509.1c); recorded whether or not the creature can obey it |
+| `continuous` | contributions' `abilities`, `hidden_keywords` | after `colors`, on every contribution: `abilities` a token per layer-6 change the static makes to the entity, a granted ability's line key as `ProvenanceKey.describe` spells it (`(cardsfolder/c/cryptolith_rite.txt) face0/static[0]`; `runtime` for one that keys to no line), and `-` before the key of an ability it takes away; `hidden_keywords` the hidden keywords the static grants (`AddHiddenKeyword$`), as Forge writes them. A static whose only change is one of these is a `continuous` record. `keywords` starts with a lone `=` when the static removes every keyword (`RemoveAllAbilities$`), as `types` and `colors` mark a line set outright |
 | `continuous` | contributions' `set_pt`, `controller` | `set_pt` after `pt_boost`: `[power, toughness]`, the base the static sets (layer 7a, then 7b), a half `null` where it sets only the other; `controller` last: the player ref the static gives control to (a `GainControl$` static, when the permanent's controller without it differs). Each present only when set. A static whose only change is one of these is a `continuous` record |
 | `combat`, observed and probe | damage events' `source` | entity ref, after `cause`: the dealer the bus names as `cause`, else the one source in `assignment_choices` that assigned damage to the event's subject, or among several the one that assigned exactly its amount; absent when none can be named. Written on the observed record too, so a probe branch's damage reads as the record it mirrors |
 
 ## Event additions
 
-No new event type. One new parameter outside a type's `EVENT_PARAMS` row, `damage_dealt`'s
-`damage_type`; every other fact rides a parameter the row already declares, a `characteristics`
+No new event type. Two new parameters outside a type's `EVENT_PARAMS` row, `damage_dealt`'s
+`damage_type` and `keyword_change`'s `hidden`; every other fact rides a parameter the row already declares, a `characteristics`
 member, or the provenance `mode` any event may carry. `state_flag_change` gains flags outside
 `DESIGNATIONS`, listed below.
 
@@ -263,6 +270,8 @@ member, or the provenance `mode` any event may carry. `state_flag_change` gains 
 | `sacrificed` | resolution, combat and `turn_action` records | subjects the permanent, `cause` as on `destroyed`, just before its `zone_change` off the battlefield, filed where that move is filed. A sacrifice paid as a cost is the payment's and reaches no record |
 | `face_change` | resolution, combat and `turn_action` records | subjects the permanent, `to_state` the face now up: `front`, `back`, `flipped`, `melded` or `face_down` (an entity's `face_state` values), written when a battlefield permanent's face differs from the one last read (transformed, flipped, turned face up or face down), beside the stat changes the new face makes |
 | `player_lost` | the record the game's outcome is written in | subjects the player, `reason` Forge's `GameLossReason` name (`LifeReachedZero`, `Milled`, `Poisoned`, `SpellEffect`, `Conceded`, `CommanderDamage`, `OpponentWon`), one per losing player, before `player_won` when there is a winner. The record is the effect half of the `LosesGame` or `WinsGame` ability whose resolution ended the game (Door to Nothingness, a "you win the game"), which holds `player_lost` and `player_won`; for any other end of the game, the game-end record. Each is written once per game. A draw (every player lost at once) writes a `player_lost` per player and no `player_won`; a player who agreed to a draw writes none |
+| `keyword_change` | `keywords`, `hidden` | a stat change's `keywords` are sorted, a second instance of a keyword counted as a keyword gained or lost; `hidden: true`, last, on a change of Forge's hidden keywords, whose `keywords` are spelled as Forge writes them (`CARDNAME can't block.`), absent on any other |
+| `ability_change` | from a stat change | the abilities the card gained, other than a keyword's, as `abilities` comma-joined line keys (`ProvenanceKey.describe`, `runtime` for one that keys to no line) with `removed: false`; any it lost as `abilities: ""` with `removed: true`; not written while an `Animate` or `AnimateAll` clause resolves, whose own rule writes its grants |
 | `card_revealed` | `from_zone` | a zone as an entity's `zone` spells it (`library`, `hand`, …); absent when Forge names none |
 | `card_made` | `to_zone` | a zone as an entity's `zone` spells it; absent when Forge names none |
 | `choice_made` | `choice_kind`, `value` | read from the accessor of the clause's own API: `ChooseColor` `color`, `ChooseType` `type`, `ChooseNumber` `number`, `NameCard` `card_name`, `ChoosePlayer` `player`, `ChooseCard` and `ChooseSource` `cards` (the count chosen), `ChooseDirection` `direction`, `ChooseEvenOdd` `even_odd`, `GenericChoice` `mode`; no event when that accessor holds nothing |
@@ -324,6 +333,12 @@ position a card left a library from, and a search of another player's library.
   transition a record holds for the same subjects is written once; the same transition after
   another of those subjects is written again (a creature flickered twice, a permanent tapped twice).
 - A forced (interventional) resolution reads its board when its resolution starts, as a live one.
+- A phased-out permanent is an entity of the board, its `designations` holding `phased_out`.
+- An entity's `copy_source` is the ref of what it is a copy of: the permanent or spell a copy was
+  made from, else the card a copy effect copied (a Clone's original); `null` on any other card.
+- A decision candidate's board and a cost half's show the acting ability's host, when it is off the
+  battlefield and the stack, on the face the ability is on: an Adventure's spell, a split card's
+  half, a modal double-faced card's back face; its `zone` and `order_rank` are the card's own.
 - A record's referenced card (tier 1) is the game's own object for it: a dies trigger's host and
   the host of an ability that sacrificed it are the card in the graveyard, written once as
   `E<id>` with its zone; the last-known copy is only the `L<id>` entity.
@@ -341,10 +356,30 @@ position a card left a library from, and a search of another player's library.
 - A resolution's effect half holds every death of the state-based loop after it. A trigger record
   never holds one.
 - A prevention event with amount 0 is not written.
-- A `life_change` or `counter_change` read off a trigger's or replacement's map (one carrying a
-  provenance `mode`) writes the map's amount as `delta`, a magnitude; the mode names the direction.
-  Under `LifeLost`, `PayLife`, `LifeReduced`, `RemoveCounter` and `CounterRemoved` (Forge's
-  trigger and replacement modes) readers read the delta as negative.
+- An event read off a trigger's or replacement's map (one carrying a provenance `mode`) is read
+  by its mode's row, each row a mode Forge's `TriggerType` or `ReplacementType` declares. Its
+  `delta` is signed as a bus event's: positive a gain, negative a loss.
+
+  | mode (trigger / replacement) | event | read |
+  |---|---|---|
+  | `LifeGained` / `GainLife` | `life_change` | `delta` +the amount |
+  | `LifeLost`, `PayLife` / `LifeReduced`, `PayLife` | `life_change` | `delta` −the amount |
+  | `CounterAdded` | `counter_change` | `delta` +1: one event per counter |
+  | `CounterRemoved` | `counter_change` | `delta` −1: one event per counter |
+  | `CounterAddedOnce` / `AddCounter` | `counter_change` | `delta` +the counters put on (`CounterAmount`; the replacement's `CounterMap` summed) |
+  | `CounterRemovedOnce` | `counter_change` | `delta` −`CounterAmount` |
+  | `RemoveCounter` (replacement) | `counter_change` | `delta` the count the removal leaves (`Result`) less the card's count: 0 or negative |
+  | `Drawn`, `Discarded`, `Milled`, `TokenCreated` / `Draw` | `card_drawn`, `card_discarded`, `card_milled`, `token_created` | `count` 1: one event per card |
+  | `TokenCreatedOnce` | `token_created` | `count` the tokens named |
+  | `DrawCards`, `Mill` (replacement) | `card_drawn`, `card_milled` | `count` `Number` |
+  | `CopySpell` (replacement) | `spell_copied` | `count` `Amount` |
+  | `DamagePreventedOnce` | `damage_prevented` | subject the player or permanent, `amount` the damage prevented |
+  | `TurnFaceUp`, `Transformed` / `TurnFaceUp`, `Transform` | `face_change` | `to_state` the face the card shows, an entity's `face_state` value |
+  | `Attached` / `Attached` | `attached` | subject the Aura or Equipment, `attached_to` what it hangs on |
+  | `Unattached` | `unattached` | subject the Aura or Equipment, `detached_from` what it left |
+
+  A trigger record's pending `face_change` is that record's event; the same turn is written once
+  more, by the bus, in the record the face turned in.
 - A zone is Forge's `ZoneType` name lower-cased: `hand`, `library`, `graveyard`, `battlefield`,
   `exile`, `flashback`, `command`, `stack`, `sideboard`, `ante`, `merged` (a mutated permanent's
   merged card), `schemedeck`, `planardeck`, `attractiondeck`, `junkyard`, `contraptiondeck`,

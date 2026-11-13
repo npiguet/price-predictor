@@ -17,7 +17,7 @@ No worker has a per-game timeout, and none should get one. A game that does not 
 
 ## Engine hooks
 
-The effect collectors reach the patched engine's hooks by name, through `PatchHooks`, and compile against stock Forge. Forge widens a listener by adding `void` default methods or same-name overloads with appended arguments, which an unaware proxy answers with nothing. The listener methods Forge declares and no collector reads yet are listed in `PatchHooksTest.NOT_CONSUMED_YET`: `onTriggerRun`, `onBufferedAbilityStarting` and `onBufferedAbilityFinished`. The arguments not read yet are `onReplacement`'s sixth (`buffered`) and `onResolutionStarting`'s third (`targetsAtCast`). The accessors not read yet are `StaticAbilityCantAttackBlock.cantBlockStatic` and `EffectRecordHook.failureCounts()`. What each one says is in `src/effects/CLAUDE.md` § The engine hooks.
+The effect collectors reach the patched engine's hooks by name, through `PatchHooks`, and compile against stock Forge. Forge widens a listener by adding `void` default methods or same-name overloads with appended arguments, which an unaware proxy answers with nothing. The listener methods Forge declares and no collector reads yet are listed in `PatchHooksTest.NOT_CONSUMED_YET`: `onTriggerRun`, `onBufferedAbilityStarting` and `onBufferedAbilityFinished`. The argument not read yet is `onReplacement`'s sixth (`buffered`). The accessors not read yet are `StaticAbilityCantAttackBlock.cantBlockStatic` and `EffectRecordHook.failureCounts()`. What each one says is in `src/effects/CLAUDE.md` § The engine hooks.
 
 ## Build
 
