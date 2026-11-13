@@ -38,7 +38,7 @@ from effects.domain.records import (
     acting_keys,
 )
 from effects.domain.sampling import SamplingClass
-from effects.domain.strata import OUTPUT_STRATA, Stratum
+from effects.domain.strata import DROPPED_STRATA, OUTPUT_STRATA, Stratum
 from effects.domain.tally_merge import merge_into
 
 
@@ -200,7 +200,7 @@ class _ShardWriter:
             self.out.unattributed += 1
         keys = acting_keys(record)
         stratum = self.plan.strata.stratum_of(record.game_id)
-        if stratum is Stratum.DROPPED_HELD_OUT:
+        if stratum in DROPPED_STRATA:
             self.out.strata.note(stratum, ())
         elif stratum is Stratum.TRAINING:
             self._train(record, klass, keys)

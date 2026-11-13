@@ -134,6 +134,16 @@ def report_write_pass(survey: Survey, written: WriteResult) -> None:
             dict(sorted(survey.totals.refusals.by_reason.items())),
             dict(sorted(written.refusals.by_reason.items())),
         )
+    unsurveyed = written.strata.records.get(Stratum.DROPPED_UNSURVEYED, 0)
+    if unsurveyed:
+        logger.warning(
+            "%d record(s) belong to games the survey never saw: a raw shard grew "
+            "between the survey and the write pass (a collection still writing "
+            "under --records-dir?). Those games were never placed, so their "
+            "records are written to no stratum (manifest per_stratum "
+            "\"dropped-unsurveyed\"); `build-corpus --verify` names the shards "
+            "that changed.", unsurveyed,
+        )
     if survey.split_games:
         logger.warning(
             "%d game(s) appear in more than one raw shard. A raw shard is one "

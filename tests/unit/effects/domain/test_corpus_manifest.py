@@ -310,7 +310,7 @@ def _gen3_fields(**extra_map) -> dict:
                                 reuse_cap=2, text_cap=0)
     strata = GameStrata(
         card_disjoint=frozenset({"g3"}), game_disjoint=frozenset({"g4", "g5"}),
-        held_out=frozenset({"g3"}),
+        held_out=frozenset({"g3"}), surveyed=frozenset({"g1", "g2", "g3", "g4", "g5"}),
         halves={Stratum.GAME_DISJOINT: {Half.SELECTION: frozenset({"g5", "g4"}),
                                         Half.REPORTING: frozenset()}},
         left_out_of_half={Stratum.GAME_DISJOINT: {Half.REPORTING: ("702.16e",)}},

@@ -368,6 +368,9 @@ class SelectionPlan:
     shortfall: dict[str, int]
     #: Distinct records each class can supply under the text cap, no repeats.
     available: dict[str, int]
+    #: ``class -> text -> natural copies`` planned over the class's cells,
+    #: which the rule budgets' text cap counts (``rule_budgets``).
+    text_planned: dict[str, dict[str, int]] = field(default_factory=dict)
 
     def copies(self, cell: Cell, keys: Keys, value: int) -> int:
         """A record's natural share: the plan of its ``(cell, keys)`` group,
@@ -417,6 +420,7 @@ def plan_selection(
     return SelectionPlan(
         plans=plans, keyless=keyless, families=_family_shares(tree, members),
         targets=targets, shortfall=shortfall, available=available,
+        text_planned=_text_planned(tree, members),
     )
 
 
@@ -447,6 +451,19 @@ def _allocation_tree(
                 once=member.once(text_cap),
             )
     return tree
+
+
+def _text_planned(
+    tree: AllocationNode, members: Mapping[Cell, Mapping[str, Member]],
+) -> dict[str, dict[str, int]]:
+    """``class -> text -> natural copies`` an allocated tree plans for each
+    keyed member, summed over the class's cells."""
+    planned: dict[str, Counter[str]] = defaultdict(Counter)
+    for (*_, cell), cell_node in tree.walk(_CELL_DEPTH):
+        for name, leaf in cell_node.children.items():
+            if not members[cell][name].is_keyless and leaf.planned:
+                planned[str(cell.klass)][name] += leaf.planned
+    return {klass: dict(sorted(texts.items())) for klass, texts in sorted(planned.items())}
 
 
 def _family_shares(
@@ -498,6 +515,9 @@ class GameStrata:
     game_disjoint: frozenset[str]
     #: Every game naming a held-out card; those the cap did not admit are dropped.
     held_out: frozenset[str]
+    #: Every game the survey saw; one the write pass meets outside it (its
+    #: shard grew between the passes) was never placed, and is dropped.
+    surveyed: frozenset[str]
     #: ``stratum -> half -> games``, over the two validation strata.
     halves: Mapping[Stratum, Mapping[Half, frozenset[str]]] = field(default_factory=dict)
     #: ``stratum -> half -> rules`` with test records of both polarities in the
@@ -506,6 +526,8 @@ class GameStrata:
         default_factory=dict)
 
     def stratum_of(self, game_id: str) -> Stratum:
+        if game_id not in self.surveyed:
+            return Stratum.DROPPED_UNSURVEYED
         if game_id in self.card_disjoint:
             return Stratum.CARD_DISJOINT
         if game_id in self.held_out:

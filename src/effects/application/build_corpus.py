@@ -16,7 +16,7 @@ import functools
 import logging
 import shutil
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -591,6 +591,7 @@ def _rule_budgets(
     )
     budgets = plan(
         _budgeted_records(training, key_text, natural), class_targets=selection.targets,
+        text_natural=selection.text_planned,
     )
     validation: dict[Stratum, RuleBudgets] = {}
     for stratum in (Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT):
@@ -601,10 +602,16 @@ def _rule_budgets(
             return natural_copies(multipliers.get(str(record.klass), 1.0), record.record_hash)
 
         targets: Counter[str] = Counter()
+        text_natural: dict[str, Counter[str]] = defaultdict(Counter)
         for record in records:
-            targets[str(record.klass)] += held(record)
+            copies = held(record)
+            targets[str(record.klass)] += copies
+            text = key_text.get(record.keys)
+            if text is not None:
+                text_natural[str(record.klass)][text] += copies
         validation[stratum] = plan(
             _budgeted_records(records, key_text, held), class_targets=dict(targets),
+            text_natural=text_natural,
         )
     return budgets, validation
 

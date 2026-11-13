@@ -173,6 +173,7 @@ def place_games(census: GameCensus, rule: PlacementRule) -> GameStrata:
         card_disjoint=card,
         game_disjoint=game,
         held_out=frozenset(census.held_out),
+        surveyed=frozenset(census.games),
         halves=halves,
         left_out_of_half=_left_out(halves, inventories),
     )

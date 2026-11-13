@@ -142,6 +142,23 @@ def test_the_text_cap_bounds_a_texts_total_in_the_class():
     assert written(budgets, "x", FIRES) == 25
 
 
+def test_the_text_cap_counts_the_texts_untagged_records_too():
+    """Ten tagged records of a text whose class also writes fifteen untagged
+    natural copies of it: the text is already at the cap of 25, so no copy is
+    added, though its tagged records alone are well under it."""
+    records = make(10, ("x", FIRES), natural=1, text="same")
+    budgets = plan_rule_budgets(
+        records, class_targets={KLASS: 1_000}, budgeted={"x"}, reuse_cap=4, text_cap=25,
+        text_natural={KLASS: {"same": 25}},
+    )
+    assert written(budgets, "x", FIRES) == 10
+    budgets = plan_rule_budgets(
+        records, class_targets={KLASS: 1_000}, budgeted={"x"}, reuse_cap=4, text_cap=25,
+        text_natural={KLASS: {"same": 20}},
+    )
+    assert written(budgets, "x", FIRES) == 15
+
+
 def test_rows_split_available_and_written_by_source():
     records = (make(2, ("x", FIRES)) + make(1, ("x", FIRES), start=2, source=RuleSource.AIMED)
                + make(3, ("x", NOT), start=3, source=RuleSource.RANDOM_SEAT))

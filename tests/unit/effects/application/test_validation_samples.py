@@ -99,22 +99,47 @@ def test_zero_validation_sample_reads_nothing_and_draws_nothing(strata, monkeypa
     assert samples == {"card-disjoint": [], "game-disjoint": []}
 
 
-def test_two_records_with_one_id_do_not_compare_the_records_themselves(
-    tmp_path, make_record,
-):
-    """The sample heap once broke its tie on the record when hash and id both matched.
-
-    ``EffectRecord`` is a dataclass with no ordering, so the comparison the
-    heap falls through to raises ``TypeError`` rather than picking a winner.
-    A monotonic counter never ties, so the record is never reached.
-    """
+def test_the_copies_of_one_record_take_one_place(tmp_path, make_record):
+    """A stratum writes a record once per copy, every copy under its one
+    ``record_id`` and so one hash: the sample keeps one copy, so a class
+    copied four times still fills its quota with distinct records."""
     write_shard(tmp_path / "shard-00001.jsonl.gz", [
         make_record(record_id="same", game_id="g1"),
-        make_record(record_id="same", game_id="g2"),
-        make_record(record_id="same", game_id="g3"),
+        make_record(record_id="same", game_id="g1"),
+        make_record(record_id="same", game_id="g1"),
+        make_record(record_id="other", game_id="g2"),
     ])
     heaps = _collect(tmp_path, {SamplingClass.RESOLUTION_EFFECT: 2}, seed=1)
-    assert [r.game_id for r in heaps[SamplingClass.RESOLUTION_EFFECT].items()] == ["g3", "g2"]
+    assert sorted(r.record_id for r in heaps[SamplingClass.RESOLUTION_EFFECT].items()) == [
+        "other", "same"]
+
+
+def _copies(make_record, record_id: str, game_id: str, added: int, **fields) -> list:
+    """A record as a stratum writes it: its natural copy and ``added`` copies
+    rule budgets drew for one rule."""
+    from effects.domain.records import Curation
+
+    copies = 1 + added
+    natural = Curation(natural_share=1, copies=copies, drawn_rules=("702.2b",) * bool(added))
+    drawn = Curation(natural_share=1, copies=copies, drawn_rule="702.2b",
+                     drawn_rules=("702.2b",))
+    return ([make_record(record_id=record_id, game_id=game_id, curation=drawn, **fields)
+             for _ in range(added)]
+            + [make_record(record_id=record_id, game_id=game_id, curation=natural, **fields)])
+
+
+def test_a_copied_class_fills_its_quota_with_distinct_natural_copies(tmp_path, make_record):
+    records = [copy for i in range(12)
+               for copy in _copies(make_record, f"r{i}", f"g{i % 3}", added=3)]
+    store = CorpusStore(tmp_path)
+    for stratum in (Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT, Stratum.GATE_ONE):
+        write_shard(store.output_dir(stratum) / "s.jsonl.gz", records)
+    samples = draw_samples(store, mix={SamplingClass.RESOLUTION_EFFECT: 1.0}, size=8, seed=1,
+                           held_out_text_of=_one_text)
+    for stratum in ("card-disjoint", "game-disjoint"):
+        sample = samples[stratum]
+        assert len({r.record_id for r in sample}) == len(sample) == 8, stratum
+        assert all(not r.curation.is_added for r in sample), stratum
 
 
 # ── FR-051: round-robin over held-out texts (T081) ──────────────────────
