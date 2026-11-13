@@ -127,6 +127,16 @@ def killed_process_trees(request, _kill_guard: KillGuard) -> Iterator[list]:
 
 
 @pytest.fixture(autouse=True)
+def _no_stale_staging_check(monkeypatch):
+    """Never empty the machine's real Forge custom-cards directory.
+
+    The first JVM command a process builds clears the variant scripts a
+    killed ``collect-variants`` left staged there; a unit test building a
+    command would otherwise reach the real ``../forge``."""
+    monkeypatch.setattr(forge_jvm, "clear_stale_staging", lambda: None)
+
+
+@pytest.fixture(autouse=True)
 def _no_java_version_probe(monkeypatch):
     """Answer the JVM-version question without spawning ``java -version``.
 

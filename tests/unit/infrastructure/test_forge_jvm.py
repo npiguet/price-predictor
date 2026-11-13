@@ -27,6 +27,9 @@ from price_predictor.infrastructure.forge_jvm import (
     java_feature_version as real_java_feature_version,
 )
 from price_predictor.infrastructure.forge_jvm import (
+    clear_stale_staging as real_clear_stale_staging,
+)
+from price_predictor.infrastructure.forge_jvm import (
     kill_process_tree as real_kill_process_tree,
 )
 from tests.unit.infrastructure.real_processes import (
@@ -593,3 +596,51 @@ class TestOneShotTimeout:
 
     def test_the_timeout_is_an_os_error_a_caller_can_degrade_on(self):
         assert issubclass(forge_jvm.ForgeWorkerTimeout, TimeoutError)
+
+
+class TestStaleStagingIsClearedAtTheFirstLaunch:
+    """V4 #2: a hard-killed collect-variants never unstages its scripts, and
+    every later Forge start on the machine then loads them. The first JVM a
+    process launches clears what the last staging left, once per process."""
+
+    @pytest.fixture
+    def staged(self, tmp_path, monkeypatch):
+        custom = tmp_path / "forge" / "forge-gui" / "data" / "custom" / "cards"
+        custom.mkdir(parents=True)
+        (custom / "bolt_variant_0a1b2c3d.txt").write_text("Name:x", encoding="utf-8")
+        (custom / "my_card.txt").write_text("Name:mine", encoding="utf-8")
+        (custom / forge_jvm.STAGED_MANIFEST).write_text(
+            "bolt_variant_0a1b2c3d.txt", encoding="utf-8",
+        )
+        monkeypatch.setattr(forge_jvm, "forge_dir", lambda: tmp_path / "forge")
+        monkeypatch.setattr(forge_jvm, "clear_stale_staging", real_clear_stale_staging)
+        monkeypatch.setattr(forge_jvm, "_stale_staging_checked", False)
+        return custom
+
+    def test_the_first_command_clears_and_says_so(self, staged, capsys):
+        build_jvm_command(main_class="Main", classpath="cp")
+
+        assert not (staged / "bolt_variant_0a1b2c3d.txt").exists()
+        assert (staged / "my_card.txt").exists(), "a card a person put there stays"
+        assert "Removed 1 variant script(s)" in capsys.readouterr().out
+
+    def test_it_is_checked_once_per_process(self, staged, capsys):
+        build_jvm_command(main_class="Main", classpath="cp")
+        (staged / "late_variant.txt").write_text("Name:y", encoding="utf-8")
+        (staged / forge_jvm.STAGED_MANIFEST).write_text("late_variant.txt", encoding="utf-8")
+
+        build_jvm_command(main_class="Main", classpath="cp")
+
+        assert (staged / "late_variant.txt").exists(), (
+            "a staging this run's own workers made is never taken from under them"
+        )
+
+    def test_the_manifest_is_the_one_the_staging_writes(self):
+        import re
+
+        source = (forge_jvm.project_root() / "forge-connector" / "src" / "main" / "java" / "com"
+                  / "pricepredictor" / "connector" / "ForgeEnvironmentInitializer.java")
+        declared = re.search(
+            r'STAGED_MANIFEST\s*=\s*"([^"]+)"', source.read_text(encoding="utf-8"),
+        )
+        assert declared is not None and declared.group(1) == forge_jvm.STAGED_MANIFEST

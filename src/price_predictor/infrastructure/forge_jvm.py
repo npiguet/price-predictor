@@ -170,6 +170,66 @@ def java_feature_version() -> int | None:
     return parse_java_feature_version(output) if isinstance(output, str) else None
 
 
+#: The list a variant staging writes of the scripts it copied into Forge's
+#: custom-cards directory (``ForgeEnvironmentInitializer.STAGED_MANIFEST``):
+#: not a ``.txt``, because Forge reads every ``.txt`` there as a card.
+STAGED_MANIFEST = ".staged-by-effects.list"
+
+
+def custom_cards_dir() -> Path:
+    """Forge's ``USER_CUSTOM_CARDS_DIR`` as a worker resolves it: the worker
+    makes ``forge-gui/`` the assets dir, and a headless GUI's user dir is
+    ``<assets>/data/``."""
+    return forge_dir() / "forge-gui" / "data" / "custom" / "cards"
+
+
+def unstage_custom_cards(directory: Path | None = None) -> int:
+    """Delete every file the last staging copied into ``directory`` (default
+    :func:`custom_cards_dir`), as its manifest names them, and empty the
+    manifest; returns how many were deleted. A card a person put there is not
+    in the manifest and stays."""
+    directory = custom_cards_dir() if directory is None else Path(directory)
+    manifest = directory / STAGED_MANIFEST
+    if not manifest.is_file():
+        return 0
+    removed = 0
+    for name in manifest.read_text(encoding="utf-8").splitlines():
+        name = name.strip()
+        if name and (directory / name).is_file():
+            (directory / name).unlink()
+            removed += 1
+    manifest.write_text("", encoding="utf-8")
+    return removed
+
+
+_stale_staging_checked = False
+
+
+def clear_stale_staging() -> None:
+    """Before this process's first JVM, take out the variant scripts a
+    ``collect-variants`` left staged when it was killed too hard to unstage
+    them, saying so; every Forge start on the machine would load them.
+
+    Once per process: a variant run's own workers restage at each start, so
+    a staging made after this process began is its own and stays. A run
+    that stages clears the same list itself before staging, so clearing it
+    here first changes nothing for it."""
+    global _stale_staging_checked
+    if _stale_staging_checked:
+        return
+    _stale_staging_checked = True
+    try:
+        removed = unstage_custom_cards()
+    except OSError as exc:
+        print(f"Could not check {custom_cards_dir()} for staged variant scripts: {exc}")
+        return
+    if removed:
+        print(
+            f"Removed {removed} variant script(s) a collect-variants run left "
+            f"staged in {custom_cards_dir()} (it ended without unstaging them)"
+        )
+
+
 def build_jvm_command(
     *,
     main_class: str,
@@ -178,7 +238,10 @@ def build_jvm_command(
     xmx: str | None = None,
     main_args: list[str] | None = None,
 ) -> list[str]:
-    """Construct a ``java`` subprocess command list."""
+    """Construct a ``java`` subprocess command list. The first one a process
+    builds clears stale variant staging first (:func:`clear_stale_staging`):
+    every Forge JVM of every command is built here."""
+    clear_stale_staging()
     cmd: list[str] = ["java"]
     version = java_feature_version()
     if version is not None and version >= _FIRST_WARNING_JDK:
