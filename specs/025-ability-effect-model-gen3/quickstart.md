@@ -82,7 +82,8 @@ $rules = (Get-Content rules/directed-fork-rules.txt | Where-Object { $_.Trim() -
 ```
 
 Before the first long run, the fork fidelity audit (T181): collect for 20 minutes into a scratch run
-directory, stop the run, and count the console's `fork fidelity:` lines by field.
+directory, stop the run, and count the `fork fidelity:` lines by field in its `logs/` worker logs
+(the run's end prints their total as `fork_fidelity`).
 
 ```powershell
 .venv\Scripts\python.exe -u -m sealed match-outcomes --workers 6 --effect-records <scratch run dir> --random-seat-share 0.25 --random-seat-probability 0.5 --interventions-per-game 4 --probes-per-game 4 --directed-fork-rules $rules --count-dropped-events
@@ -102,8 +103,9 @@ python -u -m effects collect-variants --round steered --rule-counts <counts> --e
 The steered round runs last, on counts of everything collected before it (FR-058c). Every
 collecting command takes the same three decision-sampling rates (FR-059a).
 
-Each collector's run directory is its `--effect-records`: worker logs under `logs/`, the round's
-failure lines printed after each round and kept in `run.json`. A `collect-coverage` run in a new run
+Each collecting command's run directory is its `--effect-records`: worker logs under `logs/`,
+their failure lines printed as the run goes (after each round on a collector, at each status line
+on `match-outcomes`) and kept in `run.json`. A `collect-coverage` run in a new run
 directory passes each earlier run's directory as `--count-from`, so their coverage counts. An
 interrupted `collect-variants` restarts into the same directory with the same `--seed` and
 `--continues <run id>`, the run id its `run.json` records.

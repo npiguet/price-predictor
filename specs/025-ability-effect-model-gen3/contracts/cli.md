@@ -99,6 +99,15 @@ refused before any game, as the random-seat flags are (`candidate_rate_error`): 
 stage 1 keeps it. Every collecting run of a corpus, the held-out coverage round included, uses
 the same three rates (FR-059a).
 
+`--workers N` is 1 to 12 (exit 2, usage). With `--effect-records DIR`, `DIR` is the run directory:
+the shards at its top level, every worker log under `DIR/logs/` (`<run id>.<slot>.log`, never
+beside the shards). At every status line and at the end the supervisor scans what the logs gained
+for failure lines (`price_predictor.domain.worker_failures`, as on the collectors) and prints them
+by kind; at the end it prints the run's totals and records in its `run.json` entry `run_id`,
+`effect_records` (records the run's shards hold), `matches`, `worker_failures`,
+`worker_failure_examples` and `worker_survivors`. A run that completed matches and wrote no effect
+record exits 1. `match-outcomes.txt` and `cards-played.txt` stay at `output/sealed/`.
+
 ## `python -m effects collect-coverage` (existing)
 
 | Flag | Default | Meaning |
@@ -111,10 +120,18 @@ the same three rates (FR-059a).
 
 `--wording-cards` beside `--only-cards` exits 1. A run with none of `--exclude-cards`,
 `--split-from` and `--training-corpus` exits 1 (FR-058g). A `--count-from` directory that does not
-exist, or that holds or is held by `--effect-records` or another `--count-from`, exits 1. A card the
-castability consult leaves unanswered, when it answers any, is not in Forge's card database: it
-leaves the coverage unit and the decks, named in a warning. A run that plays rounds and writes no
-record exits 1.
+exist, or that holds or is held by `--effect-records` or another `--count-from`, exits 1.
+
+The castability verdict only ranks cards and never drops one. A separate rule applies to a card
+the consult leaves unanswered while answering others: Forge's card database does not hold it, no
+deck can name it, and it leaves the coverage unit and the decks. No share of such cards stops the
+run. A warning prints their count, their share of the consulted pool and the first twenty names,
+and says that a large share means `../forge` is older than the converted cards; the run's
+`run.json` entry records `unresolved_cards`, `unresolved_share` and `unresolved_examples`.
+
+A run counts a round only once it plays one. A run that plays rounds and writes no record in its
+own shards (`<run id>.*`) exits 1; a run that plays none exits 0 when every unit was already done
+and 1 when units remain that no deck could hold.
 
 ## Both collectors (existing)
 
@@ -132,14 +149,20 @@ level, `run.json`, every worker log and each round's progress file under `logs/`
 (`logs/<run id>.<slot>.log`, `logs/<run id>.round-NNNN.progress.txt`), and the decks file the
 workers read under `decks/` (`decks/coverage-decks.<run id>.txt`, `decks/variant-decks.<run id>.txt`).
 After each round the collector scans the round's additions to the worker logs for failure lines
-(`effects.domain.worker_failures`: unresolved deck, match error, worker gave up, hook, emitter,
-boundary step, withheld records, fork score mismatch, fork fidelity, staging, JVM error and the
-rest), prints them by kind, and names any worker the kill could not end. The running command's
-entry in `run.json`'s `invocations` records `run_id` (the supervisor's), `caps` (every
-`CollectionCaps` field, resolved), `rounds`, `worker_failures` (kind to line count),
-`worker_failure_examples` (kind to its first line) and `worker_survivors` (PIDs). A one-shot JVM
-(the castability consult, the sidecar pass) is killed after 3600 s: the consult then ranks every
-card castable, the sidecar pass exits 1.
+(`price_predictor.domain.worker_failures`: unresolved deck, match error, worker gave up, hook,
+emitter, boundary step, withheld records, fork score mismatch, fork fidelity, staging, JVM error
+and the rest, each found anywhere in a line, since a worker's stdout and stderr interleave
+mid-line), prints them by kind, and names any worker the kill could not end and still running.
+A log rotated twice between two scans counts as `log_unread`. The running command's entry in
+`run.json`'s `invocations` records `run_id` (the supervisor's), `caps` (every `CollectionCaps`
+field, resolved), `rounds`, `worker_failures` (kind to line count), `worker_failure_examples`
+(kind to its first line) and `worker_survivors` (PIDs). The castability consult and the sidecar
+pass are one-shot JVMs killed after `max(3600, 600 + 0.1 × scripts handed over)` seconds: the
+consult then ranks every card castable, the sidecar pass exits 1.
+
+The first JVM any command starts removes the variant scripts a `collect-variants` killed before
+it could unstage them left in Forge's custom-cards directory (the files its staging list names),
+and prints how many.
 
 ## `python -m effects collect-variants` (existing)
 
@@ -164,8 +187,9 @@ two decks). A protection keyword line of a source script swaps its quality for a
 `--variant-volume` is removed. Startup, exit 1: no holdout source (`--exclude-cards`,
 `--split-from`, `--training-corpus`); `--round steered` without `--rule-counts`, or with a counts
 file whose `generation` is not `gen-3`; `--continues` with `--round steered`, or naming a run id no
-shard under `--effect-records` carries. A run whose variants all have their games before the first
-round plays none and exits 0; one that plays rounds and writes no record exits 1. The manifest's
+shard under `--effect-records` carries. A run that plays no round exits 0 when every variant
+already has its games, and 1 when variants remain that no deck could hold; one that plays rounds and
+writes no record exits 1. The manifest's
 inputs list `--variant-scripts`, which the run reads and extends, and `rules/` in the steered round.
 A steered round's deck file adds a fourth column, the
 deck's rule (`LABEL;SET_CODE;Card1|...|Card40;RULE`); the worker stamps every record of a game

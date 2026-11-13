@@ -1062,8 +1062,10 @@ and that the reporting half never enters the control score.
 - **FR-058g**: `collect-coverage` and `collect-variants` MUST exit 1 at startup without a holdout
   source (`--exclude-cards`, `--split-from` or `--training-corpus`); the steered round MUST exit 1
   without `--rule-counts` or on counts of gen-2 records. Both MUST exit 1 when they play rounds and
-  write no record, and MUST report their workers' failure lines by kind after each round and in
-  `run.json` (contracts/cli.md § Both collectors).
+  write no record of their own, or play none while units remain that no deck could hold, and MUST
+  report their workers' failure lines by kind after each round and in `run.json`
+  (contracts/cli.md § Both collectors); `match-outcomes --effect-records` MUST do the same at each
+  status line and exit 1 when its matches wrote no effect record.
 - **FR-059**: The game-disjoint stratum MUST keep only games between two Forge AIs; the card-disjoint
   stratum MUST keep every game naming a held-out card, random-seat games included. A permanent spell's
   resolution record MUST survive `build-corpus`, keyed to the permanent's card. A decision record
