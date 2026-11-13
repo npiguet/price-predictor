@@ -81,14 +81,35 @@ class OwnedProcess:
         self._handle = None
 
 
+def end_tree(owner: subprocess.Popen) -> None:
+    """End ``owner`` and every process it started, then reap it.
+
+    By ``owner``'s PID, which is safe only because ``owner`` is a ``Popen``
+    this test holds and has not reaped: Windows never hands out the PID of a
+    process while a handle to it is open. A tree kill reaches a grandchild
+    whose PID the test never learned, or learned and could not own."""
+    if owner.poll() is None:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(owner.pid)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+            )
+        else:
+            try:
+                os.killpg(os.getpgid(owner.pid), 9)
+            except (ProcessLookupError, PermissionError):
+                pass
+    owner.kill()
+    owner.wait()
+
+
 def wait_for_file(path: Path, owner: subprocess.Popen, *, seconds: float = 30) -> str:
     """The text ``owner`` writes to ``path``; ``owner`` killed and an error
     raised when it dies or the wait runs out first."""
     deadline = time.monotonic() + seconds
     while not path.exists():
         if owner.poll() is not None or time.monotonic() > deadline:
-            owner.kill()
-            owner.wait()
+            end_tree(owner)
             raise RuntimeError(f"{owner.args!r} never wrote {path}")
         time.sleep(0.05)
     return path.read_text(encoding="utf-8")
@@ -96,13 +117,13 @@ def wait_for_file(path: Path, owner: subprocess.Popen, *, seconds: float = 30) -
 
 def start_with_grandchild(pid_file: Path, **popen) -> tuple[subprocess.Popen, OwnedProcess]:
     """A child holding a sleeping grandchild; returns both, the grandchild owned
-    through a handle opened while it runs. On any failure here the child is
-    killed before the error propagates."""
+    through a handle opened while it runs. On any failure here the child's
+    whole tree, the grandchild included, is ended before the error
+    propagates."""
     child = subprocess.Popen([sys.executable, "-c", _WITH_GRANDCHILD, str(pid_file)], **popen)
     try:
         grandchild = OwnedProcess(int(wait_for_file(pid_file, child)))
     except BaseException:
-        child.kill()
-        child.wait()
+        end_tree(child)
         raise
     return child, grandchild

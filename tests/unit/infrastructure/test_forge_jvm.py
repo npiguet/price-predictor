@@ -38,6 +38,7 @@ from price_predictor.infrastructure.forge_jvm import (
 from tests.unit.infrastructure.real_processes import (
     SLEEPER,
     OwnedProcess,
+    end_tree,
     start_with_grandchild,
     wait_for_file,
 )
@@ -537,8 +538,7 @@ class TestWorkersDieWithTheirParent:
             pid, bound = wait_for_file(out, parent).split()
             worker = OwnedProcess(int(pid))
         except BaseException:
-            parent.kill()
-            parent.wait()
+            end_tree(parent)
             raise
         return parent, worker, bound == "True"
 
