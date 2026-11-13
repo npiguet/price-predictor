@@ -312,7 +312,46 @@ final class EventAttribution {
         }
         return event
                 .duration(duration(root, pointer, event.type()))
-                .attributedTo(attributedTo(pointer))
+                .attributedTo(damageLink(event, pointer, attributedTo(pointer)))
                 .cause(namedCause != null ? namedCause : cause(root, pointer));
+    }
+
+    /**
+     * The link a damage belongs to: Forge deals a chain's damage from one
+     * shared damage map when its last clause resolves (Arc Trail's 2 to one
+     * target and 1 to another), so the resolving clause is the last link for
+     * every damage. A damage whose subject that clause does not target but an
+     * earlier link does is that link's.
+     *
+     * @param byPointer the attribution the resolving clause gives
+     */
+    static String damageLink(EffectEvent event, Object pointer, String byPointer) {
+        if (event.type() != EventType.DAMAGE_DEALT || event.subjects().isEmpty()
+                || !(pointer instanceof SpellAbility clause)) {
+            return byPointer;
+        }
+        String subject = event.subjects().get(0);
+        if (targets(clause, subject)) {
+            return byPointer;
+        }
+        for (SpellAbility link = clause.getParent(); link != null; link = link.getParent()) {
+            if (targets(link, subject)) {
+                return attributedTo(link);
+            }
+        }
+        return byPointer;
+    }
+
+    /** Whether {@code clause} targets the object {@code ref} names. */
+    private static boolean targets(SpellAbility clause, String ref) {
+        if (!clause.usesTargeting()) {
+            return false;
+        }
+        for (Object target : clause.getTargets()) {
+            if (ref.equals(ChainTargets.refOf(target))) {
+                return true;
+            }
+        }
+        return false;
     }
 }

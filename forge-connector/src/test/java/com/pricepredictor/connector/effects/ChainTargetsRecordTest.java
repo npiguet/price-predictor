@@ -75,6 +75,41 @@ class ChainTargetsRecordTest {
     }
 
     /**
+     * Each of Arc Trail's damages belongs to the link that targets its
+     * subject (WP4's leftover): Forge deals both from one damage map as the
+     * chain's last clause (DamageResolve) resolves, so both read its index before.
+     */
+    @Test
+    void eachDamageOfAChainIsTheLinkTargetingItsSubject() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card wurm = TestBoard.inPlay(game, opponent, "Craw Wurm");
+        Card arcTrail = TestBoard.inHand(game, caster, "Arc Trail");
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            SpellAbility spell = TestBoard.spellOf(
+                    game.getAction().moveToStack(arcTrail, null), caster);
+            spell.getTargets().add(wurm);
+            spell.getSubAbility().getTargets().add(opponent);
+            game.getStack().add(spell);
+            game.getStack().resolveStack();
+            TestBoard.priority(game);
+            TestBoard.nextStep(game);
+        });
+
+        String effect = records(records, "resolution").get(0);
+        Map<String, String> bySubject = new java.util.HashMap<>();
+        for (Map<String, Object> event : RecordLines.events(effect)) {
+            if ("damage_dealt".equals(event.get("type"))) {
+                bySubject.put((String) ((List<?>) event.get("subjects")).get(0),
+                        String.valueOf(event.get("attributed_to")));
+            }
+        }
+        assertEquals(Map.of(Refs.of(wurm), "root", Refs.of(opponent), "0"), bySubject, effect);
+    }
+
+    /**
      * Shock at a creature that left the battlefield before it resolved
      * fizzles: its effect half holds no target, names the creature as cast,
      * and carries the creature's entity, which the cast's referenced it.
@@ -104,6 +139,11 @@ class ChainTargetsRecordTest {
         List<?> entities = (List<?>) asMap(parse(effect).get("state")).get("entities");
         assertTrue(entities.stream().anyMatch(entity -> target.equals(asMap(entity).get("id"))),
                 "the target as cast is an entity of the half's board: " + effect);
+        List<?> links = (List<?>) asMap(parse(effect).get("state")).get("links");
+        assertTrue(links.stream().map(RecordLines::asMap).anyMatch(link ->
+                        "targets".equals(link.get("type")) && target.equals(link.get("to"))),
+                "the half's targets link names its target as cast, not after the fizzle: "
+                        + links);
     }
 
     /** The entity of {@code record}'s board whose id is {@code id}, or null. */

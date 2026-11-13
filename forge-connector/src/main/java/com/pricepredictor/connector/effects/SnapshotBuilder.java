@@ -157,7 +157,7 @@ public final class SnapshotBuilder {
             }
         }
         return snapshot(referenced, StaticSuppression.NONE, acting, null, null, true,
-                atCast.lastKnown());
+                atCast.lastKnown(), atCast.all());
     }
 
     /**
@@ -217,6 +217,23 @@ public final class SnapshotBuilder {
     private Snapshot snapshot(
             Iterable<Card> referenced, StaticSuppression board, SpellAbility acting, Card source,
             EffectEvent pending, boolean chosen, List<Card> lastKnownTargets) {
+        return snapshot(referenced, board, acting, source, pending, chosen, lastKnownTargets, null);
+    }
+
+    /**
+     * The same, the acting ability's {@code targets} links drawn from
+     * {@code actingTargetsAsCast} (refs, root first) rather than from its
+     * clauses: an effect half's, whose clauses Forge's check for illegal
+     * targets has already thinned, so links read off them would show the
+     * fizzle the half is to predict, as {@code refs.targets} would.
+     *
+     * @param actingTargetsAsCast the acting chain's targets as cast, or null
+     *                            to read its clauses
+     */
+    private Snapshot snapshot(
+            Iterable<Card> referenced, StaticSuppression board, SpellAbility acting, Card source,
+            EffectEvent pending, boolean chosen, List<Card> lastKnownTargets,
+            List<String> actingTargetsAsCast) {
         Set<Card> tiers = collectEntities(referenced);
         List<String> entities = new ArrayList<>();
         Set<String> present = new HashSet<>();
@@ -239,7 +256,8 @@ public final class SnapshotBuilder {
         return new Snapshot(
                 globalToJson(tiers, board), players, "[" + String.join(",", entities) + "]",
                 SnapshotLinks.render(
-                        game, cards, tiers, acting, chosen, pending, board, floating),
+                        game, cards, tiers, acting, chosen, pending, board, floating,
+                        actingTargetsAsCast),
                 RefsJson.render(chosen ? acting : null, source),
                 pending == null ? "null" : pending.toJson(),
                 libraries);
