@@ -26,6 +26,7 @@ import static com.pricepredictor.connector.effects.RecordLines.payload;
 import static com.pricepredictor.connector.effects.RecordLines.scriptOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * {@link RunParamNormalizer}'s per-mode table, checked against Forge's own
@@ -380,5 +381,185 @@ class RunParamNormalizerTest {
         assertEquals("damage_prevented", event.get("type"), event.toString());
         assertEquals(3L, params(event).get("amount"), event.toString());
         assertEquals(List.of(Refs.of(you(game))), event.get("subjects"), event.toString());
+    }
+
+    // ── every Forge mode is read or listed (follow-up item 7) ───────────
+
+    /** Every TriggerType is a row of the table or listed as read for no magnitude, never both. */
+    @Test
+    void everyForgeTriggerModeIsReadOrListed() {
+        List<String> missing = new ArrayList<>();
+        for (TriggerType mode : TriggerType.values()) {
+            boolean read = RunParamNormalizer.TRIGGER_MODES.containsKey(mode.name());
+            boolean listed = RunParamNormalizer.TRIGGER_MODES_UNREAD.contains(mode.name());
+            if (read == listed) {
+                missing.add(mode.name());
+            }
+        }
+        assertEquals(List.of(), missing, "trigger modes neither read nor listed, or both");
+    }
+
+    /** Every ReplacementType is a row of the table or listed as read for no magnitude, never both. */
+    @Test
+    void everyForgeReplacementModeIsReadOrListed() {
+        List<String> missing = new ArrayList<>();
+        for (ReplacementType mode : ReplacementType.values()) {
+            boolean read = RunParamNormalizer.REPLACEMENT_MODES.containsKey(mode.name());
+            boolean listed = RunParamNormalizer.REPLACEMENT_MODES_UNREAD.contains(mode.name());
+            if (read == listed) {
+                missing.add(mode.name());
+            }
+        }
+        assertEquals(List.of(), missing, "replacement modes neither read nor listed, or both");
+    }
+
+    // ── the modes that carry a magnitude ────────────────────────────────
+
+    /** DamageDoneOnce: the damage one target took at once, summed, and its one source. */
+    @Test
+    void damageDealtAtOnceIsOneDamageOfItsSum() throws Throwable {
+        Game game = game();
+        Card reckoner = TestBoard.inPlay(game, opponent(game), "Boros Reckoner");
+        Card shock = TestBoard.inHand(game, you(game), "Shock");
+        List<String> records = played(game, () -> {
+            TestBoard.cast(game, shock, you(game), reckoner);
+            game.getStack().resolveStack();
+        });
+
+        Map<String, Object> event = fired(records, "cardsfolder/b/boros_reckoner.txt").get(0);
+        assertEquals("damage_dealt", event.get("type"), event.toString());
+        assertEquals(2L, params(event).get("amount"), event.toString());
+        assertEquals(List.of(Refs.of(reckoner)), event.get("subjects"), event.toString());
+        assertEquals(Refs.of(game.getCardState(shock)), params(event).get("source"), event.toString());
+    }
+
+    /** ChangesZoneAll: the cards a batch moved, and the move they made. */
+    @Test
+    void aBatchOfMovesIsOneZoneChangeOfItsCards() throws Throwable {
+        Game game = game();
+        TestBoard.inPlay(game, you(game), "Dramatic Finale");
+        Card bears = TestBoard.inPlay(game, you(game), "Grizzly Bears");
+        Card shock = TestBoard.inHand(game, opponent(game), "Shock");
+        List<String> records = played(game, () -> {
+            TestBoard.cast(game, shock, opponent(game), bears);
+            game.getStack().resolveStack();
+            game.getAction().checkStateEffects(true);
+        });
+
+        Map<String, Object> event = fired(records, "cardsfolder/d/dramatic_finale.txt").get(0);
+        assertEquals("zone_change", event.get("type"), event.toString());
+        assertEquals(List.of(Refs.of(bears)), event.get("subjects"), event.toString());
+        assertEquals("battlefield", params(event).get("from_zone"), event.toString());
+        assertEquals("graveyard", params(event).get("to_zone"), event.toString());
+    }
+
+    /** Exploited: the creature sacrificed to the exploit is what was sacrificed. */
+    @Test
+    void anExploitedCreatureIsSacrificed() throws Throwable {
+        Game game = game();
+        TestBoard.inPlay(game, you(game), "Colonel Autumn");
+        Card butcher = TestBoard.inPlay(game, you(game), "Silumgar Butcher");
+        Card bears = TestBoard.inPlay(game, you(game), "Grizzly Bears");
+        List<String> records = played(game, () -> {
+            // What SacrificeEffect runs for an exploit (its Exploited key the
+            // sacrificed creature's last-known copy).
+            Card lastKnown = forge.game.card.CardCopyService.getLKICopy(bears);
+            game.getAction().moveToGraveyard(bears, null);
+            Map<forge.game.ability.AbilityKey, Object> run = forge.game.ability.AbilityKey.mapFromCard(butcher);
+            run.put(forge.game.ability.AbilityKey.Exploited, lastKnown);
+            game.getTriggerHandler().runTrigger(TriggerType.Exploited, run, false);
+        });
+
+        Map<String, Object> event = fired(records, "cardsfolder/c/colonel_autumn.txt").get(0);
+        assertEquals("sacrificed", event.get("type"), event.toString());
+        assertEquals(List.of(Refs.of(bears)), event.get("subjects"), event.toString());
+    }
+
+    /** DiscardedAll: the cards discarded at once, as subjects and count. */
+    @Test
+    void cardsDiscardedAtOnceAreOneDiscardOfTheirCount() throws Throwable {
+        Game game = game();
+        TestBoard.inPlay(game, you(game), "Arius, Flyby Trawler");
+        TestBoard.inHand(game, you(game), "Forest");
+        TestBoard.inHand(game, you(game), "Island");
+        Card rot = TestBoard.inHand(game, opponent(game), "Mind Rot");
+        List<String> records = played(game, () -> {
+            TestBoard.cast(game, rot, opponent(game), you(game));
+            game.getStack().resolveStack();
+        });
+
+        Map<String, Object> event = fired(records, "cardsfolder/a/arius_flyby_trawler.txt").get(0);
+        assertEquals("card_discarded", event.get("type"), event.toString());
+        assertEquals(2L, params(event).get("count"), event.toString());
+        assertEquals(2, ((List<?>) event.get("subjects")).size(), event.toString());
+    }
+
+    /** RolledDie and RolledDieOnce: the dice, their sides and their results. */
+    @Test
+    void aRolledDieIsADiceRoll() throws Throwable {
+        Game game = game();
+        TestBoard.inPlay(game, you(game), "As Luck Would Have It");
+        TestBoard.inPlay(game, you(game), "Brazen Dwarf");
+        Card host = TestBoard.inPlay(game, you(game), "Grizzly Bears");
+        forge.game.spellability.SpellAbility roller = forge.game.ability.AbilityFactory.getAbility(
+                "AB$ RollDice | Cost$ 0 | Sides$ 6", host);
+        roller.setActivatingPlayer(you(game));
+        List<String> records = played(game, () -> roller.resolve());
+
+        Map<String, Object> one = fired(records, "cardsfolder/a/as_luck_would_have_it.txt").get(0);
+        assertEquals("dice_rolled", one.get("type"), one.toString());
+        assertEquals(6L, params(one).get("sides"), one.toString());
+        Map<String, Object> die = asMap(((List<?>) params(one).get("results")).get(0));
+        assertTrue(die.containsKey("natural") && die.containsKey("final"), one.toString());
+        Map<String, Object> once = fired(records, "cardsfolder/b/brazen_dwarf.txt").get(0);
+        assertEquals("dice_rolled", once.get("type"), once.toString());
+        assertEquals(1, ((List<?>) params(once).get("results")).size(), once.toString());
+    }
+
+    /** CounterPlayerAddedAll: one player's counters on one object, their total. */
+    @Test
+    void countersAPlayerPutAtOnceAreTheirTotal() throws Throwable {
+        Game game = game();
+        TestBoard.inPlay(game, you(game), "All Will Be One");
+        Card bears = TestBoard.inPlay(game, you(game), "Grizzly Bears");
+        List<String> records = played(game,
+                () -> putCounters(game, bears, CounterType.getType("P1P1"), 3, you(game)));
+
+        Map<String, Object> event = fired(records, "cardsfolder/a/all_will_be_one.txt").get(0);
+        assertEquals("counter_change", event.get("type"), event.toString());
+        assertEquals(List.of(Refs.of(bears)), event.get("subjects"), event.toString());
+        assertEquals(3L, delta(event), event.toString());
+    }
+
+    /** The Scry replacement: the cards a scry would look at. */
+    @Test
+    void aScryReplacementReadsTheScrysCount() throws Throwable {
+        Game game = game();
+        TestBoard.inPlay(game, you(game), "Eligeth, Crossroads Augur");
+        for (int i = 0; i < 4; i++) {
+            game.getAction().moveToLibrary(TestBoard.card(game, you(game), "Forest"), null, null);
+        }
+        List<String> records = played(game,
+                () -> game.getAction().scry(List.of(you(game)), 2, null));
+
+        Map<String, Object> rewrite = rewrite(records, "cardsfolder/e/eligeth_crossroads_augur.txt");
+        Map<String, Object> incoming = asMap(rewrite.get("incoming"));
+        assertEquals("card_looked_at", incoming.get("type"), rewrite.toString());
+        assertEquals(2L, params(incoming).get("count"), rewrite.toString());
+    }
+
+    /** The CreateToken replacement: the tokens it would make, so a doubling is an edit. */
+    @Test
+    void aTokenReplacementReadsTheTokensItMakes() throws Throwable {
+        Game game = game();
+        TestBoard.inPlay(game, you(game), "Academy Manufactor");
+        Card host = TestBoard.inPlay(game, you(game), "Grizzly Bears");
+        forge.game.spellability.SpellAbility clue = forge.game.ability.AbilityFactory.getAbility(
+                "AB$ Token | Cost$ 0 | TokenScript$ c_a_clue_draw", host);
+        clue.setActivatingPlayer(you(game));
+        List<String> records = played(game, () -> clue.resolve());
+
+        Map<String, Object> rewrite = rewrite(records, "cardsfolder/a/academy_manufactor.txt");
+        assertEquals(1L, params(asMap(rewrite.get("incoming"))).get("count"), rewrite.toString());
     }
 }

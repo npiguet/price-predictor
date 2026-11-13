@@ -284,10 +284,10 @@ class TriggerRecordTest {
     /** An unmapped mode carries its mode and says nothing it cannot support. */
     @Test
     void anUnmappedModeCarriesOnlyWhatItKnows() {
-        Map<String, Object> event = eventOf(triggerOfMode("Exploited"), Map.of());
+        Map<String, Object> event = eventOf(triggerOfMode("Investigated"), Map.of());
 
         assertEquals("state_flag_change", event.get("type"), event.toString());
-        assertEquals(Map.of("mode", "Exploited"), params(event), event.toString());
+        assertEquals(Map.of("mode", "Investigated"), params(event), event.toString());
     }
 
     @Test

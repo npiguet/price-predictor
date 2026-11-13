@@ -70,10 +70,19 @@ final class RunParamNormalizer {
         if (byName.isEmpty()) {
             return event;
         }
-        for (String subject : subjectsOf(byName)) {
-            event.subject(subject);
+        if (reading.subjectKey() != null) {
+            Set<String> subjects = new LinkedHashSet<>();
+            refsIn(byName.get(reading.subjectKey()), subjects);
+            subjects.forEach(event::subject);
+        } else {
+            for (String subject : subjectsOf(byName)) {
+                event.subject(subject);
+            }
         }
         normalizeParams(event, mode, reading, byName);
+        if (reading.extra() != null) {
+            reading.extra().read(event, byName);
+        }
         event.cause(causeOf(byName));
         if (byName.get("CardLKI") instanceof Card lastKnown) {
             event.lastKnown(lastKnown);
@@ -410,10 +419,11 @@ final class RunParamNormalizer {
      */
     private static Map<String, Integer> counterMapTotals(Object counterMap) {
         Map<String, Integer> total = new LinkedHashMap<>();
-        if (!(counterMap instanceof Map<?, ?> counters)) {
-            return total;
-        }
-        for (Object value : counters.values()) {
+        // CounterPlayerAddedAll hands over one player's multiset itself.
+        Iterable<?> multisets = counterMap instanceof com.google.common.collect.Multiset<?> one
+                ? List.of(one)
+                : counterMap instanceof Map<?, ?> counters ? counters.values() : List.of();
+        for (Object value : multisets) {
             if (!(value instanceof com.google.common.collect.Multiset<?> multiset)) {
                 continue;
             }
@@ -590,7 +600,11 @@ final class RunParamNormalizer {
      * (written positive), {@code -1} a loss (written negative), {@code 0}
      * the amount as read, already signed.
      */
-    record Reading(EventType type, Amount amount, int sign) {
+    record Reading(EventType type, Amount amount, int sign, String subjectKey, Extra extra) {
+
+        Reading(EventType type, Amount amount, int sign) {
+            this(type, amount, sign, null, null);
+        }
 
         static Reading of(EventType type) {
             return new Reading(type, Amount.NONE, 1);
@@ -603,7 +617,114 @@ final class RunParamNormalizer {
         static Reading loss(EventType type, Amount amount) {
             return new Reading(type, amount, -1);
         }
+
+        /** The same reading, its subjects the entities under {@code key}. */
+        Reading about(String key) {
+            return new Reading(type, amount, sign, key, extra);
+        }
+
+        /** The same reading, with what the mode's own map says beyond the type's reading. */
+        Reading with(Extra more) {
+            return new Reading(type, amount, sign, subjectKey, more);
+        }
     }
+
+    /** What one mode's map says beyond its event type's general reading. */
+    @FunctionalInterface
+    interface Extra {
+        void read(EffectEvent event, Map<String, Object> byName);
+    }
+
+    /**
+     * {@code DamageDoneOnce}: one target's damage from every source at once
+     * ({@code DamageMap}, source to amount), as one {@code damage_dealt} of
+     * the summed amount, its {@code source} named when one source dealt it.
+     */
+    private static void damageMap(EffectEvent event, Map<String, Object> byName) {
+        if (!(byName.get("DamageMap") instanceof Map<?, ?> map)) {
+            return;
+        }
+        int sum = 0;
+        for (Object amount : map.values()) {
+            Integer each = intOf(amount);
+            sum += each == null ? 0 : each;
+        }
+        event.param("amount", sum);
+        if (map.size() == 1) {
+            event.param("source", subjectOf(map.keySet().iterator().next()));
+        }
+    }
+
+    /**
+     * {@code ChangesZoneAll}: every card a batch of moves moved ({@code
+     * Cards}, a {@code CardZoneTable} of origin, destination and cards), as
+     * one {@code zone_change}'s subjects, with its zones where every card
+     * made the same move.
+     */
+    private static void zoneTable(EffectEvent event, Map<String, Object> byName) {
+        if (!(byName.get("Cards") instanceof com.google.common.collect.Table<?, ?, ?> table)) {
+            return;
+        }
+        Set<String> moved = new LinkedHashSet<>();
+        for (Object cards : table.values()) {
+            refsIn(cards, moved);
+        }
+        moved.forEach(event::subject);
+        if (table.size() == 1) {
+            com.google.common.collect.Table.Cell<?, ?, ?> only = table.cellSet().iterator().next();
+            event.param("from_zone", CardSpelling.zoneName(only.getRowKey()));
+            event.param("to_zone", CardSpelling.zoneName(only.getColumnKey()));
+        }
+    }
+
+    /** {@code RolledDie}: one die, its natural and its final value. */
+    private static void oneDie(EffectEvent event, Map<String, Object> byName) {
+        event.param("sides", intOf(byName.get("Sides")));
+        Integer result = intOf(byName.get("Result"));
+        if (result != null) {
+            Map<String, Integer> die = new LinkedHashMap<>();
+            Integer natural = intOf(byName.get("NaturalResult"));
+            if (natural != null) {
+                die.put("natural", natural);
+            }
+            die.put("final", result);
+            event.param("results", List.of(die));
+        }
+    }
+
+    /** {@code RolledDieOnce}: every die of one roll, their final values. */
+    private static void dice(EffectEvent event, Map<String, Object> byName) {
+        event.param("sides", intOf(byName.get("Sides")));
+        if (byName.get("Result") instanceof Iterable<?> results) {
+            List<Map<String, Integer>> dice = new ArrayList<>();
+            for (Object result : results) {
+                Integer value = intOf(result);
+                if (value != null) {
+                    dice.add(Map.of("final", value));
+                }
+            }
+            event.param("results", dice);
+        }
+    }
+
+    /**
+     * The tokens a {@code CreateToken} replacement's table ({@code Token},
+     * a {@code TokenCreateTable} of controller, prototype and number) makes.
+     */
+    private static Integer tokenTable(Map<String, Object> byName) {
+        if (!(byName.get("Token") instanceof com.google.common.collect.Table<?, ?, ?> table)) {
+            return null;
+        }
+        int sum = 0;
+        for (Object number : table.values()) {
+            Integer each = intOf(number);
+            sum += each == null ? 0 : each;
+        }
+        return sum;
+    }
+
+    /** A subject key no map holds: a mode whose subjects its {@link Extra} names. */
+    private static final String NO_KEY = "";
 
     /** A mode with no row: the generic type, carrying its mode and nothing read. */
     private static final Reading GENERIC = Reading.of(EventType.STATE_FLAG_CHANGE);
@@ -625,6 +746,19 @@ final class RunParamNormalizer {
             Map.entry("DamageDealtOnce", Reading.of(EventType.DAMAGE_DEALT)),
             Map.entry("DamageAll", Reading.of(EventType.DAMAGE_DEALT)),
             Map.entry("DamagePreventedOnce", Reading.of(EventType.DAMAGE_PREVENTED)),
+            Map.entry("DamageDoneOnce", Reading.of(EventType.DAMAGE_DEALT)
+                    .with(RunParamNormalizer::damageMap)),
+            Map.entry("ChangesZoneAll", Reading.of(EventType.ZONE_CHANGE)
+                    .about(NO_KEY).with(RunParamNormalizer::zoneTable)),
+            // The creature sacrificed to the exploit, as it last was.
+            Map.entry("Exploited", Reading.of(EventType.SACRIFICED).about("Exploited")),
+            Map.entry("DiscardedAll", Reading.of(EventType.CARD_DISCARDED, Amount.sizeOf("Cards"))
+                    .about("Cards")),
+            Map.entry("RolledDie", Reading.of(EventType.DICE_ROLLED).with(RunParamNormalizer::oneDie)),
+            Map.entry("RolledDieOnce", Reading.of(EventType.DICE_ROLLED)
+                    .with(RunParamNormalizer::dice)),
+            // One player's counters on one object, every type at once.
+            Map.entry("CounterPlayerAddedAll", Reading.of(EventType.COUNTER_CHANGE).about("Object")),
             // Drawn, Discarded, Milled and TokenCreated fire once per card;
             // Drawn's Number and TokenCreated's Num are the turn's ordinals,
             // not counts.
@@ -697,7 +831,9 @@ final class RunParamNormalizer {
             Map.entry("AddCounter", Reading.of(EventType.COUNTER_CHANGE)),
             Map.entry("RemoveCounter", new Reading(
                     EventType.COUNTER_CHANGE, RunParamNormalizer::removalOf, 0)),
-            Map.entry("CreateToken", Reading.of(EventType.TOKEN_CREATED)),
+            Map.entry("CreateToken", Reading.of(EventType.TOKEN_CREATED,
+                    RunParamNormalizer::tokenTable)),
+            Map.entry("Scry", Reading.of(EventType.CARD_LOOKED_AT)),
             Map.entry("Untap", Reading.of(EventType.UNTAPPED)),
             Map.entry("Tap", Reading.of(EventType.TAPPED)),
             Map.entry("Counter", Reading.of(EventType.SPELL_COUNTERED)),
@@ -711,6 +847,49 @@ final class RunParamNormalizer {
             Map.entry("RollDice", Reading.of(EventType.DICE_ROLLED)),
             Map.entry("GameWin", Reading.of(EventType.PLAYER_WON)),
             Map.entry("GameLoss", Reading.of(EventType.PLAYER_LOST)));
+
+    /**
+     * Forge's trigger modes this side reads no row for: each names an
+     * outcome no declared event type holds a magnitude of (a phase begins, a
+     * card becomes the target, a dungeon room is entered, a gift is given)
+     * or a batch whose cards its own per-card mode already writes, and is
+     * carried as {@code state_flag_change} with its mode alone. Every
+     * {@code TriggerType} is a row of {@link #TRIGGER_MODES} or here, so a
+     * mode Forge adds is never missing unsaid ({@code RunParamNormalizerTest}).
+     */
+    static final java.util.Set<String> TRIGGER_MODES_UNREAD = Set.of(
+            "Abandoned", "AbilityCast", "AbilityResolves", "AbilityTriggered", "Adapt",
+            "Airbend", "Always", "AttackerBlockedOnce", "AttackerUnblocked",
+            "AttackerUnblockedOnce", "AttackersDeclaredOneTarget", "BecomeMonarch",
+            "BecomeMonstrous", "BecomeRenowned", "BecomesCrewed", "BecomesPlotted",
+            "BecomesSaddled", "BecomesTarget", "BecomesTargetOnce", "BlockersDeclared",
+            "CaseSolved", "Championed", "ChangesController", "ChaosEnsues", "ClaimPrize",
+            "Clashed", "ClassLevelGained", "CollectEvidence", "CommitCrime", "ConjureAll",
+            "Connives", "CounterAddedAll", "CounterTypeAddedAll", "CrankContraption", "Crewed",
+            "Cycled", "DamageDoneOnceByController", "DayTimeChanges", "Devoured", "Discover", "DungeonCompleted",
+            "Earthbend", "ElementalBend", "Enlisted", "Evolved", "ExcessDamage",
+            "ExcessDamageAll", "Exerted", "Exiled", "Explores", "FacesDilemma", "Fight",
+            "FightOnce", "Firebend", "FlippedCoin", "Forage", "Foretell", "FullyUnlock",
+            "GiveGift", "Immediate", "Investigated", "LandPlayed", "LifeLostAll", "LosesGame",
+            "ManaAdded", "ManaExpend", "ManifestDread", "Mentored", "MilledAll", "MilledOnce",
+            "Mutates", "NewGame", "PayCumulativeUpkeep", "PayEcho", "Phase", "PhaseOutAll",
+            "PlanarDice", "PlaneswalkedFrom", "PlaneswalkedTo", "Proliferate", "RingTemptsYou",
+            "RoomEntered", "SacrificedOnce", "Saddled", "SearchedLibrary", "SeekAll",
+            "SetInMotion", "Specializes", "SpellAbilityCopy", "SpellCastOrCopy", "SpellCopy",
+            "Stationed", "TakesInitiative", "TapAll", "Trains", "TurnBegin", "UnlockDoor",
+            "UntapAll", "VisitAttraction", "Vote", "Waterbend");
+
+    /**
+     * Forge's replacement modes this side reads no row for, on the same
+     * terms as {@link #TRIGGER_MODES_UNREAD}: {@code Explore} and {@code
+     * Proliferate} carry a count no declared event type holds (an explore's
+     * land or counter, a proliferation's chosen objects, are their own
+     * events), the rest no magnitude at all.
+     */
+    static final java.util.Set<String> REPLACEMENT_MODES_UNREAD = Set.of(
+            "AssembleContraption", "AssignDealDamage", "BeginPhase", "BeginTurn", "Cascade",
+            "Connive", "Explore", "Learn", "PlanarDiceResult", "Planeswalk", "Proliferate",
+            "RollPlanarDice", "SetInMotion");
 
     /**
      * Forge's produced-mana string as counts per colour letter.
