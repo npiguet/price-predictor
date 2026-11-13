@@ -83,6 +83,9 @@ class VariantShardGames:
     games: dict[str, set[str]] = field(default_factory=dict)
     seen: set[str] = field(default_factory=set)
     records: int = 0
+    #: What ended a shard's read early (a damaged member or line), each its
+    #: read's message; the records before the damage are counted.
+    damaged: list[str] = field(default_factory=list)
 
     def add(self, record: EffectRecord) -> None:
         """Count one record: its acting key, or its decision candidate's key,
@@ -103,6 +106,7 @@ class VariantShardGames:
             self.games.setdefault(script_file, set()).update(games)
         self.seen |= other.seen
         self.records += other.records
+        self.damaged += other.damaged
 
 
 def credit_games(

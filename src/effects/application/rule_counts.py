@@ -45,6 +45,8 @@ from effects.domain.rule_catalogue import NoDetector, Polarity
 from effects.domain.rule_detectors import DetectorIndex, RuleSource, RuleTag, tag_record
 from effects.domain.shard_generation import ShardGeneration
 from effects.domain.tally_merge import NOT_MERGED, merge_into
+from effects.infrastructure.shard_io import DecodeTally
+from effects.infrastructure.sidecar_io import JoinGaps
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +71,14 @@ class RuleCounts:
     #: The records' generation (``gen-2``, ``gen-3``), which the steered
     #: variant round checks (FR-058g); set once over the whole set.
     generation: str = field(default="", metadata=NOT_MERGED)
+    #: What reading the shards met without stopping, handed back by each
+    #: worker: values outside the closed lists, damaged last members.
+    decode: DecodeTally = field(default_factory=DecodeTally)
+    #: The keys the sidecar cache read as no line, by why.
+    joins: JoinGaps = field(default_factory=JoinGaps)
+    #: Shards a damaged member or line ended early, under ``salvage`` alone:
+    #: each one's message, its records before the damage counted.
+    damaged: list = field(default_factory=list)
 
     def to_json(self, none: dict[str, str]) -> dict:
         by_rule: dict[str, dict[str, dict[str, int]]] = {}
@@ -182,16 +192,38 @@ def _sidecar_keyword_keys(
     ]
 
 
-def count_shard(built, shard: Path) -> RuleCounts:
+def count_shard(built, shard: Path, *, salvage: bool = False) -> RuleCounts:
     """One shard's counts. Tags are held per game until the shard ends, when
-    each game's source is known."""
-    from effects.infrastructure.shard_io import read_shard
+    each game's source is known. ``salvage`` counts a damaged shard up to the
+    damage and names it in ``damaged`` (a collection run must not stop on
+    one); otherwise the damage raises, located."""
+    from effects.infrastructure.shard_io import SHARD_DAMAGE, read_shard, take_decode_tally
 
     index, sidecars, keywords = built
     out = RuleCounts()
     seat_games: set[str] = set()
     pending: list[tuple[str, bool, object]] = []
-    for record in read_shard(shard):
+    try:
+        _count_records(read_shard(shard), out, index, sidecars, keywords, seat_games, pending)
+    except SHARD_DAMAGE as exc:
+        if not salvage:
+            raise
+        logger.warning("%s; its records before the damage are counted", exc)
+        out.damaged.append(str(exc))
+    for game_id, aimed, tags in pending:
+        source = RuleSource.of(aimed=aimed, random_seat_game=game_id in seat_games)
+        for tag in tags:
+            out.counts[(tag.rule, str(tag.polarity), str(source))] += 1
+    out.decode = take_decode_tally()
+    take_gaps = getattr(sidecars, "take_join_gaps", None)
+    if take_gaps is not None:
+        out.joins = take_gaps()
+    return out
+
+
+def _count_records(records, out: RuleCounts, index, sidecars, keywords,
+                   seat_games: set[str], pending: list) -> None:
+    for record in records:
         out.records += 1
         if record.random_seat:
             seat_games.add(record.game_id)
@@ -206,11 +238,6 @@ def count_shard(built, shard: Path) -> RuleCounts:
             for script_file, key in tag_carriers(record, tag, keywords, sidecars)
         }
         out.carriers.update(carried)
-    for game_id, aimed, tags in pending:
-        source = RuleSource.of(aimed=aimed, random_seat_game=game_id in seat_games)
-        for tag in tags:
-            out.counts[(tag.rule, str(tag.polarity), str(source))] += 1
-    return out
 
 
 def none_rules(catalogue) -> dict[str, str]:
@@ -299,6 +326,8 @@ def run(config: RuleCountsConfig) -> int:
     config.output.parent.mkdir(parents=True, exist_ok=True)
     config.output.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
     for line in report_lines(document):
+        print(line)
+    for line in [*counts.decode.report_lines(), *counts.joins.report_lines()]:
         print(line)
     print(f"{counts.records} records; counts written to {config.output}")
     return 0

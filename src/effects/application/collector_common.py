@@ -310,3 +310,8 @@ def collector_supervisor(
         supervisor.stop()
 
 
+def record_damaged_shards(supervisor, damaged: list[str]) -> None:
+    """Keep every damaged shard the run has read so far, each its read's
+    message, in ``run.json`` as ``corrupt_shards``; nothing when there is none."""
+    if damaged:
+        supervisor.record(corrupt_shards=sorted(damaged))

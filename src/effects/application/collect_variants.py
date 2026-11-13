@@ -29,6 +29,7 @@ from effects.application.collector_common import (
     collector_supervisor,
     non_negative_int,
     positive_int,
+    record_damaged_shards,
 )
 from effects.application.parallel_map import run_parallel
 from effects.domain import default_paths
@@ -419,6 +420,7 @@ def _collect(config: CollectVariantsConfig) -> int:
                 continues=config.continues,
             )
             counter.seed(units)
+            record_damaged_shards(supervisor, counter.damaged)
             play_variant_rounds(units, candidates, supervisor, counter, config)
         return finish(config, units, counter, interrupted=supervisor.interrupted)
     finally:
@@ -574,12 +576,16 @@ def _keep_unheld(
 
 
 def count_variant_shard(shard: Path) -> VariantShardGames:
-    """One shard's variant games: every record read once."""
-    from effects.infrastructure.shard_io import read_shard
+    """One shard's variant games: every record read once, a damaged shard's
+    up to the damage, which it names."""
+    from effects.infrastructure.shard_io import SHARD_DAMAGE, read_shard
 
     found = VariantShardGames()
-    for record in read_shard(shard):
-        found.add(record)
+    try:
+        for record in read_shard(shard):
+            found.add(record)
+    except SHARD_DAMAGE as exc:
+        found.damaged.append(str(exc))
     return found
 
 
@@ -606,6 +612,9 @@ class VariantGameCounter:
         self.records = 0
         #: Rounds counted so far.
         self.rounds = 0
+        #: Every damaged shard read so far, as its read's message: counted up
+        #: to the damage, once, like any other shard.
+        self.damaged: list[str] = []
 
     def fresh_shards(self) -> list[Path]:
         """This run's shards not yet counted."""
@@ -627,6 +636,10 @@ class VariantGameCounter:
         ):
             found.merge(part)
         self._counted.update(shards)
+        for message in found.damaged:
+            logger.warning("%s; its records before the damage are counted, and the "
+                           "shard is not read again", message)
+        self.damaged += found.damaged
         return found
 
     def seed(self, units: Mapping[str, VariantGames]) -> None:
@@ -713,6 +726,7 @@ def play_variant_rounds(
             decks, decks_file, label="variant", matches=config.decks_per_round, rules=rules,
         )
         shown = counter.update(units)
+        record_damaged_shards(supervisor, counter.damaged)
         retired = retire_stalled(
             units, previous, no_progress_rounds=config.no_progress_rounds,
             decked=written & shown, written=written,

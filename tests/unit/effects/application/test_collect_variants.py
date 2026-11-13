@@ -563,6 +563,29 @@ def _round_writes(directory: Path, *rounds: list[EffectRecord], run: str = _RUN)
     return write
 
 
+def test_a_damaged_variant_shard_is_counted_up_to_the_damage_once(tmp_path):
+    """One damaged shard must not stop a collection run every round."""
+    import gzip
+
+    from effects.application.collect_variants import VariantGameCounter
+    from effects.domain.variant_rounds import VariantGames
+    from effects.infrastructure.record_codec import format_record_line
+
+    bolt = "variant-scripts/bolt_variant_0a1b2c3d.txt"
+    members = [gzip.compress((format_record_line(_variant_record(bolt, game, 1)) + "\n")
+                             .encode("utf-8")) for game in ("g1", "g2", "g3")]
+    members[1] = b"XX" + members[1][2:]
+    shard = tmp_path / f"{_RUN}.0-a.jsonl.gz"
+    shard.write_bytes(b"".join(members))
+    counter = VariantGameCounter(tmp_path, _RUN, workers=1)
+    units = {"Bolt": VariantGames(name="Bolt", script_file=bolt)}
+    counter.update(units)
+    assert units["Bolt"].games == {"g1"}
+    assert len(counter.damaged) == 1 and str(shard) in counter.damaged[0]
+    counter.update(units)
+    assert len(counter.damaged) == 1
+
+
 class TestTheUntargetedRound:
     """FR-058a: one variant of every eligible script, played in rounds
     weighted by the games each lacks, until each has ``--variant-games``

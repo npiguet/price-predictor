@@ -29,6 +29,7 @@ from effects.application.collector_common import (
     collector_supervisor,
     positive_int,
     read_name_list,
+    record_damaged_shards,
 )
 from effects.application.parallel_map import run_parallel
 from effects.domain.card_names import fold_card_name
@@ -165,6 +166,9 @@ class ShardCoverage:
     credits: Counter[str]
     seen: frozenset[str]
     records: int = 0
+    #: What ended the shard's read early (a damaged member or line), its
+    #: records before the damage counted; None for a whole shard.
+    damaged: str | None = None
 
 
 def _card_of_script(sidecars: SidecarLookup | None) -> CardOfScript | None:
@@ -205,23 +209,27 @@ def count_shard(shard: Path, *, roots: Mapping[str, Path] | None = None) -> Shar
     (python D5).
     """
     from effects.infrastructure.converted_trees import process_sidecars
-    from effects.infrastructure.shard_io import read_shard
+    from effects.infrastructure.shard_io import SHARD_DAMAGE, read_shard
 
     sidecars = process_sidecars(roots) if roots else None
     card_of = _card_of_script(sidecars)
     counts: Counter[str] = Counter()
     seen: set[str] = set()
     records = 0
-    for record in read_shard(shard):
-        records += 1
-        if record.generation != COUNTED_GENERATION:
-            continue
-        seen.update(fold_card_name(name) for name in cards_shown(record, card_of))
-        if not _kept(record, sidecars):
-            continue
-        for name in qualifying_cards(record, card_of):
-            counts[fold_card_name(name)] += 1
-    return ShardCoverage(counts, frozenset(seen), records)
+    damaged = None
+    try:
+        for record in read_shard(shard):
+            records += 1
+            if record.generation != COUNTED_GENERATION:
+                continue
+            seen.update(fold_card_name(name) for name in cards_shown(record, card_of))
+            if not _kept(record, sidecars):
+                continue
+            for name in qualifying_cards(record, card_of):
+                counts[fold_card_name(name)] += 1
+    except SHARD_DAMAGE as exc:
+        damaged = str(exc)
+    return ShardCoverage(counts, frozenset(seen), records, damaged)
 
 
 class _ShardCounter:
@@ -237,6 +245,9 @@ class _ShardCounter:
 
     def __init__(self, progress_every: int = PROGRESS_EVERY_SHARDS) -> None:
         self._counted: set[Path] = set()
+        #: Every damaged shard read so far, as its read's message: counted up
+        #: to the damage, once, like any other shard.
+        self.damaged: list[str] = []
         self._progress_every = progress_every
         #: Every card the shards of the last ``update`` showed.
         self.seen: set[str] = set()
@@ -271,6 +282,10 @@ class _ShardCounter:
         ), strict=True):
             apply(part)
             self._records[shard] = part.records
+            if part.damaged is not None:
+                logger.warning("%s; its %d records before the damage are counted, and "
+                               "the shard is not read again", part.damaged, part.records)
+                self.damaged.append(part.damaged)
         self._counted.update(fresh)
         return len(fresh)
 
@@ -485,6 +500,7 @@ def play_rounds(
         )
         read = rounds.count_new_shards()
         logger.info("Counted %d new shard(s) from round %d", read, round_number)
+        record_damaged_shards(supervisor, rounds.counter.damaged)
         # Charged to what the round's games showed: a worker draws its decks
         # with replacement, so some written decks are never played.
         retired = retire_stalled(
@@ -514,6 +530,7 @@ def _play_to_completion(
     ) as supervisor:
         if rounds.unresolved.pool:
             supervisor.record(**rounds.unresolved.fields())
+        record_damaged_shards(supervisor, rounds.counter.damaged)
         played = play_rounds(rounds, supervisor, config)
     logger.info("%s", rounds.report())
     # Residues print either way, but an interrupted run did not finish.
@@ -724,6 +741,8 @@ class TextShardCoverage:
     games: dict[str, set[str]]
     seen: frozenset[str]
     records: int = 0
+    #: As :attr:`ShardCoverage.damaged`.
+    damaged: str | None = None
 
 
 def count_text_shard(
@@ -742,7 +761,7 @@ def count_text_shard(
     sidecar cache does not pickle.
     """
     from effects.infrastructure.converted_trees import process_sidecars
-    from effects.infrastructure.shard_io import iter_shard_matching
+    from effects.infrastructure.shard_io import SHARD_DAMAGE, iter_shard_matching
 
     sidecars = process_sidecars(roots)
     card_of = _card_of_script(sidecars)
@@ -756,18 +775,22 @@ def count_text_shard(
         records += 1
         return head.kind == RecordKind.RESOLUTION.value
 
-    for record in iter_shard_matching(shard, where=every_record):
-        if record.kind is not RecordKind.RESOLUTION:
-            continue
-        if record.generation != COUNTED_GENERATION:
-            continue
-        seen.update(fold_card_name(name) for name in cards_shown(record, card_of))
-        if record_refusal(record, sidecars.resolution_of) is not None:
-            continue
-        text = held_out.text_acted_through(acting_keys(record), sidecars.script_text)
-        if text is not None:
-            games[text].add(record.game_id)
-    return TextShardCoverage(dict(games), frozenset(seen), records)
+    damaged = None
+    try:
+        for record in iter_shard_matching(shard, where=every_record):
+            if record.kind is not RecordKind.RESOLUTION:
+                continue
+            if record.generation != COUNTED_GENERATION:
+                continue
+            seen.update(fold_card_name(name) for name in cards_shown(record, card_of))
+            if record_refusal(record, sidecars.resolution_of) is not None:
+                continue
+            text = held_out.text_acted_through(acting_keys(record), sidecars.script_text)
+            if text is not None:
+                games[text].add(record.game_id)
+    except SHARD_DAMAGE as exc:
+        damaged = str(exc)
+    return TextShardCoverage(dict(games), frozenset(seen), records, damaged)
 
 
 class TextCoverageCounter(_ShardCounter):

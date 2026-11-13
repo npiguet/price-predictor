@@ -786,6 +786,13 @@ def _field_coverage_parser(subparsers) -> None:
 
 #: Every reader's "nothing to read"; named, as its module is not imported here.
 _NO_SHARDS = "effects.infrastructure.shard_io.NoShardsError"
+#: A shard damaged before its last gzip member, or a line that does not
+#: decode: the read cannot go on, and the message names shard and line or
+#: byte. Raised in a pool or prefetch worker too, which hands it over whole.
+_SHARD_REFUSED: dict[str, int] = {
+    "effects.infrastructure.shard_io.CorruptShardError": 1,
+    "effects.infrastructure.shard_io.RecordDecodeError": 1,
+}
 
 
 # ── rule-counts ─────────────────────────────────────────────────────────
@@ -825,7 +832,8 @@ def _rule_counts_parser(subparsers) -> None:
     )
 
 
-@exits_with({_NO_SHARDS: 1, MixedGenerationsError: 1, UnacceptedGenerationError: 1})
+@exits_with({_NO_SHARDS: 1, MixedGenerationsError: 1, UnacceptedGenerationError: 1,
+             **_SHARD_REFUSED})
 def run_rule_counts(args: argparse.Namespace) -> int:
     from effects.application.rule_counts import RuleCountsConfig
     from effects.application.rule_counts import run as rule_counts
@@ -838,13 +846,19 @@ def run_rule_counts(args: argparse.Namespace) -> int:
     ))
 
 
-@exits_with({_NO_SHARDS: 1})
+@exits_with({_NO_SHARDS: 1, UnacceptedGenerationError: 1, **_SHARD_REFUSED})
 def run_field_coverage(args: argparse.Namespace) -> int:
     from effects.application.field_coverage import field_coverage, report_lines
-    from effects.infrastructure.shard_io import read_shard, require_shards
+    from effects.infrastructure.shard_io import (
+        read_shard,
+        require_shards,
+        reset_decode_tally,
+        take_decode_tally,
+    )
 
     root = args.effect_records
     shards = require_shards(root)
+    reset_decode_tally()
     coverage = field_coverage(
         record for shard in shards for record in read_shard(shard.path(root))
     )
@@ -853,6 +867,8 @@ def run_field_coverage(args: argparse.Namespace) -> int:
         return 1
     print(f"{len(coverage)} fields over {root}\n")
     for line in report_lines(coverage, all_fields=args.all):
+        print(line)
+    for line in take_decode_tally().report_lines():
         print(line)
     return 0
 
@@ -881,7 +897,7 @@ def _validate_corpus_parser(subparsers) -> None:
     _add_cards_folder(parser)
 
 
-@exits_with({_NO_SHARDS: 1})
+@exits_with({_NO_SHARDS: 1, UnacceptedGenerationError: 1, **_SHARD_REFUSED})
 def run_validate_corpus(args: argparse.Namespace) -> int:
     """Every invariant prints its measurement whether it passed or not: the
     number is what tells an operator whether a fix worked or merely moved."""
@@ -947,6 +963,7 @@ def _train_effect_model_parser(subparsers) -> None:
     ValidationGameInTrainingError: 1,
     MixedGenerationsError: 1,
     UnacceptedGenerationError: 1,
+    **_SHARD_REFUSED,
     SurfaceMismatchError: 2,
     EmptyHoldoutError: 2,
     # A resume under other settings (contracts/cli.md).
@@ -1060,6 +1077,7 @@ def _baseline_checkpoint(value: str):
     _LAYOUT_REFUSED: 1,
     MixedGenerationsError: 1,
     UnacceptedGenerationError: 1,
+    **_SHARD_REFUSED,
 })
 def run_evaluate_effect_model(args: argparse.Namespace) -> int:
     from effects.application.evaluate_effect_model import run as evaluate

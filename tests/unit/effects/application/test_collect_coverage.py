@@ -616,6 +616,59 @@ class TestIncrementalCounting:
 
         assert coverage["alpha"].records == 3
 
+    def _damaged(self, directory: Path, cards: list[str], *, member_after: bool) -> Path:
+        """A gzip shard of one member per card, the second member's header
+        broken; with ``member_after`` a member follows the broken one."""
+        import gzip
+
+        plain = self._shard(directory / "plain", "x", cards)
+        members = [gzip.compress((line + "\n").encode("utf-8"))
+                   for line in plain.read_text(encoding="utf-8").splitlines() if line]
+        members[1] = b"XX" + members[1][2:]
+        if not member_after:
+            members = members[:2]
+        path = directory / "a.0-z.jsonl.gz"
+        path.write_bytes(b"".join(members))
+        plain.unlink()
+        return path
+
+    def test_a_damaged_shard_is_counted_up_to_the_damage_once(self, tmp_path, caplog) -> None:
+        """One damaged shard must not stop a collection run every round: its
+        records before the damage count, it is named, and it is not read again."""
+        from effects.application.collect_coverage import CoverageCounter
+
+        shard = self._damaged(tmp_path, ["alpha", "beta", "alpha"], member_after=True)
+        coverage = {n: CardCoverage(n) for n in ("alpha", "beta")}
+        counter = CoverageCounter()
+        with caplog.at_level("WARNING"):
+            assert counter.update(coverage, tmp_path, workers=1) == 1
+        assert (coverage["alpha"].records, coverage["beta"].records) == (1, 0)
+        assert len(counter.damaged) == 1 and str(shard) in counter.damaged[0]
+        assert any(str(shard) in r.getMessage() for r in caplog.records)
+        assert counter.update(coverage, tmp_path, workers=1) == 0
+        assert len(counter.damaged) == 1
+
+    def test_a_damaged_last_member_names_no_shard(self, tmp_path) -> None:
+        """Nothing follows it, so the read just ends there."""
+        from effects.application.collect_coverage import CoverageCounter
+
+        self._damaged(tmp_path, ["alpha", "beta"], member_after=False)
+        coverage = {n: CardCoverage(n) for n in ("alpha", "beta")}
+        counter = CoverageCounter()
+        counter.update(coverage, tmp_path, workers=1)
+        assert coverage["alpha"].records == 1 and counter.damaged == []
+
+    def test_the_damaged_shards_go_to_the_run_manifest(self) -> None:
+        from unittest.mock import MagicMock
+
+        from effects.application.collector_common import record_damaged_shards
+
+        supervisor = MagicMock()
+        record_damaged_shards(supervisor, [])
+        supervisor.record.assert_not_called()
+        record_damaged_shards(supervisor, ["b: corrupt", "a: corrupt"])
+        supervisor.record.assert_called_once_with(corrupt_shards=["a: corrupt", "b: corrupt"])
+
     def test_it_reports_how_many_shards_it_read(self, tmp_path) -> None:
         """The operator needs to see the round cost fall, not infer it."""
         from effects.application.collect_coverage import CoverageCounter
