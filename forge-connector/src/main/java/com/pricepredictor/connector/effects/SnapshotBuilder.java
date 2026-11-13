@@ -92,13 +92,9 @@ public final class SnapshotBuilder {
         if (ability.getHostCard() != null) {
             referenced.add(ability.getHostCard());
         }
-        if (ability.getTargets() != null) {
-            for (Object target : ability.getTargets()) {
-                if (target instanceof Card card) {
-                    referenced.add(card);
-                }
-            }
-        }
+        // Every link's targets: a charm's modes' and a sub-ability's too,
+        // which an exiled or library card is otherwise in no tier for.
+        referenced.addAll(ChainTargets.cardsOf(ability));
         return referenced;
     }
 
@@ -139,6 +135,21 @@ public final class SnapshotBuilder {
      */
     Snapshot ofResolving(SpellAbility acting) {
         return ofAbility(acting, referencedOf(acting));
+    }
+
+    /**
+     * {@link #ofResolving} with more cards referenced: an effect half's
+     * targets as cast, which Forge's check for illegal targets has taken
+     * off the ability by the time its resolution starts.
+     */
+    Snapshot ofResolving(SpellAbility acting, List<Card> targetedAtCast) {
+        List<Card> referenced = referencedOf(acting);
+        for (Card card : targetedAtCast) {
+            if (!referenced.contains(card)) {
+                referenced.add(card);
+            }
+        }
+        return ofAbility(acting, referenced);
     }
 
     /**

@@ -36,7 +36,7 @@ final class RefsJson {
      *                       an acting ability still names its own host
      */
     static String render(SpellAbility acting, Card sourceOverride) {
-        return render(acting, sourceOverride, announcedX(acting), "null");
+        return render(acting, sourceOverride, announcedX(acting), "null", targetsOf(acting), null);
     }
 
     /**
@@ -44,7 +44,7 @@ final class RefsJson {
      * read once when its costs were paid (B3).
      */
     static String renderWithX(SpellAbility acting, Integer x) {
-        return render(acting, null, x, "null");
+        return render(acting, null, x, "null", targetsOf(acting), null);
     }
 
     /**
@@ -58,7 +58,21 @@ final class RefsJson {
      * @param x        the X read before the resolution, or null
      */
     static String renderResolved(SpellAbility acting, List<EffectEvent> resolved, Integer x) {
-        return render(acting, null, x, randomJson(resolved));
+        return render(acting, null, x, randomJson(resolved), targetsOf(acting), null);
+    }
+
+    /**
+     * One effect half's refs block, read at the resolution's end as
+     * {@link #renderResolved} reads it, with the half's own targets: the ones
+     * its links held as its resolution started, after Forge's check for
+     * illegal targets removed the illegal ones ({@code targets}), and the ones
+     * they held before that check ({@code targets_at_cast}, null where they
+     * are unknown).
+     */
+    static String renderHalf(
+            SpellAbility acting, List<EffectEvent> resolved, Integer x,
+            List<String> targets, List<String> targetsAtCast) {
+        return render(acting, null, x, randomJson(resolved), targets, targetsAtCast);
     }
 
     /**
@@ -111,22 +125,26 @@ final class RefsJson {
                 .render();
     }
 
+    /**
+     * Every target the acting ability's chain holds now, root first, each
+     * once: a charm's modes' and a {@code SubAbility$}'s as well as the
+     * root's; a spell or ability on the stack by its card.
+     */
+    private static List<String> targetsOf(SpellAbility acting) {
+        return acting == null ? List.of() : ChainTargets.now(acting).all();
+    }
+
     private static String render(
-            SpellAbility acting, Card sourceOverride, Integer x, String random) {
-        List<String> targets = new ArrayList<>();
+            SpellAbility acting, Card sourceOverride, Integer x, String random,
+            List<String> targets, List<String> targetsAtCast) {
         String source = Refs.ofNullable(sourceOverride);
-        if (acting != null) {
-            if (acting.getHostCard() != null) {
-                source = Refs.of(acting.getHostCard());
-            }
-            if (acting.getTargets() != null) {
-                for (var target : acting.getTargets()) {
-                    Refs.ofAny(target).ifPresent(targets::add);
-                }
-            }
+        if (acting != null && acting.getHostCard() != null) {
+            source = Refs.of(acting.getHostCard());
         }
         return Json.object()
                 .raw("targets", Json.stringArray(targets))
+                .raw("targets_at_cast",
+                        targetsAtCast == null ? "null" : Json.stringArray(targetsAtCast))
                 .value("source", source)
                 .raw("modes", modesJson(acting))
                 .value("x", x)

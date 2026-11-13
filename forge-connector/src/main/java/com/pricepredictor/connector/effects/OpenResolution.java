@@ -28,7 +28,11 @@ final class OpenResolution {
     final String linkId;
     /** What its cast paid, or null for an item with no cost half. */
     final PaidCosts costs;
-    /** How many targets its root line had at the cast, for a partial fizzle. */
+    /**
+     * How many targets its chain had at the cast, every link's, for a
+     * partial fizzle where the resolution hook never told the targets as
+     * cast ({@link #castTargets}).
+     */
     final int targetsAtCast;
     /**
      * What the bus filed for this item, split by chosen mode as it resolves;
@@ -43,6 +47,18 @@ final class OpenResolution {
      * The board when its resolution started (FR-042b), or null until then.
      */
     private Snapshot resolutionState;
+
+    /**
+     * Its chain's targets when its resolution started, after Forge's check
+     * for illegal targets removed the illegal ones; null until then.
+     */
+    private ChainTargets resolvingTargets;
+
+    /**
+     * Its chain's targets as the resolution hook told them, before that
+     * check (608.2b); null until then, or where the hook could not copy them.
+     */
+    private ChainTargets castTargets;
 
     /**
      * The X it announced ({@link RefsJson#announcedX}), read once: when it
@@ -93,9 +109,44 @@ final class OpenResolution {
      * the events gathered meanwhile do: it is not the resolution's.
      */
     void resolutionStarted(Snapshot board) {
+        resolutionStarted(board, null, null);
+    }
+
+    /**
+     * Its resolution has started, on this board, holding {@code resolving}
+     * as its targets, and {@code atCast} before Forge's check for illegal
+     * targets (null where the hook could not tell them).
+     */
+    void resolutionStarted(Snapshot board, ChainTargets resolving, ChainTargets atCast) {
         resolutionState = board;
+        resolvingTargets = resolving;
+        castTargets = atCast;
         declined = false;
         readX();
+    }
+
+    /**
+     * One effect half's {@code targets}: what its links held as its
+     * resolution started, or, where that was never told, what they hold now.
+     */
+    java.util.List<String> targetsOfHalf(int half, int halves, Integer option) {
+        ChainTargets targets = resolvingTargets != null
+                ? resolvingTargets : ChainTargets.now(ability);
+        return targets.ofHalf(half, halves, option);
+    }
+
+    /**
+     * The cards it targeted before Forge's check for illegal targets, which
+     * its effect half's boards carry whatever zone they are in now: the
+     * card that made it fizzle is among them. Empty where they are unknown.
+     */
+    java.util.List<forge.game.card.Card> castTargetCards() {
+        return castTargets == null ? java.util.List.of() : castTargets.cards();
+    }
+
+    /** One effect half's {@code targets_at_cast}, or null where they are unknown. */
+    java.util.List<String> targetsAtCastOfHalf(int half, int halves, Integer option) {
+        return castTargets == null ? null : castTargets.ofHalf(half, halves, option);
     }
 
     private void readX() {
@@ -150,6 +201,9 @@ final class OpenResolution {
         if (wasDeclined()) {
             return ActivationOutcome.DECLINED;
         }
+        if (castTargets != null && resolvingTargets != null) {
+            return outcomeOf(castTargets.count(), resolvingTargets.count());
+        }
         return outcomeOf(targetsAtCast, ability);
     }
 
@@ -163,9 +217,10 @@ final class OpenResolution {
      * in the record distinguishes a Lightning Helix that hit from one whose
      * creature had already died.
      *
-     * <p>Only the root line's targets are compared. A partial fizzle confined to
-     * a sub-ability reads as {@code resolved}, which understates rather than
-     * invents. Losing <b>every</b> target without the engine calling it a fizzle
+     * <p>Every link's targets are counted, a charm's modes' and a
+     * {@code SubAbility$}'s with the root's: a charm whose one mode lost its
+     * target while another kept its own partially fizzled. Losing <b>every</b>
+     * target without the engine calling it a fizzle
      * is the {@code CantFizzle} case (Gilded Drake), where the spell still does
      * what it does: that is {@code resolved} too.
      */
@@ -173,15 +228,18 @@ final class OpenResolution {
         if (resolved == null) {
             return ActivationOutcome.RESOLVED;
         }
-        int surviving = targetCount(resolved);
+        return outcomeOf(targetsAtCast, targetCount(resolved));
+    }
+
+    private static ActivationOutcome outcomeOf(int targetsAtCast, int surviving) {
         return surviving > 0 && surviving < targetsAtCast
                 ? ActivationOutcome.PARTIALLY_FIZZLED
                 : ActivationOutcome.RESOLVED;
     }
 
+    /** How many targets the ability's chain holds, every link's. */
     static int targetCount(SpellAbility ability) {
-        return ability == null || ability.getTargets() == null
-                ? 0 : ability.getTargets().size();
+        return ability == null ? 0 : ChainTargets.now(ability).count();
     }
 
     /** Whether this is the bracket of the ability the engine names by id. */

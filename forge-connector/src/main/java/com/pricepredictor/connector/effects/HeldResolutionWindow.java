@@ -128,11 +128,13 @@ final class HeldResolutionWindow {
         // fizzled on its own carries an empty list under its key, which is
         // what the schema says of any resolution that did nothing observable.
         HeldHalves<HalfRecord> halves = new HeldHalves<>();
-        for (ModeSplit.ModeHalf half
-                : resolved.modes.halves(resolved.effectState())) {
-            // The random results are the half's own, and the library cards
-            // its events name join the board they were captured with.
-            String refs = RefsJson.renderResolved(resolved.ability, half.events(), resolved.x());
+        List<ModeSplit.ModeHalf> split = resolved.modes.halves(resolved.effectState());
+        for (int index = 0; index < split.size(); index++) {
+            ModeSplit.ModeHalf half = split.get(index);
+            // The random results and the targets are the half's own, and the
+            // library cards its events name join the board they were
+            // captured with.
+            String refs = refsOf(resolved, half, index, split.size(), half.events());
             halves.add(HalfRecord.of(
                     context.nextRecordId(), resolved.keys.withOption(half.mode().option()),
                     half.mode().state().withRefs(refs).withEventCards(half.events()).render(),
@@ -163,8 +165,10 @@ final class HeldResolutionWindow {
      */
     void writeEmpty(
             OpenResolution resolved, ActivationOutcome outcome, DroppedEvents dropped, String phase) {
-        String refs = RefsJson.renderResolved(resolved.ability, List.of(), resolved.x());
-        for (ModeSplit.ModeHalf half : resolved.modes.halves(resolved.effectState())) {
+        List<ModeSplit.ModeHalf> split = resolved.modes.halves(resolved.effectState());
+        for (int index = 0; index < split.size(); index++) {
+            ModeSplit.ModeHalf half = split.get(index);
+            String refs = refsOf(resolved, half, index, split.size(), List.of());
             for (EffectEvent gathered : half.events()) {
                 dropped.count(gathered.type(), phase);
             }
@@ -177,6 +181,21 @@ final class HeldResolutionWindow {
                     .state(half.mode().state().withRefs(refs).render())
                     .payload(RecordPayloads.resolutionPayload(List.of(), conditions, outcome)));
         }
+    }
+
+    /**
+     * One effect half's refs block: the half's random results, and the
+     * targets of its own links (a mode's half: the charm's and its mode's)
+     * as its resolution started and before Forge's check for illegal
+     * targets.
+     */
+    private static String refsOf(
+            OpenResolution resolved, ModeSplit.ModeHalf half, int index, int halves,
+            List<EffectEvent> events) {
+        Integer option = half.mode().option();
+        return RefsJson.renderHalf(resolved.ability, events, resolved.x(),
+                resolved.targetsOfHalf(index, halves, option),
+                resolved.targetsAtCastOfHalf(index, halves, option));
     }
 
     /**

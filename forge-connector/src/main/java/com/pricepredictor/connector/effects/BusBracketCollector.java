@@ -247,7 +247,7 @@ public final class BusBracketCollector extends BusEventReader {
             }
             boolean fizzled = Boolean.TRUE.equals(args.get(1));
             if (owns(item)) {
-                resolutionStarting(item, fizzled);
+                resolutionStarting(item, fizzled, args.optional(2));
             } else {
                 Forks.forkHooks().resolutionStarting(item, fizzled);
             }
@@ -273,6 +273,15 @@ public final class BusBracketCollector extends BusEventReader {
      *                none of the item's clauses will run
      */
     void resolutionStarting(SpellAbility item, boolean fizzled) {
+        resolutionStarting(item, fizzled, null);
+    }
+
+    /**
+     * The same with the hook's third argument: each link's targets before
+     * Forge's check for illegal targets, root first (null where the hook
+     * could not copy them, or an older Forge did not pass them).
+     */
+    void resolutionStarting(SpellAbility item, boolean fizzled, Object targetsAtCast) {
         stepTakenOver = false;
         if (!inStateBasedLoop) {
             onNextAction();
@@ -282,8 +291,10 @@ public final class BusBracketCollector extends BusEventReader {
             return;
         }
         brackets.countDropped(resolving, DroppedEvents.phaseOf(game));
-        Snapshot board = snapshots.ofResolving(resolving.ability);
-        resolving.resolutionStarted(board);
+        ChainTargets atCast = ChainTargets.atCast(item, targetsAtCast);
+        Snapshot board = snapshots.ofResolving(
+                resolving.ability, atCast == null ? List.of() : atCast.cards());
+        resolving.resolutionStarted(board, ChainTargets.now(item), atCast);
         if (fizzled) {
             for (Integer option : CharmModes.chosenOptions(item)) {
                 resolving.modes.begin(option, board);
@@ -1079,7 +1090,7 @@ public final class BusBracketCollector extends BusEventReader {
         if (open == null || !fromOpenBracket(cause) || !open.hosts(clause)) {
             return;
         }
-        open.modes.begin(option, snapshots.ofResolving(open.ability));
+        open.modes.begin(option, snapshots.ofResolving(open.ability, open.castTargetCards()));
         rebaselineAtSnapshot();
     }
 
