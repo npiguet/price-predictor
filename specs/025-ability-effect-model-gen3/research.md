@@ -378,6 +378,25 @@ Each joins `PatchHooks.REQUIRED`; an unpatched Forge still runs and stamps recor
 **Rationale**: none of the three can be observed through public API or existing hooks (survey §2 of
 the collection side). The user's standing rule allows new commits on the branch.
 
+#### C1a. What the hooks hand the connector
+
+**Decision**: the branch's listeners and accessors carry the following. Each listener method is a
+`void` default method or a same-name overload with appended arguments, so a connector proxy that
+does not know it answers with nothing and keeps working. "Consumed" says whether a collector reads
+it.
+
+| Hook | Method and arguments | What it says | Consumed |
+|---|---|---|---|
+| replacement | `onReplacement(effect, before, after, result, replacedBy, buffered)` | Forge makes the six-argument call; the five-argument one is its default. `replacedBy` is the ability that ran in the event's place during the replacement. A damage replacement's buffered ability (a `ReplaceWith$` ability other than `ReplaceDamage`, `ReplaceSplitDamage` or `ReplaceEffect`, the sub-ability of one of those three, a `Prevent$ True` rider) has not run then: it is `buffered`, never `replacedBy`. `before` is null when the run parameters could not be copied. | arguments 1-5 yes; `buffered` no; a null `before` not handled specially |
+| replacement | `onBufferedAbilityStarting(effect, ability, runParams)`, `onBufferedAbilityFinished(effect, ability, runParams)` | A buffered ability runs once every replacement of its damage event has applied, if the summed amount is above zero; `effect` and `ability` are what `onReplacement` named; every event between the two is the ability's | no |
+| trigger | `onTriggerRun(trigger, runParams, ability)` | The trigger runs: told before its ability goes on the stack, or, for a static trigger, just before its ability is played, after an optional one is accepted. Once per run (Panharmonicon: twice). `trigger` and `runParams` are the objects `onConditionEvaluated` was handed. A trigger evaluated as firing and never told did not fire. A trigger on the stack has fired whatever its optional choice at resolution. | no |
+| resolution | `onResolutionStarting(sa, fizzled, targetsAtCast)` | Forge makes the three-argument call; the two-argument one is its default. `targetsAtCast` lists each chain link's targets, root first, before the illegal-target check removes any; null when they could not be copied | `sa`, `fizzled` yes; `targetsAtCast` no |
+| state-based loop | `onStateBasedLoopBegin(game)`, `onStateBasedLoopEnd(game)` | Around the loop at priority, and around each check made where no player gets priority, as a loop of one pass: the cleanup step's, an effect ending the turn (one check), an effect ending the combat phase (two checks, the effect's and the phase end's) | yes |
+| outcome | `coin_flipped` | Names its flipper as `subjects`; also sent for coins a cost flips (`CostFlipCoin`); not sent when no coin was flipped | yes |
+| accessor | `StaticAbilityCantAttackBlock.cantBlockStatic(blocker)` | The `Mode$ CantBlock` static that stops a creature blocking at all (Pacifism), or null | no |
+| accessor | `Card.getKeywordsWithout(staticId)` | Leaves out that static's can't-have keywords too, which Forge files by (timestamp, static id) | yes |
+| failures | `EffectRecordHook.failureCounts()` | Every failure each slot contained, listener and Forge-side argument builds alike, by slot name; cumulative over the JVM's life | no |
+
 #### C2. The held effect half spans the whole state-based loop
 
 **Decision**: the held half opens at a resolution's end as today and stays open until the end signal

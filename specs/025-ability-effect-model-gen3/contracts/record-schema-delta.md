@@ -275,6 +275,14 @@ position a card left a library from, and a search of another player's library.
   dropped.
 - A rewrite record's snapshot is read before the replacement runs (`onReplacing`); replacements
   nest, and each record takes the board read when its own replacement started.
+- A rewrite record's `replaced_by` names only an ability that ran in the event's place during the
+  replacement. A damage replacement whose ability Forge buffers until every replacement of the
+  damage event has applied (Swans of Bryn Argoll's draw, Rock Hydra's counter removal, a
+  `Prevent$ True` rider such as Gatta and Luzzu's) writes `replaced_by: []` with result `replaced`,
+  `updated` or `prevented`: the ability has not run when the record is written, and it may never
+  run.
+- A `coin_flipped` event names the player who flipped as its subject. No coin flipped writes no
+  event. Forge's outcome hook also reports the coins a cost flips (cumulative upkeep).
 - A forced (interventional) resolution reads its board when its resolution starts, as a live one.
 - A record's referenced card (tier 1) is the game's own object for it: a dies trigger's host and
   the host of an ability that sacrificed it are the card in the graveyard, written once as

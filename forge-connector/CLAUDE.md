@@ -15,6 +15,10 @@ These workers import `forge-game` / `forge-core` from the sibling `../forge` che
 
 No worker has a per-game timeout, and none should get one. A game that does not finish in reasonable time, whether long or hung, ends with its JVM: the worker crashes, or `ForgeWorkerPool` recycles it, and the supervisor restarts it. Why the workers are short-lived by design is in `src/effects/CLAUDE.md` ("Why the workers are short-lived").
 
+## Engine hooks
+
+The effect collectors reach the patched engine's hooks by name, through `PatchHooks`, and compile against stock Forge. Forge widens a listener by adding `void` default methods or same-name overloads with appended arguments, which an unaware proxy answers with nothing. The listener methods Forge declares and no collector reads yet are listed in `PatchHooksTest.NOT_CONSUMED_YET`: `onTriggerRun`, `onBufferedAbilityStarting` and `onBufferedAbilityFinished`. The arguments not read yet are `onReplacement`'s sixth (`buffered`) and `onResolutionStarting`'s third (`targetsAtCast`). The accessors not read yet are `StaticAbilityCantAttackBlock.cantBlockStatic` and `EffectRecordHook.failureCounts()`. What each one says is in `src/effects/CLAUDE.md` § The engine hooks.
+
 ## Build
 
 ```bash
