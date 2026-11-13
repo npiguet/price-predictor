@@ -224,6 +224,51 @@ class StatDifferTest {
         assertEquals(Refs.of(thief), event.params().get("controller"));
     }
 
+    /** An Animate's Name$ is a name change, naming the name now (follow-up item 10). */
+    @Test
+    void aNameAnEffectGivesIsANameChange() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        forge.game.player.Player you = game.getPlayers().get(0);
+        Card bears = TestBoard.inPlay(game, you, "Grizzly Bears");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        forge.game.spellability.SpellAbility rename = forge.game.ability.AbilityFactory.getAbility(
+                "AB$ Animate | Cost$ 0 | Defined$ Self | Name$ Pigeon | Duration$ Permanent", bears);
+        rename.setActivatingPlayer(you);
+        rename.resolve();
+
+        EffectEvent event = only(differ.diff(bears), EventType.NAME_CHANGE);
+        assertEquals(Map.of("name", "Pigeon"), event.params());
+    }
+
+    /** A mana cost an effect sets is a mana cost change: the cost now and its value. */
+    @Test
+    void aManaCostAnEffectSetsIsAManaCostChange() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(0), "Grizzly Bears");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        bears.addChangedManaCost(new forge.card.mana.ManaCost(
+                new forge.card.mana.ManaCostParser("5 G")), false, game.getNextTimestamp(), 0L);
+
+        EffectEvent event = only(differ.diff(bears), EventType.MANA_COST_CHANGE);
+        assertEquals(Map.of("generic", 5, "G", 1), event.params().get("mana_cost"));
+        assertEquals(6, event.params().get("mana_value"));
+    }
+
+    /** A transform's new name is the face change's, not a name change of its own. */
+    @Test
+    void aFaceChangesNameIsNoNameChange() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        Card avacyn = TestBoard.inPlay(game, game.getPlayers().get(0), "Archangel Avacyn");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(avacyn);
+        avacyn.changeCardState("Transform", null, null);
+
+        assertTrue(differ.diff(avacyn).stream().noneMatch(e -> e.type() == EventType.NAME_CHANGE
+                || e.type() == EventType.MANA_COST_CHANGE));
+    }
+
     private static EffectEvent only(List<EffectEvent> events, EventType type) {
         List<EffectEvent> found = events.stream().filter(e -> e.type() == type).toList();
         assertEquals(1, found.size(), events.toString());

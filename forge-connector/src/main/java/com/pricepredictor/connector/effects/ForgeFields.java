@@ -114,6 +114,33 @@ final class ForgeFields {
         return timestamps;
     }
 
+    /** The card's layer-3 mana cost changes keyed (timestamp, static id), or null. */
+    static Table<?, ?, ?> changedCardManaCost(Card card) {
+        return read(Card.class, "changedCardManaCost", card) instanceof Table<?, ?, ?> table
+                ? table : null;
+    }
+
+    /**
+     * One mana cost change's cost and whether it adds to the cost before it
+     * ({@code Card.CardManaCost}, a private record, read by its accessors);
+     * null when unreadable.
+     */
+    static Map.Entry<forge.card.mana.ManaCost, Boolean> manaCostChange(Object change) {
+        if (change == null) {
+            return null;
+        }
+        try {
+            Method mana = change.getClass().getDeclaredMethod("mana");
+            Method additional = change.getClass().getDeclaredMethod("additional");
+            mana.setAccessible(true);
+            additional.setAccessible(true);
+            return Map.entry((forge.card.mana.ManaCost) mana.invoke(change),
+                    (Boolean) additional.invoke(change));
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
+    }
+
     /** The card's layer-5 colour changes keyed (timestamp, static id), or null. */
     static Table<?, ?, ?> changedCardColors(Card card) {
         return read(Card.class, "changedCardColors", card) instanceof Table<?, ?, ?> table

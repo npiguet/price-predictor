@@ -58,7 +58,8 @@ final class StatDiffer {
     private record Stats(
             int power, int toughness, int basePower, int baseToughness, List<String> keywords,
             List<String> hiddenKeywords, List<String> abilities,
-            Set<String> types, Set<String> colors, String controller) {
+            Set<String> types, Set<String> colors, String controller,
+            String name, String manaCost, int manaValue, String face, int copies) {
     }
 
     private final Map<Integer, Stats> last = new HashMap<>();
@@ -115,6 +116,20 @@ final class StatDiffer {
             events.add(new EffectEvent(EventType.CONTROL_CHANGE)
                     .subject(subject)
                     .param("controller", now.controller()));
+        }
+        // A name or mana cost a face change or a copy effect brought is that
+        // change's: the face_change and the copy say it already.
+        boolean ownChange = before.face().equals(now.face()) && before.copies() == now.copies();
+        if (ownChange && !java.util.Objects.equals(before.name(), now.name())) {
+            events.add(new EffectEvent(EventType.NAME_CHANGE)
+                    .subject(subject)
+                    .param("name", now.name()));
+        }
+        if (ownChange && !java.util.Objects.equals(before.manaCost(), now.manaCost())) {
+            events.add(new EffectEvent(EventType.MANA_COST_CHANGE)
+                    .subject(subject)
+                    .param("mana_cost", CardFacts.manaCostSymbols(card.getManaCost()))
+                    .param("mana_value", now.manaValue()));
         }
         return events;
     }
@@ -300,6 +315,8 @@ final class StatDiffer {
                 sorted(StaticSuppression.NONE.hiddenKeywords(card)),
                 sorted(abilities), types,
                 new LinkedHashSet<>(CardSpelling.colorLetters(card.getColor())),
-                Refs.ofNullable(card.getController()));
+                Refs.ofNullable(card.getController()),
+                card.getName(), CardFacts.manaCostJson(card), card.getCMC(),
+                CardFacts.faceState(card), card.getCloneStates().size());
     }
 }

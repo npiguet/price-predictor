@@ -234,6 +234,39 @@ class ContinuousChannelTest {
                 .contains("flying"), entity.toString());
     }
 
+    /**
+     * A static setting a creature's name and mana cost: its continuous
+     * record's board, the board without it, shows the creature's own name,
+     * mana value and mana cost (follow-up item 9).
+     */
+    @Test
+    void theBoardWithoutANameStaticShowsTheCardsOwnNameAndManaValue() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card host = board.battlefield("Ornithopter", board.you);
+        Card bears = board.battlefield("Grizzly Bears", board.you);
+        host.setSVar("Rename", "Mode$ Continuous | Affected$ Creature.YouCtrl+Other"
+                + " | SetName$ Pigeon | ManaCost$ 5 G | Description$ Others are Pigeons costing 5G.");
+        SpellAbility animate = AbilityFactory.getAbility(
+                "AB$ Animate | Cost$ 0 | Defined$ Self | staticAbilities$ Rename"
+                        + " | Duration$ Permanent", host);
+        animate.setActivatingPlayer(board.you);
+        animate.resolve();
+        board.game.getAction().checkStaticAbilities();
+        assertEquals("Pigeon", bears.getName());
+        assertEquals(6, bears.getCMC());
+
+        String record = continuousRecords(board).stream()
+                .filter(r -> RecordLines.payload(r).toString().contains("Pigeon"))
+                .findFirst().orElseThrow(() -> new AssertionError("no record of the renaming static"));
+        java.util.Map<String, Object> entity = ((List<?>) RecordLines.asMap(
+                RecordLines.parse(record).get("state")).get("entities")).stream()
+                .map(RecordLines::asMap).filter(e -> Refs.of(bears).equals(e.get("id")))
+                .findFirst().orElseThrow();
+        assertEquals("Grizzly Bears", entity.get("name"), entity.toString());
+        assertEquals(2L, entity.get("mana_value"), entity.toString());
+        assertEquals(java.util.Map.of("generic", 1L, "G", 1L), entity.get("mana_cost"), entity.toString());
+    }
+
     /** A continuous record of the {@code index}-th static line of one anthem card. */
     private static EffectRecord anthem(int index, String contributions, String board) {
         return RecordDedupTest.ofKind(

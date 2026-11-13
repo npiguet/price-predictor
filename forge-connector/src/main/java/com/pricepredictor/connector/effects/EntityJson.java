@@ -75,7 +75,7 @@ final class EntityJson {
         SpellAbility cast = CardLines.castSpellOf(card, onStack);
         return Json.object()
                 .value("id", beyond.id() != null ? beyond.id() : Refs.of(card))
-                .value("name", card.getName())
+                .value("name", board.name(card))
                 .value("zone", beyond.zoneless() ? null
                         : beyond.zone() != null ? beyond.zone() : zoneName(card))
                 .value("owner", CardFacts.ownerOf(card))
@@ -88,8 +88,8 @@ final class EntityJson {
                 .raw("subtypes", typeNamesJson(type.getSubtypes()))
                 .raw("supertypes", typeNamesJson(type.getSupertypes()))
                 .raw("colors", Json.stringArray(CardSpelling.colorLetters(board.colors(card))))
-                .value("mana_value", card.getCMC())
-                .raw("mana_cost", CardFacts.manaCostJson(card))
+                .value("mana_value", board.manaValue(card))
+                .raw("mana_cost", CardFacts.manaCostJson(board.manaCost(card)))
                 .raw("base_pt", basePtJson(card, board))
                 .raw("pt_boosts", ptBoostsJson(card, board))
                 .value("printed_loyalty", CardFacts.printedLoyalty(card))

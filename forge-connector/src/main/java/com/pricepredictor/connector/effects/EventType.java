@@ -47,6 +47,19 @@ public enum EventType implements WireNamed {
     KEYWORD_CHANGE("keyword_change"),
     TYPE_CHANGE("type_change"),
     COLOR_CHANGE("color_change"),
+    /**
+     * A permanent's name changed with no face change and no copy effect
+     * (an {@code Animate}'s {@code Name$}, a {@code SetName$} static), read
+     * off a stat change: {@code name} the name now.
+     */
+    NAME_CHANGE("name_change"),
+    /**
+     * A permanent's mana cost changed with no face change and no copy
+     * effect (a perpetual {@code ManaCost$}, an {@code Incorporate$}):
+     * {@code mana_cost} the cost now, as an entity's {@code mana_cost},
+     * and {@code mana_value}.
+     */
+    MANA_COST_CHANGE("mana_cost_change"),
     CARD_DRAWN("card_drawn"),
     CARD_DISCARDED("card_discarded"),
     CARD_MILLED("card_milled"),
