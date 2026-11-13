@@ -367,7 +367,9 @@ Decision T1).
 1. a pending-delayed-trigger accessor on `TriggerHandler` (FR-024, the `pending on` relation, and
    Decision D3);
 2. a state-based-loop begin/end signal around the loop in `PhaseHandler.checkStateBasedEffects`
-   (`:1168-1177`) (Decision C2);
+   (`:1168-1177`) (Decision C2), and around each check Forge makes where no player gets priority
+   (the cleanup step's, CR 514.3a; an effect ending the turn or the combat phase, CR 721.1a and
+   721.2a), each signalled as a loop of one pass;
 3. a priority-settled signal in `mainLoopStep`, after the state-based loop and before the priority
    holder chooses (Decision C3).
 
