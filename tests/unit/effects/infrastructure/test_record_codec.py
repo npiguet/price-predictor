@@ -820,6 +820,27 @@ class TestGen3EnvelopeFields:
         assert (data["kind"], data["subkind"]) == ("turn_action", subkind.value)
         assert record_from_dict(data) == record
 
+    @pytest.mark.parametrize("value", [4, "3", True, None])
+    def test_a_record_naming_no_known_generation_is_refused(self, value):
+        """``generation`` decides how several fields read, so a record whose
+        value names none is refused rather than read as another generation."""
+        from effects.domain.shard_generation import UnknownGenerationError
+
+        data = record_to_dict(_record(generation=3)) | {"generation": value}
+        with pytest.raises(UnknownGenerationError):
+            record_from_dict(data)
+
+    def test_an_unknown_generation_in_a_shard_names_the_shard_and_line(self, tmp_path):
+        from effects.domain.shard_generation import UnknownGenerationError
+        from effects.infrastructure.shard_io import shard_generation
+
+        path = tmp_path / "g4.jsonl"
+        path.write_text(json.dumps(record_to_dict(_record()) | {"generation": 4}) + "\n",
+                        encoding="utf-8")
+        for read in (lambda: list(read_shard(path)), lambda: shard_generation(path)):
+            with pytest.raises(UnknownGenerationError, match=r"g4\.jsonl, line 1: .*4"):
+                read()
+
     def test_a_gen3_shard_reads_as_gen3(self, tmp_path):
         from effects.domain.shard_generation import ShardGeneration
         from effects.infrastructure.shard_io import shard_generation, write_shard

@@ -54,6 +54,7 @@ from effects.domain.records import (
     TriggerPayload,
     TurnActionPayload,
 )
+from effects.domain.shard_generation import check_generation_member
 from effects.domain.state_snapshot import (
     CardChoices,
     CardHistory,
@@ -1108,7 +1109,14 @@ def _curation_from_json(data: dict) -> Curation:
 
 
 def record_from_dict(data: dict) -> EffectRecord:
-    """Parse one shard line into an :class:`EffectRecord`."""
+    """Parse one shard line into an :class:`EffectRecord`.
+
+    A ``generation`` other than the integer 3 is refused
+    (:class:`~effects.domain.shard_generation.UnknownGenerationError`).
+    """
+    generation = data.get("generation")
+    if "generation" in data:
+        check_generation_member(generation)
     kind = RecordKind(data["kind"])
     moment = Moment(data["moment"]) if data.get("moment") else None
     subkinds = SUBKINDS_OF.get(kind, PlayabilitySubkind)
@@ -1137,7 +1145,7 @@ def record_from_dict(data: dict) -> EffectRecord:
         synthetic=data.get("synthetic", False),
         random_seat=data.get("random_seat"),
         what_if=data.get("what_if"),
-        generation=data.get("generation"),
+        generation=generation,
         aimed_at=tuple(aimed_at) if aimed_at is not None else None,
         directed=(DirectedTag(directed["variant"], ForkOperation(directed["operation"]))
                   if directed is not None else None),

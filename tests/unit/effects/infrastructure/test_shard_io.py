@@ -180,6 +180,73 @@ class TestCompressedShards:
         assert list(iter_shard_lines(plain)) == list(iter_shard_lines(packed)) == [line, line]
 
 
+class TestDamagedShards:
+    """A killed worker can only cut the last member short, which ends the read
+    quietly; damage anywhere before it would silently drop every later
+    member, so it stops the read naming the shard and the byte the damaged
+    member starts at. A line that does not decode names its shard and line."""
+
+    def _line(self, record_id: str) -> str:
+        return format_record_line(_record(record_id=record_id))
+
+    def _members(self, *record_ids: str) -> list[bytes]:
+        return [gzip.compress((self._line(r) + "\n").encode("utf-8")) for r in record_ids]
+
+    def test_a_member_with_a_bad_header_mid_shard_stops_the_read_loudly(self, tmp_path):
+        from effects.infrastructure.shard_io import CorruptShardError
+
+        first, second, third = self._members("r.1", "r.2", "r.3")
+        path = tmp_path / "run.0-L1.jsonl.gz"
+        path.write_bytes(first + b"XX" + second[2:] + third)
+        read = []
+        with pytest.raises(CorruptShardError, match=rf"run\.0-L1\.jsonl\.gz.*byte {len(first)}"):
+            read.extend(iter_shard_lines(path))
+        assert read == [self._line("r.1")]
+
+    def test_a_flipped_bit_mid_shard_stops_the_read_loudly(self, tmp_path):
+        """The member's check sum catches it, so no later member is lost unsaid."""
+        from effects.infrastructure.shard_io import CorruptShardError
+
+        first, second, third = self._members("r.1", "r.2", "r.3")
+        damaged = bytearray(second)
+        damaged[len(damaged) - 6] ^= 0x01  # inside the CRC-32 trailer
+        path = tmp_path / "run.0-L1.jsonl.gz"
+        path.write_bytes(first + bytes(damaged) + third)
+        with pytest.raises(CorruptShardError, match=rf"byte {len(first)}"):
+            list(iter_shard_lines(path))
+
+    def test_a_truncated_final_member_still_ends_the_read_quietly(self, tmp_path):
+        first, second = self._members("r.1", "r.2")
+        path = tmp_path / "run.0-L1.jsonl.gz"
+        path.write_bytes(first + second[:-8])
+        assert list(iter_shard_lines(path)) == [self._line("r.1"), self._line("r.2")]
+        path.write_bytes(first + second[:5])
+        assert list(iter_shard_lines(path)) == [self._line("r.1")]
+
+    def test_a_line_that_does_not_decode_names_its_shard_and_line(self, tmp_path):
+        from effects.infrastructure.shard_io import RecordDecodeError, iter_shard_matching
+
+        path = tmp_path / "run.0-L1.jsonl.gz"
+        broken = json.loads(self._line("r.2"))
+        broken["kind"] = "no_such_kind"
+        body = f"{self._line('r.1')}\n\n{json.dumps(broken)}\n"
+        path.write_bytes(gzip.compress(body.encode("utf-8")))
+        for read in (lambda: list(read_shard(path)),
+                     lambda: list(read_window(tmp_path)),
+                     lambda: list(iter_shard_matching(path))):
+            with pytest.raises(RecordDecodeError,
+                               match=r"run\.0-L1\.jsonl\.gz, line 3: .*no_such_kind"):
+                read()
+
+    def test_a_line_that_is_no_json_names_its_shard_and_line(self, tmp_path):
+        from effects.infrastructure.shard_io import RecordDecodeError
+
+        path = tmp_path / "run.0-L1.jsonl"
+        path.write_text(f"{self._line('r.1')}\n{{not json\n", encoding="utf-8")
+        with pytest.raises(RecordDecodeError, match=r"run\.0-L1\.jsonl, line 2"):
+            list(read_shard(path))
+
+
 class TestShardsInSubdirectories:
     """Shards nested under the corpus directory are part of the corpus (T173).
 
@@ -565,3 +632,24 @@ class TestTheWindow:
         )))
         shard = iter_shards(tmp_path)[0].relative_to(tmp_path).as_posix()
         assert seen == [(shard, record.record_id) for record in records]
+
+
+class TestValuesOutsideTheClosedLists:
+    """A value outside the wire's closed lists decodes, and is counted, the
+    first sighting reported by shard and line."""
+
+    def test_it_is_counted_and_reported_once(self, tmp_path, caplog):
+        from effects.infrastructure import shard_io
+
+        raw = record_to_dict(_record(record_id="r.1", generation=3))
+        raw["state"]["entities"][0]["zone"] = "nowhere-zone"
+        line = json.dumps(raw)
+        path = tmp_path / "run.0-L1.jsonl"
+        path.write_text(f"{line}\n{line}\n", encoding="utf-8")
+        before = shard_io.off_list_counts().get(("entity.zone", "'nowhere-zone'"), 0)
+        with caplog.at_level("WARNING", logger=shard_io.__name__):
+            records = list(read_shard(path))
+        assert [r.state.entities[0].zone for r in records] == ["nowhere-zone"] * 2
+        assert shard_io.off_list_counts()[("entity.zone", "'nowhere-zone'")] == before + 2
+        warned = [r.getMessage() for r in caplog.records if "nowhere-zone" in r.getMessage()]
+        assert len(warned) == 1 and "run.0-L1.jsonl, line 1: entity.zone" in warned[0]
