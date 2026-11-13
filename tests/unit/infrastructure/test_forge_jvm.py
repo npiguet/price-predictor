@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -22,6 +25,15 @@ from price_predictor.infrastructure.forge_jvm import (
 # for a stub, so the probe itself can still be exercised here.
 from price_predictor.infrastructure.forge_jvm import (
     java_feature_version as real_java_feature_version,
+)
+from price_predictor.infrastructure.forge_jvm import (
+    kill_process_tree as real_kill_process_tree,
+)
+from tests.unit.infrastructure.real_processes import (
+    SLEEPER,
+    is_alive,
+    reap,
+    start_with_grandchild,
 )
 
 
@@ -82,13 +94,15 @@ class TestRunForgeWorker:
         jar_dir.mkdir(parents=True)
         (jar_dir / forge_jvm.CONNECTOR_JAR_NAME).write_bytes(b"")
         with patch.object(forge_jvm, "project_root", return_value=tmp_path), \
-             patch.object(forge_jvm.subprocess, "run") as run:
+             patch.object(forge_jvm.subprocess, "Popen") as popen:
+            popen.return_value.communicate.return_value = (None, None)
+            popen.return_value.returncode = 0
             if glob:
                 forge_jvm.run_forge_worker("Main", include_dependency_glob=True)
             else:
                 forge_jvm.run_forge_worker("Main")
 
-        cmd = run.call_args.args[0]
+        cmd = popen.call_args.args[0]
         classpath = cmd[cmd.index("-cp") + 1]
         assert (os.path.join("dependency", "*") in classpath) is glob
 
@@ -430,3 +444,143 @@ class TestWorkerLogFiles:
 
     def test_close_all_with_nothing_ever_opened_is_a_noop(self, tmp_path):
         WorkerLogFiles(tmp_path, "run-1").close_all()  # must not raise
+
+
+class TestKillProcessTree:
+    """TP1: no test killed a real process; and V4 #8: a wait that timed out
+    was swallowed, so a survivor was reported dead."""
+
+    @pytest.mark.real_process_kill
+    def test_a_real_child_and_its_grandchild_both_die(self, tmp_path):
+        child, grandchild = start_with_grandchild(tmp_path / "grandchild.pid")
+        try:
+            assert forge_jvm.kill_process_tree(child) is True
+            assert child.poll() is not None
+            assert not is_alive(grandchild, within=10)
+        finally:
+            child.kill()
+            reap(grandchild)
+
+    def test_a_process_already_gone_counts_as_killed(self):
+        class Exited:
+            pid = 7
+
+            def poll(self):
+                return 0
+
+        assert real_kill_process_tree(Exited()) is True
+
+    def _stubborn(self, *, dies_on_kill: bool):
+        class Stubborn:
+            pid = 4242
+            killed = False
+
+            def poll(self):
+                return 0 if self.killed and dies_on_kill else None
+
+            def wait(self, timeout=None):
+                if self.poll() is None:
+                    raise subprocess.TimeoutExpired("java", timeout)
+                return 0
+
+            def kill(self):
+                self.killed = True
+
+        return Stubborn()
+
+    def test_a_tree_kill_that_times_out_falls_back_to_killing_the_process(self):
+        proc = self._stubborn(dies_on_kill=True)
+        with patch.object(forge_jvm.subprocess, "run") as taskkill, \
+             patch.object(forge_jvm.platform, "system", return_value="Windows"):
+            assert real_kill_process_tree(proc, timeout=0.01) is True
+        assert taskkill.call_args.args[0][:3] == ["taskkill", "/F", "/T"]
+        assert proc.killed
+
+    def test_a_survivor_is_reported_not_swallowed(self, capsys):
+        proc = self._stubborn(dies_on_kill=False)
+        with patch.object(forge_jvm.subprocess, "run"), \
+             patch.object(forge_jvm.platform, "system", return_value="Windows"):
+            assert real_kill_process_tree(proc, timeout=0.01) is False
+        assert "PID 4242 survived" in capsys.readouterr().out
+
+
+@pytest.mark.skipif(os.name != "nt", reason="the job object is Windows-only")
+class TestWorkersDieWithTheirParent:
+    """V4 #2: a hard-killed supervisor (Stop-Process, taskkill without /T)
+    left its JVMs running and appending to shards; a worker bound to the
+    parent's job object is killed by Windows when the parent's handle closes."""
+
+    _PARENT = (
+        "import subprocess, sys, time, os\n"
+        "from price_predictor.infrastructure import forge_jvm\n"
+        "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+        "bound = forge_jvm.bind_to_this_process(child)\n"
+        "open(sys.argv[1] + '.tmp', 'w').write(f'{child.pid} {bound}')\n"
+        "os.replace(sys.argv[1] + '.tmp', sys.argv[1])\n"
+        "time.sleep(60)\n"
+    )
+
+    def _start_parent(self, tmp_path):
+        out = tmp_path / "child.txt"
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join(["src", "."]))
+        parent = subprocess.Popen(
+            [sys.executable, "-c", self._PARENT, str(out)],
+            env=env, cwd=forge_jvm.project_root(),
+        )
+        deadline = time.monotonic() + 30
+        while not out.exists():
+            assert parent.poll() is None, "the stand-in supervisor died at startup"
+            assert time.monotonic() < deadline, "the stand-in supervisor never started its worker"
+            time.sleep(0.05)
+        pid, bound = out.read_text(encoding="utf-8").split()
+        return parent, int(pid), bound == "True"
+
+    def test_a_hard_killed_parent_takes_its_bound_worker_with_it(self, tmp_path):
+        parent, worker, bound = self._start_parent(tmp_path)
+        try:
+            assert bound
+            parent.kill()  # TerminateProcess: no finally, no handler runs
+            parent.wait(timeout=10)
+            assert not is_alive(worker, within=10)
+        finally:
+            parent.kill()
+            reap(worker)
+
+    def test_a_process_without_a_handle_is_left_unbound(self):
+        """A test's fake process has a made-up PID: binding by PID could put
+        an unrelated process in the job."""
+
+        class Fake:
+            pid = 1000
+
+        assert forge_jvm.bind_to_this_process(Fake()) is False
+
+
+class TestOneShotTimeout:
+    """P1 #12: a one-shot JVM had no timeout, so a hung Forge startup hung
+    the command."""
+
+    @pytest.mark.real_process_kill
+    def test_a_one_shot_worker_past_its_timeout_is_killed_and_raises(self, monkeypatch):
+        started: list[subprocess.Popen] = []
+        real_popen = subprocess.Popen
+
+        def popen(*args, **kwargs):
+            started.append(real_popen(*args, **kwargs))
+            return started[-1]
+
+        monkeypatch.setattr(forge_jvm, "build_forge_classpath", lambda **_: "")
+        monkeypatch.setattr(forge_jvm, "build_jvm_command", lambda **_: list(SLEEPER))
+        monkeypatch.setattr(forge_jvm.subprocess, "Popen", popen)
+        begun = time.monotonic()
+        try:
+            with pytest.raises(forge_jvm.ForgeWorkerTimeout, match="Main"):
+                forge_jvm.run_forge_worker("Main", timeout=1.0)
+            assert time.monotonic() - begun < 20
+            assert started[0].poll() is not None
+        finally:
+            for proc in started:
+                proc.kill()
+
+    def test_the_timeout_is_an_os_error_a_caller_can_degrade_on(self):
+        assert issubclass(forge_jvm.ForgeWorkerTimeout, TimeoutError)

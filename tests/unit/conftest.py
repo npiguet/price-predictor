@@ -69,9 +69,10 @@ class KillGuard:
             weakref.WeakKeyDictionary()
         )
 
-    def stand_in(self, proc) -> None:
+    def stand_in(self, proc, **_options) -> bool:
         self._record_of.get(threading.current_thread(), self.killed).append(proc)
         proc.kill()
+        return True
 
     def begin_test(self) -> list:
         """Start a new record; threads alive now belong to earlier tests."""

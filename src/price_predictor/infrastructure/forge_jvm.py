@@ -194,6 +194,14 @@ def build_jvm_command(
     return cmd
 
 
+class ForgeWorkerTimeout(TimeoutError):
+    """A one-shot forge-connector main ran past its timeout and was killed.
+
+    A ``TimeoutError``, so an ``OSError``: a caller that degrades when the JVM
+    cannot run at all (the castability consult) degrades on a hung one too.
+    """
+
+
 def run_forge_worker(
     main_class: str,
     *,
@@ -201,10 +209,16 @@ def run_forge_worker(
     xmx: str | None = None,
     input_text: str | None = None,
     include_dependency_glob: bool = False,
+    timeout: float | None = None,
 ) -> subprocess.CompletedProcess:
     """Run a one-shot forge-connector main class and return the result.
 
     ``include_dependency_glob`` is passed to :func:`build_forge_classpath`.
+    The JVM is bound to this process (:func:`bind_to_this_process`), so a
+    hard-killed caller does not leave it running. Past ``timeout`` seconds
+    (None waits for ever) its process tree is killed and
+    :class:`ForgeWorkerTimeout` raised: a Forge startup can hang, and nothing
+    else would end the command.
 
     Raises FileNotFoundError if ``java`` is not on PATH.
     """
@@ -217,31 +231,54 @@ def run_forge_worker(
         xmx=xmx,
     )
     capture = input_text is not None
+    pipe = subprocess.PIPE if capture else None
     try:
-        return subprocess.run(
+        proc = subprocess.Popen(
             cmd,
-            input=input_text,
-            capture_output=capture,
+            stdin=pipe,
+            stdout=pipe,
+            stderr=pipe,
             text=capture,
             encoding="utf-8" if capture else None,
-            check=False,
         )
     except FileNotFoundError as exc:
         raise FileNotFoundError(
             "Java not found. Ensure java is on PATH."
         ) from exc
+    bind_to_this_process(proc)
+    try:
+        stdout, stderr = proc.communicate(input=input_text, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        kill_process_tree(proc)
+        raise ForgeWorkerTimeout(
+            f"{main_class} ran past its {timeout:.0f} s timeout and was killed"
+        ) from exc
+    except BaseException:
+        kill_process_tree(proc)
+        raise
+    return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
 
 
-def kill_process_tree(proc: subprocess.Popen) -> None:
-    """Kill a subprocess and its entire child tree.
+#: Seconds :func:`kill_process_tree` waits for the tree kill, and again for
+#: the fallback kill, before calling the process a survivor.
+KILL_WAIT_SECONDS = 10.0
+
+
+def kill_process_tree(proc: subprocess.Popen, *, timeout: float = KILL_WAIT_SECONDS) -> bool:
+    """Kill a subprocess and its entire child tree; True once it is gone.
 
     On Windows, ``proc.terminate()`` only kills the parent — child JVM
     processes survive as orphans. ``taskkill /F /T`` walks the PID tree
     and forces termination. On POSIX, ``os.killpg`` does the same when
     the process was launched with ``start_new_session=True``.
+
+    A process still running ``timeout`` seconds after the tree kill is killed
+    again directly; one that outlives that too is reported by PID and False
+    returned, never counted as dead: a surviving worker keeps appending to
+    its shard and to the progress file it was started with.
     """
     if proc.poll() is not None:
-        return
+        return True
     try:
         if platform.system() == "Windows":
             subprocess.run(
@@ -255,15 +292,141 @@ def kill_process_tree(proc: subprocess.Popen) -> None:
                 os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 proc.kill()
-        try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            pass
-    except Exception:
-        try:
-            proc.kill()
-        except Exception:
-            pass
+        if _waited(proc, timeout):
+            return True
+    except Exception as exc:  # noqa: BLE001 — the direct kill below still runs
+        print(f"Tree kill of worker PID {proc.pid} failed ({exc}); killing it directly")
+    try:
+        proc.kill()
+    except Exception:  # noqa: BLE001, S110 — the wait below decides
+        pass
+    if _waited(proc, timeout):
+        return True
+    print(
+        f"Worker PID {proc.pid} survived the kill; it may still be writing its "
+        "shard and progress file"
+    )
+    return False
+
+
+def _waited(proc: subprocess.Popen, timeout: float) -> bool:
+    """Whether ``proc`` ended within ``timeout`` seconds."""
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return False
+    except Exception:  # noqa: BLE001 — a wait that cannot be made proves nothing
+        return proc.poll() is not None
+    return True
+
+
+# ── binding workers to this process ─────────────────────────────────────
+
+_JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
+_JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
+
+_job_lock = threading.Lock()
+#: This process's job handle, made on first use and never closed: Windows
+#: closes it when this process ends, however it ends, and then kills every
+#: process still in the job.
+_job_handle: int | None = None
+_job_unavailable = False
+
+
+def _create_kill_on_close_job() -> int | None:
+    """A Windows job object that kills its processes when its last handle
+    closes; None when one cannot be made."""
+    import ctypes
+    from ctypes import wintypes
+
+    class BasicLimits(ctypes.Structure):
+        _fields_ = [
+            ("PerProcessUserTimeLimit", ctypes.c_int64),
+            ("PerJobUserTimeLimit", ctypes.c_int64),
+            ("LimitFlags", wintypes.DWORD),
+            ("MinimumWorkingSetSize", ctypes.c_size_t),
+            ("MaximumWorkingSetSize", ctypes.c_size_t),
+            ("ActiveProcessLimit", wintypes.DWORD),
+            ("Affinity", ctypes.c_size_t),
+            ("PriorityClass", wintypes.DWORD),
+            ("SchedulingClass", wintypes.DWORD),
+        ]
+
+    class IoCounters(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_uint64) for name in (
+            "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+            "ReadTransferCount", "WriteTransferCount", "OtherTransferCount",
+        )]
+
+    class ExtendedLimits(ctypes.Structure):
+        _fields_ = [
+            ("BasicLimitInformation", BasicLimits),
+            ("IoInfo", IoCounters),
+            ("ProcessMemoryLimit", ctypes.c_size_t),
+            ("JobMemoryLimit", ctypes.c_size_t),
+            ("PeakProcessMemoryUsed", ctypes.c_size_t),
+            ("PeakJobMemoryUsed", ctypes.c_size_t),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+    kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
+    kernel32.SetInformationJobObject.argtypes = [
+        wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD,
+    ]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    job = kernel32.CreateJobObjectW(None, None)
+    if not job:
+        return None
+    limits = ExtendedLimits()
+    limits.BasicLimitInformation.LimitFlags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    if not kernel32.SetInformationJobObject(
+        job, _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+        ctypes.byref(limits), ctypes.sizeof(limits),
+    ):
+        kernel32.CloseHandle(job)
+        return None
+    return job
+
+
+def bind_to_this_process(proc: subprocess.Popen) -> bool:
+    """Have Windows kill ``proc``, and every process it starts, when this
+    process ends, however it ends; True when it is bound.
+
+    A worker JVM otherwise outlives a supervisor killed hard (Stop-Process,
+    ``taskkill`` without ``/T``, a closed console), which runs no ``finally``:
+    it keeps appending records under a run whose manifest says the run
+    ended. The binding is a job object with kill-on-close, whose one handle
+    this process holds until it exits. Only a real ``Popen`` is bound, by its
+    own process handle, never by PID: a test's fake process carries a
+    made-up PID that could name an unrelated process. Elsewhere than on
+    Windows nothing is bound, and a failure to bind is reported and leaves
+    the worker running unbound.
+    """
+    global _job_handle, _job_unavailable
+    handle = getattr(proc, "_handle", None)
+    if platform.system() != "Windows" or handle is None:
+        return False
+    import ctypes
+    from ctypes import wintypes
+
+    with _job_lock:
+        if _job_handle is None and not _job_unavailable:
+            _job_handle = _create_kill_on_close_job()
+            if _job_handle is None:
+                _job_unavailable = True
+                print("Could not create a job object; workers outlive a hard-killed supervisor")
+        if _job_handle is None:
+            return False
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+        if kernel32.AssignProcessToJobObject(_job_handle, int(handle)):
+            return True
+    print(
+        f"Could not bind worker PID {proc.pid} to this process "
+        f"(error {ctypes.get_last_error()}); it outlives a hard-killed supervisor"
+    )
+    return False
 
 
 class WorkerLogFiles:
@@ -509,6 +672,8 @@ class ForgeWorkerPool:
         self._killed: set[subprocess.Popen] = set()
         self._failed_starts: dict[int, int] = {}
         self._start_failure: str | None = None
+        #: PIDs of workers the pool's kill could not end.
+        self._survivors: list[int] = []
 
     @property
     def interrupted(self) -> bool:
@@ -518,6 +683,16 @@ class ForgeWorkerPool:
         different exit codes.
         """
         return self._interrupted
+
+    @property
+    def survivors(self) -> list[int]:
+        """PIDs of the workers a kill could not end, recycled or at shutdown.
+
+        Each may still append to its shard and to the progress file it was
+        started with, so a caller counting either as final should say so.
+        """
+        with self._processes_lock:
+            return list(self._survivors)
 
     def run(self) -> None:
         """Start all workers and block until shutdown.
@@ -533,15 +708,20 @@ class ForgeWorkerPool:
         print(f"Starting {self._worker_count} workers...")
 
         monitor_threads = []
-        for i in range(self._worker_count):
-            t = threading.Thread(target=self._monitor_worker, args=(i,), daemon=True)
-            t.start()
-            monitor_threads.append(t)
+        try:
+            for i in range(self._worker_count):
+                t = threading.Thread(target=self._monitor_worker, args=(i,), daemon=True)
+                t.start()
+                monitor_threads.append(t)
 
-        self._supervisor_loop()
-
-        for t in monitor_threads:
-            t.join(timeout=10)
+            self._supervisor_loop()
+        finally:
+            # However the loop ended: the monitor threads are daemons, so a
+            # raise here would otherwise leave every worker running.
+            self._shutdown_event.set()
+            self._terminate_all()
+            for t in monitor_threads:
+                t.join(timeout=10)
 
         if self._start_failure is not None:
             raise WorkerStartError(
@@ -584,6 +764,7 @@ class ForgeWorkerPool:
                 continue
 
             started = time.monotonic()
+            bind_to_this_process(proc)
             with self._processes_lock:
                 self._processes.append(proc)
                 self._start_times[proc] = started
@@ -761,7 +942,7 @@ class ForgeWorkerPool:
             age = time.monotonic() - oldest_time
             self._killed.add(oldest_proc)
 
-        kill_process_tree(oldest_proc)
+        self._kill(oldest_proc)
         print(f"Recycled longest-running worker (PID {oldest_proc.pid}, age {age:.0f}s)")
 
     def _terminate_all(self) -> None:
@@ -770,7 +951,14 @@ class ForgeWorkerPool:
             procs = list(self._processes)
 
         for proc in procs:
-            kill_process_tree(proc)
+            self._kill(proc)
+
+    def _kill(self, proc: subprocess.Popen) -> None:
+        """Kill one worker's tree, keeping its PID when the kill could not end it."""
+        if kill_process_tree(proc) is False:
+            with self._processes_lock:
+                if proc.pid not in self._survivors:
+                    self._survivors.append(proc.pid)
 
     def _handle_signal(self, signum, frame) -> None:
         """Signal handler: set shutdown event to stop workers."""

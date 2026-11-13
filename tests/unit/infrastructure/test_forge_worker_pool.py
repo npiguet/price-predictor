@@ -7,6 +7,7 @@ shape is a contract, not an implementation detail.
 
 from __future__ import annotations
 
+import subprocess
 import threading
 import time
 from unittest.mock import patch
@@ -14,8 +15,10 @@ from unittest.mock import patch
 import pytest
 
 from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool, WorkerStartError
+from tests.unit.infrastructure.real_processes import SLEEPER
 
 KILL = "price_predictor.infrastructure.forge_jvm.kill_process_tree"
+BIND = "price_predictor.infrastructure.forge_jvm.bind_to_this_process"
 
 
 class _FakeProc:
@@ -313,3 +316,76 @@ class TestNoWorkerOutlivesTheRun:
 
         assert spawned, "the spawn never returned"
         assert all(proc._terminated for proc in spawned)
+
+
+class TestARunThatRaises:
+    """V4 #2 / TP1: ``run`` had no ``finally``, so a supervisor loop that
+    raised left every worker running (the monitor threads are daemons)."""
+
+    @pytest.mark.real_process_kill
+    def test_every_worker_is_killed_when_the_loop_raises(self, tmp_path):
+        started: list[subprocess.Popen] = []
+        up = threading.Event()
+
+        def spawn(worker_id):
+            proc = subprocess.Popen(SLEEPER)
+            started.append(proc)
+            up.set()
+            return proc
+
+        def should_stop(count):
+            if up.wait(timeout=10):
+                raise RuntimeError("the stop condition broke")
+            return False
+
+        pool = _pool(tmp_path / "out.txt", worker_count=1, spawn_worker=spawn,
+                     should_stop=should_stop)
+        try:
+            with pytest.raises(RuntimeError, match="stop condition broke"):
+                _run_with_watchdog(pool, seconds=20)
+            assert started, "no worker was started"
+            assert all(proc.poll() is not None for proc in started)
+        finally:
+            for proc in started:
+                proc.kill()
+
+
+class TestSurvivors:
+    """V4 #8: a worker the kill could not end was counted as ended."""
+
+    def test_a_worker_the_kill_cannot_end_is_reported(self, tmp_path, capsys):
+        pool = _pool(tmp_path / "out.txt", worker_count=1)
+        pool._processes = [_FakeProc(77)]
+
+        with patch(KILL, return_value=False):
+            pool._terminate_all()
+
+        assert pool.survivors == [77]
+
+    def test_ended_workers_leave_no_survivor(self, tmp_path):
+        pool = _pool(tmp_path / "out.txt", worker_count=1)
+        pool._processes = [_FakeProc(77)]
+
+        with patch(KILL, return_value=True):
+            pool._terminate_all()
+
+        assert pool.survivors == []
+
+
+class TestEveryWorkerIsBound:
+    """V4 #2: every spawned worker is bound to the supervisor's process, so a
+    hard-killed supervisor takes them with it."""
+
+    def test_the_monitor_binds_each_worker_it_spawns(self, tmp_path):
+        spawned: list[_ExitingProc] = []
+
+        def spawn(worker_id):
+            spawned.append(_ExitingProc(5000 + len(spawned), code=0))
+            return spawned[-1]
+
+        pool = _pool(tmp_path / "out.txt", worker_count=1, spawn_worker=spawn,
+                     max_failed_starts=2, restart_backoff=0.01)
+        with patch(KILL), patch(BIND) as bind, pytest.raises(WorkerStartError):
+            _run_with_watchdog(pool)
+
+        assert [call.args[0] for call in bind.call_args_list] == spawned

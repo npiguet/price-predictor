@@ -31,6 +31,9 @@ def run(config: ExtractKeywordDefinitionsConfig) -> int:
     except FileNotFoundError as exc:
         logger.error("%s", exc)
         return 2
+    except TimeoutError as exc:
+        logger.error("%s", exc)
+        return 1
     if code != 0:
         logger.error("KeywordDefinitionMain exited with %d", code)
         return code

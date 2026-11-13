@@ -2,7 +2,9 @@
 
 Each initializes Forge's GUI-side static state, so each needs the converter's
 full-runtime classpath, dependency glob included. Each raises
-``FileNotFoundError`` when the connector JAR or java is missing.
+``FileNotFoundError`` when the connector JAR or java is missing, and
+``ForgeWorkerTimeout`` (a ``TimeoutError``) when the JVM runs past
+:data:`ONE_SHOT_TIMEOUT_SECONDS` and is killed.
 """
 
 from __future__ import annotations
@@ -18,10 +20,16 @@ logger = logging.getLogger(__name__)
 
 _PACKAGE = "com.pricepredictor.connector"
 
+#: How long a one-shot main may run before it is killed. Each loads Forge's
+#: card database once and makes one pass over at most the whole card corpus,
+#: minutes at most; an hour is a hang, which nothing else would end.
+ONE_SHOT_TIMEOUT_SECONDS = 3600.0
+
 
 def _run(main: str, main_args: list[str]) -> int:
     return run_forge_worker(
         f"{_PACKAGE}.{main}", main_args=main_args, include_dependency_glob=True,
+        timeout=ONE_SHOT_TIMEOUT_SECONDS,
     ).returncode
 
 
@@ -57,4 +65,12 @@ def castability_verdicts(names: list[str]) -> dict[str, str]:
         if code != 0 or not response.exists():
             logger.warning("CastabilityMain exited with %d; no verdicts", code)
             return {}
-        return json.loads(response.read_text(encoding="utf-8"))
+        try:
+            verdicts = json.loads(response.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            logger.warning("CastabilityMain's answer is unreadable (%s); no verdicts", exc)
+            return {}
+        if not isinstance(verdicts, dict):
+            logger.warning("CastabilityMain's answer is no name-to-verdict map; no verdicts")
+            return {}
+        return verdicts
