@@ -421,8 +421,11 @@ def _static_condition(
 
 
 def _line_active(record: EffectRecord, key: ProvenanceKey) -> bool | None:
-    """Forge's answer to whether the static ``key`` holds, read off the snapshot."""
+    """Forge's answer to whether the static ``key`` holds, read off the snapshot:
+    on a card the board holds, never on a last-known copy (no zone)."""
     for entity in record.state.entities:
+        if entity.zone is None:
+            continue
         for line in entity.lines or ():
             if key in line.keys and line.active is not None:
                 return line.active

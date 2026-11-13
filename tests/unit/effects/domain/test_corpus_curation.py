@@ -451,6 +451,22 @@ class TestConditionBalance:
             _Lines({anthem: _TURN_STATIC}))
         assert listed.side is ConditionSide.MET and listed.carrier == anthem
 
+    def test_a_last_known_copy_of_the_static_s_host_does_not_answer_for_it(self):
+        """A last-known copy (no zone) lists the lines its card had; the static
+        holds or not on the card the board holds."""
+        from effects.domain.corpus_curation import ConditionSide, turn_step_condition
+        from effects.domain.state_snapshot import CardLine
+        from tests.unit.effects.builders import make_entity
+
+        key = _key("anthem", "static")
+        record = _continuous(key, True)
+        ghost = make_entity("L1", "anthem", zone=None, lines=(
+            CardLine(keys=(key,), kind="static", granted=False, active=False),))
+        record = dataclasses_replace(record, state=dataclasses_replace(
+            record.state, entities=(ghost, *record.state.entities)))
+        assert turn_step_condition(record, _Lines({key: _TURN_STATIC})).side is (
+            ConditionSide.MET)
+
     def test_the_condition_joins_the_outcome_signature(self):
         from effects.domain.corpus_curation import cell_signature, outcome_signature
         from effects.domain.sampling import SamplingClass
