@@ -19,6 +19,7 @@ You are coordinating the implementation of every fix that came out of the 2026-1
 - Commit freely on the branch; never commit `output/` or `models/`; never push unprompted.
 - Any edit under `specs/` or `experiments/` loads the `feature-workflow` skill first. Fixed defects, their reviews and redone runs stay out of experiment records.
 - Ask decisions in plain text, never with the question pop-up.
+- A change to anything persistent (wire schema, CLI flags and defaults, file layout, documented behaviour), as opposed to a plain bug fix, updates the spec files that describe it (`specs/025-ability-effect-model-gen3/` spec, plan, data model, contracts, quickstart) in the same package as the code. The verifier checks code and spec agree. WP13 is the final sweep, not the first time specs are touched.
 
 ## Decisions to get from the user before the affected package starts
 
@@ -34,6 +35,13 @@ Each has a recommendation. Ask them together at the start; packages that do not 
 | D6 | **Artifact layout.** Worker logs beside the shards versus under `logs/` (`V4 #20`); `match-outcomes --effect-records` appending to the shared `output/sealed/match-outcomes.txt`; a read-only `--count-from DIR` for `collect-coverage` so a run in its own directory sees earlier coverage (`V4 #5`); `collect-variants --continues RUN_ID` (`V4 #6`). | WP8 | Follow the artifact-layout skill: logs under `logs/`, add `--count-from` and `--continues`. Leave the sealed outcomes path to a separate decision in `src/sealed`. |
 | D7 | **Unverified findings.** Low-severity reviewer findings that no verifier examined (most `#` entries in the F/C/P sections not cited in a `V` section). | all | The implementer first reproduces or traces each one test-first; a finding that does not reproduce is reported back with the evidence and dropped. |
 | D8 | **Stale gen-3 test fixture.** `tests/fixtures/effects/gen3-records.jsonl.gz` is in a superseded payload shape (`V4 #19`). Regenerating it needs a small collection run after the Java fixes. | WP12 | The user launches a short pilot once WP1-WP7 are in; `scripts/make_fixture_records.py` cuts the new fixture from it. Until then, tests that need the current shape use the Java characterization records. |
+
+### Answers (user, 2026-11-13)
+
+- D1, D2, D3, D6, D7: as recommended.
+- D4: per-rule rewrite. Add anchor-side parameters (decided by `rule_outcomes.may_block` and a `may_target` twin; timing narrowed by card type or keyword) and rewrite the declarations wherever the record carries the data; a scenario that states the same observable fact as another is declared an explicit duplicate of it (counted once, exempt from the uniqueness test); only what the record cannot show drops to `none` with its reason; add the catalogue test that fails when two rules share an identical declaration. The WP11 implementer edits the catalogue (it was written by Opus/Sonnet agents) and reports any declaration it could not express.
+- D5: as recommended. The corpus-store on-disk layout is frozen for all of gen 3 (and probably later generations) unless a collection or coverage gap forces a change: keep `test_the_store_lays_out_the_dataset`.
+- D8: as recommended, except that the coordinator (or a subagent) launches the short fixture pilot and cuts the fixture itself; this permission covers that pilot only, not collection runs.
 
 ## Work packages
 
@@ -73,8 +81,8 @@ After WP1-WP11: the fork fidelity audit (tasks.md T181, quickstart stage 5), a s
 
 | WP | State | Commit(s) | Notes |
 |---|---|---|---|
-| WP0 | not started | | |
-| WP1 | not started | | |
+| WP0 | done; verified twice (all gaps closed). Connector tests and a full unit run on `f26fefea` still to run | `1cffd83a`, `2e85c898`, `f26fefea` | Unit suite 5561 passed on `1cffd83a`. Kill patched session-long at every binding found by scan; effects tests fail on an unrequested process pool (`workers=None` or wider than 4). Left: scan covers module attributes of the four packages only |
+| WP1 | implementer running | | |
 | WP2 | not started | | |
 | WP3 | not started | | |
 | WP4 | not started | | |
