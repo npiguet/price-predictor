@@ -102,7 +102,7 @@ class TestSupervisorShutdownSignal:
 
         assert elapsed < 5.0, "run() should return quickly after shutdown event"
 
-    def test_all_workers_terminated_on_shutdown(self, tmp_path):
+    def test_all_workers_terminated_on_shutdown(self, tmp_path, killed_process_trees):
         output_file = tmp_path / "match-outcomes.txt"
         processes = []
 
@@ -117,8 +117,9 @@ class TestSupervisorShutdownSignal:
         supervisor._start_worker = fake_start_worker
         supervisor.run()
 
+        assert len(processes) == 2
         for proc in processes:
-            assert proc._terminated, "All worker processes must be terminated on shutdown"
+            assert proc in killed_process_trees, "every worker's tree is killed on shutdown"
 
 
 class TestSupervisorWorkerCount:
@@ -165,7 +166,7 @@ class TestSupervisorWorkerCount:
 
 
 class TestSupervisorRecycleOldest:
-    def test_oldest_worker_is_terminated(self, tmp_path):
+    def test_oldest_worker_is_terminated(self, tmp_path, killed_process_trees):
         output_file = tmp_path / "match-outcomes.txt"
         supervisor = MatchOutcomeSupervisor(worker_count=2, output_path=output_file, best_of=3)
 
@@ -179,8 +180,7 @@ class TestSupervisorRecycleOldest:
 
         supervisor._kill_oldest_worker()
 
-        assert old_proc._terminated, "Oldest worker must be terminated"
-        assert not new_proc._terminated, "Newer worker must not be terminated"
+        assert killed_process_trees == [old_proc], "only the oldest worker's tree is killed"
 
     def test_no_crash_when_no_workers(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"

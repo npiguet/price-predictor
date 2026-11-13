@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -35,6 +36,13 @@ class VariantStagingTest {
 
     private static final long STARTUP_MINUTES = 5;
 
+    /**
+     * Tagged {@code integration}: it starts two Forge JVMs and stages scripts
+     * into the custom-cards directory of the shared {@code ../forge} checkout,
+     * which live collection workers read, so the default {@code mvn test}
+     * leaves it out.
+     */
+    @Tag("integration")
     @Test
     void aTreeWithItsLoadableListInitializesForgeTwiceRunning(@TempDir Path tmp)
             throws Exception {

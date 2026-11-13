@@ -550,7 +550,7 @@ class TestIncrementalCounting:
         self._shard(tmp_path, "y", ["alpha"])
         coverage = {n: CardCoverage(n) for n in ("alpha", "beta")}
 
-        CoverageCounter().update(coverage, tmp_path)
+        CoverageCounter().update(coverage, tmp_path, workers=1)
 
         assert coverage["alpha"].records == 2
         assert coverage["beta"].records == 1
@@ -563,8 +563,8 @@ class TestIncrementalCounting:
         coverage = {"alpha": CardCoverage("alpha")}
         counter = CoverageCounter()
 
-        counter.update(coverage, tmp_path)
-        counter.update(coverage, tmp_path)
+        counter.update(coverage, tmp_path, workers=1)
+        counter.update(coverage, tmp_path, workers=1)
 
         assert coverage["alpha"].records == 1
 
@@ -574,10 +574,10 @@ class TestIncrementalCounting:
         self._shard(tmp_path, "x", ["alpha"])
         coverage = {"alpha": CardCoverage("alpha")}
         counter = CoverageCounter()
-        counter.update(coverage, tmp_path)
+        counter.update(coverage, tmp_path, workers=1)
 
         self._shard(tmp_path, "y", ["alpha", "alpha"])
-        counter.update(coverage, tmp_path)
+        counter.update(coverage, tmp_path, workers=1)
 
         assert coverage["alpha"].records == 3
 
@@ -589,8 +589,8 @@ class TestIncrementalCounting:
         counter = CoverageCounter()
         coverage = {"alpha": CardCoverage("alpha")}
 
-        assert counter.update(coverage, tmp_path) == 1
-        assert counter.update(coverage, tmp_path) == 0
+        assert counter.update(coverage, tmp_path, workers=1) == 1
+        assert counter.update(coverage, tmp_path, workers=1) == 0
 
 
 class TestCountingCrossesTheNameBoundary:
@@ -614,7 +614,7 @@ class TestCountingCrossesTheNameBoundary:
         write_plain_shard(tmp_path, "x", [_record([make_entity("E1", "Soul Echo")], source="E1")])
         coverage = {"soul echo": CardCoverage("soul echo")}
 
-        CoverageCounter().update(coverage, tmp_path)
+        CoverageCounter().update(coverage, tmp_path, workers=1)
 
         assert coverage["soul echo"].records == 1
 
@@ -626,7 +626,7 @@ class TestCountingCrossesTheNameBoundary:
         write_plain_shard(tmp_path, "x", [_record([make_entity("E1", "Some Token")], source="E1")])
         coverage = {"soul echo": CardCoverage("soul echo")}
 
-        CoverageCounter().update(coverage, tmp_path)
+        CoverageCounter().update(coverage, tmp_path, workers=1)
 
         assert coverage["soul echo"].records == 0
 
@@ -652,7 +652,7 @@ class TestCountingReportsProgress:
         coverage = {"aa": CardCoverage("aa")}
 
         with caplog.at_level("INFO"):
-            CoverageCounter(progress_every=50).update(coverage, tmp_path)
+            CoverageCounter(progress_every=50).update(coverage, tmp_path, workers=1)
 
         progress = [r for r in caplog.messages if "of 120 shard" in r]
         assert len(progress) >= 2, f"expected periodic progress, got {progress}"
@@ -665,7 +665,7 @@ class TestCountingReportsProgress:
         coverage = {"aa": CardCoverage("aa")}
 
         with caplog.at_level("INFO"):
-            CoverageCounter(progress_every=50).update(coverage, tmp_path)
+            CoverageCounter(progress_every=50).update(coverage, tmp_path, workers=1)
 
         assert not [r for r in caplog.messages if "shard" in r and "of 3" in r]
 

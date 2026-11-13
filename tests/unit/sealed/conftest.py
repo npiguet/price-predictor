@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import time
 from pathlib import Path
 
@@ -36,9 +37,13 @@ class FakeProcess:
         self._hang = hang
         self._terminated = False
 
-    def wait(self):
+    def wait(self, timeout: float | None = None):
+        """``Popen.wait``'s signature and its ``TimeoutExpired`` on a timeout."""
         if self._hang:
+            deadline = None if timeout is None else time.monotonic() + timeout
             while not self._terminated:
+                if deadline is not None and time.monotonic() >= deadline:
+                    raise subprocess.TimeoutExpired(f"fake process {self.pid}", timeout)
                 time.sleep(0.01)
         return self.returncode
 
