@@ -174,7 +174,9 @@ players. Shapes as
 | `combat`, observed and probe | damage events carry `source` | the bus's `cause`, else from `assignment_choices` |
 | decision candidate | `cost_after_adjustment` | the cost after Forge's cost adjustment |
 | events | `pt_change.set_pt`, zone changes' `library_position`, `card_looked_at.mode`, `token_created` controller and counters, `ability_change` subjects, new `state_flag_change` flags, `damage_dealt.damage_type`, `attached.attached_to` and `unattached.detached_from` on bus events, `destroyed`, `sacrificed` and `face_change` (FaceState `to_state`) on resolution and combat records, `player_lost` on the record the game's outcome is written in (a `LosesGame` or `WinsGame` effect half that ended the game, else the game-end record), `card_revealed.from_zone` and `card_made.to_zone` lower-cased, `choice_made.choice_kind` by API, run-parameter events read per Forge mode with signed `delta` (a loss negative) and FaceState `to_state`, `keyword_change` sorted with `hidden` on a hidden keyword's, `ability_change` from stat changes | wire shapes in [contracts/record-schema-delta.md](contracts/record-schema-delta.md) |
-| resolution, effect half | `events` of a fizzled spell | exactly its card's `zone_change` off the stack; `[]` on a fizzled ability's and a declined half |
+| resolution, effect half | `events` of a fizzled or declined spell | exactly its card's `zone_change` off the stack; `[]` on a fizzled or declined ability's half and a copy of a spell's |
+| refs | `targets_on_stack`; `L<id>` in `targets_at_cast` | the targets that are spells or abilities on the stack, by their cards; a target as cast gone or a new object named as it last existed |
+| events | `name_change`, `mana_cost_change` | new types, from stat changes with no face change and no copy effect |
 | `continuous` | contributions' `abilities`, `hidden_keywords`; `=` in `keywords` | layer-6 grants by line key, removals as `-key`; a static's hidden keywords; a static removing every keyword |
 
 ## Curation

@@ -923,9 +923,10 @@ and that the reporting half never enters the control score.
 - **FR-042b**: An effect half MUST take its snapshot when its resolution starts, before the first
   clause resolves (a modal half: before its mode's first clause), through a Forge hook at the start
   of `MagicStack.resolveStack`'s resolution. It MUST carry `outcome` (`resolved`, `fizzled`,
-  `partially_fizzled`, `declined`); a declined resolution, and a fizzled ability, writes an effect
-  half with `events: []`; a fizzled spell's effect half MUST hold exactly its card's `zone_change`
-  off the stack (608.2b), wherever the card goes. A spell's effect half MUST hold its card's `zone_change` off the stack after the resolution's own
+  `partially_fizzled`, `declined`); a fizzled or declined spell's effect half MUST hold exactly its
+  card's `zone_change` off the stack (608.2b), wherever the card goes; a fizzled or declined
+  ability, and a copy of a spell, which ceases to exist with no move (707.10a), writes an effect
+  half with `events: []`. A spell's effect half MUST hold its card's `zone_change` off the stack after the resolution's own
   events and before the state-based check's deaths. A copy of a spell or ability writes no cost half. A
   countered stack item MUST write no effect half; the countering clause's effect half MUST hold the
   countered spell's `spell_countered` and its card's move off the stack.
