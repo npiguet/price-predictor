@@ -405,6 +405,24 @@ class TestSurvivors:
 
         assert pool.survivors == [4000]
 
+    def test_a_killed_worker_that_exited_is_no_longer_held(self, tmp_path):
+        """match-outcomes recycles a worker a minute for hours: each killed
+        Popen kept for the pool's life held a process handle."""
+        class Exits(_FakeProc):
+            def wait(self, timeout=None):
+                self._alive = False
+
+        def spawn(worker_id):
+            pool.request_shutdown()
+            return Exits(4000)
+
+        pool = _pool(tmp_path / "out.txt", worker_count=1, spawn_worker=spawn)
+        with patch(KILL, return_value=True):
+            pool._monitor_worker(0)
+
+        assert pool._kill_attempted == []
+        assert pool.survivors == []
+
 
 class TestEveryWorkerIsBound:
     """V4 #2: every spawned worker is bound to the supervisor's process, so a

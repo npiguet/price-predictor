@@ -971,6 +971,14 @@ class ForgeWorkerPool:
             with self._processes_lock:
                 if proc in self._processes:
                     self._processes.remove(proc)
+                # A killed worker that has exited is no survivor; holding its
+                # Popen for the pool's life would hold a process handle per
+                # recycle. One still running stays, to be reported.
+                if proc.poll() is not None:
+                    self._kill_attempted = [
+                        attempted for attempted in self._kill_attempted
+                        if attempted is not proc
+                    ]
                 self._start_times.pop(proc, None)
                 self._killed.discard(proc)
 

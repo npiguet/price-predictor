@@ -8,7 +8,7 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 
-from price_predictor.infrastructure.append_only import count_shard_records
+from price_predictor.infrastructure.append_only import has_shard_record
 from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool, WorkerLogFiles
 from price_predictor.infrastructure.run_manifest import annotate_run
 from price_predictor.infrastructure.worker_log_scan import WorkerLogReport
@@ -82,9 +82,9 @@ class MatchOutcomeSupervisor:
             WorkerLogReport(self._worker_logs, worker_count)
             if self._worker_logs is not None else None
         )
-        #: Matches this run completed and records it wrote, once it has run.
+        #: Matches this run completed, and whether it wrote a record, once it has run.
         self._matches = 0
-        self._records = 0
+        self._wrote_records = False
         # The lambda re-reads self._start_worker per spawn so tests (and any
         # caller) can patch it after construction.
         self._pool = ForgeWorkerPool(
@@ -120,7 +120,10 @@ class MatchOutcomeSupervisor:
         """Whether a run collecting effect records completed matches and wrote
         no record: every match failing to record, which the shards alone
         cannot tell from a short run."""
-        return self._effect_records_dir is not None and self._matches > 0 and self._records == 0
+        return (
+            self._effect_records_dir is not None and self._matches > 0
+            and not self._wrote_records
+        )
 
     def run(self) -> None:
         """Start all workers and block until shutdown, then report the
@@ -152,11 +155,11 @@ class MatchOutcomeSupervisor:
         """The run's worker-log totals and record count, printed and kept in
         ``run.json``; an error line when matches recorded nothing."""
         self._report_worker_logs()
-        self._records = count_shard_records(self._effect_records_dir, self._run_id)
+        self._wrote_records = has_shard_record(self._effect_records_dir, self._run_id)
         print(f"Worker logs over the run: {self._log_report.totals.render()}")
         annotate_run(
             self._effect_records_dir, run_id=self._run_id,
-            effect_records=self._records, matches=self._matches,
+            matches=self._matches,
             **self._log_report.manifest_fields(),
             worker_survivors=self._pool.survivors,
         )

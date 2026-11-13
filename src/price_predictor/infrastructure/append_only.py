@@ -34,11 +34,11 @@ def iter_gzip_complete_lines(path: Path) -> Iterator[str]:
         return
 
 
-def count_shard_records(directory: Path, run_id: str) -> int:
-    """Complete, non-blank lines in the effect-record shards of run
-    ``run_id`` at the top of ``directory`` (``{run_id}.*.jsonl`` and
-    ``.jsonl.gz``): the records a run wrote, counted without parsing."""
-    total = 0
+def has_shard_record(directory: Path, run_id: str) -> bool:
+    """Whether any effect-record shard of run ``run_id`` at the top of
+    ``directory`` (``{run_id}.*.jsonl`` or ``.jsonl.gz``) holds a complete,
+    non-blank line. Reads no further than the first one: a run's shards
+    decompress to gigabytes."""
     for shard in sorted(Path(directory).glob(f"{run_id}.*.jsonl*")):
         if shard.name.endswith(".jsonl.gz"):
             lines = iter_gzip_complete_lines(shard)
@@ -46,8 +46,9 @@ def count_shard_records(directory: Path, run_id: str) -> int:
             lines = iter_complete_lines(shard)
         else:
             continue
-        total += sum(1 for line in lines if line.strip())
-    return total
+        if any(line.strip() for line in lines):
+            return True
+    return False
 
 
 def iter_complete_lines(path: Path) -> Iterator[str]:
