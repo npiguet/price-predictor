@@ -206,7 +206,14 @@ removes its staged variants from Forge's custom-cards directory when it ends (FR
 No new flag. Behaviour:
 
 - Exit 1 unless every record carries `generation: 3`.
-- Reads `rules/heads/` and `rules/scenarios/` once; writes the map snapshot and its digest.
+- Reads `rules/heads/` and `rules/scenarios/` once; writes the map snapshot and its digest. Exit 1
+  before the survey, nothing under `--output` touched, when either holds nothing.
+- Exit 1 naming shard and line on a corrupt gzip member before a shard's last, a line that does not
+  decode or a `generation` naming none: before `--output` is cleared when the survey meets it, and
+  saying the dataset was already cleared when the write pass meets it (a shard changed between the
+  passes).
+- Warns, naming them, on raw shards whose size changed since the survey; records of games the survey
+  never saw go to no stratum (`dropped-unsurveyed` in `per_stratum`).
 - Writes no `turn_action` record; counts them by subkind.
 - Writes a `curation` member on every record it writes, and each protection copy drawn as a
   synthetic record `<record_id>~pc<i>`.
@@ -224,6 +231,8 @@ No new flag. Behaviour:
 | `--probe-set-dir DIR` | `--reports-dir` (`output/effects/reports/`) | where the set is written |
 
 Writes `<probe-set-dir>/selection-set-<corpus digest>.json` ([selection-set.md](selection-set.md)).
+A set already there is never replaced: the same set again leaves the file as it is, another exits 1
+and leaves it alone.
 Exit 1, writing nothing, when a half holds fewer than 300 games, a component misses its precision
 target, a balance rule cannot be met or a grid cell is empty, naming stratum, half and component.
 `scripts/effect_sweep_arm.py --freeze-probe-set` runs the freeze as a first step, before training.

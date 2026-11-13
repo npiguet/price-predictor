@@ -994,7 +994,8 @@ and that the reporting half never enters the control score.
   divided by the number of budgeted rules tagged on the class's records, and add copies of a rule's records
   beyond their natural share, the copies gen-2's class, family and signature budgets give, until the
   rule's written records reach its share, through the gen-2 water-filling allocator, bounded by the
-  reuse cap and `--text-cap`. Added copies come on top of the class budget. A budgeted rule is one
+  reuse cap and `--text-cap`, the text cap counting the natural copies of every record of the text in
+  the class, tagged or not. Added copies come on top of the class budget. A budgeted rule is one
   the rules-to-fields map marks `trained`. A tagged rule with any other verdict gets no share and
   no added copy, and no added copy is drawn for it; its records are still counted per polarity and
   keep their natural share, and the manifest names it as unbudgeted.
@@ -1016,7 +1017,13 @@ and that the reporting half never enters the control score.
   MUST get examples from rule-labelled copies (a copy of a real record granting the quality and
   relabelling the outcomes by rule 702.16), from `collect-variants` swapping a protection keyword's
   quality as a whitelisted selector, and from interventional forks granting protection mid-game, in
-  amounts per-rule rebalancing sets.
+  amounts per-rule rebalancing sets. A rule-labelled copy MUST be made only where the snapshot shows
+  what the rule reads: a target-illegal copy from a candidate acting through the first face its card
+  shows (no Adventure, back face or split half); a damage-prevented copy of a resolution whose acting
+  chain targets nowhere but its root and is no charm mode (`refs.targets` holds the root's targets
+  alone); an Aura-to-graveyard copy of an Aura without bestow, written with `outcome` `fizzled`; and
+  no quality, nor protection from everything, that an Aura or Equipment attached to the protected
+  permanent has (702.16c-d).
 - **FR-058a**: `collect-variants --round untargeted|steered` (default `untargeted`, root § 8.15)
   MUST replace the single variant round and `--variant-volume`. The untargeted round MUST generate
   one variant of every eligible source script (single-faced, not held out under `build-corpus`'s
@@ -1087,9 +1094,15 @@ and that the reporting half never enters the control score.
   class the mix omits is written once a record.
 - **FR-060**: The manifest MUST add the per-rule counts (FR-008's shape, three sources), per class
   and rule the records available, share, written and shortfall, each split by polarity and by the
-  same three sources, the one-sided conditions
+  same three sources, for the training stratum and for each validation stratum, the one-sided conditions
   and one-sided rules (FR-054a), the unbudgeted rules with their counts (FR-054), and the closed subtype
-  and keyword lists of FR-052/FR-053.
+  and keyword lists of FR-052/FR-053; and, per class, the kept records collected as forks,
+  interventions, directed forks, aimed or degraded, the placement thresholds and the
+  keyword-definition file's hash the build ran under, and what reading met without stopping (values
+  outside the wire's closed lists, shards a damaged last member ended, keys of a tree with no root).
+- **FR-060b**: `build-corpus` MUST refuse a rules directory holding no scenario or no heads line, and a
+  raw shard it cannot read whole, before it clears `--output`. A game the write pass meets that the
+  survey never saw MUST go to no stratum and be counted (`dropped-unsurveyed`).
 - **FR-060a**: `build-corpus` MUST read the rules-to-fields map (`rules/heads/`) once, and write
   into the manifest, for every tagged rule, its map verdict and the outputs the map names for it,
   with the map's content hash, and each rule's effective outputs: the outputs of its map entry at
@@ -1110,7 +1123,8 @@ and that the reporting half never enters the control score.
   output, outputs other than those of the record's drawn rules weighing n / d on each copy. Under
   both, the outputs of every rule an added copy of the record was drawn for MUST train at full
   weight on each copy. A gen-2 lethality copy trains every output at full weight. A record from a
-  directed fork or from collection aimed at a rule is a natural record like any other: it carries
+  directed fork or from collection aimed at a rule (one carrying `aimed_at`, `[]` included) is a
+  natural record like any other: it carries
   no drawn rule of its own, its natural copies train every output at full weight under both masks,
   and only the copies rule budgets add to it carry a drawn rule. Its `aimed_at` marks it only for
   exclusion from the rule tests (FR-009, FR-072).

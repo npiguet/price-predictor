@@ -202,14 +202,23 @@ Per class, rule and polarity, each count split by `RuleSource`:
 Adds `rule_counts`, `rule_map`, `rule_map_digest`, `effective_outputs`, `rules` (class → rule → polarity → `RuleRow`),
 `one_sided_rules`, `one_sided_conditions`, `unbudgeted_rules` (rule → counts), `left_out_of_half`
 (stratum → half → [rule]), `turn_action_left_out` (subkind → count), `subtypes` and `keywords` (the
-closed lists), `halves` (stratum → half → [game_id]). Gen-3 manifests only; no gen-2 compatibility.
+closed lists), `halves` (stratum → half → [game_id]), `validation_rules` (validation stratum → class →
+rule → polarity → `RuleRow`), `record_flags` (class → `fork` | `interventional` | `directed` | `aimed` |
+`degraded` → kept records read), `placement_thresholds` (`min_games_per_half`, `max_item_error`,
+`max_component_error`, null where infinite), `keyword_definitions_digest` (sha256 of the file read, ""
+without one), `decode_off_list` (`"<member> <repr of value>"` → times read outside the wire's closed
+lists), `damaged_tails` ([shard]) and `unconfigured_trees` (source tree → keys read as no line for want
+of a root). `per_stratum` counts `dropped-unsurveyed`: records of games the survey never saw (a shard
+grown between the two passes), written to no stratum. Gen-3 manifests only; no gen-2 compatibility.
 
 ### Placement (new, `stratum_placement.py`)
 
 Input: `GameCensus` (games, held-out games, random-seat games, keyword-combat games, held-out text
 games, per-game inventories `game → {(rule, polarity): n}` of rule-test-eligible records) and a
 `PlacementRule` (gen-2's draws, the pool factor, the half minimum, the item error). Only Forge-AI
-games enter a validation stratum. Output: `GameStrata` gains `halves` and `left_out_of_half`.
+games enter a validation stratum. Output: `GameStrata` gains `halves`, `left_out_of_half` and
+`surveyed` (every game the survey saw); a game outside `surveyed` is `dropped-unsurveyed`, never
+training.
 Deterministic for a given corpus; not stable across corpus growth (R3).
 
 ## Model
