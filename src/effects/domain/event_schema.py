@@ -308,7 +308,7 @@ class Event:
 #: magnitude and names the direction by its mode (``LifeReduced 3``), while a
 #: bus event carries the signed change and no mode.
 LOSS_MODES: dict[EventType, frozenset[str]] = {
-    EventType.LIFE_CHANGE: frozenset({"LifeLost", "LoseLife", "PayLife", "LifeReduced"}),
+    EventType.LIFE_CHANGE: frozenset({"LifeLost", "PayLife", "LifeReduced"}),
     EventType.COUNTER_CHANGE: frozenset({"RemoveCounter", "CounterRemoved"}),
 }
 

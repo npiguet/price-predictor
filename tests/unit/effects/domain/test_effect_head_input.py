@@ -639,6 +639,19 @@ class TestGen2Layout:
         record = _record(state=state)
         assert self._phase_slot(record)[PHASES.index("declare_attackers")] == 1.0
 
+    def test_a_pending_life_loss_reads_as_a_loss(self):
+        """A trigger's map writes the amount and names the direction by its
+        mode: ``LifeLost 3`` is -3 in the pending event's amount, ``LifeGained 3`` +3."""
+        def amounts(mode: str) -> tuple[float, ...]:
+            pending = Event(type=EventType.LIFE_CHANGE, subjects=("P0",),
+                            params={"delta": 3, "mode": mode})
+            return global_features(_record(state=_snapshot(pending_event=pending)))
+
+        lost, gained = amounts("LifeLost"), amounts("LifeGained")
+        differ = [i for i, (a, b) in enumerate(zip(lost, gained, strict=True)) if a != b]
+        assert [lost[i] for i in differ][:1] == [-3.0]
+        assert [gained[i] for i in differ][:1] == [3.0]
+
     def test_every_forge_combat_phase_name_is_mapped(self):
         for forge_name in (
             "combat_begin", "combat_declare_attackers", "combat_declare_blockers",

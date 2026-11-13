@@ -36,7 +36,7 @@ from functools import lru_cache
 from types import MappingProxyType
 from typing import Protocol
 
-from effects.domain.event_schema import EventType
+from effects.domain.event_schema import Event, EventType, signed_delta
 from effects.domain.forge_vocabularies import KEYWORD_COUNTERS, NAMED_COUNTERS, SUBTYPES
 from effects.domain.kept_keyword_flags import KEPT_KEYWORD_FLAGS
 from effects.domain.keyword_names import normalize_keyword, overlay_keyword
@@ -422,12 +422,14 @@ _PLAYABILITY_SUBKINDS: tuple[str, ...] = tuple(
 )
 
 
-def _event_amount(params: Mapping) -> float:
-    """The amount a pending event carries: its ``amount``, else its ``delta``."""
+def _event_amount(event: Event) -> float:
+    """The amount a pending event carries: its ``amount``, else its ``delta``
+    signed by its mode (``event_schema.signed_delta``: a trigger's ``LifeLost 3``
+    is -3, its ``LifeGained 3`` +3)."""
     for name in ("amount", "delta"):
-        value = params.get(name)
+        value = event.params.get(name)
         if isinstance(value, int | float) and not isinstance(value, bool):
-            return float(value)
+            return float(value) if name == "amount" else signed_delta(event)
     return 0.0
 
 
@@ -447,7 +449,7 @@ def global_features(record: EffectRecord) -> tuple[float, ...]:
     out += _one_hot(g.day_night or "neither", DAY_NIGHT)
     pending = state.pending_event
     out += _one_hot(pending.type.value if pending else None, EVENT_TYPES)
-    _push_scalar(out, _event_amount(pending.params) if pending else 0)
+    _push_scalar(out, _event_amount(pending) if pending else 0)
     out += _one_hot(record.kind.value, _RECORD_KINDS)
     out += _one_hot(
         record.moment.value if record.moment else None, _MOMENTS,
