@@ -129,7 +129,9 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     EventType.PERMANENT_COPIED: ("copy_source", "count"),
     EventType.CARD_MADE: ("card_name", "to_zone", "count"),
     EventType.LIFE_CHANGE: ("delta",),
-    EventType.DAMAGE_DEALT: ("amount", "combat", "source", "excess"),
+    # damage_type: on damage to a creature only, how it was dealt
+    # (``normal``, ``m1m1_counters``, ``deathtouch``, ``loyalty_loss``).
+    EventType.DAMAGE_DEALT: ("amount", "combat", "source", "excess", "damage_type"),
     # Forge prevents by replacement, so this and the `rewrite` record for the
     # same replacement are two views of one engine event, not two confirming
     # signals.

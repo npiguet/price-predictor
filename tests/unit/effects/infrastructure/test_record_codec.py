@@ -537,6 +537,27 @@ class TestEveryEventReadsOneCounterSpelling:
         assert loaded.payload.event.params["counter_type"] == "P1P1"
 
 
+class TestADamageEventReadsItsDamageType:
+    """The connector writes ``damage_type`` on damage to a creature (contract
+    record-schema-delta: ``normal``, ``m1m1_counters``, ``deathtouch``,
+    ``loyalty_loss``); a record carrying it decodes, and one without it too."""
+
+    @pytest.mark.parametrize("damage_type", ["normal", "m1m1_counters", "deathtouch",
+                                             "loyalty_loss"])
+    def test_it_round_trips(self, damage_type):
+        event = Event(type=EventType.DAMAGE_DEALT, subjects=("E1",),
+                      params={"amount": 2, "combat": False, "damage_type": damage_type})
+        record = _record(payload=ResolutionPayload(events=(event,)))
+        loaded = record_from_dict(record_to_dict(record))
+        assert loaded.payload.events[0].params["damage_type"] == damage_type
+
+    def test_damage_to_a_player_carries_none(self):
+        event = Event(type=EventType.DAMAGE_DEALT, subjects=("P1",), params={"amount": 2})
+        loaded = record_from_dict(record_to_dict(_record(payload=ResolutionPayload(
+            events=(event,)))))
+        assert "damage_type" not in loaded.payload.events[0].params
+
+
 class TestARewriteShardCollectedBeforeTheResult:
     """Both shapes coexist: the corpus is append-only.
 
