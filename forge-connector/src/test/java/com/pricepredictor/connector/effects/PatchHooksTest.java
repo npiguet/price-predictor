@@ -15,6 +15,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -122,7 +123,8 @@ class PatchHooksTest {
      * insertion would not fail a build, because neither side compiles against
      * the other, and the handlers would misread every call from then on. A
      * listener may instead match an older shape a worker still accepts, which
-     * for the replacement listener means three arguments rather than five.
+     * for the replacement listener means three or five arguments rather than
+     * six, and for the resolution listener two rather than three.
      * Skipped on a checkout without the setter, the same degradation every
      * hook lookup makes.
      */
@@ -175,22 +177,70 @@ class PatchHooksTest {
         }
     }
 
-    /** How {@code shape} differs from {@code declared}, or empty when it restates it. */
+    /**
+     * How {@code shape} differs from {@code declared}, or empty when it
+     * restates it: each of its methods is one Forge declares with exactly
+     * those parameters. By signature rather than by name, because a listener
+     * Forge widened declares the old call and the new one under one name.
+     */
     private static String mismatch(Class<?> shape, Class<?> declared) {
         for (Method ours : shape.getDeclaredMethods()) {
-            Method theirs = Arrays.stream(declared.getMethods())
-                    .filter(method -> method.getName().equals(ours.getName()))
-                    .findFirst().orElse(null);
-            if (theirs == null) {
-                return declared.getName() + " declares no " + ours.getName();
-            }
-            if (!Arrays.equals(ours.getParameterTypes(), theirs.getParameterTypes())) {
-                return ours.getName() + " takes " + Arrays.toString(theirs.getParameterTypes())
-                        + " in Forge and " + Arrays.toString(ours.getParameterTypes())
-                        + " in " + shape.getSimpleName();
+            try {
+                declared.getMethod(ours.getName(), ours.getParameterTypes());
+            } catch (NoSuchMethodException absent) {
+                List<String> theirs = Arrays.stream(declared.getMethods())
+                        .filter(method -> method.getName().equals(ours.getName()))
+                        .map(method -> Arrays.toString(method.getParameterTypes()))
+                        .toList();
+                return theirs.isEmpty()
+                        ? declared.getName() + " declares no " + ours.getName()
+                        : ours.getName() + " takes " + String.join(" or ", theirs) + " in Forge and "
+                                + Arrays.toString(ours.getParameterTypes()) + " in " + shape.getSimpleName();
             }
         }
         return "";
+    }
+
+    /**
+     * The listener methods Forge declares that no collector consumes yet,
+     * by setter. Each is a notification the engine already makes and the
+     * connector's proxy answers with nothing; it moves into its stand-in and
+     * its hook's callbacks when a collector reads it.
+     */
+    private static final Map<PatchHooks.Hook, Set<String>> NOT_CONSUMED_YET = Map.of(
+            // WP7 (TriggerChannel): a trigger's run, paired with its evaluation
+            PatchHooks.TRIGGER_LISTENER, Set.of("onTriggerRun"),
+            // WP7 (RewriteChannel, attribution): a buffered damage ability's run
+            PatchHooks.REPLACEMENT_LISTENER, Set.of("onBufferedAbilityStarting", "onBufferedAbilityFinished"));
+
+    /**
+     * Every method Forge's listener declares is restated by the stand-in or
+     * one of its older shapes, or is listed as not consumed yet.
+     *
+     * <p>The other direction from {@link #eachStandInIsForgesOwnDeclaration}:
+     * a notification Forge adds reaches the connector's proxy and is answered
+     * with nothing, silently, until a collector reads it. Listing it here is
+     * what says so. Skipped on a checkout without the setter.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("com.pricepredictor.connector.effects.HookShapes#declared")
+    void everyMethodForgesListenerDeclaresIsRestatedOrListed(HookShapes.Declared standIn) {
+        Optional<Method> setter = standIn.setter().lookUp();
+        Assumptions.assumeTrue(setter.isPresent(), "the checkout lacks " + standIn.setter());
+        Class<?> declared = setter.get().getParameterTypes()[0];
+        List<Class<?>> accepted = new ArrayList<>(List.of(standIn.shape()));
+        accepted.addAll(standIn.older());
+        Set<String> notConsumed = NOT_CONSUMED_YET.getOrDefault(standIn.setter(), Set.of());
+
+        for (Method theirs : declared.getMethods()) {
+            boolean restated = accepted.stream().anyMatch(shape -> Arrays.stream(shape.getMethods()).anyMatch(
+                    ours -> ours.getName().equals(theirs.getName())
+                            && Arrays.equals(ours.getParameterTypes(), theirs.getParameterTypes())));
+            assertTrue(restated || notConsumed.contains(theirs.getName()),
+                    declared.getName() + " declares " + theirs.getName()
+                            + Arrays.toString(theirs.getParameterTypes())
+                            + ", which neither " + accepted + " restates nor NOT_CONSUMED_YET lists");
+        }
     }
 
     /**
