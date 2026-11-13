@@ -86,6 +86,34 @@ final class ForgeFields {
                 ? table : null;
     }
 
+    /** The card's can't-have keyword rows keyed (timestamp, static id), or null. */
+    static Table<?, ?, ?> cantHaveKeywords(Card card) {
+        return read(Card.class, "cantHaveKeywords", card) instanceof Table<?, ?, ?> table
+                ? table : null;
+    }
+
+    /**
+     * The card's temporary controllers keyed by the timestamp of the change
+     * that gave each (a resolved {@code GainControl}'s, a static's), or null.
+     */
+    static Map<?, ?> tempControllers(Card card) {
+        return read(Card.class, "tempControllers", card) instanceof Map<?, ?> map ? map : null;
+    }
+
+    /** The timestamps of every static effect Forge applies now; empty when unreadable. */
+    static java.util.Set<Long> staticEffectTimestamps(Game game) {
+        java.util.Set<Long> timestamps = new java.util.HashSet<>();
+        if (game != null && read(StaticEffects.class, "staticEffects", game.getStaticEffects())
+                instanceof Map<?, ?> effects) {
+            for (Object effect : effects.values()) {
+                if (effect instanceof StaticEffect applied) {
+                    timestamps.add(applied.getTimestamp());
+                }
+            }
+        }
+        return timestamps;
+    }
+
     /** The card's layer-5 colour changes keyed (timestamp, static id), or null. */
     static Table<?, ?, ?> changedCardColors(Card card) {
         return read(Card.class, "changedCardColors", card) instanceof Table<?, ?, ?> table

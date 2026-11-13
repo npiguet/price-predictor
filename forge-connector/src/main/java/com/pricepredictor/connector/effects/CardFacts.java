@@ -224,7 +224,7 @@ final class CardFacts {
                 Comparator<Card> byTimestamp = Comparator
                         .comparingLong(Card::getLayerTimestamp).thenComparingInt(Card::getId);
                 int rank = 0;
-                for (Card other : game.getCardsIn(ZoneType.Battlefield)) {
+                for (Card other : game.getCardsIncludePhasingIn(ZoneType.Battlefield)) {
                     if (other != card && byTimestamp.compare(other, card) < 0) {
                         rank++;
                     }

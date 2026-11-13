@@ -801,6 +801,27 @@ class SnapshotBuilderTest {
             assertEquals(List.of("phased_out"), entity.get("designations"));
         }
 
+        /** A phased-out permanent takes a battlefield rank of its own, no other's. */
+        @Test
+        void aPhasedOutPermanentsRankIsItsOwn() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card bears = board.battlefield("Grizzly Bears", board.you);
+            bears.setGameTimestamp(board.game.getNextTimestamp());
+            Card elves = board.battlefield("Llanowar Elves", board.you);
+            elves.setGameTimestamp(board.game.getNextTimestamp());
+            Card angel = board.battlefield("Serra Angel", board.you);
+            angel.setGameTimestamp(board.game.getNextTimestamp());
+            elves.phase(false);
+
+            List<Map<String, Object>> entities = entitiesIn(
+                    new SnapshotBuilder(board.game).ofBoard().render());
+            List<Object> ranks = java.util.stream.Stream.of(bears, elves, angel)
+                    .map(card -> entities.stream().filter(e -> Refs.of(card).equals(e.get("id")))
+                            .findFirst().orElseThrow().get("order_rank"))
+                    .toList();
+            assertEquals(List.of(0L, 1L, 2L), ranks);
+        }
+
 
         @Test
         void faceStateNamesTheFaceUp() {

@@ -131,7 +131,7 @@ final class FloatingEffects {
     /** A live clause begins resolving: note the timestamp, its line and its duration. */
     synchronized void clauseResolving(Game game, SpellAbility clause) {
         Note note = new Note(game.getTimestamp(), ProvenanceResolver.of(clause),
-                Refs.ofNullable(clause.getHostCard()), declaredDuration(clause), clause);
+                Refs.ofNullable(clause.getHostCard()), noteDuration(clause), clause);
         notes.put(new long[] {note.start, noted++}, note);
         open.push(note);
     }
@@ -168,6 +168,29 @@ final class FloatingEffects {
             }
         }
         return null;
+    }
+
+    /**
+     * A noted clause's duration, as a {@code Duration$} value: its declared
+     * one, else, for a {@code GainControl} clause, the one its {@code
+     * LoseControl$} says: {@code EOT} until end of turn, an object's change
+     * ({@code LeavesPlay}, {@code LoseControl}, {@code Untap}, ...) until it
+     * leaves, and none at all for good.
+     */
+    static String noteDuration(SpellAbility clause) {
+        String declared = declaredDuration(clause);
+        if (declared != null || clause == null
+                || clause.getApi() != forge.game.ability.ApiType.GainControl) {
+            return declared;
+        }
+        String lose = clause.getParam("LoseControl");
+        if (lose == null || lose.isEmpty()) {
+            return "Permanent";
+        }
+        if (lose.equals("EOT") || lose.startsWith("UntilTheEndOf")) {
+            return lose.equals("EOT") ? null : lose;
+        }
+        return "UntilHostLeavesPlay";
     }
 
     /**
@@ -357,8 +380,22 @@ final class FloatingEffects {
             addResolvedRows(timestamps, names);
         }
         // "Target creature can't block this turn": a KW$ HIDDEN grant is in
-        // no keyword table but its own.
+        // no keyword table but its own; an Animate's CantHaveKeyword$ has
+        // one too.
         addResolvedRows(timestamps, ForgeFields.hiddenExtrinsicKeywords(card));
+        addResolvedRows(timestamps, ForgeFields.cantHaveKeywords(card));
+        // A resolved GainControl (Blatant Thievery, Act of Treason) files its
+        // change under its timestamp alone, with no static id: a static's is
+        // filed under the static's timestamp, which no clause note covers.
+        Map<?, ?> controllers = ForgeFields.tempControllers(card);
+        if (controllers != null) {
+            java.util.Set<Long> statics = ForgeFields.staticEffectTimestamps(card.getGame());
+            for (Object timestamp : controllers.keySet()) {
+                if (timestamp instanceof Long resolved && !statics.contains(resolved)) {
+                    timestamps.add(resolved);
+                }
+            }
+        }
         return timestamps;
     }
 
