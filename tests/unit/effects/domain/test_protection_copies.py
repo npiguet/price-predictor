@@ -178,6 +178,22 @@ class TestDamagePrevented:
         ]
         assert rules_offered(found) == ("702.16e", EVERYTHING_RULE)
 
+    def test_no_quality_knocks_off_what_is_attached_to_the_protected(self):
+        """702.16c-d: an Aura or Equipment with the quality would fall off the
+        protected permanent, which the copy does not show; such a quality, and
+        protection from everything, is not offered."""
+        aura = make_entity("A1", "aura", types=("enchantment",), subtypes=("aura",),
+                           colors=("R",), mana_value=2, attached_to="E1", lines=())
+        record = _sweeper(_creature("E1", 4))
+        record = replace(record, state=replace(
+            record.state, entities=(*record.state.entities, aura)))
+        (found,) = qualify(record)
+        assert found.qualities and not found.everything
+        assert not any(q.covers(_char(aura)) for q in found.qualities)
+        assert EVERYTHING_RULE not in rules_offered((found,))
+        assert protection_copy(record, (found,), rule=EVERYTHING_RULE,
+                               rng=random.Random(0), index=0) is None
+
     def test_the_copy_prevents_the_damage_and_undoes_the_death(self):
         record = _sweeper(_creature("E1"), _creature("E2"))
         copy = protection_copy(record, qualify(record)[:1], rule="702.16e",

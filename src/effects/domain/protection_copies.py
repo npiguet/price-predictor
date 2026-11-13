@@ -37,9 +37,12 @@ record shows:
   and fizzles (608.2b, ``outcome`` ``fizzled``), so the Aura goes from the
   stack to the graveyard and nothing it would have done happens.
 
-Protection from everything (702.16j) covers every outcome; the rare qualities
-of the other rules are those of the covered object: its card types, its
-creature types where it is a creature or kindred, and the conditions it meets.
+Protection from everything (702.16j) covers every outcome; no quality is
+granted that an Aura or Equipment attached to the protected permanent has,
+which would make it fall off (702.16c-d), and no protection from everything
+then. The rare qualities of the other rules are those of the covered object:
+its card types, its creature types where it is a creature or kindred, and the
+conditions it meets.
 The quality is granted the way a resolved effect grants a keyword: a granted
 keyword line plus its kept flag (research M5,
 :meth:`~effects.domain.state_snapshot.EntityState.with_granted_keyword`).
@@ -123,6 +126,9 @@ class Opportunity:
     #: where they share none, which leaves the record to protection from
     #: everything alone.
     qualities: tuple[ProtectionQuality, ...]
+    #: Whether protection from everything shows the outcome: not where an
+    #: Aura or Equipment is attached to the protected permanent (702.16c-d).
+    everything: bool = True
 
     @property
     def rule(self) -> str:
@@ -170,7 +176,7 @@ def rules_offered(opportunities: tuple[Opportunity, ...]) -> tuple[str, ...]:
     outcome's rule where a rare quality covers its objects, and 702.16j
     wherever any outcome is open."""
     rules = {o.rule for o in opportunities if o.qualities}
-    if opportunities:
+    if any(o.everything for o in opportunities):
         rules.add(EVERYTHING_RULE)
     return tuple(sorted(rules))
 
@@ -190,8 +196,26 @@ def qualify(record: EffectRecord, lines: SidecarLookup | None = None
     """
     if record.fork or record.interventional or record.synthetic or record.directed is not None:
         return ()
-    payload = record.payload
     entities = {entity.id: entity for entity in record.state.entities}
+    return tuple(_keeping_attachments(o, record.state.entities)
+                 for o in _opportunities(record, lines, entities))
+
+
+def _keeping_attachments(opportunity: Opportunity, entities) -> Opportunity:
+    """``opportunity`` without the qualities an object attached to the
+    protected permanent has: a protection from it would make the Aura or
+    Equipment fall off (702.16c-d), which the copy does not show."""
+    attached = [Characteristics.of(e) for e in entities
+                if e.attached_to == opportunity.protected]
+    if not attached:
+        return opportunity
+    return replace(opportunity, everything=False, qualities=tuple(
+        q for q in opportunity.qualities if not any(q.covers(a) for a in attached)))
+
+
+def _opportunities(record: EffectRecord, lines: SidecarLookup | None,
+                   entities) -> tuple[Opportunity, ...]:
+    payload = record.payload
     if isinstance(payload, PlayabilityDecisionPayload):
         return _target_opportunities(record, payload, entities)
     if isinstance(payload, PlayabilityBlockersPayload):
@@ -375,7 +399,7 @@ def protection_copy(record: EffectRecord, opportunities: tuple[Opportunity, ...]
     ``index`` numbers the copies of one record, which keeps their ids apart.
     """
     if rule == EVERYTHING_RULE:
-        pool = list(opportunities)
+        pool = [o for o in opportunities if o.everything]
     else:
         pool = [o for o in opportunities if o.rule == rule and o.qualities]
     if not pool:
