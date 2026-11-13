@@ -19,12 +19,18 @@ record shows:
 - **damage prevented** (702.16e): a ``resolution`` effect half or a ``combat``
   record dealing damage to a permanent nothing else in the record touches but
   its own death; the protection covers every source that damaged it, and the
-  permanent is not a target of the acting ability (a targeted spell would lose
-  its target instead), nor can it be: the acting chain targets nowhere but its
-  root, whose targets ``refs.targets`` holds. Each ``damage_dealt`` becomes the ``damage_prevented``
-  Forge writes for a prevented hit, and a death the damage caused is undone. A
-  source with lifelink, infect or wither is refused: what its damage does
-  besides marking damage would have to be undone too;
+  permanent is no target of the acting chain, any clause or mode, as cast or
+  after Forge's illegal-target check (``refs.targets_at_cast``,
+  ``refs.targets``; a targeted spell would lose its target instead). Each
+  ``damage_dealt`` becomes the ``damage_prevented`` Forge writes for a
+  prevented hit, and a death the damage caused is undone. Refused: a source
+  with lifelink, infect or wither, whose damage does more than mark damage;
+  a resolution whose half does not say its targets as cast (no resolution
+  hook); damage that can't be prevented (``NoPrevention$`` in the chain, an
+  active ``Mode$ CantPreventDamage`` static on the board); and a chain with a
+  later clause the prevention would change unseen (one remembering or
+  storing what was dealt, or an amount read from a variable, a drain's
+  "gain life equal to the damage dealt");
 - **target made illegal** (702.16b): a decision whose candidate has at least
   two legal targets loses one permanent from them, the verdict unchanged; the
   candidate acts through the first face its card shows (no Adventure, back
@@ -84,8 +90,8 @@ from effects.domain.rule_outcomes import (
     may_enchant,
     may_target,
 )
-from effects.domain.script_text import params, segments
-from effects.domain.state_snapshot import EntityState, FaceState, Zone
+from effects.domain.script_text import api_of, params, root, segments
+from effects.domain.state_snapshot import EntityState, FaceState, LineKind, Zone
 
 
 class ProtectionOutcome(StrEnum):
@@ -189,11 +195,10 @@ def qualify(record: EffectRecord, lines: SidecarLookup | None = None
             ) -> tuple[Opportunity, ...]:
     """Every protection copy ``record`` can carry, in record order; empty for none.
 
-    ``lines`` reads a resolution's acting chain: ``refs.targets`` holds the
-    root's targets alone, so a resolution whose chain targets anywhere else (a
-    sub-ability's ``ValidTgts$``, a charm mode) offers no damage-prevented
-    copy, a protected target there losing the target rather than the damage.
-    Without ``lines`` the chain is not read (a unit test's record).
+    ``lines`` reads the sidecars: a resolution's acting chain (``NoPrevention$``,
+    a later clause whose amount reads the damage dealt) and the statics on the
+    board (an active ``Mode$ CantPreventDamage``). Without ``lines`` neither is
+    read (a unit test's record).
     """
     if record.fork or record.interventional or record.synthetic or record.directed is not None:
         return ()
@@ -207,7 +212,7 @@ def _keeping_attachments(opportunity: Opportunity, entities) -> Opportunity:
     protected permanent has: a protection from it would make the Aura or
     Equipment fall off (702.16c-d), which the copy does not show."""
     attached = [Characteristics.of(e) for e in entities
-                if e.attached_to == opportunity.protected]
+                if e.attached_to == opportunity.protected and e.on_battlefield]
     if not attached:
         return opportunity
     return replace(opportunity, everything=False, qualities=tuple(
@@ -222,33 +227,85 @@ def _opportunities(record: EffectRecord, lines: SidecarLookup | None,
     if isinstance(payload, PlayabilityBlockersPayload):
         return _block_opportunities(record, payload, entities)
     if isinstance(payload, CombatPayload):
+        if lines is not None and _no_prevention_on_the_board(record, lines):
+            return ()
         return _damage_opportunities(payload.events, entities, targets=())
     if isinstance(payload, ResolutionPayload) and record.moment is Moment.RESOLUTION:
         aura = _aura_opportunity(record, payload, entities)
         if aura is not None:
             return (aura,)
-        if lines is not None and _targets_beyond_its_root(record, lines):
+        refs = record.state.refs
+        if refs.targets_at_cast is None:
+            # What the record cannot show: the targets before Forge's
+            # illegal-target check (a worker without the resolution hook).
             return ()
-        return _damage_opportunities(payload.events, entities, targets=record.state.refs.targets)
+        if lines is not None and (_unpreventable_or_dependent(record, lines)
+                                  or _no_prevention_on_the_board(record, lines)):
+            return ()
+        # Every target of the acting chain, a sub-ability's and a mode's own
+        # included, as cast and after the check.
+        return _damage_opportunities(
+            payload.events, entities, targets=(*refs.targets_at_cast, *refs.targets))
     return ()
 
 
-#: Parameters that make a chain segment choose targets of its own.
-_TARGETING_PARAMS = frozenset({"ValidTgts", "TargetType", "TgtPrompt", "TargetMin", "TargetMax"})
+#: The damage APIs whose amount the prevention changes.
+_DAMAGE_APIS = frozenset({"DealDamage", "DamageAll", "EachDamage"})
+#: Chain parameters after which a clause reads what the damage did.
+_DEPENDENT_PREFIXES = ("Remember", "Imprint")
+_DEPENDENT_APIS = frozenset({"StoreSVar"})
 
 
-def _targets_beyond_its_root(record: EffectRecord, lines: SidecarLookup) -> bool:
-    """Whether the acting chain may target what ``refs.targets`` does not hold:
-    a charm mode (whose targets are not traced there), a sub-ability with
-    targets of its own, or an acting line the sidecars cannot show."""
+def _unpreventable_or_dependent(record: EffectRecord, lines: SidecarLookup) -> bool:
+    """Whether the acting chain says its damage can't be prevented
+    (``NoPrevention$``), or holds a clause the prevention would change
+    without the copy showing it: one remembering what was dealt, storing an
+    amount, or reading an amount from a variable (a drain's ``LifeAmount$ Y``,
+    ``Y`` the damage dealt this way). Conservative: a variable amount in any
+    later clause refuses the record. An acting line the sidecars cannot show
+    refuses it too."""
     keys = record.ability or ()
-    if any(key.option is not None for key in keys):
-        return True
     line = lines.first_line(keys)
     if line is None or not line.script_text:
         return bool(keys)
-    return any(_TARGETING_PARAMS & params(segment).keys()
-               for segment in segments(line.script_text)[1:])
+    for segment in segments(line.script_text):
+        found = params(segment)
+        if "NoPrevention" in found:
+            return True
+        api = api_of(found)
+        if api in _DAMAGE_APIS:
+            continue
+        if api in _DEPENDENT_APIS or any(k.startswith(_DEPENDENT_PREFIXES) for k in found):
+            return True
+        if any(_is_amount(key) and not _literal(value) for key, value in found.items()):
+            return True
+    return False
+
+
+def _is_amount(key: str) -> bool:
+    return key.endswith(("Amount", "Num")) or key.startswith("Num") or key == "CounterNum"
+
+
+def _literal(value: str) -> bool:
+    return value.strip().lstrip("+-").isdigit()
+
+
+def _no_prevention_on_the_board(record: EffectRecord, lines: SidecarLookup) -> bool:
+    """Whether a static on the board says damage can't be prevented: an
+    active ``Mode$ CantPreventDamage`` line of a permanent or command-zone
+    object."""
+    for entity in record.state.entities:
+        if not entity.on_battlefield and entity.zone != Zone.COMMAND:
+            continue
+        for card_line in entity.lines or ():
+            if card_line.kind != LineKind.STATIC or card_line.active is False:
+                continue
+            for key in card_line.keys:
+                found = lines.line_or_none(key)
+                if found is not None and found.script_text and params(
+                        root(found.script_text)).get("Mode") == "CantPreventDamage":
+                    return True
+    return False
 
 
 def _permanent(entities: dict[str, EntityState], ref: str | None) -> EntityState | None:
@@ -359,11 +416,11 @@ def _aura_opportunity(record, payload: ResolutionPayload, entities) -> Opportuni
     refs = record.state.refs
     aura = entities.get(refs.source)
     if (aura is None or aura.zone != Zone.STACK
-            or "aura" not in {s.lower() for s in aura.subtypes} or len(refs.targets) != 1):
+            or "aura" not in {s.lower() for s in aura.subtypes} or len(refs.as_cast) != 1):
         return None
     if _bestowed(aura):
         return None  # 702.103e: it would resolve as a creature, not fizzle
-    target = refs.targets[0]
+    target = refs.as_cast[0]
     if _permanent(entities, target) is None:
         return None
     if any(set(event.subjects) - {aura.id, target} for event in payload.events):
@@ -437,11 +494,16 @@ def copied(record: EffectRecord, opportunity: Opportunity, quality: ProtectionQu
     )
     by_id = {entity.id: entity for entity in entities}
     payload, named = _REWRITES[opportunity.outcome](record.payload, opportunity, quality, by_id)
+    refs = record.state.refs
+    if opportunity.outcome is ProtectionOutcome.AURA_TO_GRAVEYARD and named:
+        # The fizzled spell's refs as the live shape holds them: no target
+        # left after the check, the protected one as cast.
+        refs = replace(refs, targets=(), targets_at_cast=refs.as_cast)
     return replace(
         record,
         record_id=f"{record.record_id}~pc{index}",
         synthetic=True,
-        state=replace(record.state, entities=entities),
+        state=replace(record.state, entities=entities, refs=refs),
         payload=payload,
     ), named
 
@@ -504,15 +566,15 @@ def _forbid(payload, opportunity: Opportunity, quality: ProtectionQuality, entit
 def _fizzle(payload, opportunity: Opportunity, quality: ProtectionQuality, entities):
     """The Aura spell has no legal target left, so it fizzles (rule 608.2b):
     its half's ``outcome`` is ``fizzled`` and its one event the card's move
-    from the stack to its owner's graveyard, which is 702.16c's outcome; it
-    does nothing else. The move is kept although a collected fizzled half
-    writes ``events: []``: the copy exists to show it."""
+    from the stack to its owner's graveyard, as a collected fizzled spell's
+    half holds it (``duration`` instant, ``attributed_to`` unresolved), which
+    is 702.16c's outcome; it does nothing else."""
     aura = opportunity.covered[0]
     if may_enchant((quality,), Characteristics.of(entities[aura])):
         return payload, ()
     moved = replace(_entering(payload.events, aura), params={
         "from_zone": Zone.STACK.value, "to_zone": Zone.GRAVEYARD.value, "cause": aura,
-    })
+    }, duration="instant", attributed_to="unresolved")
     conditions = None if payload.conditions_met is None else ()
     return replace(payload, events=(moved,), conditions_met=conditions,
                    outcome=ResolutionOutcome.FIZZLED, outcome_written=True), (

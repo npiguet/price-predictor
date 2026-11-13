@@ -435,7 +435,7 @@ def damage_target(lines, keywords_of: KeywordsOf):
         line = lines.line_or_none(record.ability[0])
         if line is None:
             return None
-        qualified = qualify(record, line, derive_targets(record), keywords_of)
+        qualified = qualify(record, line, derive_targets(record), keywords_of, lines=lines)
         if (qualified is None or qualified.effect.kind != "damage"
                 or qualified.effect.stated != "text" or len(qualified.hit) != 1):
             return None

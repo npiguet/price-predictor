@@ -13,7 +13,11 @@ the rule decides:
   amount and its zone, and every player it hit loses exactly the amount;
 - the source carries no deathtouch, wither, infect or lifelink, and no hit
   creature carries indestructible, a shield counter or an attachment;
-- the record is natural: no fork, intervention, directed fork or synthetic record.
+- the record is natural: no fork, intervention, directed fork or synthetic record;
+- no regeneration shield or replacement on the board may turn a hit
+  creature's death (read through the sidecars where the caller passes them);
+- an Aura or Equipment counts only on the battlefield (a last-known copy or a
+  phased-out one attaches nothing).
 
 A paid X is redrawn in ``refs.x`` and in the source's ``x_paid`` together.
 """
@@ -29,11 +33,23 @@ from enum import Enum, StrEnum, auto
 from effects.domain.damage_step_keywords import KeywordsOf
 from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
 from effects.domain.effect_targets import EntityTargets
-from effects.domain.provenance import ProvenanceKey, RoleSpan, SidecarLine, SourceTree
+from effects.domain.provenance import (
+    ProvenanceKey,
+    RoleSpan,
+    SidecarLine,
+    SidecarLookup,
+    SourceTree,
+)
 from effects.domain.records import EffectRecord, Moment, RecordKind
 from effects.domain.rule_outcomes import EffectKind, damage_lethal, lethal, shrink_lethal
-from effects.domain.script_text import api_of, params, segments
-from effects.domain.state_snapshot import EntityState, StateSnapshot, normalize_counter_type
+from effects.domain.script_text import api_of, params, root, segments
+from effects.domain.state_snapshot import (
+    EntityState,
+    LineKind,
+    StateSnapshot,
+    Zone,
+    normalize_counter_type,
+)
 
 #: Amounts and toughnesses a copy draws from, uniformly: lethal a little more
 #: than half the time.
@@ -286,11 +302,14 @@ def _creature_hit(entity: EntityState | None, entry: EntityTargets, found: State
 
 
 def qualify(record: EffectRecord, line: SidecarLine | None, targets: dict[str, EntityTargets],
-            keywords_of: KeywordsOf) -> Qualified | None:
+            keywords_of: KeywordsOf, *, lines: SidecarLookup | None = None) -> Qualified | None:
     """``record`` as copy material, or None. ``keywords_of(entity)`` names its keywords.
 
     Only natural records qualify, as for the other two derivations: no fork,
-    intervention, directed fork or other synthetic record.
+    intervention, directed fork or other synthetic record. ``lines`` reads
+    the sidecars of the board's replacements and floating effects: a death a
+    regeneration shield or a replacement may turn is refused (P3a #14).
+    Without it they are not read.
     """
     if record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION:
         return None
@@ -305,6 +324,8 @@ def qualify(record: EffectRecord, line: SidecarLine | None, targets: dict[str, E
     if hits is None or not hits[0]:
         return None
     hit, hit_players = hits
+    if lines is not None and _death_may_be_replaced(record.state, set(hit), lines):
+        return None
     return Qualified(effect=found, hit=tuple(hit), players=tuple(hit_players))
 
 
@@ -316,7 +337,8 @@ def _subjects_hit(state: StateSnapshot, targets: dict[str, EntityTargets], found
     source = entities.get(state.refs.source)
     if source is not None and keywords_of(source) & SOURCE_EXCLUSIONS:
         return None
-    attached = {entity.attached_to for entity in state.entities if entity.attached_to}
+    attached = {entity.attached_to for entity in state.entities
+                if entity.attached_to and entity.on_battlefield}
     hit: list[str] = []
     hit_players: list[str] = []
     for subject, entry in targets.items():
@@ -334,6 +356,47 @@ def _subjects_hit(state: StateSnapshot, targets: dict[str, EntityTargets], found
         if verdict is _Hit.HIT:
             into.append(subject)
     return hit, hit_players
+
+
+#: Replacement events a death goes through: the move to the graveyard, the
+#: destruction (regeneration, an exile-instead, a totem armor).
+_DEATH_EVENTS = frozenset({"Moved", "Destroy"})
+
+
+def _replaces_or_regenerates(line: SidecarLine | None) -> bool:
+    """Whether a floating effect's source line regenerates or sets up a
+    replacement (``Regenerate``, ``ReplacementEffects$``)."""
+    if line is None or not line.script_text:
+        return False
+    for segment in segments(line.script_text):
+        found = params(segment)
+        if (api_of(found) or "").startswith("Regenerate") or "ReplacementEffects" in found:
+            return True
+    return False
+
+
+def _death_may_be_replaced(state: StateSnapshot, hit: set[str], lines: SidecarLookup) -> bool:
+    """Whether a regeneration shield or a replacement may turn a hit
+    creature's death: a floating effect or delayed trigger affecting one,
+    made by a line that regenerates or sets up a replacement; or a
+    replacement line of a move or a destruction on any permanent or
+    command-zone object (Rest in Peace, an exile-instead)."""
+    for effect in (*state.global_.floating_effects, *state.global_.delayed_triggers):
+        if set(effect.affected) & hit and any(
+                _replaces_or_regenerates(lines.line_or_none(key)) for key in effect.source_lines):
+            return True
+    for entity in state.entities:
+        if not entity.on_battlefield and entity.zone != Zone.COMMAND:
+            continue
+        for card_line in entity.lines or ():
+            if card_line.kind != LineKind.REPLACEMENT or card_line.active is False:
+                continue
+            for key in card_line.keys:
+                found = lines.line_or_none(key)
+                if found is not None and found.script_text and params(
+                        root(found.script_text)).get("Event") in _DEATH_EVENTS:
+                    return True
+    return False
 
 
 def edit_text(text: str, effect: StatedEffect, amount: int) -> str | None:

@@ -153,6 +153,47 @@ class TestQualify:
         record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2), aura])
         assert _qualify(record) is None
 
+    def test_a_death_a_shield_or_a_replacement_may_turn_is_not_copied(self):
+        """P3a #14: a regeneration shield (a floating effect from a Regenerate
+        line affecting the hit creature) or a replacement of a move or a
+        destruction on the board (an exile-instead) changes what the death
+        does, which the copies' labels would not show."""
+        from effects.domain.state_snapshot import CardLine, CommandZoneObject
+
+        regen_key = ProvenanceKey("cardsfolder/r/regenerate.txt", 0, "spell", 0)
+        rip_key = ProvenanceKey("cardsfolder/r/rest_in_peace.txt", 0, "replacement", 0)
+
+        class Lines:
+            def line_or_none(self, key):
+                text = {regen_key: "SP$ Regenerate | ValidTgts$ Creature",
+                        rip_key: "Event$ Moved | Destination$ Graveyard | ReplaceWith$ Exile"}
+                return _line(text[key]) if key in text else None
+
+        record = _record([_damage("E1", 3)], [_creature("E1", 5)])
+        assert qualify(record, _line(BOLT), derive_targets(record), _no_keywords,
+                       lines=Lines()) is not None
+        shield = CommandZoneObject(id="E50", source_lines=(regen_key,), affected=("E1",))
+        shielded = replace(record, state=replace(record.state, global_=replace(
+            record.state.global_, floating_effects=(shield,))))
+        assert qualify(shielded, _line(BOLT), derive_targets(shielded), _no_keywords,
+                       lines=Lines()) is None
+        rip = make_entity("R1", "rest in peace", types=("enchantment",), lines=(
+            CardLine(keys=(rip_key,), kind="replacement", granted=False),))
+        exiling = replace(record, state=replace(
+            record.state, entities=(*record.state.entities, rip)))
+        assert qualify(exiling, _line(BOLT), derive_targets(exiling), _no_keywords,
+                       lines=Lines()) is None
+
+    def test_an_aura_no_longer_on_the_battlefield_is_no_attachment(self):
+        """A last-known copy (no zone) of an Aura or a phased-out one attaches
+        nothing the rules see."""
+        record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
+        for gone in ({"zone": None, "id": "L7"}, {"designations": ("phased_out",)}):
+            aura = make_entity("A1", "aura", attached_to="E1", **gone)
+            with_aura = replace(record, state=replace(
+                record.state, entities=(*record.state.entities, aura)))
+            assert _qualify(with_aura) is not None, gone
+
     def test_a_player_hit_by_the_same_amount_comes_along(self):
         life = Event(type=EventType.LIFE_CHANGE, subjects=("P1",), params={"delta": -3})
         record = _record([_damage("E1", 3), _died("E1"), life], [_creature("E1", 2)])
@@ -490,7 +531,7 @@ class TestStepWiring:
 
         preparer = SimpleNamespace(
             config=SimpleNamespace(lethality_copies=3),
-            _keywords=SimpleNamespace(keywords_of=_no_keywords),
+            _keywords=SimpleNamespace(keywords_of=_no_keywords), sidecars=None,
         )
         lethal_bolt = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
         contradicted = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 9)])

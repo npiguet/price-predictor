@@ -240,6 +240,34 @@ class TestOutcomeSignature:
         assert outcome_signature(with_events(moved)) == frozenset({("unknown", True)})
         assert outcome_signature(with_events(tapped)) == frozenset({("stayed", True)})
 
+    def test_a_spell_s_own_move_off_the_stack_is_no_outcome_and_a_fizzle_is_its_own_cell(self):
+        """Every resolved instant's half ends with its card's move off the
+        stack, and a fizzled spell's half holds that move alone (608.2b):
+        read as an outcome, a fizzle would share the cell of a burn spell
+        that killed its target. The move is left out, and a half that did
+        not resolve names its outcome."""
+        from effects.domain.event_schema import Event, EventType
+        from effects.domain.records import ResolutionOutcome, ResolutionPayload
+        from effects.domain.state_snapshot import Refs
+        from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+
+        spell = make_entity("S1", "shock", zone="stack")
+        bear = make_entity("E1", "bear", types=("creature",))
+        off_stack = Event(type=EventType.ZONE_CHANGE, subjects=("S1",),
+                          params={"from_zone": "stack", "to_zone": "graveyard"})
+        died = Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
+                     params={"from_zone": "battlefield", "to_zone": "graveyard"})
+
+        def half(outcome, *events):
+            return make_record(generation=3, state=make_snapshot(
+                entities=(spell, bear), refs=Refs(targets=("E1",), source="S1")),
+                payload=ResolutionPayload(events=events, outcome=outcome))
+
+        killed = outcome_signature(half(ResolutionOutcome.RESOLVED, died, off_stack))
+        fizzled = outcome_signature(half(ResolutionOutcome.FIZZLED, off_stack))
+        assert killed == frozenset({("died", True)})
+        assert fizzled == frozenset({("fizzled", False)})
+
     def test_the_label_is_sorted_and_readable(self):
         assert signature_label(frozenset({("stayed", True), ("died", True)})) == (
             "died:changed,stayed:changed"
