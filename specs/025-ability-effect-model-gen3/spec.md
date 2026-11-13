@@ -593,10 +593,14 @@ and that the reporting half never enters the control score.
   where no record field or event shows the outcome. `rules_catalogue.py validate` MUST fail on a
   scenario with neither.
 - **FR-002b**: Each rule's declaration MUST tell its records from every other rule's: no two
-  scenarios of different rules may share one declaration (family, record kind and parameters), and
-  a test over the whole real catalogue MUST fail on one. A scenario stating the same observable fact
-  as another (a restatement, a redundant-instances rule, a general rule one mechanism shows)
-  MUST declare `{"same_as": scenario id or [ids], "reason": …}`, a list naming the scenarios whose
+  scenarios of different rules may share one declaration (family, record kind and parameters,
+  compared in normalised form: each family's defaults filled in, lists sorted, names compared
+  without case), and a test over the whole real catalogue MUST fail on one. A second test over
+  the fixtures' and goldens' records MUST list a declaration tagging most of its record kind's
+  records unless its rule is the kind's own general fact, and two scenarios of different rules,
+  not linked by `same_as`, tagging the same `fires` and near-miss records. A scenario stating
+  the same observable fact as another (a restatement, a redundant-instances rule, a general rule
+  one mechanism shows) MUST declare `{"same_as": scenario id or [ids], "reason": …}`, a list naming the scenarios whose
   union it states: it tags nothing, its rules are counted once, under the named scenarios' rules,
   and `rule-counts` lists it under them. A rule whose own condition the record cannot show, or that
   no family parameter tells apart, MUST declare `none` with its reason. The blocking and targeting
@@ -717,7 +721,8 @@ and that the reporting half never enters the control score.
   the base spec's forks are.
 - **FR-014**: `match-outcomes` and `collect-variants` MUST exit 1 at startup when a rule in `--directed-fork-rules` has no
   detector, no board precondition, or none of its contrasting variants is classified into an
-  operation.
+  operation. A rule none of whose scenarios declares a taggable detector (each one `none`,
+  `same_as`, or reading an event its record kind never lists) has no detector.
 - **FR-014a**: A rule's board precondition MUST be a hand-written Java predicate over the live
   game state in `forge-connector`, registered by rule id, judging whether the board meets the
   scenario's base variant. It is separate from the rule's Python record detector (FR-006) and
@@ -904,8 +909,10 @@ and that the reporting half never enters the control score.
   and a field's coverage MUST be checked before any figure computed from that field is published.
   `validate-corpus` MUST also fail a gen-3 window of at least `--min-presence-records` (1000)
   records lacking a kind every game writes (cost and effect halves, trigger, combat, the three
-  playability subkinds, the draw step's turn action), a window whose trigger records hold fewer
-  than `--min-trigger-fired-share` (0.05) positives, and a window of at least
+  playability subkinds, the draw step's turn action; decision records only where the run's
+  `run.json` records a `playability_rate` above 0), a window whose trigger records of games that
+  ended in it hold fewer than `--min-trigger-fired-share` (0.05) positives (watched under 50 such
+  records), and a window of at least
   `--min-cost-evidence` gen-3 cost halves none of which meets its effect half (a lone one is
   counted, and the countered ones named); report an undecodable shard line as a failed finding
   naming the shard and line and read the other shards on; report the decode tally as watched

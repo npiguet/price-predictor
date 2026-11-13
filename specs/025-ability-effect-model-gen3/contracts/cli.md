@@ -69,6 +69,47 @@ variant round (FR-058f), as `rule -> [{script_file, records, lines: [{key, recor
 spelled as a sidecar spells it (without `script_file`). Exit 1 when the directory holds no shard, holds a
 gen-1 shard, or mixes generations.
 
+## `python -m effects validate-corpus` (existing)
+
+Flags this feature adds (each of `Thresholds`, `effects.application.corpus_validation.findings`):
+
+```
+--min-presence-records N        1000   gen-3 records a window needs before a kind every game
+                                       writes that it lacks fails the run
+--min-trigger-fired-share F     0.05   share of the trigger records of games that ended in the
+                                       window that must report fired=true
+--min-cost-evidence N           200    see below
+--variant-scripts DIR           output/effects/variant-scripts/
+                                       the perturbed-script tree whose keys a collect-variants
+                                       corpus names
+```
+
+Behaviour:
+
+- `--min-cost-evidence` sets two thresholds: the activation records needed before one cost channel
+  never populated fails "cost fields are not all empty" (under it, watched), and the gen-3 cost
+  halves needed before none of them meeting its effect half fails the cost-half pairing check.
+- Kind presence (`KindPresence`) judges a window of at least `--min-presence-records` gen-3
+  records: cost and effect halves, trigger, combat, the three playability subkinds and the draw
+  step's turn action; the decision subkind only when the run's `run.json` records a
+  `playability_rate` above 0 (the smallest any invocation recorded). Rarer kinds are watched.
+- The positives floor reads the trigger records of games that ended in the window: a game has
+  ended when one of its records holds `player_won` or `player_lost`. Under 50 such records it is
+  watched.
+- A keyword key in a variant tree the run was not given fails the keyword-join check as
+  unchecked; a machine with no converted tree at all watches it.
+- A copy keying its keyword lines into the copied card's file is watched.
+
+Exit codes:
+
+| Code | When |
+|------|------|
+| 0 | every invariant holds |
+| 1 | an invariant breaks, including "every shard line decodes": a line that does not decode is that finding, naming shard and line (logged at ERROR); the shard's records before it are measured and the other shards read on |
+| 1 | no shard under `--effect-records`, or a record whose `generation` the reader does not accept (`UnacceptedGenerationError`) |
+
+Every invariant prints the number it measured, passed or not.
+
 ## `python -m sealed match-outcomes` (existing)
 
 | Flag | Default | Meaning |

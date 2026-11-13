@@ -70,7 +70,8 @@ class Thresholds:
     #: end) and negatives are sampled toward ~1:1, so a share near zero is
     #: positives lost, not a balance.
     min_trigger_fired_share: float = field(default=0.05, metadata={"help": (
-        "Share of trigger records that must report fired=true (default: %(default)s)"
+        "Share of the trigger records of games that ended in the window that must "
+        "report fired=true (default: %(default)s)"
     )})
     #: A few minutes of collection writes thousands of records; a kind every
     #: game writes missing from that many is the collector.
