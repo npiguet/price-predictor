@@ -31,18 +31,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link VariantSidecarMain}, the one process that stages. The staging lands in
  * Forge's shared custom-cards directory, so the test takes it back out by the
  * staging's own manifest whatever happens.
+ *
+ * <p>Tagged {@code integration}: it starts two Forge JVMs and stages scripts
+ * into the custom-cards directory of the shared {@code ../forge} checkout,
+ * which live collection workers read, so the default {@code mvn test} leaves
+ * it out.
  */
+@Tag("integration")
 class VariantStagingTest {
 
     private static final long STARTUP_MINUTES = 5;
 
-    /**
-     * Tagged {@code integration}: it starts two Forge JVMs and stages scripts
-     * into the custom-cards directory of the shared {@code ../forge} checkout,
-     * which live collection workers read, so the default {@code mvn test}
-     * leaves it out.
-     */
-    @Tag("integration")
     @Test
     void aTreeWithItsLoadableListInitializesForgeTwiceRunning(@TempDir Path tmp)
             throws Exception {

@@ -239,7 +239,7 @@ class TestExclusionsWithoutACheckpoint:
 
         with pytest.raises(ValueError, match="one source"):
             collect_coverage.run(collect_coverage.CollectCoverageConfig(
-                cards_folders=(cards,), effect_records=tmp_path / "records",
+                cards_folders=(cards,), effect_records=tmp_path / "records", workers=1,
                 deck_holdout=DeckHoldout(
                     split_from=tmp_path / "latest.pt", exclude_cards=listed,
                 ),
@@ -310,6 +310,7 @@ class TestTheRoundPlaysTheComputedDecks:
                     cards_folders=(cards,),
                     target_records=10,
                     decks_per_round=150,
+                    workers=1,
                 )
             )
 
@@ -415,6 +416,7 @@ class TestCtrlCEndsTheRun:
             target_records=50,
             decks_per_round=2,
             no_progress_rounds=5,
+            workers=1,
         )
 
     def _run_with(self, tmp_path, supervisor, *, interrupted: bool):
@@ -507,6 +509,7 @@ class TestOnlyDeckedCardsCountAStalledRound:
                 target_records=1,
                 decks_per_round=1,
                 no_progress_rounds=1,
+                workers=1,
             ))
 
         decked_names = {
@@ -1093,7 +1096,7 @@ class TestNonDeckTypesLeaveTheUnit:
         with patch.object(collect_coverage, "consult_castability", _consult):
             collect_coverage.run(collect_coverage.CollectCoverageConfig(
                 effect_records=tmp_path / "records", cards_folders=(cards,),
-                target_records=1, decks_per_round=5,
+                target_records=1, decks_per_round=5, workers=1,
             ))
 
         assert consulted == [["aa"]]
@@ -1145,6 +1148,7 @@ class TestNonDeckTypesLeaveTheUnit:
             collect_coverage.run(collect_coverage.CollectCoverageConfig(
                 effect_records=tmp_path / "records", cards_folders=(cards,),
                 deck_holdout=DeckHoldout(only_cards=listed), min_text_games=0,
+                workers=1,
             ))
 
         assert consulted == [["alpha"]]
@@ -1181,7 +1185,7 @@ class TestHeldOutRoundCaps:
             collect_coverage.run(collect_coverage.CollectCoverageConfig(
                 effect_records=tmp_path / "records", cards_folders=(cards,),
                 deck_holdout=DeckHoldout(only_cards=listed), min_text_games=0,
-                caps=caps,
+                caps=caps, workers=1,
             ))
 
         assert fake_supervisor.constructor.call_args.kwargs["caps"] == caps
@@ -1220,7 +1224,7 @@ class TestTheWordingRound:
         with patch.object(collect_coverage, "consult_castability", _consult):
             code = collect_coverage.run(collect_coverage.CollectCoverageConfig(
                 effect_records=tmp_path / "records", cards_folders=(cards,),
-                target_records=1, decks_per_round=5, no_progress_rounds=1,
+                target_records=1, decks_per_round=5, no_progress_rounds=1, workers=1,
                 wording_cards=wording, **config,
             ))
         return code, consulted
@@ -1401,7 +1405,7 @@ class TestTheDeckFileIsTheRunsOwn:
         with patch.object(collect_coverage, "consult_castability", return_value={}):
             collect_coverage.run(CollectCoverageConfig(
                 effect_records=tmp_path / "records", cards_folders=(cards,),
-                target_records=1, decks_per_round=1, no_progress_rounds=1,
+                target_records=1, decks_per_round=1, no_progress_rounds=1, workers=1,
             ))
 
         decks_file = fake_supervisor.play_round.call_args.args[1]
@@ -1445,7 +1449,7 @@ class TestARoundChargesTheCardsItsGamesShowed:
                              return_value=[["shown", "unseen"]]):
             collect_coverage.run(CollectCoverageConfig(
                 effect_records=records_dir, cards_folders=(cards,),
-                target_records=1, decks_per_round=1, no_progress_rounds=1,
+                target_records=1, decks_per_round=1, no_progress_rounds=1, workers=1,
             ))
 
         first = calls[0]
