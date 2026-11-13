@@ -46,6 +46,22 @@ final class HeldResolutionWindow {
     /** The resolution waiting for its consequences, or null when none is. */
     private HeldResolution held;
 
+    /**
+     * A fizzled spell's effect halves, written with no event but its card's
+     * move off the stack, which Forge makes after publishing the
+     * resolution; null when none waits.
+     */
+    private FizzledSpell fizzled;
+
+    /**
+     * A fizzled spell's halves, their ids and boards fixed at the fizzle,
+     * waiting for the card's move off the stack (608.2b).
+     */
+    private record FizzledSpell(
+            SpellAbility root, int awaitedCard, String actor, String linkId,
+            List<HalfRecord> halves) {
+    }
+
     HeldResolutionWindow(CollectorContext context, FruitlessActivations fruitless) {
         this.context = context;
         this.fruitless = fruitless;
@@ -149,12 +165,16 @@ final class HeldResolutionWindow {
     /**
      * Write the effect half of an item that did nothing (FR-042b): one that
      * fizzled, or whose controller declined what it offered. Its halves
-     * have no events, and nothing joins them: a fizzled spell's move off
-     * the stack and anything after go to no record. They are split as a
-     * resolved item's are: one root half, or on a patched worker one per
-     * chosen mode of a modal item, through the mode's option line, under the
-     * cost half's link (FR-029a, FR-029c). A declined half keeps the
-     * conditions Forge decided on its way; a fizzled one decided none.
+     * have no events but one: a fizzled spell's own card's move off the
+     * stack (608.2b), which Forge makes after publishing the resolution, so
+     * a fizzled spell's halves wait for it ({@link #takeMoveOffStack}) and
+     * the last of them takes it; an ability that fizzled, or a declined
+     * item, has none and is written now. Nothing after the move joins them.
+     * They are split as a resolved item's are: one root half, or on a
+     * patched worker one per chosen mode of a modal item, through the mode's
+     * option line, under the cost half's link (FR-029a, FR-029c). A declined
+     * half keeps the conditions Forge decided on its way; a fizzled one
+     * decided none.
      *
      * <p>Whatever its halves gathered anyway reaches no record and is
      * counted as dropped.
@@ -166,6 +186,7 @@ final class HeldResolutionWindow {
     void writeEmpty(
             OpenResolution resolved, ActivationOutcome outcome, DroppedEvents dropped, String phase) {
         List<ModeSplit.ModeHalf> split = resolved.modes.halves(resolved.effectState());
+        List<HalfRecord> halves = new java.util.ArrayList<>();
         for (int index = 0; index < split.size(); index++) {
             ModeSplit.ModeHalf half = split.get(index);
             String refs = refsOf(resolved, half, index, split.size(), List.of());
@@ -174,13 +195,50 @@ final class HeldResolutionWindow {
             }
             List<ConditionsMet> conditions = outcome == ActivationOutcome.DECLINED
                     ? half.conditions() : List.of();
-            context.emit(context.newResolution(Moment.RESOLUTION)
-                    .actor(resolved.actor)
-                    .ability(resolved.keys.withOption(half.mode().option()))
-                    .linkId(resolved.linkId)
-                    .state(half.mode().state().withRefs(refs).render())
-                    .payload(RecordPayloads.resolutionPayload(List.of(), conditions, outcome)));
+            halves.add(HalfRecord.of(
+                    context.nextRecordId(), resolved.keys.withOption(half.mode().option()),
+                    half.mode().state().withRefs(refs).render(), conditions));
         }
+        Card host = resolved.ability.getHostCard();
+        if (outcome == ActivationOutcome.FIZZLED && resolved.ability.isSpell() && host != null) {
+            fizzled = new FizzledSpell(
+                    resolved.ability, host.getId(), resolved.actor, resolved.linkId, halves);
+            return;
+        }
+        emitEmpty(halves, resolved.actor, resolved.linkId, outcome, null);
+    }
+
+    /**
+     * Write halves that did nothing, the last taking {@code move} when it is
+     * not null: a fizzled spell's card leaving the stack.
+     */
+    private void emitEmpty(
+            List<HalfRecord> halves, String actor, String linkId, ActivationOutcome outcome,
+            EffectEvent move) {
+        for (int index = 0; index < halves.size(); index++) {
+            HalfRecord record = halves.get(index);
+            List<EffectEvent> events = move != null && index == halves.size() - 1
+                    ? List.of(move) : List.of();
+            context.emit(context.newResolution(
+                    Moment.RESOLUTION, record.recordId(), record.timestamp())
+                    .actor(actor)
+                    .ability(record.keys())
+                    .linkId(linkId)
+                    .state(record.state())
+                    .payload(RecordPayloads.resolutionPayload(events, record.conditions(), outcome)));
+        }
+    }
+
+    /**
+     * Write the fizzled spell's waiting halves, with its card's move off the
+     * stack, or with nothing where the move never came.
+     */
+    private void writeFizzled(EffectEvent move) {
+        FizzledSpell writing = fizzled;
+        fizzled = null;
+        emitEmpty(writing.halves(), writing.actor(), writing.linkId(),
+                ActivationOutcome.FIZZLED,
+                move == null ? null : EventAttribution.stampAt(move, writing.root(), null, null));
     }
 
     /**
@@ -209,6 +267,12 @@ final class HeldResolutionWindow {
      * @return whether the move was taken
      */
     boolean takeMoveOffStack(GameEventCardChangeZone event, EffectEvent moved) {
+        if (fizzled != null && event.card() != null
+                && event.card().getId() == fizzled.awaitedCard()
+                && event.from() != null && event.from().zoneType() == ZoneType.Stack) {
+            writeFizzled(moved);
+            return true;
+        }
         if (held == null || held.awaitedCard < 0 || event.card() == null
                 || event.card().getId() != held.awaitedCard
                 || event.from() == null || event.from().zoneType() != ZoneType.Stack) {
@@ -292,6 +356,10 @@ final class HeldResolutionWindow {
      * halves, if one is held.
      */
     void close() {
+        if (fizzled != null) {
+            // The card never left the stack where this collector saw it.
+            writeFizzled(null);
+        }
         if (held == null) {
             return;
         }
