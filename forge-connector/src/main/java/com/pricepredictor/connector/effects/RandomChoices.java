@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import forge.ai.ComputerUtilMana;
 import forge.game.GameEntity;
+import forge.game.GameObject;
 import forge.game.ability.AbilityUtils;
 import forge.game.ability.ApiType;
 import forge.game.ability.effects.CharmEffect;
@@ -188,10 +189,22 @@ public final class RandomChoices {
 
     /**
      * One clause's targets: a count uniform in [min, max], then that many
-     * distinct legal candidates (FR-022b).
+     * distinct legal candidates (FR-022b), and a divided amount split among
+     * them.
+     *
+     * <p>The candidates are offered in a random order and each is taken only
+     * if the clause can still target it beside those already taken
+     * ({@code SpellAbility.canTarget}), which is where Forge reads the
+     * constraints across a clause's targets: different or the same
+     * controllers, different names or mana values, a total mana value or
+     * power (V3 #4). A clause that "divides as you choose" gets its amount
+     * split at random over its targets, each at least one while the amount
+     * lasts ({@link #divide}); without it the resolution reads a null share
+     * (V3 #3).
      */
     public boolean chooseTargetsFor(SpellAbility clause) {
-        clause.resetTargets();
+        // clearTargets also sets the amount a divided clause splits.
+        clause.clearTargets();
         List<GameEntity> candidates = clause.getTargetRestrictions().getAllCandidates(clause);
         int min = Math.max(0, clause.getMinTargets());
         int max = Math.min(clause.getMaxTargets(), candidates.size());
@@ -199,13 +212,50 @@ public final class RandomChoices {
             return false;
         }
         int count = between(min, max);
-        for (GameEntity target : drawDistinct(candidates, count, random)) {
-            if (!clause.canAddMoreTarget()) {
+        for (GameEntity target : drawDistinct(candidates, candidates.size(), random)) {
+            if (clause.getTargets().size() >= count || !clause.canAddMoreTarget()) {
                 break;
             }
-            clause.getTargets().add(target);
+            if (clause.canTarget(target)) {
+                clause.getTargets().add(target);
+            }
         }
-        return clause.isTargetNumberValid();
+        if (!clause.isTargetNumberValid()) {
+            return false;
+        }
+        if (clause.isDividedAsYouChoose()) {
+            divide(clause);
+        }
+        return true;
+    }
+
+    /**
+     * Split a divided clause's amount among its targets at random: each
+     * target one while the amount lasts, the rest one at a time to a
+     * uniformly drawn target.
+     */
+    void divide(SpellAbility clause) {
+        List<GameObject> targets = new ArrayList<>();
+        clause.getTargets().getTargetEntities().forEach(targets::add);
+        if (targets.isEmpty()) {
+            return;
+        }
+        Integer amount = clause.getDividedValue();
+        if (amount == null) {
+            amount = AbilityUtils.calculateAmount(
+                    clause.getHostCard(), clause.getParam("DividedAsYouChoose"), clause);
+        }
+        int[] shares = new int[targets.size()];
+        int left = Math.max(0, amount);
+        for (int i = 0; i < shares.length && left > 0; i++, left--) {
+            shares[i] = 1;
+        }
+        while (left-- > 0) {
+            shares[random.nextInt(shares.length)]++;
+        }
+        for (int i = 0; i < shares.length; i++) {
+            clause.addDividedAllocation(targets.get(i), shares[i]);
+        }
     }
 
     // ── X ───────────────────────────────────────────────────────────────

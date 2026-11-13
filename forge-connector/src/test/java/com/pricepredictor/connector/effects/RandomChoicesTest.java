@@ -146,6 +146,62 @@ class RandomChoicesTest {
 
     // ── targets ─────────────────────────────────────────────────────────
 
+    /**
+     * A clause that divides its amount gets it split over its targets, every
+     * target a share and the shares summing to the amount (V3 #3): Arc
+     * Lightning's resolution reads a share per target and threw on a null.
+     */
+    @Test
+    void aDividedAmountIsSplitOverTheDrawnTargets() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player other = game.getPlayers().get(1);
+        TestBoard.inPlay(game, other, "Grizzly Bears");
+        TestBoard.inPlay(game, other, "Hill Giant");
+        SpellAbility arc = TestBoard.card(game, caster, "Arc Lightning").getFirstSpellAbility();
+        arc.setActivatingPlayer(caster);
+
+        Set<Integer> counts = new TreeSet<>();
+        for (int seed = 0; seed < SEEDS; seed++) {
+            assertTrue(drawsFor(seed).chooseTargets(arc));
+            int total = 0;
+            for (Object target : arc.getTargets().getTargetEntities()) {
+                Integer share = arc.getDividedValue((forge.game.GameObject) target);
+                assertNotNull(share, "every target has its share");
+                assertTrue(share >= 1, "at least one each");
+                total += share;
+            }
+            assertEquals(3, total, "the shares make the amount");
+            counts.add(arc.getTargets().size());
+        }
+        assertEquals(Set.of(1, 2, 3), counts);
+    }
+
+    /**
+     * A constraint across a clause's targets is honoured (V3 #4): Cannibalize
+     * takes two creatures one player controls, never one of each player's.
+     */
+    @Test
+    void aConstraintAcrossTargetsIsHonoured() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player other = game.getPlayers().get(1);
+        TestBoard.inPlay(game, caster, "Grizzly Bears");
+        TestBoard.inPlay(game, other, "Hill Giant");
+        TestBoard.inPlay(game, other, "Gray Ogre");
+        SpellAbility cannibalize = TestBoard.card(game, caster, "Cannibalize").getFirstSpellAbility();
+        cannibalize.setActivatingPlayer(caster);
+
+        for (int seed = 0; seed < SEEDS; seed++) {
+            if (!drawsFor(seed).chooseTargets(cannibalize)) {
+                continue;
+            }
+            Set<Player> controllers = new HashSet<>();
+            cannibalize.getTargets().getTargetCards().forEach(c -> controllers.add(c.getController()));
+            assertEquals(Set.of(other), controllers, "seed " + seed);
+        }
+    }
+
     /** "Up to two" over three candidates: a count in {0, 1, 2}, distinct targets. */
     @Test
     void targetCountIsUniformBetweenMinimumAndMaximumAndTargetsAreDistinct() {

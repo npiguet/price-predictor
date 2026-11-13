@@ -351,6 +351,15 @@ public final class RandomSeatController extends PlayerControllerAi {
             if (!drawPlayChoices(sa)) {
                 continue;
             }
+            // The candidate was judged affordable by the rules alone; the AI
+            // pays the mana, and what it holds back or what the cost itself
+            // sacrifices can leave it short. Asked before the card moves to
+            // the stack, so a play the AI would fail to pay is a draw to
+            // repeat (an X drawn lower may fit), never a card left in the
+            // stack zone (V3 #7).
+            if (!affordableByTheAi(sa)) {
+                continue;
+            }
             try {
                 return RandomSpellPlayer.play(
                         player, sa,
@@ -364,6 +373,15 @@ public final class RandomSeatController extends PlayerControllerAi {
             }
         }
         return false;
+    }
+
+    /** Whether the AI, which pays the seat's mana, can pay {@code sa} as drawn. */
+    private boolean affordableByTheAi(SpellAbility sa) {
+        try {
+            return forge.ai.ComputerUtilCost.canPayCost(sa, player, false);
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     /**

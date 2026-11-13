@@ -137,6 +137,37 @@ class RandomSeatControllerTest {
     }
 
     /**
+     * What the seat drew resolves (TC4): Arc Lightning, its 3 damage divided
+     * among the targets drawn, deals all of it, where an undivided draw threw
+     * at resolution and lost the match (V3 #3).
+     */
+    @Test
+    void aDividedSpellTheSeatDrewResolves() {
+        for (long seed = 1; seed <= 5; seed++) {
+            Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, seed);
+            Player a = game.getPlayers().get(0);
+            Player b = game.getPlayers().get(1);
+            for (int i = 0; i < 3; i++) {
+                TestBoard.inPlay(game, a, "Mountain");
+            }
+            TestBoard.inPlay(game, b, "Craw Wurm");
+            TestBoard.inHand(game, a, "Arc Lightning");
+            RandomSeatController seat = seatOf(game);
+            seat.attach(game, null, null);
+            int life = a.getLife() + b.getLife();
+
+            SpellAbility arc = seat.chooseSpellAbilityToPlay().get(0);
+            assertTrue(seat.playChosenSpellAbility(arc), "seed " + seed);
+            game.getStack().resolveStack();
+
+            Card wurm = b.getCardsIn(ZoneType.Battlefield).stream()
+                    .filter(c -> c.getName().equals("Craw Wurm")).findFirst().orElseThrow();
+            int dealt = life - a.getLife() - b.getLife() + wurm.getDamage();
+            assertEquals(3, dealt, "seed " + seed + ": all three damage was dealt");
+        }
+    }
+
+    /**
      * Scenario 18: holding a playable land with the drop unused, the seat
      * makes no draw and the AI decides; once the drop is used, it draws.
      */
