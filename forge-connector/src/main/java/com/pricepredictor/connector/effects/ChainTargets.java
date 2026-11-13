@@ -67,7 +67,8 @@ final class ChainTargets {
         for (SpellAbility link = item; link != null; link = link.getSubAbility()) {
             links.add(link.getTargets() == null ? List.of() : List.copyOf(link.getTargets()));
         }
-        return of(item, links);
+        // Targets an item holds now passed Forge's check, or were just chosen.
+        return of(item, links, false);
     }
 
     /**
@@ -91,10 +92,11 @@ final class ChainTargets {
         for (SpellAbility link = item; link != null; link = link.getSubAbility()) {
             chain++;
         }
-        return chain == links.size() ? of(item, links) : null;
+        return chain == links.size() ? of(item, links, true) : null;
     }
 
-    private static ChainTargets of(SpellAbility item, List<Collection<?>> links) {
+    private static ChainTargets of(
+            SpellAbility item, List<Collection<?>> links, boolean asCast) {
         Game game = item.getHostCard() == null ? null : item.getHostCard().getGame();
         List<String> root = new ArrayList<>();
         List<ModeTargets> modes = new ArrayList<>();
@@ -114,7 +116,7 @@ final class ChainTargets {
                 count++;
                 String ref = null;
                 if (target instanceof Card card) {
-                    if (isGone(game, card)) {
+                    if (asCast && isGone(game, card)) {
                         lastKnown.add(card);
                         ref = lastKnownRef(card);
                     } else {
