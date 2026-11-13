@@ -83,6 +83,8 @@ leaving the battlefield that was not in combat):
   (``melded``, ``face_down``, ``flipped``, ``back``, ``front``);
 - ``subject_designation``: the subject holds this gen-3 designation
   (``unearthed``, ``suspected``, ``monstrous`` …);
+- ``subject_type``: the subject has this card type in the snapshot (an
+  attached permanent that is a creature);
 - ``with_event``, ``without_event``: the same record does, or does not, hold
   an event of this type as well (the sacrifice beside the counters it pays for,
   the Equipment entering with no ``attached`` event): a type, or a map of
@@ -147,6 +149,7 @@ from effects.domain.rule_detectors.acting_line import (
 )
 from effects.domain.rule_detectors.emittable_events import absence_readable
 from effects.domain.rule_detectors.entity_facts import (
+    has_card_type,
     has_designation,
     has_face_state,
     is_copy,
@@ -185,6 +188,7 @@ QUALIFIER_CHECKS = {
     "controller_is_owner": dv.boolean, "subject_is_source": dv.boolean,
     "subject_is_copy": dv.boolean, "subject_merged": dv.boolean,
     "subject_face_state": dv.face_state, "subject_designation": dv.designation,
+    "subject_type": dv.card_type,
 }
 _CHECKS = {
     **EVENT_FILTER_CHECKS, **QUALIFIER_CHECKS,
@@ -234,6 +238,7 @@ SUBJECT_QUALIFIERS = {
     "subject_merged": _flag(is_merged),
     "subject_face_state": lambda entity, state, wanted: has_face_state(entity, wanted),
     "subject_designation": lambda entity, state, wanted: has_designation(entity, wanted),
+    "subject_type": lambda entity, state, wanted: has_card_type(entity, wanted),
 }
 #: The gen-3 field each subject qualifier reads, where it reads one.
 SUBJECT_QUALIFIER_NEEDS = {

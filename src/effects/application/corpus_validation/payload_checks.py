@@ -18,6 +18,7 @@ from effects.application.corpus_validation.findings import (
     keep_example,
     share_of,
 )
+from effects.domain.event_schema import EventType
 from effects.domain.records import (
     REWRITE_RESULTS_RUNNING_AN_ABILITY,
     REWRITE_RESULTS_WITHOUT_ABILITY,
@@ -136,18 +137,32 @@ class Activations:
         )
 
 
+_GAME_END = frozenset({EventType.PLAYER_WON, EventType.PLAYER_LOST})
+
+
 class Triggers:
     """Fired against not-fired, aggregate and per evaluated mode, because a
     mode drawing no negatives hides behind every other mode's balance."""
 
+    #: Trigger records of games that ended in the window needed before the
+    #: floor judges: fewer say too little about one run.
+    MIN_FINISHED = 50
+
     def __init__(self) -> None:
         #: Per evaluated mode: how often it fired, of how often it was asked.
         self.modes: dict[str, Share] = defaultdict(Share)
+        #: Per game: how often its trigger records fired, of how many.
+        self.games: dict[str, Share] = defaultdict(Share)
+        #: Games a record of which holds the game's end.
+        self.ended: set[str] = set()
 
     def add(self, record: EffectRecord) -> None:
         payload = record.payload
+        if any(event.type in _GAME_END for event in payload.listed_events()):
+            self.ended.add(record.game_id)
         if not isinstance(payload, TriggerPayload):
             return
+        self.games[record.game_id].note(payload.fired)
         # Forge's own mode name where written: the event-type vocabulary is
         # far coarser than Forge's trigger modes.
         mode = payload.event.params.get("mode") or payload.event.type.value
@@ -173,20 +188,33 @@ class Triggers:
                 for rate, mode, counts in skewed[:EXAMPLES]
             ),
         )
-        yield floor_finding(
-            name="trigger records hold positives",
+        yield self._positives(limits)
+
+    def _positives(self, limits: Thresholds) -> Finding:
+        """The floor over the games that ended in the window. A fired trigger
+        record is written when its game ends (the per-line reservoir), an
+        unfired one as drawn, so a game still running holds its negatives
+        alone. A game's end is a record holding ``player_won`` or
+        ``player_lost`` (the game-end record, a lethal combat, a game-ending
+        ability); the collector's game-end marker will name it outright."""
+        finished = Share.total(share for game, share in self.games.items()
+                               if game in self.ended)
+        name = "trigger records hold positives"
+        if finished.seen < self.MIN_FINISHED:
+            return Finding.watch(name, (
+                f"{finished.seen} trigger records of games that ended in the window, under "
+                f"the {self.MIN_FINISHED} the floor judges at ({finished.hit} fired)"))
+        return floor_finding(
+            name=name,
             floor=limits.min_trigger_fired_share,
-            seen=fired.seen,
-            rate=fired.rate,
+            seen=finished.seen,
+            rate=finished.rate,
             measured=lambda limit: (
-                f"{fired.hit}:{fired.seen - fired.hit} fired:not-fired over "
-                f"{fired.seen} trigger records ({fired.rate:.1%} fired, {limit})"
+                f"{finished.hit}:{finished.seen - finished.hit} fired:not-fired over "
+                f"{finished.seen} trigger records of {len(self.ended & set(self.games))} "
+                f"games that ended ({finished.rate:.1%} fired, {limit})"
             ),
-            detail=(
-                f"{mode}: {counts.hit}:{counts.seen - counts.hit} "
-                f"({rate:.1%} fired)"
-                for rate, mode, counts in reversed(skewed[-EXAMPLES:])
-            ),
+            detail=(),
         )
 
 

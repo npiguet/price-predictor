@@ -1556,12 +1556,31 @@ class TestEveryRecordKindIsPresent:
         return [_resolution(f"run.0-L1.{index}", generation=3) for index in range(records)]
 
     def test_a_long_window_missing_kinds_every_game_writes_fails(self):
-        finding = _named(validate_corpus(self._window(1000)), "record kind")
+        finding = _named(validate_corpus(self._window(1000), playability_rate=0.01),
+                         "record kind")
         assert not finding.ok
         for label in ("resolution/activation", "trigger", "combat", "playability/decision",
                       "playability/attackers", "playability/blockers", "turn_action/draw"):
             assert label in finding.measured
         assert "rewrite" in " ".join(finding.detail)  # watched, named, not judged
+
+    def test_decision_records_are_judged_only_where_the_run_samples_them(self):
+        """A run collected with --playability-rate 0 writes no decision record;
+        without a run manifest saying the rate, their absence is watched."""
+        for rate in (0.0, None):
+            finding = _named(validate_corpus(self._window(1000), playability_rate=rate),
+                             "record kind")
+            assert "playability/decision" not in finding.measured
+            assert "playability/decision" in " ".join(finding.detail)
+
+    def test_the_rate_is_read_off_the_run_manifest(self, tmp_path):
+        from effects.application.validate_corpus import playability_rate_of
+
+        assert playability_rate_of(tmp_path) is None
+        (tmp_path / "run.json").write_text(json.dumps({"invocations": [
+            {"command": "x", "caps": {"playability_rate": 0.01}},
+            {"command": "y", "caps": {"playability_rate": 0.0}}]}), encoding="utf-8")
+        assert playability_rate_of(tmp_path) == 0.0
 
     def test_a_short_window_is_not_judged(self):
         finding = _named(validate_corpus(self._window(10)), "record kind")
@@ -1579,17 +1598,27 @@ class TestTriggerNegatives:
         assert not finding.ok
         assert "fired:not-fired" in finding.measured
 
-    def test_a_window_of_negatives_only_fails(self):
+    @staticmethod
+    def _ended(game_id: str):
+        won = Event(type=EventType.PLAYER_WON, subjects=("P0",), attributed_to="unresolved")
+        return _combat(f"{game_id}.999", game_id=game_id, state=_snapshot(turn=30),
+                       payload=CombatPayload(events=(won,)))
+
+    def test_a_finished_game_s_negatives_only_fail(self):
         """V5 #19: the ceiling alone let 0% fired pass, the positives the
-        reservoir writes at the game's end all lost."""
-        records = [r for r in _healthy() if r.kind is not RecordKind.TRIGGER] + [
-            _trigger(f"run.0-L1.{index}", fired=False, state=_snapshot(turn=7 + index))
-            for index in range(900, 910)
-        ]
-        finding = _named(validate_corpus(records), "trigger records hold positives")
-        assert not finding.ok
-        assert "0:10" in finding.measured and "floor 5.0%" in finding.measured
-        assert _named(validate_corpus(_healthy()), "trigger records hold positives").ok
+        reservoir writes at the game's end all lost. Judged over games that
+        ended in the window: an unfinished game's positives are still held."""
+        game = "run.0-L1.0"
+        negatives = [_trigger(f"run.0-L1.{index}", fired=False, game_id=game,
+                              state=_snapshot(turn=7)) for index in range(900, 960)]
+        records = [r for r in _healthy() if r.kind is not RecordKind.TRIGGER] + negatives
+        unfinished = _named(validate_corpus(records), "trigger records hold positives")
+        assert unfinished.ok and unfinished.watched
+        assert "0 trigger records of games that ended" in unfinished.measured
+        finished = _named(validate_corpus([*records, self._ended(game)]),
+                          "trigger records hold positives")
+        assert not finished.ok
+        assert "0:60" in finished.measured and "floor 5.0%" in finished.measured
 
     def test_a_balanced_window_passes_and_reports_the_ratio(self):
         finding = _named(validate_corpus(_healthy()), "draw negatives")

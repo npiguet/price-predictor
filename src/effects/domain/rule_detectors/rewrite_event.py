@@ -21,6 +21,10 @@ Parameters:
   as ``outcome_event`` reads them): ``from_zone``/``to_zone`` of a
   ``zone_change``, ``combat`` of a ``damage_dealt`` …, text compared without
   case;
+- ``amount_change``: ``doubled``, ``increased`` or ``decreased``, the
+  outgoing event's ``amount`` against the incoming one's (a doubler, a
+  damage replacement adding to it, a partial prevention); a rewrite with no
+  readable outgoing amount speaks for nothing;
 - ``keyword``: the replacing line is the line this keyword produced
   (``etbCounter``, ``Madness``, ``Tribute``, ``Unleash``), compared in
   ``keyword_names``' spelling;
@@ -75,7 +79,10 @@ from effects.domain.rule_detectors.outcome_event import (
     subject_verdict,
 )
 
-_OWN = frozenset({"event", "result", "mode", "keyword", "prevention"}) | frozenset(
+#: How the outgoing event's ``amount`` compares with the incoming one's.
+AMOUNT_CHANGES = frozenset({"doubled", "increased", "decreased"})
+_OWN = frozenset({"event", "result", "mode", "keyword", "prevention",
+                  "amount_change"}) | frozenset(
     SUBJECT_QUALIFIERS)
 
 #: A chain that prevents: a ``PreventDamage``/``Prevent$``/``PreventionEffect$``
@@ -90,6 +97,17 @@ def is_prevention_line(line: SidecarLine | None) -> bool:
     """Whether the replacing line's chain is a prevention effect's."""
     return line is not None and bool(line.script_text) and bool(
         PREVENTS.search(line.script_text))
+
+
+def _amount_changed(incoming, outgoing, change: str) -> bool:
+    """Whether the outgoing event's ``amount`` compares with the incoming one's
+    as ``change`` says; False where either is unreadable."""
+    before = (incoming.params or {}).get("amount")
+    after = None if outgoing is None else (outgoing.params or {}).get("amount")
+    if not isinstance(before, int) or not isinstance(after, int):
+        return False
+    return {"doubled": after == 2 * before and before > 0, "increased": after > before,
+            "decreased": after < before}[change]
 
 
 def _results(value: Any) -> frozenset[RewriteResult]:
@@ -114,7 +132,8 @@ class RewriteEvent:
         event_filters(self.id, EventType(params["event"]), params, _OWN)
         dv.check(self.id, params, {**EVENT_FILTER_CHECKS, **QUALIFIER_CHECKS,
                                    "keyword": dv.keyword, "prevention": dv.boolean,
-                                   "mode": dv.mode_of_rewrite})
+                                   "mode": dv.mode_of_rewrite,
+                                   "amount_change": dv.one_of(*AMOUNT_CHANGES)})
         if "result" in params:
             _results(params["result"])
 
@@ -140,6 +159,9 @@ class RewriteEvent:
         result = record.payload.result
         if result is None:
             return None  # collected before the result was recorded: no side to read
+        if "amount_change" in params and not _amount_changed(
+                incoming, record.payload.outgoing, params["amount_change"]):
+            return None
         if "keyword" in params or prevention:
             line = acting_line(record, lines)
             if "keyword" in params and not is_keyword_line(line, params["keyword"]):

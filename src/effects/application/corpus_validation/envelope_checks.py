@@ -218,9 +218,12 @@ class KindPresence:
                 "playability/decision", "playability/attackers", "playability/blockers",
                 "turn_action/draw")
 
-    def __init__(self) -> None:
+    def __init__(self, playability_rate: float | None = None) -> None:
         self.labels: Counter[str] = Counter()
         self.gen3 = 0
+        #: The run's ``--playability-rate`` from its manifest; decision records
+        #: are judged only where it is known and above 0.
+        self.playability_rate = playability_rate
 
     def add(self, record: EffectRecord) -> None:
         if record.generation != 3:
@@ -232,9 +235,11 @@ class KindPresence:
         self.labels[label] += 1
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
-        missing = [label for label in self.EXPECTED if not self.labels[label]]
+        expected = [label for label in self.EXPECTED if label != "playability/decision"
+                    or (self.playability_rate is not None and self.playability_rate > 0)]
+        missing = [label for label in expected if not self.labels[label]]
         judged = self.gen3 >= limits.min_presence_records
-        others = sorted(set(_all_labels()) - set(self.EXPECTED) - set(self.labels))
+        others = sorted(set(_all_labels()) - set(expected) - set(self.labels))
         if not missing:
             measured = f"every kind a game writes is present over {self.gen3} gen-3 records"
         else:

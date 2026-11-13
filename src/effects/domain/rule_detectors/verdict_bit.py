@@ -50,6 +50,11 @@ The candidates a rule speaks for, each filter narrowing both sides:
   activated ability whose line says ``SorcerySpeed$`` or ``Planeswalker$``
   (a loyalty ability, 606.3); false for the rest; unreadable on a keyword's
   line, whose speed the keyword fixes (name it with ``keyword``);
+- ``phase_list_first``, ``phase_list_last``: the first or the last step
+  the candidate's ``ActivationPhases$`` names (``combat_begin`` for "only
+  before attackers are declared", Forge's ``Upkeep->BeginCombat``;
+  ``combat_declare_attackers`` for "before blockers"; ``combat_declare_blockers``
+  first for "after blockers"), in ``rule_outcomes.PHASE_ORDER``'s spelling;
 - ``candidate_face``: ``front`` for a candidate acting through its card's
   first face, ``alternative`` for one acting through another (a double-faced
   card's back face, an Adventure, an Omen, a split card's second half), read
@@ -94,12 +99,14 @@ from effects.domain.rule_detectors.acting_line import (
     script_params_match,
 )
 from effects.domain.rule_detectors.entity_facts import has_designation
+from effects.domain.rule_outcomes import PHASE_ORDER, forge_phases
 
 GEN2_BITS = frozenset({"can_play", "affordable", "has_legal_target"})
 GEN3_BITS = frozenset({"timing", "failed_check"})
 FILTERS = frozenset({"keyword", "source_keyword", "cost_symbol", "cost_part", "script_param",
                      "land_play", "candidate_face", "candidate", "source_type",
-                     "source_designation", "sorcery_speed"})
+                     "source_designation", "sorcery_speed", "phase_list_first",
+                     "phase_list_last"})
 CANDIDATE_FACES = frozenset({"front", "alternative"})
 #: What a candidate is: its card's cast, or an activated ability (a land play
 #: is ``land_play``'s).
@@ -189,6 +196,14 @@ def sorcery_speed(candidate: Candidate, record: EffectRecord,
     return None
 
 
+def _phase_list(candidate: Candidate, lines: SidecarLookup | None) -> list[str] | None:
+    """The steps the candidate's ``ActivationPhases$`` names, in turn order;
+    None where its line names none."""
+    found = root_params_of(line_of(candidate.ability, lines)) or {}
+    phases = forge_phases(found.get("ActivationPhases"))
+    return None if phases is None else [p for p in PHASE_ORDER if p in phases]
+
+
 def _source(record: EffectRecord):
     source = record.state.refs.source
     return record.state.entity(source) if source else None
@@ -213,6 +228,14 @@ def _passes(candidate: Candidate, lines: SidecarLookup | None,
     if "sorcery_speed" in params and sorcery_speed(candidate, record, lines) is not bool(
             params["sorcery_speed"]):
         return False
+    if "phase_list_first" in params or "phase_list_last" in params:
+        listed = _phase_list(candidate, lines)
+        if listed is None:
+            return False
+        if "phase_list_first" in params and listed[0] != params["phase_list_first"]:
+            return False
+        if "phase_list_last" in params and listed[-1] != params["phase_list_last"]:
+            return False
     if "candidate_face" in params:
         if not candidate.ability:
             return False
@@ -283,7 +306,9 @@ class VerdictBit:
             "land_play": dv.boolean, "sorcery_speed": dv.boolean, "keyword": dv.keyword,
             "source_keyword": dv.keyword, "cost_symbol": dv.cost_symbol,
             "script_param": dv.script_param, "source_type": dv.card_type,
-            "source_designation": dv.designation, "phase_listed": dv.boolean})
+            "source_designation": dv.designation,
+            "phase_list_first": dv.one_of(*PHASE_ORDER),
+            "phase_list_last": dv.one_of(*PHASE_ORDER)})
         if "check" in params and bit != "failed_check":
             raise ValueError("verdict_bit: check names a failed_check declaration's check")
 

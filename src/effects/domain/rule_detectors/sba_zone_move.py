@@ -4,7 +4,11 @@ Rule 704.5 lists the state-based actions that move a permanent from the
 battlefield to the graveyard. Gen-2 already files every such move made in the
 check after a resolution in that resolution's effect half, as a
 ``zone_change`` attributed ``unresolved``, so the family runs on gen-2
-records and needs no gen-3 field.
+records and needs no gen-3 field. A combat damage step's record holds its
+own check the same way (its deaths, attributed ``unresolved``), and the
+family reads it too; a damage-step probe, whose snapshot still shows the
+keyword it stripped, it leaves out. Indestructible is read off the snapshot
+and off the keywords the record itself grants.
 
 Parameter ``check`` names which action, each read off the board the record
 shows (the snapshot before the resolution, plus the resolution's own events):
@@ -271,7 +275,7 @@ def _creature_checks(record, touched, check, keywords) -> tuple[list, list, list
             side = toughness <= 0
             if not side and 0 < toughness <= entity.damage:
                 continue  # marked damage now lethal: 704.5g's, not a near miss
-        elif not t.damage_dealt or "indestructible" in keywords(entity):
+        elif not t.damage_dealt or "indestructible" in keywords(entity) | t.gained:
             continue
         elif check == "lethal_damage":
             if _source_has(record, touched, t, keywords, _COUNTER_DAMAGE):
@@ -399,8 +403,11 @@ class SbaZoneMove:
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
         check = params.get("check")
-        if (record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION
-                or is_rescued_orphans(record) or game_ends(record)):
+        effect_half = (record.kind is RecordKind.RESOLUTION
+                       and record.moment is Moment.RESOLUTION)
+        combat = record.kind is RecordKind.COMBAT and not record.is_probe
+        if (not (effect_half or combat) or is_rescued_orphans(record)
+                or game_ends(record)):
             return None
         touched = _touched(record)
         if check in ("toughness_zero", "lethal_damage", "deathtouch_damage"):

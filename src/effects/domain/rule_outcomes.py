@@ -129,18 +129,31 @@ class Characteristics(NamedTuple):
     subtypes: frozenset[str]
     colours: frozenset[str]
     mana_value: int
+    #: The object has changeling: every creature type (702.73a), which no
+    #: subtype list of Forge's spells out.
+    changeling: bool = False
 
     @classmethod
     def of(cls, entity: EntityState) -> Characteristics:
-        return cls.made(entity.types, entity.subtypes, entity.colors, entity.mana_value)
+        return cls.made(entity.types, entity.subtypes, entity.colors, entity.mana_value,
+                        changeling=has_changeling(entity))
 
     @classmethod
     def made(cls, types: Iterable[str] = (), subtypes: Iterable[str] = (),
-             colours: Iterable[str] = (), mana_value: int = 0) -> Characteristics:
+             colours: Iterable[str] = (), mana_value: int = 0, *,
+             changeling: bool = False) -> Characteristics:
         return cls(
             frozenset(t.lower() for t in types), frozenset(s.lower() for s in subtypes),
             frozenset(c for c in colours if c in COLOUR_WORDS), int(mana_value),
+            bool(changeling),
         )
+
+
+def has_changeling(entity: EntityState) -> bool:
+    """Whether the entity has changeling, granted or on one of its lines."""
+    if "changeling" in entity.granted_temporary.keywords:
+        return True
+    return any(line.keyword == "changeling" for line in entity.lines or ())
 
 
 class QualityKind(StrEnum):
@@ -228,7 +241,7 @@ class ProtectionQuality:
         if self.kind is QualityKind.CARD_TYPE:
             return self.value in obj.types
         if self.kind is QualityKind.CREATURE_TYPE:
-            return self.value in obj.subtypes
+            return self.value in obj.subtypes or obj.changeling
         return CONDITIONS[self.value].holds(obj)
 
     @classmethod
@@ -312,6 +325,7 @@ class BlockingRestriction(StrEnum):
     INTIMIDATE = "intimidate"  # 702.13b
     SHADOW = "shadow"  # 702.28b, both ways
     PROTECTION = "protection"  # 702.16f, j
+    SKULK = "skulk"  # 702.118b: no creature with greater power
 
 
 def blocking_restrictions(
@@ -320,6 +334,8 @@ def blocking_restrictions(
     blocker_types: Collection[str], *,
     attacker_protections: Iterable[ProtectionQuality] = (),
     blocker_subtypes: Collection[str] = (), blocker_mana_value: int = 0,
+    attacker_power: int | None = None, blocker_power: int | None = None,
+    blocker_changeling: bool = False,
 ) -> frozenset[BlockingRestriction]:
     """Every :class:`BlockingRestriction` that keeps the blocker from blocking
     the attacker, as far as these keywords decide; empty where it may block.
@@ -340,9 +356,13 @@ def blocking_restrictions(
         found.add(BlockingRestriction.INTIMIDATE)
     if ("shadow" in a) != ("shadow" in b):
         found.add(BlockingRestriction.SHADOW)
+    if ("skulk" in a and attacker_power is not None and blocker_power is not None
+            and blocker_power > attacker_power):
+        found.add(BlockingRestriction.SKULK)
     qualities = [q for q in map(ProtectionQuality.of_keyword, sorted(a)) if q is not None]
     blocker = Characteristics.made(
-        blocker_types, blocker_subtypes, blocker_colours, blocker_mana_value)
+        blocker_types, blocker_subtypes, blocker_colours, blocker_mana_value,
+        changeling=blocker_changeling)
     if _covered((*qualities, *attacker_protections), blocker):
         found.add(BlockingRestriction.PROTECTION)
     return frozenset(found)
@@ -365,6 +385,30 @@ def may_block(attacker_keywords: Iterable[str], attacker_colours: Iterable[str],
         attacker_keywords, attacker_colours, blocker_keywords, blocker_colours, blocker_types,
         attacker_protections=attacker_protections, blocker_subtypes=blocker_subtypes,
         blocker_mana_value=blocker_mana_value)
+
+
+def landwalk_lands(selector: str, land: EntityState) -> bool | None:
+    """Whether ``land`` is a land a landwalk's Forge selector names (702.14c):
+    ``Swamp``, ``Desert``, ``Land.nonBasic``, ``Land.Legendary``,
+    ``Swamp.Snow``; None for one read off the game rather than the card
+    (``ChosenType``, ``YourBasic``)."""
+    base, *properties = selector.split(".")
+    if base in ("ChosenType", "YourBasic"):
+        return None
+    types = {t.lower() for t in land.types}
+    if "land" not in types:
+        return False
+    supertypes = {s.lower() for s in land.supertypes}
+    if base.lower() != "land" and base.lower() not in {s.lower() for s in land.subtypes}:
+        return False
+    for prop in properties:
+        wanted = prop.lower()
+        if wanted == "nonbasic":
+            if "basic" in supertypes:
+                return False
+        elif wanted not in supertypes:
+            return False
+    return True
 
 
 # ── targeting (702.11, 702.16b, 702.18) ──────────────────────────────────

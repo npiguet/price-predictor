@@ -96,6 +96,7 @@ def validate_directory(
     reset_decode_tally()
     findings = validate_corpus(
         damage.read(root, shards, limit, presence.observe), thresholds, sidecars, presence,
+        playability_rate=playability_rate_of(root),
     )
     findings.extend(damage.findings())
     return DirectoryReport(len(shards), findings)
@@ -155,11 +156,31 @@ class ShardDamage:
         return found
 
 
+def playability_rate_of(root: Path) -> float | None:
+    """The ``--playability-rate`` the run under ``root`` collected at, from
+    its ``run.json`` (each collector's invocation records its resolved
+    ``caps``): the smallest any invocation recorded; None without a
+    manifest or a recorded rate."""
+    import json
+
+    try:
+        document = json.loads((Path(root) / "run.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    rates = [entry["caps"]["playability_rate"]
+             for entry in document.get("invocations") or ()
+             if isinstance(entry, dict) and isinstance(entry.get("caps"), dict)
+             and isinstance(entry["caps"].get("playability_rate"), (int, float))]
+    return min(rates) if rates else None
+
+
 def validate_corpus(
     records: Iterable[EffectRecord],
     thresholds: Thresholds = Thresholds(),
     sidecars: SidecarLookup | None = None,
     presence: FieldPresence | None = None,
+    *,
+    playability_rate: float | None = None,
 ) -> Findings:
     """Every invariant, measured over one pass of ``records``.
 
@@ -168,7 +189,7 @@ def validate_corpus(
     ``shard_io.read_window`` fills from the raw lines (FR-033, root § 8.13),
     since a parsed record cannot say whether a field was on the wire.
     """
-    checks = _checks(sidecars)
+    checks = _checks(sidecars, playability_rate)
     for record in records:
         for check in checks:
             check.add(record)
@@ -180,13 +201,14 @@ def validate_corpus(
     return findings
 
 
-def _checks(sidecars: SidecarLookup | None) -> tuple[Check, ...]:
+def _checks(sidecars: SidecarLookup | None,
+            playability_rate: float | None = None) -> tuple[Check, ...]:
     """Every invariant, in the order the report prints them."""
     record_ids = RecordIds()
     return (
         record_ids,
         GameBoundaries(),
-        KindPresence(),
+        KindPresence(playability_rate),
         Links(),
         ActingLines(),
         KeyJoins(sidecars),

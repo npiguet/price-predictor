@@ -166,3 +166,70 @@ def test_marked_before_keeps_only_creatures_with_damage_already_marked():
     assert SBA.match(on_worn, None, params).polarity is Polarity.FIRES
     assert SBA.match(on_fresh, None, {"check": "lethal_damage"}).polarity is (
         Polarity.DOES_NOT_FIRE)
+
+
+def test_subject_type_reads_the_event_s_subject():
+    """301.5c-2: the permanent an Equipment becomes unattached from is a creature."""
+    creature = make_entity("E2", "bears", types=("Creature",))
+    land = make_entity("E3", "forest", types=("Land",))
+    unattached = Event(type=EventType.UNATTACHED, subjects=("E2",))
+    shock = make_entity("E1", "x", zone="stack", types=("Instant",))
+    key = ProvenanceKey("cardsfolder/s/shock.txt", 0, "spell", 0)
+    record = _resolution(shock, (unattached,), key, targets=(creature, land))
+    assert OUTCOME.match(record, None, {"event": "unattached", "subject_type": "creature"}
+                         ).polarity is Polarity.FIRES
+    on_land = replace(record, payload=ResolutionPayload(events=(
+        Event(type=EventType.UNATTACHED, subjects=("E3",)),)))
+    assert OUTCOME.match(on_land, None, {"event": "unattached", "subject_type": "creature"}
+                         ).polarity is Polarity.DOES_NOT_FIRE
+
+
+class _Lines:
+    """A sidecar lookup answering one line for every key."""
+
+    def __init__(self, text):
+        from effects.domain.provenance import SidecarLine
+
+        self.line = SidecarLine(line_index=0, line_kind="spell", provenance=(),
+                                sub_ability_links=(), script_api_type="Pump",
+                                script_param_keys=(), script_text=text)
+
+    def first_line(self, keys):
+        return self.line
+
+
+def test_the_phase_list_reads_the_candidate_s_activation_phases():
+    """506.8a/b: before attackers is ``Upkeep->BeginCombat``, before blockers
+    ``Upkeep->Declare Attackers``, after blockers ``Declare Blockers->EndCombat``."""
+    bears = make_entity("E1", "x", zone="hand", types=("Instant",))
+    record = _decision(bears, False)
+    params = {"bit": "timing", "fires_when": False}
+    before_attackers = _Lines("SP$ Pump | ActivationPhases$ Upkeep->BeginCombat")
+    assert VERDICT.match(record, before_attackers,
+                         {**params, "phase_list_last": "combat_begin"}) is not None
+    assert VERDICT.match(record, before_attackers,
+                         {**params, "phase_list_last": "combat_declare_attackers"}) is None
+    after_blockers = _Lines("SP$ Pump | ActivationPhases$ Declare Blockers->EndCombat")
+    assert VERDICT.match(record, after_blockers,
+                         {**params, "phase_list_first": "combat_declare_blockers"}) is not None
+
+
+def test_amount_change_compares_the_rewrite_s_amounts():
+    """701.10g: a doubler's outgoing damage is twice the incoming."""
+    from effects.domain.records import RewritePayload, RewriteResult
+
+    rewrite = families()["rewrite_event"]
+
+    def record(before, after):
+        return make_record(RecordKind.REWRITE, state=make_snapshot(), payload=RewritePayload(
+            incoming=Event(type=EventType.DAMAGE_DEALT, subjects=("E2",),
+                           params={"amount": before}),
+            outgoing=Event(type=EventType.DAMAGE_DEALT, subjects=("E2",),
+                           params={"amount": after}),
+            result=RewriteResult.UPDATED), generation=3)
+
+    params = {"event": "damage_dealt", "result": "updated", "amount_change": "doubled"}
+    assert rewrite.match(record(2, 4), None, params).polarity is Polarity.FIRES
+    assert rewrite.match(record(2, 3), None, params) is None
+    assert rewrite.match(record(3, 1), None, {**params, "amount_change": "decreased"}
+                         ).polarity is Polarity.FIRES

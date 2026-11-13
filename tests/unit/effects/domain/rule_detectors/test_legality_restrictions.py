@@ -152,3 +152,69 @@ def test_the_restriction_functions():
     assert not targeting_restrictions(["hexproof_from_blue"], source=red, opponents=True)
     assert targeting_restrictions(["protection_from_everything"], source=red,
                                   opponents=False) == {TargetingRestriction.PROTECTION}
+
+
+def _with_power(entity, power):
+    from dataclasses import replace
+
+    from effects.domain.state_snapshot import PowerToughness
+
+    return replace(entity, pt=PowerToughness((power, power)))
+
+
+def test_skulk_forbids_a_blocker_with_greater_power():
+    """702.118b, which blocking_restrictions did not model."""
+    from effects.domain.rule_detectors.legality_restrictions import blocker_judgements, sides
+
+    skulker = _with_power(_creature("E1", "skulk", controller="P0"), 2)
+    record = _blockers(skulker, legal=(_with_power(_creature("E3"), 1),),
+                       forbidden=(_with_power(_creature("E2"), 3),))
+    assert sides(blocker_judgements(record, None, "skulk", None), "outside") == (
+        ("E2",), ("E3",))
+
+
+def test_landwalk_needs_the_land_it_names_on_the_defender_s_battlefield():
+    """702.14c: swampwalk applies only while the defending player controls a
+    Swamp; nonbasic and snow landwalk read their selector."""
+    from dataclasses import replace
+
+    from effects.domain.rule_detectors.legality_restrictions import blocker_judgements, sides
+    from effects.domain.state_snapshot import CardLine
+
+    def walker(selector):
+        line = CardLine(keys=(), kind="keyword", granted=False, fragment=f"Landwalk:{selector}")
+        return replace(_creature("E1", "landwalk", controller="P0"), lines=(line,))
+
+    def board(attacker, *lands, forbidden=True):
+        record = _blockers(attacker, forbidden=(_creature("E2"),)) if forbidden else _blockers(
+            attacker, legal=(_creature("E2"),))
+        return replace(record, state=replace(record.state, entities=(
+            *record.state.entities, *lands)))
+
+    swamp = make_entity("E5", "swamp", controller="P1", types=("Land",), subtypes=("Swamp",),
+                        supertypes=("Basic",))
+    forest = make_entity("E6", "forest", controller="P1", types=("Land",),
+                         subtypes=("Forest",), supertypes=("Basic",))
+    wastes = make_entity("E7", "evolving wilds", controller="P1", types=("Land",))
+    fires = sides(blocker_judgements(board(walker("Swamp"), swamp), None, "landwalk", None),
+                  "outside")
+    assert fires == (("E2",), ())
+    near = sides(blocker_judgements(board(walker("Swamp"), forest, forbidden=False), None,
+                                    "landwalk", None), "outside")
+    assert near == ((), ("E2",))
+    nonbasic = board(walker("Land.nonBasic"), forest)
+    assert sides(blocker_judgements(nonbasic, None, "landwalk", None), "outside") == ((), ())
+    assert sides(blocker_judgements(board(walker("Land.nonBasic"), wastes), None, "landwalk",
+                                    None), "outside") == (("E2",), ())
+
+
+def test_a_changeling_has_every_creature_type():
+    """702.73a: protection from Goblins forbids a changeling blocker."""
+    from effects.domain.rule_outcomes import ProtectionQuality, QualityKind
+
+    goblins = ProtectionQuality(QualityKind.CREATURE_TYPE, "goblin")
+    assert goblins.covers(Characteristics.made(["creature"], ["shapeshifter"], changeling=True))
+    assert not goblins.covers(Characteristics.made(["creature"], ["shapeshifter"]))
+    assert BlockingRestriction.PROTECTION in blocking_restrictions(
+        ["protection_from_goblin"], ["R"], ["changeling"], ["U"], ["creature"],
+        blocker_subtypes=["shapeshifter"], blocker_changeling=True)

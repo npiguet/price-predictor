@@ -79,7 +79,8 @@ def test_a_death_the_rule_says_should_not_happen_goes_on_the_review_list(gen2_re
 
 def test_records_of_other_kinds_and_moments_show_nothing(gen2_records):
     for record in gen2_records:
-        if record.kind.value != "resolution" or record.moment.value != "resolution":
+        if record.kind.value not in ("resolution", "combat") or (
+                record.kind.value == "resolution" and record.moment.value != "resolution"):
             assert _toughness_zero(record) is None
 
 
@@ -101,8 +102,8 @@ def test_the_family_runs_on_gen2_records():
 def _fires(records, check):
     from effects.domain.rule_catalogue import Polarity as P
 
-    return next(r for r in records
-                if (m := FAMILY.match(r, None, {"check": check})) and m.polarity is P.FIRES)
+    return next(r for r in records if r.kind.value == "resolution"
+                and (m := FAMILY.match(r, None, {"check": check})) and m.polarity is P.FIRES)
 
 
 def test_a_second_legend_entering_fires_the_legend_rule(gen2_records):
@@ -300,3 +301,41 @@ def test_a_saga_sacrificed_in_the_check_is_no_creature_check_s(gen2_records, gen
     """Summon: Shiva's last chapter: the Saga creature leaves with no P/T change."""
     record = _by_id(gen2_records, "2ed74263-ee28-4948-9621-55dba1160c44.1-mv5im7i940u2.36687")
     assert FAMILY.match(record, gen2_sidecars, {"check": "toughness_zero"}) is None
+
+
+def _combat_death(keywords=(), amount=2, granted=()):
+    from effects.domain.event_schema import Event
+    from effects.domain.records import CombatPayload, RecordKind
+    from effects.domain.state_snapshot import GrantedTemporary, PowerToughness
+    from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+
+    attacker = make_entity("E1", "giant", types=("Creature",), pt=PowerToughness((3, 3)),
+                           granted_temporary=GrantedTemporary(keywords=tuple(keywords)))
+    blocker = make_entity("E2", "bears", controller="P1", types=("Creature",),
+                          pt=PowerToughness((2, 2)))
+    events = [Event(type=EventType.DAMAGE_DEALT, subjects=("E2",),
+                    params={"amount": amount, "combat": True, "source": "E1"},
+                    attributed_to="unresolved")]
+    events += [Event(type=EventType.KEYWORD_CHANGE, subjects=("E2",),
+                     params={"keywords": list(granted)}, attributed_to="unresolved")
+               for _ in granted[:1]]
+    events.append(Event(type=EventType.ZONE_CHANGE, subjects=("E2",),
+                        params={"from_zone": "battlefield", "to_zone": "graveyard"},
+                        attributed_to="unresolved"))
+    return make_record(RecordKind.COMBAT, state=make_snapshot(entities=(attacker, blocker)),
+                       payload=CombatPayload(attackers=("E1",), events=tuple(events)))
+
+
+def test_a_combat_death_is_the_check_s_own():
+    """The commonest lethal-damage death is combat's; the family read
+    resolutions alone."""
+    found = FAMILY.match(_combat_death(), None, {"check": "lethal_damage"})
+    assert (found.polarity, found.observed, found.outcome) == (Polarity.FIRES, True, ("E2",))
+    deathtouch = FAMILY.match(_combat_death(("deathtouch",), amount=1), None,
+                              {"check": "deathtouch_damage"})
+    assert deathtouch.polarity is Polarity.FIRES
+
+
+def test_indestructible_the_record_grants_spares_the_creature_from_the_check():
+    assert FAMILY.match(_combat_death(granted=("indestructible",)), None,
+                        {"check": "lethal_damage"}) is None

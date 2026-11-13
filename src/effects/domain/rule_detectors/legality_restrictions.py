@@ -9,10 +9,13 @@ names the one rule a declaration speaks for, decided by ``rule_outcomes``:
   a :class:`BlockingRestriction` (``flying``, ``horsemanship``, ``fear``,
   ``intimidate``, ``shadow``, ``protection``, ``unblockable``), read off the
   anchor's and the blocker's keywords, colours and types
-  (``rule_outcomes.blocking_restrictions``); ``tapped`` (509.1a: a blocker
-  is untapped); ``landwalk``, whose land the record does not name, so it is
-  the attacker's landwalk and no other reason; and ``effect``, a creature an
-  effect forbids, no static, no evasion and no tap explaining it (detain);
+  (``rule_outcomes.blocking_restrictions``; a changeling blocker has every
+  creature type, and skulk compares powers); ``tapped`` (509.1a: a blocker
+  is untapped); ``landwalk``, applying where the defending player controls a
+  land the attacker's landwalk line names (``Landwalk:Swamp``,
+  ``Land.nonBasic``, ``Swamp.Snow``; where no line names it, a gen-2 entity
+  or a chosen type, the attacker's landwalk and no other reason); and
+  ``effect``, a creature no static, evasion or tap keeps out;
 - on ``legal_targets``, each battlefield entity and player against each
   targeting candidate's card: a :class:`TargetingRestriction`
   (``hexproof``, ``hexproof_from``, ``shroud``, ``protection``), read off
@@ -53,6 +56,7 @@ from effects.domain.rule_outcomes import (
     QualityKind,
     TargetingRestriction,
     blocking_restrictions,
+    landwalk_lands,
     targeting_restrictions,
 )
 from effects.domain.state_snapshot import EntityState
@@ -130,20 +134,40 @@ def blocker_judgements(record: EffectRecord, lines: SidecarLookup | None, restri
             attacker, anchor.colors, blocker_keywords, blocker.colors,
             {t.lower() for t in blocker.types},
             blocker_subtypes={s.lower() for s in blocker.subtypes},
-            blocker_mana_value=blocker.mana_value)
+            blocker_mana_value=blocker.mana_value,
+            attacker_power=anchor.power if anchor.pt is not None else None,
+            blocker_power=blocker.power if blocker.pt is not None else None,
+            blocker_changeling="changeling" in blocker_keywords)
         explained = bool(evasions) or blocker.tapped or entity_id in statics
+        walked = _walked(anchor, blocker, state) if restriction == LANDWALK else None
         found.append(_blocker(restriction, entity_id, inside, attacker, blocker_keywords,
-                              evasions, blocker, explained))
+                              evasions, blocker, explained, walked))
     return found
+
+
+def _walked(anchor: EntityState, blocker: EntityState, state) -> bool | None:
+    """Whether the blocker's controller controls a land the anchor's landwalk
+    names (702.14c), read off its keyword lines' fragments; None where no
+    line says which land (a gen-2 entity, a chosen type)."""
+    selectors = [line.fragment.split(":")[1] for line in anchor.lines or ()
+                 if line.fragment and line.fragment.lower().startswith("landwalk:")
+                 and len(line.fragment.split(":")) > 1]
+    if not selectors or any(s.split(".")[0] in ("ChosenType", "YourBasic") for s in selectors):
+        return None
+    lands = [e for e in state.entities if e.on_battlefield and e.controller == blocker.controller]
+    return any(landwalk_lands(selector, land) for selector in selectors for land in lands)
 
 
 def _blocker(restriction: str, entity_id: str, inside: bool, attacker: set[str],
              blocker_keywords: set[str], evasions, blocker: EntityState,
-             explained: bool) -> Judgement:
+             explained: bool, walked: bool | None = None) -> Judgement:
     if restriction == TAPPED:
         return Judgement(entity_id, inside, blocker.tapped, True)
     if restriction == LANDWALK:
         walks = "landwalk" in attacker
+        if walked is not None:
+            # The land the landwalk names is on the defender's battlefield.
+            return Judgement(entity_id, inside, walks and walked, walks)
         return Judgement(entity_id, inside, walks and not inside and not explained, walks)
     if restriction == EFFECT:
         return Judgement(entity_id, inside, not inside and not explained
@@ -153,6 +177,8 @@ def _blocker(restriction: str, entity_id: str, inside: bool, attacker: set[str],
         in_play = "shadow" in attacker or "shadow" in blocker_keywords
     elif rule is BlockingRestriction.PROTECTION:
         in_play = any(k.startswith(PROTECTION_FROM) for k in attacker)
+    elif rule is BlockingRestriction.SKULK:
+        in_play = "skulk" in attacker
     else:
         in_play = _EVASION_KEYWORD[rule] in attacker
     return Judgement(entity_id, inside, rule in evasions, in_play)
@@ -165,7 +191,8 @@ def target_judgements(record: EffectRecord, lines: SidecarLookup | None, restric
     source_entity = state.entity(state.refs.source) if state.refs.source else None
     if source_entity is None:
         return []
-    source = Characteristics.of(source_entity)
+    source = Characteristics.of(source_entity)._replace(
+        changeling="changeling" in KeywordResolver(lines).keywords_of(source_entity))
     keywords_of = KeywordResolver(lines).keywords_of
     actor = record.actor_player
     players = {p.id for p in state.players}
