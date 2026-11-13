@@ -193,7 +193,7 @@ final class FloatingEffects {
      * into every zone for the rest of the game); {@code until_leaves} for a
      * duration that ends when
      * an object changes (it leaves play, its control is lost, it untaps or is
-     * unattached or turned face down, "as long as"); {@code end_of_turn} for
+     * unattached, turned face down or face up, "as long as"); {@code end_of_turn} for
      * every other, which ends at a step of some turn — absent, which Forge
      * reads as until end of turn, until end of combat, until your next turn,
      * or a host-leaves duration that also ends at end of turn or combat.
@@ -210,7 +210,8 @@ final class FloatingEffects {
         }
         if (duration.startsWith("UntilHostLeavesPlay") || duration.startsWith("AsLongAs")
                 || duration.equals("UntilLoseControlOfHost") || duration.endsWith("Untaps")
-                || duration.equals("UntilUnattached") || duration.equals("UntilFacedown")) {
+                || duration.equals("UntilUnattached") || duration.equals("UntilFacedown")
+                || duration.equals("UntilAnimatedFaceup")) {
             return "until_leaves";
         }
         return "end_of_turn";

@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -151,28 +152,55 @@ class EventAttributionTest {
     }
 
     /**
+     * Every {@code Duration$} Forge's scripts spell, and the event
+     * {@code duration} it reads: one that ends only when an object changes
+     * outlasts the turn, as {@code Permanent} does; one that ends at a step
+     * of some turn ends with it, as an until-end-of-turn one does.
+     */
+    private static final Map<String, String> DURATIONS = Map.ofEntries(
+            Map.entry("Permanent", "permanent"),
+            Map.entry("Perpetual", "permanent"),
+            Map.entry("UntilHostLeavesPlay", "permanent"),
+            Map.entry("UntilLoseControlOfHost", "permanent"),
+            Map.entry("AsLongAsInPlay", "permanent"),
+            Map.entry("AsLongAsControl", "permanent"),
+            Map.entry("UntilUntaps", "permanent"),
+            Map.entry("UntilTargetedUntaps", "permanent"),
+            Map.entry("UntilUnattached", "permanent"),
+            Map.entry("UntilFacedown", "permanent"),
+            Map.entry("UntilAnimatedFaceup", "permanent"),
+            Map.entry("UntilHostLeavesPlayOrEOT", "end_of_turn"),
+            Map.entry("UntilHostLeavesPlayOrEndOfCombat", "end_of_turn"),
+            Map.entry("UntilYourNextTurn", "end_of_turn"),
+            Map.entry("UntilTheEndOfYourNextTurn", "end_of_turn"),
+            Map.entry("UntilTheEndOfTargetedNextTurn", "end_of_turn"),
+            Map.entry("UntilYourNextUntap", "end_of_turn"),
+            Map.entry("UntilTheEndOfYourNextUntap", "end_of_turn"),
+            Map.entry("UntilYourNextUpkeep", "end_of_turn"),
+            Map.entry("UntilTheEndOfYourNextUpkeep", "end_of_turn"),
+            Map.entry("UntilYourNextEndStep", "end_of_turn"),
+            Map.entry("UntilNextEndStep", "end_of_turn"),
+            Map.entry("UntilEndOfCombat", "end_of_turn"),
+            Map.entry("UntilEndOfCombatYourNextTurn", "end_of_turn"),
+            Map.entry("UntilEndOfTurn", "end_of_turn"),
+            Map.entry("EndOfTurn", "end_of_turn"),
+            Map.entry("EOT", "end_of_turn"),
+            Map.entry("End of Turn", "end_of_turn"),
+            Map.entry("UntilStateBasedActionChecked", "end_of_turn"),
+            Map.entry("ThisTurnAndNextTurn", "end_of_turn"),
+            Map.entry("NextThisTurn", "end_of_turn"));
+
+    static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> durations() {
+        return DURATIONS.entrySet().stream().map(entry ->
+                org.junit.jupiter.params.provider.Arguments.of(entry.getKey(), entry.getValue()));
+    }
+
+    /**
      * A declared {@code Duration$} is bucketed as the contract buckets a
-     * floating effect's: one that ends only when an object changes outlasts
-     * the turn, as {@code Permanent} does; one that ends at a step of some
-     * turn ends with it, as an until-end-of-turn one does.
+     * floating effect's, {@code until_leaves} reading {@code permanent}.
      */
     @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.CsvSource({
-            "Permanent, permanent",
-            "Perpetual, permanent",
-            "UntilHostLeavesPlay, permanent",
-            "UntilLoseControlOfHost, permanent",
-            "AsLongAsInPlay, permanent",
-            "AsLongAsControl, permanent",
-            "UntilUntaps, permanent",
-            "UntilYourNextUntap, end_of_turn",
-            "UntilTheEndOfYourNextUntap, end_of_turn",
-            "UntilUnattached, permanent",
-            "UntilFacedown, permanent",
-            "UntilHostLeavesPlayOrEOT, end_of_turn",
-            "UntilYourNextTurn, end_of_turn",
-            "UntilTheEndOfYourNextTurn, end_of_turn",
-            "UntilEndOfCombat, end_of_turn"})
+    @org.junit.jupiter.params.provider.MethodSource("durations")
     void aDeclaredDurationIsBucketedAsAFloatingEffectsIs(String declared, String bucket) {
         Card host = TestCards.build("Grizzly Bears");
         SpellAbility pump = AbilityFactory.getAbility(
@@ -182,6 +210,40 @@ class EventAttributionTest {
                 EventAttribution.duration(pump, pump, EventType.PT_CHANGE).wireName(), declared);
         assertEquals(bucket, "until_leaves".equals(FloatingEffects.bucket(declared))
                 ? "permanent" : FloatingEffects.bucket(declared), declared);
+    }
+
+    /**
+     * Every {@code Duration$} value a card or token script of the Forge
+     * checkout spells is in the table above: a new one fails here rather
+     * than falling silently into {@code end_of_turn}.
+     */
+    @Test
+    void everyDurationForgesScriptsSpellIsBucketedExplicitly() throws java.io.IOException {
+        java.nio.file.Path cards = com.pricepredictor.connector.ForgeEnvironmentInitializer
+                .findCardsFolder();
+        java.util.regex.Pattern declared =
+                java.util.regex.Pattern.compile("Duration\\$\\s*([^|\\r\\n]+)");
+        java.util.Set<String> spelled = new java.util.TreeSet<>();
+        for (java.nio.file.Path tree : List.of(cards, cards.resolveSibling("tokenscripts"))) {
+            if (!java.nio.file.Files.isDirectory(tree)) {
+                continue;
+            }
+            try (var files = java.nio.file.Files.walk(tree)) {
+                for (java.nio.file.Path file : files.filter(java.nio.file.Files::isRegularFile)
+                        .toList()) {
+                    var found = declared.matcher(new String(java.nio.file.Files.readAllBytes(
+                            file), java.nio.charset.StandardCharsets.ISO_8859_1));
+                    while (found.find()) {
+                        spelled.add(found.group(1).strip());
+                    }
+                }
+            }
+        }
+        assertFalse(spelled.isEmpty(), "no Duration$ read under " + cards);
+        spelled.removeAll(DURATIONS.keySet());
+        assertEquals(java.util.Set.of(), spelled,
+                "Duration$ values no bucket lists: add each to DURATIONS and, where it ends"
+                        + " on an object change, to FloatingEffects.bucket's until_leaves");
     }
 
     /**
