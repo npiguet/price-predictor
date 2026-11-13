@@ -264,6 +264,9 @@ public final class GameRecording implements AutoCloseable {
      * would unrecorded; the bracket still records off the bus.
      */
     public void open() {
+        // A subscriber that throws loses the events it was handling, which
+        // the bus swallows: counted, for this game's and every fork's.
+        HookFailures.watchSubscribers();
         game.subscribeToEvents(bracket);
         if (!fork) {
             // A fork's collectors are handed the live hooks' callbacks

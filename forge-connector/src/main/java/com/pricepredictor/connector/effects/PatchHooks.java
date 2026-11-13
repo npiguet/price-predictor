@@ -173,7 +173,9 @@ public final class PatchHooks {
      * <p>Any other method the proxy is asked for, and a callback called with
      * fewer arguments than its {@link Callback#arity}, answers null and does
      * nothing, the way an absent hook would: a handler that threw instead
-     * would throw out of the engine's own call.
+     * would throw out of the engine's own call. A short call is counted
+     * ({@link HookFailures#countShortCall}): it loses what it would have
+     * recorded.
      *
      * <p>What the body throws is counted against the hook
      * ({@link HookFailures}) and goes on to Forge, which contains it.
@@ -184,13 +186,17 @@ public final class PatchHooks {
         public Object invoke(Object proxy, Method invoked, Object[] args) {
             for (Callback callback : hook.callbacks()) {
                 if (callback.methodName().equals(invoked.getName())) {
-                    if (args != null && args.length >= callback.arity()) {
-                        try {
-                            body.on(callback, new Args(args));
-                        } catch (RuntimeException failure) {
-                            HookFailures.count(hook, failure);
-                            throw failure;
-                        }
+                    int given = args == null ? 0 : args.length;
+                    if (given < callback.arity()) {
+                        HookFailures.countShortCall(
+                                hook, callback.methodName(), given, callback.arity());
+                        return null;
+                    }
+                    try {
+                        body.on(callback, new Args(args));
+                    } catch (RuntimeException failure) {
+                        HookFailures.count(hook, failure);
+                        throw failure;
                     }
                     return null;
                 }
