@@ -59,7 +59,7 @@ final class HeldResolutionWindow {
      */
     private record FizzledSpell(
             SpellAbility root, int awaitedCard, String actor, String linkId,
-            List<HalfRecord> halves) {
+            List<HalfRecord> halves, ActivationOutcome outcome) {
     }
 
     HeldResolutionWindow(CollectorContext context, FruitlessActivations fruitless) {
@@ -165,11 +165,12 @@ final class HeldResolutionWindow {
     /**
      * Write the effect half of an item that did nothing (FR-042b): one that
      * fizzled, or whose controller declined what it offered. Its halves
-     * have no events but one: a fizzled spell's own card's move off the
-     * stack (608.2b), which Forge makes after publishing the resolution, so
-     * a fizzled spell's halves wait for it ({@link #takeMoveOffStack}) and
-     * the last of them takes it; an ability that fizzled, or a declined
-     * item, has none and is written now. Nothing after the move joins them.
+     * have no events but one: a spell's own card's move off the stack
+     * (608.2b), which Forge makes after publishing the resolution, so a
+     * fizzled or declined spell's halves wait for it ({@link
+     * #takeMoveOffStack}) and the last of them takes it; an ability, and a
+     * copy of a spell, which ceases to exist without a move (707.10a), has
+     * none and is written now. Nothing after the move joins them.
      * They are split as a resolved item's are: one root half, or on a
      * patched worker one per chosen mode of a modal item, through the mode's
      * option line, under the cost half's link (FR-029a, FR-029c). A declined
@@ -200,9 +201,12 @@ final class HeldResolutionWindow {
                     half.mode().state().withRefs(refs).render(), conditions));
         }
         Card host = resolved.ability.getHostCard();
-        if (outcome == ActivationOutcome.FIZZLED && resolved.ability.isSpell() && host != null) {
-            fizzled = new FizzledSpell(
-                    resolved.ability, host.getId(), resolved.actor, resolved.linkId, halves);
+        // A spell's card leaves the stack after a fizzle or a refusal as after
+        // any resolution; a copy's ceases to exist instead (707.10a) and
+        // publishes no move, so its halves are written now, empty.
+        if (resolved.ability.isSpell() && host != null && !host.isCopiedSpell()) {
+            fizzled = new FizzledSpell(resolved.ability, host.getId(), resolved.actor,
+                    resolved.linkId, halves, outcome);
             return;
         }
         emitEmpty(halves, resolved.actor, resolved.linkId, outcome, null);
@@ -237,7 +241,7 @@ final class HeldResolutionWindow {
         FizzledSpell writing = fizzled;
         fizzled = null;
         emitEmpty(writing.halves(), writing.actor(), writing.linkId(),
-                ActivationOutcome.FIZZLED,
+                writing.outcome(),
                 move == null ? null : EventAttribution.stampAt(move, writing.root(), null, null));
     }
 

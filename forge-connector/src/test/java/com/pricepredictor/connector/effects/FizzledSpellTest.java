@@ -132,6 +132,94 @@ class FizzledSpellTest {
         assertEquals("exile", params(events.get(0)).get("to_zone"), half);
     }
 
+    /**
+     * A copy of a fizzled spell ceases to exist and publishes no move off
+     * the stack (707.10a): its half holds nothing, while the original's
+     * holds its card's move.
+     */
+    @Test
+    void aFizzledCopysHalfHoldsNothing() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+        Card shock = TestBoard.inHand(game, caster, "Shock");
+
+        Run run = played(game, () -> {
+            SpellAbility original = TestBoard.cast(game, shock, caster, bears);
+            SpellAbility copy = forge.game.card.CardFactory.copySpellAbilityAndPossiblyHost(
+                    original, original, caster);
+            game.getStack().add(copy);
+            game.getAction().exile(bears, null, null);
+            // The copy, on top, then the original.
+            game.getStack().resolveStack();
+            TestBoard.priority(game);
+            resolveAndMoveOn(game);
+        });
+
+        List<String> halves = RecordLines.records(run.records(), "resolution");
+        assertEquals(2, halves.size(), run.records().toString());
+        String copyHalf = halves.stream().filter(half -> RecordLines.linkOf(half) == null)
+                .findFirst().orElseThrow(() -> new AssertionError(run.records().toString()));
+        assertEquals("fizzled", outcomeOf(copyHalf), copyHalf);
+        assertEquals(List.of(), events(copyHalf), copyHalf);
+        String originalHalf = halves.stream().filter(half -> RecordLines.linkOf(half) != null)
+                .findFirst().orElseThrow();
+        assertEquals(1, events(originalHalf).size(), originalHalf);
+    }
+
+    /** A controller that refuses every "you may" it is asked, through the confirm hook. */
+    private static final class Declining extends forge.ai.PlayerControllerAi {
+        Declining(Game game, Player player) {
+            super(game, player, player.getLobbyPlayer());
+        }
+
+        @Override
+        public boolean confirmAction(SpellAbility sa, forge.game.player.PlayerActionConfirmMode mode,
+                                     String message, List<String> options, Card cardToShow,
+                                     Map<String, Object> params) {
+            try {
+                java.lang.reflect.Method note = forge.ai.PlayerControllerAi.class.getDeclaredMethod(
+                        "noteEffectRecordConfirm", SpellAbility.class, boolean.class);
+                note.setAccessible(true);
+                return (Boolean) note.invoke(null, sa, false);
+            } catch (ReflectiveOperationException e) {
+                throw new AssertionError(e);
+            }
+        }
+    }
+
+    /**
+     * A spell whose only clause is a "you may draw" its controller refuses
+     * resolves into nothing and reads declined; its card still leaves the
+     * stack as any resolved spell's does, and its half holds that move.
+     */
+    @Test
+    void aDeclinedSpellsHalfHoldsItsMoveOffTheStack() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        caster.dangerouslySetController(new Declining(game, caster));
+        for (int i = 0; i < 3; i++) {
+            game.getAction().moveToLibrary(TestBoard.card(game, caster, "Island"), null, null);
+        }
+        Card opt = TestBoard.inHand(game, caster, "Opt");
+
+        Run run = played(game, () -> {
+            Card onStack = game.getAction().moveToStack(opt, null);
+            SpellAbility mayDraw = forge.game.ability.AbilityFactory.getAbility(
+                    "SP$ Draw | Defined$ You | NumCards$ 1 | OptionalDecider$ You", onStack);
+            mayDraw.setActivatingPlayer(caster);
+            game.getStack().add(mayDraw);
+            resolveAndMoveOn(game);
+        });
+
+        String half = RecordLines.records(run.records(), "resolution").get(0);
+        assertEquals("declined", outcomeOf(half), half);
+        List<Map<String, Object>> events = events(half);
+        assertEquals(1, events.size(), half);
+        assertEquals("zone_change", events.get(0).get("type"), half);
+        assertEquals("graveyard", params(events.get(0)).get("to_zone"), half);
+    }
+
     /** A fizzled ability has no card to move: its half holds nothing. */
     @Test
     void aFizzledAbilitysHalfHoldsNothing() throws Throwable {
