@@ -213,7 +213,7 @@ public final class SnapshotBuilder {
         List<String> entities = new ArrayList<>();
         Set<String> present = new HashSet<>();
         for (Card card : tiers) {
-            entities.add(EntityJson.render(game, card, board));
+            entities.add(renderTier(card, acting, board));
             present.add(Refs.of(card));
         }
         LibraryCapture libraries = LibraryCapture.of(game, board, present);
@@ -227,6 +227,50 @@ public final class SnapshotBuilder {
                 RefsJson.render(chosen ? acting : null, source),
                 pending == null ? "null" : pending.toJson(),
                 libraries);
+    }
+
+    /**
+     * One entity of the tiers. The acting ability's host, off the
+     * battlefield and the stack, shows the face the ability is on: an
+     * Adventure's spell, a split card's half, a modal double-faced card's
+     * back face, cast from a hand that holds the card on its front (or, for
+     * a split card, on its combined face). Read off a last-known copy turned
+     * to that face, so the game's card is not touched; its zone and rank are
+     * the card's own.
+     */
+    private String renderTier(Card card, SpellAbility acting, StaticSuppression board) {
+        Card shown = actingFaceOf(card, acting);
+        if (shown == card) {
+            return EntityJson.render(game, card, board);
+        }
+        var zone = card.getZone();
+        return EntityJson.render(game, shown, board, new EntityJson.Beyond(
+                null, zone == null ? null : CardSpelling.zoneName(zone.getZoneType()),
+                CardFacts.orderRank(game, card), null));
+    }
+
+    /**
+     * {@code card} turned to the face {@code acting} is on, or {@code card}
+     * itself where it is not the acting host, is on the battlefield or the
+     * stack, already shows that face, or the face cannot be shown.
+     */
+    private static Card actingFaceOf(Card card, SpellAbility acting) {
+        if (acting == null || acting.getHostCard() == null
+                || acting.getHostCard().getId() != card.getId()
+                || card.isInZone(ZoneType.Battlefield) || card.isInZone(ZoneType.Stack)
+                || card.isFaceDown() || acting.getCardState() == null) {
+            return card;
+        }
+        forge.card.CardStateName face = acting.getCardState().getStateName();
+        if (face == null || face == card.getCurrentStateName() || !card.hasState(face)) {
+            return card;
+        }
+        try {
+            Card copy = new forge.game.card.CardCopyService(card).getLKICopy();
+            return copy.setState(face, false) || copy.getCurrentStateName() == face ? copy : card;
+        } catch (RuntimeException e) {
+            return card;
+        }
     }
 
     static final String ROLE_LIBRARY_CARD = "library_card";

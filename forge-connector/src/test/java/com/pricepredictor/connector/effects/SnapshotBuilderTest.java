@@ -332,6 +332,32 @@ class SnapshotBuilderTest {
         }
 
         /**
+         * A decision on an Adventure's spell, the card in hand: the host
+         * shows the Adventure's face, the spell the candidate casts, not
+         * the creature the hand holds it as (X1 #3); the hand card itself is
+         * left on its front.
+         */
+        @Test
+        void aHandCardShowsTheFaceItsActingAbilityIsOn() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card giant = board.hand("Bonecrusher Giant", board.you);
+            SpellAbility stomp = giant.getAllSpellAbilities().stream()
+                    .filter(sa -> sa.getCardState() != null && sa.getCardState().getStateName()
+                            == forge.card.CardStateName.Secondary)
+                    .findFirst().orElseThrow(() -> new AssertionError("no Stomp"));
+            stomp.setActivatingPlayer(board.you);
+
+            Map<String, Object> entity = entitiesIn(
+                    new SnapshotBuilder(board.game).ofCandidate(stomp).render()).stream()
+                    .filter(e -> Refs.of(giant).equals(e.get("id"))).findFirst().orElseThrow();
+
+            assertEquals("Stomp", entity.get("name"), entity.toString());
+            assertEquals(List.of("instant"), entity.get("types"), entity.toString());
+            assertEquals("hand", entity.get("zone"), entity.toString());
+            assertEquals("Bonecrusher Giant", giant.getName(), "the game's card is untouched");
+        }
+
+        /**
          * A Clone's {@code copy_source} is the creature it copied, never the
          * Clone itself (C2 #11, V2 #18).
          */
