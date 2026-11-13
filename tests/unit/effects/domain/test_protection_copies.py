@@ -428,6 +428,19 @@ class TestAuraToGraveyard:
         assert "E1" not in targets or not targets["E1"].affected
         assert copy.outcome_entities == ("S1", "E1")
 
+    def test_a_bestowed_aura_is_not_copied(self):
+        """702.103e: a bestowed Aura whose target became illegal resolves as an
+        enchantment creature rather than going to the graveyard."""
+        from effects.domain.state_snapshot import CardLine
+
+        record = _aura_spell()
+        bestow = CardLine(keys=(), kind="keyword", granted=False, cast_with=1,
+                          fragment="Bestow:3 W")
+        aura = replace(record.state.entity("S1"), lines=(bestow,))
+        record = replace(record, state=replace(record.state, entities=tuple(
+            aura if e.id == "S1" else e for e in record.state.entities)))
+        assert qualify(record) == ()
+
     def test_an_aura_record_touching_anything_else_is_not_copied(self):
         other = Event(type=EventType.LIFE_CHANGE, subjects=("P0",), params={"delta": 1})
         assert qualify(_aura_spell(extra=(other,))) == ()

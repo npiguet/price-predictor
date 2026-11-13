@@ -35,7 +35,8 @@ record shows:
 - **Aura put into the graveyard** (702.16c): an Aura spell's resolution whose
   one target gains protection from the Aura; the spell has no legal target
   and fizzles (608.2b, ``outcome`` ``fizzled``), so the Aura goes from the
-  stack to the graveyard and nothing it would have done happens.
+  stack to the graveyard and nothing it would have done happens; a bestowed
+  Aura, which would resolve as a creature instead (702.103e), is not copied.
 
 Protection from everything (702.16j) covers every outcome; no quality is
 granted that an Aura or Equipment attached to the protected permanent has,
@@ -360,6 +361,8 @@ def _aura_opportunity(record, payload: ResolutionPayload, entities) -> Opportuni
     if (aura is None or aura.zone != Zone.STACK
             or "aura" not in {s.lower() for s in aura.subtypes} or len(refs.targets) != 1):
         return None
+    if _bestowed(aura):
+        return None  # 702.103e: it would resolve as a creature, not fizzle
     target = refs.targets[0]
     if _permanent(entities, target) is None:
         return None
@@ -369,6 +372,13 @@ def _aura_opportunity(record, payload: ResolutionPayload, entities) -> Opportuni
         return None
     return Opportunity(ProtectionOutcome.AURA_TO_GRAVEYARD, target, (aura.id,),
                        rare_qualities(aura))
+
+
+def _bestowed(aura: EntityState) -> bool:
+    """Whether the Aura spell carries bestow, by a keyword line or a grant."""
+    lines = aura.lines or ()
+    return ("bestow" in {k.lower() for k in aura.granted_temporary.keywords}
+            or any((line.fragment or "").lower().startswith("bestow") for line in lines))
 
 
 def _entering(events: tuple[Event, ...], aura: str) -> Event | None:
