@@ -13,7 +13,7 @@ You are coordinating the implementation of every fix that came out of the 2026-1
 
 ## Limits the user set
 
-- At most 3 Opus agents at once. Mechanical lookups go to Sonnet or Haiku. Resume an interrupted agent by message; do not relaunch it.
+- One Opus agent at a time (user, 2026-11-13: three at once ran into the 5-hour usage limit, and every restart or pause over an hour costs a token cache rewrite). Implementer, then its verifier, then the next package; no filling of idle slots. Mechanical lookups go to Sonnet or Haiku. Resume an interrupted agent by message; do not relaunch it.
 - One heavy job at a time, machine-wide (any `mvn`, any JVM, the full pytest suite, GPU). Implementers run targeted tests only; you run the full suites between packages. At most 12 CPU-busy processes, with explicit worker counts.
 - Long runs (collection, pilots, fixture regeneration that needs Forge workers) are launched by the user: give them the PowerShell command.
 - Commit freely on the branch; never commit `output/` or `models/`; never push unprompted.
