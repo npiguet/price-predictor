@@ -10,7 +10,9 @@ import errno
 import json
 import logging
 import time
+from collections import Counter
 from collections.abc import Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -297,6 +299,50 @@ class UnconfiguredTree(KeyError):
     """
 
 
+@dataclass
+class JoinGaps:
+    """Keys a sidecar cache read as no line, by why: a script never converted
+    (``unresolved``, by script file), a key its sidecar does not describe
+    (``undescribed``, by script file), a source tree the run has no root for
+    (``unconfigured``, by tree), each with how often it was asked.
+
+    A cache's are cumulative (:meth:`SidecarCache.join_gaps`); a pool worker
+    hands back what each shard added (:meth:`SidecarCache.take_join_gaps`),
+    and its caller sums them (:meth:`merge`).
+    """
+
+    unresolved: Counter = field(default_factory=Counter)
+    undescribed: Counter = field(default_factory=Counter)
+    unconfigured: Counter = field(default_factory=Counter)
+
+    def merge(self, other: JoinGaps) -> None:
+        self.unresolved.update(other.unresolved)
+        self.undescribed.update(other.undescribed)
+        self.unconfigured.update(other.unconfigured)
+
+    def __bool__(self) -> bool:
+        return bool(self.unresolved or self.undescribed or self.unconfigured)
+
+    def __sub__(self, earlier: JoinGaps) -> JoinGaps:
+        return JoinGaps(self.unresolved - earlier.unresolved,
+                        self.undescribed - earlier.undescribed,
+                        self.unconfigured - earlier.unconfigured)
+
+    def report_lines(self, *, examples: int = 5) -> list[str]:
+        """The gaps as printed lines, the most asked first; none when empty."""
+        lines = []
+        for name, what, gaps in (
+            ("unresolved", "scripts the converted corpus does not hold", self.unresolved),
+            ("undescribed", "scripts whose sidecar does not describe a key", self.undescribed),
+            ("unconfigured", "source trees this run has no root for", self.unconfigured),
+        ):
+            if gaps:
+                most = ", ".join(f"{key} ({n})" for key, n in gaps.most_common(examples))
+                lines.append(f"keys read as no line, {name}: {len(gaps)} {what}, "
+                             f"{sum(gaps.values())} lookups; most asked: {most}")
+        return lines
+
+
 class SidecarCache:
     """Sidecars held by script file, read once per card.
 
@@ -320,6 +366,8 @@ class SidecarCache:
         #: ``tree -> times asked`` for keys :meth:`line_or_none` read as no
         #: line because this run configured no root for their source tree.
         self.unconfigured: dict[str, int] = {}
+        #: What :meth:`take_join_gaps` last handed out.
+        self._taken = JoinGaps()
 
     def path_for(self, script_file: str) -> Path:
         tree, relative = split_script_file(script_file)
@@ -354,6 +402,18 @@ class SidecarCache:
             return self.get(key.script_file).line_for(key)
         except UnconvertedScript:
             return None
+
+    def join_gaps(self) -> JoinGaps:
+        """Every key this cache read as no line so far, by why."""
+        return JoinGaps(Counter(self.unresolved), Counter(self.undescribed),
+                        Counter(self.unconfigured))
+
+    def take_join_gaps(self) -> JoinGaps:
+        """What :meth:`join_gaps` gained since the last take: a pool worker,
+        whose cache outlives a shard, hands this back with each shard's result."""
+        now = self.join_gaps()
+        gained, self._taken = now - self._taken, now
+        return gained
 
     def line_or_none(self, key: ProvenanceKey) -> SidecarLine | None:
         """The line a key names, or None wherever the join gives none.

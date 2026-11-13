@@ -256,6 +256,30 @@ class TestSidecarCache:
         warned = [r.getMessage() for r in caplog.records if "variant-scripts" in r.getMessage()]
         assert len(warned) == 1
 
+    def test_the_join_gaps_travel_as_what_each_take_added(self, tmp_path):
+        """A pool worker's cache outlives a shard: each take hands back what
+        that shard added, and the caller's sum is the whole run's."""
+        from effects.infrastructure.sidecar_io import JoinGaps
+
+        cache = self._write_trees(tmp_path)
+        variant = ProvenanceKey("variant-scripts/shock_variant.txt", 0, "spell", 0)
+        cache.line_or_none(variant)
+        cache.line_or_none(_ABSENT)
+        first = cache.take_join_gaps()
+        cache.line_or_none(variant)
+        cache.line_or_none(ProvenanceKey("cardsfolder/b/bird_token.txt", 0, "static", 0))
+        second = cache.take_join_gaps()
+        assert first.unconfigured == {"variant-scripts": 1}
+        assert first.undescribed == {_SCRIPT: 1}
+        assert second.unconfigured == {"variant-scripts": 1} and not second.undescribed
+        assert second.unresolved == {"cardsfolder/b/bird_token.txt": 1}
+        total = JoinGaps()
+        total.merge(first)
+        total.merge(second)
+        assert total == cache.join_gaps()
+        assert any(line.startswith("keys read as no line, unconfigured: 1")
+                   for line in total.report_lines())
+
     def test_line_or_none_counts_the_keys_a_sidecar_does_not_describe(self, tmp_path):
         """That case is the join's fail-loudly one: tolerated here, never hidden."""
         cache = self._write_trees(tmp_path)
