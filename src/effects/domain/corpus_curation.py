@@ -381,7 +381,10 @@ def _static_condition(
     record: EffectRecord, keys: Iterable[ProvenanceKey], lines: SidecarLookup,
 ) -> TurnStepCondition | None:
     for key in keys:
-        line = lines.line_for(key)
+        # Keys read off a record's statics, never validated by the refusal
+        # rule: one the sidecars do not describe, or of a tree the run has no
+        # root for, is no line (tallied by the cache), never an error.
+        line = lines.line_or_none(key)
         if line is None or not line.script_text:
             continue
         found = params(root(line.script_text))

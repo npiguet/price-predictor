@@ -284,7 +284,7 @@ class _ShardWriter:
         rules = self.copies.get(record.game_id, _NO_ADDED).get(value, ())
         if not rules:
             return 0
-        opportunities = qualify(record)
+        opportunities = qualify(record, self.context.sidecars)
         rng = random.Random(value)
         drawn = tuple(sorted(set(rules)))
         written = 0

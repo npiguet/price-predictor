@@ -530,7 +530,7 @@ class _ShardSurveyor:
         each counted toward the outputs a copy drawn for it carries."""
         if not self.protection_rules:
             return ()
-        opportunities = qualify(record)
+        opportunities = qualify(record, self.context.sidecars)
         offered = tuple(rule for rule in rules_offered(opportunities)
                         if rule in self.protection_rules)
         for rule in offered:

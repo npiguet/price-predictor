@@ -20,19 +20,22 @@ record shows:
   record dealing damage to a permanent nothing else in the record touches but
   its own death; the protection covers every source that damaged it, and the
   permanent is not a target of the acting ability (a targeted spell would lose
-  its target instead). Each ``damage_dealt`` becomes the ``damage_prevented``
+  its target instead), nor can it be: the acting chain targets nowhere but its
+  root, whose targets ``refs.targets`` holds. Each ``damage_dealt`` becomes the ``damage_prevented``
   Forge writes for a prevented hit, and a death the damage caused is undone. A
   source with lifelink, infect or wither is refused: what its damage does
   besides marking damage would have to be undone too;
 - **target made illegal** (702.16b): a decision whose candidate has at least
-  two legal targets loses one permanent from them, the verdict unchanged;
+  two legal targets loses one permanent from them, the verdict unchanged; the
+  candidate acts through the first face its card shows (no Adventure, back
+  face or split half, whose characteristics the snapshot does not hold);
 - **block made illegal** (702.16f): a real blockers record's anchored
   attacker gains protection from a quality one of its legal blockers has, and
   every legal blocker with the quality becomes forbidden;
 - **Aura put into the graveyard** (702.16c): an Aura spell's resolution whose
-  one target gains protection from the Aura; the spell resolves with no legal
-  target, so the Aura goes from the stack to the graveyard and nothing it
-  would have done happens.
+  one target gains protection from the Aura; the spell has no legal target
+  and fizzles (608.2b, ``outcome`` ``fizzled``), so the Aura goes from the
+  stack to the graveyard and nothing it would have done happens.
 
 Protection from everything (702.16j) covers every outcome; the rare qualities
 of the other rules are those of the covered object: its card types, its
@@ -54,6 +57,7 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 
 from effects.domain.event_schema import Event, EventType
+from effects.domain.provenance import SidecarLookup
 from effects.domain.records import (
     CombatPayload,
     EffectRecord,
@@ -61,6 +65,7 @@ from effects.domain.records import (
     Moment,
     PlayabilityBlockersPayload,
     PlayabilityDecisionPayload,
+    ResolutionOutcome,
     ResolutionPayload,
 )
 from effects.domain.rule_outcomes import (
@@ -75,7 +80,8 @@ from effects.domain.rule_outcomes import (
     may_enchant,
     may_target,
 )
-from effects.domain.state_snapshot import EntityState, Zone
+from effects.domain.script_text import params, segments
+from effects.domain.state_snapshot import EntityState, FaceState, Zone
 
 
 class ProtectionOutcome(StrEnum):
@@ -172,8 +178,16 @@ def rules_offered(opportunities: tuple[Opportunity, ...]) -> tuple[str, ...]:
 # ── the qualifier ────────────────────────────────────────────────────────
 
 
-def qualify(record: EffectRecord) -> tuple[Opportunity, ...]:
-    """Every protection copy ``record`` can carry, in record order; empty for none."""
+def qualify(record: EffectRecord, lines: SidecarLookup | None = None
+            ) -> tuple[Opportunity, ...]:
+    """Every protection copy ``record`` can carry, in record order; empty for none.
+
+    ``lines`` reads a resolution's acting chain: ``refs.targets`` holds the
+    root's targets alone, so a resolution whose chain targets anywhere else (a
+    sub-ability's ``ValidTgts$``, a charm mode) offers no damage-prevented
+    copy, a protected target there losing the target rather than the damage.
+    Without ``lines`` the chain is not read (a unit test's record).
+    """
     if record.fork or record.interventional or record.synthetic or record.directed is not None:
         return ()
     payload = record.payload
@@ -188,8 +202,28 @@ def qualify(record: EffectRecord) -> tuple[Opportunity, ...]:
         aura = _aura_opportunity(record, payload, entities)
         if aura is not None:
             return (aura,)
+        if lines is not None and _targets_beyond_its_root(record, lines):
+            return ()
         return _damage_opportunities(payload.events, entities, targets=record.state.refs.targets)
     return ()
+
+
+#: Parameters that make a chain segment choose targets of its own.
+_TARGETING_PARAMS = frozenset({"ValidTgts", "TargetType", "TgtPrompt", "TargetMin", "TargetMax"})
+
+
+def _targets_beyond_its_root(record: EffectRecord, lines: SidecarLookup) -> bool:
+    """Whether the acting chain may target what ``refs.targets`` does not hold:
+    a charm mode (whose targets are not traced there), a sub-ability with
+    targets of its own, or an acting line the sidecars cannot show."""
+    keys = record.ability or ()
+    if any(key.option is not None for key in keys):
+        return True
+    line = lines.first_line(keys)
+    if line is None or not line.script_text:
+        return bool(keys)
+    return any(_TARGETING_PARAMS & params(segment).keys()
+               for segment in segments(line.script_text)[1:])
 
 
 def _permanent(entities: dict[str, EntityState], ref: str | None) -> EntityState | None:
@@ -206,11 +240,24 @@ def _target_opportunities(record, payload: PlayabilityDecisionPayload,
     source = entities.get(record.state.refs.source)
     if candidate.land_play or source is None or len(candidate.legal_targets) < 2:
         return ()
+    if not _shows_the_acting_face(source, candidate.ability or ()):
+        return ()
     qualities = rare_qualities(source)
     return tuple(
         Opportunity(ProtectionOutcome.TARGET_ILLEGAL, target, (source.id,), qualities)
         for target in candidate.legal_targets if _permanent(entities, target) is not None
     )
+
+
+def _shows_the_acting_face(source: EntityState, keys) -> bool:
+    """Whether the card's snapshot holds the characteristics of what acts:
+    its first face, shown face up, and not a split card, whose card in hand
+    shows both halves at once. An Adventure or a back face cast from hand has
+    characteristics the snapshot does not hold (Bonecrusher Giant shows the
+    Giant while Stomp is cast)."""
+    if source.face_state not in (None, FaceState.FRONT) or " // " in (source.name or ""):
+        return False
+    return all(key.face == 0 for key in keys)
 
 
 def _block_opportunities(record, payload: PlayabilityBlockersPayload,
@@ -421,8 +468,11 @@ def _forbid(payload, opportunity: Opportunity, quality: ProtectionQuality, entit
 
 
 def _fizzle(payload, opportunity: Opportunity, quality: ProtectionQuality, entities):
-    """The Aura spell has no legal target left, so it moves from the stack to
-    its owner's graveyard and does nothing else (702.16c, rule 608.2b)."""
+    """The Aura spell has no legal target left, so it fizzles (rule 608.2b):
+    its half's ``outcome`` is ``fizzled`` and its one event the card's move
+    from the stack to its owner's graveyard, which is 702.16c's outcome; it
+    does nothing else. The move is kept although a collected fizzled half
+    writes ``events: []``: the copy exists to show it."""
     aura = opportunity.covered[0]
     if may_enchant((quality,), Characteristics.of(entities[aura])):
         return payload, ()
@@ -430,7 +480,8 @@ def _fizzle(payload, opportunity: Opportunity, quality: ProtectionQuality, entit
         "from_zone": Zone.STACK.value, "to_zone": Zone.GRAVEYARD.value, "cause": aura,
     })
     conditions = None if payload.conditions_met is None else ()
-    return replace(payload, events=(moved,), conditions_met=conditions), (
+    return replace(payload, events=(moved,), conditions_met=conditions,
+                   outcome=ResolutionOutcome.FIZZLED, outcome_written=True), (
         aura, opportunity.protected)
 
 

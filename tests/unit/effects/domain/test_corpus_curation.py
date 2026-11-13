@@ -281,7 +281,9 @@ _TURN_STATIC = "Mode$ Continuous | Affected$ Creature.YouCtrl | AddPower$ 1 | Co
 
 
 class _Lines:
-    """A sidecar lookup over ``key -> script text``."""
+    """A sidecar lookup over ``key -> script text``, raising on a key it does
+    not describe as ``SidecarCache.line_for`` does, ``line_or_none`` reading
+    it as no line."""
 
     def __init__(self, scripts):
         from effects.domain.provenance import SidecarLine
@@ -293,10 +295,21 @@ class _Lines:
         }
 
     def line_for(self, key):
+        if key not in self._lines:
+            raise KeyError(f"{key} is not described")
+        return self._lines[key]
+
+    def line_or_none(self, key):
         return self._lines.get(key)
 
     def first_line(self, keys):
         return next((self._lines[k] for k in keys if k in self._lines), None)
+
+
+def dataclasses_replace(record, **changes):
+    import dataclasses
+
+    return dataclasses.replace(record, **changes)
 
 
 def _key(name, kind="spell"):
@@ -382,6 +395,33 @@ class TestConditionBalance:
         assert turn_step_condition(_continuous(key, False), lines).side is ConditionSide.UNMET
         assert turn_step_condition(_continuous(key, True), lines).side is ConditionSide.MET
         assert turn_step_condition(_continuous(key, None), lines) is None
+
+    def test_a_static_the_sidecars_do_not_describe_reads_as_no_condition(self):
+        """A responsible static whose key no sidecar describes (or whose tree
+        the run has no root for) is no line, never an error that stops a
+        survey worker hours in."""
+        from effects.domain.corpus_curation import ConditionSide, turn_step_condition
+        from effects.domain.records import (
+            Candidate,
+            FailedCheck,
+            PlayabilityDecisionPayload,
+            RecordKind,
+        )
+        from tests.unit.effects.builders import make_record
+
+        undescribed, anthem = _key("gone", "static"), _key("anthem", "static")
+        candidate = Candidate(
+            ability=(_key("shock"),), can_play=False, affordable=True, has_legal_target=True,
+            failed_checks=(FailedCheck("static_prohibition", responsible_static=(undescribed,)),),
+            responsible_static=(undescribed,))
+        record = make_record(RecordKind.PLAYABILITY, generation=3,
+                             payload=PlayabilityDecisionPayload(candidates=(candidate,)))
+        assert turn_step_condition(record, _Lines({_key("shock"): "SP$ DealDamage"})) is None
+        continuous = _continuous(anthem, True)
+        listed = turn_step_condition(
+            dataclasses_replace(continuous, ability=(undescribed, anthem)),
+            _Lines({anthem: _TURN_STATIC}))
+        assert listed.side is ConditionSide.MET and listed.carrier == anthem
 
     def test_the_condition_joins_the_outcome_signature(self):
         from effects.domain.corpus_curation import cell_signature, outcome_signature

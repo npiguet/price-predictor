@@ -23,6 +23,7 @@ from effects.domain.protection_copies import (
     rare_qualities,
     rules_offered,
 )
+from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     Candidate,
     CombatPayload,
@@ -31,6 +32,7 @@ from effects.domain.records import (
     PlayabilityDecisionPayload,
     PlayabilitySubkind,
     RecordKind,
+    ResolutionOutcome,
     ResolutionPayload,
 )
 from effects.domain.rule_outcomes import ProtectionQuality, QualityKind
@@ -86,6 +88,22 @@ def _damage(subject: str, amount: int, source: str, *, combat: bool = False) -> 
 def _died(subject: str) -> Event:
     return Event(type=EventType.ZONE_CHANGE, subjects=(subject,),
                  params={"from_zone": "battlefield", "to_zone": "graveyard"})
+
+
+_SWEEP_KEY = ProvenanceKey("cardsfolder/p/pyroclasm.txt", 0, "spell", 0)
+
+
+class _Lines:
+    """The acting-line read: every key names one line of ``text``."""
+
+    def __init__(self, text: str) -> None:
+        from effects.domain.provenance import SidecarLine
+
+        self.line = SidecarLine(line_index=0, line_kind="spell", provenance=(_SWEEP_KEY,),
+                                script_text=text)
+
+    def first_line(self, keys):
+        return self.line if keys else None
 
 
 def _sweeper(*creatures: EntityState, source: EntityState | None = None,
@@ -196,6 +214,23 @@ class TestDamagePrevented:
         source = replace(_spell(), granted_temporary=GrantedTemporary(keywords=(keyword,)))
         assert qualify(_sweeper(_creature("E1"), source=source)) == ()
 
+    def test_a_chain_targeting_beyond_its_root_is_not_copied(self):
+        """``refs.targets`` holds the root's targets alone: a creature a
+        sub-ability targeted would lose that target to protection rather than
+        have the damage prevented, so the record is no damage-prevented copy."""
+        record = replace(_sweeper(_creature("E1")), ability=(_SWEEP_KEY,))
+        plain = _Lines("SP$ DamageAll | NumDmg$ 2 | ValidCards$ Creature")
+        assert len(qualify(record, lines=plain)) == 1
+        targeted = _Lines("SP$ DamageAll | NumDmg$ 2 | ValidCards$ Creature | SubAbility$ SV1"
+                          " [SEG] SV1: DB$ DealDamage | NumDmg$ 1 | ValidTgts$ Creature")
+        assert qualify(record, lines=targeted) == ()
+
+    def test_a_charm_mode_is_not_copied(self):
+        """A mode's targets are not traced to ``refs.targets``."""
+        mode = replace(_SWEEP_KEY, option=0)
+        record = replace(_sweeper(_creature("E1")), ability=(mode,))
+        assert qualify(record, lines=_Lines("DB$ DamageAll | NumDmg$ 2 | ValidTgts$ Player")) == ()
+
     def test_a_death_the_damage_did_not_cause_is_refused(self):
         events = [_damage("E1", 1, "S1"), _died("E1")]
         assert qualify(_sweeper(_creature("E1", 4), events=events)) == ()
@@ -265,6 +300,30 @@ class TestTargetIllegal:
         record = _decision("E1", "E2")
         assert all(q.covers(_char(record.state.entity("H1"))) for q in qualify(record)[0].qualities)
 
+    def test_a_spell_cast_from_another_face_than_the_card_shows_is_not_copied(self):
+        """Bonecrusher Giant in hand shows its creature face; casting Stomp (the
+        Adventure, face 1) the spell has Stomp's characteristics, which the
+        snapshot does not hold, so no quality can be read off the card."""
+        giant = make_entity("H1", "bonecrusher giant", zone="hand", types=("creature",),
+                            subtypes=("giant",), colors=("R",), mana_value=3, lines=())
+        stomp = ProvenanceKey("cardsfolder/b/bonecrusher_giant.txt", 1, "spell", 0)
+        record = _decision("E1", "E2", source=giant)
+        assert qualify(record) != ()
+        record = replace(record, payload=PlayabilityDecisionPayload(candidates=(replace(
+            record.payload.candidates[0], ability=(stomp,)),)))
+        assert qualify(record) == ()
+
+    def test_a_split_card_s_half_is_not_copied(self):
+        """A split card in hand shows both halves' characteristics at once,
+        never the cast half's alone."""
+        split = make_entity("H1", "fire // ice", zone="hand", types=("instant",),
+                            colors=("R", "U"), mana_value=4, lines=())
+        fire = ProvenanceKey("cardsfolder/f/fire_ice.txt", 0, "spell", 0)
+        record = _decision("E1", "E2", source=split)
+        record = replace(record, payload=PlayabilityDecisionPayload(candidates=(replace(
+            record.payload.candidates[0], ability=(fire,)),)))
+        assert qualify(record) == ()
+
 
 def _char(entity):
     from effects.domain.rule_outcomes import Characteristics
@@ -330,16 +389,22 @@ def _aura_spell(extra=()) -> EffectRecord:
     )
     return make_record(
         generation=3, state=_state((aura, _creature("E1", 4)), source="S1", targets=("E1",)),
-        payload=ResolutionPayload(events=events, conditions_met=()),
+        payload=ResolutionPayload(events=events, conditions_met=(),
+                                  outcome=ResolutionOutcome.RESOLVED),
     )
 
 
 class TestAuraToGraveyard:
     def test_the_aura_goes_to_the_graveyard_and_does_nothing(self):
+        """The Aura spell fizzles (608.2b): its half says so, and holds the one
+        move of its card off the stack, which is what 702.16c's output reads."""
         record = _aura_spell()
         (found,) = qualify(record)
         assert found.outcome is ProtectionOutcome.AURA_TO_GRAVEYARD and found.protected == "E1"
         copy = _copy(record, "702.16c")
+        assert copy.record.payload.outcome is ResolutionOutcome.FIZZLED
+        assert record_from_dict(record_to_dict(copy.record)).payload.outcome is (
+            ResolutionOutcome.FIZZLED)
         (moved,) = copy.record.payload.events
         assert moved.params == {"from_zone": "stack", "to_zone": "graveyard", "cause": "S1"}
         targets = derive_targets(copy.record)
