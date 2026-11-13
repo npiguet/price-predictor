@@ -167,6 +167,31 @@ class TriggerRecordTest {
     }
 
     /**
+     * Played through the engine with the hooks installed, the run Forge
+     * tells pairs with the evaluation it confirms: Soul Warden's trigger on a
+     * creature entering is written fired.
+     */
+    @Test
+    void anEngineTriggerRunConfirmsItsEvaluation() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        TestBoard.inPlay(game, you, "Soul Warden");
+        game.getTriggerHandler().resetActiveTriggers();
+        Card bears = TestBoard.inHand(game, you, "Grizzly Bears");
+
+        List<String> lines = ShardRun.recordsWithClauseHook(tempDir, game,
+                "for the trigger hook's run", () -> {
+                    game.getAction().moveToPlay(bears, null, null);
+                    game.getTriggerHandler().runWaitingTriggers();
+                    game.getStack().addAllTriggeredAbilitiesToStack();
+                });
+
+        assertTrue(lines.stream().anyMatch(line -> line.contains("\"kind\":\"trigger\"")
+                        && line.contains("soul_warden") && line.contains("\"fired\":true")),
+                "a fired Soul Warden record: " + lines);
+    }
+
+    /**
      * Two triggers that key to no printed line keep a reservoir and a
      * negative cap each (C2 #16): their keys differ, where both were "null".
      */
