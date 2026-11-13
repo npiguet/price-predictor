@@ -842,11 +842,11 @@ def _unreadable_shards(consequence: str) -> Iterator[None]:
     dataset unusable: the build stops with exit 1, naming the shard and line
     the error names, and saying what became of ``--output``."""
     from effects.domain.shard_generation import UnknownGenerationError
-    from effects.infrastructure.shard_io import CorruptShardError, RecordDecodeError
+    from effects.infrastructure.shard_io import SHARD_DAMAGE
 
     try:
         yield
-    except (CorruptShardError, RecordDecodeError, UnknownGenerationError) as exc:
+    except (*SHARD_DAMAGE, UnknownGenerationError) as exc:
         raise BuildCorpusError(f"a raw shard cannot be read: {exc}; {consequence}.") from exc
 
 

@@ -398,7 +398,7 @@ def test_the_collection_fields_round_trip():
         placement_thresholds={"min_games_per_half": 300, "max_item_error": 0.1,
                               "max_component_error": None},
         keyword_definitions_digest="ab", decode_off_list={"global.phase 'x'": 2},
-        damaged_tails=("run.0-a.jsonl.gz",), unconfigured_trees={"variant-scripts": 3},
+        damaged_tails=("run.0-a.jsonl.gz",), join_gaps={"unconfigured": {"variant-scripts": 3}},
     )
     back = CorpusManifest.from_dict(json.loads(json.dumps(built.as_dict())))
     assert back == built

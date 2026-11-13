@@ -145,6 +145,11 @@ def report_write_pass(survey: Survey, written: WriteResult) -> None:
             "\"dropped-unsurveyed\"); `build-corpus --verify` names the shards "
             "that changed.", unsurveyed,
         )
+    if survey.totals.reading != written.reading:
+        logger.warning(
+            "The survey and the write pass met different decode tallies or join "
+            "gaps reading the same shards: the corpus changed between the passes. "
+            "The manifest records the survey's.")
     if survey.split_games:
         logger.warning(
             "%d game(s) appear in more than one raw shard. A raw shard is one "
@@ -288,11 +293,14 @@ def _collection_fields(
     """How the records were collected and read, and what the build ran under
     (P3a #17): the manifest's ``validation_rules``, ``record_flags``,
     ``placement_thresholds``, ``keyword_definitions_digest``,
-    ``decode_off_list``, ``damaged_tails`` and ``unconfigured_trees``."""
+    ``decode_off_list``, ``damaged_tails`` and ``join_gaps``, the survey's:
+    the write pass reads the same bytes, and a difference is warned of
+    (:func:`report_write_pass`)."""
     import hashlib
     import math
 
     totals = survey.totals
+    reading = totals.reading
     flags: dict[str, dict[str, int]] = {}
     for (klass, flag), count in sorted(totals.flags.items()):
         flags.setdefault(klass, {})[flag] = count
@@ -310,9 +318,11 @@ def _collection_fields(
                                 ("max_component_error", config.max_component_error))},
         "keyword_definitions_digest": digest,
         "decode_off_list": {f"{member} {value}": count
-                            for (member, value), count in sorted(totals.off_list.items())},
-        "damaged_tails": tuple(totals.damaged_tails),
-        "unconfigured_trees": dict(sorted(totals.unconfigured.items())),
+                            for (member, value), count in sorted(reading.off_list.items())},
+        "damaged_tails": tuple(sorted(reading.damaged_tails)),
+        "join_gaps": {kind: dict(sorted(counts.items())) for kind, counts in (
+            ("unresolved", reading.unresolved), ("undescribed", reading.undescribed),
+            ("unconfigured", reading.unconfigured)) if counts},
     }
 
 
@@ -377,10 +387,10 @@ def _log_reading(manifest: CorpusManifest) -> None:
         logger.warning(
             "%d raw shard(s) ended at a damaged last gzip member (manifest "
             "damaged_tails), e.g. %s", len(manifest.damaged_tails), manifest.damaged_tails[0])
-    if manifest.unconfigured_trees:
+    for kind, counts in manifest.join_gaps.items():
         logger.warning(
-            "keys read as no line for want of their tree's root (manifest "
-            "unconfigured_trees): %s", manifest.unconfigured_trees)
+            "%d key(s) read as no line, %s (manifest join_gaps), e.g. %s",
+            sum(counts.values()), kind, ", ".join(list(counts)[:3]))
 
 
 def _log_counts(manifest: CorpusManifest) -> None:

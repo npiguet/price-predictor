@@ -702,9 +702,25 @@ def test_the_manifest_records_how_its_records_were_collected_and_read(
         "min_games_per_half": 0, "max_item_error": MAX_ITEM_ERROR, "max_component_error": None}
     assert manifest.keyword_definitions_digest == hashlib.sha256(b"{}").hexdigest()
     assert manifest.decode_off_list == {"global.combat_substep 'third_strike'": 1}
-    assert manifest.unconfigured_trees == {"variant-scripts": 1}
+    assert manifest.join_gaps == {"unconfigured": {"variant-scripts": 1}}
     data = json.loads((tmp_path / "curated" / "manifest.json").read_text(encoding="utf-8"))
     assert "damaged_tails" not in data
+
+
+def test_a_shard_whose_last_member_is_damaged_builds_and_is_named_in_the_manifest(
+    tmp_path, a_corpus,
+):
+    """A shard whose last gzip member is damaged: the read ends there quietly
+    (a worker killed mid-write leaves such a tail), and the manifest names it."""
+    import gzip
+
+    good = _line(CorpusFixture.resolution("g-clean-1.cut", game="g-clean-1"))
+    shard = a_corpus.records / "full-strength" / "run.0-cut.jsonl.gz"
+    with open(shard, "wb") as handle:
+        handle.write(gzip.compress(good))
+        handle.write(gzip.compress(good)[:12] + bytes(40))
+    manifest = a_corpus.build(tmp_path / "curated").load()
+    assert any("run.0-cut.jsonl.gz" in where for where in manifest.damaged_tails)
 
 
 # ── fix round 1: _output_name must be injective (review Finding 1) ─────

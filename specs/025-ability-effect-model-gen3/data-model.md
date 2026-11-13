@@ -207,8 +207,9 @@ rule → polarity → `RuleRow`), `record_flags` (class → `fork` | `interventi
 `degraded` → kept records read), `placement_thresholds` (`min_games_per_half`, `max_item_error`,
 `max_component_error`, null where infinite), `keyword_definitions_digest` (sha256 of the file read, ""
 without one), `decode_off_list` (`"<member> <repr of value>"` → times read outside the wire's closed
-lists), `damaged_tails` ([shard]) and `unconfigured_trees` (source tree → keys read as no line for want
-of a root). `per_stratum` counts `dropped-unsurveyed`: records of games the survey never saw (a shard
+lists), `damaged_tails` ([shard, byte] a damaged last gzip member ended) and `join_gaps`
+(`unresolved` | `undescribed` → script file → keys, `unconfigured` → source tree → keys: keys read as
+no line), all three the survey's. `per_stratum` counts `dropped-unsurveyed`: records of games the survey never saw (a shard
 grown between the two passes), written to no stratum. Gen-3 manifests only; no gen-2 compatibility.
 
 ### Placement (new, `stratum_placement.py`)

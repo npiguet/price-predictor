@@ -22,7 +22,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from effects.application.corpus_survey import ReadConfig, RefusalTally, WorkerContext
+from effects.application.corpus_survey import ReadConfig, ReadGaps, RefusalTally, WorkerContext
 from effects.application.parallel_map import run_parallel
 from effects.domain.corpus_curation import CopyPlan, natural_copies
 from effects.domain.corpus_manifest import SourceShard
@@ -153,6 +153,8 @@ class WriteResult:
     protection: Counter[str] = field(default_factory=Counter)
     #: ``turn_action`` records by subkind, written to no stratum (FR-059).
     turn_actions: Counter[str] = field(default_factory=Counter)
+    #: What reading the shards met without stopping, as the survey counts it.
+    reading: ReadGaps = field(default_factory=ReadGaps)
 
 
 # ── the pass ────────────────────────────────────────────────────────────
@@ -166,11 +168,14 @@ class WriteWorker:
         self.context = WorkerContext(config.read)
 
     def write(self, task: WriteTask) -> WriteResult:
-        """Filter one shard into its output parts."""
+        """Filter one shard into its output parts, with what reading it met."""
+        ReadGaps.take(self.context.sidecars)
         writer = _ShardWriter(self.plan, self.context, task.copies)
         for record in self.context.records(task.shard):
             writer.observe(record)
-        return writer.finish(task.shard.part_name)
+        result = writer.finish(task.shard.part_name)
+        result.reading = ReadGaps.take(self.context.sidecars)
+        return result
 
 
 _NO_ADDED: Mapping[int, tuple[str, ...]] = {}

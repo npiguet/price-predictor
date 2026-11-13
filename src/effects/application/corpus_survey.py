@@ -285,6 +285,36 @@ class SurveyedRecord:
 
 
 @dataclass(slots=True)
+class ReadGaps:
+    """What reading shards met without stopping, as a pool worker hands it
+    back with each shard's result and the parent sums it (``merge_into``):
+    the decode tally (``shard_io.DecodeTally``: ``(member, repr of the value)
+    -> times read`` outside the wire's closed lists, and each shard a damaged
+    last gzip member ended) and the sidecar cache's join gaps
+    (``sidecar_io.JoinGaps``: keys read as no line, by script file or tree)."""
+
+    off_list: Counter[tuple[str, str]] = field(default_factory=Counter)
+    damaged_tails: list[str] = field(default_factory=list)
+    unresolved: Counter[str] = field(default_factory=Counter)
+    undescribed: Counter[str] = field(default_factory=Counter)
+    unconfigured: Counter[str] = field(default_factory=Counter)
+
+    @classmethod
+    def take(cls, sidecars: SidecarCache) -> ReadGaps:
+        """What this process's reads and ``sidecars`` met since the last take."""
+        from effects.infrastructure.shard_io import take_decode_tally
+
+        decode, gaps = take_decode_tally(), sidecars.take_join_gaps()
+        return cls(Counter(decode.off_list), list(decode.damaged_tails),
+                   Counter(gaps.unresolved), Counter(gaps.undescribed),
+                   Counter(gaps.unconfigured))
+
+    def __bool__(self) -> bool:
+        return bool(self.off_list or self.damaged_tails or self.unresolved
+                    or self.undescribed or self.unconfigured)
+
+
+@dataclass(slots=True)
 class ShardSurvey:
     """One shard's contribution, or every shard's folded into
     :attr:`Survey.totals`. Plain data, so it pickles back cheaply."""
@@ -325,14 +355,8 @@ class ShardSurvey:
     #: ``(class, flag) -> kept records`` for the collection flags
     #: (:data:`RECORD_FLAGS`): how the class's records were collected.
     flags: Counter[tuple[str, str]] = field(default_factory=Counter)
-    #: What reading the shard met without stopping (``shard_io.DecodeTally``):
-    #: ``(member, repr of the value) -> times read`` for each value outside
-    #: the wire's closed lists, and each shard a damaged last member ended.
-    off_list: Counter[tuple[str, str]] = field(default_factory=Counter)
-    damaged_tails: list[str] = field(default_factory=list)
-    #: ``source tree -> keys`` read as no line for want of the tree's root
-    #: (``SidecarCache.unconfigured``).
-    unconfigured: Counter[str] = field(default_factory=Counter)
+    #: What reading the shard met without stopping.
+    reading: ReadGaps = field(default_factory=ReadGaps)
 
 
 @dataclass(frozen=True, slots=True)
@@ -407,20 +431,14 @@ class SurveyWorker:
     def survey(self, shard: SourceShard) -> ShardSurvey:
         """One shard's survey, its games split at the end of the shard, with
         what reading it met without stopping."""
-        from effects.infrastructure.shard_io import take_decode_tally
-
-        take_decode_tally()
-        unconfigured = Counter(self.context.sidecars.unconfigured)
+        ReadGaps.take(self.context.sidecars)
         surveyor = _ShardSurveyor(self.config, self.context, ShardSurvey(
             shard=shard, supply=TrainingSupply(self.config.heap_cap),
         ))
         for record in self.context.records(shard):
             surveyor.observe(record)
         out = surveyor.finish()
-        tally = take_decode_tally()
-        out.off_list.update(tally.off_list)
-        out.damaged_tails.extend(tally.damaged_tails)
-        out.unconfigured = Counter(self.context.sidecars.unconfigured) - unconfigured
+        out.reading = ReadGaps.take(self.context.sidecars)
         return out
 
 
