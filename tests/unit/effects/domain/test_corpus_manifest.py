@@ -240,7 +240,7 @@ def test_the_gen1_corpus_still_matches_the_digest_its_checkpoint_recorded():
 
 
 def test_gen2_fields_are_left_out_at_their_gen1_values(manifest_dict):
-    assert len(_GEN1_DEFAULTS) == 35
+    assert len(_GEN1_DEFAULTS) == 38
     for name in _GEN1_DEFAULTS:
         if name != "game_disjoint_target":
             assert name not in manifest_dict

@@ -57,13 +57,14 @@ from effects.domain.corpus_plan import (
     TrainingSupply,
 )
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME, qualifying_observations
-from effects.domain.effect_targets import derive_targets
+from effects.domain.effect_targets import derive_targets, unsupervised_kind
 from effects.domain.protection_copies import (
     PROTECTION_RULES,
     protection_copy,
     qualify,
     rules_offered,
 )
+from effects.domain.provenance import KeyResolution
 from effects.domain.record_quality import QualityDefect, record_refusal
 from effects.domain.records import (
     CollectionMode,
@@ -357,6 +358,9 @@ class ShardSurvey:
     flags: Counter[tuple[str, str]] = field(default_factory=Counter)
     #: What reading the shard met without stopping.
     reading: ReadGaps = field(default_factory=ReadGaps)
+    #: Events of kept records no output column reads, by kind
+    #: (``effect_targets.RecordTargets.unsupervised``).
+    unsupervised: Counter[str] = field(default_factory=Counter)
 
 
 @dataclass(frozen=True, slots=True)
@@ -380,6 +384,9 @@ class Survey:
     #: Shard name -> the games it holds a kept record of: what the write pass
     #: hands each shard's worker of the copy map.
     shard_games: dict[str, frozenset[str]] = field(default_factory=dict)
+    #: Shard name -> the records the survey read in it: the write pass writes
+    #: none past them (a shard grown between the passes).
+    shard_records: dict[str, int] = field(default_factory=dict)
 
 
 # ── the pass ────────────────────────────────────────────────────────────
@@ -499,7 +506,22 @@ class _ShardSurveyor:
             return
         self.out.kept[klass] += 1
         self.out.flags.update((str(klass), flag) for flag in record_flags(record))
+        if self._runtime_only(record):
+            self.out.flags[str(klass), "runtime_only"] += 1
+        if any(unsupervised_kind(event) for event in record.payload.all_events()):
+            self.out.unsupervised.update(derive_targets(record).unsupervised)
         self.pending.append(self._kept(record, klass, found))
+
+    def _runtime_only(self, record: EffectRecord) -> bool:
+        """A kept resolution acting only through keys the join reads as
+        runtime-only traits: no line, yet a real ability (``KeyResolution``)."""
+        if record.kind is not RecordKind.RESOLUTION or not record.ability:
+            return False
+        try:
+            found = {self.context.sidecars.resolution_of(key) for key in record.ability}
+        except KeyError:
+            return False
+        return KeyResolution.RUNTIME_ONLY in found and KeyResolution.LINE not in found
 
     def _note_game_properties(self, record: EffectRecord) -> None:
         """The keyword threshold, the random seat and the held-out test:
@@ -672,6 +694,7 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
     games_by_source: dict[str, set[str]] = defaultdict(set)
     held_by_source: dict[str, set[str]] = defaultdict(set)
     shard_games: dict[str, frozenset[str]] = {}
+    shard_records: dict[str, int] = {}
     split_games = 0
 
     for part in parts:
@@ -682,6 +705,7 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
         games_by_source[source] |= part.games.games
         held_by_source[source] |= part.games.held_out
         shard_games[part.shard.name] = frozenset(part.games.games)
+        shard_records[part.shard.name] = part.records
     total.supply = total.supply.resolved(total.mode_counts)
 
     return Survey(
@@ -691,6 +715,7 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
         held_out_games_by_source={s: len(g) for s, g in held_by_source.items()},
         split_games=split_games,
         shard_games=shard_games,
+        shard_records=shard_records,
     )
 
 

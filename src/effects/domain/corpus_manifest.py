@@ -422,8 +422,9 @@ class CorpusManifest:
             lambda values: {stratum: _rule_rows(rows) for stratum, rows in values.items()}),
     )
     #: ``class -> collection flag -> kept records`` over the records read
-    #: (``fork``, ``interventional``, ``directed``, ``aimed``, ``degraded``);
-    #: a flag no record of the class carries is left out.
+    #: (``fork``, ``interventional``, ``directed``, ``aimed``, ``degraded``,
+    #: and ``runtime_only`` for a resolution acting only through runtime-only
+    #: keys); a flag no record of the class carries is left out.
     record_flags: dict[str, dict[str, int]] = field(
         default_factory=dict, metadata=_gen1_implied(_nested_int_map),
     )
@@ -448,6 +449,18 @@ class CorpusManifest:
     join_gaps: dict[str, dict[str, int]] = field(
         default_factory=dict, metadata=_gen1_implied(_nested_int_map),
     )
+    #: ``kind -> events`` of kept records no output column reads (a hidden
+    #: keyword change, a name change, a mana cost change;
+    #: ``effect_targets.RecordTargets.unsupervised``).
+    unsupervised_events: dict[str, int] = field(
+        default_factory=dict, metadata=_gen1_implied(_int_map),
+    )
+    #: The commit of the code that built the corpus (``git rev-parse HEAD``),
+    #: "" outside a checkout.
+    code_version: str = field(default="", metadata=_gen1_implied(str))
+    #: sha256 over every sidecar the build joined against, by tree, relative
+    #: path and size: a reconversion since the build moves it.
+    sidecar_digest: str = field(default="", metadata=_gen1_implied(str))
 
     @property
     def budgeted_rules(self) -> frozenset[str]:
@@ -526,7 +539,14 @@ class CorpusManifest:
 
     #: Operator-facing tallies the digest leaves out, so a manifest written
     #: before one existed keeps the digest its checkpoints pin (FR-147).
-    _OUTSIDE_THE_DIGEST = ("no_acting_text_scripts",)
+    #: Fields no decision reads: what the build met reading (a tally a pool
+    #: worker's sidecar cache shapes, a shard's damaged tail), so neither
+    #: where the raw corpus sits nor what ran before moves the digest the
+    #: selection set and every checkpoint find the corpus by.
+    _OUTSIDE_THE_DIGEST = (
+        "no_acting_text_scripts", "decode_off_list", "damaged_tails", "join_gaps",
+        "unsupervised_events", "code_version", "sidecar_digest",
+    )
 
     def digest(self) -> str:
         """A stable hash over every decision: sorted keys and sources, so the

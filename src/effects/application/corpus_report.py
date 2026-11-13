@@ -145,11 +145,15 @@ def report_write_pass(survey: Survey, written: WriteResult) -> None:
             "\"dropped-unsurveyed\"); `build-corpus --verify` names the shards "
             "that changed.", unsurveyed,
         )
-    if survey.totals.reading != written.reading:
+    # The decode tally alone: the two passes read the same bytes, but ask the
+    # sidecar cache different numbers of times, so their join gaps differ.
+    surveyed, rewritten = survey.totals.reading, written.reading
+    if (surveyed.off_list, sorted(surveyed.damaged_tails)) != (
+            rewritten.off_list, sorted(rewritten.damaged_tails)):
         logger.warning(
-            "The survey and the write pass met different decode tallies or join "
-            "gaps reading the same shards: the corpus changed between the passes. "
-            "The manifest records the survey's.")
+            "The survey and the write pass met different decode tallies reading the "
+            "same shards: the corpus changed between the passes. The manifest "
+            "records the survey's.")
     if survey.split_games:
         logger.warning(
             "%d game(s) appear in more than one raw shard. A raw shard is one "
@@ -287,6 +291,47 @@ def build_manifest(
     )
 
 
+def _code_version() -> str:
+    """``git rev-parse HEAD`` of the checkout this code runs from; "" outside one."""
+    import subprocess
+
+    try:
+        done = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent, capture_output=True,
+            text=True, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
+def _sidecar_digest(roots: Mapping[str, Path]) -> str:
+    """sha256 over every sidecar under ``roots``, by tree, relative path and
+    size: cheap enough for tens of thousands of files, and moved by a
+    reconversion."""
+    import hashlib
+
+    from effects.infrastructure.sidecar_io import sidecar_paths
+
+    digest = hashlib.sha256()
+    for tree, root in sorted(roots.items()):
+        for path in sidecar_paths(Path(root)):
+            relative = path.relative_to(root).as_posix()
+            digest.update(f"{tree}/{relative}:{path.stat().st_size}\n".encode())
+    return digest.hexdigest()
+
+
+def _under(where: str, records_dir: Path) -> str:
+    """A tally's ``<shard path>, byte <n>`` with the shard's path relative to
+    ``--records-dir``, so the manifest does not depend on where the raw
+    corpus sits."""
+    path, comma, rest = where.partition(", ")
+    try:
+        relative = Path(path).resolve().relative_to(Path(records_dir).resolve()).as_posix()
+    except ValueError:
+        return where
+    return f"{relative}{comma}{rest}"
+
+
 def _collection_fields(
     config: BuildCorpusConfig, survey: Survey, decisions: Decisions,
 ) -> dict:
@@ -319,7 +364,11 @@ def _collection_fields(
         "keyword_definitions_digest": digest,
         "decode_off_list": {f"{member} {value}": count
                             for (member, value), count in sorted(reading.off_list.items())},
-        "damaged_tails": tuple(sorted(reading.damaged_tails)),
+        "damaged_tails": tuple(sorted(
+            _under(where, config.records_dir) for where in reading.damaged_tails)),
+        "unsupervised_events": dict(sorted(totals.unsupervised.items())),
+        "code_version": _code_version(),
+        "sidecar_digest": _sidecar_digest(config.source_trees.sidecar_roots()),
         "join_gaps": {kind: dict(sorted(counts.items())) for kind, counts in (
             ("unresolved", reading.unresolved), ("undescribed", reading.undescribed),
             ("unconfigured", reading.unconfigured)) if counts},
@@ -387,6 +436,10 @@ def _log_reading(manifest: CorpusManifest) -> None:
         logger.warning(
             "%d raw shard(s) ended at a damaged last gzip member (manifest "
             "damaged_tails), e.g. %s", len(manifest.damaged_tails), manifest.damaged_tails[0])
+    if manifest.unsupervised_events:
+        logger.info(
+            "events no output column reads, by kind (manifest unsupervised_events): %s",
+            manifest.unsupervised_events)
     for kind, counts in manifest.join_gaps.items():
         logger.warning(
             "%d key(s) read as no line, %s (manifest join_gaps), e.g. %s",

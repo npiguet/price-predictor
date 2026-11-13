@@ -637,37 +637,40 @@ def test_a_damaged_shard_stops_the_build_naming_it_before_anything_is_cleared(
     assert _dataset(out) == before
 
 
-def test_a_game_a_shard_gains_between_the_passes_is_written_nowhere(
-    tmp_path, a_corpus, monkeypatch, caplog,
+@pytest.mark.parametrize("game", ["g-late", "g-clean-1"])
+def test_records_a_shard_gains_between_the_passes_are_written_nowhere(
+    tmp_path, a_corpus, monkeypatch, caplog, game,
 ):
-    """A collection still appending under --records-dir: a game the survey
-    never saw was never placed, and may name a held-out card, so the write
-    pass trains it nowhere and counts it (V5 #1)."""
+    """A collection still appending under --records-dir. A new game was never
+    placed and may name a held-out card; a game the survey placed has records
+    it never planned. Either way the write pass reads past what the survey
+    read, writes those records nowhere and counts them (V5 #1)."""
     import gzip
 
     from effects.application import build_corpus as module
 
     shard = a_corpus.records / "full-strength" / "run.0-a.jsonl.gz"
-    late = _resolution("g-late.1", "g-late", ability=(_BOLT_KEY,),
-                       entity_names=(_HELD_OUT_CARD,))
+    late = [_resolution(f"{game}.late{n}", game, ability=(_SHOCK_KEY,),
+                        entity_names=(_HELD_OUT_CARD,) if game == "g-late" else ())
+            for n in range(3)]
     decide = module._decide_or_refuse
 
     def decide_then_grow(*args, **kwargs):
         decided = decide(*args, **kwargs)
         with open(shard, "ab") as handle:
-            handle.write(gzip.compress(_line(late)))
+            handle.write(gzip.compress(b"".join(_line(record) for record in late)))
         return decided
 
     monkeypatch.setattr(module, "_decide_or_refuse", decide_then_grow)
     store = a_corpus.build(tmp_path / "curated")
     manifest = store.load()
-    assert manifest.per_stratum[Stratum.DROPPED_UNSURVEYED] == 1
-    assert all(record.game_id != "g-late" for record in _written(store))
-    assert "changed size since the survey" in caplog.text
+    assert manifest.per_stratum[Stratum.DROPPED_UNSURVEYED] == 3
+    assert not {r.record_id for r in late} & {r.record_id for r in _written(store)}
+    assert "run.0-a.jsonl.gz" in caplog.text and "changed size since the survey" in caplog.text
 
 
 def test_the_manifest_records_how_its_records_were_collected_and_read(
-    tmp_path, a_corpus,
+    tmp_path, a_corpus, caplog,
 ):
     """P3a #17: per class, the kept records collected as forks, interventions,
     directed forks, aimed or degraded; the placement thresholds and the
@@ -703,6 +706,9 @@ def test_the_manifest_records_how_its_records_were_collected_and_read(
     assert manifest.keyword_definitions_digest == hashlib.sha256(b"{}").hexdigest()
     assert manifest.decode_off_list == {"global.combat_substep 'third_strike'": 1}
     assert manifest.join_gaps == {"unconfigured": {"variant-scripts": 1}}
+    # The two passes ask the sidecars different numbers of times: a join gap
+    # alone is no sign the corpus changed between them.
+    assert "changed between the passes" not in caplog.text
     data = json.loads((tmp_path / "curated" / "manifest.json").read_text(encoding="utf-8"))
     assert "damaged_tails" not in data
 
@@ -721,6 +727,149 @@ def test_a_shard_whose_last_member_is_damaged_builds_and_is_named_in_the_manifes
         handle.write(gzip.compress(good)[:12] + bytes(40))
     manifest = a_corpus.build(tmp_path / "curated").load()
     assert any("run.0-cut.jsonl.gz" in where for where in manifest.damaged_tails)
+
+
+def test_only_a_decode_tally_differing_between_the_passes_is_a_changed_corpus(caplog):
+    """The two passes ask the sidecar cache different numbers of times, so
+    their join gaps differ on every build with one; their decode tallies read
+    the same bytes and differ only when a shard changed between them."""
+    from effects.application.corpus_report import report_write_pass
+    from effects.application.corpus_survey import ReadGaps, ShardSurvey, Survey
+    from effects.application.corpus_write import WriteResult
+    from effects.domain.corpus_plan import TrainingSupply
+
+    survey = Survey(totals=ShardSurvey(shard=SourceShard("", 0), supply=TrainingSupply(1),
+                                       reading=ReadGaps(unconfigured=Counter({"t": 3}))),
+                    shards=())
+    report_write_pass(survey, WriteResult(reading=ReadGaps(unconfigured=Counter({"t": 1}))))
+    assert "changed between the passes" not in caplog.text
+    report_write_pass(survey, WriteResult(reading=ReadGaps(
+        off_list=Counter({("global.phase", "'x'"): 1}), unconfigured=Counter({"t": 3}))))
+    assert "changed between the passes" in caplog.text
+
+
+def test_one_raw_corpus_builds_to_one_digest_wherever_it_sits_and_whatever_ran_before(
+    tmp_path, a_corpus,
+):
+    """The selection set is found by the corpus digest: a copy of the raw
+    corpus elsewhere, or a second build in the same process, must reach the
+    same one. What reading met (a damaged last member, a key of a tree with
+    no root) is recorded outside the digest, the damaged shard by its path
+    under --records-dir."""
+    import gzip
+    import shutil
+
+    from effects.domain.state_snapshot import CombatStatus
+
+    good = _line(CorpusFixture.resolution("g-clean-1.cut", game="g-clean-1"))
+    with open(a_corpus.records / "full-strength" / "run.0-cut.jsonl.gz", "wb") as handle:
+        handle.write(gzip.compress(good))
+        handle.write(gzip.compress(good)[:12] + bytes(40))
+    variant = ProvenanceKey("variant-scripts/x_variant.txt", 0, "spell", 0)
+    unrooted = _combat("g-clean-1.variant", "g-clean-1")
+    unrooted = replace(unrooted, state=replace(unrooted.state, entities=(
+        make_entity("E0", "x variant", printed=(variant,), combat=CombatStatus(attacking="p2")),)))
+    write_shard(a_corpus.records / "full-strength" / "run.0-variant.jsonl.gz", [unrooted])
+
+    first = a_corpus.build(tmp_path / "first").load()
+    again = a_corpus.build(tmp_path / "again").load()
+    moved = tmp_path / "elsewhere" / "records"
+    shutil.copytree(a_corpus.records, moved)
+    elsewhere = a_corpus.build(tmp_path / "third", records_dir=moved).load()
+
+    assert first.damaged_tails == elsewhere.damaged_tails
+    assert first.damaged_tails[0].startswith("full-strength/run.0-cut.jsonl.gz")
+    assert first.join_gaps
+    assert first.digest() == again.digest() == elsewhere.digest()
+
+
+def test_the_manifest_s_rule_counts_say_what_the_catalogue_says_of_untagged_rules(
+    tmp_path, a_corpus,
+):
+    """The rule counts in ``rule-counts.json``'s full shape: the declared rules
+    no record tagged, the rules declared without a detector, the untaggable
+    declarations and the duplicates (``CatalogueStanding``)."""
+    counts = a_corpus.build(tmp_path / "curated").load().rule_counts
+    assert {"declared_zero", "none", "untaggable", "same_as"} <= set(counts)
+    assert "103.6a" in counts["none"]
+    # A rule declared with a detector no record of this corpus satisfies.
+    counts = a_corpus.build(tmp_path / "budgeted",
+                            rules_dir=_budget_rules(tmp_path / "rules")).load().rule_counts
+    assert counts["declared_zero"] == [_BUDGET_RULE]
+
+
+def test_the_events_no_output_reads_are_counted_outside_the_digest(tmp_path, a_corpus):
+    """``RecordTargets.unsupervised``: a name change, a mana cost change and a
+    hidden keyword change have no output column; the build counts them by
+    kind over the kept records, in the manifest and its report, outside the
+    digest."""
+    renamed = CorpusFixture.resolution("g-clean-1.renamed", game="g-clean-1", events=(
+        Event(type=EventType.NAME_CHANGE, subjects=("E0",), params={"name": "x"}),
+        Event(type=EventType.NAME_CHANGE, subjects=("E0",), params={"name": "y"}),
+    ))
+    a_corpus.with_extra_records([renamed])
+    manifest = a_corpus.build(tmp_path / "curated").load()
+    assert manifest.unsupervised_events == {"name_change": 2}
+    assert manifest.digest() == replace(manifest, unsupervised_events={}).digest()
+
+
+def test_a_shard_damaged_between_the_passes_stops_the_write_pass_and_says_so(
+    tmp_path, a_corpus, monkeypatch,
+):
+    """The survey read the shard whole; damage appended before the write pass
+    stops the build there, after --output was cleared, and the message says
+    the dataset was cleared."""
+    import gzip
+
+    from effects.application import build_corpus as module
+
+    shard = a_corpus.records / "full-strength" / "run.0-a.jsonl.gz"
+    good = _line(CorpusFixture.resolution("g-clean-1.later", game="g-clean-1"))
+    decide = module._decide_or_refuse
+
+    def decide_then_damage(*args, **kwargs):
+        decided = decide(*args, **kwargs)
+        with open(shard, "ab") as handle:
+            handle.write(gzip.compress(good)[:12] + bytes(40))
+            handle.write(gzip.compress(good))
+        return decided
+
+    monkeypatch.setattr(module, "_decide_or_refuse", decide_then_damage)
+    with pytest.raises(BuildCorpusError, match="already cleared") as raised:
+        build(a_corpus.config(tmp_path / "curated"))
+    assert "run.0-a.jsonl.gz" in str(raised.value)
+
+
+def test_a_build_on_two_workers_is_the_build_on_one(tmp_path, a_corpus):
+    """Each pool worker hands back its shards' tallies, and the parent sums
+    them: two workers write the dataset one does, under the same digest and
+    the same reading tallies."""
+    import gzip
+
+    good = _line(CorpusFixture.resolution("g-clean-1.cut", game="g-clean-1"))
+    with open(a_corpus.records / "full-strength" / "run.0-cut.jsonl.gz", "wb") as handle:
+        handle.write(gzip.compress(good))
+        handle.write(gzip.compress(good)[:12] + bytes(40))
+    one = a_corpus.build(tmp_path / "one").load()
+    two = a_corpus.build(tmp_path / "two", workers=2).load()
+    assert one.digest() == two.digest()
+    assert one.damaged_tails == two.damaged_tails and two.damaged_tails
+
+
+def test_the_manifest_records_the_code_and_the_sidecars_it_was_built_from(
+    tmp_path, a_corpus,
+):
+    """The commit the build ran on and a hash of the sidecar trees it joined
+    against, both outside the digest; and per class the kept resolution
+    records acting only through runtime-only keys."""
+    first = a_corpus.build(tmp_path / "first").load()
+    assert len(first.code_version) >= 40 or first.code_version == ""
+    assert first.record_flags["resolution-effect"]["runtime_only"] == 1  # g-clean-3.level
+    sidecar = next(a_corpus.cards[0].rglob("*.provenance.json"))
+    sidecar.write_text(sidecar.read_text(encoding="utf-8") + " ", encoding="utf-8")
+    second = a_corpus.build(tmp_path / "second").load()
+    assert first.sidecar_digest and first.sidecar_digest != second.sidecar_digest
+    assert first.digest() == second.digest()
 
 
 # ── fix round 1: _output_name must be injective (review Finding 1) ─────
@@ -1802,6 +1951,29 @@ def budget_build(tmp_path, a_corpus):
         class_mix={"resolution-effect": 1.0}, validation_sample=0,
     )
     return store, game
+
+
+def test_the_text_cap_bounds_a_text_s_natural_and_added_copies_together(tmp_path, a_corpus):
+    """The build hands the rule budgets every natural copy of the text in the
+    class (``SelectionPlan.text_planned``), untagged records' included, so the
+    copies added for a rule never take the text past ``--text-cap``."""
+    from effects.domain.corpus_curation import game_disjoint_draw
+
+    game = next(f"g-dmg-{i}" for i in range(100) if game_disjoint_draw(f"g-dmg-{i}") >= 0.1)
+    a_corpus.with_extra_records([
+        *(_damaged(f"{game}.tagged{i}", game, hits=2) for i in range(2)),
+        *(_damaged(f"{game}.plain{i}", game, hits=1) for i in range(8)),
+        # Another text's records, so the class asks the rule for many copies.
+        *(_resolution(f"{game}.shock{i}", game, ability=(_SHOCK_KEY,)) for i in range(40)),
+    ])
+    store = a_corpus.build(
+        tmp_path / "out", rules=_GEN2_RULES, rules_dir=_budget_rules(tmp_path / "rules"),
+        game_disjoint_share=0.01, game_disjoint_keyword_share=0.01,
+        class_mix={"resolution-effect": 1.0}, validation_sample=0, text_cap=6,
+    )
+    bolts = [r for r in read_records(store.training_dir)
+             if r.game_id == game and r.ability == (_BOLT_KEY,)]
+    assert 0 < len(bolts) <= 6
 
 
 def test_added_copies_carry_their_rule_and_natural_copies_none(budget_build):

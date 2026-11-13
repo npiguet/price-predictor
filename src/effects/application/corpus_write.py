@@ -77,6 +77,10 @@ class WriteTask:
 
     shard: SourceShard
     copies: CopyMap = field(default_factory=dict)
+    #: The records the survey read in the shard; None for no bound. A record
+    #: past them (the shard grew between the passes) was never surveyed nor
+    #: planned, so it is written nowhere and counted as ``dropped-unsurveyed``.
+    surveyed: int | None = None
 
 
 # ── the tallies ─────────────────────────────────────────────────────────
@@ -170,7 +174,7 @@ class WriteWorker:
     def write(self, task: WriteTask) -> WriteResult:
         """Filter one shard into its output parts, with what reading it met."""
         ReadGaps.take(self.context.sidecars)
-        writer = _ShardWriter(self.plan, self.context, task.copies)
+        writer = _ShardWriter(self.plan, self.context, task.copies, task.surveyed)
         for record in self.context.records(task.shard):
             writer.observe(record)
         result = writer.finish(task.shard.part_name)
@@ -185,15 +189,22 @@ class _ShardWriter:
     """One shard's write pass in progress: every record routed to its outputs
     and tallied, then each output written as one part."""
 
-    def __init__(self, plan: WritePlan, context: WorkerContext, copies: CopyMap) -> None:
+    def __init__(self, plan: WritePlan, context: WorkerContext, copies: CopyMap,
+                 surveyed: int | None = None) -> None:
         self.plan = plan
         self.context = context
         self.copies = copies
+        self.surveyed = surveyed
+        self.read = 0
         self.out = WriteResult()
         self.outputs: dict[Stratum, list] = {stratum: [] for stratum in OUTPUT_STRATA}
 
     def observe(self, record: EffectRecord) -> None:
         """Route one record to its outputs and tally it."""
+        self.read += 1
+        if self.surveyed is not None and self.read > self.surveyed:
+            self.out.strata.note(Stratum.DROPPED_UNSURVEYED, ())
+            return
         if record.kind is RecordKind.TURN_ACTION:
             self.out.turn_actions[str(record.subkind)] += 1
             return

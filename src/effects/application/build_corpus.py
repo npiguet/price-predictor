@@ -46,7 +46,7 @@ from effects.application.corpus_write import (
     WriteTask,
     run_write_pass,
 )
-from effects.application.rule_counts import none_rules
+from effects.application.rule_counts import CatalogueStanding
 from effects.domain import default_paths
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.corpus_curation import (
@@ -410,7 +410,7 @@ class Decisions:
             games = survey.shard_games.get(shard.name, frozenset())
             tasks.append(WriteTask(shard=shard, copies={
                 game: self.copies[game] for game in games if game in self.copies
-            }))
+            }, surveyed=survey.shard_records.get(shard.name)))
         return tasks
 
 
@@ -474,7 +474,7 @@ def decide(
     copies: dict[str, dict[int, tuple[str, ...]]] = dict(budgets.copies)
     for planned in validation.values():
         copies.update(planned.copies)
-    rule_counts = totals.rule_counts.to_json(none_rules(rules.scenarios))
+    rule_counts = totals.rule_counts.to_json(CatalogueStanding.of(rules.scenarios))
     return Decisions(
         selection=selection,
         strata=strata,
@@ -867,9 +867,9 @@ def _read_rules(rules_dir: Path) -> RuleCatalogue:
 
 
 def _warn_on_resized_shards(records_dir: Path, survey: Survey) -> None:
-    """Shards whose size moved since the survey read them, counted and named:
-    the write pass reads the grown part too, and drops any game the survey
-    never saw (``dropped-unsurveyed``)."""
+    """Shards whose size moved since the survey read them, every one named:
+    the write pass writes none of the records past those the survey read
+    (``dropped-unsurveyed``)."""
     def size(shard) -> int | None:
         path = Path(records_dir) / shard.name
         return path.stat().st_size if path.exists() else None
@@ -878,8 +878,8 @@ def _warn_on_resized_shards(records_dir: Path, survey: Survey) -> None:
     if moved:
         logger.warning(
             "%d raw shard(s) changed size since the survey read them (a collection "
-            "still writing under --records-dir?), e.g. %s; records of games the "
-            "survey never saw are written to no stratum.", len(moved), ", ".join(moved[:5]))
+            "still writing under --records-dir?): %s. The records past those the "
+            "survey read are written to no stratum.", len(moved), ", ".join(moved))
 
 
 def _known_keywords(definitions: Path | None) -> frozenset[str]:
