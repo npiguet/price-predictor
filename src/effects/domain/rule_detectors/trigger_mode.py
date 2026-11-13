@@ -44,6 +44,11 @@ evaluated:
   on its source (``harnessed``, ``solved``): a fired trigger counts only
   with its source holding it, an unfired one only with its source lacking
   it, so each side is the one the designation explains;
+- ``source_subtype``: the trigger's source has this subtype (``Class``,
+  ``Case``), compared without case;
+- ``outcome_event``'s subject qualifiers (``subject_face_state``,
+  ``subject_is_token`` …): the trigger's event subject is such an object in
+  the snapshot; a record whose subjects cannot be read speaks for nothing;
 - ``step``: the snapshot's phase or step when the trigger was evaluated, in
   ``rule_outcomes.PHASE_ORDER``'s spelling (``cleanup``, ``combat_damage``);
   given alone, it speaks for every trigger evaluated then.
@@ -76,6 +81,11 @@ from effects.domain.rule_detectors.acting_line import (
     source_ids,
 )
 from effects.domain.rule_detectors.entity_facts import has_designation, is_copy
+from effects.domain.rule_detectors.outcome_event import (
+    SUBJECT_QUALIFIER_NEEDS,
+    SUBJECT_QUALIFIERS,
+    subject_verdict,
+)
 from effects.domain.rule_outcomes import PHASE_ORDER
 from effects.domain.script_text import api_of, params, segments
 
@@ -111,11 +121,15 @@ def _spawning_segment(record: EffectRecord, lines: SidecarLookup | None,
 class TriggerMode:
     id: str = "trigger_mode"
     params: frozenset[str] = _SEGMENT_PARAMS | {
-        "keyword", "spawned_by", "source_is_copy", "source_designation", "step"}
+        "keyword", "spawned_by", "source_is_copy", "source_designation", "step",
+        "source_subtype"} | frozenset(SUBJECT_QUALIFIERS)
     general: frozenset[str] = frozenset({"mode", "keyword", "spawned_by", "step"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
-        return frozenset({"designations"}) if "source_designation" in params else frozenset()
+        found = {field for name, field in SUBJECT_QUALIFIER_NEEDS.items() if name in params}
+        if "source_designation" in params:
+            found.add("designations")
+        return frozenset(found)
 
     def validate(self, params: Mapping[str, Any]) -> None:
         keyword = params.get("keyword")
@@ -168,9 +182,17 @@ class TriggerMode:
     def _source_fits(record: EffectRecord, params: Mapping[str, Any]) -> bool:
         """Whether the trigger's source is a copy where ``source_is_copy``
         asks; a record with no readable source fits no such declaration."""
+        sources = source_entities(record.state, record.ability or ())
+        if "source_subtype" in params and not any(
+                params["source_subtype"].lower() in {s.lower() for s in e.subtypes}
+                for e in sources):
+            return False
+        if set(SUBJECT_QUALIFIERS) & set(params) and not subject_verdict(
+                record.payload.event.subjects, record.state, params):
+            # Not the object the rule is about, or none readable.
+            return False
         if "source_is_copy" not in params:
             return True
-        sources = source_entities(record.state, record.ability or ())
         return bool(sources) and any(
             is_copy(entity, record.state) == bool(params["source_is_copy"])
             for entity in sources)

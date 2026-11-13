@@ -69,11 +69,12 @@
       "detector": {
         "family": "rewrite_event",
         "record_kind": "rewrite",
-        "outcome": "A card draw is replaced by an optional replacement (dredge: mill N cards and return the dredge card to hand instead).",
-        "near_miss": "A card draw meets the replacement and is not replaced: the player declines it and draws.",
+        "outcome": "Dredge replaces a draw.",
+        "near_miss": "A draw dredge meets and does not replace.",
         "params": {
           "event": "card_drawn",
-          "result": "replaced"
+          "result": "replaced",
+          "keyword": "Dredge"
         },
         "needs": []
       }

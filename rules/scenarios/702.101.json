@@ -165,14 +165,7 @@
       ],
       "forge_notes": "Check that Forge keeps Basilica Screecher's printed Extort and the one granted by Pontiff of Blight as two separate triggers.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "An extort trigger fires, one trigger record per instance of the keyword on its source.",
-        "near_miss": "An extort trigger evaluated and not fired.",
-        "params": {
-          "keyword": "extort"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     }
   ]

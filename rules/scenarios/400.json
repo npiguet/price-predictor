@@ -966,16 +966,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A spell cast with a permission that carries an exile rider (flashback and the like) leaves the stack for exile instead of the graveyard.",
-        "near_miss": "A spell leaves the stack for the graveyard (not counted: no API restriction).",
-        "params": {
-          "event": "zone_change",
-          "from_zone": "stack",
-          "to_zone": "exile"
-        },
-        "needs": []
+        "none": "The record names no cast permission: that a card was cast through another object's permission (Snapcaster Mage, Torrential Gearhulk) is in no field, so the exile the permission causes reads like any other."
       }
     },
     {
@@ -1064,16 +1055,7 @@
       ],
       "forge_notes": "Forge scripts the exile clause as ReplaceGraveyard$ Exile on the Play effect.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A spell cast under an effect's permission is found by the effect's later part and leaves the stack for exile instead of the graveyard.",
-        "near_miss": "A spell leaves the stack for the graveyard (not counted: no API restriction).",
-        "params": {
-          "event": "zone_change",
-          "from_zone": "stack",
-          "to_zone": "exile"
-        },
-        "needs": []
+        "none": "The record names no cast permission: that a card was cast through another object's permission (Snapcaster Mage, Torrential Gearhulk) is in no field, so the exile the permission causes reads like any other."
       }
     },
     {

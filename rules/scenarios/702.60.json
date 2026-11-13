@@ -163,14 +163,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "Each ripple instance of a spell is evaluated when the spell is cast and fires separately.",
-        "near_miss": "A ripple trigger is evaluated against a cast it does not match and does not fire.",
-        "params": {
-          "keyword": "ripple"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     }
   ]

@@ -334,14 +334,16 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A creature that can't block (a suspected creature) is forbidden from the legal blockers of an anchored attacker.",
-        "near_miss": "A creature that is a legal blocker of the attacker.",
+        "outcome": "A suspected creature is forbidden from blocking.",
+        "near_miss": "A suspected creature among the legal blockers.",
         "params": {
           "list": "legal_blockers",
           "fires_when": "outside",
-          "responsible_static": true
+          "designation": "suspected"
         },
-        "needs": []
+        "needs": [
+          "designations"
+        ]
       }
     },
     {

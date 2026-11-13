@@ -84,11 +84,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A creature an effect forbids from blocking, as detain does, stands outside the legal blockers list.",
-        "near_miss": "A creature nothing forbids from blocking stands inside the legal blockers list.",
+        "outcome": "A creature an effect forbids from blocking, as detain does, stands outside the legal blockers list with no static, evasion or tap explaining it.",
+        "near_miss": "A creature among the legal blockers.",
         "params": {
           "list": "legal_blockers",
-          "fires_when": "outside"
+          "fires_when": "outside",
+          "restriction": "effect"
         },
         "needs": []
       }

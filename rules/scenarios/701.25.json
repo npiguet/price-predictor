@@ -181,14 +181,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A trigger on surveilling fires when a player surveils 1 or more.",
-        "near_miss": "A surveil trigger evaluated against a surveil it does not watch (another player's, or not the first this turn) does not fire; a surveil 0 is no surveil event and evaluates no trigger at all.",
-        "params": {
-          "mode": "Surveil"
-        },
-        "needs": []
+        "none": "A scry or surveil of 0 writes no event, so no trigger record contrasts with it."
       }
     },
     {

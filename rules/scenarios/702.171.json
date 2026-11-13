@@ -168,11 +168,12 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A candidate restricted to sorcery timing has a true timing verdict: its controller's main phase with an empty stack.",
-        "near_miss": "A candidate whose timing verdict is false: not its controller's main phase, or the stack is not empty.",
+        "outcome": "A saddle candidate has its timing true: a main phase of its controller's turn with an empty stack.",
+        "near_miss": "A saddle candidate whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Saddle"
         },
         "needs": [
           "timing"

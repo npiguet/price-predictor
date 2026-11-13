@@ -196,15 +196,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A spell whose targets would need the same object twice for one instance of 'target' has no legal target choice: has_legal_target is false on its candidate.",
-        "near_miss": "A multi-target spell with a legal choice has has_legal_target true.",
-        "params": {
-          "bit": "has_legal_target",
-          "fires_when": false
-        },
-        "needs": []
+        "none": "Could not express: why no target is legal (the spell itself, a card off the battlefield, one object named twice) is read by no verdict_bit filter."
       }
     },
     {
@@ -293,15 +285,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A spell using 'target' twice with an object legal for both instances is a candidate with has_legal_target true.",
-        "near_miss": "A candidate with no legal target choice has has_legal_target false.",
-        "params": {
-          "bit": "has_legal_target",
-          "fires_when": true
-        },
-        "needs": []
+        "none": "Could not express: that one object is chosen for two instances of 'target' is read by no verdict_bit filter."
       }
     },
     {
@@ -854,11 +838,12 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A rule or effect prohibits beginning to cast a spell: the candidate's failed_checks hold static_prohibition.",
-        "near_miss": "A candidate whose casting no static prohibits: static_prohibition is not among its failed_checks.",
+        "outcome": "A spell's cast fails the static-prohibition check.",
+        "near_miss": "A spell's cast that passes it.",
         "params": {
           "bit": "failed_check",
-          "check": "static_prohibition"
+          "check": "static_prohibition",
+          "candidate": "cast"
         },
         "needs": [
           "failed_checks"
@@ -1366,17 +1351,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A prohibition already in effect when the player would begin casting a spell stops the cast: the candidate's failed_checks hold static_prohibition.",
-        "near_miss": "A candidate no prohibition applies to when the cast begins: static_prohibition is not among its failed_checks, and a prohibition that starts later leaves the spell on the stack.",
-        "params": {
-          "bit": "failed_check",
-          "check": "static_prohibition"
-        },
-        "needs": [
-          "failed_checks"
-        ]
+        "none": "A prohibition beginning after the spell was cast leaves no record to contrast: the cast was decided before it, and a spell on the stack is no candidate."
       }
     },
     {

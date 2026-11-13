@@ -313,14 +313,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "continuous_contribution",
-        "record_kind": "continuous",
-        "outcome": "A static's power/toughness boost reaches a creature its controller controls once layer 2 has settled who controls it, so a creature gained by a control change gets the new controller's boost.",
-        "near_miss": "The static applies to the board and gives no creature a power/toughness boost, the creature being outside the set its controller condition names.",
-        "params": {
-          "field": "pt"
-        },
-        "needs": []
+        "none": "Layer order is in no field: a contribution names its effect, not the layer it was applied in or what it depended on."
       }
     },
     {
@@ -716,14 +709,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "continuous_contribution",
-        "record_kind": "continuous",
-        "outcome": "A colour-changing effect adds or sets an object's colours in layer 5, before the effects keyed to colour are applied.",
-        "near_miss": "A static applies to the board and contributes no colour change, only effects of other layers.",
-        "params": {
-          "field": "colors"
-        },
-        "needs": []
+        "none": "Layer order is in no field: a contribution names its colours, not the layer it was applied in or what keyed on it."
       }
     },
     {
@@ -1798,14 +1784,7 @@
       ],
       "forge_notes": "The chosen card type is an ETB choice that the setup has to preset.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "combat",
-        "outcome": "In a combat damage step, damage dealt to a player is prevented by a protection effect that applies once the source's characteristics are determined.",
-        "near_miss": "A combat damage step in which no damage is prevented (no damage_prevented event); the fires side only is tagged, since no clean near miss exists without an acting line.",
-        "params": {
-          "event": "damage_prevented"
-        },
-        "needs": []
+        "none": "Layer order is in no field: that an effect on a player applied after the objects' characteristics is not recorded."
       }
     },
     {
@@ -1870,17 +1849,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "An attackers legality record's anchored attacker is held by an attack requirement (it must attack if able).",
-        "near_miss": "The anchored attacker has no attack requirement applying to it.",
-        "params": {
-          "list": "must_attack",
-          "fires_when": "inside"
-        },
-        "needs": [
-          "must_attack"
-        ]
+        "none": "Layer order is in no field: whether the requirement survived because a rules effect applied after the characteristics is not recorded."
       }
     }
   ]

@@ -157,7 +157,7 @@ class CatalogueStanding:
             none=none_rules(catalogue),
             untaggable={sid: {"rules": list(index.untaggable_rules[sid]), "reason": reason}
                         for sid, reason in index.untaggable.items()},
-            same_as={sid: {"rules": list(d.rules), "same_as": d.same_as,
+            same_as={sid: {"rules": list(d.rules), "same_as": list(d.same_as),
                            "counted_under": list(d.counted_under)}
                      for sid, d in index.duplicates.items()},
         )
@@ -357,7 +357,7 @@ def report_lines(counts: dict) -> list[str]:
               for sid, found in untaggable.items()]
     same_as = counts.get("same_as", {})
     lines.append(f"scenarios counted under another (same_as): {len(same_as)}")
-    lines += [f"  {sid} ({', '.join(found['rules'])}) -> {found['same_as']} "
+    lines += [f"  {sid} ({', '.join(found['rules'])}) -> {', '.join(found['same_as'])} "
               f"({', '.join(found['counted_under'])})" for sid, found in same_as.items()]
     lines.append(f"rules declared none: {len(counts['none'])}")
     lines += [f"  {rule}: {reason}" for rule, reason in counts["none"].items()]

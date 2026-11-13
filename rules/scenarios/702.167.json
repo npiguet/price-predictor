@@ -63,12 +63,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolution returns a card from exile to the battlefield, a zone_change from exile to battlefield in the effect half, as a craft activation does with its exiled source.",
-        "near_miss": "Not counted: with no api the family tags only the fires side; a craft ability that cannot be activated writes no resolution.",
+        "outcome": "A craft ability returns its card from exile to the battlefield.",
+        "near_miss": "A craft ability resolving and returning nothing.",
         "params": {
           "event": "zone_change",
           "from_zone": "exile",
-          "to_zone": "battlefield"
+          "to_zone": "battlefield",
+          "keyword": "Craft"
         },
         "needs": []
       }
@@ -153,11 +154,12 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A candidate restricted to sorcery timing has a true timing verdict: its controller's main phase with an empty stack.",
-        "near_miss": "A candidate whose timing verdict is false: not its controller's main phase, or the stack is not empty.",
+        "outcome": "A craft candidate has its timing true: a main phase of its controller's turn with an empty stack.",
+        "near_miss": "A craft candidate whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Craft"
         },
         "needs": [
           "timing"

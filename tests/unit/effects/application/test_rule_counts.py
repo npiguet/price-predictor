@@ -160,7 +160,7 @@ def test_untaggable_and_same_as_scenarios_are_reported(tmp_path, gen2_dir):
     assert document["untaggable"]["121.4-1"]["rules"] == ["121.4"]
     assert "game-end record" in document["untaggable"]["121.4-1"]["reason"]
     assert document["same_as"] == {"704.5f-2": {
-        "rules": ["704.3"], "same_as": "704.5f-1", "counted_under": ["704.5f"]}}
+        "rules": ["704.3"], "same_as": ["704.5f-1"], "counted_under": ["704.5f"]}}
     assert "704.3" not in document["rules"] and "704.3" not in document["declared_zero"]
     lines = report_lines(document)
     assert "  704.5f-2 (704.3) -> 704.5f-1 (704.5f)" in lines

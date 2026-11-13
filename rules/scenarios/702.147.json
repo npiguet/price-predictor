@@ -138,12 +138,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A creature that a static ability forbids from blocking sits outside the legal blockers.",
-        "near_miss": "A creature that no static forbids sits among the legal blockers.",
+        "outcome": "A creature with decayed is forbidden from blocking.",
+        "near_miss": "A creature with decayed among the legal blockers.",
         "params": {
           "list": "legal_blockers",
           "fires_when": "outside",
-          "responsible_static": true
+          "keyword": "Decayed"
         },
         "needs": []
       }

@@ -89,11 +89,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A creature that cannot legally block an attacker with an evasion restriction is among the forbidden blockers.",
-        "near_miss": "A creature that satisfies the restriction is among the legal blockers.",
+        "outcome": "An attacker with horsemanship has a forbidden blocker without horsemanship.",
+        "near_miss": "An attacker with horsemanship has a legal blocker with horsemanship.",
         "params": {
           "list": "legal_blockers",
-          "fires_when": "outside"
+          "fires_when": "outside",
+          "restriction": "horsemanship"
         },
         "needs": []
       }
@@ -168,15 +169,8 @@
       ],
       "forge_notes": "Riding Red Hare is a sorcery cast in main1; the setup step is main1 and combat follows within the same decisions.",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A creature that cannot legally block an attacker with an evasion restriction is among the forbidden blockers, however many instances of the ability the attacker has.",
-        "near_miss": "A creature that satisfies the restriction is among the legal blockers.",
-        "params": {
-          "list": "legal_blockers",
-          "fires_when": "outside"
-        },
-        "needs": []
+        "same_as": "702.31b-1",
+        "reason": "Redundant instances of horsemanship forbid exactly the blockers one instance forbids; no record field counts instances."
       }
     }
   ]

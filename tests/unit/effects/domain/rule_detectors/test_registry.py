@@ -185,11 +185,14 @@ def test_a_same_as_scenario_tags_nothing_and_points_at_its_scenario():
     flying = scenario("702.9b-1", ("702.9b",), "playability", declaration(
         "legality_membership", "playability", list="legal_blockers"))
     again = scenario("702.17b-1", ("702.17b",), "playability",
-                     SameAs("702.9b-1", "both say a flier is blocked only by flying or reach"))
+                     SameAs(("702.9b-1",), "both say a flier is blocked only by flying or reach"))
     index = DetectorIndex.of(catalogue(flying, again))
     assert index.declared_rules == {"702.9b"}
-    assert index.duplicates["702.17b-1"] == Duplicate(("702.17b",), "702.9b-1", ("702.9b",))
-    dangling = scenario("1-1", ("1.1",), "playability", SameAs("2-1", "x"))
+    assert index.duplicates["702.17b-1"] == Duplicate(("702.17b",), ("702.9b-1",), ("702.9b",))
+    union = scenario("1-1", ("1.1",), "playability", SameAs(("702.9b-1", "702.17b-1"), "x"))
+    with pytest.raises(DeclarationError, match="702.17b-1"):
+        DetectorIndex.of(catalogue(flying, again, union))
+    dangling = scenario("1-1", ("1.1",), "playability", SameAs(("2-1",), "x"))
     with pytest.raises(DeclarationError, match="2-1"):
         DetectorIndex.of(catalogue(dangling))
 

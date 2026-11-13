@@ -154,14 +154,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "Each annihilator instance fires as its own trigger when its creature attacks.",
-        "near_miss": "An annihilator trigger evaluated and not fired; the detector does not count instances per attack, and misses an instance another permanent's static grants, which reads off that static's line.",
-        "params": {
-          "keyword": "annihilator"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     }
   ]

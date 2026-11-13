@@ -89,14 +89,7 @@
       ],
       "forge_notes": "GameAction.scry returns before any event when the scry number is 0.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A trigger watching for a scry event fires after a player scries N>0.",
-        "near_miss": "A scry trigger is evaluated against an event it does not watch (another player's scry) and does not fire. A scry of 0 produces no event, so no trigger record exists.",
-        "params": {
-          "mode": "Scry"
-        },
-        "needs": []
+        "none": "A scry or surveil of 0 writes no event, so no trigger record contrasts with it."
       }
     },
     {

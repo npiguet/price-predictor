@@ -601,10 +601,11 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolution gives a player an extra turn, a turn_added event in the effect half, as a promised extra turn gift does.",
-        "near_miss": "Not counted: with no api the family tags only the fires side; a spell resolving with its gift unpromised carries no field that marks it as such.",
+        "outcome": "A gift of an extra turn adds a turn.",
+        "near_miss": "A gift resolving and adding no turn.",
         "params": {
-          "event": "turn_added"
+          "event": "turn_added",
+          "keyword": "Gift"
         },
         "needs": []
       }
@@ -748,14 +749,7 @@
       ],
       "forge_notes": "Observe immediately after the gift trigger resolves: at the beginning of the end step Octomancer's own trigger copies an Octopus token that entered this turn.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A gift enters trigger (keyword-generated, with an intervening if on the gift being promised) is evaluated as its permanent enters and fires.",
-        "near_miss": "The same gift trigger evaluated on entering and not fired: the gift was not promised.",
-        "params": {
-          "keyword": "Gift"
-        },
-        "needs": []
+        "none": "Could not express: which gift was promised is read by no trigger_mode parameter."
       }
     },
     {

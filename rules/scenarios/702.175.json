@@ -157,14 +157,7 @@
       ],
       "forge_notes": "Zinnia grants Offspring:2 to creature spells A casts (AddKeyword on the stack). Zinnia gets +1/+0 per other creature A controls with base power 1, which counts the 1/1 tokens.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "An offspring enters trigger, one per offspring instance, is evaluated as its creature enters and fires for an instance whose cost was paid.",
-        "near_miss": "An offspring trigger evaluated on entering and not fired: its instance's cost was not paid.",
-        "params": {
-          "keyword": "Offspring"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     }
   ]

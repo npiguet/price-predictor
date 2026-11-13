@@ -90,13 +90,16 @@
       "detector": {
         "family": "trigger_mode",
         "record_kind": "trigger",
-        "outcome": "A trigger on an object entering the battlefield (Mode$ ChangesZone, Destination$ Battlefield) is evaluated for an entering object and fires.",
-        "near_miss": "Such a trigger is evaluated for an entering object and does not fire, its condition on the entering object unmet.",
+        "outcome": "An enters trigger evaluated for a face-down creature entering, which has no name.",
+        "near_miss": "An enters trigger evaluated for a face-down creature and not fired.",
         "params": {
           "mode": "ChangesZone",
-          "destination": "Battlefield"
+          "destination": "Battlefield",
+          "subject_face_state": "face_down"
         },
-        "needs": []
+        "needs": [
+          "face_state"
+        ]
       }
     },
     {
@@ -172,14 +175,7 @@
       ],
       "forge_notes": "Needs Conspiracy's ChooseType already set to Demon and a face-down Battering Craghorn on the battlefield (puzzle state). Forge counts Count$Valid Demon.YouCtrl$DifferentCardNames; whether a face-down card contributes an empty name to that count (and is skipped) should be confirmed.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A beginning-of-step trigger (Mode$ Phase) is evaluated and fires, its condition met.",
-        "near_miss": "A beginning-of-step trigger is evaluated and does not fire, its condition unmet.",
-        "params": {
-          "mode": "Phase"
-        },
-        "needs": []
+        "none": "Could not express: the trigger's condition (an intervening if, a face-down creature among the named ones) is read by no trigger_mode parameter."
       }
     },
     {
@@ -247,14 +243,7 @@
       ],
       "forge_notes": "Forge scripts say Defined Self for the regenerate ability, so the 'same name' reading is implicit in the implementation.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A regeneration shield is used: a permanent that would be destroyed is regenerated instead (a regenerated event in a resolution's effect half).",
-        "near_miss": "A permanent without a regeneration shield is destroyed; not counted, as the declaration sets no api.",
-        "params": {
-          "event": "regenerated"
-        },
-        "needs": []
+        "none": "Could not express: that an ability naming its source acts on that object alone is compared by no parameter (the record names no card a selector refers to)."
       }
     },
     {
@@ -404,14 +393,7 @@
       ],
       "forge_notes": "Forge implements the gain with GainsAbilitiesOfDefined; confirm that the regenerate effect's Defined Self resolves to the Elemental and not to the Drudge Skeletons card.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A regeneration shield is used: a permanent that would be destroyed is regenerated instead (a regenerated event in a resolution's effect half).",
-        "near_miss": "A permanent without a regeneration shield is destroyed; not counted, as the declaration sets no api.",
-        "params": {
-          "event": "regenerated"
-        },
-        "needs": []
+        "none": "Could not express: that an ability naming its source acts on that object alone is compared by no parameter (the record names no card a selector refers to)."
       }
     }
   ]

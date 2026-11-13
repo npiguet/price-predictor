@@ -209,15 +209,17 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An activated ability restricted by a script condition on its own source (an Activation$ condition such as solved) is a candidate whose script_condition check passes.",
-        "near_miss": "A candidate whose script_condition check failed: the condition is not met.",
+        "outcome": "A solved Case's activated ability passes its condition check.",
+        "near_miss": "A solved Case's ability that fails it.",
         "params": {
           "bit": "failed_check",
           "check": "script_condition",
-          "fires_when": true
+          "fires_when": true,
+          "source_designation": "solved"
         },
         "needs": [
-          "failed_checks"
+          "failed_checks",
+          "designations"
         ]
       }
     }

@@ -250,8 +250,9 @@ class TestLandPlays:
                                 / "305.json").read_text(encoding="utf-8"))["scenarios"]
         declared = {s["id"]: s["detector"]["params"] for s in scenarios
                     if s.get("detector", {}).get("family") == "verdict_bit"}
-        assert set(declared) == {"305.1-1", "305.2-1", "305.2a-1", "305.2b-1", "305.3-1",
-                                 "305.4-1"}
+        # 305.1-1 and 305.2b-1 state 116.2a's and 305.2's facts (same_as); 305.4-1's
+        # effect-put land is read by no filter (none): D4.
+        assert set(declared) == {"305.2-1", "305.2a-1", "305.3-1"}
         land = self._land(lambda c: True)
         for scenario, params in declared.items():
             assert params["land_play"] is True, scenario

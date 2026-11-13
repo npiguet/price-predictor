@@ -159,15 +159,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate is affordable: the player's untapped mana sources can add the mana its cost needs.",
-        "near_miss": "A candidate that is not affordable for want of mana a source can add.",
-        "params": {
-          "bit": "affordable",
-          "fires_when": true
-        },
-        "needs": []
+        "none": "Could not express: the mana a land's ability adds is the mana record's, which verdict_bit's affordable bit does not read."
       }
     },
     {

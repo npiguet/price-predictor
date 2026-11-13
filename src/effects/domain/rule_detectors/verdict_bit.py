@@ -37,6 +37,19 @@ The candidates a rule speaks for, each filter narrowing both sides:
   on a candidate whose line the sidecar dropped (a permanent spell);
 - ``script_param``: the line's root segment holds this parameter, a name or a
   name -> value map as ``outcome_event`` reads it;
+- ``candidate``: ``cast`` for the candidate's card's own cast (a spell line,
+  or a permanent's implicit cast spell the converter drops), ``activated``
+  for an activated ability (a land play is neither);
+- ``source_type``: the candidate's card, as the snapshot shows it
+  (``refs.source``), has this card type (``creature``, ``sorcery``,
+  ``kindred`` …), compared without case;
+- ``source_designation``: the candidate's card holds this gen-3 designation
+  (``plotted``, ``foretold`` …);
+- ``sorcery_speed``: true for a candidate its rules restrict to sorcery
+  timing (307.5): a cast of a card neither an instant nor with flash, or an
+  activated ability whose line says ``SorcerySpeed$`` or ``Planeswalker$``
+  (a loyalty ability, 606.3); false for the rest; unreadable on a keyword's
+  line, whose speed the keyword fixes (name it with ``keyword``);
 - ``candidate_face``: ``front`` for a candidate acting through its card's
   first face, ``alternative`` for one acting through another (a double-faced
   card's back face, an Adventure, an Omen, a split card's second half), read
@@ -60,6 +73,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_targets import target_legality_subjects
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import (
@@ -78,12 +92,17 @@ from effects.domain.rule_detectors.acting_line import (
     root_params_of,
     script_params_match,
 )
+from effects.domain.rule_detectors.entity_facts import has_designation
 
 GEN2_BITS = frozenset({"can_play", "affordable", "has_legal_target"})
 GEN3_BITS = frozenset({"timing", "failed_check"})
 FILTERS = frozenset({"keyword", "source_keyword", "cost_symbol", "cost_part", "script_param",
-                     "land_play", "candidate_face"})
+                     "land_play", "candidate_face", "candidate", "source_type",
+                     "source_designation", "sorcery_speed"})
 CANDIDATE_FACES = frozenset({"front", "alternative"})
+#: What a candidate is: its card's cast, or an activated ability (a land play
+#: is ``land_play``'s).
+CANDIDATE_KINDS = frozenset({"cast", "activated"})
 CHECKS = frozenset(check.value for check in PlayabilityCheck)
 
 #: A mana symbol as ``Cost$`` spells it (``W``, ``12``, ``W/U``, ``2/W``,
@@ -130,10 +149,68 @@ def _holds_symbol(symbols: frozenset[str], wanted: str) -> bool:
     return wanted.upper() in symbols
 
 
+def candidate_kind(candidate: Candidate, lines: SidecarLookup | None) -> str | None:
+    """``cast`` or ``activated``; None for a land play or an unreadable key."""
+    if candidate.land_play or not candidate.ability:
+        return None
+    key = candidate.ability[0]
+    if key.trait_kind == "keyword":
+        return "activated"
+    if key.trait_kind != "spell":
+        return None
+    line = line_of(candidate.ability, lines)
+    if line is None:
+        # A permanent's implicit cast spell, which the converter drops.
+        return "cast" if key.index_within_kind == 0 and key.option is None else None
+    found = root_params_of(line) or {}
+    return "cast" if "SP" in found else "activated" if "AB" in found else None
+
+
+def sorcery_speed(candidate: Candidate, record: EffectRecord,
+                  lines: SidecarLookup | None) -> bool | None:
+    """Whether the candidate's rules restrict it to sorcery timing; None
+    where nothing read says (a keyword's line, an unreadable card)."""
+    kind = candidate_kind(candidate, lines)
+    if kind == "cast":
+        source = _source(record)
+        if source is None:
+            return None
+        flash = "flash" in KeywordResolver(lines).keywords_of(source) or card_has_keyword(
+            candidate.ability, lines, "Flash")
+        return "instant" not in {t.lower() for t in source.types} and not flash
+    if kind == "activated":
+        line = line_of(candidate.ability, lines)
+        if line is None or line.keyword_display_name:
+            return None
+        found = root_params_of(line) or {}
+        return any(str(found.get(name, "")).lower() == "true"
+                   for name in ("SorcerySpeed", "Planeswalker"))
+    return None
+
+
+def _source(record: EffectRecord):
+    source = record.state.refs.source
+    return record.state.entity(source) if source else None
+
+
 def _passes(candidate: Candidate, lines: SidecarLookup | None,
-            params: Mapping[str, Any]) -> bool:
+            params: Mapping[str, Any], record: EffectRecord) -> bool:
     """Whether the candidate is one the declaration's filters speak for."""
     if "land_play" in params and candidate.land_play is not bool(params["land_play"]):
+        return False
+    if "candidate" in params and candidate_kind(candidate, lines) != params["candidate"]:
+        return False
+    if "source_type" in params:
+        source = _source(record)
+        if source is None or params["source_type"].lower() not in {
+                t.lower() for t in source.types}:
+            return False
+    if "source_designation" in params:
+        source = _source(record)
+        if source is None or not has_designation(source, params["source_designation"]):
+            return False
+    if "sorcery_speed" in params and sorcery_speed(candidate, record, lines) is not bool(
+            params["sorcery_speed"]):
         return False
     if "candidate_face" in params:
         if not candidate.ability:
@@ -181,6 +258,8 @@ class VerdictBit:
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         bit = params.get("bit")
         needs = {"land_play"} if "land_play" in params else set()
+        if "source_designation" in params:
+            needs.add("designations")
         if bit == "timing":
             needs.add("timing")
         if bit == "failed_check":
@@ -196,6 +275,8 @@ class VerdictBit:
                              f"one of {sorted(CHECKS)}; got {params.get('check')!r}")
         if params.get("candidate_face", "front") not in CANDIDATE_FACES:
             raise ValueError(f"verdict_bit: candidate_face is one of {sorted(CANDIDATE_FACES)}")
+        if params.get("candidate", "cast") not in CANDIDATE_KINDS:
+            raise ValueError(f"verdict_bit: candidate is one of {sorted(CANDIDATE_KINDS)}")
         if "check" in params and bit != "failed_check":
             raise ValueError("verdict_bit: check names a failed_check declaration's check")
 
@@ -212,7 +293,7 @@ class VerdictBit:
         candidates = [
             c for c in record.payload.candidates
             if (not params.get("responsible_static") or c.responsible_static)
-            and _passes(c, lines, params)]
+            and _passes(c, lines, params, record)]
         values = [_bit(c, bit, params.get("check")) for c in candidates]
         values = [v for v in values if v is not None]
         if not values:

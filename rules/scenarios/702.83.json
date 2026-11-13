@@ -216,14 +216,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "An exalted trigger fires because exactly one creature was declared as an attacker.",
-        "near_miss": "An exalted trigger evaluated against an attack with two or more attackers and not fired.",
-        "params": {
-          "keyword": "exalted"
-        },
-        "needs": []
+        "same_as": "702.83a-1",
+        "reason": "Exalted triggering for a creature attacking alone is 702.83a's fact."
       }
     }
   ]

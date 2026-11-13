@@ -819,21 +819,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A triggered phase-out lasting until its source leaves, resolving after the source left, phases nothing out.",
-        "near_miss": "The same trigger resolves with its source still present and phases a permanent out.",
-        "params": {
-          "event": "phased",
-          "out": true,
-          "absent": true,
-          "api": "Phases",
-          "api_in_chain": true,
-          "chain_param": {
-            "WontPhaseInNormal": "True"
-          }
-        },
-        "needs": []
+        "none": "Could not express: when the until-event happened relative to the trigger is read by no parameter."
       }
     },
     {

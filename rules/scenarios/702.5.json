@@ -77,12 +77,13 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
-        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
+        "outcome": "An Aura spell's candidate leaves out an entity no hexproof, shroud or protection keeps out: its enchant ability restricts what it may target.",
+        "near_miss": "An entity among the Aura spell's legal targets.",
         "params": {
           "list": "legal_targets",
           "fires_when": "outside",
-          "universe": "battlefield_and_players"
+          "restriction": "selector",
+          "source_keyword": "Enchant"
         },
         "needs": []
       }
@@ -144,11 +145,12 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A spell with a target requirement has no legal target on the board, so its has_legal_target verdict is false.",
-        "near_miss": "The spell has a legal target and has_legal_target is true.",
+        "outcome": "An Aura spell has no legal target.",
+        "near_miss": "An Aura spell with a legal target.",
         "params": {
           "bit": "has_legal_target",
-          "fires_when": false
+          "fires_when": false,
+          "source_keyword": "Enchant"
         },
         "needs": []
       }
@@ -219,12 +221,14 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A spell or ability's candidate lists, among its legal targets, an entity or player that a restriction or permission makes targetable.",
-        "near_miss": "An entity or player that the candidate's targeting restriction excludes from its legal targets.",
+        "outcome": "A player is among the legal targets of an Aura spell's candidate (an Aura that can enchant a player).",
+        "near_miss": "A player left out of an Aura spell's legal targets with nothing but its enchant restriction keeping it out.",
         "params": {
           "list": "legal_targets",
           "fires_when": "inside",
-          "universe": "battlefield_and_players"
+          "restriction": "selector",
+          "source_keyword": "Enchant",
+          "judged": "player"
         },
         "needs": []
       }

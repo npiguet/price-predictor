@@ -353,15 +353,7 @@
       ],
       "forge_notes": "Holy Day is the Fog effect; Forge implements prevention as a replacement effect, so it should apply to a blocker that entered after resolution.",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A damage event meets a resolved prevention effect (a rules-modifying effect) and is prevented, including damage from creatures that entered after it resolved.",
-        "near_miss": "A damage event meets the effect and is not prevented.",
-        "params": {
-          "event": "damage_dealt",
-          "result": "prevented"
-        },
-        "needs": []
+        "none": "Could not express: the prevention's kind (a chosen source's shield, a rule-changing effect, protection from everything or from a player) is compared by no rewrite_event parameter; protection's quality is not read on a rewrite."
       }
     },
     {
@@ -507,15 +499,7 @@
       ],
       "forge_notes": "Rise from the Grave applies its Zombie type through StaticEffect$ Animate; check that Forge applies it before the enters trigger is evaluated.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "An enters-the-battlefield trigger is evaluated and fires for a permanent whose characteristic was set by a resolving effect as it entered.",
-        "near_miss": "An enters trigger evaluated for a permanent that lacks the characteristic and does not fire.",
-        "params": {
-          "mode": "ChangesZone",
-          "destination": "Battlefield"
-        },
-        "needs": []
+        "none": "Whether a continuous effect modified the entering permanent before its enters triggers were checked is in no field: the trigger record gives the verdict, not the characteristics it read."
       }
     },
     {
@@ -672,14 +656,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "continuous_contribution",
-        "record_kind": "continuous",
-        "outcome": "A static ability contributes a P/T boost to whatever currently matches its text.",
-        "near_miss": "The static applies to the board and contributes no boost to an entity that does not match.",
-        "params": {
-          "field": "pt"
-        },
-        "needs": []
+        "same_as": "604.2-1",
+        "reason": "The record shows a static's power and toughness contribution applying while its source is on the battlefield, 604.2's fact."
       }
     },
     {
@@ -744,14 +722,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "continuous_contribution",
-        "record_kind": "continuous",
-        "outcome": "A static ability on the battlefield contributes a P/T boost to the entities its text indicates.",
-        "near_miss": "The static applies and contributes nothing to an entity its text does not indicate.",
-        "params": {
-          "field": "pt"
-        },
-        "needs": []
+        "same_as": "604.2-1",
+        "reason": "The record shows a static's power and toughness contribution applying while its source is on the battlefield, 604.2's fact."
       }
     },
     {
@@ -826,15 +798,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "An enters-the-battlefield trigger is evaluated for a permanent that entered with a static characteristic change already applied, and fires.",
-        "near_miss": "An enters trigger evaluated for a permanent without the change and does not fire.",
-        "params": {
-          "mode": "ChangesZone",
-          "destination": "Battlefield"
-        },
-        "needs": []
+        "none": "Whether a continuous effect modified the entering permanent before its enters triggers were checked is in no field: the trigger record gives the verdict, not the characteristics it read."
       }
     },
     {

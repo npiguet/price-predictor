@@ -157,16 +157,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A spell whose card has delve is affordable once its reduced total cost's generic part is paid by graveyard cards.",
-        "near_miss": "A delve spell that is not affordable.",
-        "params": {
-          "bit": "affordable",
-          "fires_when": true,
-          "source_keyword": "Delve"
-        },
-        "needs": []
+        "none": "Could not express: the total cost delve applies after is read by no verdict_bit filter."
       }
     }
   ]

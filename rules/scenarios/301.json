@@ -98,11 +98,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A decision candidate whose timing bit is true: it may be played at this time (for a spell without flash, a main phase of its controller's turn with an empty stack).",
-        "near_miss": "A decision candidate whose timing bit is false: wrong phase or step, the opponent's turn, or a non-empty stack.",
+        "outcome": "An artifact card's cast candidate has its timing true: a main phase of its controller's turn with an empty stack (or any priority with flash).",
+        "near_miss": "An artifact card's cast candidate whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "candidate": "cast",
+          "source_type": "artifact"
         },
         "needs": [
           "timing"
@@ -177,12 +179,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A permanent spell resolves and moves from the stack to the battlefield under its controller's control.",
-        "near_miss": "A spell on the stack that is countered instead and goes to the graveyard (not counted: a permanent spell's implicit trait has no line, so no api can be set).",
+        "outcome": "A resolving artifact spell is put onto the battlefield.",
+        "near_miss": "A artifact spell's resolution that puts nothing onto the battlefield.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",
-          "to_zone": "battlefield"
+          "to_zone": "battlefield",
+          "source_type": "artifact"
         },
         "needs": []
       }
@@ -244,11 +247,12 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A candidate ability with no legal target (has_legal_target false) because every permanent fails the ability's target restriction.",
-        "near_miss": "A candidate ability with at least one legal target.",
+        "outcome": "An equip ability has no legal target.",
+        "near_miss": "An equip ability with a legal target.",
         "params": {
           "bit": "has_legal_target",
-          "fires_when": false
+          "fires_when": false,
+          "keyword": "Equip"
         },
         "needs": []
       }
@@ -482,14 +486,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "An Equipment or Fortification attached to an illegal permanent becomes unattached in the state-based check after a resolution (an unattached event) and stays on the battlefield.",
-        "near_miss": "A resolution after which no Equipment or Fortification becomes unattached (not counted: no api is set, because the unattach comes from the state-based check rather than the acting line's API, so only the fires side is tagged).",
-        "params": {
-          "event": "unattached"
-        },
-        "needs": []
+        "same_as": "704.5n-1",
+        "reason": "An Equipment becoming unattached from a permanent it can no longer equip (no longer a creature, or gone) is 704.5n's fact."
       }
     },
     {
@@ -558,14 +556,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "An Equipment that is also a creature becomes unattached in the state-based check after a resolution (an unattached event).",
-        "near_miss": "A resolution after which no Equipment or Fortification becomes unattached (not counted: no api is set, because the unattach comes from the state-based check rather than the acting line's API, so only the fires side is tagged).",
-        "params": {
-          "event": "unattached"
-        },
-        "needs": []
+        "none": "Could not express: that the attached permanent is itself a creature (an Equipment or Fortification creature, an attached creature or battle) is read by no outcome_event parameter."
       }
     },
     {
@@ -633,14 +624,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "An Equipment whose creature left the battlefield becomes unattached in the state-based check after a resolution (an unattached event) and stays on the battlefield.",
-        "near_miss": "A resolution after which no Equipment or Fortification becomes unattached (not counted: no api is set, because the unattach comes from the state-based check rather than the acting line's API, so only the fires side is tagged).",
-        "params": {
-          "event": "unattached"
-        },
-        "needs": []
+        "same_as": "704.5n-1",
+        "reason": "An Equipment becoming unattached from a permanent it can no longer equip (no longer a creature, or gone) is 704.5n's fact."
       }
     },
     {
@@ -832,11 +817,12 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A candidate ability with no legal target (has_legal_target false) because every permanent fails the ability's target restriction.",
-        "near_miss": "A candidate ability with at least one legal target.",
+        "outcome": "A fortify ability has no legal target.",
+        "near_miss": "A fortify ability with a legal target.",
         "params": {
           "bit": "has_legal_target",
-          "fires_when": false
+          "fires_when": false,
+          "keyword": "Fortify"
         },
         "needs": []
       }
@@ -907,14 +893,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A Fortification that is also a creature becomes unattached from its land in the state-based check after a resolution (an unattached event).",
-        "near_miss": "A resolution after which no Equipment or Fortification becomes unattached (not counted: no api is set, because the unattach comes from the state-based check rather than the acting line's API, so only the fires side is tagged).",
-        "params": {
-          "event": "unattached"
-        },
-        "needs": []
+        "none": "Could not express: that the attached permanent is itself a creature (an Equipment or Fortification creature, an attached creature or battle) is read by no outcome_event parameter."
       }
     },
     {

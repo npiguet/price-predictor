@@ -146,14 +146,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "keyword_combat",
-        "record_kind": "combat",
-        "outcome": "A combat in which a creature with infect deals damage.",
-        "near_miss": "A damage-step probe fork that stripped infect from its carrier.",
-        "params": {
-          "keyword": "infect"
-        },
-        "needs": []
+        "none": "Could not express: keyword_combat's infect row judges the carrier's damage to a player; no parameter picks its damage to a creature."
       }
     },
     {
@@ -235,12 +228,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A damage-dealing resolution puts -1/-1 counters on a creature, as damage from a source with infect (or wither) does, instead of marking damage.",
-        "near_miss": "A DealDamage resolution that puts no -1/-1 counter: its damage is marked.",
+        "outcome": "Damage from an infect source to a creature is dealt as -1/-1 counters.",
+        "near_miss": "An infect source's damage resolution putting no -1/-1 counter.",
         "params": {
           "event": "counter_change",
           "counter_type": "-1/-1",
-          "api": "DealDamage"
+          "api": "DealDamage",
+          "source_keyword": "Infect"
         },
         "needs": []
       }

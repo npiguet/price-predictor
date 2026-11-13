@@ -214,14 +214,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "sba_game_loss",
-        "record_kind": "resolution",
-        "outcome": "A player whose life total, after the record's own life changes or damage, is 0 or less loses the game.",
-        "near_miss": "A player who lost life in the record and stays above 0.",
-        "params": {
-          "check": "life_zero"
-        },
-        "needs": []
+        "same_as": "704.5a-1",
+        "reason": "A player at 0 or less life losing in the state-based check is 704.5a's fact."
       }
     },
     {
@@ -292,15 +286,8 @@
       ],
       "forge_notes": "The enough_cards variant adds a Swamp below the Mountain in A's library.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A player who attempted to draw from an empty library loses the game at the next state-based check: a player_lost event whose reason is Milled.",
-        "near_miss": "A player who loses the game for another reason (life, poison, an effect); not counted, since no API scopes the near miss.",
-        "params": {
-          "event": "player_lost",
-          "reason": "Milled"
-        },
-        "needs": []
+        "same_as": "704.5b-1",
+        "reason": "A player who drew from an empty library losing at the next state-based check is 704.5b's fact; the game end is filed in the game-end record, where 704.5b's declaration reads it."
       }
     },
     {

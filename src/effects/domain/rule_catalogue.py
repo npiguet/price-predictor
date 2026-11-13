@@ -176,13 +176,15 @@ class SameAs:
     changes nothing beside the keyword's own scenario.
 
     It declares no detector of its own. Its rules are counted once, under the
-    scenario ``scenario`` names, whose detector tags the records; the
-    catalogue's uniqueness test exempts the pair, and ``rule-counts`` reports
-    the duplicate under the scenario it points at. ``reason`` says what fact
-    the two share.
+    scenarios ``scenarios`` names, whose detectors tag the records: one, or
+    several where the scenario states their union (117.1a's "a noninstant
+    spell" beside each card type's own rule); the catalogue's uniqueness test
+    exempts it, and ``rule-counts`` reports it under the scenarios it points
+    at. ``reason`` says what fact they share. Written ``{"same_as": id or
+    [ids], "reason": ...}``.
     """
 
-    scenario: str
+    scenarios: tuple[str, ...]
     reason: str
 
 

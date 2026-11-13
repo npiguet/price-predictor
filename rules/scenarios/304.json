@@ -86,11 +86,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An instant candidate is castable whenever its controller has priority: the timing verdict bit is true even with a non-empty stack or outside a main phase.",
-        "near_miss": "A decision candidate whose timing bit is false: a sorcery-speed spell outside a main phase of its controller's turn or with a non-empty stack.",
+        "outcome": "An instant card's cast candidate has its timing true whenever its controller has priority.",
+        "near_miss": "An instant card's cast candidate whose timing is false (no priority).",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "candidate": "cast",
+          "source_type": "instant"
         },
         "needs": [
           "timing"
@@ -164,12 +166,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolving instant or sorcery spell moves from the stack to its owner's graveyard.",
-        "near_miss": "A spell that leaves the stack without resolving (countered); not counted without an api, since an instant's acting line may have any API.",
+        "outcome": "A resolving instant is put into its owner's graveyard.",
+        "near_miss": "An instant's resolution that leaves it elsewhere.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",
-          "to_zone": "graveyard"
+          "to_zone": "graveyard",
+          "source_type": "instant"
         },
         "needs": []
       }
@@ -318,15 +321,7 @@
       ],
       "forge_notes": "Lion's Eye Diamond is a mana ability, so the activation does not use the stack; its playability verdict is the legality of activating it.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A player with priority can activate an 'only as an instant' ability even when unable to cast spells: can_play is true.",
-        "near_miss": "A candidate that is an actual instant spell the player is barred from casting has a false can_play bit.",
-        "params": {
-          "bit": "can_play",
-          "fires_when": true
-        },
-        "needs": []
+        "none": "Could not express: the candidate's own condition (a special action ending an effect, who controls an Aura against the creature it enchants, an instant-only action, a Class's level) is read by no verdict_bit filter; a Class's level is no designation the snapshot writes."
       }
     }
   ]

@@ -242,15 +242,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A destroy event meets a destruction replacement, such as a static regeneration ability, and is replaced: the permanent stays on the battlefield.",
-        "near_miss": "A destroy event meets a destruction replacement and is not replaced.",
-        "params": {
-          "event": "destroyed",
-          "result": "replaced"
-        },
-        "needs": []
+        "none": "Could not express: which effect replaced the destruction (a shield counter, which no line carries; a static regeneration against a shield; Pyramids' damage removal) is compared by no rewrite_event parameter."
       }
     },
     {

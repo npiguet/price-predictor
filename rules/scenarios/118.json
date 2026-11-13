@@ -287,17 +287,7 @@
       ],
       "forge_notes": "Suspending Ancestral Vision is a special action, not casting, so it is not the thing under test.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate spell with an unpayable cost fails the cost check.",
-        "near_miss": "A candidate spell whose cost check passes.",
-        "params": {
-          "bit": "failed_check",
-          "check": "cost"
-        },
-        "needs": [
-          "failed_checks"
-        ]
+        "none": "Could not express: what makes the cost unpayable (one object paying two costs, no mana cost, a free-cast permission) is read by no verdict_bit filter."
       }
     },
     {
@@ -366,17 +356,7 @@
       ],
       "forge_notes": "Depends on Forge applying Sphere of Resistance's RaiseCost to a MayPlayWithoutManaCost cast.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate with an unpayable cost fails the cost check even after cost increases.",
-        "near_miss": "A candidate whose cost check passes, for example because a permission lets it be cast for free.",
-        "params": {
-          "bit": "failed_check",
-          "check": "cost"
-        },
-        "needs": [
-          "failed_checks"
-        ]
+        "none": "Could not express: what makes the cost unpayable (one object paying two costs, no mana cost, a free-cast permission) is read by no verdict_bit filter."
       }
     },
     {
@@ -983,17 +963,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "An activated-ability candidate whose sacrifice cost has no remaining permanent to sacrifice fails the cost check.",
-        "near_miss": "A candidate whose cost check passes.",
-        "params": {
-          "bit": "failed_check",
-          "check": "cost"
-        },
-        "needs": [
-          "failed_checks"
-        ]
+        "none": "Could not express: what makes the cost unpayable (one object paying two costs, no mana cost, a free-cast permission) is read by no verdict_bit filter."
       }
     },
     {

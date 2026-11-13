@@ -184,15 +184,7 @@
       ],
       "forge_notes": "Raiding Schemes grants conspire to a spell on the stack; confirm Forge offers the two conspire costs separately.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A conspire trigger resolves and copies its spell, one copy per paid instance.",
-        "near_miss": "A conspire trigger resolves and makes no copy.",
-        "params": {
-          "event": "spell_copied",
-          "keyword": "Conspire"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     }
   ]

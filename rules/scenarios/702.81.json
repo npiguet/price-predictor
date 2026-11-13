@@ -74,12 +74,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A cast candidate with an additional cost passes the cost check, so it is castable (retrace: cast from the graveyard by discarding a land card).",
-        "near_miss": "The candidate fails the cost check because its additional or mana cost cannot be paid.",
+        "outcome": "A Retrace candidate passes its cost check.",
+        "near_miss": "A Retrace candidate that fails it.",
         "params": {
           "bit": "failed_check",
           "check": "cost",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Retrace"
         },
         "needs": [
           "failed_checks"

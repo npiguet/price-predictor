@@ -150,12 +150,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An ability that functions only from one zone (the hand) passes the zone check because its card is in that zone.",
-        "near_miss": "The candidate fails the zone check because its card is in another zone.",
+        "outcome": "A Reinforce candidate passes its zone check.",
+        "near_miss": "A Reinforce candidate that fails it.",
         "params": {
           "bit": "failed_check",
           "check": "zone",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Reinforce"
         },
         "needs": [
           "failed_checks"

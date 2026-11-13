@@ -254,16 +254,7 @@
       ],
       "forge_notes": "Depends on Forge applying a granted modular's enters-with-counters replacement to a permanent entering under the granting static (rule 614.12).",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A permanent spell resolves and the permanent enters with +1/+1 counters put on it by an enters-with-counters keyword (several modular instances add up).",
-        "near_miss": "A permanent whose card prints modular enters with no counters.",
-        "params": {
-          "event": "counter_change",
-          "counter_type": "+1/+1",
-          "source_keyword": "Modular"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     }
   ]

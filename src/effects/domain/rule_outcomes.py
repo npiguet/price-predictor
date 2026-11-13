@@ -34,7 +34,7 @@ from enum import StrEnum
 from typing import NamedTuple
 
 from effects.domain.forge_vocabularies import SUBTYPES
-from effects.domain.keyword_names import PROTECTION_FROM, normalize_keyword
+from effects.domain.keyword_names import HEXPROOF_FROM, PROTECTION_FROM, normalize_keyword
 from effects.domain.state_snapshot import EntityState
 
 # ── 704.5f-g ─────────────────────────────────────────────────────────────
@@ -301,6 +301,53 @@ def damage_prevented(qualities: Iterable[ProtectionQuality], source: Characteris
 # ── blocking ─────────────────────────────────────────────────────────────
 
 
+class BlockingRestriction(StrEnum):
+    """A rule that can keep one creature from blocking another (509.1b):
+    an evasion of the attacker's, or what the blocker itself must be."""
+
+    UNBLOCKABLE = "unblockable"
+    FLYING = "flying"  # 702.9b, 702.17b
+    HORSEMANSHIP = "horsemanship"  # 702.31b
+    FEAR = "fear"  # 702.36b
+    INTIMIDATE = "intimidate"  # 702.13b
+    SHADOW = "shadow"  # 702.28b, both ways
+    PROTECTION = "protection"  # 702.16f, j
+
+
+def blocking_restrictions(
+    attacker_keywords: Iterable[str], attacker_colours: Iterable[str],
+    blocker_keywords: Iterable[str], blocker_colours: Iterable[str],
+    blocker_types: Collection[str], *,
+    attacker_protections: Iterable[ProtectionQuality] = (),
+    blocker_subtypes: Collection[str] = (), blocker_mana_value: int = 0,
+) -> frozenset[BlockingRestriction]:
+    """Every :class:`BlockingRestriction` that keeps the blocker from blocking
+    the attacker, as far as these keywords decide; empty where it may block.
+    :func:`may_block` is its emptiness."""
+    a, b = set(attacker_keywords), set(blocker_keywords)
+    attacker_colours, blocker_colours = set(attacker_colours), set(blocker_colours)
+    found: set[BlockingRestriction] = set()
+    if "unblockable" in a:
+        found.add(BlockingRestriction.UNBLOCKABLE)
+    if "flying" in a and not b & {"flying", "reach"}:
+        found.add(BlockingRestriction.FLYING)
+    if "horsemanship" in a and "horsemanship" not in b:
+        found.add(BlockingRestriction.HORSEMANSHIP)
+    if "fear" in a and "artifact" not in blocker_types and "B" not in blocker_colours:
+        found.add(BlockingRestriction.FEAR)
+    if ("intimidate" in a and "artifact" not in blocker_types
+            and not attacker_colours & blocker_colours):
+        found.add(BlockingRestriction.INTIMIDATE)
+    if ("shadow" in a) != ("shadow" in b):
+        found.add(BlockingRestriction.SHADOW)
+    qualities = [q for q in map(ProtectionQuality.of_keyword, sorted(a)) if q is not None]
+    blocker = Characteristics.made(
+        blocker_types, blocker_subtypes, blocker_colours, blocker_mana_value)
+    if _covered((*qualities, *attacker_protections), blocker):
+        found.add(BlockingRestriction.PROTECTION)
+    return frozenset(found)
+
+
 def may_block(attacker_keywords: Iterable[str], attacker_colours: Iterable[str],
               blocker_keywords: Iterable[str], blocker_colours: Iterable[str],
               blocker_types: Collection[str], *,
@@ -314,25 +361,47 @@ def may_block(attacker_keywords: Iterable[str], attacker_colours: Iterable[str],
     colour or from everything; ``attacker_protections`` adds the ones only a
     keyword line's fragment states (a card type, a creature type, a condition).
     """
-    a, b = set(attacker_keywords), set(blocker_keywords)
-    attacker_colours, blocker_colours = set(attacker_colours), set(blocker_colours)
-    if "unblockable" in a:
-        return False
-    if "flying" in a and not b & {"flying", "reach"}:
-        return False
-    if "horsemanship" in a and "horsemanship" not in b:
-        return False
-    if "fear" in a and "artifact" not in blocker_types and "B" not in blocker_colours:
-        return False
-    if ("intimidate" in a and "artifact" not in blocker_types
-            and not attacker_colours & blocker_colours):
-        return False
-    if ("shadow" in a) != ("shadow" in b):
-        return False
-    qualities = [q for q in map(ProtectionQuality.of_keyword, sorted(a)) if q is not None]
-    blocker = Characteristics.made(
-        blocker_types, blocker_subtypes, blocker_colours, blocker_mana_value)
-    return not _covered((*qualities, *attacker_protections), blocker)
+    return not blocking_restrictions(
+        attacker_keywords, attacker_colours, blocker_keywords, blocker_colours, blocker_types,
+        attacker_protections=attacker_protections, blocker_subtypes=blocker_subtypes,
+        blocker_mana_value=blocker_mana_value)
+
+
+# ── targeting (702.11, 702.16b, 702.18) ──────────────────────────────────
+
+
+class TargetingRestriction(StrEnum):
+    """A rule that can keep an object or player from being a legal target."""
+
+    HEXPROOF = "hexproof"  # 702.11b: an opponent's spells and abilities
+    HEXPROOF_FROM = "hexproof_from"  # 702.11d: an opponent's, of the quality
+    SHROUD = "shroud"  # 702.18a: anyone's
+    PROTECTION = "protection"  # 702.16b, j: of the quality
+
+
+def targeting_restrictions(
+    target_keywords: Iterable[str], *, source: Characteristics, opponents: bool,
+) -> frozenset[TargetingRestriction]:
+    """Every :class:`TargetingRestriction` that keeps what carries
+    ``target_keywords`` from being targeted by a spell or ability of
+    ``source``, ``opponents`` when the source's controller is an opponent of
+    the target's; empty where it may be targeted as far as these keywords
+    decide. The twin of :func:`blocking_restrictions`; :func:`may_target`
+    reads protection alone."""
+    keywords = set(target_keywords)
+    found: set[TargetingRestriction] = set()
+    if "shroud" in keywords:
+        found.add(TargetingRestriction.SHROUD)
+    if opponents and "hexproof" in keywords:
+        found.add(TargetingRestriction.HEXPROOF)
+    hexproof_from = [ProtectionQuality.of_keyword(PROTECTION_FROM + k.removeprefix(HEXPROOF_FROM))
+                     for k in keywords if k.startswith(HEXPROOF_FROM)]
+    if opponents and _covered([q for q in hexproof_from if q is not None], source):
+        found.add(TargetingRestriction.HEXPROOF_FROM)
+    protections = [q for q in map(ProtectionQuality.of_keyword, sorted(keywords)) if q is not None]
+    if not may_target(protections, source):
+        found.add(TargetingRestriction.PROTECTION)
+    return frozenset(found)
 
 
 # ── turn structure (500.1, 307.1, 702.61) ────────────────────────────────

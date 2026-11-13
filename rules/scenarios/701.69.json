@@ -75,15 +75,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "Damage that would be dealt to a permanent meets a replacement that lets it be dealt and heals the damage already marked: the handler reports the event updated.",
-        "near_miss": "Damage dealt to a permanent meets a replacement effect and is not updated by it.",
-        "params": {
-          "event": "damage_dealt",
-          "result": "updated"
-        },
-        "needs": []
+        "none": "Could not express: what the replacement does to the damage (doubles it, heals instead, keyed to a source off the battlefield) shows only in comparing the incoming and outgoing amounts or the source's zone, which no rewrite_event parameter compares."
       }
     },
     {
@@ -153,15 +145,7 @@
       ],
       "forge_notes": "Pyramids is a one-shot replacement effect created by the activation; it lasts for the turn or until used.",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A permanent's destruction is replaced by an effect that removes its marked damage instead.",
-        "near_miss": "A destruction meets a replacement effect and is not replaced.",
-        "params": {
-          "event": "destroyed",
-          "result": "replaced"
-        },
-        "needs": []
+        "none": "Could not express: which effect replaced the destruction (a shield counter, which no line carries; a static regeneration against a shield; Pyramids' damage removal) is compared by no rewrite_event parameter."
       }
     }
   ]

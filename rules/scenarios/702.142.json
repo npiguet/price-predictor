@@ -153,12 +153,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An ability limited per turn is a legal candidate while its activation limit is unspent.",
-        "near_miss": "The same ability is a candidate rejected because its limit is spent.",
+        "outcome": "A boast candidate passes its activation-limit check.",
+        "near_miss": "A boast candidate that fails it (already activated).",
         "params": {
           "bit": "failed_check",
           "check": "activation_limit",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Boast"
         },
         "needs": [
           "failed_checks"

@@ -160,20 +160,8 @@
       ],
       "forge_notes": "The harnessed designation of the base setup cannot be written in the card state; it is reached by a harness activation on an earlier turn.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A trigger conditioned on its source holding the harnessed designation fires while the source has stayed harnessed since it was harnessed.",
-        "near_miss": "The same trigger is evaluated with its source no longer harnessed (a new object) and does not fire.",
-        "params": {
-          "mode": "Phase",
-          "script_param": {
-            "IsPresent": "Card.Self+harnessed"
-          },
-          "source_designation": "harnessed"
-        },
-        "needs": [
-          "designations"
-        ]
+        "same_as": "701.64a-1",
+        "reason": "The record shows a harnessed permanent's infinity ability triggering, 701.64a's fact."
       }
     }
   ]

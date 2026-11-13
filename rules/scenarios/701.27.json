@@ -75,11 +75,14 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolution turns a double-faced permanent over (a face_change event names it).",
-        "near_miss": "A transform resolution that produced no face_change.",
+        "outcome": "A transform instruction turns a double-faced permanent over.",
+        "near_miss": "A transform instruction turns nothing over.",
         "params": {
           "event": "face_change",
-          "api": "SetState"
+          "api": "SetState",
+          "script_param": {
+            "Mode": "Transform"
+          }
         },
         "needs": [
           "face_change"
@@ -149,12 +152,15 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A transform resolution turns nothing over (no face_change event): the Human it would transform is not double-faced.",
-        "near_miss": "A transform resolution that turns a double-faced permanent over (a face_change event).",
+        "outcome": "A transform instruction resolves and turns nothing over.",
+        "near_miss": "A transform instruction turns a permanent over.",
         "params": {
           "event": "face_change",
           "api": "SetState",
-          "absent": true
+          "absent": true,
+          "script_param": {
+            "Mode": "Transform"
+          }
         },
         "needs": [
           "face_change"
@@ -484,17 +490,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A resolution turns a double-faced permanent over (a face_change event names it).",
-        "near_miss": "A transform resolution that produced no face_change.",
-        "params": {
-          "event": "face_change",
-          "api": "SetState"
-        },
-        "needs": [
-          "face_change"
-        ]
+        "none": "Could not express: whether the permanent transformed since the ability went on the stack is read by no parameter."
       }
     }
   ]

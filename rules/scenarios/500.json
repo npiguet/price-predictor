@@ -686,15 +686,7 @@
       ],
       "forge_notes": "Obeka's AddPhase uses AfterPhase$ EndCombat and NumPhases from the damage amount; check that each added phase contains only the upkeep step.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A resolution's effect half holds a phase_added event: an AddPhase ability adds a step after a phase, in a phase of its own that holds only that step.",
-        "near_miss": "An AddPhase ability resolves and adds no phase.",
-        "params": {
-          "event": "phase_added",
-          "api": "AddPhase"
-        },
-        "needs": []
+        "none": "Could not express: that the added step makes a phase of its own is read by no outcome_event parameter."
       }
     },
     {

@@ -82,15 +82,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate spell is affordable because the available mana matches its colored symbols and covers its generic part.",
-        "near_miss": "A candidate spell is not affordable with the available mana.",
-        "params": {
-          "bit": "affordable",
-          "fires_when": true
-        },
-        "needs": []
+        "same_as": "701.5a-2",
+        "reason": "A spell castable only when its mana cost can be paid is 701.5a's fact."
       }
     },
     {
@@ -155,14 +148,7 @@
       ],
       "forge_notes": "Forge treats a card with ManaCost:no cost as uncastable from hand; its suspend ability is the only way to play it from hand.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate card with no mana cost cannot be played from hand (can_play false).",
-        "near_miss": "A candidate card with a mana cost can be played from hand.",
-        "params": {
-          "bit": "can_play"
-        },
-        "needs": []
+        "none": "Could not express: the candidate's own condition (no mana cost, a copy's missing solved designation) is read by no verdict_bit filter."
       }
     },
     {

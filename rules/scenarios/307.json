@@ -102,11 +102,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A sorcery cast candidate whose timing is legal: main phase of its owner's turn, empty stack.",
-        "near_miss": "A candidate in another step, another player's turn or with a non-empty stack has timing false.",
+        "outcome": "A sorcery card's cast candidate has its timing true: a main phase of its controller's turn with an empty stack.",
+        "near_miss": "A sorcery card's cast candidate whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "candidate": "cast",
+          "source_type": "sorcery"
         },
         "needs": [
           "timing"
@@ -180,12 +182,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolved instant or sorcery moves from the stack to its owner's graveyard (zone_change) in its resolution's effect half.",
-        "near_miss": "A spell that did not resolve (countered) shows no effect half; not counted without an api.",
+        "outcome": "A resolving sorcery is put into its owner's graveyard.",
+        "near_miss": "A sorcery's resolution that leaves it elsewhere.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",
-          "to_zone": "graveyard"
+          "to_zone": "graveyard",
+          "source_type": "sorcery"
         },
         "needs": []
       }
@@ -363,11 +366,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An only-as-a-sorcery action candidate whose timing is legal: main phase of own turn, empty stack.",
-        "near_miss": "A candidate in another step, another player's turn or with a non-empty stack has timing false.",
+        "outcome": "An activated ability restricted to sorcery timing (SorcerySpeed$, \"activate only as a sorcery\") has its timing true: a main phase of its controller's turn with an empty stack.",
+        "near_miss": "Such an ability whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "candidate": "activated",
+          "sorcery_speed": true
         },
         "needs": [
           "timing"

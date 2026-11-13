@@ -454,18 +454,7 @@
       ],
       "forge_notes": "Forge implements the third daybound ability as a CantTransform static excepting the daybound cause. In the no_daybound variant nothing sets day or night, which does not affect the outcome.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A transform resolution turns nothing over (no face_change event), as when the permanent's daybound or nightbound forbids any transform but its own.",
-        "near_miss": "A transform resolution turns a double-faced permanent over (a face_change event names it).",
-        "params": {
-          "event": "face_change",
-          "api": "SetState",
-          "absent": true
-        },
-        "needs": [
-          "face_change"
-        ]
+        "none": "Could not express: why a transform instruction does nothing (a meld card, an instant or sorcery back face, a can't-transform effect, daybound's own restriction) is read by no outcome_event parameter."
       }
     }
   ]

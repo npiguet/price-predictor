@@ -74,15 +74,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A potential blocker is outside the legal-blockers list for an attacker because of an evasion or protection restriction on the attacker.",
-        "near_miss": "The potential blocker is inside the legal-blockers list for the attacker.",
-        "params": {
-          "list": "legal_blockers",
-          "fires_when": "outside"
-        },
-        "needs": []
+        "same_as": "702.9b-1",
+        "reason": "Both state that a creature with flying can't be blocked except by creatures with flying or reach: the same blockers are forbidden and the same ones are legal."
       }
     }
   ]

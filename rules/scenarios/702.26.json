@@ -622,16 +622,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "turn_action",
-        "outcome": "In a player's untap step a permanent phases out or in, and the Auras and Equipment attached to it phase indirectly with it: the phasing turn_action record holds phased events for them.",
-        "near_miss": "No near miss is counted: outcome_event counts one only with an api or keyword.",
-        "params": {
-          "event": "phased"
-        },
-        "needs": [
-          "turn_action"
-        ]
+        "none": "Could not express: whether a permanent phased out directly or with what it is attached to is read by no parameter."
       }
     },
     {
@@ -693,17 +684,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "turn_action",
-        "outcome": "In a player's untap step a phased-out permanent phases in: the phasing turn_action record holds a phased event with out false.",
-        "near_miss": "No near miss is counted: outcome_event counts one only with an api or keyword.",
-        "params": {
-          "event": "phased",
-          "out": false
-        },
-        "needs": [
-          "turn_action"
-        ]
+        "none": "Could not express: that a phased-in Equipment returns attached is read by no parameter of this declaration."
       }
     },
     {
@@ -904,16 +885,8 @@
       ],
       "forge_notes": "Teferi's Curse phases out indirectly with the host, so the attached aura is part of the observed state. A redundancy rule has no does_not_fire branch: no board state lets a second instance change the outcome, so the one-instance variant is the identical-outcome control.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "turn_action",
-        "outcome": "In a player's untap step a permanent phases once however many instances of phasing it has: the phasing turn_action record holds a single phased event for it.",
-        "near_miss": "No near miss is counted: outcome_event counts one only with an api or keyword.",
-        "params": {
-          "event": "phased"
-        },
-        "needs": [
-          "turn_action"
-        ]
+        "same_as": "702.26a-1",
+        "reason": "The record shows the untap step's phasing, 702.26a's fact; redundant instances phase alike."
       }
     }
   ]

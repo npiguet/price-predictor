@@ -136,12 +136,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A candidate spell whose total cost, the chosen mode's additional cost included, is payable passes the cost check.",
-        "near_miss": "A candidate spell whose total cost with the chosen mode's additional cost exceeds the available mana fails the cost check.",
+        "outcome": "A Tiered candidate passes its cost check.",
+        "near_miss": "A Tiered candidate that fails it.",
         "params": {
           "bit": "failed_check",
           "check": "cost",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Tiered"
         },
         "needs": [
           "failed_checks"

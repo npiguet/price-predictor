@@ -145,14 +145,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "turn_action",
-        "outcome": "The untap step's phasing action phases permanents out or in.",
-        "near_miss": "No near miss is tagged: outcome_event counts one only with an api or keyword.",
-        "params": {
-          "event": "phased"
-        },
-        "needs": []
+        "same_as": "702.26a-1",
+        "reason": "The record shows the untap step's phasing, 702.26a's fact; redundant instances phase alike."
       }
     },
     {
@@ -217,15 +211,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "turn_action",
-        "outcome": "The untap step's day/night action changes the designation to night.",
-        "near_miss": "No near miss is tagged: outcome_event counts one only with an api or keyword.",
-        "params": {
-          "event": "day_night_changed",
-          "to": "night"
-        },
-        "needs": []
+        "same_as": "731.2a-1",
+        "reason": "All three state that day becomes night in the untap step after a turn whose active player cast no spells."
       }
     },
     {
@@ -292,15 +279,8 @@
       ],
       "forge_notes": "Setup requires the night designation and the back face on the battlefield.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "turn_action",
-        "outcome": "The untap step's day/night action changes the designation to day.",
-        "near_miss": "No near miss is tagged: outcome_event counts one only with an api or keyword.",
-        "params": {
-          "event": "day_night_changed",
-          "to": "day"
-        },
-        "needs": []
+        "same_as": "731.2b-1",
+        "reason": "All three state that night becomes day in the untap step after a turn whose active player cast two or more spells."
       }
     },
     {
@@ -447,14 +427,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "turn_action",
-        "outcome": "The draw step's turn-based action draws a card for the active player.",
-        "near_miss": "No near miss is tagged: outcome_event counts one only with an api or keyword.",
-        "params": {
-          "event": "card_drawn"
-        },
-        "needs": []
+        "same_as": "504.1-1",
+        "reason": "The record shows the draw step's turn-based draw, 504.1's fact."
       }
     },
     {
@@ -664,16 +638,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "combat",
-        "outcome": "One combat damage step deals damage from two or more sources at once.",
-        "near_miss": "No near miss is tagged: outcome_event counts one only with an api or keyword.",
-        "params": {
-          "event": "damage_dealt",
-          "combat": true,
-          "min_count": 2
-        },
-        "needs": []
+        "same_as": "510.2-1",
+        "reason": "The record shows combat damage dealt by every creature at once, 510.2's fact."
       }
     },
     {

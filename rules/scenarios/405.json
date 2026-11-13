@@ -419,17 +419,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "resolution_outcome",
-        "record_kind": "resolution",
-        "outcome": "With all players passing in succession the top stack object resolves.",
-        "near_miss": "A player responds instead of passing and the stack object is countered rather than resolving.",
-        "params": {
-          "outcome": "resolved",
-          "near": [
-            "countered"
-          ]
-        },
-        "needs": []
+        "same_as": "701.5a-1",
+        "reason": "The top object resolving when all players pass is 701.5a's fact."
       }
     },
     {
@@ -503,14 +494,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A resolving effect creates a delayed trigger and puts nothing on the stack itself.",
-        "near_miss": "A resolution that creates no delayed trigger (not counted: no API restriction).",
-        "params": {
-          "event": "delayed_trigger_created"
-        },
-        "needs": []
+        "same_as": "610.2-1",
+        "reason": "An effect creating a delayed trigger is 610.2's fact."
       }
     },
     {
@@ -582,14 +567,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "continuous_contribution",
-        "record_kind": "continuous",
-        "outcome": "A static ability contributes a power/toughness boost to the board with nothing put on the stack.",
-        "near_miss": "The static applies and contributes no P/T boost.",
-        "params": {
-          "field": "pt"
-        },
-        "needs": []
+        "same_as": "604.2-1",
+        "reason": "The record shows a static's power and toughness contribution applying while its source is on the battlefield, 604.2's fact."
       }
     },
     {
@@ -794,16 +773,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "turn_action",
-        "outcome": "At the start of the draw step the active player draws as a turn-based action, with no object on the stack and before any player receives priority: the draw turn_action record holds a card_drawn event.",
-        "near_miss": "No near miss is counted: a skipped or replaced draw writes no card_drawn on a turn_action record, so only the fires side is tagged.",
-        "params": {
-          "event": "card_drawn"
-        },
-        "needs": [
-          "turn_action"
-        ]
+        "same_as": "504.1-1",
+        "reason": "The record shows the draw step's turn-based draw, 504.1's fact."
       }
     },
     {
@@ -891,14 +862,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "sba_zone_move",
-        "record_kind": "resolution",
-        "outcome": "A creature with lethal damage dies in the state-based check right after the resolution, before priority.",
-        "near_miss": "A creature dealt damage short of its toughness stays on the battlefield.",
-        "params": {
-          "check": "lethal_damage"
-        },
-        "needs": []
+        "same_as": "704.5g-1",
+        "reason": "The record shows a creature with lethal damage marked put into the graveyard in the state-based check, 704.5g's fact."
       }
     }
   ]

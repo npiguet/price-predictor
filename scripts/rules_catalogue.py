@@ -425,7 +425,8 @@ def validate_gen3_fields(s, families):
         if set(detector) != {"same_as", "reason"} or not str(detector["reason"]).strip():
             errs.append(f"{sid}: a same_as detector names its scenario and the fact the two "
                         "share (reason), and nothing else")
-        elif detector["same_as"] == sid:
+        elif sid in (detector["same_as"] if isinstance(detector["same_as"], list)
+                     else [detector["same_as"]]):
             errs.append(f"{sid}: a scenario is no duplicate of itself")
     else:
         family = detector.get("family")

@@ -93,17 +93,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A resolution turns a double-faced permanent over (a face_change event names it).",
-        "near_miss": "A transform resolution that produced no face_change.",
-        "params": {
-          "event": "face_change",
-          "api": "SetState"
-        },
-        "needs": [
-          "face_change"
-        ]
+        "same_as": "701.27a-1",
+        "reason": "A double-faced permanent transforming (or converting, which Forge writes as a transform) is 701.27a's fact; the copy that cannot is its near miss."
       }
     },
     {
@@ -175,18 +166,8 @@
       ],
       "forge_notes": "Card.canTransform requires the card itself to be transformable, so SetState skips a Clone whose copiable values come from a double-faced card.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A transform or convert resolution turns nothing over (no face_change event), as when the permanent is not a double-faced card.",
-        "near_miss": "A transform or convert resolution that turned a permanent over (a face_change event).",
-        "params": {
-          "event": "face_change",
-          "api": "SetState",
-          "absent": true
-        },
-        "needs": [
-          "face_change"
-        ]
+        "same_as": "701.27c-1",
+        "reason": "Forge writes convert as a transform (Mode$ Transform), and 701.28 makes converting follow the transform rules: the record shows 701.27c's fact."
       }
     },
     {
@@ -270,14 +251,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A turned-face-up trigger fires when a permanent it watches is turned face up.",
-        "near_miss": "A turned-face-up trigger evaluated against a face-up turn it does not watch does not fire; a convert is no face-up turn and evaluates no turned-face-up trigger.",
-        "params": {
-          "mode": "TurnFaceUp"
-        },
-        "needs": []
+        "same_as": "701.27b-1",
+        "reason": "Forge writes convert as a transform, and 701.28 makes converting follow the transform rules: the record shows 701.27b's fact."
       }
     },
     {
@@ -348,17 +323,7 @@
       ],
       "forge_notes": "Forge stores the host's transform timestamp on the stack instance (StoredTransform) and compares it when SetState resolves.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A resolution turns a double-faced permanent over (a face_change event names it).",
-        "near_miss": "A transform resolution that produced no face_change.",
-        "params": {
-          "event": "face_change",
-          "api": "SetState"
-        },
-        "needs": [
-          "face_change"
-        ]
+        "none": "Could not express: whether the permanent transformed since the ability went on the stack is read by no parameter."
       }
     },
     {
@@ -430,18 +395,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A transform or convert resolution turns nothing over (no face_change event), as when an effect says the permanent can't transform.",
-        "near_miss": "A transform or convert resolution that turned a permanent over (a face_change event).",
-        "params": {
-          "event": "face_change",
-          "api": "SetState",
-          "absent": true
-        },
-        "needs": [
-          "face_change"
-        ]
+        "none": "Could not express: why a transform instruction does nothing (a meld card, an instant or sorcery back face, a can't-transform effect, daybound's own restriction) is read by no outcome_event parameter."
       }
     }
   ]

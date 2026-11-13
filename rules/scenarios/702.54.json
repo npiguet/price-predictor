@@ -173,16 +173,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A permanent spell's resolution puts +1/+1 counters on the permanent as it enters.",
-        "near_miss": "A permanent whose card prints bloodthirst enters with no +1/+1 counters.",
-        "params": {
-          "event": "counter_change",
-          "counter_type": "+1/+1",
-          "source_keyword": "Bloodthirst"
-        },
-        "needs": []
+        "none": "Could not express: the damage dealt to opponents this turn, which bloodthirst X counts, is read by no outcome_event parameter."
       }
     },
     {

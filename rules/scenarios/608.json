@@ -1107,16 +1107,11 @@
       ],
       "forge_notes": "The ability variant adds Prodigal Sorcerer (not summoning sick) to A's battlefield and removes Firebolt from the hand.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A resolving spell is moved from the stack to its owner's graveyard as the last step of its resolution.",
-        "near_miss": "A spell that does not go to the graveyard on resolving (not counted: no API restricts the near miss).",
-        "params": {
-          "event": "zone_change",
-          "from_zone": "stack",
-          "to_zone": "graveyard"
-        },
-        "needs": []
+        "same_as": [
+          "304.2-1",
+          "307.2-1"
+        ],
+        "reason": "An instant or sorcery put into the graveyard as it resolves is the union of 304.2 and 307.2."
       }
     },
     {
@@ -1267,16 +1262,14 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A resolving permanent spell moves from the stack to the battlefield.",
-        "near_miss": "A permanent spell that leaves the stack another way (not counted: no API restricts the near miss).",
-        "params": {
-          "event": "zone_change",
-          "from_zone": "stack",
-          "to_zone": "battlefield"
-        },
-        "needs": []
+        "same_as": [
+          "301.2-1",
+          "302.2-1",
+          "303.2-1",
+          "306.2-1",
+          "310.2-1"
+        ],
+        "reason": "A permanent spell entering the battlefield as it resolves is the union of each permanent type's own resolution rule."
       }
     },
     {
@@ -1346,18 +1339,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "resolution_outcome",
-        "record_kind": "resolution",
-        "outcome": "An Aura spell (or any targeted spell) whose target is illegal on resolution is removed from the stack without resolving, so it never enters the battlefield.",
-        "near_miss": "A targeted spell whose target is still legal, which resolves.",
-        "params": {
-          "outcome": "fizzled",
-          "near": [
-            "resolved"
-          ],
-          "targeted": true
-        },
-        "needs": []
+        "same_as": "608.2b-1",
+        "reason": "An Aura spell with an illegal target does not resolve, 608.2b's fizzle; the record shows the same fizzle."
       }
     },
     {
@@ -1658,16 +1641,7 @@
       ],
       "forge_notes": "Forge's Clone replacement effect and Worms' replacement ('Lands can't enter the battlefield') may not combine as the rule describes; verify in the engine.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A resolving permanent spell that cannot enter the battlefield is moved from the stack to its owner's graveyard.",
-        "near_miss": "A permanent spell that enters the battlefield (not counted: no API restricts the near miss).",
-        "params": {
-          "event": "zone_change",
-          "from_zone": "stack",
-          "to_zone": "graveyard"
-        },
-        "needs": []
+        "none": "Could not express: that a permanent spell could not be put onto the battlefield is read by no parameter."
       }
     },
     {
@@ -1807,14 +1781,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "The delayed triggered ability a dash spell's static ability creates as the permanent enters is evaluated at its stated time and fires.",
-        "near_miss": "Such a delayed triggered ability is evaluated and does not fire.",
-        "params": {
-          "keyword": "Dash"
-        },
-        "needs": []
+        "none": "Could not express: that the delayed trigger came from a static ability on the stack is read by no trigger_mode parameter."
       }
     }
   ]

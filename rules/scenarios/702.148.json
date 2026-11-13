@@ -141,11 +141,12 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A spell cast with a cost that removes its targeting restriction has a legal target.",
-        "near_miss": "The same spell cast normally has no legal target.",
+        "outcome": "A cleave cast has a legal target without the bracketed restriction.",
+        "near_miss": "A cleave cast with no legal target.",
         "params": {
           "bit": "has_legal_target",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Cleave"
         },
         "needs": []
       }

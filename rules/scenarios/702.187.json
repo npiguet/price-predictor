@@ -155,16 +155,8 @@
       ],
       "forge_notes": "Oscorp Industries carries K:Mayhem with no cost.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A costless mayhem play is a playable candidate for a card discarded this turn.",
-        "near_miss": "A mayhem candidate is not playable (not discarded this turn, or the play is illegal).",
-        "params": {
-          "bit": "can_play",
-          "fires_when": true,
-          "keyword": "Mayhem"
-        },
-        "needs": []
+        "same_as": "702.187b-1",
+        "reason": "A mayhem card is playable from the graveyard only the turn it was discarded, cost or no cost: 702.187b's fact."
       }
     }
   ]

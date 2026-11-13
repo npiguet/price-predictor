@@ -75,11 +75,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A potential blocker is outside the legal-blockers list for an attacker because of an evasion or protection restriction on the attacker.",
-        "near_miss": "The potential blocker is inside the legal-blockers list for the attacker.",
+        "outcome": "An attacker with landwalk has a forbidden blocker no other restriction, tap or static explains (the defending player controls the land it walks).",
+        "near_miss": "An attacker with landwalk has a legal blocker (the defending player controls no such land).",
         "params": {
           "list": "legal_blockers",
-          "fires_when": "outside"
+          "fires_when": "outside",
+          "restriction": "landwalk"
         },
         "needs": []
       }
@@ -156,11 +157,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A potential blocker is outside the legal-blockers list for an attacker because of an evasion or protection restriction on the attacker.",
-        "near_miss": "The potential blocker is inside the legal-blockers list for the attacker.",
+        "outcome": "An attacker with landwalk has a forbidden blocker no other restriction, tap or static explains (the defending player controls the land it walks).",
+        "near_miss": "An attacker with landwalk has a legal blocker (the defending player controls no such land).",
         "params": {
           "list": "legal_blockers",
-          "fires_when": "outside"
+          "fires_when": "outside",
+          "restriction": "landwalk"
         },
         "needs": []
       }
@@ -233,15 +235,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A potential blocker is outside the legal-blockers list for an attacker because of an evasion or protection restriction on the attacker.",
-        "near_miss": "The potential blocker is inside the legal-blockers list for the attacker.",
-        "params": {
-          "list": "legal_blockers",
-          "fires_when": "outside"
-        },
-        "needs": []
+        "same_as": "702.14c-1",
+        "reason": "A blocker with the same landwalk is forbidden like any other: the record shows 702.14c's fact, landwalk keeping a creature from blocking, whatever the blocker carries."
       }
     }
   ]

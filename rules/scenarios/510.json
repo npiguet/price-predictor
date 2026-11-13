@@ -332,16 +332,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "combat",
-        "outcome": "A blocking creature's combat damage is dealt to the attacker it blocks: a combat damage_dealt event whose subject is a creature in combat.",
-        "near_miss": "Combat damage in the step goes only to what is not in combat, no blocker dealing damage to an attacker.",
-        "params": {
-          "event": "damage_dealt",
-          "combat": true,
-          "subject_in_combat": true
-        },
-        "needs": []
+        "none": "Could not express: subject_in_combat cannot tell a blocker's damage from an attacker's."
       }
     },
     {
@@ -631,14 +622,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "keyword_combat",
-        "record_kind": "combat",
-        "outcome": "A real combat in which a creature with first strike deals damage, so combat damage is dealt in a separate first-strike step.",
-        "near_miss": "A damage-step probe fork that re-ran the combat with first strike stripped from its carrier.",
-        "params": {
-          "keyword": "first_strike"
-        },
-        "needs": []
+        "same_as": "702.7b-1",
+        "reason": "A first strike creature dealing its damage in the first-strike step is 702.7b's fact."
       }
     }
   ]

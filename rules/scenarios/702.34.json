@@ -68,12 +68,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolving spell cast with an exile-instead clause moves from the stack to exile rather than the graveyard.",
-        "near_miss": "A resolving instant or sorcery whose effect half shows it going to the graveyard.",
+        "outcome": "A spell whose card prints flashback moves from the stack to exile as the keyword says.",
+        "near_miss": "A spell whose card prints flashback leaves the stack elsewhere.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",
-          "to_zone": "exile"
+          "to_zone": "exile",
+          "source_keyword": "Flashback"
         },
         "needs": []
       }
@@ -151,13 +152,14 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A counter ability sends a countered spell with an exile-instead clause from the stack to exile.",
-        "near_miss": "A Counter resolution whose spell went to the graveyard.",
+        "outcome": "A countered flashback spell is exiled.",
+        "near_miss": "A countered spell with flashback put elsewhere.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",
           "to_zone": "exile",
-          "api": "Counter"
+          "api": "Counter",
+          "source_keyword": "Flashback"
         },
         "needs": []
       }

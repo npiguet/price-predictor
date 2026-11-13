@@ -144,15 +144,7 @@
       ],
       "forge_notes": "Each Frenzy Sliver grants the trigger to every Sliver, so two of them give the attacker two separate triggers; confirm Forge does not merge identical granted triggers.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "Each attacks-and-isn't-blocked trigger of one unblocked creature is evaluated and fires separately.",
-        "near_miss": "The trigger is evaluated when the creature is blocked, or for another attacker, and does not fire.",
-        "params": {
-          "mode": "AttackerUnblocked",
-          "selector": "Card.Self"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     }
   ]

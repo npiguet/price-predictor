@@ -90,18 +90,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A land-play candidate is playable: its controller has priority in their own main phase, the stack is empty and a land drop remains.",
-        "near_miss": "A land-play candidate refused for timing, phase, stack or land-drop limit.",
-        "params": {
-          "bit": "can_play",
-          "land_play": true,
-          "fires_when": true
-        },
-        "needs": [
-          "land_play"
-        ]
+        "same_as": "505.6b-1",
+        "reason": "Both state when a land may be played from hand."
       }
     },
     {

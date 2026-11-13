@@ -287,16 +287,7 @@
       ],
       "forge_notes": "Variant three_artifacts removes one Ornithopter from the base setup.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate for a card with improvise whose cost was raised is affordable, untapped artifacts paying the raised generic part.",
-        "near_miss": "A candidate for a card with improvise that is not affordable.",
-        "params": {
-          "bit": "affordable",
-          "fires_when": true,
-          "source_keyword": "Improvise"
-        },
-        "needs": []
+        "none": "Could not express: the cost increases improvise applies after, and its instances, are read by no verdict_bit filter."
       }
     },
     {
@@ -374,16 +365,7 @@
       ],
       "forge_notes": "Variant two_artifacts removes one Ornithopter from the base setup.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate for a card with several instances of improvise is affordable with at most one artifact per generic mana.",
-        "near_miss": "A candidate for a card with improvise that is not affordable.",
-        "params": {
-          "bit": "affordable",
-          "fires_when": true,
-          "source_keyword": "Improvise"
-        },
-        "needs": []
+        "none": "Could not express: the cost increases improvise applies after, and its instances, are read by no verdict_bit filter."
       }
     }
   ]

@@ -86,17 +86,15 @@
       ],
       "forge_notes": "The stack-not-empty variant puts B's Shock on the stack through setup.stack: {card Shock, controller B, targets [A]}.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A noninstant spell candidate has a true timing verdict: its controller has priority in their main phase with an empty stack.",
-        "near_miss": "A noninstant spell candidate has a false timing verdict: another step, another player's turn, or a non-empty stack.",
-        "params": {
-          "bit": "timing",
-          "fires_when": true
-        },
-        "needs": [
-          "timing"
-        ]
+        "same_as": [
+          "301.1-1",
+          "302.1-1",
+          "303.1-1",
+          "306.1-1",
+          "307.1-1",
+          "310.1-1"
+        ],
+        "reason": "A noninstant spell's timing is the union of each noninstant card type's own casting rule; the record shows one of those."
       }
     },
     {
@@ -171,11 +169,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An instant-speed candidate has its timing verdict true whenever its player has priority, including with a non-empty stack.",
-        "near_miss": "A candidate whose timing verdict is false.",
+        "outcome": "An instant-speed cast (an instant, or a card with flash) has its timing verdict true whenever its player has priority, including with a non-empty stack.",
+        "near_miss": "An instant-speed cast whose timing is false (no priority).",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "candidate": "cast",
+          "sorcery_speed": false
         },
         "needs": [
           "timing"
@@ -254,11 +254,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An activated-ability candidate has its timing verdict true whenever its controller has priority.",
-        "near_miss": "A candidate whose timing verdict is false.",
+        "outcome": "An activated ability not restricted to sorcery timing has its timing true whenever its controller has priority.",
+        "near_miss": "Such an activated ability whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "candidate": "activated",
+          "sorcery_speed": false
         },
         "needs": [
           "timing"
@@ -397,14 +399,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A trigger on a spell being cast is evaluated and fires during casting.",
-        "near_miss": "The same kind of trigger evaluated and not fired.",
-        "params": {
-          "mode": "SpellCast"
-        },
-        "needs": []
+        "same_as": "601.2i-1",
+        "reason": "Both state that a cast trigger triggers once the spell is cast; the record shows the same trigger."
       }
     },
     {
@@ -471,15 +467,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A trigger on a permanent entering the battlefield is evaluated and fires.",
-        "near_miss": "The same kind of trigger evaluated and not fired.",
-        "params": {
-          "mode": "ChangesZone",
-          "destination": "Battlefield"
-        },
-        "needs": []
+        "same_as": "603.6a-1",
+        "reason": "The record shows an enters trigger firing or not, 603.6a's fact; this general rule about triggering adds no observable of its own."
       }
     },
     {
@@ -555,14 +544,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A beginning-of-step trigger is evaluated and fires.",
-        "near_miss": "A beginning-of-step trigger evaluated and not fired.",
-        "params": {
-          "mode": "Phase"
-        },
-        "needs": []
+        "none": "When priority is given relative to the triggers put on the stack is in no record."
       }
     },
     {

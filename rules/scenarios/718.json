@@ -305,15 +305,7 @@
       ],
       "forge_notes": "Double Major copies the creature spell; the copy becomes a token on resolution.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A copy-spell resolution holds a spell_copied event.",
-        "near_miss": "A CopySpellAbility resolution that produced no copy.",
-        "params": {
-          "event": "spell_copied",
-          "api": "CopySpellAbility"
-        },
-        "needs": []
+        "none": "Could not express: what the copy kept of the original (its source, its Adventure or prototyped characteristics) is read by no outcome_event parameter."
       }
     },
     {
@@ -446,14 +438,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate that targets a card in a graveyard has no legal target because the card's characteristics there fail the targeting condition.",
-        "near_miss": "A candidate whose targeting clause has a legal target.",
-        "params": {
-          "bit": "has_legal_target"
-        },
-        "needs": []
+        "none": "Could not express: which characteristics the card has in its zone (an Adventure's on the stack, a prototype's normal ones) is read by no verdict_bit filter."
       }
     },
     {

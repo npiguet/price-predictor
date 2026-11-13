@@ -43,7 +43,9 @@ def _detector(data: Mapping[str, Any] | None
     if "none" in data:
         return NoDetector(str(data["none"]))
     if "same_as" in data:
-        return SameAs(str(data["same_as"]), str(data.get("reason") or ""))
+        named = data["same_as"]
+        return SameAs(tuple(named) if isinstance(named, list) else (str(named),),
+                      str(data.get("reason") or ""))
     return DetectorDeclaration.from_json(data)
 
 

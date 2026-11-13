@@ -249,14 +249,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A trigger on a player bending is evaluated when an earthbend resolution creates its return delayed trigger, and fires.",
-        "near_miss": "The bend trigger is evaluated for a bend it does not cover (another player's) and does not fire.",
-        "params": {
-          "mode": "ElementalBend"
-        },
-        "needs": []
+        "none": "Could not express: the ElementalBend trigger mode covers every bending; which bending happened is read by no trigger_mode parameter."
       }
     }
   ]

@@ -141,14 +141,7 @@
       ],
       "forge_notes": "Fang of the Pack grants melee as a keyword through a pump effect; Forge must keep the granted instance distinct from the printed one.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "Each melee instance on an attacking creature is evaluated and fires as its own trigger.",
-        "near_miss": "A melee trigger evaluated and not fired; the detector does not count instances per event, and misses an instance another permanent's effect grants, which reads off that effect's line.",
-        "params": {
-          "keyword": "Melee"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     }
   ]

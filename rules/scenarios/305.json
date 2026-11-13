@@ -69,19 +69,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A land-play candidate whose timing is legal: a main phase of its player's turn with an empty stack.",
-        "near_miss": "A land-play candidate offered in another step, or with a non-empty stack, has timing false.",
-        "params": {
-          "bit": "timing",
-          "fires_when": true,
-          "land_play": true
-        },
-        "needs": [
-          "timing",
-          "land_play"
-        ]
+        "same_as": "116.2a-1",
+        "reason": "Both state when a land may be played."
       }
     },
     {
@@ -307,19 +296,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A land-play candidate fails the land_play_limit check: its player has made as many land plays this turn as max_land_plays allows. An effect permitting a land play does not lift the limit.",
-        "near_miss": "A land-play candidate whose player has played fewer lands this turn than allowed passes the check.",
-        "params": {
-          "bit": "failed_check",
-          "check": "land_play_limit",
-          "land_play": true
-        },
-        "needs": [
-          "failed_checks",
-          "land_play"
-        ]
+        "same_as": "305.2-1",
+        "reason": "A land play past the limit failing its land-play check is 305.2's fact."
       }
     },
     {
@@ -461,20 +439,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A land-play candidate passes the land_play_limit check: its player has made fewer land plays this turn than max_land_plays allows. A land an effect put onto the battlefield is not counted among the lands played this turn.",
-        "near_miss": "A land-play candidate fails the land_play_limit check once its player has played as many lands as allowed.",
-        "params": {
-          "bit": "failed_check",
-          "check": "land_play_limit",
-          "land_play": true,
-          "fires_when": true
-        },
-        "needs": [
-          "failed_checks",
-          "land_play"
-        ]
+        "none": "Could not express: a land put onto the battlefield by an effect, not counted as the land played, is read by no verdict_bit filter."
       }
     },
     {

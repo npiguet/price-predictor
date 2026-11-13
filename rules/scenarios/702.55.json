@@ -238,14 +238,7 @@
       ],
       "forge_notes": "Forge's haunt trigger matches Creature.HauntedBy, so it may not fire when the haunted card is a non-creature land when it dies. The rules text says it does.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A haunt-granted trigger fires from exile when the object its card haunts is put into a graveyard, whether or not that object is still a creature.",
-        "near_miss": "A haunt-granted trigger is evaluated against an event and does not fire.",
-        "params": {
-          "keyword": "Haunt"
-        },
-        "needs": []
+        "none": "Could not express: haunt's two triggers act through its one keyword line, so the record cannot tell the haunting trigger from the haunted creature's, nor read a target's characteristics at haunting."
       },
       "departure": {
         "status": "confirmed",
@@ -321,14 +314,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A haunt-granted trigger fires while its card is in exile, when the creature it haunts dies.",
-        "near_miss": "A haunt-granted trigger is evaluated against an event and does not fire.",
-        "params": {
-          "keyword": "Haunt"
-        },
-        "needs": []
+        "none": "Could not express: haunt's two triggers act through its one keyword line, so the record cannot tell the haunting trigger from the haunted creature's, nor read a target's characteristics at haunting."
       }
     }
   ]

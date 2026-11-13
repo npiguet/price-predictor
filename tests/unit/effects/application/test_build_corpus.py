@@ -1979,7 +1979,12 @@ def test_the_manifest_holds_every_gen3_field(gen3_build):
     manifest = gen3_build.load()
     assert manifest.rule_map_digest == heads_digest()
     heads = load_heads()
-    assert set(manifest.rule_map) == set(manifest.rule_counts["rules"])
+    # The map holds every tagged rule and every rule a copy is drawn for: a
+    # protection rule (702.16j's protection from everything) may be drawn on a
+    # protection copy with no natural record tagging it.
+    tagged = set(manifest.rule_counts["rules"])
+    assert tagged <= set(manifest.rule_map)
+    assert {rule[:6] for rule in set(manifest.rule_map) - tagged} <= {"702.16"}
     for rule, entry in manifest.rule_map.items():
         assert entry.verdict == (heads[rule].verdict if rule in heads else "missing")
     # FR-054: every tagged rule but a trained one is named as unbudgeted, a

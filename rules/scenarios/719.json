@@ -77,10 +77,11 @@
       "detector": {
         "family": "trigger_mode",
         "record_kind": "trigger",
-        "outcome": "A phase trigger with a state condition is evaluated at the beginning of a step and fires when the condition holds.",
-        "near_miss": "The phase trigger evaluated with its condition false, not fired.",
+        "outcome": "A Case's to-solve trigger fires at its controller's end step.",
+        "near_miss": "The trigger evaluated and not fired.",
         "params": {
-          "mode": "Phase"
+          "mode": "Phase",
+          "source_subtype": "Case"
         },
         "needs": []
       }
@@ -204,14 +205,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "An activated ability's candidate is illegal because the permanent lacks a designation the ability requires.",
-        "near_miss": "The same ability's candidate legal when the designation is present.",
-        "params": {
-          "bit": "can_play"
-        },
-        "needs": []
+        "none": "Could not express: the candidate's own condition (no mana cost, a copy's missing solved designation) is read by no verdict_bit filter."
       }
     },
     {
@@ -266,14 +260,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "continuous_contribution",
-        "record_kind": "continuous",
-        "outcome": "A static that applies only while a permanent state holds contributes a P/T boost.",
-        "near_miss": "The static is on the board but its condition fails and it contributes no P/T.",
-        "params": {
-          "field": "pt"
-        },
-        "needs": []
+        "same_as": "702.169b-1",
+        "reason": "Both state that a solved Case's static ability applies only while it is solved; the declaration is the same condition on the same static."
       }
     },
     {
@@ -342,10 +330,11 @@
       "detector": {
         "family": "trigger_mode",
         "record_kind": "trigger",
-        "outcome": "A trigger gated by a permanent state is evaluated on its event and fires.",
-        "near_miss": "The trigger's event occurred with the state absent and it did not fire.",
+        "outcome": "A solved Case's triggered ability fires.",
+        "near_miss": "A solved Case's trigger evaluated and not fired.",
         "params": {
-          "mode": "SpellCast"
+          "mode": "SpellCast",
+          "source_designation": "solved"
         },
         "needs": []
       }
@@ -407,13 +396,16 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An activated ability gated by a permanent state has a legal candidate.",
-        "near_miss": "The candidate illegal because the state is absent.",
+        "outcome": "A solved Case's activated ability is playable.",
+        "near_miss": "A solved Case's candidate that is not playable.",
         "params": {
           "bit": "can_play",
-          "fires_when": true
+          "fires_when": true,
+          "source_designation": "solved"
         },
-        "needs": []
+        "needs": [
+          "designations"
+        ]
       }
     }
   ]

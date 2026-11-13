@@ -81,11 +81,11 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "An attach ability resolves and produces an attached event.",
-        "near_miss": "An attach ability resolved with no attached event.",
+        "outcome": "A reconfigure ability attaches the permanent to a creature.",
+        "near_miss": "A reconfigure ability resolving and attaching nothing.",
         "params": {
           "event": "attached",
-          "api": "Attach"
+          "keyword": "Reconfigure"
         },
         "needs": []
       }

@@ -226,19 +226,7 @@
       ],
       "forge_notes": "Forge's SetState transform path goes through Card.canTransform, which should refuse a meld card; confirm that Midnight Scavengers is left untouched.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A transform instruction resolves on a permanent that cannot transform (a meld card, a face-down permanent, a permanent whose other face is an instant or sorcery) and the permanent does not change faces.",
-        "near_miss": "A transform instruction resolves and the permanent changes faces.",
-        "params": {
-          "event": "face_change",
-          "api": "SetState",
-          "script_param": {
-            "Mode": "Transform"
-          },
-          "absent": true
-        },
-        "needs": []
+        "none": "Could not express: why a transform instruction does nothing (a meld card, an instant or sorcery back face, a can't-transform effect, daybound's own restriction) is read by no outcome_event parameter."
       }
     },
     {
@@ -882,17 +870,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A transform instruction turns a double-faced permanent over: a face_change event to its other face (front or back, whichever was down).",
-        "near_miss": "A transform instruction resolves and turns nothing over, as on a permanent that is not represented by a double-faced card or token.",
-        "params": {
-          "event": "face_change",
-          "api": "SetState"
-        },
-        "needs": [
-          "face_change"
-        ]
+        "same_as": "701.27a-1",
+        "reason": "A double-faced permanent transforming (or converting, which Forge writes as a transform) is 701.27a's fact; the copy that cannot is its near miss."
       }
     },
     {
@@ -1399,17 +1378,20 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A transform instruction resolves on a permanent that cannot transform (a meld card, a face-down permanent, a permanent whose other face is an instant or sorcery) and the permanent does not change faces.",
-        "near_miss": "A transform instruction resolves and the permanent changes faces.",
+        "outcome": "A transform instruction on a face-down permanent turns nothing over.",
+        "near_miss": "A transform instruction turns a face-down permanent over.",
         "params": {
           "event": "face_change",
           "api": "SetState",
+          "absent": true,
           "script_param": {
             "Mode": "Transform"
           },
-          "absent": true
+          "target_face_state": "face_down"
         },
-        "needs": []
+        "needs": [
+          "face_state"
+        ]
       }
     },
     {
@@ -2111,19 +2093,7 @@
       ],
       "forge_notes": "Forge's SetState transform may not check for an instant or sorcery destination face; confirm Invasion of Alara keeps its front face.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A transform instruction resolves on a permanent that cannot transform (a meld card, a face-down permanent, a permanent whose other face is an instant or sorcery) and the permanent does not change faces.",
-        "near_miss": "A transform instruction resolves and the permanent changes faces.",
-        "params": {
-          "event": "face_change",
-          "api": "SetState",
-          "script_param": {
-            "Mode": "Transform"
-          },
-          "absent": true
-        },
-        "needs": []
+        "none": "Could not express: why a transform instruction does nothing (a meld card, an instant or sorcery back face, a can't-transform effect, daybound's own restriction) is read by no outcome_event parameter."
       }
     },
     {

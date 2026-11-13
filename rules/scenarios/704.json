@@ -802,14 +802,8 @@
       ],
       "forge_notes": "B's battlefield in the second variant lists Fugitive Wizard in place of Typhoid Rats.",
       "detector": {
-        "family": "keyword_combat",
-        "record_kind": "combat",
-        "outcome": "A creature dealt combat damage by a deathtouch source is destroyed in the state-based check, whatever the amount, in a real combat where the keyword's effect is observable.",
-        "near_miss": "A damage-step probe re-runs the combat with deathtouch stripped from the source, and a creature it dealt less than lethal damage survives.",
-        "params": {
-          "keyword": "deathtouch"
-        },
-        "needs": []
+        "same_as": "702.2b-1",
+        "reason": "A creature dealt damage by a deathtouch source destroyed is 702.2b's fact."
       }
     },
     {
@@ -1185,10 +1179,11 @@
       "detector": {
         "family": "sba_zone_move",
         "record_kind": "resolution",
-        "outcome": "An Aura whose host left the battlefield or became illegal moves to its owner's graveyard in the state-based check.",
-        "near_miss": "An Aura whose host the record touched but which stayed legal remains on the battlefield.",
+        "outcome": "An Aura whose enchanted object left the battlefield is put into its owner's graveyard.",
+        "near_miss": "An Aura whose host the record touched and which stays attached.",
         "params": {
-          "check": "aura_illegal"
+          "check": "aura_illegal",
+          "aura_cause": "left"
         },
         "needs": []
       }
@@ -1339,14 +1334,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A permanent that is both attached and a creature becomes unattached in the state-based check after a resolution.",
-        "near_miss": "No near miss is tagged: outcome_event counts one only with an api or keyword.",
-        "params": {
-          "event": "unattached"
-        },
-        "needs": []
+        "none": "Could not express: that the attached permanent is itself a creature (an Equipment or Fortification creature, an attached creature or battle) is read by no outcome_event parameter."
       }
     },
     {

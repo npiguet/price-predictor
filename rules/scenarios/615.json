@@ -159,15 +159,7 @@
       ],
       "forge_notes": "The scenario spans two turns; the step name only gives the starting point.",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A prevention effect within its duration prevents damage it applies to.",
-        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
-        "params": {
-          "event": "damage_dealt",
-          "prevention": true
-        },
-        "needs": []
+        "none": "A rewrite record shows a prevention that applied; why it applied or not (its duration, when it was created, a next-time or per-creature shield, a source re-checked, a rider using the amount) is compared by no parameter, and damage no effect met writes no rewrite record."
       }
     },
     {
@@ -236,15 +228,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A prevention effect that exists when the damage would be dealt prevents it.",
-        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
-        "params": {
-          "event": "damage_dealt",
-          "prevention": true
-        },
-        "needs": []
+        "none": "A rewrite record shows a prevention that applied; why it applied or not (its duration, when it was created, a next-time or per-creature shield, a source re-checked, a rider using the amount) is compared by no parameter, and damage no effect met writes no rewrite record."
       }
     },
     {
@@ -309,15 +293,7 @@
       ],
       "forge_notes": "Vigor's script is a DamageDone replacement with PreventionEffect and ExecuteMode$ PerTarget that puts counters equal to the damage.",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A prevention effect prevents damage, and its additional effect follows.",
-        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
-        "params": {
-          "event": "damage_dealt",
-          "prevention": true
-        },
-        "needs": []
+        "none": "A rewrite record shows a prevention that applied; why it applied or not (its duration, when it was created, a next-time or per-creature shield, a source re-checked, a rider using the amount) is compared by no parameter, and damage no effect met writes no rewrite record."
       }
     },
     {
@@ -395,15 +371,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "Damage is prevented by a prevention effect and is never dealt.",
-        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
-        "params": {
-          "event": "damage_dealt",
-          "prevention": true
-        },
-        "needs": []
+        "none": "A rewrite record shows a prevention that applied; why it applied or not (its duration, when it was created, a next-time or per-creature shield, a source re-checked, a rider using the amount) is compared by no parameter, and damage no effect met writes no rewrite record."
       }
     },
     {
@@ -492,11 +460,12 @@
       "detector": {
         "family": "rewrite_event",
         "record_kind": "rewrite",
-        "outcome": "A damage-amount shield prevents damage up to its remaining amount.",
-        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
+        "outcome": "A damage-amount shield absorbs a whole damage event (Forge reports it replaced).",
+        "near_miss": "A prevention effect meets damage it cannot prevent.",
         "params": {
           "event": "damage_dealt",
-          "prevention": true
+          "prevention": true,
+          "result": "replaced"
         },
         "needs": []
       }
@@ -572,15 +541,7 @@
       ],
       "forge_notes": "Circle of Protection: Red is implemented as an Effect with a replacement that exiles itself after one use.",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A next-time prevention effect prevents a whole damage instance.",
-        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
-        "params": {
-          "event": "damage_dealt",
-          "prevention": true
-        },
-        "needs": []
+        "none": "A rewrite record shows a prevention that applied; why it applied or not (its duration, when it was created, a next-time or per-creature shield, a source re-checked, a rider using the amount) is compared by no parameter, and damage no effect met writes no rewrite record."
       }
     },
     {
@@ -649,15 +610,7 @@
       ],
       "forge_notes": "The ChooseSource choice is made on resolution, so the recoloring response must come after the ability resolves. Forge rechecks the colour through ValidSource Card.ChosenCardStrict+GreenSource.",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A shield for sources with a property prevents damage from a matching source.",
-        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
-        "params": {
-          "event": "damage_dealt",
-          "prevention": true
-        },
-        "needs": []
+        "none": "A rewrite record shows a prevention that applied; why it applied or not (its duration, when it was created, a next-time or per-creature shield, a source re-checked, a rider using the amount) is compared by no parameter, and damage no effect met writes no rewrite record."
       }
     },
     {
@@ -733,15 +686,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A static prevention effect of a fixed amount prevents that amount of each damage event.",
-        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
-        "params": {
-          "event": "damage_dealt",
-          "prevention": true
-        },
-        "needs": []
+        "none": "A rewrite record shows a prevention that applied; why it applied or not (its duration, when it was created, a next-time or per-creature shield, a source re-checked, a rider using the amount) is compared by no parameter, and damage no effect met writes no rewrite record."
       }
     },
     {
@@ -826,15 +771,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A shield created by a radiance prevention effect prevents damage to its creature.",
-        "near_miss": "A damage event meets the prevention effect and none of it is prevented (result not_replaced).",
-        "params": {
-          "event": "damage_dealt",
-          "prevention": true
-        },
-        "needs": []
+        "none": "A rewrite record shows a prevention that applied; why it applied or not (its duration, when it was created, a next-time or per-creature shield, a source re-checked, a rider using the amount) is compared by no parameter, and damage no effect met writes no rewrite record."
       }
     },
     {

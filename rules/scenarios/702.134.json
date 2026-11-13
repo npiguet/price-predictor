@@ -153,14 +153,7 @@
       ],
       "forge_notes": "Bestow is a setup that Forge may not reach directly; the Aura could instead be cast with bestow in an earlier step.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "Each mentor instance on an attacking creature is evaluated and fires as its own trigger.",
-        "near_miss": "A mentor trigger evaluated and not fired; the detector does not count instances per event, and misses an instance another permanent's effect grants, which reads off that effect's line.",
-        "params": {
-          "keyword": "Mentor"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     },
     {

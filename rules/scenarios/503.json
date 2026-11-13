@@ -75,14 +75,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A trigger with Mode$ Untaps is evaluated against a permanent becoming untapped and fires; one that fires in the untap step is held until the upkeep step, where it goes on the stack before the active player gets priority.",
-        "near_miss": "An Untaps trigger evaluated against an untapping permanent its condition does not match, which does not fire.",
-        "params": {
-          "mode": "Untaps"
-        },
-        "needs": []
+        "none": "When triggered abilities go on the stack relative to priority is in no record."
       }
     },
     {

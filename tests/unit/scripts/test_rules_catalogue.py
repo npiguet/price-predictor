@@ -96,7 +96,7 @@ def test_a_confirmed_accepted_departure_passes(declared, families):
 
 
 def test_the_registry_the_validator_reads_is_the_package_s(families):
-    assert families["sba_zone_move"] == frozenset({"check"})
+    assert families["sba_zone_move"] == frozenset({"check", "marked_before", "aura_cause"})
 
 
 def test_the_real_tree_passes_every_check_but_the_gen3_fields():

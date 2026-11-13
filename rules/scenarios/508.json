@@ -842,14 +842,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "An attack trigger fires only for a creature that meets its condition at the moment it is declared.",
-        "near_miss": "The trigger is evaluated at declaration and does not fire for a creature that does not yet meet its condition.",
-        "params": {
-          "mode": "Attacks"
-        },
-        "needs": []
+        "none": "Could not express: when the attacker gained its quality, or that it entered attacking, is read by no trigger_mode parameter."
       }
     },
     {
@@ -917,14 +910,7 @@
       ],
       "forge_notes": "The Cat Soldier token enters attacking without being declared; the count of Hellrider triggers is the observable.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "An attack trigger fires for a creature declared as an attacker.",
-        "near_miss": "An attack trigger is evaluated for a declared attacker that does not meet its condition and does not fire; a creature put onto the battlefield attacking is never evaluated.",
-        "params": {
-          "mode": "Attacks"
-        },
-        "needs": []
+        "none": "Could not express: when the attacker gained its quality, or that it entered attacking, is read by no trigger_mode parameter."
       }
     },
     {
@@ -1001,14 +987,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A trigger on a player being attacked fires when creatures are declared attacking that player.",
-        "near_miss": "The trigger is not fired when no creature attacks that player, such as attackers aimed at a planeswalker.",
-        "params": {
-          "mode": "AttackersDeclared"
-        },
-        "needs": []
+        "none": "Could not express: what the attack trigger asks of the declaration (a player attacked, a qualifying creature) is in its script, which the declaration's mode alone does not read."
       }
     },
     {
@@ -1079,14 +1058,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A trigger on a player attacking with a qualifying creature fires when such a creature is declared.",
-        "near_miss": "The trigger is not fired when only non-qualifying creatures are declared.",
-        "params": {
-          "mode": "AttackersDeclared"
-        },
-        "needs": []
+        "none": "Could not express: what the attack trigger asks of the declaration (a player attacked, a qualifying creature) is in its script, which the declaration's mode alone does not read."
       }
     },
     {
@@ -1314,14 +1286,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "An attacks-and-isn't-blocked trigger fires in the declare blockers step for an unblocked attacker.",
-        "near_miss": "The trigger is evaluated in the declare blockers step for an unblocked attacker its condition does not cover, and does not fire.",
-        "params": {
-          "mode": "AttackerUnblocked"
-        },
-        "needs": []
+        "same_as": "509.3g-1",
+        "reason": "An attacks-and-isn't-blocked trigger firing in the declare blockers step is 509.3g's fact."
       }
     },
     {

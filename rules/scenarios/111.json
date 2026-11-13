@@ -71,15 +71,7 @@
       ],
       "forge_notes": "Forbidden Orchard's Mode$ TapsForMana trigger with Activator$ You; the token is created with TokenOwner$ Targeted.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A token-making resolution puts a token onto the battlefield; the player who created it owns and controls it.",
-        "near_miss": "A token-making resolution of the same API that creates no token.",
-        "params": {
-          "event": "token_created",
-          "api": "Token"
-        },
-        "needs": []
+        "none": "A token's owner and controller are its creator by construction: no record contrasts with it."
       }
     },
     {
@@ -143,15 +135,7 @@
       ],
       "forge_notes": "111.2 has no does_not_fire branch: every created token is owned by its creator.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A token-making resolution puts a token onto the battlefield; the player who created it owns and controls it.",
-        "near_miss": "A token-making resolution of the same API that creates no token.",
-        "params": {
-          "event": "token_created",
-          "api": "Token"
-        },
-        "needs": []
+        "none": "A token's owner and controller are its creator by construction: no record contrasts with it."
       }
     },
     {

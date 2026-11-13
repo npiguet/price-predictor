@@ -98,11 +98,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A decision candidate's timing bit is true: for an enchantment or any other spell without flash, its controller has priority in a main phase of their own turn with an empty stack.",
-        "near_miss": "A decision candidate whose timing bit is false: another step, another player's turn, or a non-empty stack.",
+        "outcome": "An enchantment card's cast candidate has its timing true: a main phase of its controller's turn with an empty stack (or any priority with flash).",
+        "near_miss": "An enchantment card's cast candidate whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "candidate": "cast",
+          "source_type": "enchantment"
         },
         "needs": [
           "timing"
@@ -180,12 +182,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolving permanent spell moves from the stack to the battlefield.",
-        "near_miss": "A permanent spell that leaves the stack without entering the battlefield (countered); not counted: a permanent spell's implicit trait has no line, so no api can be set.",
+        "outcome": "A resolving enchantment spell is put onto the battlefield.",
+        "near_miss": "A enchantment spell's resolution that puts nothing onto the battlefield.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",
-          "to_zone": "battlefield"
+          "to_zone": "battlefield",
+          "source_type": "enchantment"
         },
         "needs": []
       }
@@ -341,11 +344,12 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A targeted spell candidate has a legal target, so it is playable.",
-        "near_miss": "A targeted spell candidate with no legal target.",
+        "outcome": "An Aura spell has a legal target for its enchant ability.",
+        "near_miss": "An Aura spell with no legal target.",
         "params": {
           "bit": "has_legal_target",
-          "fires_when": true
+          "fires_when": true,
+          "source_keyword": "Enchant"
         },
         "needs": []
       }
@@ -424,14 +428,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "sba_zone_move",
-        "record_kind": "resolution",
-        "outcome": "An Aura whose host left the battlefield in the record moves to its owner's graveyard in the state-based check.",
-        "near_miss": "An Aura whose host the record touched and which stayed attached on the battlefield.",
-        "params": {
-          "check": "aura_illegal"
-        },
-        "needs": []
+        "same_as": "704.5m-2",
+        "reason": "Both state that an Aura whose object left is put into the graveyard."
       }
     },
     {
@@ -503,14 +501,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "sba_zone_move",
-        "record_kind": "resolution",
-        "outcome": "An Aura whose host left the battlefield or gained protection from one of the Aura's colours moves to its owner's graveyard in the state-based check after the resolution.",
-        "near_miss": "An Aura whose host the resolution touched stays legal and stays on the battlefield.",
-        "params": {
-          "check": "aura_illegal"
-        },
-        "needs": []
+        "same_as": "704.5m-1",
+        "reason": "Both state that an Aura on an object it can no longer enchant is put into the graveyard."
       }
     },
     {
@@ -642,15 +634,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "The controller of an Aura can activate the Aura's own ability: the candidate's can_play bit is true.",
-        "near_miss": "A player who does not control the Aura has a false can_play bit for its ability.",
-        "params": {
-          "bit": "can_play",
-          "fires_when": true
-        },
-        "needs": []
+        "none": "Could not express: the candidate's own condition (a special action ending an effect, who controls an Aura against the creature it enchants, an instant-only action, a Class's level) is read by no verdict_bit filter; a Class's level is no designation the snapshot writes."
       }
     },
     {
@@ -722,15 +706,7 @@
       ],
       "forge_notes": "Centaur Courser must be set up as a declared attacker, which a tapped flag alone does not express.",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "The controller of the enchanted creature can activate an ability the Aura grants it: can_play is true.",
-        "near_miss": "A player who does not control the enchanted creature has a false can_play bit for the granted ability.",
-        "params": {
-          "bit": "can_play",
-          "fires_when": true
-        },
-        "needs": []
+        "none": "Could not express: the candidate's own condition (a special action ending an effect, who controls an Aura against the creature it enchants, an instant-only action, a Class's level) is read by no verdict_bit filter; a Class's level is no designation the snapshot writes."
       }
     },
     {
@@ -803,15 +779,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "The Aura's controller can still activate its ability after control of the enchanted permanent changed: can_play is true.",
-        "near_miss": "The player who gained the enchanted permanent has a false can_play bit for the Aura's ability.",
-        "params": {
-          "bit": "can_play",
-          "fires_when": true
-        },
-        "needs": []
+        "none": "Could not express: the candidate's own condition (a special action ending an effect, who controls an Aura against the creature it enchants, an instant-only action, a Class's level) is read by no verdict_bit filter; a Class's level is no designation the snapshot writes."
       }
     },
     {
@@ -1092,16 +1060,7 @@
       ],
       "forge_notes": "Forge may offer only permanents Pacifism can enchant; with Black Knight as the only other creature it then offers none, and Pacifism still does not move.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "An attach effect resolves without moving its Aura, because the object or player it would attach to can't legally be enchanted: the attach resolution's effect half holds no attached event.",
-        "near_miss": "An attach effect resolves and moves the Aura to its new object or player: an attached event in the effect half.",
-        "params": {
-          "event": "attached",
-          "api": "Attach",
-          "absent": true
-        },
-        "needs": []
+        "none": "Could not express: whether the object an Attach would move is an Aura or an Equipment is read by no absent declaration."
       }
     },
     {

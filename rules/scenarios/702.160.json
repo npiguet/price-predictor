@@ -132,12 +132,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A card with an alternative cost is a legal candidate when its cost is payable.",
-        "near_miss": "The same card is a candidate rejected because the cost cannot be paid.",
+        "outcome": "A Prototype candidate passes its cost check.",
+        "near_miss": "A Prototype candidate that fails it.",
         "params": {
           "bit": "failed_check",
           "check": "cost",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Prototype"
         },
         "needs": [
           "failed_checks"

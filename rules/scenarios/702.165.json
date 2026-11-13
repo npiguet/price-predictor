@@ -216,15 +216,7 @@
       ],
       "forge_notes": "Forge grants a backup creature's printed abilities from the BackupAbility SVar, so a keyword from a static effect such as Herald of Dromoka's is not part of the grant.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A backup ability's resolution grants only the source's printed abilities: a keyword_change event in the effect half.",
-        "near_miss": "A backup ability resolving with no keyword_change event.",
-        "params": {
-          "event": "keyword_change",
-          "keyword": "Backup"
-        },
-        "needs": []
+        "none": "Could not express: which of the backup creature's abilities were granted, and when they were fixed, is read by no outcome_event parameter."
       }
     },
     {
@@ -297,15 +289,7 @@
       ],
       "forge_notes": "702.165d has no does_not_fire branch: it only says the granted set does not change, and an ability the source gains after the trigger is on the stack is unprinted, so 702.165c already excludes it.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A backup ability's resolution grants the abilities fixed when it went on the stack: a keyword_change event in the effect half.",
-        "near_miss": "A backup ability resolving with no keyword_change event.",
-        "params": {
-          "event": "keyword_change",
-          "keyword": "Backup"
-        },
-        "needs": []
+        "none": "Could not express: which of the backup creature's abilities were granted, and when they were fixed, is read by no outcome_event parameter."
       }
     }
   ]

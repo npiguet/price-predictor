@@ -161,14 +161,7 @@
       ],
       "forge_notes": "Reckless Pyrosurfer gains battle cry through two separate Pump effects; check that Forge keeps two instances of the keyword rather than collapsing them.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A battle cry trigger fires, one trigger record per instance of the keyword on the attacker.",
-        "near_miss": "A battle cry trigger evaluated and not fired.",
-        "params": {
-          "keyword": "battle cry"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     }
   ]

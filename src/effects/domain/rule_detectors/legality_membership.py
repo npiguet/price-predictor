@@ -55,6 +55,17 @@ Parameters:
   none, in ``normalize_counter_type``'s spelling;
 - ``judged_type``: only a judged entity of this card type counts, on either
   side (a battle among an attacker's defenders), compared without case;
+- ``restriction`` (``legal_blockers`` and ``legal_targets``): the one rule
+  that keeps an entity out, decided by ``rule_outcomes``
+  (``legality_restrictions``: an evasion, ``tapped``, ``landwalk`` or
+  ``effect`` for a blocker; ``hexproof``, ``hexproof_from``, ``shroud``,
+  ``protection`` or ``selector`` for a target), with ``quality`` (a
+  protection's quality kind, ``everything``) beside ``protection``;
+- ``judged`` (``permanent`` or ``player``), ``source_keyword`` (the
+  candidate's card prints this keyword) and ``candidate_keyword`` (the
+  candidate is this keyword's line), on ``legal_targets``;
+- ``designation``: only a judged entity holding this gen-3 designation counts
+  (a suspected creature);
 - ``min_types``: only a judged entity with at least this many card types
   counts, on either side (an artifact creature, 205.2b).
 
@@ -88,8 +99,22 @@ from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord, PlayabilitySubkind, RecordKind
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors import FamilyMatch, register
-from effects.domain.rule_detectors.acting_line import card_has_keyword
-from effects.domain.rule_detectors.entity_facts import card_type_count, has_card_type
+from effects.domain.rule_detectors.acting_line import card_has_keyword, is_keyword_line, line_of
+from effects.domain.rule_detectors.entity_facts import (
+    card_type_count,
+    has_card_type,
+    has_designation,
+)
+from effects.domain.rule_detectors.legality_restrictions import (
+    BLOCKER_RESTRICTIONS,
+    JUDGED,
+    QUALITY_KINDS,
+    SELECTOR,
+    TARGET_RESTRICTIONS,
+    blocker_judgements,
+    sides,
+    target_judgements,
+)
 from effects.domain.state_snapshot import normalize_counter_type
 
 UNIVERSES = frozenset({"battlefield", "battlefield_and_players"})
@@ -217,6 +242,36 @@ def _sides(record: EffectRecord, listed: str, statics_only: bool, universe: str 
     return inside, outside
 
 
+#: The restrictions each list can name (``legality_restrictions``).
+_RESTRICTIONS = {"legal_blockers": BLOCKER_RESTRICTIONS, "legal_targets": TARGET_RESTRICTIONS}
+
+
+def _restricted(record: EffectRecord, lines: SidecarLookup | None,
+                params: Mapping[str, Any]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """``(fires, near)`` under a named restriction (``legality_restrictions``)."""
+    listed, quality = params["list"], params.get("quality")
+    restriction = params.get("restriction", SELECTOR)
+    fires_when = params.get("fires_when", "outside")
+    if listed == "legal_blockers":
+        return sides(blocker_judgements(record, lines, restriction, quality), fires_when)
+    candidates = [c for c in record.payload.candidates
+                  if (c.legal_targets or not c.has_legal_target)
+                  and (record.generation == 3 or len(c.legal_targets) < GEN2_TARGET_CAP)]
+    if "source_keyword" in params:
+        candidates = [c for c in candidates
+                      if card_has_keyword(c.ability, lines, params["source_keyword"])]
+    if "candidate_keyword" in params:
+        candidates = [c for c in candidates if is_keyword_line(
+            line_of(c.ability, lines), params["candidate_keyword"])]
+    players = {p.id for p in record.state.players}
+    universe = _universe(record, "legal_targets", "battlefield_and_players")
+    judged = params.get("judged")
+    if judged is not None:
+        universe = tuple(e for e in universe if (e in players) == (judged == "player"))
+    return sides(target_judgements(record, lines, restriction, quality, candidates, universe),
+                 fires_when)
+
+
 def _of_kind(record: EffectRecord, ids: tuple[str, ...], entity_type: str | None,
              min_types: int | None) -> tuple[str, ...]:
     """The entities of ``ids`` of the card type ``entity_type`` and with at
@@ -254,13 +309,18 @@ class LegalityMembership:
     id: str = "legality_membership"
     params: frozenset[str] = frozenset({"list", "fires_when", "responsible_static", "universe",
                                         "keyword", "counter_type", "at_least", "judged_type",
-                                        "min_types"})
+                                        "min_types", "restriction", "quality", "judged",
+                                        "source_keyword", "candidate_keyword", "designation"})
     general: frozenset[str] = frozenset({"list", "fires_when", "universe", "keyword",
-                                         "counter_type", "at_least"})
+                                         "counter_type", "at_least", "restriction",
+                                         "source_keyword", "candidate_keyword"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         listed = params.get("list")
-        return frozenset({listed}) if listed in GEN3_LISTS else frozenset()
+        found = {listed} if listed in GEN3_LISTS else set()
+        if "designation" in params:
+            found.add("designations")
+        return frozenset(found)
 
     def validate(self, params: Mapping[str, Any]) -> None:
         listed = params.get("list")
@@ -274,6 +334,24 @@ class LegalityMembership:
             raise ValueError(f"legality_membership: unknown universe {universe!r}")
         if "at_least" in params and listed != "min_blockers":
             raise ValueError("legality_membership: at_least reads the min_blockers list")
+        restriction = params.get("restriction")
+        if restriction is not None:
+            known = _RESTRICTIONS.get(listed, frozenset())
+            if restriction not in known:
+                raise ValueError(f"legality_membership: restriction {restriction!r} on "
+                                 f"{listed} is none of {sorted(known)}")
+            if params.get("responsible_static"):
+                raise ValueError("legality_membership: a restriction names the rule; "
+                                 "responsible_static reads no rule")
+        if "quality" in params and (restriction != "protection"
+                                    or params["quality"] not in QUALITY_KINDS):
+            raise ValueError(f"legality_membership: quality is one of {sorted(QUALITY_KINDS)}, "
+                             "with restriction protection")
+        for name in ("judged", "source_keyword", "candidate_keyword"):
+            if name in params and listed != "legal_targets":
+                raise ValueError(f"legality_membership: {name} reads legal_targets")
+        if params.get("judged", "permanent") not in JUDGED:
+            raise ValueError(f"legality_membership: judged is one of {sorted(JUDGED)}")
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
@@ -283,14 +361,24 @@ class LegalityMembership:
         universe = params.get("universe")
         if record.kind is not RecordKind.PLAYABILITY or record.subkind is not _SUBKIND_OF[listed]:
             return None
-        inside, outside = _sides(record, listed, bool(params.get("responsible_static")),
-                                 universe, int(params.get("at_least", 2)))
-        fires, near = (outside, inside) if fires_when == "outside" else (inside, outside)
+        if "restriction" in params or "source_keyword" in params or "candidate_keyword" in params:
+            fires, near = _restricted(record, lines, params)
+        else:
+            inside, outside = _sides(record, listed, bool(params.get("responsible_static")),
+                                     universe, int(params.get("at_least", 2)))
+            fires, near = (outside, inside) if fires_when == "outside" else (inside, outside)
         keyword, counter = params.get("keyword"), params.get("counter_type")
         if keyword is not None or counter is not None:
             counter = None if counter is None else normalize_counter_type(counter)
             fires = _carriers(record, fires, lines, keyword, counter, holding=True)
             near = _carriers(record, near, lines, keyword, counter, holding=False)
+        if "designation" in params:
+            def held(entity_id: str) -> bool:
+                entity = record.state.entity(entity_id)
+                return entity is not None and bool(
+                    has_designation(entity, params["designation"]))
+            fires, near = (tuple(e for e in fires if held(e)),
+                           tuple(e for e in near if held(e)))
         entity_type, min_types = params.get("judged_type"), params.get("min_types")
         if entity_type is not None or min_types is not None:
             min_types = None if min_types is None else int(min_types)

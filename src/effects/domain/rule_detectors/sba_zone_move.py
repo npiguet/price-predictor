@@ -39,6 +39,12 @@ shows (the snapshot before the resolution, plus the resolution's own events):
                        record touched and which stayed legal
 =====================  ======================================================
 
+Two parameters narrow a check: ``marked_before`` (``lethal_damage`` only)
+keeps the creatures the board already shows damage marked on, the damage
+accumulating over the turn (120.6); ``aura_cause`` (``aura_illegal`` only),
+``left`` or ``protection``, keeps the Auras whose host left, or gained a
+protection, in the record.
+
 The polarity is read from the board, ``observed`` from the record's own move,
 so a record where Forge disagrees with the rule is the one
 :attr:`RuleTag.needs_review` flags. Left out of every check, because the
@@ -333,7 +339,12 @@ def _uniqueness_checks(record, touched, check) -> tuple[list, list, list]:
     return fires, spared, observed
 
 
-def _aura_checks(record, touched, keywords) -> tuple[list, list, list]:
+#: Why an Aura's host stops being legal: it left, or it gained protection.
+AURA_CAUSES = frozenset({"left", "protection"})
+
+
+def _aura_checks(record, touched, keywords, cause: str | None = None
+                 ) -> tuple[list, list, list]:
     fires, spared, observed = [], [], []
     acted_on = {record.state.refs.source, *record.state.refs.targets}
     for aura in record.state.entities:
@@ -352,6 +363,11 @@ def _aura_checks(record, touched, keywords) -> tuple[list, list, list]:
             # every enchant keyword ``enchant``), so a host changing types or
             # gaining an unnamed protection says nothing of its legality.
             continue
+        if cause == "left" and not host.left and protected:
+            continue
+        if cause == "protection" and (host.left or not any(
+                k.startswith("protection") for k in host.gained)):
+            continue
         (fires if host.left or protected else spared).append(aura.id)
         if touched.get(aura.id, _Touched()).died:
             observed.append(aura.id)
@@ -361,7 +377,7 @@ def _aura_checks(record, touched, keywords) -> tuple[list, list, list]:
 @dataclass(frozen=True, slots=True)
 class SbaZoneMove:
     id: str = "sba_zone_move"
-    params: frozenset[str] = frozenset({"check"})
+    params: frozenset[str] = frozenset({"check", "marked_before", "aura_cause"})
     general: frozenset[str] = frozenset({"check"})
 
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
@@ -371,6 +387,12 @@ class SbaZoneMove:
         check = params.get("check")
         if check not in CHECKS:
             raise ValueError(f"sba_zone_move: unknown check {check!r}; known: {sorted(CHECKS)}")
+        if "marked_before" in params and check != "lethal_damage":
+            raise ValueError("sba_zone_move: marked_before reads lethal_damage")
+        if "aura_cause" in params and (check != "aura_illegal"
+                                       or params["aura_cause"] not in AURA_CAUSES):
+            raise ValueError(f"sba_zone_move: aura_cause is one of {sorted(AURA_CAUSES)}, "
+                             "with aura_illegal")
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
@@ -383,11 +405,18 @@ class SbaZoneMove:
         if check in ("toughness_zero", "lethal_damage", "deathtouch_damage"):
             keywords = KeywordResolver(lines).keywords_of
             fires, spared, observed = _creature_checks(record, touched, check, keywords)
+            if params.get("marked_before"):
+                # Damage accumulating over the turn (120.6): only a creature
+                # the board shows damage already marked on.
+                def marked(entity_id: str) -> bool:
+                    entity = record.state.entity(entity_id)
+                    return entity is not None and entity.damage > 0
+                fires, spared = [e for e in fires if marked(e)], [e for e in spared if marked(e)]
         elif check in _COUNTER_OF:
             fires, spared, observed = _counter_checks(record, touched, check)
         elif check == "aura_illegal":
             fires, spared, observed = _aura_checks(
-                record, touched, KeywordResolver(lines).keywords_of)
+                record, touched, KeywordResolver(lines).keywords_of, params.get("aura_cause"))
         else:
             fires, spared, observed = _uniqueness_checks(record, touched, check)
         for polarity, judged in ((Polarity.FIRES, fires), (Polarity.DOES_NOT_FIRE, spared)):

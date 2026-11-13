@@ -173,14 +173,7 @@
       ],
       "forge_notes": "Forge must treat the granted Flanking as a second instance; if it dedupes keywords, the two_instances variant degrades to one trigger.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "Each instance of flanking on a blocked attacking creature is its own trigger, evaluated and fired separately against a blocking creature without flanking.",
-        "near_miss": "A flanking trigger evaluated against a blocking creature that has flanking, not fired.",
-        "params": {
-          "keyword": "Flanking"
-        },
-        "needs": []
+        "none": "How many times one event triggers an ability is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     }
   ]

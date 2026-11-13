@@ -231,14 +231,17 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A turn-face-up candidate acting through the morph keyword's line is playable (can_play true).",
-        "near_miss": "A morph turn-face-up candidate that is not playable.",
+        "outcome": "A manifested card with morph can be turned face up for its morph cost.",
+        "near_miss": "A manifested card's morph candidate that is not playable.",
         "params": {
           "bit": "can_play",
           "fires_when": true,
-          "keyword": "Morph"
+          "keyword": "Morph",
+          "source_designation": "manifested"
         },
-        "needs": []
+        "needs": [
+          "designations"
+        ]
       }
     },
     {

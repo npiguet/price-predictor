@@ -72,12 +72,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
-        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
+        "outcome": "A permanent with protection from a quality the candidate's source has is outside its legal targets.",
+        "near_miss": "A permanent with protection from a quality the candidate's source lacks is among its legal targets.",
         "params": {
           "list": "legal_targets",
           "fires_when": "outside",
-          "universe": "battlefield_and_players"
+          "restriction": "protection"
         },
         "needs": []
       }
@@ -148,12 +148,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
-        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
+        "outcome": "A permanent with protection from a quality the candidate's source has is outside its legal targets.",
+        "near_miss": "A permanent with protection from a quality the candidate's source lacks is among its legal targets.",
         "params": {
           "list": "legal_targets",
           "fires_when": "outside",
-          "universe": "battlefield_and_players"
+          "restriction": "protection"
         },
         "needs": []
       }
@@ -230,10 +230,11 @@
       "detector": {
         "family": "sba_zone_move",
         "record_kind": "resolution",
-        "outcome": "An Aura whose enchanted permanent left the battlefield or gained protection from one of the Aura's colours is put into its owner's graveyard in the state-based check.",
-        "near_miss": "An Aura whose host the record touched and which stayed legal stays attached.",
+        "outcome": "An Aura of the stated quality is put into the graveyard when its host gains protection from that quality.",
+        "near_miss": "An Aura stays attached when its host gains protection from a quality the Aura lacks.",
         "params": {
-          "check": "aura_illegal"
+          "check": "aura_illegal",
+          "aura_cause": "protection"
         },
         "needs": []
       }
@@ -528,11 +529,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A potential blocker is outside the legal-blockers list for an attacker because of an evasion or protection restriction on the attacker.",
-        "near_miss": "The potential blocker is inside the legal-blockers list for the attacker.",
+        "outcome": "An attacker with protection has a forbidden blocker with the stated quality.",
+        "near_miss": "An attacker with protection has a legal blocker without the stated quality.",
         "params": {
           "list": "legal_blockers",
-          "fires_when": "outside"
+          "fires_when": "outside",
+          "restriction": "protection"
         },
         "needs": []
       }
@@ -600,12 +602,13 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
-        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
+        "outcome": "A permanent with protection from everything is outside every candidate's legal targets; it has no near miss.",
+        "near_miss": "None: protection from everything keeps it out of every targeting candidate's list.",
         "params": {
           "list": "legal_targets",
           "fires_when": "outside",
-          "universe": "battlefield_and_players"
+          "restriction": "protection",
+          "quality": "everything"
         },
         "needs": []
       }
@@ -675,11 +678,13 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A potential blocker is outside the legal-blockers list for an attacker because of an evasion or protection restriction on the attacker.",
-        "near_miss": "The potential blocker is inside the legal-blockers list for the attacker.",
+        "outcome": "An attacker with protection from everything has a forbidden blocker; no creature may block it, so there is no near miss.",
+        "near_miss": "None: protection from everything leaves no legal blocker.",
         "params": {
           "list": "legal_blockers",
-          "fires_when": "outside"
+          "fires_when": "outside",
+          "restriction": "protection",
+          "quality": "everything"
         },
         "needs": []
       }
@@ -752,15 +757,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "Damage to a permanent with protection from everything is prevented.",
-        "near_miss": "Damage dealt to a permanent meets the effect and is not prevented.",
-        "params": {
-          "event": "damage_dealt",
-          "result": "prevented"
-        },
-        "needs": []
+        "none": "Could not express: the prevention's kind (a chosen source's shield, a rule-changing effect, protection from everything or from a player) is compared by no rewrite_event parameter; protection's quality is not read on a rewrite."
       }
     },
     {
@@ -822,16 +819,7 @@
       ],
       "forge_notes": "The chosen player is a setup fact; B chose A in the base. Current Oracle and Forge let True-Name Nemesis's controller choose any player, so the protected_from_B variant is reachable.",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A spell or ability's candidate lists its legal targets, and an entity or player that the rule keeps out (hexproof, shroud, protection, an enchant or equip restriction) is outside that list.",
-        "near_miss": "An entity or player that the same kind of restriction allows is listed in the candidate's legal targets.",
-        "params": {
-          "list": "legal_targets",
-          "fires_when": "outside",
-          "universe": "battlefield_and_players"
-        },
-        "needs": []
+        "none": "Protection from a player names a player, which no keyword list spells and ProtectionQuality does not read, so the record cannot say which candidates the protection keeps out."
       }
     },
     {
@@ -892,15 +880,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A potential blocker is outside the legal-blockers list for an attacker because of an evasion or protection restriction on the attacker.",
-        "near_miss": "The potential blocker is inside the legal-blockers list for the attacker.",
-        "params": {
-          "list": "legal_blockers",
-          "fires_when": "outside"
-        },
-        "needs": []
+        "none": "Protection from a player names a player, which no keyword list spells (Forge's quality is the player) and ProtectionQuality does not read, so the record cannot say which blockers the protection forbids."
       }
     },
     {
@@ -964,15 +944,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "Damage from a player's sources to a permanent with protection from that player is prevented.",
-        "near_miss": "Damage dealt to a permanent meets the effect and is not prevented.",
-        "params": {
-          "event": "damage_dealt",
-          "result": "prevented"
-        },
-        "needs": []
+        "none": "Could not express: the prevention's kind (a chosen source's shield, a rule-changing effect, protection from everything or from a player) is compared by no rewrite_event parameter; protection's quality is not read on a rewrite."
       }
     },
     {
@@ -1037,14 +1009,7 @@
       ],
       "forge_notes": "Pledge of Loyalty gives protection from the colors of permanents its controller controls; with Pledge (white), Grizzly Bears (green) and the colorless Sword and Plains that is white and green.",
       "detector": {
-        "family": "sba_zone_move",
-        "record_kind": "resolution",
-        "outcome": "An Aura whose enchanted permanent left the battlefield or gained protection from one of the Aura's colours is put into its owner's graveyard in the state-based check.",
-        "near_miss": "An Aura whose host the record touched and which stayed legal stays attached.",
-        "params": {
-          "check": "aura_illegal"
-        },
-        "needs": []
+        "none": "Could not express: that a protection's own effect exempts an Aura is in its script, which aura_illegal does not read."
       }
     },
     {
@@ -1118,14 +1083,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "sba_zone_move",
-        "record_kind": "resolution",
-        "outcome": "An Aura whose enchanted permanent left the battlefield or gained protection from one of the Aura's colours is put into its owner's graveyard in the state-based check.",
-        "near_miss": "An Aura whose host the record touched and which stayed legal stays attached.",
-        "params": {
-          "check": "aura_illegal"
-        },
-        "needs": []
+        "none": "Could not express: that a protection's own effect exempts an Aura is in its script, which aura_illegal does not read."
       }
     }
   ]

@@ -86,11 +86,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A candidate planeswalker cast whose timing is legal: main phase of its owner's turn, empty stack.",
-        "near_miss": "A candidate cast in another step, on the opponent's turn or with a non-empty stack has timing false.",
+        "outcome": "A planeswalker card's cast candidate has its timing true: a main phase of its controller's turn with an empty stack.",
+        "near_miss": "A planeswalker card's cast candidate whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "candidate": "cast",
+          "source_type": "planeswalker"
         },
         "needs": [
           "timing"
@@ -165,12 +167,13 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolving permanent spell moves from the stack to the battlefield (zone_change) in its resolution's effect half.",
-        "near_miss": "A spell that left the stack otherwise (countered) shows no such zone change; not counted without an api.",
+        "outcome": "A resolving planeswalker spell is put onto the battlefield.",
+        "near_miss": "A planeswalker spell's resolution that puts nothing onto the battlefield.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",
-          "to_zone": "battlefield"
+          "to_zone": "battlefield",
+          "source_type": "planeswalker"
         },
         "needs": []
       }
@@ -241,14 +244,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "sba_zone_move",
-        "record_kind": "resolution",
-        "outcome": "Of two or more legendary permanents (planeswalkers included) with one name under one controller, one moves to the graveyard in the state-based check.",
-        "near_miss": "A legendary permanent enters with no same-named twin and stays.",
-        "params": {
-          "check": "legend_rule"
-        },
-        "needs": []
+        "same_as": "704.5j-1",
+        "reason": "Two legendary permanents (planeswalkers included) with one name and controller put all but one into the graveyard: 704.5j's fact."
       }
     },
     {
@@ -454,17 +451,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A loyalty-ability candidate whose timing is legal: sorcery timing (main phase of own turn, empty stack).",
-        "near_miss": "A candidate in another step or with a non-empty stack has timing false.",
-        "params": {
-          "bit": "timing",
-          "fires_when": true
-        },
-        "needs": [
-          "timing"
-        ]
+        "same_as": "209.2-1",
+        "reason": "306.5d restates 209.2's loyalty-ability timing for planeswalkers; the record shows one timing verdict on one loyalty ability."
       }
     },
     {
@@ -698,14 +686,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "sba_zone_move",
-        "record_kind": "resolution",
-        "outcome": "A planeswalker whose loyalty counters number 0 moves to the graveyard in the state-based check after a resolution.",
-        "near_miss": "A planeswalker loses loyalty but keeps 1 or more and stays.",
-        "params": {
-          "check": "loyalty_zero"
-        },
-        "needs": []
+        "same_as": "704.5i-1",
+        "reason": "A planeswalker with no loyalty counters put into the graveyard is 704.5i's fact."
       }
     }
   ]

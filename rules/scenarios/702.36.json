@@ -91,12 +91,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A creature that is neither an artifact creature nor black is forbidden, by a static ability, from blocking an attacker with fear.",
-        "near_miss": "An artifact creature or black creature is listed among the legal blockers of an attacker with fear.",
+        "outcome": "An attacker with fear has a forbidden blocker that is neither an artifact creature nor black.",
+        "near_miss": "An attacker with fear has a legal blocker that is an artifact creature or black.",
         "params": {
           "list": "legal_blockers",
           "fires_when": "outside",
-          "responsible_static": true
+          "restriction": "fear"
         },
         "needs": []
       }
@@ -166,16 +166,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A creature that is neither an artifact creature nor black is forbidden, by a static ability, from blocking an attacker with fear, however many instances of fear the attacker has.",
-        "near_miss": "An artifact creature or black creature is listed among the legal blockers of an attacker with one or more instances of fear.",
-        "params": {
-          "list": "legal_blockers",
-          "fires_when": "outside",
-          "responsible_static": true
-        },
-        "needs": []
+        "same_as": "702.36b-1",
+        "reason": "Redundant instances of fear forbid exactly the blockers one instance forbids; no record counts instances."
       }
     }
   ]

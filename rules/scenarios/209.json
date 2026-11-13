@@ -206,11 +206,14 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An activated ability candidate restricted to sorcery timing has timing legal: a main phase of its controller's turn with an empty stack.",
-        "near_miss": "A candidate in another step, on another player's turn or with a non-empty stack has timing false.",
+        "outcome": "A loyalty ability candidate has its timing true: a main phase of its controller's turn with an empty stack.",
+        "near_miss": "A loyalty ability candidate whose timing is false.",
         "params": {
           "bit": "timing",
-          "fires_when": true
+          "fires_when": true,
+          "script_param": {
+            "Planeswalker": "True"
+          }
         },
         "needs": [
           "timing"

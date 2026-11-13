@@ -195,10 +195,10 @@ class DeclarationError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class Duplicate:
-    """A scenario declared ``same_as`` another, and the rules it is counted under."""
+    """A scenario declared ``same_as`` others, and the rules it is counted under."""
 
     rules: tuple[str, ...]
-    same_as: str
+    same_as: tuple[str, ...]
     counted_under: tuple[str, ...]
 
 
@@ -259,12 +259,15 @@ class DetectorIndex:
         scenarios = {s.id: s for s in catalogue.scenarios}
         duplicates = {}
         for scenario in same_as:
-            target = scenarios.get(scenario.detector.scenario)
-            if target is None or not isinstance(target.detector, DetectorDeclaration):
-                raise DeclarationError(
-                    f"{scenario.id}: same_as {scenario.detector.scenario!r} names no scenario "
-                    "declaring a detector")
-            duplicates[scenario.id] = Duplicate(scenario.rules, target.id, target.rules)
+            under: list[str] = []
+            for named in scenario.detector.scenarios:
+                target = scenarios.get(named)
+                if target is None or not isinstance(target.detector, DetectorDeclaration):
+                    raise DeclarationError(
+                        f"{scenario.id}: same_as {named!r} names no scenario declaring a detector")
+                under += target.rules
+            duplicates[scenario.id] = Duplicate(
+                scenario.rules, scenario.detector.scenarios, tuple(dict.fromkeys(under)))
         return cls({kind: tuple(found) for kind, found in by_kind.items()}, frozenset(rules),
                    untaggable, duplicates, untaggable_rules)
 

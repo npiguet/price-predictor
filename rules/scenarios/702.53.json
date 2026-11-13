@@ -173,12 +173,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A sorcery-speed ability candidate passes the casting_speed check (its controller's main phase, empty stack).",
-        "near_miss": "A sorcery-speed ability candidate fails the casting_speed check.",
+        "outcome": "A transmute candidate passes its casting-speed check (sorcery timing).",
+        "near_miss": "A transmute candidate that fails it.",
         "params": {
           "bit": "failed_check",
           "check": "casting_speed",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Transmute"
         },
         "needs": [
           "failed_checks"
