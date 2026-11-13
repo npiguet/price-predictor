@@ -79,4 +79,30 @@ class HiddenKeywordsTest {
                 "the grant is a floating effect of Abandon the Post's: " + floating);
         assertTrue(records(all, "resolution").size() >= 2, all.toString());
     }
+
+    /**
+     * Lavaclaw Reaches animates itself and gains an ability: its effect half
+     * holds exactly one ability_change, the Animate clause rule's; the stat
+     * change it publishes writes none of its own (follow-up item 11).
+     */
+    @Test
+    void anAnimatesGrantIsOneAbilityChange() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card reaches = TestBoard.inPlay(game, caster, "Lavaclaw Reaches");
+        forge.game.spellability.SpellAbility animate =
+                TestBoard.ability(reaches, forge.game.ability.ApiType.Animate);
+        animate.setActivatingPlayer(caster);
+
+        List<String> all = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            game.getStack().add(animate);
+            game.getStack().resolveStack();
+            TestBoard.priority(game);
+            TestBoard.nextStep(game);
+        });
+
+        String half = RecordLines.only(all, "resolution", "cardsfolder/l/lavaclaw_reaches.txt");
+        assertEquals(1, RecordLines.eventTypes(half).stream()
+                .filter("ability_change"::equals).count(), half);
+    }
 }

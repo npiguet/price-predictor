@@ -348,10 +348,17 @@ public final class ProvenanceResolver {
             return keyAt(state, TraitKind.KEYWORD, FaceOrder.keywordIndex(state, keyword));
         }
         Card origin = cloned.getOrigin();
-        CardState original = origin == null ? null : origin.getState(state.getStateName());
-        if (original != null && original != state && depth < MAX_COPY_DEPTH
-                && FaceOrder.keywordIndex(original, keyword) >= 0) {
-            return keyOfPrinted(original, keyword, depth + 1);
+        if (origin != null && depth < MAX_COPY_DEPTH) {
+            // The original's state of the copy's name, else the face it
+            // showed: a copy of a transformed card copies its back face
+            // into its own front.
+            for (CardState original : java.util.Arrays.asList(
+                    origin.getState(state.getStateName()), origin.getCurrentState())) {
+                if (original != null && original != state
+                        && FaceOrder.keywordIndex(original, keyword) >= 0) {
+                    return keyOfPrinted(original, keyword, depth + 1);
+                }
+            }
         }
         return cloned.getSource() == null ? null : of(cloned.getSource());
     }

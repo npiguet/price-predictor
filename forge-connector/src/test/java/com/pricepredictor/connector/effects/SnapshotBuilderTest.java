@@ -357,6 +357,64 @@ class SnapshotBuilderTest {
             assertEquals("Bonecrusher Giant", giant.getName(), "the game's card is untouched");
         }
 
+        /** The acting face of a card in hand, for an ability on {@code face}. */
+        private Map<String, Object> handEntityActingThrough(
+                String name, forge.card.CardStateName face) {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card card = board.hand(name, board.you);
+            SpellAbility acting = card.getAllSpellAbilities().stream()
+                    .filter(sa -> sa.getCardState() != null
+                            && sa.getCardState().getStateName() == face)
+                    .findFirst().orElseThrow(() -> new AssertionError("no ability on " + face));
+            acting.setActivatingPlayer(board.you);
+            return entitiesIn(new SnapshotBuilder(board.game).ofCandidate(acting).render())
+                    .stream().filter(e -> Refs.of(card).equals(e.get("id")))
+                    .findFirst().orElseThrow();
+        }
+
+        /** Fire // Ice in hand, its Ice half acting: the host shows Ice (X1 #3). */
+        @Test
+        void aSplitCardShowsTheHalfItsActingAbilityIsOn() {
+            Map<String, Object> entity = handEntityActingThrough(
+                    "Fire // Ice", forge.card.CardStateName.RightSplit);
+            assertEquals("Ice", entity.get("name"), entity.toString());
+            assertEquals("hand", entity.get("zone"), entity.toString());
+        }
+
+        /** A modal double-faced card acting through its back face shows that face (X1 #3). */
+        @Test
+        void aModalDoubleFacedCardShowsTheBackFaceItsAbilityIsOn() {
+            Map<String, Object> entity = handEntityActingThrough(
+                    "Agadeem's Awakening",
+                    forge.card.CardStateName.Backside);
+            assertEquals("Agadeem, the Undercrypt", entity.get("name"), entity.toString());
+            assertEquals("back", entity.get("face_state"), entity.toString());
+        }
+
+        /**
+         * A Clone of a transformed Delver copies its face up, Insectile
+         * Aberration: the copy's Flying keys to the Aberration's face of the
+         * Delver's file, not to the Clone's own line (V2 #4 edge).
+         */
+        @Test
+        void aCopyOfATransformedCardKeysToTheFaceItCopied() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card delver = board.battlefield("Delver of Secrets", board.opponent);
+            delver.changeCardState("Transform", null, null);
+            SpellAbility clone = board.spell(board.hand("Clone", board.you), board.you);
+            board.game.getStack().addAndUnfreeze(clone);
+            board.game.getStack().resolveStack();
+            Card copy = board.game.getCardsIn(ZoneType.Battlefield).stream()
+                    .filter(card -> card.getController() == board.you).findFirst().orElseThrow();
+            assertEquals("Insectile Aberration", copy.getName(), "the Clone copied the face up");
+
+            Map<String, Object> flying = keywordLine(linesOf(board, copy), "Flying");
+            Map<String, Object> key = RecordLines.asMap(((List<?>) flying.get("keys")).get(0));
+            assertEquals("cardsfolder/d/delver_of_secrets_insectile_aberration.txt",
+                    key.get("script_file"), flying.toString());
+            assertEquals(1L, key.get("face"), flying.toString());
+        }
+
         /**
          * A Clone's {@code copy_source} is the creature it copied, never the
          * Clone itself (C2 #11, V2 #18).
