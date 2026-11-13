@@ -73,6 +73,24 @@ Order: WP0; then WP1 and WP8-independent parts in parallel (WP8's non-protocol i
 3. Brief one Opus verifier with the package's finding list and the diff, without the implementer's reasoning: for each finding, is it fixed on the real path, does a test fail without the fix, and did the change break a neighbour. It is read-only apart from targeted tests.
 4. Send confirmed gaps back to the same implementer (resume it). Record the package's state in the table below and commit.
 
+## Carried into the connector packages
+
+What earlier packages found that a later package's brief must include.
+
+**From WP1 (game copy), for WP5:** `AbilityMapper.map` / `copier.counterpartAbility` may return null (treat as no counterpart); forks fire dies and leaves triggers for creatures killed before the first resolution; `BoardEdit.settle` calls `fork.copyLastState()` after an edit; last-known copies are one shared object per card per fork (never mutate one); a fork's extra-turn ability with no counterpart is dropped and counted.
+
+**From WP2 (hooks), verified:**
+- WP7 `RewriteChannel`: read the 6th argument of `onReplacement` (`buffered`) and add callbacks for `onBufferedAbilityStarting` / `onBufferedAbilityFinished`; attribute the events between them to the buffered ability. Cases: N `onReplacement` calls to M runs (summed amount, `ExecuteMode` per source or per target), a named buffered ability that never starts, nested brackets. Buffered damage abilities arrive with `replacedBy = null`, so `replaced_by` is empty on those records (the Python `min_rewrite_replaced_by_rate` watch falls; it has no default floor). `before == null` means unknown: do not diff it (today it writes a bare `incoming`, the whole `after` as `outgoing`, and counts as rewritten).
+- WP7 `TriggerChannel`: add an `ON_TRIGGER_RUN` callback; pair with the evaluation by identity of `(trigger, runParams)`; several runs per evaluation under Panharmonicon; read the board at evaluation, not at the run; a held fired record with no run did not fire.
+- WP7 `PlayabilityChannel`: a `CANT_BLOCK_STATIC` entry in `PatchHooks`, used for a forbidden blocker's `responsible_static`.
+- WP7 failure report: read `EffectRecordHook.failureCounts()` (cumulative per JVM); a listener body failure is counted by both the connector's `HookFailures` and Forge.
+- WP7 (from WP8): the worker's match-error line names a random-seat match, so Python can count crashed random-seat matches and `collected_nothing` sees a random-seat-only run.
+- WP4 `resolutionHandler`: `targetsAtCast` is the 3rd argument of `onResolutionStarting` (one list per chain link, root first; null = unknown): wire `refs.targets` / `targets_at_cast` from it.
+- WP3: `GameEventCardDamaged.type()` carries the damage type and `BusEvents.cardDamaged` drops it (`Deathtouch` wins over `M1M1Counters`; planeswalker and battle damage fire no `CardDamaged`). `coin_flipped` carries `subjects: [flipper]` (Python `effect_targets` marks every event subject affected, so the flipper becomes a gate positive: decide) and also arrives from cost payment; `OutcomeHandlerTest.anOutcomeNamingNoSubjectsHasNone` is stale. State-based loop signals arrive inside an open resolution (Time Stop, end of combat twice) and at cleanup: traced harmless for `PhaseSignals` / `BusBracketCollector`, keep a test. `new_targets` true more often; `permanent_copied.copy_source` is the original's name; `clash_resolved` with `won=false` for empty libraries.
+- WP12: `HookShapes` / `PatchHooksTest` keep a "not consumed yet" list of Forge listener methods; each connector package removes its entries as it adds the callback.
+
+**From WP9 (decoding), deferred to the wire change:** `face_change.to_state` in FaceState spelling (`front`/`back`/`flipped`/`melded`/`face_down`) and a bus-side `face_change`; per-chain targets read into `Refs`; the game-end marker's kind or member; `card_revealed.from_zone` / `card_made.to_zone` through `CardSpelling.zoneName`; bus `attached`/`unattached` with `attached_to`/`detached_from`; refusing old-shape gen-3 records once the fixture is regenerated (a gen-3 cost half has `events` and no `outcome`; an effect half carries `outcome`).
+
 ## Before re-collection
 
 After WP1-WP11: the fork fidelity audit (tasks.md T181, quickstart stage 5), a short pilot the user launches, `validate-corpus` and `rule-counts` on it, the fixture regeneration (D8), and T124 before stage 6. Ask the user before any collection run.
