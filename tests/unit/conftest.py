@@ -134,6 +134,8 @@ def _no_stale_staging_check(monkeypatch):
     killed ``collect-variants`` left staged there; a unit test building a
     command would otherwise reach the real ``../forge``."""
     monkeypatch.setattr(forge_jvm, "clear_stale_staging", lambda: None)
+    # A collect-variants claims the real directory before its sidecar pass.
+    monkeypatch.setattr(forge_jvm, "claim_staging", lambda directory=None: None)
 
 
 @pytest.fixture(autouse=True)

@@ -21,6 +21,9 @@ from price_predictor.infrastructure.forge_jvm import (
     resolve_connector_jar,
 )
 from price_predictor.infrastructure.forge_jvm import (
+    claim_staging as real_claim_staging,
+)
+from price_predictor.infrastructure.forge_jvm import (
     clear_stale_staging as real_clear_stale_staging,
 )
 
@@ -644,3 +647,78 @@ class TestStaleStagingIsClearedAtTheFirstLaunch:
             r'STAGED_MANIFEST\s*=\s*"([^"]+)"', source.read_text(encoding="utf-8"),
         )
         assert declared is not None and declared.group(1) == forge_jvm.STAGED_MANIFEST
+
+
+class TestAStagingInUseIsLeftAlone:
+    """A clean-up from any process's first JVM emptied the staging a
+    collect-variants still running elsewhere used, so its next recycled
+    worker refused every variant deck. The staging run records its owner
+    (PID and start time); a live owner keeps its staging."""
+
+    @pytest.fixture
+    def staged(self, tmp_path, monkeypatch):
+        custom = tmp_path / "forge" / "forge-gui" / "data" / "custom" / "cards"
+        custom.mkdir(parents=True)
+        (custom / "bolt_variant_0a1b2c3d.txt").write_text("Name:x", encoding="utf-8")
+        (custom / forge_jvm.STAGED_MANIFEST).write_text(
+            "bolt_variant_0a1b2c3d.txt", encoding="utf-8",
+        )
+        monkeypatch.setattr(forge_jvm, "forge_dir", lambda: tmp_path / "forge")
+        monkeypatch.setattr(forge_jvm, "clear_stale_staging", real_clear_stale_staging)
+        monkeypatch.setattr(forge_jvm, "_stale_staging_checked", False)
+        return custom
+
+    def _owned_by(self, staged, pid, started):
+        import json
+
+        (staged / forge_jvm.STAGING_OWNER).write_text(
+            json.dumps({"pid": pid, "started": started}), encoding="utf-8",
+        )
+
+    def test_a_live_owner_keeps_its_staging_and_the_notice_names_it(self, staged, capsys):
+        owner = subprocess.Popen(SLEEPER)
+        try:
+            self._owned_by(staged, owner.pid, forge_jvm.process_start_time(owner.pid))
+
+            build_jvm_command(main_class="Main", classpath="cp")
+
+            assert (staged / "bolt_variant_0a1b2c3d.txt").exists()
+            assert f"PID {owner.pid}) still runs" in capsys.readouterr().out
+        finally:
+            owner.kill()
+            owner.wait()
+
+    def test_a_reused_pid_is_no_owner(self, staged):
+        """This process's PID with another start time: the owner is gone."""
+        self._owned_by(staged, os.getpid(), 12345)
+
+        build_jvm_command(main_class="Main", classpath="cp")
+
+        assert not (staged / "bolt_variant_0a1b2c3d.txt").exists()
+        assert not (staged / forge_jvm.STAGING_OWNER).exists()
+
+    def test_the_claim_names_this_process(self, tmp_path):
+        real_claim_staging(tmp_path)
+
+        assert forge_jvm.staging_owner(tmp_path) == os.getpid()
+
+    def test_an_unreadable_manifest_is_reported_and_the_command_goes_on(self, staged, capsys):
+        (staged / forge_jvm.STAGED_MANIFEST).write_bytes(b"\xff\xfe\x00bad")
+
+        command = build_jvm_command(main_class="Main", classpath="cp")
+
+        assert command[-1] == "Main"
+        assert "Could not clear the variant scripts staged" in capsys.readouterr().out
+
+    def test_an_entry_outside_the_directory_is_never_deleted(self, staged, capsys):
+        outside = staged.parent / "outside.txt"
+        outside.write_text("Name:keep", encoding="utf-8")
+        (staged / forge_jvm.STAGED_MANIFEST).write_text(
+            f"../outside.txt\n{outside}\nbolt_variant_0a1b2c3d.txt\n", encoding="utf-8",
+        )
+
+        build_jvm_command(main_class="Main", classpath="cp")
+
+        assert outside.exists()
+        assert not (staged / "bolt_variant_0a1b2c3d.txt").exists()
+        assert "outside" in capsys.readouterr().out

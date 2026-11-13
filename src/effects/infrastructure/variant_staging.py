@@ -26,14 +26,27 @@ def custom_cards_dir() -> Path:
     return forge_jvm.custom_cards_dir()
 
 
+def claim_staging() -> None:
+    """Record this process as the staging's owner before anything is staged,
+    so another command's first JVM leaves the staging alone while this run
+    lasts (``forge_jvm.clear_stale_staging``); :func:`unstage_variants`
+    drops the record."""
+    forge_jvm.claim_staging()
+
+
 def unstage_variants(directory: Path | None = None) -> int:
     """Delete every file the last staging copied into ``directory`` (default
-    :func:`custom_cards_dir`), as its manifest names them, and empty the
-    manifest; returns how many were deleted. A card a person put there is not
-    in the manifest and stays. A run killed too hard to get here leaves its
-    scripts staged: the next command's first JVM clears them
-    (``forge_jvm.clear_stale_staging``)."""
+    :func:`custom_cards_dir`), as its manifest names them, empty the manifest
+    and drop the owner record; returns how many were deleted. A card a person
+    put there is not in the manifest and stays. A manifest that cannot be
+    read is reported and left. A run killed too hard to get here leaves its
+    scripts staged: the next command's first JVM clears them once this
+    process is gone (``forge_jvm.clear_stale_staging``)."""
     directory = custom_cards_dir() if directory is None else Path(directory)
-    removed = forge_jvm.unstage_custom_cards(directory)
+    try:
+        removed = forge_jvm.unstage_custom_cards(directory)
+    except (OSError, ValueError) as exc:
+        logger.warning("Could not unstage the variant scripts in %s: %s", directory, exc)
+        return 0
     logger.info("Unstaged %d variant script(s) from %s", removed, directory)
     return removed

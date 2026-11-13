@@ -66,7 +66,7 @@ from effects.domain.variant_rounds import (
     variant_script_file,
 )
 from effects.infrastructure.one_shot_workers import write_variant_sidecars
-from effects.infrastructure.variant_staging import unstage_variants
+from effects.infrastructure.variant_staging import claim_staging, unstage_variants
 from price_predictor.infrastructure.card_filenames import sanitize_card_name
 from sealed.infrastructure.effect_collection_flags import directed_fork_error
 
@@ -472,6 +472,9 @@ def _write_sidecars(variant_scripts: Path) -> None:
     """Write every variant's sidecar before the first game: a variant without
     one produces records nothing can join. Aborts with the worker's code, or
     1 when it ran past its timeout and was killed."""
+    # The sidecar pass is the run's first staging: claim it first, so another
+    # command's first JVM leaves it alone while this run lasts.
+    claim_staging()
     try:
         code = write_variant_sidecars(variant_scripts)
     except TimeoutError as exc:

@@ -805,6 +805,23 @@ class TestTheUntargetedRound:
         assert collect_variants.run(config) == 3
         fake_supervisor.play_round.assert_not_called()
 
+    def test_the_staging_is_claimed_before_anything_is_staged(
+        self, tmp_path, monkeypatch, fake_supervisor,
+    ):
+        """Another command's first JVM leaves a staging alone while its owner
+        runs: the owner is recorded before the sidecar pass stages."""
+        collect_variants, config = self._fixture(tmp_path, monkeypatch, fake_supervisor)
+        order: list[str] = []
+        monkeypatch.setattr(collect_variants, "claim_staging", lambda: order.append("claim"))
+        monkeypatch.setattr(
+            collect_variants, "write_variant_sidecars",
+            lambda _path: order.append("sidecar pass") or 0,
+        )
+
+        collect_variants.run(config)
+
+        assert order[:2] == ["claim", "sidecar pass"]
+
     def test_a_sidecar_pass_past_its_timeout_ends_the_run_with_1(
         self, tmp_path, monkeypatch, fake_supervisor, caplog,
     ):
