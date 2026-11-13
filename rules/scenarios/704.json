@@ -1334,7 +1334,15 @@
       ],
       "forge_notes": "",
       "detector": {
-        "none": "Could not express: that the attached permanent is itself a creature (an Equipment or Fortification creature, an attached creature or battle) is read by no outcome_event parameter."
+        "family": "outcome_event",
+        "record_kind": "resolution",
+        "outcome": "A permanent that is attached and a creature becomes unattached.",
+        "near_miss": "A permanent becoming unattached that is no creature.",
+        "params": {
+          "event": "unattached",
+          "subject_type": "creature"
+        },
+        "needs": []
       }
     },
     {
@@ -1834,14 +1842,8 @@
       ],
       "forge_notes": "Polarity refers to the undying trigger. Black Sun's Zenith also puts three -1/-1 counters on any other creature; none is present.",
       "detector": {
-        "family": "trigger_mode",
-        "record_kind": "trigger",
-        "outcome": "A leaves-the-battlefield keyword trigger (undying) is evaluated against a state-based death and fires because the permanent's last known information, from before the whole check, satisfies its condition.",
-        "near_miss": "The same keyword trigger is evaluated against the death and does not fire, because the last known information fails its condition.",
-        "params": {
-          "keyword": "Undying"
-        },
-        "needs": []
+        "same_as": "702.93a-1",
+        "reason": "The scenario shows undying returning the creature, 702.93a's fact; which information the check read is in no field."
       }
     },
     {
@@ -2071,6 +2073,288 @@
         "Confiscate"
       ],
       "forge_notes": "Protector is not a record field; the reassignment shows in the playability verdict for attack targets. The graveyard branch (no player can protect) cannot arise in a two-player game."
+    },
+    {
+      "id": "704.5a-2",
+      "rules": [
+        "704.5a"
+      ],
+      "title": "A player at 0 or less life after combat damage loses the game",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 3
+        },
+        "battlefield": {
+          "A": [
+            "Hill Giant"
+          ],
+          "B": []
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Hill Giant.",
+        "B declares no blockers.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "lethal",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant deals 3 combat damage to B; B is at 0 life and loses the game in the state-based check."
+        },
+        {
+          "label": "four_life",
+          "polarity": "does_not_fire",
+          "delta": "B is at 4 life instead of 3.",
+          "expected": "B is at 1 life and the game goes on.",
+          "operation": "life"
+        }
+      ],
+      "cards": [
+        "Hill Giant"
+      ],
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_game_loss",
+        "record_kind": "combat",
+        "outcome": "A player whose life the combat damage step takes to 0 or less loses the game in the step's state-based check.",
+        "near_miss": "A player who lost life to combat damage and stays above 0.",
+        "params": {
+          "check": "life_zero"
+        },
+        "needs": []
+      }
+    },
+    {
+      "id": "704.5g-2",
+      "rules": [
+        "704.5g"
+      ],
+      "title": "A blocker dealt lethal combat damage is destroyed in the step's state-based check",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Hill Giant"
+          ],
+          "B": [
+            "Grizzly Bears"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Hill Giant.",
+        "B blocks Hill Giant with Grizzly Bears.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "bears",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Grizzly Bears (2/2) has 3 damage marked and moves to B's graveyard; Hill Giant has 2 damage marked and stays."
+        },
+        {
+          "label": "spider",
+          "polarity": "does_not_fire",
+          "delta": "B's blocker is Giant Spider (2/4) instead of Grizzly Bears.",
+          "expected": "Giant Spider has 3 damage marked and stays on the battlefield.",
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Grizzly Bears",
+            "remove": [
+              "PT:2/2"
+            ],
+            "add": [
+              "PT:2/4"
+            ],
+            "note": "Giant Spider's toughness on Grizzly Bears"
+          }
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Grizzly Bears",
+        "Giant Spider"
+      ],
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "combat",
+        "outcome": "A creature combat damage was dealt to, with damage marked reaching its toughness, moves to its owner's graveyard in the step's state-based check.",
+        "near_miss": "A creature dealt combat damage below its toughness stays.",
+        "params": {
+          "check": "lethal_damage"
+        },
+        "needs": []
+      }
+    },
+    {
+      "id": "704.5h-2",
+      "rules": [
+        "704.5h"
+      ],
+      "title": "A creature dealt combat damage by a deathtouch source is destroyed",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Hill Giant"
+          ],
+          "B": [
+            "Typhoid Rats"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": ""
+      },
+      "decisions": [
+        "A attacks B with Hill Giant.",
+        "B blocks Hill Giant with Typhoid Rats.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "rats",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Typhoid Rats deals 1 deathtouch damage to Hill Giant (3/3), which is destroyed; Typhoid Rats dies too."
+        },
+        {
+          "label": "no_deathtouch",
+          "polarity": "does_not_fire",
+          "delta": "Typhoid Rats has no deathtouch.",
+          "expected": "Hill Giant has 1 damage marked and stays on the battlefield.",
+          "operation": "keyword",
+          "script_edit": {
+            "card": "Typhoid Rats",
+            "remove": [
+              "K:Deathtouch"
+            ],
+            "add": []
+          }
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Typhoid Rats"
+      ],
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "combat",
+        "outcome": "A creature dealt non-lethal combat damage by a deathtouch source moves to its owner's graveyard in the step's state-based check.",
+        "near_miss": "A creature dealt non-lethal combat damage by a source without deathtouch stays.",
+        "params": {
+          "check": "deathtouch_damage"
+        },
+        "needs": []
+      }
+    },
+    {
+      "id": "704.5i-2",
+      "rules": [
+        "704.5i"
+      ],
+      "title": "A planeswalker that combat damage leaves with no loyalty goes to the graveyard",
+      "record_kind": "combat",
+      "setup": {
+        "active": "A",
+        "step": "declare_attackers",
+        "life": {
+          "A": 20,
+          "B": 20
+        },
+        "battlefield": {
+          "A": [
+            "Hill Giant"
+          ],
+          "B": [
+            "Jace Beleren"
+          ]
+        },
+        "hand": {},
+        "graveyard": {},
+        "library": {},
+        "exile": {},
+        "notes": "Jace Beleren has 3 loyalty counters."
+      },
+      "decisions": [
+        "A attacks Jace Beleren with Hill Giant.",
+        "B declares no blockers.",
+        "Combat damage is dealt."
+      ],
+      "variants": [
+        {
+          "label": "giant",
+          "polarity": "fires",
+          "delta": "",
+          "expected": "Hill Giant deals 3 damage to Jace Beleren, which loses its 3 loyalty counters and moves to B's graveyard."
+        },
+        {
+          "label": "bears",
+          "polarity": "does_not_fire",
+          "delta": "A attacks with Grizzly Bears (2/2) instead of Hill Giant.",
+          "expected": "Jace Beleren loses 2 loyalty counters and stays with 1.",
+          "operation": "replace_card",
+          "script_edit": {
+            "card": "Hill Giant",
+            "remove": [
+              "PT:3/3"
+            ],
+            "add": [
+              "PT:2/2"
+            ],
+            "note": "Grizzly Bears's power on Hill Giant"
+          }
+        }
+      ],
+      "cards": [
+        "Hill Giant",
+        "Jace Beleren",
+        "Grizzly Bears"
+      ],
+      "forge_notes": "",
+      "detector": {
+        "family": "sba_zone_move",
+        "record_kind": "combat",
+        "outcome": "A planeswalker combat damage left with no loyalty counter moves to its owner's graveyard in the step's state-based check.",
+        "near_miss": "A planeswalker combat damage left with loyalty stays.",
+        "params": {
+          "check": "loyalty_zero"
+        },
+        "needs": []
+      }
     }
   ]
 }

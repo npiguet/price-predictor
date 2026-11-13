@@ -224,15 +224,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A spell is countered by a resolution whose condition reads the spell's characteristics.",
-        "near_miss": "A Counter resolution that countered nothing.",
-        "params": {
-          "event": "spell_countered",
-          "api": "Counter"
-        },
-        "needs": []
+        "none": "Could not express: a prototyped spell's colours on the stack are read by no parameter; the declaration read every countering resolution."
       }
     },
     {

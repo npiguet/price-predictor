@@ -152,8 +152,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "same_as": "510.2-1",
-        "reason": "The record shows combat damage dealt by every creature at once, 510.2's fact."
+        "same_as": "510.1a-1",
+        "reason": "Each creature dealing combat damage equal to its power is 510.1a's fact."
       }
     },
     {
@@ -639,13 +639,12 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "combat",
-        "outcome": "Combat damage dealt to a creature is marked on it: the damage_dealt to a combatant creature comes with no -1/-1 counter_change.",
-        "near_miss": "Combat damage to a creature comes with -1/-1 counters (wither or infect), so it is not marked.",
+        "outcome": "Combat damage from a source with neither wither nor infect is marked on a creature.",
+        "near_miss": "Combat damage to a creature dealt as -1/-1 counters.",
         "params": {
           "event": "damage_dealt",
           "combat": true,
-          "subject_in_combat": true,
-          "without_event": "counter_change"
+          "damage_type": "normal"
         },
         "needs": []
       }
@@ -806,16 +805,12 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
+        "family": "combat_keyword_effect",
         "record_kind": "combat",
-        "outcome": "Combat damage dealt to a player by a source with toxic also gives that player poison counters: the damage step holds a poison_change beside the combat damage_dealt.",
-        "near_miss": "Poison counters changing with no combat damage in the record.",
+        "outcome": "Combat damage to a player from a creature with toxic gives that player poison counters.",
+        "near_miss": "A toxic attacker dealing no combat damage to the player.",
         "params": {
-          "event": "poison_change",
-          "with_event": {
-            "event": "damage_dealt",
-            "combat": true
-          }
+          "keyword": "toxic"
         },
         "needs": []
       }
@@ -975,15 +970,7 @@
       ],
       "forge_notes": "Samite Healer's prevention shield on a player must apply to combat damage before lifelink computes the life gain.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "combat",
-        "outcome": "Damage is reduced by a prevention effect first and the damaged player's life change is processed from the reduced amount: the damage step holds a damage_prevented beside the life_change.",
-        "near_miss": "A life change in a damage step with no prevention.",
-        "params": {
-          "event": "life_change",
-          "with_event": "damage_prevented"
-        },
-        "needs": []
+        "none": "Could not express: the order in which damage is modified, processed and dealt is in no record, which shows the events that happened; the declaration read every life change beside a prevention."
       }
     },
     {

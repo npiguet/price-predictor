@@ -82,16 +82,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A creature an effect forbids from blocking, as detain does, stands outside the legal blockers list with no static, evasion or tap explaining it.",
-        "near_miss": "A creature among the legal blockers.",
-        "params": {
-          "list": "legal_blockers",
-          "fires_when": "outside",
-          "restriction": "effect"
-        },
-        "needs": []
+        "none": "Detain sets a flag on the card (Card.detain), no static and no designation the snapshot writes: an effect forbidding a blocker or a candidate reads like any other (skulk, a Pacifism-style static the connector does not name yet). Taggable once the connector names the forbidding static or writes a detained designation."
       }
     },
     {
@@ -176,15 +167,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A candidate action a restriction forbids, such as a detained permanent's activated ability before its detainer's next turn, has can_play false.",
-        "near_miss": "A candidate action no restriction forbids has can_play true.",
-        "params": {
-          "bit": "can_play",
-          "fires_when": false
-        },
-        "needs": []
+        "none": "Detain sets a flag on the card (Card.detain), no static and no designation the snapshot writes: an effect forbidding a blocker or a candidate reads like any other (skulk, a Pacifism-style static the connector does not name yet). Taggable once the connector names the forbidding static or writes a detained designation."
       }
     },
     {
@@ -262,15 +245,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "An activated ability a restriction forbids, such as a detained permanent's, has can_play false.",
-        "near_miss": "An activated ability no restriction forbids has can_play true.",
-        "params": {
-          "bit": "can_play",
-          "fires_when": false
-        },
-        "needs": []
+        "none": "Detain sets a flag on the card (Card.detain), no static and no designation the snapshot writes: an effect forbidding a blocker or a candidate reads like any other (skulk, a Pacifism-style static the connector does not name yet). Taggable once the connector names the forbidding static or writes a detained designation."
       }
     }
   ]

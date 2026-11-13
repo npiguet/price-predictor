@@ -99,13 +99,14 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A battle card's cast candidate has its timing true: a main phase of its controller's turn with an empty stack.",
-        "near_miss": "A battle card's cast candidate whose timing is false.",
+        "outcome": "A sorcery-speed battle card's cast has its timing true: a main phase of its controller's turn with an empty stack.",
+        "near_miss": "A sorcery-speed battle card's cast whose timing is false.",
         "params": {
           "bit": "timing",
           "fires_when": true,
           "candidate": "cast",
-          "source_type": "battle"
+          "source_type": "battle",
+          "sorcery_speed": true
         },
         "needs": [
           "timing"

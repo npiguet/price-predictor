@@ -271,18 +271,7 @@
         "Island"
       ],
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A countered harmonize spell is exiled.",
-        "near_miss": "A countered spell with harmonize put elsewhere.",
-        "params": {
-          "event": "zone_change",
-          "from_zone": "stack",
-          "to_zone": "exile",
-          "api": "Counter",
-          "source_keyword": "Harmonize"
-        },
-        "needs": []
+        "none": "Could not express: on a countering half the acting card is the counterspell's; that the countered spell has harmonize is read by no outcome_event parameter."
       }
     }
   ]

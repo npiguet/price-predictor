@@ -72,12 +72,13 @@
       "detector": {
         "family": "rewrite_event",
         "record_kind": "rewrite",
-        "outcome": "A permanent entering the battlefield meets a replacement that changes how it enters (such as entering with fewer loyalty counters) and the handler reports updated.",
-        "near_miss": "Such a replacement meets an entering permanent and leaves the event as it was.",
+        "outcome": "Compleated modifies how a planeswalker enters (fewer loyalty counters).",
+        "near_miss": "A compleated planeswalker entering as proposed.",
         "params": {
           "event": "zone_change",
           "result": "updated",
-          "to_zone": "Battlefield"
+          "to_zone": "Battlefield",
+          "keyword": "Compleated"
         },
         "needs": []
       }

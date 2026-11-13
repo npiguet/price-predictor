@@ -451,13 +451,14 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A discard-as-a-special-action candidate (a line with InstantSpeed$, Circling Vultures') has its timing true whenever its owner could cast an instant.",
+        "outcome": "Discarding a card as a special action at instant speed (Circling Vultures) has its timing true whenever its owner could cast an instant.",
         "near_miss": "Such a candidate whose timing is false.",
         "params": {
           "bit": "timing",
           "fires_when": true,
           "script_param": {
-            "InstantSpeed": "True"
+            "InstantSpeed": "True",
+            "ST": "Discard"
           }
         },
         "needs": [
@@ -830,18 +831,8 @@
       ],
       "forge_notes": "Rule 702.170a limits plotting to the owner's main phase with an empty stack, stricter than 116.2k's 'during their own turn'; no variant here relies on the difference (an upkeep plot is left out).",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A plot candidate's timing is true: its owner's main phase, with priority and an empty stack.",
-        "near_miss": "A plot candidate whose timing is false.",
-        "params": {
-          "bit": "timing",
-          "fires_when": true,
-          "keyword": "Plot"
-        },
-        "needs": [
-          "timing"
-        ]
+        "same_as": "702.170a-1",
+        "reason": "Both state when the plot special action may be taken. The Comprehensive Rules disagree with themselves: 116.2k says any time its owner has priority during their own turn with an empty stack, 702.170a during their main phase; Forge follows 702.170a (only as a sorcery), so the record shows 702.170a's timing."
       }
     },
     {

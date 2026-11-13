@@ -66,6 +66,11 @@ Parameters:
   candidate is this keyword's line), on ``legal_targets``;
 - ``designation``: only a judged entity holding this gen-3 designation counts
   (a suspected creature);
+- ``judged_not_type``: only a judged entity without this card type counts,
+  on either side (a noncreature permanent, 506.3);
+- ``restriction`` on ``legal_attackers``: ``tapped`` or ``sick`` (summoning
+  sick without haste), 508.1a's two conditions, judged on a gen-3 record's
+  anchor alone;
 - ``min_types``: only a judged entity with at least this many card types
   counts, on either side (an artifact creature, 205.2b).
 
@@ -107,11 +112,13 @@ from effects.domain.rule_detectors.entity_facts import (
     has_designation,
 )
 from effects.domain.rule_detectors.legality_restrictions import (
+    ATTACKER_RESTRICTIONS,
     BLOCKER_RESTRICTIONS,
     JUDGED,
     QUALITY_KINDS,
     SELECTOR,
     TARGET_RESTRICTIONS,
+    attacker_judgements,
     blocker_judgements,
     sides,
     target_judgements,
@@ -244,7 +251,8 @@ def _sides(record: EffectRecord, listed: str, statics_only: bool, universe: str 
 
 
 #: The restrictions each list can name (``legality_restrictions``).
-_RESTRICTIONS = {"legal_blockers": BLOCKER_RESTRICTIONS, "legal_targets": TARGET_RESTRICTIONS}
+_RESTRICTIONS = {"legal_blockers": BLOCKER_RESTRICTIONS, "legal_targets": TARGET_RESTRICTIONS,
+                 "legal_attackers": ATTACKER_RESTRICTIONS}
 
 
 def _restricted(record: EffectRecord, lines: SidecarLookup | None,
@@ -255,6 +263,8 @@ def _restricted(record: EffectRecord, lines: SidecarLookup | None,
     fires_when = params.get("fires_when", "outside")
     if listed == "legal_blockers":
         return sides(blocker_judgements(record, lines, restriction, quality), fires_when)
+    if listed == "legal_attackers":
+        return sides(attacker_judgements(record, lines, restriction), fires_when)
     candidates = [c for c in record.payload.candidates
                   if (c.legal_targets or not c.has_legal_target)
                   and (record.generation == 3 or len(c.legal_targets) < GEN2_TARGET_CAP)]
@@ -311,7 +321,8 @@ class LegalityMembership:
     params: frozenset[str] = frozenset({"list", "fires_when", "responsible_static", "universe",
                                         "keyword", "counter_type", "at_least", "judged_type",
                                         "min_types", "restriction", "quality", "judged",
-                                        "source_keyword", "candidate_keyword", "designation"})
+                                        "source_keyword", "candidate_keyword", "designation",
+                                        "judged_not_type"})
     general: frozenset[str] = frozenset({"list", "fires_when", "universe", "keyword",
                                          "counter_type", "at_least", "restriction",
                                          "source_keyword", "candidate_keyword"})
@@ -357,7 +368,8 @@ class LegalityMembership:
             "responsible_static": dv.boolean, "keyword": dv.keyword,
             "source_keyword": dv.keyword, "candidate_keyword": dv.keyword,
             "counter_type": dv.counter_type, "at_least": dv.integer, "min_types": dv.integer,
-            "judged_type": dv.card_type, "designation": dv.designation})
+            "judged_type": dv.card_type, "judged_not_type": dv.card_type,
+            "designation": dv.designation})
 
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
@@ -384,6 +396,12 @@ class LegalityMembership:
                     has_designation(entity, params["designation"]))
             fires, near = (tuple(e for e in fires if held(e)),
                            tuple(e for e in near if held(e)))
+        if "judged_not_type" in params:
+            def lacks(entity_id: str) -> bool:
+                entity = record.state.entity(entity_id)
+                return entity is not None and not has_card_type(
+                    entity, params["judged_not_type"])
+            fires, near = tuple(e for e in fires if lacks(e)), tuple(e for e in near if lacks(e))
         entity_type, min_types = params.get("judged_type"), params.get("min_types")
         if entity_type is not None or min_types is not None:
             min_types = None if min_types is None else int(min_types)

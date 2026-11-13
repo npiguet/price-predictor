@@ -315,7 +315,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "none": "The record cannot show the rule's condition: no snapshot fact says a permanent holds a regeneration shield, and the destroyed event the bus writes carries no regenerable flag (a destruction regeneration stopped writes no destroyed at all), so a can't-be-regenerated destruction looks like any other."
+        "none": "The record cannot show the rule's condition: no snapshot fact says a permanent holds a regeneration shield, and the bus-side destroyed event carries no regenerable flag (the run-parameter one on a trigger or rewrite record does; a destruction regeneration stopped writes no destroyed at all), so a can't-be-regenerated destruction looks like any other."
       }
     }
   ]

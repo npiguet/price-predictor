@@ -68,11 +68,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "A creature with defender is outside the legal attackers, listed as forbidden.",
-        "near_miss": "A creature that is a legal attacker.",
+        "outcome": "A creature with defender is no legal attacker.",
+        "near_miss": "A creature with defender among the legal attackers (an effect lets it attack).",
         "params": {
           "list": "legal_attackers",
-          "fires_when": "outside"
+          "fires_when": "outside",
+          "keyword": "Defender"
         },
         "needs": []
       }

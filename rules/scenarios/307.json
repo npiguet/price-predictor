@@ -102,13 +102,14 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A sorcery card's cast candidate has its timing true: a main phase of its controller's turn with an empty stack.",
-        "near_miss": "A sorcery card's cast candidate whose timing is false.",
+        "outcome": "A sorcery-speed sorcery card's cast has its timing true: a main phase of its controller's turn with an empty stack.",
+        "near_miss": "A sorcery-speed sorcery card's cast whose timing is false.",
         "params": {
           "bit": "timing",
           "fires_when": true,
           "candidate": "cast",
-          "source_type": "sorcery"
+          "source_type": "sorcery",
+          "sorcery_speed": true
         },
         "needs": [
           "timing"
@@ -182,13 +183,14 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolving sorcery is put into its owner's graveyard.",
-        "near_miss": "A sorcery's resolution that leaves it elsewhere.",
+        "outcome": "A resolved sorcery is put into its owner's graveyard.",
+        "near_miss": "A resolved sorcery left elsewhere.",
         "params": {
           "event": "zone_change",
           "from_zone": "stack",
           "to_zone": "graveyard",
-          "source_type": "sorcery"
+          "source_type": "sorcery",
+          "half_outcome": "resolved"
         },
         "needs": []
       }

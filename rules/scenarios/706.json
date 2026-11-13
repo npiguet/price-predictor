@@ -78,14 +78,7 @@
       ],
       "forge_notes": "Every die roll's final result is computed this way, so the contrast is other and the detector counts the fires side only. Modifier$ X is applied after the natural result; the dice_rolled note records natural and final values per die.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A resolution rolls a die (a dice_rolled event), whose final result is the natural result plus every modifier.",
-        "near_miss": "None counted: every roll has a final result, and outcome_event counts a near miss only with an api or keyword.",
-        "params": {
-          "event": "dice_rolled"
-        },
-        "needs": []
+        "none": "Could not express: a die's natural result and its modifiers are read by no outcome_event parameter; the declaration read every die rolled."
       }
     },
     {

@@ -82,8 +82,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "same_as": "701.5a-2",
-        "reason": "A spell castable only when its mana cost can be paid is 701.5a's fact."
+        "none": "Could not express: affordability is decided for every candidate and no filter names what makes a cost payable here (mana matching the coloured symbols, the whole cost); the verdict is computed for every candidate, so a declaration naming the check alone tags every candidate of every decision record."
       }
     },
     {

@@ -228,12 +228,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An action restricted to the owner's own turn is a legal candidate on that turn.",
-        "near_miss": "The same action is a candidate rejected on another player's turn.",
+        "outcome": "A foretell candidate passes its whose-turn check during its owner's turn.",
+        "near_miss": "A foretell candidate on another player's turn.",
         "params": {
           "bit": "failed_check",
           "check": "whose_turn",
-          "fires_when": true
+          "fires_when": true,
+          "keyword": "Foretell"
         },
         "needs": [
           "failed_checks"

@@ -425,15 +425,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "A proposed spell with no legal target cannot be cast: its candidate has has_legal_target false and can_play false.",
-        "near_miss": "A candidate with a legal target has has_legal_target true.",
-        "params": {
-          "bit": "has_legal_target",
-          "fires_when": false
-        },
-        "needs": []
+        "none": "Could not express: a proposed spell's illegality is every failed check at once; the verdict is computed for every candidate, so a declaration naming the check alone tags every candidate of every decision record."
       }
     },
     {

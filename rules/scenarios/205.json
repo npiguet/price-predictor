@@ -653,11 +653,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A spell with a script-level cast restriction (such as a legendary sorcery's required legendary permanent) fails that restriction and cannot be played.",
-        "near_miss": "No candidate of the decision fails the script-restriction check.",
+        "outcome": "A sorcery's cast fails its script restriction (a legendary sorcery with no legendary creature or planeswalker).",
+        "near_miss": "A sorcery's cast whose script restriction holds.",
         "params": {
           "bit": "failed_check",
-          "check": "script_restriction"
+          "check": "script_restriction",
+          "candidate": "cast",
+          "source_type": "sorcery"
         },
         "needs": [
           "failed_checks"

@@ -401,17 +401,8 @@
       ],
       "forge_notes": "Forge adds the counter in the draw-to-main transition; the scenario is set in the draw step so that it is the only change before main phase.",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "turn_action",
-        "outcome": "The turn-based action as the active player's precombat main phase begins puts a lore counter on each Saga that player controls: a counter_change on lore counters in a turn_action record.",
-        "near_miss": "Not counted: a turn_action record has no acting line to scope by, so only the fires side is tagged.",
-        "params": {
-          "event": "counter_change",
-          "counter_type": "lore"
-        },
-        "needs": [
-          "turn_action"
-        ]
+        "same_as": "703.4f-1",
+        "reason": "Both state the precombat main phase's lore counter."
       }
     },
     {

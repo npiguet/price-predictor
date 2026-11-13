@@ -356,7 +356,8 @@
         "params": {
           "bit": "affordable",
           "fires_when": false,
-          "responsible_static": true
+          "responsible_static": true,
+          "source_keyword": "Suspend"
         },
         "needs": []
       }

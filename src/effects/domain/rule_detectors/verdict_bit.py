@@ -43,6 +43,8 @@ The candidates a rule speaks for, each filter narrowing both sides:
 - ``source_type``: the candidate's card, as the snapshot shows it
   (``refs.source``), has this card type (``creature``, ``sorcery``,
   ``kindred`` …), compared without case;
+- ``source_tapped``, ``source_sick``: the candidate's card is (true) or is
+  not (false) tapped, or summoning sick, in the snapshot;
 - ``source_designation``: the candidate's card holds this gen-3 designation
   (``plotted``, ``foretold`` …);
 - ``sorcery_speed``: true for a candidate its rules restrict to sorcery
@@ -106,7 +108,7 @@ GEN3_BITS = frozenset({"timing", "failed_check"})
 FILTERS = frozenset({"keyword", "source_keyword", "cost_symbol", "cost_part", "script_param",
                      "land_play", "candidate_face", "candidate", "source_type",
                      "source_designation", "sorcery_speed", "phase_list_first",
-                     "phase_list_last"})
+                     "phase_list_last", "source_tapped", "source_sick"})
 CANDIDATE_FACES = frozenset({"front", "alternative"})
 #: What a candidate is: its card's cast, or an activated ability (a land play
 #: is ``land_play``'s).
@@ -221,6 +223,12 @@ def _passes(candidate: Candidate, lines: SidecarLookup | None,
         if source is None or params["source_type"].lower() not in {
                 t.lower() for t in source.types}:
             return False
+    for flag in ("source_tapped", "source_sick"):
+        if flag in params:
+            source = _source(record)
+            held = None if source is None else getattr(source, flag.removeprefix("source_"))
+            if held is not bool(params[flag]):
+                return False
     if "source_designation" in params:
         source = _source(record)
         if source is None or not has_designation(source, params["source_designation"]):
@@ -306,8 +314,8 @@ class VerdictBit:
             "land_play": dv.boolean, "sorcery_speed": dv.boolean, "keyword": dv.keyword,
             "source_keyword": dv.keyword, "cost_symbol": dv.cost_symbol,
             "script_param": dv.script_param, "source_type": dv.card_type,
-            "source_designation": dv.designation,
-            "phase_list_first": dv.one_of(*PHASE_ORDER),
+            "source_designation": dv.designation, "source_tapped": dv.boolean,
+            "source_sick": dv.boolean, "phase_list_first": dv.one_of(*PHASE_ORDER),
             "phase_list_last": dv.one_of(*PHASE_ORDER)})
         if "check" in params and bit != "failed_check":
             raise ValueError("verdict_bit: check names a failed_check declaration's check")

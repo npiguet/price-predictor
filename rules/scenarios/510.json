@@ -394,12 +394,16 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "combat",
-        "outcome": "Combat damage is dealt simultaneously: several creatures deal combat damage in one damage step, those the state-based check then kills included.",
-        "near_miss": "A combat damage step in which fewer than two damage events happen.",
+        "outcome": "A combat damage step deals its damage and a creature it kills dies in the same record's check: a creature dying still dealt its damage.",
+        "near_miss": "A combat damage step where nothing dies.",
         "params": {
           "event": "damage_dealt",
           "combat": true,
-          "min_count": 2
+          "with_event": {
+            "event": "zone_change",
+            "from_zone": "battlefield",
+            "to_zone": "graveyard"
+          }
         },
         "needs": []
       }

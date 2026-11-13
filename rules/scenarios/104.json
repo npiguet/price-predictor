@@ -436,10 +436,10 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "The resolution of an effect that states a player loses the game holds a player_won event naming that player's opponent: the game ends against the losing player. No resolution carries player_lost, which the connector writes only on a GameLoss replacement's rewrite record.",
-        "near_miss": "A lose-the-game resolution with no player_won: the player did not lose, as when a static says that player can't lose.",
+        "outcome": "An effect that states a player loses the game ends it against that player: the LosesGame ability's own half holds player_lost.",
+        "near_miss": "A lose-the-game resolution with no player_lost: the player did not lose (a static says that player can't lose).",
         "params": {
-          "event": "player_won",
+          "event": "player_lost",
           "api": "LosesGame"
         },
         "needs": []

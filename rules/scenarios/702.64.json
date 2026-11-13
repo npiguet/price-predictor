@@ -300,8 +300,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "same_as": "702.64a-1",
-        "reason": "Each absorb instance is its own rewrite of the same kind; no record counts instances."
+        "none": "How many times one event meets one prevention effect is in no record: an evaluation writes one trigger record whatever the occurrences or instances, and the runs an additional-trigger effect adds are counted nowhere."
       }
     }
   ]

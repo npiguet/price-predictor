@@ -230,8 +230,16 @@
       ],
       "forge_notes": "Forge lets the human pay Phyrexian mana with life only if getLife() >= 2; the AI may decline to do so even when legal.",
       "detector": {
-        "same_as": "107.4f-1",
-        "reason": "A Phyrexian symbol paid with life, allowed only with enough life, is 107.4f's fact."
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A cost paying life is payable while the player's life total is at least the payment.",
+        "near_miss": "A cost paying life the player's life total cannot cover.",
+        "params": {
+          "bit": "affordable",
+          "fires_when": true,
+          "cost_part": "PayLife"
+        },
+        "needs": []
       }
     },
     {
@@ -672,7 +680,8 @@
         "params": {
           "bit": "failed_check",
           "check": "cost",
-          "responsible_static": true
+          "responsible_static": true,
+          "cost_part": "PayLife"
         },
         "needs": [
           "failed_checks"

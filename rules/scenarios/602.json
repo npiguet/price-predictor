@@ -447,12 +447,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An ability with {T} in its cost fails its cost check (summoning sick, or tapped).",
-        "near_miss": "An ability with {T} in its cost whose cost check passes.",
+        "outcome": "A summoning-sick creature's ability with {T} in its cost fails its cost check.",
+        "near_miss": "A summoning-sick creature's {T} ability whose cost check passes (haste).",
         "params": {
           "bit": "failed_check",
           "check": "cost",
-          "cost_symbol": "T"
+          "cost_symbol": "T",
+          "source_sick": true
         },
         "needs": [
           "failed_checks"
@@ -530,11 +531,14 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An ability with an activation limit cannot be activated because that ability's limit is already used up.",
-        "near_miss": "The candidate passes the activation-limit check.",
+        "outcome": "An ability with an activation limit fails it once used (whoever controls it now).",
+        "near_miss": "Such an ability under its limit.",
         "params": {
           "bit": "failed_check",
-          "check": "activation_limit"
+          "check": "activation_limit",
+          "script_param": {
+            "ActivationLimit": "*"
+          }
         },
         "needs": [
           "failed_checks"
@@ -687,16 +691,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "verdict_bit",
-        "record_kind": "playability",
-        "outcome": "An ability restricted to sorcery timing is not activatable because it is not its controller's main phase with an empty stack; the candidate's timing verdict is false.",
-        "near_miss": "The candidate's timing verdict is true.",
-        "params": {
-          "bit": "timing"
-        },
-        "needs": [
-          "timing"
-        ]
+        "same_as": "307.5-1",
+        "reason": "An activate-only-as-a-sorcery ability's timing is 307.5's fact."
       }
     },
     {

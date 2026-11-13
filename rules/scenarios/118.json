@@ -93,11 +93,13 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A candidate whose cost cannot be paid fails the cost check (for example a tap cost of an already tapped permanent).",
-        "near_miss": "A candidate whose cost check passes.",
+        "outcome": "An ability with {T} in its cost fails its cost check while its permanent is tapped.",
+        "near_miss": "An ability of a tapped permanent whose cost check passes.",
         "params": {
           "bit": "failed_check",
-          "check": "cost"
+          "check": "cost",
+          "cost_symbol": "T",
+          "source_tapped": true
         },
         "needs": [
           "failed_checks"
@@ -1026,15 +1028,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "rewrite_event",
-        "record_kind": "rewrite",
-        "outcome": "A replacement effect replaces a permanent's move to the graveyard (a sacrificed permanent exiled instead): the action is performed in its modified form.",
-        "near_miss": "A move to the graveyard that a replacement effect was checked against and did not replace.",
-        "params": {
-          "event": "zone_change",
-          "to_zone": "graveyard"
-        },
-        "needs": []
+        "none": "Could not express: that the replaced action was a cost's is read by no rewrite_event parameter."
       }
     },
     {

@@ -86,13 +86,14 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A planeswalker card's cast candidate has its timing true: a main phase of its controller's turn with an empty stack.",
-        "near_miss": "A planeswalker card's cast candidate whose timing is false.",
+        "outcome": "A sorcery-speed planeswalker card's cast has its timing true: a main phase of its controller's turn with an empty stack.",
+        "near_miss": "A sorcery-speed planeswalker card's cast whose timing is false.",
         "params": {
           "bit": "timing",
           "fires_when": true,
           "candidate": "cast",
-          "source_type": "planeswalker"
+          "source_type": "planeswalker",
+          "sorcery_speed": true
         },
         "needs": [
           "timing"
@@ -609,15 +610,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A resolution's effect half removes loyalty counters from a planeswalker (a counter_change of counter type loyalty), as damage dealt to a planeswalker does.",
-        "near_miss": "Damage to a planeswalker is prevented and no loyalty counter is removed; not counted without an api.",
-        "params": {
-          "event": "counter_change",
-          "counter_type": "loyalty"
-        },
-        "needs": []
+        "same_as": "120.3c-1",
+        "reason": "120.3c and 306.8 both state that damage dealt to a planeswalker removes that many loyalty counters."
       }
     },
     {

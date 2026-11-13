@@ -95,13 +95,14 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A creature card's cast candidate has its timing true: a main phase of its controller's turn with an empty stack (or any priority with flash).",
-        "near_miss": "A creature card's cast candidate whose timing is false.",
+        "outcome": "A sorcery-speed creature card's cast has its timing true: a main phase of its controller's turn with an empty stack.",
+        "near_miss": "A sorcery-speed creature card's cast whose timing is false.",
         "params": {
           "bit": "timing",
           "fires_when": true,
           "candidate": "cast",
-          "source_type": "creature"
+          "source_type": "creature",
+          "sorcery_speed": true
         },
         "needs": [
           "timing"
@@ -446,8 +447,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "same_as": "508.1a-1",
-        "reason": "A creature among the legal attackers is 508.1a's fact."
+        "same_as": "506.3-1",
+        "reason": "A noncreature permanent is no legal attacker: 506.3's fact."
       }
     },
     {
@@ -508,15 +509,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "legality_membership",
-        "record_kind": "playability",
-        "outcome": "A creature is listed among the legal blockers of a blockers record.",
-        "near_miss": "A creature the blockers record lists as forbidden (tapped, summoning-sick or restricted); a noncreature permanent is never a candidate, so it shows on neither side.",
-        "params": {
-          "list": "legal_blockers",
-          "fires_when": "inside"
-        },
-        "needs": []
+        "same_as": "506.3-2",
+        "reason": "A noncreature permanent is no legal blocker: 506.3's fact."
       }
     },
     {
@@ -779,16 +773,12 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "combat",
-        "outcome": "Combat damage dealt to a creature by a source without infect or wither is marked on it: a combat damage_dealt to a creature in combat with no -1/-1 counter_change in the record.",
-        "near_miss": "Combat damage to a creature in combat comes with -1/-1 counters (infect or wither), so it is not marked as damage.",
+        "outcome": "Combat damage from a wither or infect source to a creature is dealt as -1/-1 counters and marks none.",
+        "near_miss": "Combat damage to a creature marked as damage.",
         "params": {
           "event": "damage_dealt",
           "combat": true,
-          "subject_in_combat": true,
-          "without_event": {
-            "event": "counter_change",
-            "counter_type": "M1M1"
-          }
+          "damage_type": "m1m1_counters"
         },
         "needs": []
       }

@@ -659,7 +659,16 @@
       ],
       "forge_notes": "",
       "detector": {
-        "none": "Could not express: what the replacement does to the damage (doubles it, heals instead, keyed to a source off the battlefield) shows only in comparing the incoming and outgoing amounts or the source's zone, which no rewrite_event parameter compares."
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A replacement doubles the damage a source would deal.",
+        "near_miss": "A damage replacement updating the event without doubling it.",
+        "params": {
+          "event": "damage_dealt",
+          "result": "updated",
+          "amount_change": "doubled"
+        },
+        "needs": []
       }
     },
     {
@@ -731,7 +740,16 @@
       ],
       "forge_notes": "",
       "detector": {
-        "none": "Could not express: what the replacement does to the damage (doubles it, heals instead, keyed to a source off the battlefield) shows only in comparing the incoming and outgoing amounts or the source's zone, which no rewrite_event parameter compares."
+        "family": "rewrite_event",
+        "record_kind": "rewrite",
+        "outcome": "A replacement doubles the damage a source would deal.",
+        "near_miss": "A damage replacement updating the event without doubling it.",
+        "params": {
+          "event": "damage_dealt",
+          "result": "updated",
+          "amount_change": "doubled"
+        },
+        "needs": []
       }
     }
   ]

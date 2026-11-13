@@ -87,11 +87,12 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "A candidate spell or non-mana ability is refused by the split second check: a spell with split second is on the stack.",
-        "near_miss": "A candidate the split second check does not refuse.",
+        "outcome": "A spell or non-mana ability candidate fails the split-second check while a split-second spell is on the stack.",
+        "near_miss": "Such a candidate with no split-second spell on the stack.",
         "params": {
           "bit": "failed_check",
-          "check": "split_second"
+          "check": "split_second",
+          "land_play": false
         },
         "needs": [
           "failed_checks"

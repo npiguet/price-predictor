@@ -98,13 +98,14 @@
       "detector": {
         "family": "verdict_bit",
         "record_kind": "playability",
-        "outcome": "An artifact card's cast candidate has its timing true: a main phase of its controller's turn with an empty stack (or any priority with flash).",
-        "near_miss": "An artifact card's cast candidate whose timing is false.",
+        "outcome": "A sorcery-speed artifact card's cast has its timing true: a main phase of its controller's turn with an empty stack.",
+        "near_miss": "A sorcery-speed artifact card's cast whose timing is false.",
         "params": {
           "bit": "timing",
           "fires_when": true,
           "candidate": "cast",
-          "source_type": "artifact"
+          "source_type": "artifact",
+          "sorcery_speed": true
         },
         "needs": [
           "timing"
@@ -556,7 +557,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "none": "Could not express: that the attached permanent is itself a creature (an Equipment or Fortification creature, an attached creature or battle) is read by no outcome_event parameter."
+        "same_as": "704.5p-1",
+        "reason": "An Equipment or Fortification that is also a creature becoming unattached is 704.5p's fact."
       }
     },
     {
@@ -893,7 +895,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "none": "Could not express: that the attached permanent is itself a creature (an Equipment or Fortification creature, an attached creature or battle) is read by no outcome_event parameter."
+        "same_as": "704.5p-1",
+        "reason": "An Equipment or Fortification that is also a creature becoming unattached is 704.5p's fact."
       }
     },
     {

@@ -277,3 +277,19 @@ class TestCandidateFace:
         assert FAMILY.match(on_front, None, {**declared, "candidate_face": "front"}) is not None
         with pytest.raises(ValueError, match="candidate_face"):
             FAMILY.validate({**declared, "candidate_face": "back"})
+
+
+@pytest.mark.parametrize("flag", ["tapped", "sick"])
+def test_the_source_s_tapped_and_sick_flags_filter_the_candidate(by_kind, flag):
+    record = _unaffordable(by_kind)
+    source = record.state.refs.source
+
+    def held(value):
+        return replace(record, state=replace(record.state, entities=tuple(
+            replace(e, **{flag: value}) if e.id == source else e
+            for e in record.state.entities)))
+
+    declared = {"bit": "affordable", f"source_{flag}": True}
+    assert FAMILY.match(held(True), None, declared) is not None
+    assert FAMILY.match(held(False), None, declared) is None
+    assert FAMILY.match(held(False), None, {**declared, f"source_{flag}": False}) is not None

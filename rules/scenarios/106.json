@@ -97,10 +97,11 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A spell's or ability's effect adds mana: the record holds a mana_produced event naming the player who gets it.",
-        "near_miss": "No near miss is counted: mana production is written by the mana hook as its own record, so a Mana resolution's bracketed half holding none would be a false near miss.",
+        "outcome": "A resolving spell that makes mana adds it as it resolves (a mana ability's record has no outcome).",
+        "near_miss": "A resolved spell or ability making no mana.",
         "params": {
-          "event": "mana_produced"
+          "event": "mana_produced",
+          "half_outcome": "resolved"
         },
         "needs": []
       }

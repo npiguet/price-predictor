@@ -83,11 +83,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "An untapped creature the attacking player has controlled since the turn began (or that has haste) is listed among the legal attackers.",
-        "near_miss": "A tapped or summoning-sick creature without haste is listed as forbidden from attacking.",
+        "outcome": "A tapped creature is no legal attacker.",
+        "near_miss": "An untapped creature among the legal attackers.",
         "params": {
           "list": "legal_attackers",
-          "fires_when": "inside"
+          "fires_when": "outside",
+          "restriction": "tapped"
         },
         "needs": []
       }
@@ -152,11 +153,12 @@
       "detector": {
         "family": "legality_membership",
         "record_kind": "playability",
-        "outcome": "An untapped creature the attacking player has controlled since the turn began (or that has haste) is listed among the legal attackers.",
-        "near_miss": "A tapped or summoning-sick creature without haste is listed as forbidden from attacking.",
+        "outcome": "A summoning-sick creature without haste is no legal attacker.",
+        "near_miss": "A summoning-sick creature with haste among the legal attackers.",
         "params": {
           "list": "legal_attackers",
-          "fires_when": "inside"
+          "fires_when": "outside",
+          "restriction": "sick"
         },
         "needs": []
       }

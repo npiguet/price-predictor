@@ -74,11 +74,12 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolution creates a Food token, a token_created event with a Food token in the effect half, as a promised Food gift does.",
-        "near_miss": "Not counted: with no api the family tags only the fires side; a spell resolving with its gift unpromised carries no field that marks it as such.",
+        "outcome": "A gift spell's promised Food is created.",
+        "near_miss": "A gift spell resolving and creating no Food.",
         "params": {
           "event": "token_created",
-          "token_kind": "Food"
+          "token_kind": "Food",
+          "source_keyword": "Gift"
         },
         "needs": []
       }
@@ -442,10 +443,11 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolution makes a player draw a card, a card_drawn event in the effect half, as a promised card gift does.",
-        "near_miss": "Not counted: with no api the family tags only the fires side; a spell resolving with its gift unpromised carries no field that marks it as such.",
+        "outcome": "A gift spell's promised card is drawn.",
+        "near_miss": "A gift spell resolving and drawing no card.",
         "params": {
-          "event": "card_drawn"
+          "event": "card_drawn",
+          "source_keyword": "Gift"
         },
         "needs": []
       }
@@ -677,11 +679,12 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A resolution creates a Treasure token, a token_created event with a Treasure token in the effect half, as a promised Treasure gift does.",
-        "near_miss": "Not counted: with no api the family tags only the fires side; a spell resolving with its gift unpromised carries no field that marks it as such.",
+        "outcome": "A gift spell's promised Treasure is created.",
+        "near_miss": "A gift spell resolving and creating no Treasure.",
         "params": {
           "event": "token_created",
-          "token_kind": "Treasure"
+          "token_kind": "Treasure",
+          "source_keyword": "Gift"
         },
         "needs": []
       }
@@ -838,14 +841,15 @@
       "detector": {
         "family": "resolution_outcome",
         "record_kind": "resolution",
-        "outcome": "A spell leaves the stack by resolving, so its effects, a gift effect included, happen.",
-        "near_miss": "A spell that leaves the stack countered or fizzled, so none of its effects, the gift included, happen.",
+        "outcome": "A gift spell resolves, so its gift happens.",
+        "near_miss": "A gift spell countered or fizzled, so its gift does not happen.",
         "params": {
           "outcome": "resolved",
           "near": [
             "countered",
             "fizzled"
-          ]
+          ],
+          "source_keyword": "Gift"
         },
         "needs": []
       }

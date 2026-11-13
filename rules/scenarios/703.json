@@ -714,16 +714,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "turn_action",
-        "outcome": "The cleanup step's discard action moves cards from the active player's hand to the graveyard.",
-        "near_miss": "No near miss is tagged: outcome_event counts one only with an api or keyword.",
-        "params": {
-          "event": "zone_change",
-          "from_zone": "hand",
-          "to_zone": "graveyard"
-        },
-        "needs": []
+        "same_as": "514.1-1",
+        "reason": "Both state the cleanup step's discard to hand size."
       }
     },
     {

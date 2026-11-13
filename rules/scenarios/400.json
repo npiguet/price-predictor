@@ -479,19 +479,8 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A permanent spell resolves and enters the battlefield under a controller who is not its owner.",
-        "near_miss": "A permanent spell resolves and enters the battlefield under its owner.",
-        "params": {
-          "event": "zone_change",
-          "from_zone": "stack",
-          "to_zone": "battlefield",
-          "controller_is_owner": false
-        },
-        "needs": [
-          "owner"
-        ]
+        "same_as": "110.2b-1",
+        "reason": "A permanent spell whose control changed becoming a permanent under the new controller is 110.2b's fact."
       }
     },
     {
@@ -966,7 +955,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "none": "The record names no cast permission: that a card was cast through another object's permission (Snapcaster Mage, Torrential Gearhulk) is in no field, so the exile the permission causes reads like any other."
+        "none": "Could not express: a line's cast_with names the line a card was cast through (a flashback granted by Snapcaster Mage), but no outcome_event parameter reads it."
       }
     },
     {
@@ -1055,7 +1044,7 @@
       ],
       "forge_notes": "Forge scripts the exile clause as ReplaceGraveyard$ Exile on the Play effect.",
       "detector": {
-        "none": "The record names no cast permission: that a card was cast through another object's permission (Snapcaster Mage, Torrential Gearhulk) is in no field, so the exile the permission causes reads like any other."
+        "none": "Could not express: a line's cast_with names the line a card was cast through (a flashback granted by Snapcaster Mage), but no outcome_event parameter reads it."
       }
     },
     {

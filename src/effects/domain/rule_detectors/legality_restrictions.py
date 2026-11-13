@@ -61,7 +61,10 @@ from effects.domain.rule_outcomes import (
 )
 from effects.domain.state_snapshot import EntityState
 
-TAPPED, LANDWALK, EFFECT, SELECTOR = "tapped", "landwalk", "effect", "selector"
+TAPPED, LANDWALK, EFFECT, SELECTOR, SICK = "tapped", "landwalk", "effect", "selector", "sick"
+#: What keeps a creature out of the legal attackers (508.1a): tapped, or
+#: summoning sick without haste.
+ATTACKER_RESTRICTIONS = frozenset({TAPPED, SICK})
 BLOCKER_RESTRICTIONS = frozenset({*BlockingRestriction, TAPPED, LANDWALK, EFFECT})
 TARGET_RESTRICTIONS = frozenset({*TargetingRestriction, SELECTOR})
 QUALITY_KINDS = frozenset(QualityKind)
@@ -182,6 +185,29 @@ def _blocker(restriction: str, entity_id: str, inside: bool, attacker: set[str],
     else:
         in_play = _EVASION_KEYWORD[rule] in attacker
     return Judgement(entity_id, inside, rule in evasions, in_play)
+
+
+def attacker_judgements(record: EffectRecord, lines: SidecarLookup | None,
+                        restriction: str) -> list[Judgement]:
+    """Each creature of an attackers record (a gen-3 record's anchor alone)
+    against 508.1a's two conditions."""
+    payload, state = record.payload, record.state
+    listed = [(e, True) for e in payload.legal_attackers]
+    listed += [(f.entity, False) for f in payload.forbidden]
+    anchor = getattr(payload, "anchor_attacker", None)
+    keywords_of = KeywordResolver(lines).keywords_of
+    found = []
+    for entity_id, inside in dict.fromkeys(listed):
+        creature = state.entity(entity_id)
+        if creature is None or (anchor is not None and entity_id != anchor):
+            continue
+        if restriction == TAPPED:
+            found.append(Judgement(entity_id, inside, creature.tapped, True))
+        else:
+            sick = creature.sick
+            found.append(Judgement(entity_id, inside,
+                                   sick and "haste" not in keywords_of(creature), sick))
+    return found
 
 
 def target_judgements(record: EffectRecord, lines: SidecarLookup | None, restriction: str,

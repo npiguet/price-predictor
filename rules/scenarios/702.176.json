@@ -76,11 +76,12 @@
       "detector": {
         "family": "continuous_contribution",
         "record_kind": "continuous",
-        "outcome": "A static ability removes the creature type from a permanent on the battlefield, as impending does while the permanent has a time counter.",
-        "near_miss": "The static applies to the board and removes no creature type.",
+        "outcome": "An impending permanent's static removes its creature type while it has time counters.",
+        "near_miss": "The static applying and removing no type.",
         "params": {
           "field": "types",
-          "value": "-creature"
+          "value": "-creature",
+          "source_keyword": "Impending"
         },
         "needs": []
       }

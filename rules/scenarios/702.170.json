@@ -92,8 +92,16 @@
       ],
       "forge_notes": "",
       "detector": {
-        "same_as": "116.2k-1",
-        "reason": "Both state when the plot special action may be taken; the record shows one timing verdict on one plot candidate."
+        "family": "verdict_bit",
+        "record_kind": "playability",
+        "outcome": "A plot candidate's timing is true: its owner's main phase, with priority and an empty stack (Forge applies sorcery timing).",
+        "near_miss": "A plot candidate whose timing is false.",
+        "params": {
+          "bit": "timing",
+          "fires_when": true,
+          "keyword": "Plot"
+        },
+        "needs": []
       }
     },
     {

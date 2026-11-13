@@ -87,7 +87,19 @@
         "Grizzly Bears",
         "Llanowar Elves"
       ],
-      "forge_notes": ""
+      "forge_notes": "",
+      "detector": {
+        "family": "legality_membership",
+        "record_kind": "playability",
+        "outcome": "An attacker with skulk has a forbidden blocker with greater power.",
+        "near_miss": "An attacker with skulk has a legal blocker with power no greater than its own.",
+        "params": {
+          "list": "legal_blockers",
+          "fires_when": "outside",
+          "restriction": "skulk"
+        },
+        "needs": []
+      }
     }
   ]
 }

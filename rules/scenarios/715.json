@@ -387,15 +387,7 @@
       ],
       "forge_notes": "",
       "detector": {
-        "family": "outcome_event",
-        "record_kind": "resolution",
-        "outcome": "A discard resolution holds a card_discarded event counting the cards actually discarded.",
-        "near_miss": "A Discard resolution that discarded nothing.",
-        "params": {
-          "event": "card_discarded",
-          "api": "Discard"
-        },
-        "needs": []
+        "none": "Could not express: that the discarded card is an adventurer card is read by no outcome_event parameter."
       }
     },
     {
