@@ -667,6 +667,25 @@ class Refs:
     #: coins it flipped. None on every other refs block.
     random: RandomResults | None = None
 
+    @property
+    def as_cast(self) -> tuple[str, ...]:
+        """The targets the acting item was cast or put on the stack with:
+        ``targets_at_cast``, else ``targets`` where that is unknown. An
+        effect half's ``targets`` leave out what became illegal, so reading
+        them would hand a model the fizzle it is asked to predict; on a record
+        with no ``targets_at_cast`` (a worker without the resolution hook, a
+        record collected before the member, every block but an effect half's)
+        the fallback still leaks it."""
+        return self.targets_at_cast if self.targets_at_cast is not None else self.targets
+
+    def targets_entity(self, entity: EntityState) -> bool:
+        """Whether the acting item targets this card itself, as cast: a ref
+        :attr:`targets_on_stack` names is the spell or ability on the stack,
+        so a permanent whose ability is targeted is not itself targeted."""
+        if entity.id not in self.as_cast:
+            return False
+        return entity.id not in (self.targets_on_stack or ()) or entity.zone == Zone.STACK
+
 
 @dataclass(frozen=True, slots=True)
 class RandomResults:

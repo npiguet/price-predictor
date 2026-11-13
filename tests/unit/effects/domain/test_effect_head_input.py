@@ -1435,3 +1435,49 @@ class TestTheGen3FixtureInTheModel:
         hidden = model(inputs)
         assert hidden.shape[:2] == inputs.slot_kinds.shape
         assert torch.isfinite(hidden).all()
+
+
+class TestTheTargetsAsCast:
+    """An effect half's ``targets`` leave out what became illegal before it
+    resolved; the input reads ``targets_at_cast`` so that a fizzle is not
+    handed to the model it is asked to predict (``V5 #25``)."""
+
+    @staticmethod
+    def _fizzled(**refs):
+        return _record(state=_snapshot(refs=Refs(**refs)))
+
+    def test_a_fizzled_half_reads_its_targets_as_cast(self):
+        from effects.domain.effect_head_input import _push_relation_to_act
+
+        record = self._fizzled(targets=(), targets_at_cast=("E2", "P1"), targets_on_stack=())
+        out: list[float] = []
+        _push_relation_to_act(out, record.state.entities[1], record, frozenset())
+        assert out[1] == 1.0
+        assert player_features(record.state.players[1], record)[-1 - THERMOMETER_STEPS] == 1.0
+        unknown = self._fizzled(targets=("P1",), targets_at_cast=None)
+        assert unknown.state.refs.as_cast == ("P1",)
+
+    def test_the_count_of_targets_is_the_count_as_cast(self):
+        from effects.domain.effect_head_input import act_features
+
+        fizzled = act_features(self._fizzled(targets=(), targets_at_cast=("E2",)))
+        resolved = act_features(self._fizzled(targets=("E2",), targets_at_cast=("E2",)))
+        assert fizzled == resolved
+
+    def test_a_permanent_whose_ability_is_targeted_is_not_itself_targeted(self):
+        from effects.domain.effect_head_input import _push_relation_to_act
+
+        record = self._fizzled(targets=("E2",), targets_at_cast=("E2",),
+                               targets_on_stack=("E2",))
+        out: list[float] = []
+        _push_relation_to_act(out, record.state.entities[1], record, frozenset())
+        assert out[1] == 0.0
+
+    def test_the_act_slot_targets_what_it_was_cast_at(self):
+        record = _gen3_record(
+            (_gen3_entity("E1"), _gen3_entity("E2")),
+            refs=Refs(targets=(), targets_at_cast=("E2",), source="E1"),
+        )
+        surface = _build(record)
+        assert _linked(surface, ACT_SLOT, _subject_slot(surface, "E2"), "targets", 0)
+

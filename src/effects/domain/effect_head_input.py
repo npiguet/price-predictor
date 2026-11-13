@@ -481,7 +481,7 @@ def act_features(record: EffectRecord) -> tuple[float, ...]:
     _push_scalar(out, refs.x if refs.x is not None else 0)
     out.append(1.0 if refs.x is not None else 0.0)
     _push_scalar(out, len(refs.modes))
-    _push_scalar(out, len(refs.targets))
+    _push_scalar(out, len(refs.as_cast))
     _push_scalar(out, len(refs.choices))
     _push_random_results(out, refs.random)
     return tuple(out)
@@ -533,7 +533,7 @@ def player_features(player: PlayerState, record: EffectRecord) -> tuple[float, .
     out.append(0.0 if player.id == record.actor_player else 1.0)
     out.append(1.0 if player.id == g.active else 0.0)
     out.append(1.0 if player.id == g.priority else 0.0)
-    out.append(1.0 if player.id in record.state.refs.targets else 0.0)
+    out.append(1.0 if player.id in record.state.refs.as_cast else 0.0)
     out += thermometer(player.life)
     return tuple(out)
 
@@ -671,7 +671,7 @@ def _push_relation_to_act(out, entity: EntityState, record: EffectRecord, masked
     state = record.state
     g = state.global_
     out.append(1.0 if entity.controller == record.actor_player else 0.0)
-    out.append(1.0 if entity.id in state.refs.targets else 0.0)
+    out.append(1.0 if state.refs.targets_entity(entity) else 0.0)
     out.append(1.0 if entity.id == state.refs.source else 0.0)
     out.append(1.0 if entity.controller == g.active else 0.0)
     out.append(1.0 if entity.controller == g.priority else 0.0)
@@ -1141,7 +1141,7 @@ class _SlotRelations:
             self.link(self._end(found.from_), self._end(found.to), found.type, index)
         if record.has_act_line:
             refs = state.refs
-            for index, target in enumerate(refs.targets):
+            for index, target in enumerate(refs.as_cast):
                 self.link(ACT_SLOT, self.subjects.get(target), "targets", index)
             if refs.source is not None:
                 self.link(self.subjects.get(refs.source), ACT_SLOT, "source_of")
