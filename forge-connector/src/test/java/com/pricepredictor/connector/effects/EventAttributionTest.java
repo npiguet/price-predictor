@@ -352,4 +352,31 @@ class EventAttributionTest {
         assertFalse(RunParamNormalizer.preventedNothing(
                 new EffectEvent(EventType.DAMAGE_DEALT).param("amount", 0)));
     }
+
+    /**
+     * At Arc Trail's DamageResolve clause, the damage to the root's target is
+     * the root's; the life its controller gains (a lifelink source) and any
+     * event published at another clause keep the clause's own attribution.
+     */
+    @Test
+    void onlyADamageMapsEventsOnAnEarlierLinksTargetMove() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player other = game.getPlayers().get(1);
+        Card bears = TestBoard.inPlay(game, other, "Grizzly Bears");
+        SpellAbility root = TestBoard.card(game, caster, "Arc Trail").getFirstSpellAbility();
+        root.setActivatingPlayer(caster);
+        root.getTargets().add(bears);
+        SpellAbility second = root.getSubAbility();
+        second.getTargets().add(other);
+        SpellAbility resolve = second.getSubAbility();
+
+        EffectEvent damage = new EffectEvent(EventType.DAMAGE_DEALT).subject(Refs.of(bears));
+        EffectEvent gain = new EffectEvent(EventType.LIFE_CHANGE).subject(Refs.of(caster));
+        EffectEvent died = new EffectEvent(EventType.ZONE_CHANGE).subject(Refs.of(bears));
+
+        assertEquals("root", EventAttribution.damageLink(damage, resolve, "1"));
+        assertEquals("1", EventAttribution.damageLink(gain, resolve, "1"), "the gainer is no target");
+        assertEquals("0", EventAttribution.damageLink(died, second, "0"), "not a damage map's clause");
+    }
 }

@@ -110,6 +110,42 @@ class ChainTargetsRecordTest {
     }
 
     /**
+     * Only a deferred damage map's events move to the link targeting their
+     * subject: Epic Confrontation's fight deals both its damages as the fight
+     * clause resolves, the one to the creature the pump targeted included.
+     */
+    @Test
+    void aFightsDamageIsTheFightsWhateverTheRootTargets() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card mine = TestBoard.inPlay(game, caster, "Craw Wurm");
+        Card theirs = TestBoard.inPlay(game, opponent, "Hill Giant");
+        Card confrontation = TestBoard.inHand(game, caster, "Epic Confrontation");
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            SpellAbility spell = TestBoard.spellOf(
+                    game.getAction().moveToStack(confrontation, null), caster);
+            spell.getTargets().add(mine);
+            spell.getSubAbility().getTargets().add(theirs);
+            game.getStack().add(spell);
+            game.getStack().resolveStack();
+            TestBoard.priority(game);
+            TestBoard.nextStep(game);
+        });
+
+        String effect = records(records, "resolution").get(0);
+        Map<String, String> bySubject = new java.util.HashMap<>();
+        for (Map<String, Object> event : RecordLines.events(effect)) {
+            if ("damage_dealt".equals(event.get("type"))) {
+                bySubject.put((String) ((List<?>) event.get("subjects")).get(0),
+                        String.valueOf(event.get("attributed_to")));
+            }
+        }
+        assertEquals(Map.of(Refs.of(mine), "0", Refs.of(theirs), "0"), bySubject, effect);
+    }
+
+    /**
      * Shock at a creature that left the battlefield before it resolved
      * fizzles: its effect half holds no target, names the creature as cast,
      * and carries the creature's entity, which the cast's referenced it.
