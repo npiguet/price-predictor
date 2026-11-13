@@ -153,6 +153,10 @@ Send each to the package's own implementer (resume it), in this order, once no o
 
 (none queued)
 
+## When everything is done
+
+The user asked (2026-11-14) for one summary of the results at the very end: per package what was fixed, what did not reproduce, what was left and why, the wire and CLI changes, the catalogue's final state, the suites' final totals, and what must happen before re-collection. They did not read the per-package reports.
+
 ## Before re-collection
 
 After WP1-WP11: the fork fidelity audit (tasks.md T181, quickstart stage 5), a short pilot the user launches, `validate-corpus` and `rule-counts` on it, the fixture regeneration (D8), and T124 before stage 6. Ask the user before any collection run.
