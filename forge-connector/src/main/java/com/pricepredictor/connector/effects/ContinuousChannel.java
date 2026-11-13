@@ -89,10 +89,15 @@ final class ContinuousChannel {
         if (source == null) {
             return;
         }
-        if (!allowContinuousRecord(String.valueOf(staticId), boardHash)) {
+        String rendered = Json.array(contributions, LayerContributions.Contribution::toJson);
+        // Keyed on what the static contributes as well as on the board: the
+        // board hash reads ids, names and P/T only, so a boundary where the
+        // same static grants another keyword, type, colour or control on an
+        // otherwise alike board is a record of its own (V3 #6).
+        if (!allowContinuousRecord(String.valueOf(staticId), boardHash + "|" + Long.toHexString(
+                Hashing.murmur3_128().hashUnencodedChars(rendered).asLong()))) {
             return;
         }
-        String rendered = Json.array(contributions, LayerContributions.Contribution::toJson);
         ProvenanceKey.Resolved acting = ProvenanceResolver.resolve(source);
         String state = live.snapshots().ofBoardWithout(source).render();
         String payload = Json.object()

@@ -207,11 +207,7 @@ class PatchHooksTest {
      * connector's proxy answers with nothing; it moves into its stand-in and
      * its hook's callbacks when a collector reads it.
      */
-    private static final Map<PatchHooks.Hook, Set<String>> NOT_CONSUMED_YET = Map.of(
-            // WP7 (TriggerChannel): a trigger's run, paired with its evaluation
-            PatchHooks.TRIGGER_LISTENER, Set.of("onTriggerRun"),
-            // WP7 (RewriteChannel, attribution): a buffered damage ability's run
-            PatchHooks.REPLACEMENT_LISTENER, Set.of("onBufferedAbilityStarting", "onBufferedAbilityFinished"));
+    private static final Map<PatchHooks.Hook, Set<String>> NOT_CONSUMED_YET = Map.of();
 
     /**
      * Every method Forge's listener declares is restated by the stand-in or

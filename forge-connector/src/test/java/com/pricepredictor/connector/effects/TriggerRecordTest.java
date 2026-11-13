@@ -47,6 +47,8 @@ class TriggerRecordTest {
 
     private static final Method ON_CONDITION_EVALUATED =
             HookShapes.method(HookShapes.TriggerFire.class, "onConditionEvaluated");
+    private static final Method ON_TRIGGER_RUN =
+            HookShapes.method(HookShapes.TriggerFire.class, "onTriggerRun");
 
     @TempDir
     Path tempDir;
@@ -124,6 +126,10 @@ class TriggerRecordTest {
                 for (Trigger trigger : triggers) {
                     collectors.triggers().handler().invoke(null, ON_CONDITION_EVALUATED,
                             new Object[]{trigger, Map.of(), fired});
+                    if (fired) {
+                        collectors.triggers().handler().invoke(null, ON_TRIGGER_RUN,
+                                new Object[]{trigger, Map.of(), null});
+                    }
                 }
             }
         });
@@ -150,8 +156,11 @@ class TriggerRecordTest {
         List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             for (int firing = 0; firing < 100; firing++) {
                 you.setLife(1000 - firing, null);
+                Map<?, ?> runParams = new java.util.HashMap<>();
                 collectors.triggers().handler().invoke(null, ON_CONDITION_EVALUATED,
-                        new Object[]{trigger, Map.of(), true});
+                        new Object[]{trigger, runParams, true});
+                collectors.triggers().handler().invoke(null, ON_TRIGGER_RUN,
+                        new Object[]{trigger, runParams, null});
             }
         });
 

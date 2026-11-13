@@ -108,13 +108,40 @@ final class RecordPayloads {
     static String rewritePayload(
             EffectEvent incoming, EffectEvent outgoing, String result,
             List<ProvenanceKey> replacedBy) {
-        return Json.object()
+        return rewritePayload(incoming, outgoing, result, replacedBy, false, null, false, List.of());
+    }
+
+    /**
+     * The same, with what a gen-3 rewrite record adds after
+     * {@code replaced_by}, each only where it says something:
+     * {@code incoming_unknown: true} where Forge could not copy the event as
+     * it arrived ({@code incoming} is then the event as it left, and
+     * {@code outgoing} null); and, for a damage replacement that set an
+     * ability aside, {@code buffered} (that ability's keys),
+     * {@code buffered_ran} (whether Forge ran it) and
+     * {@code buffered_events} (the events of its run this record took).
+     *
+     * @param buffered the buffered ability's keys, or null when none was set aside
+     */
+    static String rewritePayload(
+            EffectEvent incoming, EffectEvent outgoing, String result,
+            List<ProvenanceKey> replacedBy, boolean incomingUnknown,
+            List<ProvenanceKey> buffered, boolean bufferedRan, List<EffectEvent> bufferedEvents) {
+        var payload = Json.object()
                 .raw("incoming", incoming.toJson())
                 .raw("outgoing", outgoing == null ? "null" : outgoing.toJson())
                 .value("result", result)
                 .raw("replaced_by",
-                        ProvenanceKey.toJsonArray(replacedBy == null ? List.of() : replacedBy))
-                .render();
+                        ProvenanceKey.toJsonArray(replacedBy == null ? List.of() : replacedBy));
+        if (incomingUnknown) {
+            payload.value("incoming_unknown", true);
+        }
+        if (buffered != null) {
+            payload.raw("buffered", ProvenanceKey.toJsonArray(buffered))
+                    .value("buffered_ran", bufferedRan)
+                    .raw("buffered_events", eventArray(bufferedEvents));
+        }
+        return payload.render();
     }
 
     /**

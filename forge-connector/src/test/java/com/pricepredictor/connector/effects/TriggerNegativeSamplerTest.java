@@ -12,9 +12,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Which trigger evaluations are offered to the writer, and how many one line may write. */
 class TriggerNegativeSamplerTest {
 
-    /** The one acting line these tests' evaluations name. */
-    private static final ProvenanceKey LINE = new ProvenanceKey(
-            "cardsfolder/p/paralyze.txt", 0, TraitKind.TRIGGER, 0, null);
+    /** The one acting line these tests' evaluations name, as the channel keys it. */
+    private static final String LINE = new ProvenanceKey(
+            "cardsfolder/p/paralyze.txt", 0, TraitKind.TRIGGER, 0, null).describe();
 
     /** A game's sampler, drawing from the stream a game seeded with 42 would. */
     private static TriggerNegativeSampler negatives() {

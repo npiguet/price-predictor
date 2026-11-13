@@ -51,7 +51,8 @@ class WireVocabularyTest {
     @Test
     void turnActionSubkinds() {
         assertEquals(
-                List.of("draw", "cleanup_discard", "untap", "phasing", "day_night", "lore_counter"),
+                List.of("draw", "cleanup_discard", "untap", "phasing", "day_night", "lore_counter",
+                        "game_end"),
                 wireNames(TurnActionSubkind.class));
     }
 

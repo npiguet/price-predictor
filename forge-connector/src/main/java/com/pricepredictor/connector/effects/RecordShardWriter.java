@@ -170,6 +170,28 @@ public final class RecordShardWriter implements AutoCloseable {
     }
 
     /**
+     * Append one record line past {@code --max-records-per-game}: a game's
+     * end-of-game records (the reservoirs' trigger and mana records, the
+     * game-end marker), each kept by a per-key bound of its own, are written
+     * last and so would be the first a cap withheld (V3 #5).
+     */
+    public synchronized void writeUncapped(String recordJson) {
+        if (closed) {
+            throw new IllegalStateException("shard already closed: " + path);
+        }
+        block.append(recordJson).append('\n');
+        if (++blockRecords >= BLOCK_RECORDS) {
+            flushBlock();
+        }
+    }
+
+    /** The records {@code gameId} has had withheld so far; 0 for a game that had none. */
+    public synchronized int withheld(String gameId) {
+        GameRecords records = games.get(gameId);
+        return records == null ? 0 : records.withheld;
+    }
+
+    /**
      * Compress the buffered lines as one gzip member and append it.
      *
      * <p>Written in a single {@code Files.write} append so a reader never sees a

@@ -84,6 +84,11 @@ public class DraftWorkerMain {
     static final int PROGRESS_EVERY = 10;
 
     public static void main(String[] args) {
+        ToolMain.guard(() -> work(args));
+    }
+
+    /** The worker itself; an exit it requests ends the process through {@link ToolMain#guard}. */
+    static void work(String[] args) {
         // The sentinel channel is UTF-8 so Python can decode accented card
         // names; diagnostics keep using System.err.
         PrintStream out = ToolMain.claimStdout();

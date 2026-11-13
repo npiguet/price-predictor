@@ -33,10 +33,17 @@ import java.util.Map;
  * which is still being built when it arrives, so the land's record reads
  * "tapping it made {G}{G}"; with no such record, its mana reaches none.
  *
+ * <p>A mana ability's own other effects are its record's too, taken from the
+ * bracket ({@link BusBracketCollector.EventTap}) rather than dropped as a
+ * payment's: what its cost did beyond the taps (a creature sacrificed for
+ * mana: its {@code sacrificed} and {@code zone_change}), before
+ * {@code mana_produced}, and what its sub-abilities did (a pain land's
+ * damage to its controller), after it.
+ *
  * <p>Capped at {@code --mana-cap} records per unique mana-ability text, by a
  * reservoir that holds the sampled records until the game ends.
  */
-final class ManaChannel {
+final class ManaChannel implements BusBracketCollector.EventTap {
 
     private final LiveGame live;
     private final CollectorContext context;
@@ -65,6 +72,8 @@ final class ManaChannel {
         final String state;
         /** The permanents its cost tapped, read once the payment succeeded. */
         List<String> tapped = List.of();
+        /** What its payment did besides the taps: a sacrifice's events. */
+        final List<EffectEvent> paid = new ArrayList<>();
 
         Activation(String state) {
             this.state = state;
@@ -73,8 +82,8 @@ final class ManaChannel {
 
     /** A mana record being built, keyed for the reservoir by the activation's own mana. */
     private record Building(
-            String key, String actor, ProvenanceKey.Resolved ability, String state,
-            List<EffectEvent> events) {
+            SpellAbility source, String key, String actor, ProvenanceKey.Resolved ability,
+            String state, List<EffectEvent> events) {
     }
 
     ManaChannel(
@@ -99,6 +108,12 @@ final class ManaChannel {
     PatchHooks.Listener paymentHandler() {
         return PatchHooks.PAYMENT_LISTENER.listener((callback, args) -> {
             SpellAbility ability = args.get(0, SpellAbility.class);
+            if (ability != null && !ability.isManaAbility() && live.owns(ability)
+                    && callback == PatchHooks.Callback.ON_COSTS_PAID) {
+                // The payment the mana went to is over: no triggered mana of
+                // the last activation comes after it (V3 #15).
+                finishBuilding();
+            }
             if (ability == null || !ability.isManaAbility() || !live.owns(ability)
                     || !reservoir.keepsAny()) {
                 return;
@@ -113,11 +128,53 @@ final class ManaChannel {
 
     private void payingCosts(SpellAbility ability) {
         finishBuilding();
-        // A record's stat changes are measured from its own board (FR-042f).
-        if (bracket != null) {
-            bracket.rebaselineAtSnapshot();
-        }
+        // No stat re-read here: a mana record holds no stat change, and a
+        // re-read would take the enclosing cast's unpublished changes out of
+        // its cost half whether or not this activation is kept (V3 #15).
         pending.put(ability, new Activation(live.snapshots().ofBoard().render()));
+    }
+
+    /**
+     * An event published while one of this game's mana abilities is paid
+     * for or resolves is that activation's: its payment's, but for the taps
+     * its {@code tapped} events already say; its own clauses', read off the
+     * resolving clause's root.
+     */
+    @Override
+    public boolean take(EffectEvent event, String namedCause) {
+        if (pending.isEmpty() && building == null) {
+            return false;
+        }
+        Object clause = PatchHooks.currentSubAbility();
+        if (clause instanceof SpellAbility resolving && resolving.getRootAbility() != null
+                && resolving.getRootAbility().isManaAbility()) {
+            SpellAbility root = resolving.getRootAbility();
+            List<EffectEvent> into = building != null && building.source() == root
+                    ? building.events()
+                    : pending.containsKey(root) ? pending.get(root).paid : null;
+            if (into == null) {
+                return false;
+            }
+            into.add(EventAttribution.stamp(event, root, namedCause));
+            return true;
+        }
+        Activation paying = payingFor();
+        if (paying == null) {
+            return false;
+        }
+        if (event.type() != EventType.TAPPED) {
+            paying.paid.add(EventAttribution.stampAt(event, null, null, namedCause));
+        }
+        return true;
+    }
+
+    /** The activation whose costs are being paid now, from the top of the payment stack. */
+    private Activation payingFor() {
+        var game = live.game();
+        var top = game == null ? null : game.costPaymentStack.peek();
+        SpellAbility paid = top == null || top.payment() == null
+                ? null : top.payment().getAbility();
+        return paid == null ? null : pending.get(paid);
     }
 
     private void costsPaid(SpellAbility ability, boolean paid) {
@@ -173,8 +230,9 @@ final class ManaChannel {
             SpellAbility ability, String player, String produced, EffectEvent event) {
         Activation activation = pending.remove(ability);
         if (activation == null) {
-            if (ability.isTrigger() && building != null) {
-                // A triggered mana ability the building activation set off.
+            if (building != null && (ability.isTrigger() || building.source() == ability)) {
+                // A triggered mana ability the building activation set off,
+                // or the same ability adding mana a second time.
                 building.events().add(event);
             }
             return;
@@ -184,9 +242,10 @@ final class ManaChannel {
         for (String tapped : activation.tapped) {
             events.add(new EffectEvent(EventType.TAPPED).subject(tapped));
         }
+        events.addAll(activation.paid);
         events.add(event);
         building = new Building(
-                capKey(ability, produced), player, ProvenanceResolver.resolve(ability),
+                ability, capKey(ability, produced), player, ProvenanceResolver.resolve(ability),
                 activation.state, events);
     }
 
@@ -238,7 +297,7 @@ final class ManaChannel {
         finishBuilding();
         pending.clear();
         for (EffectRecord record : reservoir.drain()) {
-            context.emit(record);
+            context.emitAtGameEnd(record);
         }
     }
 }

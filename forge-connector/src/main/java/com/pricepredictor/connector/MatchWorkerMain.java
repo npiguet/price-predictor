@@ -128,6 +128,11 @@ public class MatchWorkerMain {
     }
 
     public static void main(String[] args) {
+        ToolMain.guard(() -> work(args));
+    }
+
+    /** The worker itself; an exit it requests ends the process through {@link ToolMain#guard}. */
+    static void work(String[] args) {
         WorkerConfig config = parseConfig();
         initializeForge(config);
         runForever(config);
@@ -233,22 +238,54 @@ public class MatchWorkerMain {
         RecordShardWriter effectRecords = openEffectRecords(config, caps);
 
         HookFailureReport hookFailureReport = new HookFailureReport();
+        WorkerStop stop = WorkerStop.fromSystemProperties();
+        stop.describe().ifPresent(System.out::println);
         MatchGenerator generator = MatchGenerator.builder(eligibleSets, config.runId())
-                .gamePlayer(new GamePlayer(config.bestOf(), effectRecords, caps))
+                .gamePlayer(new GamePlayer(
+                        config.bestOf(), effectRecords, caps, stop, forge.game.Match::startGame))
                 .sideA(sideA)
                 .sideB(sideB, config.sideBWeight())
                 .excludedCards(HoldoutCards.fromSystemProperty())
                 .decksOnly(config.decksOnly())
                 .build();
 
-        WorkerLoop.runUntilBroken(
-                () -> {
-                    recordMatch(generator.generateMatch(), sealedCorpus, progress);
-                    hookFailureReport.afterMatch();
-                    return WorkerLoop.Outcome.COMPLETED;
-                },
-                new WorkerLoop.Progress(
-                        System.out, PROGRESS_EVERY, "matches generated", "Error generating match"));
+        WorkerLoop.Progress matches = new WorkerLoop.Progress(
+                System.out, PROGRESS_EVERY, "matches generated", "Error generating match");
+        WorkerLoop.Ending ending;
+        try {
+            ending = WorkerLoop.runUntilBroken(
+                    () -> {
+                        try {
+                            recordMatch(generator.generateMatch(), sealedCorpus, progress);
+                        } finally {
+                            // A match that threw counts its hooks' failures too.
+                            hookFailureReport.afterMatch();
+                        }
+                        return WorkerLoop.Outcome.COMPLETED;
+                    },
+                    matches, stop);
+        } finally {
+            // Whatever ended the loop, the counts so far are printed: a
+            // worker giving up or stopping is when they matter most.
+            hookFailureReport.afterMatch();
+        }
+        throw stopGracefully(ending, matches, effectRecords);
+    }
+
+    /**
+     * End a worker the stop asked to end: its last game is over and its
+     * marker written, so the shard is closed whole, the acknowledgement
+     * printed, and the process exits {@link ExitCode#OK}.
+     */
+    static ToolMain.Exit stopGracefully(
+            WorkerLoop.Ending ending, WorkerLoop.Progress progress,
+            RecordShardWriter effectRecords) {
+        if (effectRecords != null) {
+            effectRecords.close();
+        }
+        progress.stream().println(WorkerLoop.stoppedLine(ending, progress));
+        progress.stream().flush();
+        return ToolMain.exit(ExitCode.OK);
     }
 
     /**
@@ -325,13 +362,25 @@ public class MatchWorkerMain {
      */
     static final class HookFailureReport {
         private Map<String, Long> reported = Map.of();
+        private Map<String, Long> reportedByForge = Map.of();
 
+        /**
+         * Print the counts when they changed: the connector's
+         * ({@link HookFailures#counts}: listener calls, short calls,
+         * subscribers, boundary steps, unreadable candidates) and Forge's
+         * own per slot ({@link PatchHooks#forgeFailureCounts}), which also
+         * holds the argument builds Forge made inside a hook's call; a
+         * listener's failure is in both.
+         */
         void afterMatch() {
             Map<String, Long> counts = HookFailures.counts();
-            if (!counts.equals(reported)) {
+            Map<String, Long> byForge = PatchHooks.forgeFailureCounts();
+            if (!counts.equals(reported) || !byForge.equals(reportedByForge)) {
                 System.err.println("effect-record hook failures so far, listener calls that threw"
-                        + " and lost their records: " + counts);
+                        + " and lost their records: " + counts
+                        + "; contained by Forge, per slot: " + byForge);
                 reported = counts;
+                reportedByForge = byForge;
             }
         }
     }

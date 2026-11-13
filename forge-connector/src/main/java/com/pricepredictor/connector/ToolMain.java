@@ -38,6 +38,8 @@ final class ToolMain {
         try {
             body.run();
             System.exit(ExitCode.OK.status());
+        } catch (Exit exit) {
+            System.exit(exit.status());
         } catch (Exception e) {
             System.err.println("Fatal error: " + e.getMessage());
             e.printStackTrace(System.err);
@@ -46,23 +48,66 @@ final class ToolMain {
     }
 
     /**
-     * Exit with {@code code}. Declared to return an exception only so a
-     * caller can write {@code throw exit(..)} and have the compiler see that
-     * control does not continue.
+     * Run a worker's {@code main}, ending the process with the code of an
+     * {@link Exit} thrown anywhere under it; a {@code main} that returns ends
+     * as it would have unguarded.
+     *
+     * <p>Every main that reaches {@link #exit} or {@link #badConfig} runs
+     * under this or {@link #run}: those throw rather than call
+     * {@link System#exit} themselves, so an exit path can be tested by
+     * catching the {@link Exit} it throws.
      */
-    static IllegalStateException exit(ExitCode code) {
-        System.exit(code.status());
-        return new IllegalStateException("exit(" + code + ") returned");
+    static void guard(Runnable main) {
+        try {
+            main.run();
+        } catch (Exit exit) {
+            System.out.flush();
+            System.err.flush();
+            System.exit(exit.status());
+        }
     }
 
     /**
-     * Exit with {@link ExitCode#BAD_CONFIG} after naming the problem on
-     * stderr; the result is for the caller to {@code throw}, as in
+     * The process is to end with {@code code}. Returned for the caller to
+     * {@code throw}, so the compiler sees that control does not continue;
+     * {@link #run} or {@link #guard} turns it into the exit status.
+     */
+    static Exit exit(ExitCode code) {
+        return new Exit(code);
+    }
+
+    /**
+     * Name the problem on stderr; the result, for the caller to
+     * {@code throw}, ends the process with {@link ExitCode#BAD_CONFIG}, as in
      * {@link #exit}.
      */
-    static IllegalStateException badConfig(String problem) {
+    static Exit badConfig(String problem) {
         System.err.println("Error: " + problem);
         return exit(ExitCode.BAD_CONFIG);
+    }
+
+    /**
+     * A request to end the process with an exit code.
+     *
+     * <p>An {@link Error} rather than an exception, so no {@code catch
+     * (Exception)} on its way to {@link #guard} — a worker loop's, a tool
+     * main's — mistakes it for a failure of the work.
+     */
+    static final class Exit extends Error {
+        private final ExitCode code;
+
+        Exit(ExitCode code) {
+            super("exit(" + code + ")", null, false, false);
+            this.code = code;
+        }
+
+        ExitCode code() {
+            return code;
+        }
+
+        int status() {
+            return code.status();
+        }
     }
 
     /**

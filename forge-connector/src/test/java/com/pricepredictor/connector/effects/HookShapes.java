@@ -49,6 +49,8 @@ final class HookShapes {
     /** {@code TriggerHandler.EffectRecordTriggerListener}. */
     interface TriggerFire {
         void onConditionEvaluated(Trigger trigger, Map<AbilityKey, Object> runParams, boolean fired);
+
+        void onTriggerRun(Trigger trigger, Map<AbilityKey, Object> runParams, SpellAbility ability);
     }
 
     /** {@code CombatLegalityObserver.EffectRecordCombatListener}. */
@@ -84,6 +86,12 @@ final class HookShapes {
                 SpellAbility replacedBy) {
             onReplacement(effect, before, after, result, replacedBy, null);
         }
+
+        void onBufferedAbilityStarting(ReplacementEffect effect, SpellAbility ability,
+                Map<AbilityKey, Object> runParams);
+
+        void onBufferedAbilityFinished(ReplacementEffect effect, SpellAbility ability,
+                Map<AbilityKey, Object> runParams);
     }
 
     /**

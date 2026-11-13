@@ -131,6 +131,16 @@ public final class HookFailures {
      * The failures counted so far, by hook, short call or subscriber, in name
      * order; empty when none failed.
      */
+    /**
+     * A failure the connector contains outside a hook's listener and a bus
+     * subscriber, counted under {@code key}: a phase boundary's step
+     * ({@code "boundary step <name>"}), a decision candidate the rules check
+     * could not read ({@code "decision candidate unreadable"}).
+     */
+    static void countContained(String key) {
+        COUNTS.computeIfAbsent(key, name -> new AtomicLong()).incrementAndGet();
+    }
+
     public static Map<String, Long> counts() {
         Map<String, Long> counts = new TreeMap<>();
         COUNTS.forEach((hook, failures) -> counts.put(hook, failures.get()));

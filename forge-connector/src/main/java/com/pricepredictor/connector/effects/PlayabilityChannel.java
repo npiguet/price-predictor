@@ -200,9 +200,10 @@ public final class PlayabilityChannel {
         if (attacker == null || candidates == null || candidates.isEmpty()) {
             return;
         }
-        LegalSet blockers = LegalSet.of(candidates, legal,
-                card -> cantBlockByStatic(attacker, card));
         Combat combat = live.game().getPhaseHandler().getCombat();
+        LegalSet blockers = LegalSet.of(candidates, legal,
+                card -> blockingStatic(attacker, card),
+                card -> requiredElsewhere(card, attacker, combat));
         List<String> mustBlock = new ArrayList<>();
         for (Card card : candidates) {
             if (MustBlock.required(card, attacker, combat)) {
@@ -232,13 +233,15 @@ public final class PlayabilityChannel {
          */
         static LegalSet of(
                 List<Card> candidates, List<Card> legal,
-                Function<Card, StaticAbility> responsible) {
+                Function<Card, StaticAbility> responsible,
+                java.util.function.Predicate<Card> requiredElsewhere) {
             List<String> forbidden = new ArrayList<>();
             for (Card card : candidates) {
                 if (legal.contains(card)) {
                     continue;
                 }
-                forbidden.add(forbiddenJson(card, responsible.apply(card)));
+                forbidden.add(forbiddenJson(
+                        card, responsible.apply(card), requiredElsewhere.test(card)));
             }
             return new LegalSet(
                     Json.array(legal, card -> Json.string(Refs.of(card))),
@@ -270,12 +273,53 @@ public final class PlayabilityChannel {
      * is to blame.
      */
     static String forbiddenJson(Card card, StaticAbility responsible) {
+        return forbiddenJson(card, responsible, false);
+    }
+
+    /**
+     * The same, for a blocker: {@code required_elsewhere: true}, after
+     * {@code responsible_static}, when what keeps it from blocking this
+     * attacker is a requirement to block another (a lure, 509.1c), not a
+     * prohibition; absent otherwise.
+     */
+    static String forbiddenJson(Card card, StaticAbility responsible, boolean requiredElsewhere) {
         ProvenanceKey key = responsible == null ? null : ProvenanceResolver.of(responsible);
-        return Json.object()
+        var entry = Json.object()
                 .value("entity", Refs.of(card))
                 .raw("responsible_static",
-                        ProvenanceKey.toJsonArray(key == null ? List.of() : List.of(key)))
-                .render();
+                        ProvenanceKey.toJsonArray(key == null ? List.of() : List.of(key)));
+        if (requiredElsewhere) {
+            entry.value("required_elsewhere", true);
+        }
+        return entry.render();
+    }
+
+    /**
+     * Whether {@code blocker} must block another attacker of the combat and
+     * not {@code attacker}: Forge then refuses its block of {@code attacker}
+     * (a lure), which is a requirement elsewhere, not a prohibition.
+     */
+    static boolean requiredElsewhere(Card blocker, Card attacker, Combat combat) {
+        if (combat == null || MustBlock.required(blocker, attacker, combat)) {
+            return false;
+        }
+        for (Card other : combat.getAttackers()) {
+            if (other != attacker && MustBlock.required(blocker, other, combat)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The static keeping {@code blocker} from blocking {@code attacker}: one
+     * aimed at the pair, else one keeping it from blocking at all (Pacifism,
+     * {@code cantBlockStatic}).
+     */
+    static StaticAbility blockingStatic(Card attacker, Card blocker) {
+        StaticAbility pair = cantBlockByStatic(attacker, blocker);
+        return pair != null ? pair : (StaticAbility) PatchHooks.CANT_BLOCK_STATIC.invoke(
+                new Class<?>[]{Card.class}, blocker);
     }
 
     /** Reflective, because the engine exposes these only on a patched checkout. */

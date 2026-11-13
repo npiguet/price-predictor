@@ -293,6 +293,7 @@ public final class GameRecording implements AutoCloseable {
      */
     @Override
     public void close() {
+        boolean flushed = false;
         try {
             if (fork) {
                 // A fork played on stops where no event closes its last
@@ -301,10 +302,20 @@ public final class GameRecording implements AutoCloseable {
                 bracket.stopPlaying();
             }
             patched.close();
+            flushed = true;
         } finally {
             appendDroppedEvents();
             if (!fork) {
-                envelope.endGame();
+                try {
+                    // Last of the game's records, and only for a game that
+                    // ended with all of them written: one that threw
+                    // mid-match, or whose flush threw, gets none (D2).
+                    if (flushed && game.isGameOver()) {
+                        GameEndMarker.write(game, envelope);
+                    }
+                } finally {
+                    envelope.endGame();
+                }
             }
         }
     }
@@ -413,6 +424,7 @@ public final class GameRecording implements AutoCloseable {
             try {
                 step.body().run();
             } catch (RuntimeException failure) {
+                HookFailures.countContained("boundary step " + step.name());
                 BOUNDARY_STEP_FAILED.computeIfAbsent(step.name(), name -> new OnceWarning())
                         .raise(() -> "Effect records: the phase boundary's " + step.name()
                                 + " step threw, and lost its records at that boundary"

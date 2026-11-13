@@ -251,6 +251,7 @@ class RecordCharacterizationTest {
             bearsEntered.put(AbilityKey.Card, bears);
             bearsEntered.put(AbilityKey.Destination, ZoneType.Battlefield.name());
             listener.onConditionEvaluated(entered, bearsEntered, true);
+            listener.onTriggerRun(entered, bearsEntered, null);
 
             Map<AbilityKey, Object> itselfEntered = AbilityKey.newMap();
             itselfEntered.put(AbilityKey.Card, warden);
@@ -261,6 +262,7 @@ class RecordCharacterizationTest {
             endStep.put(AbilityKey.Phase, PhaseType.END_OF_TURN.nameForScripts);
             endStep.put(AbilityKey.Player, you);
             listener.onConditionEvaluated(monarch, endStep, true);
+            listener.onTriggerRun(monarch, endStep, null);
         });
 
         Characterization.assertMatches(

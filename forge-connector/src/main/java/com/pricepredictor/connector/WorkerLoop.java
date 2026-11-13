@@ -75,12 +75,38 @@ final class WorkerLoop {
      *         healthy worker this never returns — the supervisor kills it.
      */
     static long run(Attempt attempt, int maxConsecutiveFailures, Progress progress) {
+        return run(attempt, maxConsecutiveFailures, progress, WorkerStop.NEVER).completed();
+    }
+
+    /**
+     * How a run of attempts ended.
+     *
+     * @param completed the attempts that completed
+     * @param stopped   why the worker stopped gracefully, or null when it gave up
+     */
+    record Ending(long completed, String stopped) {
+    }
+
+    /**
+     * Run attempts until {@code maxConsecutiveFailures} fail in a row, or
+     * until {@code stop} asks the worker to stop: before an attempt, or at a
+     * game end inside one ({@link WorkerStop.Requested}), which is neither a
+     * success nor a failure.
+     */
+    static Ending run(
+            Attempt attempt, int maxConsecutiveFailures, Progress progress, WorkerStop stop) {
         long completed = 0;
         int consecutiveFailures = 0;
         while (true) {
+            var before = stop.reason();
+            if (before.isPresent()) {
+                return new Ending(completed, before.get());
+            }
             Outcome outcome;
             try {
                 outcome = attempt.run();
+            } catch (WorkerStop.Requested requested) {
+                return new Ending(completed, requested.reason());
             } catch (Exception e) {
                 System.err.println(progress.failure() + ": " + e.getMessage());
                 e.printStackTrace(System.err);
@@ -99,7 +125,7 @@ final class WorkerLoop {
                 case SKIPPED -> {
                     consecutiveFailures++;
                     if (consecutiveFailures >= maxConsecutiveFailures) {
-                        return completed;
+                        return new Ending(completed, null);
                     }
                 }
                 case ABANDONED -> {
@@ -116,13 +142,39 @@ final class WorkerLoop {
      * run that never finishes.
      */
     static void runUntilBroken(Attempt attempt, Progress progress) {
-        long completed = run(attempt, MAX_CONSECUTIVE_FAILURES, progress);
+        runUntilBroken(attempt, progress, WorkerStop.NEVER);
+    }
+
+    /**
+     * The same, returning instead when {@code stop} asks the worker to stop
+     * gracefully: the caller closes what it writes, prints
+     * {@link #stoppedLine} and exits {@link ExitCode#OK}.
+     *
+     * @return the ending of a graceful stop; a worker that gives up never returns
+     */
+    static Ending runUntilBroken(Attempt attempt, Progress progress, WorkerStop stop) {
+        Ending ending = run(attempt, MAX_CONSECUTIVE_FAILURES, progress, stop);
+        if (ending.stopped() != null) {
+            return ending;
+        }
         System.err.println("Worker giving up after " + MAX_CONSECUTIVE_FAILURES
                 + " consecutive failed attempts with no success between them ("
-                + completed + " " + progress.completed() + " in this JVM). Exiting "
+                + ending.completed() + " " + progress.completed() + " in this JVM). Exiting "
                 + "non-zero so the supervisor restarts the slot and the operator sees "
                 + "a failing worker rather than a run that never finishes.");
         System.err.flush();
         throw ToolMain.exit(ExitCode.FAILURE);
+    }
+
+    /** The first words of {@link #stoppedLine}: a graceful stop, which is no failure. */
+    static final String STOPPED = "Worker: stopped at a game end";
+
+    /**
+     * The line a worker prints once it has stopped gracefully and closed
+     * what it writes, just before it exits {@link ExitCode#OK}.
+     */
+    static String stoppedLine(Ending ending, Progress progress) {
+        return STOPPED + " (" + ending.stopped() + "); " + ending.completed() + " "
+                + progress.completed() + " in this JVM; output closed, exiting 0";
     }
 }

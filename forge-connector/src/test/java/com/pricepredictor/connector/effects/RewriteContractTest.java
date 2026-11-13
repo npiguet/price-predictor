@@ -471,6 +471,24 @@ class RewriteContractTest {
                 "a replacement that declined rewrote nothing");
     }
 
+    /**
+     * The tally counts what reaches the shard (C5 #16): a replacement told
+     * twice in one game, the second record a duplicate of the first, counts
+     * once.
+     */
+    @Test
+    void aDuplicateRecordIsNotCountedInTheTally() throws Throwable {
+        Card card = TestCards.build("Mountain");
+        Map<String, Object> moved = new LinkedHashMap<>(Map.of(
+                "Origin", ZoneType.Battlefield, "Destination", ZoneType.Graveyard,
+                "Card", card));
+
+        Tally start = tallyAfter(moved, moved, ReplacementResult.NotReplaced);
+        Tally twice = tallyAfter(moved, moved, ReplacementResult.NotReplaced, 2);
+
+        assertEquals(start.records() + 1, twice.records(), "the duplicate wrote nothing");
+    }
+
     /** The headline counts of one printed tally summary. */
     private record Tally(long records, long rewritten) {
     }
@@ -487,8 +505,18 @@ class RewriteContractTest {
      */
     private Tally tallyAfter(Map<String, Object> before, Map<String, Object> after,
             ReplacementResult result) throws Throwable {
+        return tallyAfter(before, after, result, 1);
+    }
+
+    /** The same, the replacement told {@code times} times in the one game. */
+    private Tally tallyAfter(Map<String, Object> before, Map<String, Object> after,
+            ReplacementResult result, int times) throws Throwable {
         Channels game = recording(tempDir);
-        game.rewrites().record(replacementOfMode("Moved"), before, after, result, null);
+        Object replacement = replacementOfMode("Moved");
+        for (int i = 0; i < times; i++) {
+            game.rewrites().handler().invoke(null, onReplacement(HookShapes.Replacement.class),
+                    new Object[]{replacement, before, after, result, null, null});
+        }
         String printed = StdStreams.captureStdout(game::close);
         for (int games = 1; printed.isEmpty() && games < GAMES_PER_SUMMARY; games++) {
             printed = StdStreams.captureStdout(() -> unwired(CollectionCaps.defaults()).close());

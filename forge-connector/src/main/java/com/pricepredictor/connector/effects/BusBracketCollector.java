@@ -964,6 +964,11 @@ public final class BusBracketCollector extends BusEventReader {
      * @param filing what kind of event it is, which narrows where it may go
      */
     private void route(EffectEvent event, String namedCause, Filing filing) {
+        for (EventTap tap : taps) {
+            if (tap.take(event, namedCause)) {
+                return;
+            }
+        }
         Now now = classifyNow();
         switch (now.cause()) {
             // What a payment publishes: the paid ability's cost half holds
@@ -1024,6 +1029,24 @@ public final class BusBracketCollector extends BusEventReader {
                     EventAttribution.stampAt(event, null, null, namedCause),
                     DroppedEvents.phaseOf(game));
         }
+    }
+
+    /**
+     * A channel that takes, before they are routed, the events of a moment it
+     * records itself: a buffered damage ability's run ({@link RewriteChannel}),
+     * a mana ability's own activation ({@link ManaChannel}).
+     */
+    interface EventTap {
+        /** Whether the event, published now, is this tap's; it is then routed nowhere else. */
+        boolean take(EffectEvent event, String namedCause);
+    }
+
+    /** The taps asked, in order, before an event is routed. */
+    private final List<EventTap> taps = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** Ask {@code tap} first, before routing any event. */
+    void addTap(EventTap tap) {
+        taps.add(tap);
     }
 
     /**
