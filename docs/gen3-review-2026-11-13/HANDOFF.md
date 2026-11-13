@@ -81,7 +81,7 @@ After WP1-WP11: the fork fidelity audit (tasks.md T181, quickstart stage 5), a s
 
 | WP | State | Commit(s) | Notes |
 |---|---|---|---|
-| WP0 | done; verified twice (all gaps closed). Connector tests and a full unit run on `f26fefea` still to run | `1cffd83a`, `2e85c898`, `f26fefea` | Unit suite 5561 passed on `1cffd83a`. Kill patched session-long at every binding found by scan; effects tests fail on an unrequested process pool (`workers=None` or wider than 4). Left: scan covers module attributes of the four packages only |
+| WP0 | done; verified twice (all gaps closed); connector default suite 1657 passed with `VariantStagingTest` out of it. A full unit run on `f26fefea` still to run (comes with WP1) | `1cffd83a`, `2e85c898`, `f26fefea` | Unit suite 5561 passed on `1cffd83a`. Kill patched session-long at every binding found by scan; effects tests fail on an unrequested process pool (`workers=None` or wider than 4). Left: scan covers module attributes of the four packages only |
 | WP1 | implementer running | | |
 | WP2 | not started | | |
 | WP3 | not started | | |
