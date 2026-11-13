@@ -9,6 +9,7 @@ import forge.game.event.GameEventCardCounters;
 import forge.game.event.GameEventCardDamaged;
 import forge.game.event.GameEventCardPhased;
 import forge.game.event.GameEventCardRegenerated;
+import forge.game.event.GameEventCardSacrificed;
 import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventDayTimeChanged;
 import forge.game.event.GameEventGameOutcome;
@@ -101,11 +102,36 @@ final class BusEvents {
         return Refs.ofNullable(event.source());
     }
 
+    /**
+     * Damage to a creature, with how it was dealt as {@code damage_type}:
+     * {@code normal} (marked on the creature), {@code m1m1_counters} (wither
+     * or infect, 120.3d: -1/-1 counters, which the event's own
+     * {@code counter_change} also tells, and no damage marked) or {@code
+     * deathtouch}. Forge's choice: a source with deathtouch reads {@code
+     * deathtouch} even when its wither or infect turned the damage into
+     * counters. Damage to a planeswalker or a battle publishes no such
+     * event, only its counter change; {@code loyalty_loss} is Forge's
+     * spelling for it should it ever.
+     */
     static EffectEvent cardDamaged(GameEventCardDamaged event, boolean combat) {
         return new EffectEvent(EventType.DAMAGE_DEALT)
                 .subject(Refs.of(event.card()))
                 .param("amount", event.amount())
-                .param("combat", combat);
+                .param("combat", combat)
+                .param("damage_type", damageType(event.type()));
+    }
+
+    /** A card damage's type as {@code damage_type} spells it, or null when Forge named none. */
+    static String damageType(GameEventCardDamaged.DamageType type) {
+        if (type == null) {
+            return null;
+        }
+        return switch (type) {
+            case Normal -> "normal";
+            case M1M1Counters -> "m1m1_counters";
+            case Deathtouch -> "deathtouch";
+            case LoyaltyLoss -> "loyalty_loss";
+        };
     }
 
     static EffectEvent playerDamaged(GameEventPlayerDamaged event) {
@@ -260,6 +286,39 @@ final class BusEvents {
         return null;
     }
 
+    /**
+     * Every player the game's end found lost, each a {@code player_lost}
+     * with Forge's {@code GameLossReason} as {@code reason}
+     * ({@code LifeReachedZero}, {@code Milled}, {@code Poisoned}, {@code
+     * SpellEffect}, {@code Conceded}, {@code CommanderDamage}, {@code
+     * OpponentWon}), as the trigger path's run parameters spell it. Read off
+     * each player's outcome when the game's outcome is published; a player
+     * who agreed to a draw lost nothing.
+     */
+    static List<EffectEvent> playersLost(Game game) {
+        List<EffectEvent> lost = new ArrayList<>();
+        // Registered rather than in the game: a player who lost has left it.
+        for (Player player : game.getRegisteredPlayers()) {
+            var outcome = player.getOutcome();
+            if (outcome == null || outcome.lossState == null
+                    || outcome.lossState == forge.game.player.GameLossReason.IntentionalDraw) {
+                continue;
+            }
+            lost.add(new EffectEvent(EventType.PLAYER_LOST)
+                    .subject(Refs.of(player))
+                    .param("reason", outcome.lossState.name()));
+        }
+        return lost;
+    }
+
+    /** A permanent sacrificed, or null when the event names no card. */
+    static EffectEvent sacrificed(GameEventCardSacrificed event) {
+        if (event.card() == null) {
+            return null;
+        }
+        return new EffectEvent(EventType.SACRIFICED).subject(Refs.of(event.card()));
+    }
+
     static EffectEvent counters(GameEventCardCounters event) {
         return new EffectEvent(EventType.COUNTER_CHANGE)
                 .subject(Refs.of(event.card()))
@@ -380,15 +439,37 @@ final class BusEvents {
                 .param("count", 1);
     }
 
-    /** An aura or equipment moving, or null when it names no card. */
+    /**
+     * An aura, equipment or fortification moving, or null when it names no
+     * card: {@code attached} with {@code attached_to}, the entity it now
+     * hangs on, or {@code unattached} with {@code detached_from}, the one it
+     * left, as the trigger path's run parameters name them. A move from one
+     * host to another is one {@code attached}, whose old host the record's
+     * board shows.
+     */
     static EffectEvent attachment(GameEventCardAttachment event) {
         if (event.equipment() == null) {
             return null;
         }
         boolean attaching = event.newTarget() != null;
-        return new EffectEvent(
+        EffectEvent built = new EffectEvent(
                 attaching ? EventType.ATTACHED : EventType.UNATTACHED)
                 .subject(Refs.of(event.equipment()));
+        String host = entityRef(attaching ? event.newTarget() : event.oldEntity());
+        return attaching
+                ? built.param("attached_to", host)
+                : built.param("detached_from", host);
+    }
+
+    /** A card's or a player's ref from its view, or null for neither. */
+    private static String entityRef(forge.game.GameEntityView entity) {
+        if (entity instanceof CardView card) {
+            return Refs.of(card);
+        }
+        if (entity instanceof forge.game.player.PlayerView player) {
+            return Refs.of(player);
+        }
+        return null;
     }
 
     /**

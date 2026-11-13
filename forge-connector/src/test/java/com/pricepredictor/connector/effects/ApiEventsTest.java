@@ -358,8 +358,9 @@ class ApiEventsTest {
      * ChooseDirectionEffect.setChosenDirection}, {@code
      * ChooseEvenOddEffect.setChosenEvenOdd}, and {@code
      * ChooseGenericEffect}'s {@code SetChosenMode$ True} path's {@code
-     * setChosenMode} -- on a fresh host each time, so one API's fixture
-     * cannot leak into another's read.
+     * setChosenMode} -- on a fresh host each time, which already holds a
+     * colour and a number chosen earlier, so the reading follows the API
+     * that ran rather than whichever accessor holds something.
      */
     @Test
     void everyChoiceMadeApiHasAReadableChoice() {
@@ -407,6 +408,15 @@ class ApiEventsTest {
         for (Map.Entry<String, ChoiceFixture> fixture : fixtures.entrySet()) {
             Card host = TestCards.build("Grizzly Bears");
             SpellAbility sa = AbilityFactory.getAbility("SP$ " + fixture.getKey(), host);
+            // Earlier choices the host still holds, which every other API's
+            // reading would find first: the clause's own API decides the
+            // reading, not what the host happens to hold.
+            if (!"ChooseColor".equals(fixture.getKey())) {
+                host.setChosenColors(List.of("red"));
+            }
+            if (!"ChooseNumber".equals(fixture.getKey())) {
+                host.setChosenNumber(9);
+            }
             fixture.getValue().mutate().accept(host);
 
             EffectEvent event = observe(sa).finish();
@@ -576,6 +586,8 @@ class ApiEventsTest {
     @Test
     void aSecretlyChosenNumberIsStillAChoice() {
         Card host = TestCards.build("Grizzly Bears");
+        // A colour chosen earlier, which the number's API does not read.
+        host.setChosenColors(List.of("red"));
         host.setChosenNumber(7, true);
         SpellAbility sa = AbilityFactory.getAbility("SP$ ChooseNumber", host);
 

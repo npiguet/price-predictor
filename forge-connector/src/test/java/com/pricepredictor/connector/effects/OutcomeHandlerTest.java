@@ -75,20 +75,70 @@ class OutcomeHandlerTest {
     }
 
     /**
-     * An outcome that names no subjects has none: a coin flip or a token
-     * made is not something done to the card whose ability did it, so the
-     * acting host is not a default.
+     * A coin flip names the player who flipped as its subject, as Forge's
+     * note hands it over (dice name their roller the same way), and only
+     * that player: the acting host is not a default.
      */
     @Test
-    void anOutcomeNamingNoSubjectsHasNone() throws Throwable {
+    void aCoinFlipNamesItsFlipper() throws Throwable {
         SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        Player flipper = new Player("flipper", TestCards.game(), 93205);
 
-        Map<String, Object> written =
-                onlyEvent(new Object[]{sa, "coin_flipped", Map.of("won", true)});
+        Map<String, Object> written = onlyEvent(new Object[]{sa, "coin_flipped",
+                Map.of("results", List.of("win", "loss"), "called", true,
+                        "subjects", List.of(flipper))});
 
         assertEquals("coin_flipped", written.get("type"), written.toString());
-        assertEquals(List.of(), written.get("subjects"),
-                "the acting host is not a subject: " + written);
+        assertEquals(List.of(Refs.of(flipper)), written.get("subjects"),
+                "the flipper, and not the acting host: " + written);
+        assertEquals(Map.of("results", List.of("win", "loss"), "called", true),
+                params(written), written.toString());
+    }
+
+    /**
+     * A coin flipped paying a cost (Karplusan Minotaur's cumulative upkeep,
+     * {@code CostFlipCoin}) is reported by the outcome hook too. Paid while
+     * the ability that asks for it resolves — cumulative upkeep's trigger
+     * asks it as an unless cost — it is that resolution's event; paid for
+     * something being cast or activated, it is the payment's, which reaches
+     * no record and is counted as dropped.
+     */
+    @Test
+    void aCoinFlippedPayingACostGoesWhereThePaymentDoes() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.UPKEEP);
+        Player flipper = game.getPlayers().get(0);
+        Card minotaur = TestBoard.inPlay(game, flipper, "Karplusan Minotaur");
+        SpellAbility upkeep = AbilityFactory.getAbility(
+                "AB$ GainLife | Cost$ T | Defined$ You | LifeAmount$ 1", minotaur);
+        upkeep.setActivatingPlayer(flipper);
+        Object[] flip = {upkeep, "coin_flipped",
+                Map.of("results", List.of("loss"), "called", true, "subjects", List.of(flipper))};
+        java.util.concurrent.atomic.AtomicLong droppedFlips = new java.util.concurrent.atomic.AtomicLong();
+
+        List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
+            // Paid for an activation: no record, counted as dropped.
+            game.costPaymentStack.push(upkeep.getPayCosts().getCostParts().get(0),
+                    new forge.game.cost.CostPayment(upkeep.getPayCosts(), upkeep));
+            collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME, flip);
+            game.costPaymentStack.pop();
+            droppedFlips.set(bracket.droppedEvents().counts().getOrDefault(
+                    new DroppedEvents.Key("coin_flipped", "upkeep"), 0L));
+            // Paid while the ability that asks for it resolves: its event.
+            bracket.beginBracket(upkeep);
+            game.getStack().setResolving(true);
+            game.costPaymentStack.push(upkeep.getPayCosts().getCostParts().get(0),
+                    new forge.game.cost.CostPayment(upkeep.getPayCosts(), upkeep));
+            collectors.clauses().outcomeHandler().invoke(null, ON_OUTCOME, flip);
+            game.costPaymentStack.pop();
+            game.getStack().setResolving(false);
+            bracket.endBracket(upkeep.getId(), false);
+            bracket.onNextAction();
+        });
+
+        assertEquals(1L, droppedFlips.get(), "the activation's flip is counted as dropped");
+        String half = records.get(records.size() - 1);
+        assertEquals(List.of("coin_flipped"), RecordLines.eventTypes(half), half);
+        assertEquals(List.of(Refs.of(flipper)), events(half).get(0).get("subjects"), half);
     }
 
     /**
@@ -211,9 +261,32 @@ class OutcomeHandlerTest {
         Map<String, Object> fromLibraries = events.get(0);
         assertEquals(List.of(Refs.of(first), Refs.of(second)),
                 fromLibraries.get("subjects"), fromLibraries.toString());
-        assertEquals(Set.of("count", "from_zone"), params(fromLibraries).keySet(),
+        assertEquals(Map.of("count", 2L, "from_zone", "library"), params(fromLibraries),
                 fromLibraries.toString());
         assertEquals(List.of(), events.get(1).get("subjects"), events.get(1).toString());
+        assertEquals("hand", params(events.get(1)).get("from_zone"), events.get(1).toString());
+    }
+
+    /**
+     * The zones an outcome names are spelled as every zone of a record is,
+     * lower-cased ({@code CardSpelling.zoneName}): Forge hands over its
+     * {@code ZoneType} names, and {@code "?"} or {@code "null"} where it had
+     * no zone, which write no parameter.
+     */
+    @Test
+    void anOutcomesZonesAreSpelledAsARecordsZones() throws Throwable {
+        List<Map<String, Object>> events = outcomeEvents(
+                new Object[]{null, "card_made",
+                        Map.of("card_name", "Grizzly Bears", "to_zone", "Hand", "count", 1)},
+                new Object[]{null, "card_made",
+                        Map.of("card_name", "Grizzly Bears", "to_zone", "null", "count", 1)},
+                new Object[]{null, "card_revealed", Map.of("count", 1, "from_zone", "?")});
+
+        assertEquals(3, events.size(), events.toString());
+        assertEquals("hand", params(events.get(0)).get("to_zone"), events.get(0).toString());
+        assertEquals(Set.of("card_name", "count"), params(events.get(1)).keySet(),
+                events.get(1).toString());
+        assertEquals(Set.of("count"), params(events.get(2)).keySet(), events.get(2).toString());
     }
 
     /**

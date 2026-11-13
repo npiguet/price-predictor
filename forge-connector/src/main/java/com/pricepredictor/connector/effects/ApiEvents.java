@@ -408,70 +408,66 @@ final class ApiEvents {
      * and the fixtures disagree.
      */
     private static void choiceRules(Map<String, Rule<?>> rules) {
-        put(rules, new Rule<>(EventType.CHOICE_MADE, null, (sa, host, memo) -> choice(host)),
-                "ChooseColor", "ChooseType", "ChooseCard", "NameCard", "ChooseNumber",
-                "ChoosePlayer", "ChooseDirection", "ChooseEvenOdd", "ChooseSource",
-                "GenericChoice");
+        choiceRule(rules, "ChooseColor", "color");
+        choiceRule(rules, "ChooseType", "type");
+        choiceRule(rules, "ChooseNumber", "number");
+        choiceRule(rules, "NameCard", "card_name");
+        choiceRule(rules, "ChoosePlayer", "player");
+        choiceRule(rules, "ChooseCard", "cards");
+        choiceRule(rules, "ChooseSource", "cards");
+        choiceRule(rules, "ChooseDirection", "direction");
+        choiceRule(rules, "ChooseEvenOdd", "even_odd");
+        choiceRule(rules, "GenericChoice", "mode");
+    }
+
+    /** The rule of a Choose* API: the choice it leaves in its own accessor, of {@code kind}. */
+    private static void choiceRule(Map<String, Rule<?>> rules, String api, String kind) {
+        put(rules, new Rule<>(EventType.CHOICE_MADE, null, (sa, host, memo) -> choice(host, kind)),
+                api);
     }
 
     /**
-     * The choice a Choose* clause left on its host, as a kind and a value.
-     *
-     * <p>Reads whichever dedicated accessor the clause populated, in a fixed
-     * priority order -- the API that actually ran is not consulted, only what
-     * state it left behind, so a choice left on the host by an earlier clause
-     * in the same chain can in principle outrank a later clause that
-     * legitimately produced no reading of its own. This mirrors the
-     * approximation {@link #ownerOf} already accepts for {@code
-     * GainOwnership}'s single-scalar shape rather than introducing a new one.
+     * The choice a Choose* clause left on its host, as a kind and a value:
+     * read from the one accessor the clause's API populates ({@link
+     * #choiceRules}), never from another the host may still hold from an
+     * earlier choice — a colour chosen as it entered outranks nothing a
+     * later {@code ChooseNumber} left.
      *
      * <p><b>{@code getChosenColor()} and {@code getNamedCard()} never return
      * {@code null}</b> -- an unset colour reads back as {@code ""} ({@code
      * Card.getChosenColor}), the same way an unset named card reads back as
-     * {@code ""} rather than {@code null}. A bare {@code != null} check
-     * against either would always be true, which for the colour branch --
-     * checked first -- would report <i>every</i> clause routed through this
-     * method as a colour choice, direction and number and all. {@code
-     * hasChosenColor()} is what {@code Card} itself defines for this
-     * distinction, so this reads that instead; the named-card branch is
-     * guarded by {@link Strings#emptyToNull}.
+     * {@code ""} rather than {@code null}. {@code hasChosenColor()} is what
+     * {@code Card} itself defines for this distinction, so this reads that
+     * instead; the named-card branch is guarded by {@link Strings#emptyToNull}.
      *
-     * <p>The direction, even/odd and mode readings are not optional extras,
-     * though few cards reach them: {@link #choiceRules} wires all three (and
-     * {@code NameCard}) to {@code CHOICE_MADE}, and a rule that matches and
-     * then reads nothing back would be worse than one left out of {@code
-     * RULES} entirely, because it looks wired. {@code
-     * ChooseDirectionEffect.resolve()} always calls {@code
+     * <p>{@code ChooseDirectionEffect.resolve()} always calls {@code
      * setChosenDirection}, and {@code ChooseEvenOddEffect.resolve()} always
-     * calls {@code setChosenEvenOdd} -- the identical "dedicated accessor
-     * that stays there" shape as the six branches already read. {@code
-     * GenericChoice} only reaches its branch for the {@code SetChosenMode$
-     * True} scripts (Tarkir's Sieges, Fallout's Hoover Dam, 15 real cards);
-     * the rest resolve a chosen sub-ability directly and leave no scalar on
-     * the host to describe which one -- the rule still matches the API, so
-     * the branch is what makes the reachable subset of it reachable.
+     * calls {@code setChosenEvenOdd}. {@code GenericChoice} leaves a reading
+     * only for the {@code SetChosenMode$ True} scripts (Tarkir's Sieges,
+     * Fallout's Hoover Dam, 15 real cards); the rest resolve a chosen
+     * sub-ability directly and leave no scalar on the host to describe which
+     * one.
      *
      * <p>There is no {@code getChosenSector()} reading, for the reason there
-     * is no {@code ChooseSector} rule ({@link #choiceRules}): nothing routes
-     * that API here, and the reading would be a stale-state misattribution
-     * risk (a host carrying a leftover {@code chosenSector} from something
-     * else entirely would outrank a later, real choice on the same card).
+     * is no {@code ChooseSector} rule ({@link #choiceRules}).
+     *
+     * @return the event, or null where the API's accessor holds nothing: a
+     *         {@code choice_made} naming a kind it cannot read would train
+     *         the head on a distinction the corpus cannot make
      */
-    private static EffectEvent choice(Card host) {
+    private static EffectEvent choice(Card host, String kind) {
         if (host == null) {
             return null;
         }
         for (ChoiceReading reading : CHOICES) {
-            String value = reading.read().apply(host);
-            if (value != null) {
-                return new EffectEvent(EventType.CHOICE_MADE)
-                        .param("choice_kind", reading.kind())
-                        .param("value", value);
+            if (!reading.kind().equals(kind)) {
+                continue;
             }
+            String value = reading.read().apply(host);
+            return value == null ? null : new EffectEvent(EventType.CHOICE_MADE)
+                    .param("choice_kind", kind)
+                    .param("value", value);
         }
-        // The clause chose something this has no reading for. An event naming
-        // the choice kind "?" would train the head on a distinction the corpus
-        // cannot make.
         return null;
     }
 
@@ -483,7 +479,7 @@ final class ApiEvents {
     }
 
     /**
-     * The accessors {@link #choice} reads, in its priority order.
+     * The accessors {@link #choice} reads, one per kind.
      *
      * <p>Read only when an emitter runs, never while {@link #RULES} is built,
      * so being declared below it is safe.

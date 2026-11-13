@@ -221,9 +221,15 @@ final class ClauseOutcomeRouter {
      *
      * <p>The event's subjects are exactly what the effect names under
      * {@code "subjects"}, and an outcome that names none has none. The acting
-     * ability's host is never a default: a coin flip or a token made is not
-     * something done to the card whose ability did it, and Detain's host is
-     * the spell that cast the restriction, not one of the cards it landed on.
+     * ability's host is never a default: a token made is not something done
+     * to the card whose ability did it, and Detain's host is the spell that
+     * cast the restriction, not one of the cards it landed on. A coin flip
+     * names the player who flipped, as dice name their roller.
+     *
+     * <p>Filed as any event is ({@link BusBracketCollector#recordClauseEvent}):
+     * a coin a cost flips (cumulative upkeep's {@code CostFlipCoin}) is the
+     * resolution's that asks for it while it resolves, and otherwise the
+     * payment's, which reaches no record and is counted as dropped.
      * Which params entries are not generic parameters is
      * {@link #outcomeEvent}'s to say.
      *
@@ -261,7 +267,7 @@ final class ClauseOutcomeRouter {
 
     /**
      * The event an outcome's params describe: every entry a generic
-     * parameter, except three.
+     * parameter, except five.
      *
      * <ul>
      *   <li>{@code "subjects"}, carrying the raw Card/Player list of who the
@@ -278,6 +284,11 @@ final class ClauseOutcomeRouter {
      *   and the trigger-derived {@code damage_prevented}) renders one, and a
      *   display name here would silently fail a join against those refs and
      *   collide two sources sharing a name.
+     *   <li>{@code "from_zone"} ({@code card_revealed}) and {@code "to_zone"}
+     *   ({@code card_made}), Forge's {@code ZoneType} names, are spelled as
+     *   every other zone of a record is ({@link CardSpelling#zoneName}),
+     *   lower-cased; the placeholder Forge writes for no zone ({@code "?"},
+     *   {@code "null"}) writes no parameter.
      *   <li>{@code "sample"} ({@code token_created} only), one token standing
      *   for its batch, becomes {@code token_script_id} and
      *   {@code characteristics}, rendered by {@link SnapshotBuilder}'s own
@@ -294,6 +305,7 @@ final class ClauseOutcomeRouter {
             switch (key) {
                 case "subjects" -> addOutcomeSubjects(event, value);
                 case "source" -> event.param("source", outcomeRefOf(value));
+                case "from_zone", "to_zone" -> event.param(key, outcomeZoneOf(value));
                 case "sample" -> {
                     if (value instanceof Card token) {
                         event.param("token_script_id", CardSpelling.tokenScriptIdOf(token));
@@ -343,6 +355,14 @@ final class ClauseOutcomeRouter {
         }
         traits.put("counters", counters);
         return traits;
+    }
+
+    /** A zone an outcome names, as a record spells it, or null for none. */
+    private static String outcomeZoneOf(Object value) {
+        if (value instanceof String named && ("?".equals(named) || "null".equals(named))) {
+            return null;
+        }
+        return CardSpelling.zoneName(value);
     }
 
     /**

@@ -151,6 +151,40 @@ class EventAttributionTest {
     }
 
     /**
+     * A declared {@code Duration$} is bucketed as the contract buckets a
+     * floating effect's: one that ends only when an object changes outlasts
+     * the turn, as {@code Permanent} does; one that ends at a step of some
+     * turn ends with it, as an until-end-of-turn one does.
+     */
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+            "Permanent, permanent",
+            "Perpetual, permanent",
+            "UntilHostLeavesPlay, permanent",
+            "UntilLoseControlOfHost, permanent",
+            "AsLongAsInPlay, permanent",
+            "AsLongAsControl, permanent",
+            "UntilUntaps, permanent",
+            "UntilYourNextUntap, end_of_turn",
+            "UntilTheEndOfYourNextUntap, end_of_turn",
+            "UntilUnattached, permanent",
+            "UntilFacedown, permanent",
+            "UntilHostLeavesPlayOrEOT, end_of_turn",
+            "UntilYourNextTurn, end_of_turn",
+            "UntilTheEndOfYourNextTurn, end_of_turn",
+            "UntilEndOfCombat, end_of_turn"})
+    void aDeclaredDurationIsBucketedAsAFloatingEffectsIs(String declared, String bucket) {
+        Card host = TestCards.build("Grizzly Bears");
+        SpellAbility pump = AbilityFactory.getAbility(
+                "SP$ Pump | ValidTgts$ Creature | NumAtt$ +3 | Duration$ " + declared, host);
+
+        assertEquals(bucket,
+                EventAttribution.duration(pump, pump, EventType.PT_CHANGE).wireName(), declared);
+        assertEquals(bucket, "until_leaves".equals(FloatingEffects.bucket(declared))
+                ? "permanent" : FloatingEffects.bucket(declared), declared);
+    }
+
+    /**
      * An undeclared duration means what Forge does with it. A pump with no
      * {@code Duration$} ends at end of turn — Giant Growth — and a counter
      * lasts; only an outcome with no lasting state is instant.

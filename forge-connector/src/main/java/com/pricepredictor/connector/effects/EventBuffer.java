@@ -3,13 +3,14 @@ package com.pricepredictor.connector.effects;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.LinkedHashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
- * The events one record is gathering, with repeated state transitions filed
- * once.
+ * The events one record is gathering, with a state transition told twice in
+ * a row filed once.
  *
  * <p>A resolution bracket, a combat bracket and a held effect half each gather
  * their events this way, so a repeat is recognised the same way in all three.
@@ -21,9 +22,13 @@ final class EventBuffer {
      *
      * <p>These describe a transition into a state a thing is either in or not:
      * a card is on the battlefield, a permanent is tapped, an aura is attached.
-     * Told twice in one record, the second telling is the engine publishing the
-     * same change again — nothing in the record can distinguish it from the
-     * first, and nothing downstream can use it.
+     * Told twice in a row for the same subjects, with no other transition of
+     * theirs between, the second telling is the engine publishing the same
+     * change again — nothing in the record can distinguish it from the first,
+     * and nothing downstream can use it. The same transition after another of
+     * the same subjects is a second occurrence and is kept: a creature
+     * flickered twice by one resolution leaves and returns twice, a permanent
+     * tapped, untapped and tapped again was tapped twice.
      *
      * <p>Everything else is deliberately absent, because for a quantitative
      * outcome the repeat <b>is</b> the information: two creatures each dealing
@@ -55,7 +60,8 @@ final class EventBuffer {
      * in two brackets and is never compared. And a second destroy check
      * driven by a separately-resolving ability changes {@code attributed_to}
      * (stamped in {@code BusBracketCollector.fileOutcome}), which breaks the
-     * rendered-line equality {@link #file} dedups on. Nobody has
+     * rendered-line equality {@link #file} dedups on; and two regenerations
+     * with any other transition of the creature between them are both kept. Nobody has
      * constructed, or ruled out, a same-bracket same-attribution double from
      * reasoning about the code alone — that is an open question static
      * analysis cannot settle, and one a corpus run can: look for brackets that
@@ -69,8 +75,8 @@ final class EventBuffer {
             EventType.SACRIFICED, EventType.REGENERATED);
 
     private final List<EffectEvent> events = new ArrayList<>();
-    /** The rendered lines of the state transitions filed so far. */
-    private final Set<String> seen = new LinkedHashSet<>();
+    /** The rendered line of the last state transition filed, by its subjects. */
+    private final Map<List<String>, String> lastTransition = new HashMap<>();
 
     /**
      * A buffer holding these events as they are, repeats included, so that a
@@ -81,14 +87,15 @@ final class EventBuffer {
         for (EffectEvent event : events) {
             copy.events.add(event);
             if (IDEMPOTENT_EVENTS.contains(event.type())) {
-                copy.seen.add(event.toJson());
+                copy.lastTransition.put(List.copyOf(event.subjects()), event.toJson());
             }
         }
         return copy;
     }
 
     /**
-     * Add an event unless it repeats a state transition already here.
+     * Add an event unless it repeats the last state transition of its
+     * subjects.
      *
      * @return whether it was added
      */
@@ -96,8 +103,11 @@ final class EventBuffer {
         // Compared as the rendered line, so two events are the same when what
         // the record says about them is the same -- subjects, params, duration
         // and the clause they were attributed to, all of it.
-        if (IDEMPOTENT_EVENTS.contains(event.type()) && !seen.add(event.toJson())) {
-            return false;
+        if (IDEMPOTENT_EVENTS.contains(event.type())) {
+            String line = event.toJson();
+            if (line.equals(lastTransition.put(List.copyOf(event.subjects()), line))) {
+                return false;
+            }
         }
         if (event.type() == EventType.LIBRARY_SHUFFLED) {
             forgetLibraryPositions(event.subjects());
@@ -132,7 +142,7 @@ final class EventBuffer {
 
     void clear() {
         events.clear();
-        seen.clear();
+        lastTransition.clear();
     }
 
     /** Every event filed so far, leaving the buffer empty. */

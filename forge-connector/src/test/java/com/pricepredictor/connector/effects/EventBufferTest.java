@@ -10,19 +10,60 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EventBufferTest {
 
     /**
-     * The same transition told twice in one record is filed once.
+     * The same transition told twice in a row for its subject is filed once.
      *
      * <p>A card is on the battlefield or it is not, so a second identical
-     * {@code zone_change} carries nothing the first did not.
+     * {@code zone_change} with no other transition of the card between
+     * carries nothing the first did not.
      */
     @Test
-    void aRepeatedStateTransitionIsFiledOnce() {
+    void aStateTransitionToldTwiceInARowIsFiledOnce() {
         EventBuffer into = new EventBuffer();
 
         assertTrue(into.file(zoneChange()));
-        assertFalse(into.file(zoneChange()));
+        assertTrue(into.file(new EffectEvent(EventType.TAPPED).subject("E8")));
+        assertFalse(into.file(zoneChange()),
+                "another subject's transition between is no second occurrence");
 
-        assertEquals(1, into.events().size());
+        assertEquals(2, into.events().size());
+    }
+
+    /**
+     * The same transition after another of the same subject is a second
+     * occurrence: a creature flickered twice by one resolution left and
+     * returned twice, a permanent tapped, untapped and tapped again was
+     * tapped twice.
+     */
+    @Test
+    void aTransitionAfterAnotherOfItsSubjectIsFiledAgain() {
+        EventBuffer into = new EventBuffer();
+        EffectEvent leaves = move("E7", "battlefield", "exile");
+        EffectEvent returns = move("E7", "exile", "battlefield");
+
+        for (int flicker = 0; flicker < 2; flicker++) {
+            assertTrue(into.file(leaves), "flicker " + flicker);
+            assertTrue(into.file(returns), "flicker " + flicker);
+        }
+        for (int tap = 0; tap < 2; tap++) {
+            assertTrue(into.file(new EffectEvent(EventType.TAPPED).subject("E9")));
+            assertTrue(into.file(new EffectEvent(EventType.UNTAPPED).subject("E9")));
+        }
+
+        assertEquals(8, into.events().size());
+    }
+
+    /** A buffer copied from events refuses a repeat of their last transition. */
+    @Test
+    void aCopyRefusesARepeatOfTheLastTransition() {
+        EventBuffer copy = EventBuffer.copyOf(java.util.List.of(zoneChange()));
+
+        assertFalse(copy.file(zoneChange()));
+        assertEquals(1, copy.events().size());
+    }
+
+    private static EffectEvent move(String card, String from, String to) {
+        return new EffectEvent(EventType.ZONE_CHANGE)
+                .subject(card).param("from_zone", from).param("to_zone", to);
     }
 
     /**

@@ -233,9 +233,10 @@ static, as it writes no `affected`. `line_of`, `line_of_the_same_card`, `mode_of
 
 ## Event additions
 
-No new event type and no new parameter outside a type's `EVENT_PARAMS` row: each fact rides a
-parameter the row already declares, a `characteristics` member, or the provenance `mode` any event
-may carry. `state_flag_change` gains flags outside `DESIGNATIONS`, listed below.
+No new event type. One new parameter outside a type's `EVENT_PARAMS` row, `damage_dealt`'s
+`damage_type`; every other fact rides a parameter the row already declares, a `characteristics`
+member, or the provenance `mode` any event may carry. `state_flag_change` gains flags outside
+`DESIGNATIONS`, listed below.
 
 | Event | Field | Shape |
 |---|---|---|
@@ -255,6 +256,16 @@ may carry. `state_flag_change` gains flags outside `DESIGNATIONS`, listed below.
 | `state_flag_change` | `flag` `door_unlocked` | `value` true; subjects the battlefield permanents with more unlocked rooms after an `UnlockDoor` clause than before |
 | `state_flag_change` | `flag` `paired` | `value` true; subjects every battlefield permanent paired after a `Bond` clause and not before (both creatures of the pair) |
 | `state_flag_change` | `flag` `merged` | `value` true; subject the permanent a `Mutate` clause's spell merged into (`getMergedToCard`) |
+| `damage_dealt` | `damage_type` | on damage to a creature (bus `GameEventCardDamaged`), after `combat`: `normal` (marked damage), `m1m1_counters` (wither or infect, 120.3d: the same record's `counter_change` adds the -1/-1 counters and no damage is marked), `deathtouch` (a deathtouch source, whatever else it has: a deathtouch source with wither or infect reads `deathtouch`), `loyalty_loss` (Forge's value, never published). Absent on damage to a player, and on a `damage_dealt` read off a trigger's or replacement's map |
+| `attached` | `attached_to` | on the bus event too: the ref (`E`, or `P` for a player) of what the Aura, Equipment or Fortification now hangs on. A move from one host to another is one `attached` |
+| `unattached` | `detached_from` | on the bus event too: the ref of what it left |
+| `destroyed` | resolution, combat and `turn_action` records | subjects the permanent, written just before its `zone_change` off the battlefield and filed where that move is filed (a state-based destruction joins the held half or the damage step's record its death joins). No `regenerable` (Forge's bus event does not say); a destruction a replacement or regeneration stopped writes nothing |
+| `sacrificed` | resolution, combat and `turn_action` records | subjects the permanent, just before its `zone_change` off the battlefield, filed where that move is filed. A sacrifice paid as a cost is the payment's and reaches no record |
+| `face_change` | resolution, combat and `turn_action` records | subjects the permanent, `to_state` the face now up: `front`, `back`, `flipped`, `melded` or `face_down` (an entity's `face_state` values), written when a battlefield permanent's face differs from the one last read (transformed, flipped, turned face up or face down), beside the stat changes the new face makes |
+| `player_lost` | the game-end record | subjects the player, `reason` Forge's `GameLossReason` name (`LifeReachedZero`, `Milled`, `Poisoned`, `SpellEffect`, `Conceded`, `CommanderDamage`, `OpponentWon`), one per losing player, before `player_won`, in the record `player_won` is written in. A player who agreed to a draw writes none |
+| `card_revealed` | `from_zone` | a zone as an entity's `zone` spells it (`library`, `hand`, …); absent when Forge names none |
+| `card_made` | `to_zone` | a zone as an entity's `zone` spells it; absent when Forge names none |
+| `choice_made` | `choice_kind`, `value` | read from the accessor of the clause's own API: `ChooseColor` `color`, `ChooseType` `type`, `ChooseNumber` `number`, `NameCard` `card_name`, `ChoosePlayer` `player`, `ChooseCard` and `ChooseSource` `cards` (the count chosen), `ChooseDirection` `direction`, `ChooseEvenOdd` `even_odd`, `GenericChoice` `mode`; no event when that accessor holds nothing |
 | `state_flag_change` | `flag` `city_blessing` / `dungeon_completed` | `value` true; subject the player, read on the player's command-zone notification (`GameEventZone`) as the state against the state last read: `hasBlessing()` turned true, `getCompletedDungeons().size()` rose. Filed wherever the bus event lands (a resolution's effect half, the held half across the state-based loop) |
 
 Not collected: a battle's protector changing (`Card.setProtectingPlayer` publishes nothing), the
@@ -282,7 +293,31 @@ position a card left a library from, and a search of another player's library.
   `updated` or `prevented`: the ability has not run when the record is written, and it may never
   run.
 - A `coin_flipped` event names the player who flipped as its subject. No coin flipped writes no
-  event. Forge's outcome hook also reports the coins a cost flips (cumulative upkeep).
+  event. Forge's outcome hook also reports the coins a cost flips (cumulative upkeep): one flipped
+  paying an unless cost while the asking ability resolves is that resolution's event, one flipped
+  paying for a cast or an activation is the payment's.
+- An event a cost payment publishes (a tap, a sacrifice, a pain land's damage, a counter removed)
+  reaches no record: the cost half's `costs` and a mana record hold what was paid. Each such event
+  is counted as dropped.
+- A bestowed Aura spell or a mutating creature spell whose target is illegal when it resolves
+  resolves as a creature spell (702.103e, 702.140b): its effect half reads `resolved` and holds its
+  events, the permanent's arrival included.
+- An effect that ends the turn or the combat phase (`EndTurn`, `EndCombatPhase`) writes its effect
+  half: its `turn_ended`, the exile of every card on the stack (its own included), and what the
+  state-based checks and the steps it runs while it resolves do (a death in its own check, the
+  cleanup step's discard).
+- A refusal made between a cast and the start of its resolution does not make the effect half
+  `declined`.
+- `conditions_met` lists the conditional clauses of the line the effect half keys to; a clause of
+  another line of the same card resolving meanwhile (an enters-the-battlefield replacement's) is
+  not listed.
+- An event's `duration` buckets a declared `Duration$` as a floating effect's `duration` is
+  bucketed (above, "Command-zone objects"): `permanent` and `until_leaves` read `permanent`, every
+  other reads `end_of_turn`; an undeclared one stays what Forge applies.
+- A state transition (`zone_change`, `tapped`, `untapped`, `attached`, `unattached`, `phased`,
+  `face_change`, `destroyed`, `sacrificed`, `regenerated`) that repeats, line for line, the last
+  transition a record holds for the same subjects is written once; the same transition after
+  another of those subjects is written again (a creature flickered twice, a permanent tapped twice).
 - A forced (interventional) resolution reads its board when its resolution starts, as a live one.
 - A record's referenced card (tier 1) is the game's own object for it: a dies trigger's host and
   the host of an ability that sacrificed it are the card in the graveyard, written once as
@@ -319,7 +354,9 @@ position a card left a library from, and a search of another player's library.
 - A record's stat-change events (`pt_change`, `keyword_change`, `type_change`, `color_change`,
   `control_change`) are changes after its own snapshot: the differ re-reads the battlefield when a
   cost half, an effect half at its resolution's start, a mode's half or a damage step takes its
-  snapshot. A change Forge
+  snapshot. A cast started while something resolves and a trigger the state-based loop puts on the
+  stack between two passes re-read nothing: the resolving item and the damage step keep their
+  changes. A change Forge
   applied before such a snapshot and published after it reaches no record and is counted as
   dropped.
 - `can_play = canPlay ∧ timing ∧ no static prohibition`.

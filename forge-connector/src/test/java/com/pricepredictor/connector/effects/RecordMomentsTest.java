@@ -157,12 +157,14 @@ class RecordMomentsTest {
         assertEquals(linkOf(cost), linkOf(effect));
         assertEquals("stack", entity(effect, ref(bolt)).get("zone"), effect);
         // The Bolt leaves the stack after its own events, and the Giant's
-        // death, the state-based consequence the half holds, comes after.
-        assertEquals(List.of("damage_dealt", "zone_change", "zone_change"), eventTypes(effect),
-                effect);
+        // death, the state-based consequence the half holds, comes after:
+        // destroyed, then its move.
+        assertEquals(List.of("damage_dealt", "zone_change", "destroyed", "zone_change"),
+                eventTypes(effect), effect);
         List<Map<String, Object>> resolved = events(effect);
         assertTrue(carries(resolved.get(1), zoneChange(ref(bolt), "stack", "graveyard")), effect);
-        assertTrue(carries(resolved.get(2), zoneChange(ref(giant), "battlefield", "graveyard")),
+        assertEquals(List.of(ref(giant)), resolved.get(2).get("subjects"), effect);
+        assertTrue(carries(resolved.get(3), zoneChange(ref(giant), "battlefield", "graveyard")),
                 effect);
 
         List<String> manaRecords = records(all, "resolution").stream()

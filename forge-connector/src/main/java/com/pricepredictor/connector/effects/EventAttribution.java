@@ -6,7 +6,6 @@ import forge.game.spellability.SpellAbility;
 
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -29,18 +28,6 @@ final class EventAttribution {
 
     private EventAttribution() {
     }
-
-    /**
-     * Script durations that outlast the turn.
-     *
-     * <p>Forge uses a dozen spellings and the head has three buckets, so the
-     * mapping is by exception: these last, anything else beginning
-     * {@code Until} or {@code EOT} ends with the turn or sooner.
-     * {@code UntilHostLeavesPlay} is here because an aura's grant lasts as long
-     * as the aura does, which is not a turn boundary.
-     */
-    private static final Set<String> LASTING = Set.of(
-            "permanent", "perpetual", "aslongascontrol", "untilhostleavesplay");
 
     /**
      * Events that describe a state lasting past their own instant.
@@ -159,9 +146,16 @@ final class EventAttribution {
      * The source is the script rather than the engine's cleanup registration
      * because the script is where the answer is written down.
      *
-     * <p>A declared {@code Duration$} is bucketed as it says. An undeclared one
-     * is instant for an event with no lasting state, and otherwise whatever
-     * Forge applies to the resolving clause's API: end of turn for a pump,
+     * <p>A declared {@code Duration$} is bucketed as a floating effect's is
+     * ({@link FloatingEffects#bucket}, the contract's one table): one that
+     * ends only when an object changes — the host leaves play or its control
+     * is lost, "as long as", until it untaps, is unattached or turned face
+     * down — outlasts any turn, and reads {@link EventDuration#PERMANENT}
+     * beside {@code Permanent} and {@code Perpetual}; every other, ending at
+     * a step of some turn ({@code …OrEOT}, until your next turn included),
+     * reads {@link EventDuration#END_OF_TURN}. An undeclared one is instant
+     * for an event with no lasting state, and otherwise whatever Forge
+     * applies to the resolving clause's API: end of turn for a pump,
      * permanent for a counter.
      */
     static EventDuration duration(SpellAbility root, Object pointer, EventType eventType) {
@@ -174,11 +168,8 @@ final class EventAttribution {
             return api != null && END_OF_TURN_BY_DEFAULT.contains(api)
                     ? EventDuration.END_OF_TURN : EventDuration.PERMANENT;
         }
-        String key = declared.toLowerCase(Locale.ROOT);
-        if (LASTING.contains(key)) {
-            return EventDuration.PERMANENT;
-        }
-        return EventDuration.END_OF_TURN;
+        return "end_of_turn".equals(FloatingEffects.bucket(declared))
+                ? EventDuration.END_OF_TURN : EventDuration.PERMANENT;
     }
 
     /**
