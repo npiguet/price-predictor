@@ -65,6 +65,7 @@ from price_predictor.infrastructure.cli_run_manifest import (
     dispatch,
     tag_subcommands,
 )
+from price_predictor.infrastructure.forge_jvm import MAX_WORKERS, worker_count
 from sealed.infrastructure.effect_collection_flags import (
     add_cap_flags,
     add_directed_fork_flags,
@@ -819,8 +820,8 @@ def _rule_counts_parser(subparsers) -> None:
         help="Scenarios and their detector declarations (default: %(default)s)",
     )
     parser.add_argument(
-        "--workers", type=int, default=None,
-        help="Parallel shard readers; unset uses the CPU count",
+        "--workers", type=worker_count, default=MAX_WORKERS,
+        help=f"Parallel shard readers, 1 to {MAX_WORKERS} (default: %(default)s)",
     )
 
 

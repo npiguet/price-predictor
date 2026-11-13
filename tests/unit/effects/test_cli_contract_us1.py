@@ -330,7 +330,10 @@ class TestBuildCorpus:
 
     def test_the_run_defaults_are_the_contracts(self):
         args = parse("build-corpus")
-        assert args.workers is None  # CPU count
+        assert args.workers == 12  # explicit and bounded, never the CPU count
+        for out_of_range in ("0", "13"):
+            with pytest.raises(SystemExit):
+                parse("build-corpus", "--workers", out_of_range)
         assert args.verify is False
         assert parse("build-corpus", "--verify").verify is True
 

@@ -36,7 +36,15 @@ def test_the_defaults_are_the_contract_s():
     assert tuple(args.cards_folders) == tuple(DEFAULT_CARDS_FOLDER_PATHS)
     assert str(args.variant_scripts) == str(Path(DEFAULT_VARIANT_SCRIPTS))
     assert args.rules_dir == Path("rules")
-    assert args.workers is None
+    assert args.workers == 12
+
+
+@pytest.mark.parametrize("workers", ["0", "13"])
+def test_the_shard_readers_are_1_to_12(workers):
+    """The machine runs at most twelve CPU-busy processes: an explicit,
+    bounded count, never the CPU count."""
+    with pytest.raises(SystemExit):
+        parse("--records-dir", "r", "--workers", workers)
 
 
 def test_cards_folder_repeats():

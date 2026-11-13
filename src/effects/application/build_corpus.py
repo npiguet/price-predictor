@@ -93,6 +93,7 @@ from effects.domain.stratum_placement import (
     place_games,
     rule_test_misses,
 )
+from price_predictor.infrastructure.forge_jvm import MAX_WORKERS, worker_count
 
 if TYPE_CHECKING:
     from effects.infrastructure.converted_trees import ConvertedTrees, SourceTrees
@@ -208,9 +209,10 @@ class BuildCorpusConfig:
     seed: int = field(default=42, metadata={"help": (
         "Seeds the selection and the repacking (default: %(default)s)"
     )})
-    workers: int | None = field(default=None, metadata={"help": (
-        "Parallel shard readers; unset uses the CPU count"
-    )})
+    workers: int = field(default=MAX_WORKERS, metadata={
+        "type": worker_count,
+        "help": f"Parallel shard readers, 1 to {MAX_WORKERS} (default: %(default)s)",
+    })
     verify: bool = field(default=False, metadata={"help": (
         "Report drift against an existing manifest and write nothing"
     )})
