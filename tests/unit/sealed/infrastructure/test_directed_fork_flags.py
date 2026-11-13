@@ -19,6 +19,7 @@ import pytest
 
 import sealed.infrastructure.effect_collection_flags as flags
 from sealed.infrastructure.effect_collection_flags import (
+    UNTAGGABLE_SCENARIOS,
     directed_fork_error,
     rule_readiness,
 )
@@ -58,6 +59,8 @@ def rules_dir(tmp_path: Path) -> Path:
         _scenario(["1.5"], operation={"unclassifiable": "a timing"}),
         _scenario(["1.5"], detector={"none": "unread"}, operation="tap"),
         _scenario(["1.6"], detector={"same_as": "1.1-1", "reason": "the same fact"}),
+        # 104.4a-1 reads game_drawn, which no resolution record lists.
+        {**_scenario(["1.7"]), "id": "104.4a-1"},
     ]
     root = tmp_path / "rules"
     (root / "scenarios").mkdir(parents=True)
@@ -81,6 +84,7 @@ class TestTheCatalogueChecks:
     @pytest.mark.parametrize(("rule", "complaint"), [
         ("1.2", "declares its detector none"),
         ("1.6", "same_as"),
+        ("1.7", "an event its record kind never lists"),
         ("1.3", "has no detector declaration"),
         ("1.4", "no contrasting variant classified into a fork operation"),
         ("9.9", "has no detector declaration"),
@@ -166,14 +170,19 @@ class TestTheCatalogueIsReadAsEffectsReadsIt:
     def test_every_rule_agrees(self):
         from effects.domain.rule_catalogue import DetectorDeclaration, NoDetector, SameAs
         from effects.domain.rule_catalogue import ForkOperation as Operation
+        from effects.domain.rule_detectors import DetectorIndex
         from effects.infrastructure.rules_catalogue_io import load_scenarios
 
+        catalogue = load_scenarios()
+        untaggable = DetectorIndex.of(catalogue).untaggable
+        assert set(untaggable) == UNTAGGABLE_SCENARIOS
         expected: dict[str, tuple[str, bool]] = {}
-        rank = {"missing": 0, "none": 1, "same_as": 2, "declared": 3}
-        for rule, scenarios in load_scenarios().by_rule().items():
+        rank = {"missing": 0, "none": 1, "untaggable": 2, "same_as": 3, "declared": 4}
+        for rule, scenarios in catalogue.by_rule().items():
             state = max(
                 (
-                    "declared" if isinstance(s.detector, DetectorDeclaration)
+                    "untaggable" if s.id in untaggable
+                    else "declared" if isinstance(s.detector, DetectorDeclaration)
                     else "none" if isinstance(s.detector, NoDetector)
                     else "same_as" if isinstance(s.detector, SameAs) else "missing"
                     for s in scenarios

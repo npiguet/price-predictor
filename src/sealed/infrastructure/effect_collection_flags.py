@@ -234,7 +234,14 @@ def directed_fork_properties(args: argparse.Namespace) -> dict[str, str]:
     }
 
 
-_DETECTOR_RANK = {"missing": 0, "none": 1, "same_as": 2, "declared": 3}
+_DETECTOR_RANK = {"missing": 0, "none": 1, "untaggable": 2, "same_as": 3, "declared": 4}
+
+#: The scenarios whose declaration names an event its record kind never
+#: lists (the effects package's ``DetectorIndex.untaggable``, read off its
+#: emittable-events table): no record of theirs can be tagged.
+#: ``test_directed_fork_flags.py`` pins this set to that index over the real
+#: catalogue.
+UNTAGGABLE_SCENARIOS = frozenset({"104.4a-1", "104.4c-1", "701.8c-2"})
 
 
 def rule_readiness(rules_dir: Path = DEFAULT_RULES_DIR) -> dict[str, tuple[str, bool]]:
@@ -245,9 +252,11 @@ def rule_readiness(rules_dir: Path = DEFAULT_RULES_DIR) -> dict[str, tuple[str, 
     The detector state is ``"declared"`` when some scenario listing the rule
     declares a detector family, else ``"same_as"`` when one declares the
     same fact as another scenario (``{"same_as": id, "reason": ...}``, its
-    rule counted under that scenario's), else ``"none"`` when one declares
-    ``{"none": reason}``, else ``"missing"``. The base variant, the first,
-    makes nothing, and an unclassifiable variant's operation is an object.
+    rule counted under that scenario's), else ``"untaggable"`` when one
+    declares a family no record can show (:data:`UNTAGGABLE_SCENARIOS`), else
+    ``"none"`` when one declares ``{"none": reason}``, else ``"missing"``.
+    The base variant, the first, makes nothing, and an unclassifiable
+    variant's operation is an object.
 
     Read here rather than through ``effects.infrastructure.rules_catalogue_io``,
     which this package may not import; ``test_directed_fork_flags.py`` pins the
@@ -265,6 +274,8 @@ def rule_readiness(rules_dir: Path = DEFAULT_RULES_DIR) -> dict[str, tuple[str, 
                 state = "none"
             elif "same_as" in declaration:
                 state = "same_as"
+            elif scenario.get("id") in UNTAGGABLE_SCENARIOS:
+                state = "untaggable"
             else:
                 state = "declared"
             classified = any(
@@ -307,7 +318,8 @@ def directed_fork_error(
     ``collect-variants``, never of ``collect-coverage``, whose
     ``--directed-fork-rules`` is a label only.
 
-    A listed rule needs a detector declared in its scenarios (not ``none``),
+    A listed rule needs a detector declared in its scenarios (not ``none``,
+    not ``same_as``, not one only for an event its record never lists),
     a contrasting variant classified into a fork operation, and a board
     precondition registered in ``forge-connector``, which one run of
     ``DirectedRulesMain`` lists. The JVM is asked once the catalogue's checks
@@ -330,6 +342,11 @@ def directed_fork_error(
             return (
                 f"--directed-fork-rules: {rule} declares its detector none, so "
                 "no record of its fork could be tagged"
+            )
+        if detector == "untaggable":
+            return (
+                f"--directed-fork-rules: {rule} declares a detector only for an event "
+                "its record kind never lists, so no record of its fork could be tagged"
             )
         if detector == "same_as":
             return (
