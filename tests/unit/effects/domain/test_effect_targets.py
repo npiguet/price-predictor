@@ -1298,3 +1298,21 @@ class TestTheWp4Wire:
         targets = derive_targets(_resolution(
             Event(type=EventType.FACE_CHANGE, subjects=("E1",), params={"to_state": "back"})))
         assert targets["E1"].fields["face_after"] == FACE_STATES.index("back")
+
+    def test_a_phased_out_planeswalker_is_no_attack_target_at_all(self):
+        """A phased-out permanent is an entity of the board, treated as though
+        it does not exist (702.26b): no defender to be legal or not."""
+        from effects.domain.records import PlayabilityAttackersPayload
+
+        walker = _entity("E9", types=("planeswalker",), controller="P1")
+        gone = _entity("E8", types=("planeswalker",), controller="P1",
+                       designations=("phased_out",))
+        assert walker.on_battlefield and not gone.on_battlefield
+        record = _on_board(PlayabilityAttackersPayload(
+            legal_attackers=("E1",), anchor_attacker="E1", legal_defenders=("P1", "E9")),
+            _entity("E1"), walker, gone, kind=RecordKind.PLAYABILITY,
+            subkind=PlayabilitySubkind.ATTACKERS)
+        targets = derive_targets(record)
+        assert targets["E9"].fields["attack_target_legal"] == 1
+        assert "E8" not in targets
+

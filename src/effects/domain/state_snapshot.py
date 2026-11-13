@@ -600,8 +600,16 @@ class EntityState:
         return "creature" in self.types
 
     @property
+    def phased_out(self) -> bool:
+        """Whether the permanent is phased out: an entity of the board with the
+        designation, treated as though it does not exist (702.26b)."""
+        return "phased_out" in self.designations
+
+    @property
     def on_battlefield(self) -> bool:
-        return self.zone == Zone.BATTLEFIELD
+        """Whether the card is a permanent the rules see: on the battlefield
+        and not phased out, which no rule, attack, block or effect reaches."""
+        return self.zone == Zone.BATTLEFIELD and not self.phased_out
 
     def with_total_toughness(self, toughness: int) -> EntityState:
         """This entity at total toughness ``toughness`` with no marked damage.

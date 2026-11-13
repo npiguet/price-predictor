@@ -848,7 +848,7 @@ def _attackers_legality(record, payload: PlayabilityAttackersPayload, slot) -> N
     defenders = set(payload.legal_defenders)
     candidates = [player.id for player in record.state.players] + [
         entity.id for entity in record.state.entities
-        if entity.zone == Zone.BATTLEFIELD
+        if entity.on_battlefield  # a phased-out one is no defender at all
         and {"planeswalker", "battle"} & {kind.lower() for kind in entity.types}
     ]
     for ref in candidates:
