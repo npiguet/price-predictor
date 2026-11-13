@@ -12,6 +12,8 @@ within gen-3. Relative to gen-2 a field may change meaning or go away.
 
 - Every gen-3 record carries `"generation": 3` as its first envelope member after `record_id`.
 - Readers decide a record's generation by `generation`, else by `random_seat` (gen-2), else gen-1.
+- A `generation` other than the integer `3` (`4`, `"3"`, `true`, `null`) names no generation:
+  readers refuse the record.
 - `build-corpus`, `train-effect-model`, `evaluate-effect-model` and the probes accept gen-3 only.
   `rule-counts` accepts gen-2 or gen-3, not mixed.
 
@@ -291,6 +293,15 @@ position a card left a library from, and a search of another player's library.
 - A resolution's effect half holds every death of the state-based loop after it. A trigger record
   never holds one.
 - A prevention event with amount 0 is not written.
+- A `life_change` or `counter_change` read off a trigger's or replacement's map (one carrying a
+  provenance `mode`) writes the map's amount as `delta`, a magnitude; the mode names the direction.
+  Under `LifeLost`, `LoseLife`, `PayLife`, `LifeReduced`, `RemoveCounter` and `CounterRemoved`
+  readers read the delta as negative.
+- Readers decode a value outside its member's closed list as written and count it: an entity's
+  `zone` (a zone, or `merged` for a mutated permanent's merged card), `face_state`, `role`, a line's
+  `kind`, a link's `type`, the `phase`, `combat_substep`, `day_night`, a command-zone object's
+  `duration`, a `zone_change`'s `from_zone` and `to_zone` (a zone, `none` or null), an event's
+  `attributed_to`, and the envelope's `mode`, which every gen-3 record carries.
 - A record's stat-change events (`pt_change`, `keyword_change`, `type_change`, `color_change`,
   `control_change`) are changes after its own snapshot: the differ re-reads the battlefield when a
   cost half, an effect half at its resolution's start, a mode's half or a damage step takes its

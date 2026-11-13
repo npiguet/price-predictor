@@ -115,7 +115,7 @@ A rule no record tags is absent from `rules`; absent is not "not countable".
 
 | Field | Type | Kinds | Rule |
 |---|---|---|---|
-| `generation` | int, `3` | all | absent: gen-1 or gen-2 (feature 024's rule) |
+| `generation` | int, `3` | all | absent: gen-1 or gen-2 (feature 024's rule); any other value is refused |
 | `aimed_at` | list of rule ids | all, aimed records only | directed fork: `[rule]`; `collect-coverage` / `collect-variants`: the run's `--directed-fork-rules`, possibly `[]`; absent on every other record |
 | `directed` | `{variant, operation}` | all, directed-fork records only | `operation` a `ForkOperation` |
 | `kind` | adds `turn_action` | | subkinds `draw`, `cleanup_discard`, `untap`, `phasing`, `day_night`, `lore_counter` |
