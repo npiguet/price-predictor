@@ -17,6 +17,7 @@ distinct provenance key, which is why ``--limit`` exists.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,6 +60,9 @@ from effects.application.corpus_validation.payload_checks import (
 from effects.application.corpus_validation.presence import FieldPresence
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +124,7 @@ class ShardDamage:
                     yield record
                     seen += 1
             except SHARD_DAMAGE as error:
+                logger.error("%s", error)
                 self.cut.append(str(error))
             if limit and seen >= limit:
                 return

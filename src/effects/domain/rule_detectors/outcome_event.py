@@ -166,7 +166,7 @@ __all__ = ["EVENT_FILTERS", "FAMILY", "SUBJECT_QUALIFIERS", "SUBJECT_QUALIFIER_N
 _UNFILTERABLE = frozenset({
     "cause", "source", "card_name", "token_script_id", "copy_source", "characteristics",
     "controller", "owner", "attached_to", "detached_from", "targets", "blockers", "blocked",
-    "defender", "called", "options", "piles", "mana_by_color"})
+    "defender", "called", "options", "piles", "mana_by_color", "name", "mana_cost"})
 EVENT_FILTERS = frozenset(
     name for names in EVENT_PARAMS.values() for name in names) - _UNFILTERABLE
 

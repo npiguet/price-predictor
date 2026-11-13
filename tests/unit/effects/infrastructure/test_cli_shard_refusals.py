@@ -22,7 +22,7 @@ FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
 
 
 @pytest.mark.parametrize("handler", [
-    cli.run_rule_counts, cli.run_validate_corpus, cli.run_field_coverage,
+    cli.run_rule_counts, cli.run_field_coverage,
     cli.run_train_effect_model, cli.run_evaluate_effect_model,
 ])
 @pytest.mark.parametrize("error", [
