@@ -71,16 +71,41 @@ def test_an_unreadable_answer_yields_no_verdicts(caplog):
     assert "unreadable" in caplog.text
 
 
-@pytest.mark.parametrize("call", [
-    lambda path: one_shot_workers.castability_verdicts(["Forest"]),
-    one_shot_workers.write_keyword_definitions,
-    one_shot_workers.write_variant_sidecars,
-])
-def test_every_main_runs_under_a_timeout(tmp_path, call):
+def test_every_main_runs_under_a_timeout(tmp_path):
     """P1 #12: a one-shot JVM had none, so a hung Forge startup hung the command."""
     seen, launch = _run_with(None)
     with launch:
-        call(tmp_path)
-
+        one_shot_workers.write_keyword_definitions(tmp_path / "k.json")
     assert seen["timeout"] == one_shot_workers.ONE_SHOT_TIMEOUT_SECONDS
     assert 0 < one_shot_workers.ONE_SHOT_TIMEOUT_SECONDS < float("inf")
+
+
+def test_the_timeout_scales_with_the_scripts_handed_over_above_a_floor():
+    """The sidecar pass and the consult each make one pass over what they are
+    handed, which grows with every variant round: the timeout grows with it."""
+    floor = one_shot_workers.ONE_SHOT_TIMEOUT_SECONDS
+    assert one_shot_workers.scaled_timeout(0) == floor
+    assert one_shot_workers.scaled_timeout(10) == floor
+    many = 100_000
+    assert one_shot_workers.scaled_timeout(many) == (
+        one_shot_workers.FORGE_STARTUP_SECONDS + one_shot_workers.SECONDS_PER_SCRIPT * many
+    )
+    assert one_shot_workers.scaled_timeout(many) > floor
+
+
+def test_the_sidecar_pass_is_timed_by_the_scripts_in_its_tree(tmp_path):
+    for index in range(3):
+        (tmp_path / f"v{index}.txt").write_text("Name:v\n", encoding="utf-8")
+    (tmp_path / "loadable.lst").write_text("v\n", encoding="utf-8")
+    seen, launch = _run_with(None)
+    with launch:
+        one_shot_workers.write_variant_sidecars(tmp_path)
+    assert seen["timeout"] == one_shot_workers.scaled_timeout(3)
+
+
+def test_the_consult_is_timed_by_the_names_it_is_handed():
+    seen, launch = _run_with({"Forest": "castable"})
+    names = [f"card {index}" for index in range(50_000)]
+    with launch:
+        one_shot_workers.castability_verdicts(names)
+    assert seen["timeout"] == one_shot_workers.scaled_timeout(50_000)
