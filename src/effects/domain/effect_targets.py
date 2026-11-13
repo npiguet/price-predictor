@@ -40,7 +40,7 @@ from effects.domain.effect_head_layout import (
     counter_field,
     mana_field,
 )
-from effects.domain.event_schema import Event, EventType
+from effects.domain.event_schema import Event, EventType, signed_delta
 from effects.domain.keyword_names import overlay_keyword
 from effects.domain.output_vocabularies import KEYWORDS_CHANGED, SUBTYPES_CHANGED
 from effects.domain.records import (
@@ -67,7 +67,9 @@ _ZONE_BY_EVENT: dict[EventType, ZoneOutcome] = {
 #: A ``zone_change``'s destination as a zone outcome. A move to the
 #: battlefield or the library is refined once the whole record is read
 #: (:func:`_refine_zone_outcomes`): a blink against any other entry, and the
-#: library's top, bottom or shuffle.
+#: library's top, bottom or shuffle. A destination the table does not name
+#: (the stack, the sideboard, a mutated permanent's ``merged`` cards) leaves
+#: the outcome unknown: the card moved, so "stayed" would be wrong.
 _ZONE_BY_DESTINATION: dict[str, ZoneOutcome] = {
     Zone.GRAVEYARD: ZoneOutcome.DIED,
     Zone.EXILE: ZoneOutcome.EXILED,
@@ -78,9 +80,6 @@ _ZONE_BY_DESTINATION: dict[str, ZoneOutcome] = {
     #: The collector's spelling of a move to no zone at all.
     "none": ZoneOutcome.CEASED_TO_EXIST,
 }
-#: The outcome of a ``zone_change`` to a destination the table does not name.
-_STAYED = ZoneOutcome.STAYED
-
 _LIBRARY_EVENT_BY_TYPE: dict[EventType, LibraryEvent] = {
     EventType.LIBRARY_REORDERED: LibraryEvent.REORDER,
     EventType.CARD_REVEALED: LibraryEvent.REVEAL,
@@ -92,7 +91,6 @@ _ADDITIVE: dict[EventType, tuple[str, str, float, float]] = {
     EventType.DAMAGE_DEALT: (HeadField.DAMAGE_TAKEN, "amount", 0, 1.0),
     EventType.DAMAGE_HEALED: (HeadField.DAMAGE_TAKEN, "amount", 0, -1.0),
     EventType.DAMAGE_PREVENTED: (HeadField.DAMAGE_PREVENTED, "amount", 0, 1.0),
-    EventType.LIFE_CHANGE: (HeadField.LIFE_DELTA, "delta", 0, 1.0),
     EventType.POISON_CHANGE: (HeadField.POISON_DELTA, "delta", 0, 1.0),
     EventType.ENERGY_CHANGE: (HeadField.ENERGY_DELTA, "delta", 0, 1.0),
     EventType.RADIATION_CHANGE: (HeadField.RAD_DELTA, "delta", 0, 1.0),
@@ -278,11 +276,15 @@ def _flag_library(entry: EntityTargets, library_event: LibraryEvent) -> None:
 
 
 def _apply_zone_change(entry: EntityTargets, event: Event) -> None:
-    destination = str(event.params.get("to_zone", "")).lower()
-    entry.set(
-        HeadField.ZONE_OUTCOME,
-        ZONE_OUTCOMES.index(_ZONE_BY_DESTINATION.get(destination, _STAYED)),
-    )
+    outcome = _ZONE_BY_DESTINATION.get(str(event.params.get("to_zone", "")).lower())
+    if outcome is None:
+        entry.forget(HeadField.ZONE_OUTCOME)
+        return
+    entry.set(HeadField.ZONE_OUTCOME, ZONE_OUTCOMES.index(outcome))
+
+
+def _apply_life_change(entry: EntityTargets, event: Event) -> None:
+    entry.add(HeadField.LIFE_DELTA, signed_delta(event))
 
 
 def _apply_counter_change(entry: EntityTargets, event: Event) -> None:
@@ -292,7 +294,7 @@ def _apply_counter_change(entry: EntityTargets, event: Event) -> None:
         if counter in _OUTPUT_COUNTERS
         else HeadField.COUNTERS_DELTA_OTHER
     )
-    entry.add(name, float(event.params.get("delta", 0)))
+    entry.add(name, signed_delta(event))
 
 
 _OUTPUT_COUNTERS = frozenset(OUTPUT_COUNTER_TYPES)
@@ -457,6 +459,7 @@ def _appliers() -> dict[EventType, Callable[[EntityTargets, Event], None]]:
 #: The events no table above states, each read off its own parameters.
 _PARAMETER_APPLIERS: dict[EventType, Callable[[EntityTargets, Event], None]] = {
     EventType.ZONE_CHANGE: _apply_zone_change,
+    EventType.LIFE_CHANGE: _apply_life_change,
     EventType.COUNTER_CHANGE: _apply_counter_change,
     EventType.PT_CHANGE: _apply_pt_change,
     EventType.KEYWORD_CHANGE: lambda entry, event: _apply_keywords(entry, event.params),
@@ -529,9 +532,10 @@ class _RecordPass:
             entry = self.targets[subject]
             last = history[-1]
             destination = str(last.params.get("to_zone", "")).lower()
-            written = entry.fields.get(HeadField.ZONE_OUTCOME)
-            if written != ZONE_OUTCOMES.index(_ZONE_BY_DESTINATION.get(destination, _STAYED)):
-                continue  # a later event (destroyed, countered, phased) said more
+            outcome = _ZONE_BY_DESTINATION.get(destination)
+            if outcome is None or entry.fields.get(HeadField.ZONE_OUTCOME) != (
+                    ZONE_OUTCOMES.index(outcome)):
+                continue  # unnamed, or a later event (destroyed, countered, phased) said more
             if destination == Zone.BATTLEFIELD:
                 self._entered(entry, subject, history)
             elif destination == Zone.LIBRARY:

@@ -163,6 +163,41 @@ class TestMagnitudes:
         ))
         assert targets["P1"].fields["life_delta"] == -3.0
 
+    @pytest.mark.parametrize("mode", ["LifeReduced", "PayLife", "LoseLife", "LifeLost"])
+    def test_a_life_loss_mode_reads_its_amount_as_a_loss(self, mode):
+        """A run-parameter event writes the amount and names the direction by
+        its mode: a rewritten life loss of 3 is a delta of -3, not +3."""
+        record = _record(
+            RewritePayload(
+                incoming=Event(type=EventType.LIFE_CHANGE, subjects=("P1",),
+                               params={"delta": 4, "mode": mode}),
+                outgoing=Event(type=EventType.LIFE_CHANGE, subjects=("P1",),
+                               params={"delta": 3, "mode": mode}),
+            ),
+            kind=RecordKind.REWRITE, moment=None,
+        )
+        assert derive_targets(record)["P1"].fields["life_delta"] == -3.0
+
+    @pytest.mark.parametrize(("params", "delta"), [
+        ({"delta": 3, "mode": "GainLife"}, 3.0),
+        ({"delta": 3, "mode": "LifeGained"}, 3.0),
+        ({"delta": -3, "mode": "LifeLost"}, -3.0),
+        ({"delta": -3}, -3.0),
+    ])
+    def test_a_gain_or_an_already_signed_delta_keeps_its_sign(self, params, delta):
+        targets = derive_targets(_resolution(
+            Event(type=EventType.LIFE_CHANGE, subjects=("P1",), params=params),
+        ))
+        assert targets["P1"].fields["life_delta"] == delta
+
+    @pytest.mark.parametrize("mode", ["RemoveCounter", "CounterRemoved"])
+    def test_a_counter_removal_mode_reads_its_amount_as_a_removal(self, mode):
+        targets = derive_targets(_resolution(
+            Event(type=EventType.COUNTER_CHANGE, subjects=("E1",),
+                  params={"counter_type": "P1P1", "delta": 2, "mode": mode}),
+        ))
+        assert targets["E1"].fields["counters_delta_p1p1"] == -2.0
+
     def test_a_tracked_counter_type_gets_its_own_field(self):
         targets = derive_targets(_resolution(
             Event(type=EventType.COUNTER_CHANGE, subjects=("E1",),
@@ -536,8 +571,6 @@ class TestEverySimpleEventType:
          {"zone_outcome": ZONE_OUTCOMES.index("exiled")}),
         (EventType.ZONE_CHANGE, {"to_zone": "command"},
          {"zone_outcome": ZONE_OUTCOMES.index("to_command")}),
-        (EventType.ZONE_CHANGE, {"to_zone": "nowhere"},
-         {"zone_outcome": ZONE_OUTCOMES.index("stayed")}),
     ])
     def test_its_fields(self, event_type, params, expected):
         targets = derive_targets(_resolution(
@@ -884,6 +917,26 @@ class TestZoneOutcomeExtensions:
         )), _entity("E1", owner="P0")))["E1"]
         assert entry.affected
         assert entry.supervised(_spec("zone_outcome")) is None
+
+    @pytest.mark.parametrize("destination", ["stack", "sideboard", "merged", "ante", "nowhere"])
+    def test_a_move_to_a_zone_no_outcome_names_leaves_the_outcome_unknown(self, destination):
+        """The card moved, so it did not stay; no outcome names where it went
+        (a card cast during a resolution goes to the stack), so the field is
+        unknown rather than "stayed"."""
+        entry = derive_targets(_resolution(
+            Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
+                  params={"from_zone": "hand", "to_zone": destination}),
+        ))["E1"]
+        assert entry.affected
+        assert "zone_outcome" not in entry.fields
+        assert entry.supervised(_spec("zone_outcome")) is None
+
+    def test_a_later_event_still_names_the_outcome_after_an_unnamed_move(self):
+        entry = derive_targets(_resolution(
+            Event(type=EventType.ZONE_CHANGE, subjects=("E1",), params={"to_zone": "stack"}),
+            Event(type=EventType.SPELL_COUNTERED, subjects=("E1",)),
+        ))["E1"]
+        assert entry.supervised(_spec("zone_outcome")) == _zone("countered")
 
     def test_a_move_to_no_zone_ceased_to_exist(self):
         targets = derive_targets(_resolution(

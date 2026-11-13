@@ -301,3 +301,22 @@ class Event:
             duration=data.get("duration"),
             attributed_to=data.get("attributed_to"),
         )
+
+
+#: The run-parameter modes (an event's provenance ``mode``) whose ``delta``
+#: is a loss. A trigger's or replacement's map carries the amount as a
+#: magnitude and names the direction by its mode (``LifeReduced 3``), while a
+#: bus event carries the signed change and no mode.
+LOSS_MODES: dict[EventType, frozenset[str]] = {
+    EventType.LIFE_CHANGE: frozenset({"LifeLost", "LoseLife", "PayLife", "LifeReduced"}),
+    EventType.COUNTER_CHANGE: frozenset({"RemoveCounter", "CounterRemoved"}),
+}
+
+
+def signed_delta(event: Event, default: float = 0) -> float:
+    """An event's ``delta`` as the signed change it is: negative under a
+    loss mode (:data:`LOSS_MODES`) whatever sign the amount was written with."""
+    delta = float(event.params.get("delta", default))
+    if event.params.get("mode") in LOSS_MODES.get(event.type, ()):
+        return -abs(delta)
+    return delta
