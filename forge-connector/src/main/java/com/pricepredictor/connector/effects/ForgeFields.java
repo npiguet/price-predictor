@@ -75,6 +75,17 @@ final class ForgeFields {
                 ? table : null;
     }
 
+    /**
+     * The card's hidden extrinsic keywords keyed (timestamp, static id), or
+     * null: a {@code Pump}'s or {@code Animate}'s {@code KW$ HIDDEN …} under
+     * static id 0, a static's {@code AddHiddenKeyword$} under its own id.
+     * Forge hands out only the concatenated values.
+     */
+    static Table<?, ?, ?> hiddenExtrinsicKeywords(Card card) {
+        return read(Card.class, "hiddenExtrinsicKeywords", card) instanceof Table<?, ?, ?> table
+                ? table : null;
+    }
+
     /** The card's layer-5 colour changes keyed (timestamp, static id), or null. */
     static Table<?, ?, ?> changedCardColors(Card card) {
         return read(Card.class, "changedCardColors", card) instanceof Table<?, ?, ?> table

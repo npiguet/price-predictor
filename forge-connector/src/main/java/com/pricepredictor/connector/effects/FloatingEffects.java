@@ -356,6 +356,9 @@ final class FloatingEffects {
         if (PatchHooks.CHANGED_NAMES.read(card) instanceof Table<?, ?, ?> names) {
             addResolvedRows(timestamps, names);
         }
+        // "Target creature can't block this turn": a KW$ HIDDEN grant is in
+        // no keyword table but its own.
+        addResolvedRows(timestamps, ForgeFields.hiddenExtrinsicKeywords(card));
         return timestamps;
     }
 

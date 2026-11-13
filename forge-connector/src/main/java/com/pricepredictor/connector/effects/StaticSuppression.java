@@ -61,6 +61,11 @@ final class StaticSuppression {
         return new StaticSuppression((long) stat.getId(), stat.getTimestamp());
     }
 
+    /** The board without the static of this layer-table id, its control change kept. */
+    static StaticSuppression ofId(long staticId) {
+        return new StaticSuppression(staticId, Long.MIN_VALUE);
+    }
+
     /** Whether a static is suppressed: a {@code continuous} record's board. */
     boolean active() {
         return staticId != null;
@@ -83,6 +88,31 @@ final class StaticSuppression {
 
     Iterable<KeywordInterface> keywords(Card card) {
         return staticId == null ? card.getKeywords() : card.getKeywordsWithout(staticId);
+    }
+
+    /**
+     * The card's hidden extrinsic keywords as Forge spells them ("CARDNAME
+     * can't block."), in timestamp order, the suppressed static's left out.
+     * Forge keeps them apart from its keyword list: a resolved {@code KW$
+     * HIDDEN} grant and a static's {@code AddHiddenKeyword$}.
+     */
+    java.util.List<String> hiddenKeywords(Card card) {
+        java.util.List<String> hidden = new java.util.ArrayList<>();
+        Table<?, ?, ?> table = ForgeFields.hiddenExtrinsicKeywords(card);
+        if (table == null) {
+            return hidden;
+        }
+        for (Table.Cell<?, ?, ?> cell : table.cellSet()) {
+            if (cell.getColumnKey() instanceof Long column && wrote(column)) {
+                continue;
+            }
+            if (cell.getValue() instanceof Iterable<?> keywords) {
+                for (Object keyword : keywords) {
+                    hidden.add(String.valueOf(keyword));
+                }
+            }
+        }
+        return hidden;
     }
 
     /** Whether the card is a creature on this board: whether it has power and toughness. */

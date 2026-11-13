@@ -581,11 +581,23 @@ abstract class BusEventReader {
                 if (turned != null) {
                     fileOutcome(turned, null);
                 }
+                boolean animating = animating();
                 for (EffectEvent changed : stats.diff(card)) {
-                    fileOutcome(changed, null);
+                    // An Animate clause's grants are its own clause rule's
+                    // ability_change (ApiEvents), named by their SVars.
+                    if (!(animating && changed.type() == EventType.ABILITY_CHANGE)) {
+                        fileOutcome(changed, null);
+                    }
                 }
             }
         }
+    }
+
+    /** Whether the clause resolving now is an {@code Animate} or {@code AnimateAll}. */
+    private static boolean animating() {
+        return PatchHooks.currentSubAbility() instanceof forge.game.spellability.SpellAbility clause
+                && (clause.getApi() == forge.game.ability.ApiType.Animate
+                        || clause.getApi() == forge.game.ability.ApiType.AnimateAll);
     }
 
     @Subscribe

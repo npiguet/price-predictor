@@ -193,6 +193,7 @@ final class EntityJson {
         return Json.object()
                 .raw("keywords", Json.stringArray(CardSpelling.keywordNames(board.keywords(card))))
                 .raw("abilities", ProvenanceKey.toJsonArray(grantedTemporaryAbilities(card, board)))
+                .raw("hidden_keywords", Json.stringArray(board.hiddenKeywords(card)))
                 .render();
     }
 

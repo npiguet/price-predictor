@@ -116,4 +116,117 @@ class StatDifferTest {
                 Map.of("power_delta", 0, "toughness_delta", 0, "set_pt", List.of(4, 4)),
                 events.get(0).params());
     }
+
+    // ── keywords, hidden keywords, abilities, control ───────────────────
+
+    /** Keywords gained are listed sorted, the same on every JVM (V2 #16). */
+    @Test
+    void gainedKeywordsAreSorted() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(0), "Grizzly Bears");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        bears.addChangedCardKeywords(List.of("Vigilance", "Flying", "Trample"), List.of(), false,
+                game.getNextTimestamp(), null);
+
+        EffectEvent event = only(differ.diff(bears), EventType.KEYWORD_CHANGE);
+        assertEquals(List.of("flying", "trample", "vigilance"), event.params().get("keywords"));
+        assertEquals(false, event.params().get("removed"));
+    }
+
+    /** A second instance of a stacking keyword is a keyword gained (C2 #7). */
+    @Test
+    void aSecondInstanceOfAKeywordIsAChange() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(0), "Grizzly Bears");
+        bears.addChangedCardKeywords(List.of("Bushido:1"), List.of(), false,
+                game.getNextTimestamp(), null);
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        bears.addChangedCardKeywords(List.of("Bushido:1"), List.of(), false,
+                game.getNextTimestamp(), null);
+
+        EffectEvent event = only(differ.diff(bears), EventType.KEYWORD_CHANGE);
+        assertEquals(List.of("bushido:1"), event.params().get("keywords"));
+    }
+
+    /** A hidden keyword is a keyword change of its own, flagged hidden (X1 #10). */
+    @Test
+    void aHiddenKeywordIsAHiddenKeywordChange() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(0), "Grizzly Bears");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        long timestamp = game.getNextTimestamp();
+        bears.addHiddenExtrinsicKeywords(timestamp, 0, List.of("CARDNAME can't block."));
+
+        EffectEvent gained = only(differ.diff(bears), EventType.KEYWORD_CHANGE);
+        assertEquals(Map.of("keywords", List.of("CARDNAME can't block."), "removed", false,
+                "hidden", true), gained.params());
+
+        bears.removeHiddenExtrinsicKeywords(timestamp, 0);
+        EffectEvent lost = only(differ.diff(bears), EventType.KEYWORD_CHANGE);
+        assertEquals(true, lost.params().get("removed"));
+        assertEquals(true, lost.params().get("hidden"));
+    }
+
+    /**
+     * An ability a static grants is an ability change naming its line, and
+     * one taken away an ability change marked removed (C2 #7).
+     */
+    @Test
+    void anAbilityGrantedAndTakenAwayIsAnAbilityChange() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        forge.game.player.Player you = game.getPlayers().get(0);
+        Card bears = TestBoard.inPlay(game, you, "Grizzly Bears");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        Card rite = TestBoard.inPlay(game, you, "Cryptolith Rite");
+        game.getAction().checkStaticAbilities();
+
+        EffectEvent gained = only(differ.diff(bears), EventType.ABILITY_CHANGE);
+        assertEquals(false, gained.params().get("removed"));
+        assertTrue(String.valueOf(gained.params().get("abilities"))
+                .startsWith("(cardsfolder/c/cryptolith_rite.txt)"), gained.params().toString());
+
+        game.getAction().moveToGraveyard(rite, null);
+        game.getAction().checkStaticAbilities();
+        EffectEvent lost = only(differ.diff(bears), EventType.ABILITY_CHANGE);
+        assertEquals(Map.of("abilities", "", "removed", true), lost.params());
+    }
+
+    /** Re-applying the same static changes nothing: abilities are read by their text. */
+    @Test
+    void aStaticReappliedIsNoAbilityChange() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        forge.game.player.Player you = game.getPlayers().get(0);
+        Card bears = TestBoard.inPlay(game, you, "Grizzly Bears");
+        TestBoard.inPlay(game, you, "Cryptolith Rite");
+        game.getAction().checkStaticAbilities();
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        game.getAction().checkStaticAbilities();
+
+        assertTrue(differ.diff(bears).isEmpty());
+    }
+
+    /** A control change names the new controller (TC2 #9). */
+    @Test
+    void aControlChangeNamesTheNewController() {
+        forge.game.Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(0), "Grizzly Bears");
+        StatDiffer differ = new StatDiffer();
+        differ.prime(bears);
+        forge.game.player.Player thief = game.getPlayers().get(1);
+        bears.addTempController(thief, game.getNextTimestamp());
+
+        EffectEvent event = only(differ.diff(bears), EventType.CONTROL_CHANGE);
+        assertEquals(Refs.of(thief), event.params().get("controller"));
+    }
+
+    private static EffectEvent only(List<EffectEvent> events, EventType type) {
+        List<EffectEvent> found = events.stream().filter(e -> e.type() == type).toList();
+        assertEquals(1, found.size(), events.toString());
+        return found.get(0);
+    }
 }
