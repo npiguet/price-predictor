@@ -679,6 +679,28 @@ class BusBracketCollectorTest {
         assertTrue(records.get(2).contains("\"outcome\":\"resolved\""), records.get(2));
     }
 
+    /**
+     * A refusal made between a cast and its resolution's start is the
+     * cast's consequence, which precedes the effect half's board: a
+     * resolution that then did nothing observable is resolved, not
+     * declined.
+     */
+    @Test
+    void aRefusalBeforeTheResolutionStartsIsNotTheResolutions() throws IOException {
+        BusBracketCollector collector = collector();
+        SpellAbility bolt = damageAbility();
+
+        collector.beginBracket(bolt);
+        collector.noteDeclined();
+        collector.resolutionStarting(bolt, false);
+        collector.endBracket(bolt.getId(), false);
+        collector.onNextAction();
+
+        List<String> records = written();
+        assertEquals(2, records.size(), records.toString());
+        assertTrue(records.get(1).contains("\"outcome\":\"resolved\""), records.get(1));
+    }
+
     /** A refusal outside any bracket is nobody's, and is dropped. */
     @Test
     void aRefusalWithNothingResolvingIsNotHeldAgainstTheNextSpell()

@@ -200,16 +200,22 @@ public final class BusBracketCollector extends BusEventReader {
      * the cost half describes. Starting a cast at priority is the next
      * action, so the held resolution's consequences are over; one started by
      * a resolving ability (cascade, a "you may cast") is part of that
-     * resolution and ends nothing.
+     * resolution and ends nothing, and leaves the stat differ alone: the
+     * resolving item's bracket keeps its events, measured from its own
+     * snapshot, and the cast spell's effect half reads the board again when
+     * its resolution starts.
      */
     void castStarting(SpellAbility cast) {
-        if (!inStateBasedLoop && !game.getStack().isResolving()) {
+        boolean resolving = game.getStack().isResolving();
+        if (!inStateBasedLoop && !resolving) {
             onNextAction();
         }
         Card host = cast.getHostCard();
         pendingCast = new PendingCast(
                 cast, host == null ? -1 : host.getId(), snapshots.ofResolving(cast));
-        rebaselineAtSnapshot();
+        if (!resolving) {
+            rebaselineAtSnapshot();
+        }
     }
 
     /**
@@ -318,11 +324,16 @@ public final class BusBracketCollector extends BusEventReader {
                 brackets.waitForResolution(cast);
             }
         } else {
-            if (cast != null && started == null) {
+            if (cast != null && started == null && !inStateBasedLoop) {
                 // Its board was read just now, at the cast event, where no
                 // hook told the cast's start: its stat changes are measured
                 // from here. Not while an ability resolves, whose bracket
-                // keeps the events, and whose snapshot is older.
+                // keeps the events, and whose snapshot is older; nor for a
+                // trigger the state-based loop puts on the stack between
+                // two passes, where the loop has applied statics it
+                // publishes only at its end, which a damage step's record
+                // still takes (FR-028): the trigger's effect half reads the
+                // board again when its resolution starts.
                 rebaselineAtSnapshot();
             }
             brackets.openCast(cast);
@@ -474,9 +485,10 @@ public final class BusBracketCollector extends BusEventReader {
         // The last mode's half closes with the resolution, since no next
         // mode's first clause comes to close it.
         resolved.modes.close();
-        ActivationOutcome outcome = resolved.outcome(fizzled);
+        ActivationOutcome outcome = resolved.outcome(fizzled && !resolvesAsACreature(resolved.ability));
         if (outcome == ActivationOutcome.FIZZLED || outcome == ActivationOutcome.DECLINED) {
-            heldResolution.writeEmpty(resolved, outcome);
+            heldResolution.writeEmpty(resolved, outcome, dropped,
+                    game == null ? DroppedEvents.NO_PHASE : DroppedEvents.phaseOf(game));
             return;
         }
         // Held rather than written: the deaths this resolution causes have
@@ -485,6 +497,17 @@ public final class BusBracketCollector extends BusEventReader {
         boolean free = resolved.costs != null && resolved.ability.isActivatedAbility()
                 && resolved.costs.spentNoManaAndMovedNoCard();
         heldResolution.hold(resolved, outcome, free);
+    }
+
+    /**
+     * Whether an item Forge reports as fizzled still resolved: a bestowed
+     * Aura spell or a mutating creature spell whose target became illegal
+     * stops being one and resolves as a creature spell (702.103e,
+     * 702.140b; {@code MagicStack.resolveStack}), its permanent entering the
+     * battlefield. Its effect half is a resolution's, held with its events.
+     */
+    private static boolean resolvesAsACreature(SpellAbility ability) {
+        return ability.isBestow() || ability.isMutate();
     }
 
     /**
@@ -728,7 +751,9 @@ public final class BusBracketCollector extends BusEventReader {
          * A cost is being paid — for something being cast or activated, or,
          * while an ability resolves, for a spell it casts
          * ({@link #payingForACast}). The paid ability's cost half records
-         * it; the event goes nowhere.
+         * what was paid, in its {@code costs}; the event goes nowhere and
+         * is counted as dropped, the costs' channels (tapped, sacrificed,
+         * discarded, exiled, life, mana) and the rest alike.
          */
         PAYMENT,
         /**
@@ -878,10 +903,13 @@ public final class BusBracketCollector extends BusEventReader {
     private void route(EffectEvent event, String namedCause, Filing filing) {
         Now now = classifyNow();
         switch (now.cause()) {
+            // What a payment publishes: the paid ability's cost half holds
+            // its costs, never an event, so the event reaches no record.
             case PAYMENT -> {
                 if (!game.getStack().isResolving()) {
                     brackets.closeForAction();
                 }
+                dropped.count(event.type(), DroppedEvents.phaseOf(game));
             }
             // What a card's move onto the stack set off: after the cost
             // half's board, which records only the move and the costs, and
@@ -992,10 +1020,11 @@ public final class BusBracketCollector extends BusEventReader {
      * Whether a conditional clause met its condition (FR-034), as Forge
      * decided it, filed into the half its events joined: called by the clause
      * hook when the clause's own effect is over, before a later mode's first
-     * clause begins. Filed by the test {@link #beginMode} applies:
-     * a consequence of the open bracket, of a clause on its card; a clause
-     * of a mana ability or a special action resolves at an action and is no
-     * resolution's.
+     * clause begins. Filed when it is a consequence of the open bracket, of
+     * a clause on its own line ({@link OpenResolution#onItsLine}): a clause
+     * another line of the card resolves meanwhile, an enters-the-battlefield
+     * replacement's, is not the resolution's; a clause of a mana ability or
+     * a special action resolves at an action and is no resolution's.
      */
     void recordClauseCondition(SpellAbility clause, ConditionsMet condition) {
         if (condition == null) {
@@ -1003,7 +1032,7 @@ public final class BusBracketCollector extends BusEventReader {
         }
         Cause cause = classifyNow().cause();
         OpenResolution open = brackets.open();
-        if (open == null || !fromOpenBracket(cause) || !open.hosts(clause)) {
+        if (open == null || !fromOpenBracket(cause) || !open.onItsLine(clause)) {
             return;
         }
         open.modes.noteCondition(condition);
@@ -1053,7 +1082,8 @@ public final class BusBracketCollector extends BusEventReader {
      * @param onStack the ability ids still on the stack
      */
     void writeOffRemoved(Set<Integer> onStack) {
-        brackets.removeAbsent(onStack, game == null ? null : DroppedEvents.phaseOf(game));
+        brackets.removeAbsent(onStack, game == null ? null : DroppedEvents.phaseOf(game),
+                game != null && game.getStack().isResolving());
     }
 
     /**

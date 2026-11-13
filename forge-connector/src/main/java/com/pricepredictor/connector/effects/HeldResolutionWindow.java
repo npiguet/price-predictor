@@ -154,11 +154,20 @@ final class HeldResolutionWindow {
      * cost half's link (FR-029a, FR-029c). A declined half keeps the
      * conditions Forge decided on its way; a fizzled one decided none.
      *
+     * <p>Whatever its halves gathered anyway reaches no record and is
+     * counted as dropped.
+     *
      * @param outcome {@link ActivationOutcome#FIZZLED} or {@link ActivationOutcome#DECLINED}
+     * @param dropped where what the halves gathered is counted
+     * @param phase   the engine phase it is counted in
      */
-    void writeEmpty(OpenResolution resolved, ActivationOutcome outcome) {
+    void writeEmpty(
+            OpenResolution resolved, ActivationOutcome outcome, DroppedEvents dropped, String phase) {
         String refs = RefsJson.renderResolved(resolved.ability, List.of(), resolved.x());
         for (ModeSplit.ModeHalf half : resolved.modes.halves(resolved.effectState())) {
+            for (EffectEvent gathered : half.events()) {
+                dropped.count(gathered.type(), phase);
+            }
             List<ConditionsMet> conditions = outcome == ActivationOutcome.DECLINED
                     ? half.conditions() : List.of();
             context.emit(context.newResolution(Moment.RESOLUTION)

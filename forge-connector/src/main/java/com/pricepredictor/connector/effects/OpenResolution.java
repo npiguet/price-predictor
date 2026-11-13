@@ -87,9 +87,14 @@ final class OpenResolution {
         }
     }
 
-    /** Its resolution has started, on this board (FR-042b). */
+    /**
+     * Its resolution has started, on this board (FR-042b). A refusal made
+     * since its cast was the cast's consequence and precedes this board, as
+     * the events gathered meanwhile do: it is not the resolution's.
+     */
     void resolutionStarted(Snapshot board) {
         resolutionState = board;
+        declined = false;
         readX();
     }
 
@@ -190,5 +195,23 @@ final class OpenResolution {
      */
     boolean hosts(SpellAbility clause) {
         return clause != null && clause.getHostCard() == ability.getHostCard();
+    }
+
+    /**
+     * Whether a clause is on this resolution's own line: its chain's root is
+     * the item the stack resolves, or, for a triggered ability, the ability
+     * its stack wrapper resolves. A clause another line of the same card
+     * resolves meanwhile — an enters-the-battlefield replacement's (Eddymurk
+     * Crab's "enters tapped if it's not your turn"), a static trigger's — is
+     * on the card ({@link #hosts}) and not on this line.
+     */
+    boolean onItsLine(SpellAbility clause) {
+        if (!hosts(clause)) {
+            return false;
+        }
+        SpellAbility root = clause.getRootAbility();
+        return root == ability
+                || ability instanceof forge.game.trigger.WrappedAbility wrapper
+                        && root == wrapper.getWrappedAbility();
     }
 }
