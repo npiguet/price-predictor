@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib
 import pkgutil
 import sys
+import threading
+import weakref
 from collections.abc import Iterator
 from types import ModuleType
 
@@ -48,19 +50,37 @@ class KillGuard:
     outlive the test that started them (``ForgeWorkerPool.run`` joins them with
     a timeout) and still look the kill up afterwards.
 
-    The stand-in records the process in ``killed`` and calls its own
-    ``kill()``, which ends a fake (and, for a real child, only that child).
+    The stand-in records the process and calls its own ``kill()``, which ends
+    a fake (and, for a real child, only that child). It records into the list
+    of the test that started the calling thread: ``begin_test`` hands every
+    thread still alive at a test's setup to the record of the test before, so
+    a late kill from an outlived thread never lands in the current test's
+    record. Kills from threads alive before the first test go to ``stray``.
     """
 
     def __init__(self) -> None:
-        self.killed: list = []
+        self.stray: list = []
+        #: The current test's record.
+        self.killed: list = self.stray
         #: Every (module, attribute) the guard replaced.
         self.sites: list[tuple[ModuleType, str]] = []
         self._patch = pytest.MonkeyPatch()
+        self._record_of: weakref.WeakKeyDictionary[threading.Thread, list] = (
+            weakref.WeakKeyDictionary()
+        )
 
     def stand_in(self, proc) -> None:
-        self.killed.append(proc)
+        self._record_of.get(threading.current_thread(), self.killed).append(proc)
         proc.kill()
+
+    def begin_test(self) -> list:
+        """Start a new record; threads alive now belong to earlier tests."""
+        main = threading.main_thread()
+        for thread in threading.enumerate():
+            if thread is not main and thread not in self._record_of:
+                self._record_of[thread] = self.killed
+        self.killed = []
+        return self.killed
 
     def patch_new_sites(self) -> None:
         """Replace the real kill wherever a loaded module of ours still holds it:
@@ -95,14 +115,14 @@ def killed_process_trees(request, _kill_guard: KillGuard) -> Iterator[list]:
     every name for that test alone.
     """
     _kill_guard.patch_new_sites()
-    _kill_guard.killed = []
+    killed = _kill_guard.begin_test()
     if request.node.get_closest_marker("real_process_kill") is None:
-        yield _kill_guard.killed
+        yield killed
         return
     with pytest.MonkeyPatch.context() as real:
         for module, attr in _kill_guard.sites:
             real.setattr(module, attr, _REAL_KILL)
-        yield _kill_guard.killed
+        yield killed
 
 
 @pytest.fixture(autouse=True)

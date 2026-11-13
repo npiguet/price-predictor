@@ -17,6 +17,7 @@ import importlib
 import os
 import pkgutil
 import sys
+import threading
 import types
 
 import pytest
@@ -26,6 +27,12 @@ from price_predictor.infrastructure.forge_jvm import kill_process_tree as real_k
 from tests.unit.sealed.conftest import FakeProcess
 
 _OWN_PACKAGES = ("price_predictor", "sealed", "draft", "effects")
+
+#: A module standing for one that bound the real kill at load, mid-session.
+_PROBE = "effects._real_kill_probe"
+
+#: What a test leaves for the test after it: the pairs below need two setups.
+_HANDOVER: dict = {}
 
 
 def _own_modules() -> list[types.ModuleType]:
@@ -51,6 +58,7 @@ def _between_tests():
     that outlived its test would look it up."""
     state = {"real_before": forge_jvm.kill_process_tree is real_kill}
     yield state
+    sys.modules.pop(_PROBE, None)
     assert forge_jvm.kill_process_tree is not real_kill, "the real kill is back between tests"
     assert _holders_of_the_real_kill() == []
 
@@ -74,16 +82,19 @@ def test_no_module_of_ours_holds_the_real_kill():
     assert _holders_of_the_real_kill() == []
 
 
-def test_a_module_that_binds_the_real_kill_at_load_is_caught(monkeypatch, _kill_guard):
+def test_a_module_binding_the_real_kill_is_loaded_mid_session():
     """A module loaded before the patch, or during a marked test, keeps the real
-    function under whatever name it imported it as; the next test's setup finds it."""
-    probe = types.ModuleType("effects._real_kill_probe")
+    function under whatever name it imported it as."""
+    probe = types.ModuleType(_PROBE)
     probe.kill_process_tree = real_kill
     probe.terminate_tree = real_kill
-    monkeypatch.setitem(sys.modules, probe.__name__, probe)
+    sys.modules[_PROBE] = probe
 
-    _kill_guard.patch_new_sites()
 
+def test_the_next_tests_setup_replaces_it():
+    probe = sys.modules.pop(_PROBE, None)
+    if probe is None:
+        pytest.skip("runs after test_a_module_binding_the_real_kill_is_loaded_mid_session")
     assert probe.kill_process_tree is not real_kill
     assert probe.terminate_tree is not real_kill
 
@@ -103,6 +114,31 @@ def test_the_pool_kill_never_reaches_the_os(monkeypatch, killed_process_trees):
 
 def test_each_test_gets_its_own_record(killed_process_trees):
     assert killed_process_trees == []
+
+
+def test_a_monitor_thread_outlives_its_test(killed_process_trees):
+    """A pool joins its monitor threads with a timeout, so one can still kill
+    after its test has ended and the next one has set up."""
+    go = threading.Event()
+    proc = FakeProcess(pid=1000, hang=True)
+
+    def monitor() -> None:
+        go.wait(timeout=30)
+        forge_jvm.kill_process_tree(proc)
+
+    thread = threading.Thread(target=monitor, daemon=True)
+    thread.start()
+    _HANDOVER.update(go=go, proc=proc, thread=thread, record=killed_process_trees)
+
+
+def test_its_late_kill_stays_out_of_the_next_tests_record(killed_process_trees):
+    if "thread" not in _HANDOVER:
+        pytest.skip("runs after test_a_monitor_thread_outlives_its_test")
+    _HANDOVER["go"].set()
+    _HANDOVER["thread"].join(timeout=10)
+
+    assert killed_process_trees == []
+    assert _HANDOVER["record"] == [_HANDOVER["proc"]], "it lands in its own test's record"
 
 
 @pytest.mark.real_process_kill
