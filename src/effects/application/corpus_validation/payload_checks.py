@@ -173,6 +173,21 @@ class Triggers:
                 for rate, mode, counts in skewed[:EXAMPLES]
             ),
         )
+        yield floor_finding(
+            name="trigger records hold positives",
+            floor=limits.min_trigger_fired_share,
+            seen=fired.seen,
+            rate=fired.rate,
+            measured=lambda limit: (
+                f"{fired.hit}:{fired.seen - fired.hit} fired:not-fired over "
+                f"{fired.seen} trigger records ({fired.rate:.1%} fired, {limit})"
+            ),
+            detail=(
+                f"{mode}: {counts.hit}:{counts.seen - counts.hit} "
+                f"({rate:.1%} fired)"
+                for rate, mode, counts in reversed(skewed[-EXAMPLES:])
+            ),
+        )
 
 
 @dataclass(slots=True)

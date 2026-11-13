@@ -884,11 +884,10 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A transform instruction turns a double-faced permanent over: a face_change event to its other face.",
+        "outcome": "A transform instruction turns a double-faced permanent over: a face_change event to its other face (front or back, whichever was down).",
         "near_miss": "A transform instruction resolves and turns nothing over, as on a permanent that is not represented by a double-faced card or token.",
         "params": {
           "event": "face_change",
-          "to_state": "transformed",
           "api": "SetState"
         },
         "needs": [

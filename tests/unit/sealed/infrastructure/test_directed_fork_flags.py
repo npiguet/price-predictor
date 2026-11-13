@@ -57,6 +57,7 @@ def rules_dir(tmp_path: Path) -> Path:
         # 1.5 is declared in one scenario and forkable in another.
         _scenario(["1.5"], operation={"unclassifiable": "a timing"}),
         _scenario(["1.5"], detector={"none": "unread"}, operation="tap"),
+        _scenario(["1.6"], detector={"same_as": "1.1-1", "reason": "the same fact"}),
     ]
     root = tmp_path / "rules"
     (root / "scenarios").mkdir(parents=True)
@@ -79,6 +80,7 @@ class TestTheCatalogueChecks:
 
     @pytest.mark.parametrize(("rule", "complaint"), [
         ("1.2", "declares its detector none"),
+        ("1.6", "same_as"),
         ("1.3", "has no detector declaration"),
         ("1.4", "no contrasting variant classified into a fork operation"),
         ("9.9", "has no detector declaration"),
@@ -162,17 +164,18 @@ class TestTheCatalogueIsReadAsEffectsReadsIt:
     itself; over the real catalogue it must agree with ``rules_catalogue_io``."""
 
     def test_every_rule_agrees(self):
-        from effects.domain.rule_catalogue import DetectorDeclaration, NoDetector
+        from effects.domain.rule_catalogue import DetectorDeclaration, NoDetector, SameAs
         from effects.domain.rule_catalogue import ForkOperation as Operation
         from effects.infrastructure.rules_catalogue_io import load_scenarios
 
         expected: dict[str, tuple[str, bool]] = {}
-        rank = {"missing": 0, "none": 1, "declared": 2}
+        rank = {"missing": 0, "none": 1, "same_as": 2, "declared": 3}
         for rule, scenarios in load_scenarios().by_rule().items():
             state = max(
                 (
                     "declared" if isinstance(s.detector, DetectorDeclaration)
-                    else "none" if isinstance(s.detector, NoDetector) else "missing"
+                    else "none" if isinstance(s.detector, NoDetector)
+                    else "same_as" if isinstance(s.detector, SameAs) else "missing"
                     for s in scenarios
                 ),
                 key=rank.__getitem__,

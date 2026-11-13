@@ -59,6 +59,14 @@ _CATALOGUE = (
         "family": "verdict_bit", "record_kind": "playability", "outcome": "o",
         "near_miss": "n", "params": {"bit": "timing"}}),
     _scenario("613.1-1", ["613.1"], "continuous", {"none": "layer order is in no field"}),
+    _scenario("704.5k-1", ["704.5k"], "resolution", {
+        "family": "sba_zone_move", "record_kind": "resolution", "outcome": "o",
+        "near_miss": "n", "params": {"check": "world_rule"}}),
+    _scenario("121.4-1", ["121.4"], "resolution", {
+        "family": "outcome_event", "record_kind": "resolution", "outcome": "o",
+        "near_miss": "n", "params": {"event": "player_lost", "api": "Draw"}}),
+    _scenario("704.5f-2", ["704.3"], "resolution", {
+        "same_as": "704.5f-1", "reason": "the check 704.3 describes is 704.5f's"}),
 )
 
 
@@ -120,15 +128,42 @@ def test_a_game_s_source_follows_any_of_its_records(tmp_path, gen2_dir):
 
 
 def test_a_rule_needing_a_gen3_field_is_listed_not_countable(tmp_path, gen2_dir):
-    counts, none = count(_config(tmp_path, gen2_dir))
-    document = counts.to_json(none)
+    counts, standing = count(_config(tmp_path, gen2_dir))
+    document = counts.to_json(standing)
     assert document["not_countable"] == ["601.2"]
+    assert "601.2" not in document["declared_zero"]
     assert "601.2" not in document["rules"]
 
 
 def test_a_none_rule_is_listed_with_its_reason(tmp_path, gen2_dir):
-    counts, none = count(_config(tmp_path, gen2_dir))
-    assert none == {"613.1": "layer order is in no field"}
+    counts, standing = count(_config(tmp_path, gen2_dir))
+    assert standing.none == {"613.1": "layer order is in no field"}
+
+
+def test_a_declared_rule_no_record_tags_is_listed_with_zero_records(tmp_path, gen2_dir):
+    """D3(d), V5 #22: absent is no longer silent."""
+    counts, standing = count(_config(tmp_path, gen2_dir))
+    document = counts.to_json(standing)
+    assert "704.5k" not in document["rules"]
+    assert document["declared_zero"] == ["704.5k"]
+    assert "rules declared with zero records: 1" in report_lines(document)
+    assert "  704.5k" in report_lines(document)
+
+
+def test_untaggable_and_same_as_scenarios_are_reported(tmp_path, gen2_dir):
+    """V5 #14 and D4: a declaration asking a Draw resolution for the game's
+    end tags nothing and is named with its reason; a same_as scenario is reported
+    under the one it points at and counted nowhere else."""
+    counts, standing = count(_config(tmp_path, gen2_dir))
+    document = counts.to_json(standing)
+    assert "121.4" not in document["rules"] and "121.4" not in document["declared_zero"]
+    assert document["untaggable"]["121.4-1"]["rules"] == ["121.4"]
+    assert "game-end record" in document["untaggable"]["121.4-1"]["reason"]
+    assert document["same_as"] == {"704.5f-2": {
+        "rules": ["704.3"], "same_as": "704.5f-1", "counted_under": ["704.5f"]}}
+    assert "704.3" not in document["rules"] and "704.3" not in document["declared_zero"]
+    lines = report_lines(document)
+    assert "  704.5f-2 (704.3) -> 704.5f-1 (704.5f)" in lines
 
 
 def test_the_review_list_names_record_and_scenario(tmp_path, gen2_dir):
@@ -187,8 +222,8 @@ def _gen3_counts(tmp_path, workers=1, copies=1):
         sidecar_roots={"cardsfolder": GEN3_SIDECARS / "cardsfolder",
                        "tokenscripts": GEN3_SIDECARS / "tokenscripts"},
         workers=workers)
-    counts, none = count(config)
-    return counts.to_json(none)["carriers"]
+    counts, standing = count(config)
+    return counts.to_json(standing)["carriers"]
 
 
 def _carrier(carriers, rule, script_file):

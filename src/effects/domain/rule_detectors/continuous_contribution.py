@@ -11,7 +11,9 @@ Parameters:
   ``types`` or ``colors``;
 - ``value``: a keyword, type or colour the contribution must name (``flying``,
   ``artifact``, ``U``), compared without case; a leading ``-`` names a
-  removal, a lone ``=`` a characteristic set outright;
+  removal, a lone ``=`` a characteristic set outright; with ``field = pt``,
+  ``=`` for a base set outright (layer 7a-b) and ``+`` for a boost (7c),
+  either by default;
 - ``source_token_kind``: the static's source is a token of this kind (a
   Monster or a Royal Role, rule 111.10), found as ``outcome_event``'s is: a
   ``continuous`` record names no source, so its host is the battlefield entity
@@ -97,9 +99,16 @@ def conditioned_on_counters(script_text: str | None, counter_type: str) -> bool:
     return normalize_counter_type(counter_type) in condition_counter_types(script_text)
 
 
+#: What a ``pt`` declaration's ``value`` asks for: a base set outright (layer
+#: 7a or 7b, a characteristic-defining ability's or a "base power and
+#: toughness" effect's), or a boost (layer 7c).
+PT_VALUES = frozenset({"=", "+"})
+
+
 def _carries(contribution: Contribution, field: str, value: str | None) -> bool:
     if field == "pt":
-        return contribution.pt_boost != (0, 0) or contribution.set_pt is not None
+        boosts, sets = contribution.pt_boost != (0, 0), contribution.set_pt is not None
+        return {None: boosts or sets, "=": sets, "+": boosts}[value]
     found = getattr(contribution, field)
     if value is None:
         return bool(found)
@@ -126,11 +135,17 @@ class ContinuousContribution:
             needs.add("designations")
         return frozenset(needs)
 
-    def match(self, record: EffectRecord, lines: SidecarLookup | None,
-              params: Mapping[str, Any]) -> FamilyMatch | None:
+    def validate(self, params: Mapping[str, Any]) -> None:
         field = params.get("field")
         if field not in FIELDS:
             raise ValueError(f"continuous_contribution: unknown field {field!r}")
+        if field == "pt" and params.get("value", "=") not in PT_VALUES:
+            raise ValueError(f"continuous_contribution: a pt value is one of {sorted(PT_VALUES)}")
+
+    def match(self, record: EffectRecord, lines: SidecarLookup | None,
+              params: Mapping[str, Any]) -> FamilyMatch | None:
+        self.validate(params)
+        field = params.get("field")
         if record.kind is not RecordKind.CONTINUOUS:
             return None
         kind = params.get("source_token_kind")

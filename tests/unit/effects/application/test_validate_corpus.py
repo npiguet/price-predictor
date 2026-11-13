@@ -15,6 +15,7 @@ output takes.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -457,6 +458,35 @@ class TestLinkHalvesPair:
         assert not finding.ok
         assert "unpaired" in finding.measured
 
+    @staticmethod
+    def _cast(index: int, source: str = "E7", game: str = "run.0-L1.0"):
+        """A gen-3 cost half: written at the cast, no outcome (FR-042a)."""
+        snapshot = replace(_snapshot(), refs=replace(_snapshot().refs, source=source))
+        return _activation(f"run.0-L1.{index}", outcome=None, link_id=f"cast.{index}",
+                           game_id=game, state=snapshot, generation=3)
+
+    def test_gen3_cost_halves_none_of_which_meets_its_effect_half_fail(self):
+        """V5 #18: a lone cost half is a paired link (its item countered, or on
+        the stack at the game's end), so 500 of them read 500/500 paired; a
+        window where no cost half meets its effect half is the collector."""
+        records = _healthy() + [self._cast(300 + i) for i in range(200)]
+        finding = _named(validate_corpus(records), "gen-3 cost half")
+        assert not finding.ok
+        assert "0/200" in finding.measured and "200 alone" in finding.measured
+
+    def test_a_lone_cost_half_whose_item_was_countered_is_explained(self):
+        countered = _resolution("run.0-L1.990", game_id="run.0-L1.0", generation=3,
+                                payload=ResolutionPayload(events=(Event(
+                                    type=EventType.SPELL_COUNTERED, subjects=("E7",),
+                                    attributed_to=AttributionKind.ROOT),)))
+        paired = [half for i in range(5) for half in (
+            self._cast(400 + i, source=f"E{40 + i}"),
+            _resolution(f"run.0-L1.{500 + i}", link_id=f"cast.{400 + i}", generation=3))]
+        records = _healthy() + paired + [self._cast(300), countered]
+        finding = _named(validate_corpus(records), "gen-3 cost half")
+        assert finding.ok and finding.watched
+        assert "5/6" in finding.measured and "1 alone, 1 of them countered" in finding.measured
+
     def test_a_link_id_shared_by_three_halves_on_one_line_fails(self):
         """A link id whose tail is a JVM-static counter collides like an id does.
 
@@ -748,6 +778,43 @@ class TestTheCli:
         out = capsys.readouterr().out
         assert "[FAIL] record_id is unique across the run's shards" in out
         assert "invariants broken" in out
+
+    def test_an_undecodable_line_is_a_failed_finding_and_the_rest_is_read(
+            self, tmp_path, capsys):
+        """V5 #20: one line that does not decode is the shard's finding, not a
+        stop: the other shards and the lines before it are still measured."""
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
+            for record in _healthy():
+                writer.write(record)
+        bad = tmp_path / "run.1-L1.jsonl"
+        bad.write_text('{"record_id": "x", "kind": "nonesuch"}\n', encoding="utf-8")
+        assert self._run(tmp_path) == 1
+        out = capsys.readouterr().out
+        assert "[FAIL] every shard line decodes" in out
+        assert "1/2 shards" in out and "run.1-L1.jsonl, line 1" in out
+        assert "[PASS] record_id is unique" in out
+
+    def test_values_outside_the_closed_lists_are_watched_figures(self, tmp_path, capsys):
+        """The decode tally the read keeps (WP9) is reported, never judged."""
+        from effects.infrastructure.record_codec import record_to_dict
+
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
+            for record in _healthy():
+                writer.write(record)
+        raw = record_to_dict(_resolution("run.0-L1.950", generation=3))
+        raw.pop("mode")
+        (tmp_path / "run.1-L1.jsonl").write_text(json.dumps(raw) + "\n", encoding="utf-8")
+        self._run(tmp_path)
+        out = capsys.readouterr().out
+        assert "[WATCH] values outside the wire's closed lists: 1" in out
+
+    def test_variant_scripts_names_the_variant_tree_for_the_key_joins(self, tmp_path):
+        from effects.infrastructure.cli import build_parser
+
+        args = build_parser().parse_args([
+            "validate-corpus", "--effect-records", str(tmp_path),
+            "--variant-scripts", str(tmp_path / "variants")])
+        assert args.variant_scripts == tmp_path / "variants"
 
     def test_an_empty_directory_exits_non_zero(self, tmp_path, caplog):
         """Refused through exits_with, as every command's refusal is."""
@@ -1153,15 +1220,13 @@ class TestKeywordKeysJoinTheirSidecar:
         assert not finding.ok
         assert any("no sidecar" in line for line in finding.detail)
 
-    def test_a_key_in_a_tree_this_run_was_not_given_is_unchecked_not_broken(
+    def test_a_key_in_a_tree_this_run_was_not_given_fails_as_unchecked(
         self, tmp_path,
     ):
-        """A stage-four corpus names variant-scripts keys; absence is not proof.
-
-        A validate run without that tree has nothing to join them against, and
-        counting them as mismatches would fail every variant run for a reason
-        that says nothing about the corpus.
-        """
+        """V5 #20: a stage-four corpus names variant-scripts keys, which a run
+        without that tree cannot join; they are no mismatch, but a run that
+        checked none of them is no pass either: ``--variant-scripts`` names
+        the tree."""
         sidecars = _write_bears_sidecar(tmp_path, (0,))
         variant = _trigger(
             "run.0-L1.901",
@@ -1173,9 +1238,10 @@ class TestKeywordKeysJoinTheirSidecar:
             validate_corpus([*_healthy(), variant], sidecars=sidecars),
             "keyword provenance keys",
         )
-        assert finding.ok, finding.detail
-        assert "1 unchecked" in finding.measured
-        assert any("variant-scripts" in line for line in finding.detail)
+        assert not finding.ok
+        assert "0/" in finding.measured and "1 unchecked" in finding.measured
+        assert any("variant-scripts" in line and "--variant-scripts" in line
+                   for line in finding.detail)
 
     def test_without_a_converted_tree_the_check_reports_unchecked(self):
         finding = _named(validate_corpus(_healthy()), "keyword provenance keys")
@@ -1481,6 +1547,28 @@ class TestRewritesNameTheAbilityThatRanInstead:
         assert "2/2" in _named(validate_corpus(records), "ran instead").measured
 
 
+class TestEveryRecordKindIsPresent:
+    """V5 #19: a kind no record of a long gen-3 window holds was reported
+    ``ok`` ("no records of this kind") by every per-kind check."""
+
+    @staticmethod
+    def _window(records: int):
+        return [_resolution(f"run.0-L1.{index}", generation=3) for index in range(records)]
+
+    def test_a_long_window_missing_kinds_every_game_writes_fails(self):
+        finding = _named(validate_corpus(self._window(1000)), "record kind")
+        assert not finding.ok
+        for label in ("resolution/activation", "trigger", "combat", "playability/decision",
+                      "playability/attackers", "playability/blockers", "turn_action/draw"):
+            assert label in finding.measured
+        assert "rewrite" in " ".join(finding.detail)  # watched, named, not judged
+
+    def test_a_short_window_is_not_judged(self):
+        finding = _named(validate_corpus(self._window(10)), "record kind")
+        assert finding.ok and "under the 1000" in finding.measured
+        assert _named(validate_corpus(_healthy()), "record kind").ok
+
+
 class TestTriggerNegatives:
     def test_a_window_of_positives_only_fails(self):
         records = _healthy() + [
@@ -1490,6 +1578,18 @@ class TestTriggerNegatives:
         finding = _named(validate_corpus(records), "draw negatives")
         assert not finding.ok
         assert "fired:not-fired" in finding.measured
+
+    def test_a_window_of_negatives_only_fails(self):
+        """V5 #19: the ceiling alone let 0% fired pass, the positives the
+        reservoir writes at the game's end all lost."""
+        records = [r for r in _healthy() if r.kind is not RecordKind.TRIGGER] + [
+            _trigger(f"run.0-L1.{index}", fired=False, state=_snapshot(turn=7 + index))
+            for index in range(900, 910)
+        ]
+        finding = _named(validate_corpus(records), "trigger records hold positives")
+        assert not finding.ok
+        assert "0:10" in finding.measured and "floor 5.0%" in finding.measured
+        assert _named(validate_corpus(_healthy()), "trigger records hold positives").ok
 
     def test_a_balanced_window_passes_and_reports_the_ratio(self):
         finding = _named(validate_corpus(_healthy()), "draw negatives")

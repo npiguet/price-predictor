@@ -187,8 +187,7 @@ class VerdictBit:
             needs.add("failed_checks")
         return frozenset(needs)
 
-    def match(self, record: EffectRecord, lines: SidecarLookup | None,
-              params: Mapping[str, Any]) -> FamilyMatch | None:
+    def validate(self, params: Mapping[str, Any]) -> None:
         bit = params.get("bit")
         if bit not in GEN2_BITS | GEN3_BITS:
             raise ValueError(f"verdict_bit: unknown bit {bit!r}")
@@ -197,6 +196,13 @@ class VerdictBit:
                              f"one of {sorted(CHECKS)}; got {params.get('check')!r}")
         if params.get("candidate_face", "front") not in CANDIDATE_FACES:
             raise ValueError(f"verdict_bit: candidate_face is one of {sorted(CANDIDATE_FACES)}")
+        if "check" in params and bit != "failed_check":
+            raise ValueError("verdict_bit: check names a failed_check declaration's check")
+
+    def match(self, record: EffectRecord, lines: SidecarLookup | None,
+              params: Mapping[str, Any]) -> FamilyMatch | None:
+        self.validate(params)
+        bit = params.get("bit")
         if record.kind is not RecordKind.PLAYABILITY or (
                 record.subkind is not PlayabilitySubkind.DECISION):
             return None

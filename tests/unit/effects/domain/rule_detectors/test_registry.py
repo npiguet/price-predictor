@@ -7,9 +7,11 @@ from dataclasses import dataclass
 
 import pytest
 
-from effects.domain.rule_catalogue import NoDetector, Polarity
+from effects.domain.rule_catalogue import NoDetector, Polarity, SameAs
 from effects.domain.rule_detectors import (
+    DeclarationError,
     DetectorIndex,
+    Duplicate,
     FamilyMatch,
     RuleTag,
     families,
@@ -130,8 +132,66 @@ def test_only_the_record_s_own_kind_is_matched():
 
 def test_an_unregistered_family_is_refused_when_the_index_is_built():
     unknown = scenario("1-1", ("1.1",), "resolution", declaration("no_such_family", "resolution"))
-    with pytest.raises(KeyError, match="no_such_family"):
+    with pytest.raises(DeclarationError, match="no_such_family"):
         DetectorIndex.of(catalogue(unknown))
+
+
+@pytest.mark.parametrize(("family", "params", "message"), [
+    ("sba_zone_move", {"check": "lethal_damage", "chek": "x"}, "no parameter"),
+    ("sba_zone_move", {"check": "lethal_damag"}, "unknown check"),
+    ("verdict_bit", {"bit": "timming"}, "unknown bit"),
+    ("legality_membership", {"list": "legal_blocker"}, "unknown list"),
+    ("outcome_event", {"event": "zone_changed"}, "zone_changed"),
+    ("outcome_event", {"event": "zone_change", "to": "graveyard"}, "no parameter"),
+    ("trigger_mode", {"keyword": "Prowess", "mode": "SpellCast"}, "keyword"),
+    ("resolution_outcome", {"outcome": "fizzle"}, "fizzle"),
+])
+def test_a_misspelt_declaration_is_refused_when_the_index_is_built(family, params, message):
+    """V5 #22: a parameter name the family does not declare, or a value it
+    cannot read, stops the command at the index, naming the scenario, rather
+    than tagging nothing or raising mid-run."""
+    bad = scenario("9.9-1", ("9.9",), "resolution",
+                   declaration(family, "resolution", **params))
+    with pytest.raises(DeclarationError, match=f"9.9-1.*{message}"):
+        DetectorIndex.of(catalogue(bad))
+
+
+def test_a_declaration_asking_its_kind_for_an_event_it_never_lists_is_untaggable():
+    """V5 #14: a combat never lists ``removed_from_combat`` (a clause hook's
+    event), so a combat record must not read as the rule's near miss."""
+    asks = scenario("701.8c-2", ("701.8c",), "combat", declaration(
+        "outcome_event", "combat", event="regenerated", with_event="removed_from_combat"))
+    index = DetectorIndex.of(catalogue(asks))
+    assert index.by_kind == {} and "701.8c" not in index.declared_rules
+    assert "removed_from_combat" in index.untaggable["701.8c-2"]
+    assert index.untaggable_rules["701.8c-2"] == ("701.8c",)
+    on_a_resolution = scenario("1-1", ("1.1",), "resolution", declaration(
+        "outcome_event", "resolution", event="face_change", api="SetState"))
+    assert DetectorIndex.of(catalogue(on_a_resolution)).untaggable == {}
+
+
+def test_the_game_s_end_asked_of_a_resolution_acting_through_a_line_is_untaggable():
+    """The game's end is filed in the game-end record, which acts through no
+    line: a Draw resolution would read as 121.4's near miss every time."""
+    scoped = scenario("121.4-1", ("121.4",), "resolution", declaration(
+        "outcome_event", "resolution", event="player_lost", api="Draw"))
+    assert "game-end record" in DetectorIndex.of(catalogue(scoped)).untaggable["121.4-1"]
+    unscoped = scenario("704.5b-1", ("704.5b",), "resolution", declaration(
+        "outcome_event", "resolution", event="player_lost", reason="Milled"))
+    assert DetectorIndex.of(catalogue(unscoped)).untaggable == {}
+
+
+def test_a_same_as_scenario_tags_nothing_and_points_at_its_scenario():
+    flying = scenario("702.9b-1", ("702.9b",), "playability", declaration(
+        "legality_membership", "playability", list="legal_blockers"))
+    again = scenario("702.17b-1", ("702.17b",), "playability",
+                     SameAs("702.9b-1", "both say a flier is blocked only by flying or reach"))
+    index = DetectorIndex.of(catalogue(flying, again))
+    assert index.declared_rules == {"702.9b"}
+    assert index.duplicates["702.17b-1"] == Duplicate(("702.17b",), "702.9b-1", ("702.9b",))
+    dangling = scenario("1-1", ("1.1",), "playability", SameAs("2-1", "x"))
+    with pytest.raises(DeclarationError, match="2-1"):
+        DetectorIndex.of(catalogue(dangling))
 
 
 _SCENARIO_SPECIFIC = re.compile(r"card|name|cards|names|entity|object", re.IGNORECASE)

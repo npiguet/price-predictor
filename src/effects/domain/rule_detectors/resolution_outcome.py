@@ -95,6 +95,11 @@ class ResolutionOutcomeFamily:
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset()
 
+    def validate(self, params: Mapping[str, Any]) -> None:
+        ResolutionOutcome(params["outcome"])
+        for near in params.get("near", ["resolved"]):
+            ResolutionOutcome(near)
+
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
         fires = ResolutionOutcome(params["outcome"])

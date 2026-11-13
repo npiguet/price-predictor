@@ -289,7 +289,7 @@ class RunRuleCounter:
         self._counted.update(fresh)
 
     def document(self) -> dict:
-        return self.total.to_json({})
+        return self.total.to_json()
 
     @property
     def damaged(self) -> list[str]:

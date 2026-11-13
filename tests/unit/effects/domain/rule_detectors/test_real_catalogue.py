@@ -1,0 +1,67 @@
+"""The detectors over the whole real catalogue under ``rules/scenarios`` (TP4's missing test).
+
+Every other detector test passes hand-written parameters to one family; these
+build the index the commands build, from every scenario the catalogue holds.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from effects.domain.records import RecordKind
+from effects.domain.rule_detectors import DetectorIndex
+from effects.domain.rule_detectors.emittable_events import EMITTABLE, carries
+from effects.infrastructure.rules_catalogue_io import load_scenarios
+
+RULES = Path(__file__).parents[5] / "rules"
+
+#: The declarations no record can show (V5 #14), each reported, none tagging:
+#: an event no collector writes on its kind, or the game's end asked of a
+#: resolution acting through a line (it is filed in the game-end record).
+#: The bus-side ``face_change``, ``destroyed``, ``sacrificed`` and
+#: ``player_lost`` (025 WP3) took the other nineteen of V5 #14's off this list.
+UNTAGGABLE = {
+    # the game's end, asked of a resolution scoped to its API
+    "104.2b-1", "104.3e-1", "121.4-1",
+    # game_drawn: no collector writes it
+    "104.4a-1", "104.4c-1",
+    # removed_from_combat on a combat record: a clause hook's alone
+    "701.8c-2",
+}
+
+
+@pytest.fixture(scope="module")
+def catalogue():
+    return load_scenarios(RULES)
+
+
+@pytest.fixture(scope="module")
+def index(catalogue):
+    return DetectorIndex.of(catalogue)
+
+
+def test_every_declaration_of_the_real_catalogue_is_readable(index):
+    """``DetectorIndex.of`` refuses an undeclared parameter or a value its
+    family cannot read (V5 #22); building it over the real tree is the test."""
+    assert sum(len(found) for found in index.by_kind.values()) > 1000
+
+
+def test_exactly_the_known_declarations_are_untaggable(index):
+    assert set(index.untaggable) == UNTAGGABLE
+    for sid, reason in index.untaggable.items():
+        assert "never lists" in reason or "game-end record" in reason, sid
+
+
+def test_no_taggable_declaration_asks_its_kind_for_an_event_it_never_lists(index):
+    for kind, found in index.by_kind.items():
+        for scenario, declaration, family in found:
+            for event in getattr(family, "events", lambda _: ())(declaration.params):
+                assert carries(kind, event), (scenario.id, event)
+
+
+def test_every_record_kind_a_declaration_names_has_a_row(index, catalogue):
+    kinds = {s.detector.record_kind for s in catalogue.scenarios
+             if hasattr(s.detector, "record_kind")}
+    assert {RecordKind(k) for k in kinds} <= set(EMITTABLE)

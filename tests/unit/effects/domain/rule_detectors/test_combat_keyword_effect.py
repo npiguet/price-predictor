@@ -117,6 +117,32 @@ def test_another_attacker_s_poison_leaves_the_near_miss_unreadable():
     assert found.polarity is Polarity.DOES_NOT_FIRE and found.observed is None
 
 
+@pytest.mark.parametrize("keyword", ["toxic", "poisonous"])
+def test_a_poison_carrier_judges_only_the_step_it_strikes_in(keyword):
+    """510.4: a creature without first or double strike deals no damage in the
+    first-strike step, so dealing none there is no near miss (V5 #21)."""
+    plain = _creature("E1", (keyword,), combat=_attacking())
+    assert FAMILY.match(_combat([plain], substep="first_strike"), None,
+                        {"keyword": keyword}) is None
+    striker = _creature("E1", (keyword, "first_strike"), combat=_attacking())
+    found = FAMILY.match(_combat([striker], substep="first_strike"), None, {"keyword": keyword})
+    assert found.polarity is Polarity.DOES_NOT_FIRE
+    # A first striker without double strike deals nothing in the regular step.
+    assert FAMILY.match(_combat([striker], substep="regular"), None, {"keyword": keyword}) is None
+    double = _creature("E1", (keyword, "double_strike"), combat=_attacking())
+    assert FAMILY.match(_combat([double], substep="regular"), None,
+                        {"keyword": keyword}).polarity is Polarity.DOES_NOT_FIRE
+
+
+def test_trample_over_planeswalkers_judges_only_the_step_it_strikes_in():
+    board = [_at_walker("E1", ("trample",)), _walker()]
+    assert FAMILY.match(_combat(board, substep="first_strike"), None,
+                        {"keyword": "trample_over_planeswalkers"}) is None
+    gone = [_at_walker("E1", (), defender="<Nothing>")]
+    assert FAMILY.match(_combat(gone, substep="first_strike"), None,
+                        {"keyword": "trample_over_planeswalkers", "defender": "gone"}) is None
+
+
 def test_vigilance_sides_are_carriers_against_other_attackers():
     vigilant = _creature("E1", ("vigilance",), combat=_attacking())
     plain = _creature("E2", tapped=True, combat=_attacking())

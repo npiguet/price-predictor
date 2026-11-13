@@ -198,6 +198,19 @@ def _sides(record: EffectRecord, listed: str, statics_only: bool, universe: str 
         inside = tuple(getattr(payload, listed))
         outside = tuple(f.entity for f in payload.forbidden
                         if not statics_only or f.responsible_static)
+    anchor = getattr(payload, "anchor_attacker", None)
+    if listed == "legal_attackers" and anchor is not None:
+        # A gen-3 declaration writes one record per creature, each listing the
+        # declaration's whole lists: each judges its own anchor, and the
+        # universe's unlisted permanents are judged once, on the record whose
+        # anchor the lists name first.
+        listed_ids = (*inside, *(f.entity for f in payload.forbidden))
+        first = bool(listed_ids) and listed_ids[0] == anchor
+        if universe is not None and not statics_only and first:
+            known = set(listed_ids)
+            outside += tuple(e for e in _universe(record, listed, universe) if e not in known)
+        return (tuple(e for e in inside if e == anchor),
+                tuple(e for e in outside if e == anchor or (e not in listed_ids and first)))
     if universe is not None and not statics_only:
         listed_ids = set(inside) | set(outside)
         outside += tuple(e for e in _universe(record, listed, universe) if e not in listed_ids)
@@ -249,8 +262,7 @@ class LegalityMembership:
         listed = params.get("list")
         return frozenset({listed}) if listed in GEN3_LISTS else frozenset()
 
-    def match(self, record: EffectRecord, lines: SidecarLookup | None,
-              params: Mapping[str, Any]) -> FamilyMatch | None:
+    def validate(self, params: Mapping[str, Any]) -> None:
         listed = params.get("list")
         if listed not in _SUBKIND_OF:
             raise ValueError(f"legality_membership: unknown list {listed!r}")
@@ -260,10 +272,17 @@ class LegalityMembership:
         universe = params.get("universe")
         if universe is not None and universe not in UNIVERSES:
             raise ValueError(f"legality_membership: unknown universe {universe!r}")
-        if record.kind is not RecordKind.PLAYABILITY or record.subkind is not _SUBKIND_OF[listed]:
-            return None
         if "at_least" in params and listed != "min_blockers":
             raise ValueError("legality_membership: at_least reads the min_blockers list")
+
+    def match(self, record: EffectRecord, lines: SidecarLookup | None,
+              params: Mapping[str, Any]) -> FamilyMatch | None:
+        self.validate(params)
+        listed = params.get("list")
+        fires_when = params.get("fires_when", "outside")
+        universe = params.get("universe")
+        if record.kind is not RecordKind.PLAYABILITY or record.subkind is not _SUBKIND_OF[listed]:
+            return None
         inside, outside = _sides(record, listed, bool(params.get("responsible_static")),
                                  universe, int(params.get("at_least", 2)))
         fires, near = (outside, inside) if fires_when == "outside" else (inside, outside)

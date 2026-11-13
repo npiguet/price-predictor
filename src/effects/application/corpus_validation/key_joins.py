@@ -14,7 +14,13 @@ from effects.application.corpus_validation.findings import (
     keep_example,
     share_of,
 )
-from effects.domain.provenance import KeyResolution, ProvenanceKey, SidecarLookup, TraitKind
+from effects.domain.provenance import (
+    KeyResolution,
+    ProvenanceKey,
+    SidecarLookup,
+    SourceTree,
+    TraitKind,
+)
 from effects.domain.records import (
     EffectRecord,
     key_sites,
@@ -30,7 +36,7 @@ class JoinOutcome(Enum):
     #: trait Forge attached at runtime, neither a join nor a mismatch.
     RUNTIME_ONLY = auto()
     #: In a tree this run was not given (such as ``variant-scripts`` without
-    #: ``--variant-scripts``): unchecked, never a mismatch.
+    #: ``--variant-scripts``): unchecked, no mismatch, but no pass either.
     UNCHECKED = auto()
 
 
@@ -72,6 +78,11 @@ _OUTSIDE_JOIN = "provenance keys outside every declared range"
 
 class KeyJoins:
     """Every provenance key the window names resolves in its own sidecar.
+
+    A key in a tree the run was not given (a variant key without
+    ``--variant-scripts``) is unchecked, and fails the judged finding: the
+    run could not check what the corpus names. A machine with no converted
+    tree at all reports every key unchecked and judges nothing.
 
     A key joined to the wrong printed line is invisible downstream. ``keyword``
     keys are judged: their ordinal is derived rather than positional, and a
@@ -153,11 +164,13 @@ class _JoinTally:
         broken = self.keyword.unjoinable.total()
         trees = tuple(
             f"{count} keys in {tree}, a tree this run was not given"
+            + (" (pass --variant-scripts)" if tree == SourceTree.VARIANT_SCRIPTS else "")
             for tree, count in sorted(self.unchecked_by_tree.items())
         )
+        # A key no tree of this run could join was checked by nothing (V5 #20).
         return Finding(
             name=_KEYWORD_JOIN,
-            ok=broken == 0,
+            ok=broken == 0 and not self.unchecked_by_tree,
             measured=(
                 f"{broken}/{self.keyword.checked.total()} keyword keys fail to "
                 f"join, {self.keyword.runtime_only.total()} outside every "

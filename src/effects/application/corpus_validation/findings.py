@@ -66,6 +66,18 @@ class Thresholds:
         "Share of trigger records that may report fired=true; the negative "
         "sampler targets ~1:1 (default: %(default)s)"
     )})
+    #: All positives are written (the reservoir flushes them at the game's
+    #: end) and negatives are sampled toward ~1:1, so a share near zero is
+    #: positives lost, not a balance.
+    min_trigger_fired_share: float = field(default=0.05, metadata={"help": (
+        "Share of trigger records that must report fired=true (default: %(default)s)"
+    )})
+    #: A few minutes of collection writes thousands of records; a kind every
+    #: game writes missing from that many is the collector.
+    min_presence_records: int = field(default=1000, metadata={"help": (
+        "Gen-3 records a window needs before a record kind every game writes "
+        "that it lacks fails the run (default: %(default)s)"
+    )})
     min_zone_change_from_zone_rate: float | None = field(default=None, metadata={
         "help": (
             "Share of zone_change events that must carry from_zone; unset, it "

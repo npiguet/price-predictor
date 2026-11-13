@@ -206,6 +206,42 @@ def test_the_same_hit_from_a_deathtouch_source_fires(gen2_records):
     assert found.polarity is Polarity.FIRES and not found.observed  # the edit left no death
 
 
+def _granted(record, entity_id, keyword):
+    entity = record.state.entity(entity_id)
+    granted = replace(entity, granted_temporary=replace(
+        entity.granted_temporary, keywords=(*entity.granted_temporary.keywords, keyword)))
+    return replace(record, state=replace(record.state, entities=tuple(
+        granted if e.id == entity_id else e for e in record.state.entities)))
+
+
+@pytest.mark.parametrize("keyword", ["wither", "infect"])
+def test_a_wither_or_infect_kill_is_no_lethal_damage(gen2_records, keyword):
+    """V5 #24: damage from a source with wither or infect is dealt as -1/-1
+    counters (702.80a, 702.90b) and marks none, so its kill is 704.5f's, not
+    704.5g's: neither side of ``lethal_damage``."""
+    record = _fires(gen2_records, "lethal_damage")
+    found = FAMILY.match(record, None, {"check": "lethal_damage"})
+    hits = [e for e in record.payload.events if e.type is EventType.DAMAGE_DEALT
+            and set(e.subjects) & set(found.outcome)]
+    sources = {e.params.get("source") or e.params.get("cause") for e in hits}
+    assert len(sources) == 1 and None not in sources
+    withered = _granted(record, sources.pop(), keyword)
+    assert FAMILY.match(withered, None, {"check": "lethal_damage"}) is None
+
+
+def test_two_legends_the_record_touches_neither_of_show_no_legend_rule(gen2_records):
+    """V5 #24: a pair already sharing the battlefield (Mirror Gallery, or a
+    check that already ran) is no situation the record's changes made."""
+    record = _fires(gen2_records, "legend_rule")
+    found = FAMILY.match(record, None, {"check": "legend_rule"})
+    state = replace(record.state, entities=tuple(
+        replace(e, zone="battlefield") if e.id in found.entities else e
+        for e in record.state.entities))
+    untouched = replace(record, state=state, payload=ResolutionPayload(events=tuple(
+        e for e in record.payload.events if not set(e.subjects) & set(found.entities))))
+    assert FAMILY.match(untouched, None, {"check": "legend_rule"}) is None
+
+
 #: Real gen-2 records the review list held before T036, each read by hand
 #: (``scripts/make_fixture_records.py``'s ``_GEN2_PINNED``), and what the
 #: family now says of them: ``(check, polarity, observed)``, or None for a

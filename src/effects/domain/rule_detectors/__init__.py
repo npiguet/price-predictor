@@ -33,6 +33,7 @@ from effects.domain.records import EffectRecord
 from effects.domain.rule_catalogue import (
     DetectorDeclaration,
     Polarity,
+    SameAs,
     Scenario,
     ScenarioCatalogue,
 )
@@ -133,6 +134,13 @@ class DetectorFamily(Protocol):
         """The gen-3 fields the family reads under ``params``; empty on gen-2 records."""
         ...
 
+    def validate(self, params: Mapping[str, Any]) -> None:
+        """Raise ``ValueError`` on a value the family cannot read (an unknown
+        check, list, bit, event type or filter), so a misspelt declaration
+        stops the command that builds the index rather than a record in the
+        middle of a run; ``match`` takes the same values."""
+        ...
+
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
         """The record's side of the rule, or None where the record does not show it."""
@@ -181,34 +189,118 @@ class TagResult:
     review: tuple[RuleTag, ...] = ()
 
 
+class DeclarationError(ValueError):
+    """A catalogue declaration no family can read, naming its scenario."""
+
+
+@dataclass(frozen=True, slots=True)
+class Duplicate:
+    """A scenario declared ``same_as`` another, and the rules it is counted under."""
+
+    rules: tuple[str, ...]
+    same_as: str
+    counted_under: tuple[str, ...]
+
+
 @dataclass(frozen=True, slots=True)
 class DetectorIndex:
     """The catalogue's declared scenarios by record kind, built once per command.
 
     Running every scenario on every record would cost 1,763 calls a record;
     a record is only ever matched against the scenarios of its own kind.
+
+    Building it checks every declaration: a family that is not registered, a
+    parameter the family does not declare, or a value it cannot read raises
+    :class:`DeclarationError` naming the scenario. A declaration asking its
+    record kind for an event that kind never lists (``emittable_events``) is
+    set aside in ``untaggable`` with its reason, since it would read every
+    record of the kind as the event's absence; a ``same_as`` scenario goes to
+    ``duplicates``. Neither tags.
     """
 
     by_kind: Mapping[str, tuple[tuple[Scenario, DetectorDeclaration, DetectorFamily], ...]]
+    #: The rules some taggable declaration speaks for.
     declared_rules: frozenset[str] = field(default_factory=frozenset)
+    #: Scenario id -> why its declaration can tag no record.
+    untaggable: Mapping[str, str] = field(default_factory=dict)
+    #: Scenario id -> the scenario it states the same fact as.
+    duplicates: Mapping[str, Duplicate] = field(default_factory=dict)
+    #: Scenario id -> the rules it lists, for every untaggable scenario.
+    untaggable_rules: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
     @classmethod
     def of(cls, catalogue: ScenarioCatalogue) -> DetectorIndex:
         registry = families()
         by_kind: dict[str, list] = {}
         rules: set[str] = set()
+        untaggable: dict[str, str] = {}
+        untaggable_rules: dict[str, tuple[str, ...]] = {}
+        same_as: list[Scenario] = []
         for scenario in catalogue.scenarios:
             declaration = scenario.detector
+            if isinstance(declaration, SameAs):
+                same_as.append(scenario)
+                continue
             if not isinstance(declaration, DetectorDeclaration):
                 continue
             family = registry.get(declaration.family)
             if family is None:
-                raise KeyError(
+                raise DeclarationError(
                     f"{scenario.id}: detector family {declaration.family!r} is not registered")
+            _check(scenario, declaration, family)
+            reason = _untaggable(declaration, family)
+            if reason is not None:
+                untaggable[scenario.id] = reason
+                untaggable_rules[scenario.id] = scenario.rules
+                continue
             by_kind.setdefault(declaration.record_kind, []).append(
                 (scenario, declaration, family))
             rules.update(scenario.rules)
-        return cls({kind: tuple(found) for kind, found in by_kind.items()}, frozenset(rules))
+        scenarios = {s.id: s for s in catalogue.scenarios}
+        duplicates = {}
+        for scenario in same_as:
+            target = scenarios.get(scenario.detector.scenario)
+            if target is None or not isinstance(target.detector, DetectorDeclaration):
+                raise DeclarationError(
+                    f"{scenario.id}: same_as {scenario.detector.scenario!r} names no scenario "
+                    "declaring a detector")
+            duplicates[scenario.id] = Duplicate(scenario.rules, target.id, target.rules)
+        return cls({kind: tuple(found) for kind, found in by_kind.items()}, frozenset(rules),
+                   untaggable, duplicates, untaggable_rules)
+
+
+def _check(scenario: Scenario, declaration: DetectorDeclaration,
+           family: DetectorFamily) -> None:
+    undeclared = set(declaration.params) - family.params
+    if undeclared:
+        raise DeclarationError(f"{scenario.id}: {family.id} has no parameter {sorted(undeclared)}")
+    try:
+        family.validate(declaration.params)
+    except (KeyError, ValueError) as error:
+        raise DeclarationError(f"{scenario.id}: {error}") from error
+
+
+def _untaggable(declaration: DetectorDeclaration, family: DetectorFamily) -> str | None:
+    """Why ``declaration`` can tag nothing, or None: an event type it reads
+    that its record kind never lists."""
+    from effects.domain.rule_detectors.emittable_events import carries
+
+    events = getattr(family, "events", None)
+    if events is None:
+        return None
+    kind = declaration.record_kind
+    missing = sorted(e.value for e in events(declaration.params) if not carries(kind, e))
+    if missing:
+        return f"a {kind} record never lists {', '.join(missing)} (emittable_events)"
+    reads_line = getattr(family, "reads_acting_line", lambda params: False)
+    if reads_line(declaration.params):
+        filed = sorted(e.value for e in events(declaration.params)
+                       if not carries(kind, e, acting_line=True))
+        if filed:
+            return (f"{', '.join(filed)} is filed in the game-end record, which acts "
+                    "through no line, never in a resolution acting through one "
+                    "(emittable_events)")
+    return None
 
 
 _ORDER = {Polarity.FIRES: 0, Polarity.DOES_NOT_FIRE: 1, Polarity.OTHER: 2}

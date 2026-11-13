@@ -17,6 +17,7 @@ from effects.application.field_coverage import (
     GEN3_FIELDS,
     KNOWN_CONSTANT_FIELDS,
     FieldCoverage,
+    event_param_lines,
     field_coverage,
     gen3_report_lines,
     report_lines,
@@ -148,6 +149,25 @@ class TestTheWalk:
         coverage = field_coverage(records)
         assert "record.payload<CombatPayload>.attackers" in coverage
         assert "record.payload<ContinuousPayload>.contributions" in coverage
+
+    def test_each_event_parameter_has_a_cell_of_its_own(self):
+        """P3b #14: every parameter collapsed into one ``params`` cell, so a
+        parameter the collector never writes could not show."""
+        events = tuple(
+            Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
+                  params={"from_zone": "battlefield", "to_zone": zone, "cause": "E2"})
+            for zone in ("graveyard", "exile"))
+        record = _record(ResolutionPayload(events=events), kind=RecordKind.RESOLUTION,
+                         moment=Moment.RESOLUTION)
+        coverage = field_coverage([record])
+        cell = "record.payload<ResolutionPayload>.events[].params<zone_change>"
+        assert coverage[f"{cell}.to_zone"].varied
+        assert coverage[f"{cell}.from_zone"].constant
+        assert coverage[f"{cell}.library_position"].populated == 0
+        lines = event_param_lines(coverage)
+        assert any("[absent]" in line and "zone_change.library_position" in line
+                   for line in lines)
+        assert any("[varies]" in line and "zone_change.to_zone" in line for line in lines)
 
     def test_nested_dataclasses_are_reached(self):
         record = _record(ContinuousPayload(), _snapshot(

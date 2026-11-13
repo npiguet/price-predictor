@@ -24,6 +24,7 @@ from effects.domain.rule_catalogue import (
     NoDetector,
     Polarity,
     RuleMapEntry,
+    SameAs,
     Scenario,
     ScenarioCatalogue,
     ScenarioVariant,
@@ -35,11 +36,14 @@ from effects.domain.rule_catalogue import (
 DEFAULT_RULES_DIR = Path("rules")
 
 
-def _detector(data: Mapping[str, Any] | None) -> DetectorDeclaration | NoDetector | None:
+def _detector(data: Mapping[str, Any] | None
+              ) -> DetectorDeclaration | NoDetector | SameAs | None:
     if data is None:
         return None
     if "none" in data:
         return NoDetector(str(data["none"]))
+    if "same_as" in data:
+        return SameAs(str(data["same_as"]), str(data.get("reason") or ""))
     return DetectorDeclaration.from_json(data)
 
 

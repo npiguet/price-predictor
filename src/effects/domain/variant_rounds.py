@@ -18,7 +18,6 @@ from effects.domain.coverage import CoverageUnit
 from effects.domain.provenance import ProvenanceKey, SourceTree
 from effects.domain.records import EffectRecord, acting_keys
 from effects.domain.rule_catalogue import (
-    DetectorDeclaration,
     MapVerdict,
     Polarity,
     RuleMapEntry,
@@ -152,12 +151,13 @@ def pair_records(counts: Mapping, rule: str, polarity: Polarity) -> int:
 
 
 def detected_rules(catalogue: ScenarioCatalogue) -> frozenset[str]:
-    """The rules some scenario declares a detector for (not ``none``)."""
-    return frozenset(
-        rule for scenario in catalogue.scenarios
-        if isinstance(scenario.detector, DetectorDeclaration)
-        for rule in scenario.rules
-    )
+    """The rules some scenario declares a detector for that can tag a record:
+    not ``none``, not ``same_as`` another scenario, and asking no record kind
+    for an event it never lists (``DetectorIndex.untaggable``), since no
+    variant could fill such a rule's counts."""
+    from effects.domain.rule_detectors import DetectorIndex
+
+    return DetectorIndex.of(catalogue).declared_rules
 
 
 def short_pairs(

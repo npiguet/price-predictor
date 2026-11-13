@@ -234,7 +234,7 @@ def directed_fork_properties(args: argparse.Namespace) -> dict[str, str]:
     }
 
 
-_DETECTOR_RANK = {"missing": 0, "none": 1, "declared": 2}
+_DETECTOR_RANK = {"missing": 0, "none": 1, "same_as": 2, "declared": 3}
 
 
 def rule_readiness(rules_dir: Path = DEFAULT_RULES_DIR) -> dict[str, tuple[str, bool]]:
@@ -243,7 +243,9 @@ def rule_readiness(rules_dir: Path = DEFAULT_RULES_DIR) -> dict[str, tuple[str, 
     operation.
 
     The detector state is ``"declared"`` when some scenario listing the rule
-    declares a detector family, else ``"none"`` when one declares
+    declares a detector family, else ``"same_as"`` when one declares the
+    same fact as another scenario (``{"same_as": id, "reason": ...}``, its
+    rule counted under that scenario's), else ``"none"`` when one declares
     ``{"none": reason}``, else ``"missing"``. The base variant, the first,
     makes nothing, and an unclassifiable variant's operation is an object.
 
@@ -261,6 +263,8 @@ def rule_readiness(rules_dir: Path = DEFAULT_RULES_DIR) -> dict[str, tuple[str, 
                 state = "missing"
             elif "none" in declaration:
                 state = "none"
+            elif "same_as" in declaration:
+                state = "same_as"
             else:
                 state = "declared"
             classified = any(
@@ -326,6 +330,12 @@ def directed_fork_error(
             return (
                 f"--directed-fork-rules: {rule} declares its detector none, so "
                 "no record of its fork could be tagged"
+            )
+        if detector == "same_as":
+            return (
+                f"--directed-fork-rules: {rule} states the same fact as another "
+                "scenario (same_as) and is counted under that scenario's rule, so "
+                "no record of its fork would be tagged for it: aim at that rule"
             )
         if not forkable:
             return (

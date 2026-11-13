@@ -81,12 +81,12 @@
       "detector": {
         "family": "outcome_event",
         "record_kind": "resolution",
-        "outcome": "A cascade trigger's resolution casts a card from exile without paying its mana cost.",
+        "outcome": "A cascade trigger's resolution casts a card it exiled: the card moves from exile to the stack within the resolution (cascade casts without paying, so no cost is read).",
         "near_miss": "A cascade trigger's resolution that casts nothing.",
         "params": {
-          "event": "spell_cast",
-          "without_paying": true,
+          "event": "zone_change",
           "from_zone": "exile",
+          "to_zone": "stack",
           "keyword": "cascade"
         },
         "needs": []

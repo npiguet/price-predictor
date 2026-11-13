@@ -643,7 +643,7 @@
         "near_miss": "A reveal-first set-state resolution that turns nothing face up, the revealed card itself lacking that characteristic.",
         "params": {
           "event": "face_change",
-          "to_state": "face_up",
+          "to_state": "front",
           "api": "SetState",
           "script_param": {
             "RevealFirst": "*"

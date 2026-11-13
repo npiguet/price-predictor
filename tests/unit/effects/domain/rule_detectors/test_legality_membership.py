@@ -140,6 +140,22 @@ class TestTheGen3Lists:
         assert found.polarity is Polarity.FIRES and found.condition == ("P1", "E2")
         assert found.outcome == ("P1",)
 
+    def test_an_anchored_attackers_record_judges_its_anchor_alone(self):
+        """P3b #11: each of a declaration's per-creature records lists the same
+        ``legal_attackers`` and ``forbidden``; judging the whole list on each
+        would count every creature once per creature."""
+        inside = {"list": "legal_attackers", "fires_when": "inside"}
+        legal, forbidden = self._anchor("E2"), self._anchor("E3")
+        found = FAMILY.match(legal, None, inside)
+        assert (found.polarity, found.condition, found.outcome) == (
+            Polarity.FIRES, ("E2",), ("E2",))
+        found = FAMILY.match(forbidden, None, inside)
+        assert (found.polarity, found.condition, found.outcome) == (
+            Polarity.DOES_NOT_FIRE, ("E3",), ("E3",))
+        outside = {"list": "legal_attackers", "responsible_static": True}
+        assert FAMILY.match(legal, None, outside).condition == ("E2",)
+        assert FAMILY.match(forbidden, None, outside).polarity is Polarity.FIRES
+
     def test_a_creature_that_may_attack_nothing_lists_no_inside(self):
         assert FAMILY.match(self._anchor("E3"), None,
                             {"list": "legal_defenders", "fires_when": "inside"}) is None

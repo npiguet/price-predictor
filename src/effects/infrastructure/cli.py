@@ -895,9 +895,15 @@ def _validate_corpus_parser(subparsers) -> None:
     )
     add_config_flags(parser, Thresholds)
     _add_cards_folder(parser)
+    parser.add_argument(
+        "--variant-scripts", type=_optional_path, default=DEFAULT_VARIANT_SCRIPTS,
+        help=("The perturbed-script tree whose keys a collect-variants corpus names; "
+              "a key in a tree not given fails the keyword-join check as unchecked "
+              "(default: %(default)s)"),
+    )
 
 
-@exits_with({_NO_SHARDS: 1, UnacceptedGenerationError: 1, **_SHARD_REFUSED})
+@exits_with({_NO_SHARDS: 1, UnacceptedGenerationError: 1})
 def run_validate_corpus(args: argparse.Namespace) -> int:
     """Every invariant prints its measurement whether it passed or not: the
     number is what tells an operator whether a fix worked or merely moved."""
@@ -926,7 +932,9 @@ def _sidecars_for_validation(args: argparse.Namespace):
     """
     from effects.infrastructure.converted_trees import SourceTrees
 
-    trees = SourceTrees.of(path for path in args.cards_folders if path.is_dir())
+    variants = getattr(args, "variant_scripts", None)
+    trees = SourceTrees.of((path for path in args.cards_folders if path.is_dir()),
+                           variants if variants is not None and variants.is_dir() else None)
     return trees.sidecar_cache() if trees.cards_folders else None
 
 

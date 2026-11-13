@@ -206,6 +206,57 @@ class GameBoundaries:
         )
 
 
+class KindPresence:
+    """V5 #19: whether a gen-3 window holds every record kind a game writes.
+    Each per-kind check reads an absent kind as holding, so a collector that
+    stopped writing one kind passed every check."""
+
+    #: Kinds every game writes: two cost-and-effect resolutions, a trigger
+    #: evaluated, a combat, sampled decision candidates, a declaration's
+    #: attackers and blockers, a draw step.
+    EXPECTED = ("resolution/activation", "resolution/resolution", "trigger", "combat",
+                "playability/decision", "playability/attackers", "playability/blockers",
+                "turn_action/draw")
+
+    def __init__(self) -> None:
+        self.labels: Counter[str] = Counter()
+        self.gen3 = 0
+
+    def add(self, record: EffectRecord) -> None:
+        if record.generation != 3:
+            return
+        self.gen3 += 1
+        label = _kind_label(record)
+        if record.kind is RecordKind.TURN_ACTION and record.subkind is not None:
+            label = f"{record.kind.value}/{record.subkind.value}"
+        self.labels[label] += 1
+
+    def findings(self, limits: Thresholds) -> Iterator[Finding]:
+        missing = [label for label in self.EXPECTED if not self.labels[label]]
+        judged = self.gen3 >= limits.min_presence_records
+        others = sorted(set(_all_labels()) - set(self.EXPECTED) - set(self.labels))
+        if not missing:
+            measured = f"every kind a game writes is present over {self.gen3} gen-3 records"
+        else:
+            measured = (f"{self.gen3} gen-3 records hold no {', '.join(missing)}"
+                        + ("" if judged else f" (under the {limits.min_presence_records} "
+                           "records this is judged at)"))
+        yield Finding(
+            name="every record kind a game writes is present",
+            ok=not (missing and judged),
+            measured=measured,
+            detail=(f"watched, absent: {', '.join(others)}",) if others else (),
+        )
+
+
+def _all_labels() -> tuple[str, ...]:
+    """Every kind label a gen-3 window can hold, turn actions by subkind."""
+    from effects.domain.records import TurnActionSubkind
+
+    labels = [label for label in _labels_of(*RecordKind) if not label.startswith("turn_action")]
+    return (*labels, *(f"{RecordKind.TURN_ACTION.value}/{s.value}" for s in TurnActionSubkind))
+
+
 class _LinkHalf(NamedTuple):
     """One record carrying a ``link_id``: which half it is, and what it acts through."""
 
@@ -244,13 +295,23 @@ class Links:
     def __init__(self) -> None:
         #: link_id -> every half carrying it.
         self.links: dict[str, list[_LinkHalf]] = defaultdict(list)
+        #: link_id -> ``(game_id, source)`` of each gen-3 cost half.
+        self.casts: dict[str, tuple[str, str | None]] = {}
+        #: ``(game_id, subject)`` of every ``spell_countered`` an effect half holds.
+        self.countered: set[tuple[str, str]] = set()
 
     def add(self, record: EffectRecord) -> None:
+        if record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION:
+            self.countered.update(
+                (record.game_id, subject) for event in record.payload.listed_events()
+                if event.type is EventType.SPELL_COUNTERED for subject in event.subjects)
         if record.link_id is not None:
+            at_cast = (isinstance(record.payload, ActivationPayload)
+                       and record.payload.outcome is None)
             self.links[record.link_id].append(_LinkHalf(
-                record.moment, tuple(record.ability or ()),
-                isinstance(record.payload, ActivationPayload) and record.payload.outcome is None,
-            ))
+                record.moment, tuple(record.ability or ()), at_cast))
+            if at_cast:
+                self.casts[record.link_id] = (record.game_id, record.state.refs.source)
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         unpaired = Share()
@@ -275,6 +336,26 @@ class Links:
                 for size, count in sorted(sizes.items())
             ),
         )
+        yield self._casts_met(limits)
+
+    def _casts_met(self, limits: Thresholds) -> Finding:
+        """V5 #18: a gen-3 cost half standing alone pairs (its item was
+        countered, or still on the stack at the game's end), so the pairing
+        check cannot see a collector writing no effect half at all. Judged
+        only at the degenerate end: at least ``min_cost_evidence`` cost halves
+        and not one met by its effect half; the share alone is watched."""
+        alone = [link for link in self.casts if len(self.links[link]) == 1]
+        countered = sum(1 for link in alone if self.casts[link] in self.countered)
+        met = len(self.casts) - len(alone)
+        degenerate = len(self.casts) >= limits.min_cost_evidence and met == 0
+        measured = (f"{met}/{len(self.casts)} gen-3 cost halves met by an effect half; "
+                    f"{len(alone)} alone, {countered} of them countered by a "
+                    "spell_countered in their game")
+        name = "every gen-3 cost half is met by its effect half unless its item never resolved"
+        if degenerate:
+            return Finding(name=name, ok=False, measured=measured + (
+                f" (none met over {len(self.casts)}: the collector writes no effect half)"))
+        return Finding.watch(name, measured)
 
 
 @dataclass(slots=True)

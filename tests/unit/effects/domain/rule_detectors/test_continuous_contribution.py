@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
+
 from effects.domain.records import ContinuousPayload
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors.acting_line import acting_line, source_entities
@@ -43,6 +45,25 @@ def test_a_pt_boost_fires_the_pt_field(by_kind):
     record = next(r for r in by_kind("continuous")
                   if any(c.pt_boost != (0, 0) for c in r.payload.contributions))
     assert FAMILY.match(record, None, {"field": "pt"}).polarity is Polarity.FIRES
+    assert FAMILY.match(record, None, {"field": "pt", "value": "+"}).polarity is Polarity.FIRES
+
+
+def test_a_pt_set_alone_fires_value_equals(by_kind):
+    """208.2a's ``=`` asks for a set base P/T: an anthem's boost is its near
+    miss, never its ``fires`` side (V5 #17)."""
+    record = next(r for r in by_kind("continuous")
+                  if any(c.pt_boost != (0, 0) for c in r.payload.contributions)
+                  and all(c.set_pt is None for c in r.payload.contributions))
+    assert FAMILY.match(record, None, {"field": "pt", "value": "="}).polarity is (
+        Polarity.DOES_NOT_FIRE)
+    contributions = tuple(replace(c, pt_boost=(0, 0), set_pt=(None, 3))
+                          for c in record.payload.contributions)
+    set_base = replace(record, payload=replace(record.payload, contributions=contributions))
+    assert FAMILY.match(set_base, None, {"field": "pt", "value": "="}).polarity is Polarity.FIRES
+    assert FAMILY.match(set_base, None, {"field": "pt", "value": "+"}).polarity is (
+        Polarity.DOES_NOT_FIRE)
+    with pytest.raises(ValueError):
+        FAMILY.match(record, None, {"field": "pt", "value": "flying"})
 
 
 def test_a_tokens_static_shows_by_the_tokens_kind(by_kind):

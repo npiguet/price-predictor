@@ -104,8 +104,17 @@ class RewriteEvent:
         return frozenset(field for name, field in SUBJECT_QUALIFIER_NEEDS.items()
                          if name in params)
 
+    def events(self, params: Mapping[str, Any]) -> frozenset[EventType]:
+        return frozenset({EventType(params["event"])})
+
+    def validate(self, params: Mapping[str, Any]) -> None:
+        event_filters(self.id, EventType(params["event"]), params, _OWN)
+        if "result" in params:
+            _results(params["result"])
+
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
+        self.validate(params)
         event = EventType(params["event"])
         filters = event_filters(self.id, event, params, _OWN)
         prevention = bool(params.get("prevention"))

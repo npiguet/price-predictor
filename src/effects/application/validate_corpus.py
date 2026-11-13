@@ -17,7 +17,7 @@ distinct provenance key, which is why ``--limit`` exists.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,6 +25,7 @@ from effects.application.corpus_validation.envelope_checks import (
     ActingLines,
     Duplicates,
     GameBoundaries,
+    KindPresence,
     Links,
     MirrorTurns,
     Modes,
@@ -43,7 +44,9 @@ from effects.application.corpus_validation.event_checks import (
     resolution_events,
 )
 from effects.application.corpus_validation.findings import (
+    EXAMPLES,
     Check,
+    Finding,
     Findings,
     Thresholds,
 )
@@ -74,16 +77,78 @@ def validate_directory(
 ) -> DirectoryReport:
     """Every invariant over the first ``limit`` records under ``root`` (0
     reading all), the shards listed once; raises ``NoShardsError`` on a
-    directory holding none."""
-    from effects.infrastructure.shard_io import read_window, require_shards
+    directory holding none.
+
+    A shard whose read a damaged member or an undecodable line ends is a
+    failed finding naming it and the line, its records before the damage
+    measured; the other shards are read on (V5 #20). What the read met
+    without stopping, values outside the wire's closed lists and damaged last
+    members (``shard_io.DecodeTally``), is reported as watched figures.
+    """
+    from effects.infrastructure.shard_io import require_shards, reset_decode_tally
 
     shards = require_shards(root)
     presence = FieldPresence()
+    damage = ShardDamage()
+    reset_decode_tally()
     findings = validate_corpus(
-        read_window(root, limit, presence.observe, shards=shards),
-        thresholds, sidecars, presence,
+        damage.read(root, shards, limit, presence.observe), thresholds, sidecars, presence,
     )
+    findings.extend(damage.findings())
     return DirectoryReport(len(shards), findings)
+
+
+class ShardDamage:
+    """The shards a damaged member or an undecodable line cut short, and the
+    read's decode tally, as findings."""
+
+    def __init__(self) -> None:
+        self.read_shards = 0
+        self.cut: list[str] = []
+
+    def read(self, root: Path, shards, limit: int, observe) -> Iterator[EffectRecord]:
+        """Every record of ``shards`` up to ``limit``, a shard's damage noted
+        and its read ended, the next shard read on."""
+        from effects.infrastructure.shard_io import SHARD_DAMAGE, read_window
+
+        seen = 0
+        for shard in shards:
+            self.read_shards += 1
+            try:
+                for record in read_window(root, limit - seen if limit else 0, observe,
+                                          shards=(shard,)):
+                    yield record
+                    seen += 1
+            except SHARD_DAMAGE as error:
+                self.cut.append(str(error))
+            if limit and seen >= limit:
+                return
+
+    def findings(self) -> list[Finding]:
+        from effects.infrastructure.shard_io import take_decode_tally
+
+        found = [Finding(
+            name="every shard line decodes",
+            ok=not self.cut,
+            measured=(f"{self.read_shards - len(self.cut)}/{self.read_shards} shards read "
+                      f"whole; {len(self.cut)} ended at a line or member that does not "
+                      "decode, their records before it measured"),
+            detail=tuple(self.cut[:EXAMPLES]),
+        )]
+        tally = take_decode_tally()
+        found.append(Finding.watch(
+            f"values outside the wire's closed lists: {sum(tally.off_list.values())}",
+            "read as written and counted (shard_io.DecodeTally)",
+            tuple(f"{member} {value}: {count}"
+                  for (member, value), count in sorted(tally.off_list.items())),
+        ))
+        found.append(Finding.watch(
+            f"shards whose damaged last gzip member ended the read: "
+            f"{len(tally.damaged_tails)}",
+            "their records before it read",
+            tuple(tally.damaged_tails[:EXAMPLES]),
+        ))
+        return found
 
 
 def validate_corpus(
@@ -117,6 +182,7 @@ def _checks(sidecars: SidecarLookup | None) -> tuple[Check, ...]:
     return (
         record_ids,
         GameBoundaries(),
+        KindPresence(),
         Links(),
         ActingLines(),
         KeyJoins(sidecars),

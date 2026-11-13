@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from effects.domain.event_schema import Event, EventType
-from effects.domain.records import ResolutionPayload
+from effects.domain.records import CollectionMode, ResolutionPayload
 from effects.domain.rule_catalogue import Polarity
 from effects.domain.rule_detectors.acting_line import acting_line, acting_root_params
 from effects.domain.rule_detectors.outcome_event import (
@@ -43,6 +43,31 @@ def test_the_same_resolution_edited_to_create_nothing_is_the_near_miss_of_its_ap
     found = FAMILY.match(edited, gen2_sidecars, {"event": "token_created", "api": api})
     assert found.polarity is Polarity.DOES_NOT_FIRE and not found.observed
     assert FAMILY.match(edited, gen2_sidecars, {"event": "token_created"}) is None
+
+
+@pytest.mark.parametrize("hookless", [
+    {"mode": CollectionMode.DEGRADED}, {"interventional": True, "fork": True}])
+def test_a_hookless_record_without_a_hook_event_shows_no_side(by_kind, gen2_sidecars, hookless):
+    """V5 #15: a degraded worker hears no hook, and a forced resolution none but
+    its start, modes, conditions and mana, so a missing ``token_created`` (an
+    outcome-hook event) may have happened: neither the near miss nor an
+    ``absent`` declaration's ``fires`` side is read; the event present still fires."""
+    record = _token_maker(by_kind, gen2_sidecars)
+    api = acting_api(record, gen2_sidecars)
+    emptied = replace(record, payload=ResolutionPayload(events=tuple(
+        e for e in record.payload.events if e.type is not EventType.TOKEN_CREATED)))
+    assert emptied.mode is CollectionMode.PATCHED
+    for params in ({"event": "token_created", "api": api},
+                   {"event": "token_created", "api": api, "absent": True}):
+        assert FAMILY.match(emptied, gen2_sidecars, params) is not None
+        assert FAMILY.match(replace(emptied, **hookless), gen2_sidecars, params) is None
+    found = FAMILY.match(replace(record, **hookless), gen2_sidecars,
+                         {"event": "token_created", "api": api})
+    assert found.polarity is Polarity.FIRES
+    # A bus event's absence stays readable on a hookless record.
+    bus = FAMILY.match(replace(emptied, **hookless), gen2_sidecars,
+                       {"event": "zone_change", "api": api, "to_zone": "exile"})
+    assert bus is not None
 
 
 def test_another_api_shows_nothing(by_kind, gen2_sidecars):

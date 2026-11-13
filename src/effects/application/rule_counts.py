@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -80,16 +81,25 @@ class RuleCounts:
     #: each one's message, its records before the damage counted.
     damaged: list = field(default_factory=list)
 
-    def to_json(self, none: dict[str, str]) -> dict:
+    def to_json(self, standing: CatalogueStanding | Mapping[str, str] | None = None) -> dict:
+        """The counts file; ``standing`` a bare ``rule -> reason`` map of the
+        ``none`` rules where a caller has nothing more of the catalogue."""
+        if not isinstance(standing, CatalogueStanding):
+            standing = CatalogueStanding(none=dict(standing or {}))
         by_rule: dict[str, dict[str, dict[str, int]]] = {}
         for (rule, polarity, source), n in sorted(self.counts.items()):
             by_rule.setdefault(rule, {}).setdefault(polarity, {})[source] = n
+        not_countable = self.not_countable - set(by_rule)
         return {
             "generation": self.generation,
             "records": self.records,
             "rules": by_rule,
-            "not_countable": sorted(self.not_countable - set(by_rule)),
-            "none": dict(sorted(none.items())),
+            "declared_zero": sorted(standing.declared - set(by_rule) - not_countable,
+                                    key=rule_order),
+            "not_countable": sorted(not_countable),
+            "none": dict(sorted(standing.none.items())),
+            "untaggable": dict(sorted(standing.untaggable.items())),
+            "same_as": dict(sorted(standing.same_as.items())),
             "review": [{"record_id": r, "scenario": s} for r, s in sorted(self.review)],
             "carriers": self._carriers_json(),
         }
@@ -119,6 +129,38 @@ class RuleCounts:
             ]
             for rule, by_file in sorted(files.items())
         }
+
+
+@dataclass(frozen=True)
+class CatalogueStanding:
+    """What the catalogue says of the rules no count can show.
+
+    ``declared``: the rules a taggable declaration speaks for, so one the
+    records never tag is listed as declared with zero records rather than
+    omitted (D3); ``none``: rules every scenario of which declares no
+    detector, with the first reason; ``untaggable``: per scenario, a
+    declaration asking its record kind for an event that kind never lists
+    (``DetectorIndex.untaggable``); ``same_as``: per scenario, the scenario
+    it states the same fact as, under whose rules its own are counted.
+    """
+
+    declared: frozenset[str] = frozenset()
+    none: dict[str, str] = field(default_factory=dict)
+    untaggable: dict[str, dict] = field(default_factory=dict)
+    same_as: dict[str, dict] = field(default_factory=dict)
+
+    @classmethod
+    def of(cls, catalogue) -> CatalogueStanding:
+        index = DetectorIndex.of(catalogue)
+        return cls(
+            declared=index.declared_rules,
+            none=none_rules(catalogue),
+            untaggable={sid: {"rules": list(index.untaggable_rules[sid]), "reason": reason}
+                        for sid, reason in index.untaggable.items()},
+            same_as={sid: {"rules": list(d.rules), "same_as": d.same_as,
+                           "counted_under": list(d.counted_under)}
+                     for sid, d in index.duplicates.items()},
+        )
 
 
 @dataclass(frozen=True)
@@ -241,7 +283,8 @@ def _count_records(records, out: RuleCounts, index, sidecars, keywords,
 
 
 def none_rules(catalogue) -> dict[str, str]:
-    """Rules whose every scenario declares no detector, with the first reason given."""
+    """Rules whose every scenario declares no detector, with the first reason
+    given; a ``same_as`` scenario declares its rule's detector elsewhere."""
     reasons: dict[str, str] = {}
     declared: set[str] = set()
     for scenario in catalogue.scenarios:
@@ -262,7 +305,7 @@ class RuleCountsConfig:
     workers: int | None = None
 
 
-def count(config: RuleCountsConfig) -> tuple[RuleCounts, dict[str, str]]:
+def count(config: RuleCountsConfig) -> tuple[RuleCounts, CatalogueStanding]:
     """Count every shard under ``config.records_dir``; refuse a mix of generations."""
     from effects.infrastructure.rules_catalogue_io import load_scenarios
     from effects.infrastructure.shard_io import NoShardsError, iter_shards, require_generation
@@ -279,7 +322,7 @@ def count(config: RuleCountsConfig) -> tuple[RuleCounts, dict[str, str]]:
         progress_every=50, context=CountContext(config.rules_dir, config.sidecar_roots),
     ):
         merge_into(total, found)
-    return total, none_rules(load_scenarios(config.rules_dir))
+    return total, CatalogueStanding.of(load_scenarios(config.rules_dir))
 
 
 def unit_of(rule: str) -> str:
@@ -299,12 +342,23 @@ def report_lines(counts: dict) -> list[str]:
     lines = [f"{'rule':12s} {'fires':>20s} {'does_not_fire':>20s}   "
              f"(each {' / '.join(str(s) for s in RuleSource)})"]
     unit = None
-    for rule, sides in sorted(counts["rules"].items(), key=lambda item: _rule_key(item[0])):
+    for rule, sides in sorted(counts["rules"].items(), key=lambda item: rule_order(item[0])):
         if unit_of(rule) != unit:
             unit = unit_of(rule)
             lines.append(f"-- {unit}")
         lines.append(f"{rule:12s} {split(sides, Polarity.FIRES):>20s} "
                      f"{split(sides, Polarity.DOES_NOT_FIRE):>20s}")
+    zero = counts.get("declared_zero", [])
+    lines.append(f"rules declared with zero records: {len(zero)}")
+    lines += [f"  {rule}" for rule in zero]
+    untaggable = counts.get("untaggable", {})
+    lines.append(f"scenarios no record can show (untaggable): {len(untaggable)}")
+    lines += [f"  {sid} ({', '.join(found['rules'])}): {found['reason']}"
+              for sid, found in untaggable.items()]
+    same_as = counts.get("same_as", {})
+    lines.append(f"scenarios counted under another (same_as): {len(same_as)}")
+    lines += [f"  {sid} ({', '.join(found['rules'])}) -> {found['same_as']} "
+              f"({', '.join(found['counted_under'])})" for sid, found in same_as.items()]
     lines.append(f"rules declared none: {len(counts['none'])}")
     lines += [f"  {rule}: {reason}" for rule, reason in counts["none"].items()]
     lines.append(f"rules not countable on these records: {len(counts['not_countable'])}")
@@ -313,7 +367,7 @@ def report_lines(counts: dict) -> list[str]:
     return lines
 
 
-def _rule_key(rule: str):
+def rule_order(rule: str):
     import re
 
     m = re.match(r"(\d+)\.(\d+)([a-z]*)", rule)
@@ -321,8 +375,8 @@ def _rule_key(rule: str):
 
 
 def run(config: RuleCountsConfig) -> int:
-    counts, none = count(config)
-    document = counts.to_json(none)
+    counts, standing = count(config)
+    document = counts.to_json(standing)
     config.output.parent.mkdir(parents=True, exist_ok=True)
     config.output.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
     for line in report_lines(document):

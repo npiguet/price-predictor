@@ -421,6 +421,12 @@ def validate_gen3_fields(s, families):
     elif "none" in detector:
         if len(detector) != 1 or not str(detector["none"]).strip():
             errs.append(f"{sid}: a none detector carries its reason and nothing else")
+    elif "same_as" in detector:
+        if set(detector) != {"same_as", "reason"} or not str(detector["reason"]).strip():
+            errs.append(f"{sid}: a same_as detector names its scenario and the fact the two "
+                        "share (reason), and nothing else")
+        elif detector["same_as"] == sid:
+            errs.append(f"{sid}: a scenario is no duplicate of itself")
     else:
         family = detector.get("family")
         if family not in families:
@@ -707,7 +713,7 @@ def turn_action_rules(by_rule):
     out = set()
     for rule, scenarios in by_rule.items():
         kinds = [s["detector"].get("record_kind") for s in scenarios
-                 if isinstance(s.get("detector"), dict) and "none" not in s["detector"]]
+                 if isinstance(s.get("detector"), dict) and "family" in s["detector"]]
         if kinds and all(kind == RecordKind.TURN_ACTION for kind in kinds):
             out.add(rule)
     return out

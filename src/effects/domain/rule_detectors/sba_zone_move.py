@@ -16,7 +16,9 @@ shows (the snapshot before the resolution, plus the resolution's own events):
                        is 0 or less; the near miss is one it lowered that
                        keeps 1 or more
 ``lethal_damage``      704.5g: a creature the resolution dealt damage to, by
-                       whether the damage marked reaches its toughness
+                       whether the damage marked reaches its toughness; damage
+                       from a wither or infect source marks none (-1/-1
+                       counters, 704.5f's) and is left out
 ``deathtouch_damage``  704.5h: a creature dealt non-lethal damage by a source
                        with deathtouch; the near miss is non-lethal damage
                        from a source without it
@@ -25,7 +27,9 @@ shows (the snapshot before the resolution, plus the resolution's own events):
 ``defense_zero``       704.5v: a battle the resolution removed defense
                        counters from, by whether none remain
 ``legend_rule``        704.5j: two or more legendary permanents with one name
-                       under one controller; the near miss is a legendary
+                       under one controller, one of them touched by the
+                       record (a pair already standing, as under Mirror
+                       Gallery, shows no check); the near miss is a legendary
                        permanent entering with no such twin
 ``world_rule``         704.5k: two or more world permanents; the near miss is
                        a world permanent entering alone
@@ -214,15 +218,24 @@ def _protection_side(aura: EntityState, protections: list[str]) -> bool | None:
     return found
 
 
-def _deathtouched(record, touched, t: _Touched, keywords) -> bool:
-    """Whether a source of the damage the creature was dealt has deathtouch,
-    printed, granted on the board, or granted by the record itself."""
+def _source_has(record, touched, t: _Touched, keywords, wanted: frozenset[str]) -> bool:
+    """Whether a source of the damage the creature was dealt has one of
+    ``wanted``, printed, granted on the board, or granted by the record itself."""
     for source in t.damage_sources:
         entity = record.state.entity(source)
-        if "deathtouch" in touched.get(source, _Touched()).gained or (
-                entity is not None and "deathtouch" in keywords(entity)):
+        if wanted & touched.get(source, _Touched()).gained or (
+                entity is not None and wanted & keywords(entity)):
             return True
     return False
+
+
+def _deathtouched(record, touched, t: _Touched, keywords) -> bool:
+    return _source_has(record, touched, t, keywords, frozenset({"deathtouch"}))
+
+
+#: Damage from a source with one of these is dealt as -1/-1 counters and
+#: marks none (702.80a, 702.90b).
+_COUNTER_DAMAGE = frozenset({"wither", "infect"})
 
 
 def _zero_toughness_on_entry(record, touched, entity_id) -> bool:
@@ -254,6 +267,8 @@ def _creature_checks(record, touched, check, keywords) -> tuple[list, list, list
         elif not t.damage_dealt or "indestructible" in keywords(entity):
             continue
         elif check == "lethal_damage":
+            if _source_has(record, touched, t, keywords, _COUNTER_DAMAGE):
+                continue  # -1/-1 counters, no marked damage: 704.5f's
             side = damage_lethal(toughness, entity.damage, t.damage_dealt)
             if not side and _deathtouched(record, touched, t, keywords):
                 continue  # 704.5h's, not a near miss of 704.5g
@@ -303,6 +318,10 @@ def _uniqueness_checks(record, touched, check) -> tuple[list, list, list]:
     for members in groups.values():
         died = [m for m in members if touched.get(m, _Touched()).died]
         if len(members) >= 2:
+            if not any(m in touched for m in members):
+                # A pair the record's changes did not make (Mirror Gallery,
+                # or one the check already let stand) shows no check.
+                continue
             fires += members
             observed += died
         elif any(touched.get(m, _Touched()).entered for m in members):
@@ -348,11 +367,15 @@ class SbaZoneMove:
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset()
 
-    def match(self, record: EffectRecord, lines: SidecarLookup | None,
-              params: Mapping[str, Any]) -> FamilyMatch | None:
+    def validate(self, params: Mapping[str, Any]) -> None:
         check = params.get("check")
         if check not in CHECKS:
             raise ValueError(f"sba_zone_move: unknown check {check!r}; known: {sorted(CHECKS)}")
+
+    def match(self, record: EffectRecord, lines: SidecarLookup | None,
+              params: Mapping[str, Any]) -> FamilyMatch | None:
+        self.validate(params)
+        check = params.get("check")
         if (record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION
                 or is_rescued_orphans(record) or game_ends(record)):
             return None

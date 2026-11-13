@@ -83,11 +83,15 @@ class SbaGameLoss:
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset()
 
-    def match(self, record: EffectRecord, lines: SidecarLookup | None,
-              params: Mapping[str, Any]) -> FamilyMatch | None:
+    def validate(self, params: Mapping[str, Any]) -> None:
         check = params.get("check")
         if check not in CHECKS:
             raise ValueError(f"sba_game_loss: unknown check {check!r}; known: {sorted(CHECKS)}")
+
+    def match(self, record: EffectRecord, lines: SidecarLookup | None,
+              params: Mapping[str, Any]) -> FamilyMatch | None:
+        self.validate(params)
+        check = params.get("check")
         effect_half = record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION
         if not effect_half and record.kind is not RecordKind.COMBAT:
             return None

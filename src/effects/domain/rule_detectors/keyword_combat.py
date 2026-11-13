@@ -52,12 +52,16 @@ class KeywordCombat:
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset()
 
-    def match(self, record: EffectRecord, lines: SidecarLookup | None,
-              params: Mapping[str, Any]) -> FamilyMatch | None:
+    def validate(self, params: Mapping[str, Any]) -> None:
         keyword = params.get("keyword")
         if keyword not in _ROWS:
             raise ValueError(
                 f"keyword_combat: {keyword!r} is not a damage-step keyword; known: {sorted(_ROWS)}")
+
+    def match(self, record: EffectRecord, lines: SidecarLookup | None,
+              params: Mapping[str, Any]) -> FamilyMatch | None:
+        self.validate(params)
+        keyword = params.get("keyword")
         if record.kind is not RecordKind.COMBAT:
             return None
         row = _ROWS[keyword]

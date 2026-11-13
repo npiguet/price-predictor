@@ -128,6 +128,7 @@ from effects.domain.rule_detectors.acting_line import (
     source_ids,
     source_is_token_of_kind,
 )
+from effects.domain.rule_detectors.emittable_events import absence_readable
 from effects.domain.rule_detectors.entity_facts import (
     has_designation,
     has_face_state,
@@ -139,7 +140,8 @@ from effects.domain.script_text import params as params_of
 from effects.domain.state_snapshot import EntityState, StateSnapshot, normalize_counter_type
 
 __all__ = ["EVENT_FILTERS", "FAMILY", "SUBJECT_QUALIFIERS", "SUBJECT_QUALIFIER_NEEDS",
-           "acting_api", "event_filters", "source_is_token_of_kind", "subject_verdict",
+           "acting_api", "declared_events", "event_filters", "source_is_token_of_kind",
+           "subject_verdict",
            "token_kind_of"]
 
 #: Event parameters a declaration may not filter on: they name a card or an
@@ -200,6 +202,9 @@ SUBJECT_QUALIFIER_NEEDS = {
     "subject_designation": "designations",
 }
 _RECORD_QUALIFIERS = frozenset({"with_event", "without_event"})
+#: The parameters that read the acting line or its source.
+_LINE_PARAMS = frozenset({"api", "keyword", "source_keyword", "script_param", "chain_param",
+                          "source_token_kind"})
 _QUALIFIERS = frozenset(SUBJECT_QUALIFIERS) | _RECORD_QUALIFIERS
 _OWN = frozenset({"event", "min_count", "api", "api_in_chain", "keyword", "source_keyword",
                   "script_param", "chain_param", "absent", "token_kind",
@@ -255,6 +260,15 @@ def _event_spec(spec: Any) -> tuple[EventType, dict[str, Any]]:
         event = EventType(spec["event"])
         return event, event_filters("outcome_event", event, spec, frozenset({"event"}))
     return EventType(spec), {}
+
+
+def declared_events(params: Mapping[str, Any]) -> frozenset[EventType]:
+    """Every event type a declaration reads: its ``event`` and the types its
+    ``with_event``/``without_event`` name."""
+    found = {EventType(params["event"])}
+    for name in _RECORD_QUALIFIERS & set(params):
+        found.add(_event_spec(params[name])[0])
+    return frozenset(found)
 
 
 def _holds(listed: tuple[Event, ...], spec: Any) -> bool:
@@ -313,6 +327,13 @@ class OutcomeEvent:
         return frozenset(field for name, field in SUBJECT_QUALIFIER_NEEDS.items()
                          if name in params)
 
+    def events(self, params: Mapping[str, Any]) -> frozenset[EventType]:
+        return declared_events(params)
+
+    def reads_acting_line(self, params: Mapping[str, Any]) -> bool:
+        """Whether the declaration only speaks for records acting through a line."""
+        return bool(_LINE_PARAMS & set(params))
+
     def _filters(self, event: EventType, params: Mapping[str, Any]) -> dict[str, Any]:
         filters = event_filters(self.id, event, params, _OWN)
         if "token_kind" in params and event is not EventType.TOKEN_CREATED:
@@ -321,8 +342,21 @@ class OutcomeEvent:
             _event_spec(params[name])  # an unknown type or filter raises
         return filters
 
+    def validate(self, params: Mapping[str, Any]) -> None:
+        self._filters(EventType(params["event"]), params)
+        scoped = any(params.get(name) is not None
+                     for name in ("api", "keyword", "source_keyword"))
+        absent = bool(params.get("absent"))
+        if absent and not scoped:
+            raise ValueError("outcome_event: absent needs api, keyword or source_keyword, "
+                             "or every resolution fires")
+        if absent and _QUALIFIERS & set(params):
+            raise ValueError("outcome_event: a qualifier picks among events that happened, "
+                             "which absent says did not")
+
     def match(self, record: EffectRecord, lines: SidecarLookup | None,
               params: Mapping[str, Any]) -> FamilyMatch | None:
+        self.validate(params)
         event = EventType(params["event"])
         filters = self._filters(event, params)
         api, keyword = params.get("api"), params.get("keyword")
@@ -330,12 +364,6 @@ class OutcomeEvent:
         scoped = api is not None or keyword is not None or source_keyword is not None
         absent = bool(params.get("absent"))
         qualified = bool(_QUALIFIERS & set(params))
-        if absent and not scoped:
-            raise ValueError("outcome_event: absent needs api, keyword or source_keyword, "
-                             "or every resolution fires")
-        if absent and qualified:
-            raise ValueError("outcome_event: a qualifier picks among events that happened, "
-                             "which absent says did not")
         if record.kind not in _EVENT_KINDS or (
                 record.kind is RecordKind.RESOLUTION and record.moment is not Moment.RESOLUTION):
             return None
@@ -363,8 +391,11 @@ class OutcomeEvent:
             if e.type is event
             and meets_filters(e, filters)
             and (token_kind is None or token_kind.lower() in token_kind_of(e))]
+        # A hook-derived event a hookless record lacks may have happened: no
+        # side that reads its absence (V5 #15).
+        absence = all(absence_readable(record, e) for e in declared_events(params))
         if qualified:
-            return self._qualified(record, params, wanted, listed, scoped)
+            return self._qualified(record, params, wanted, listed, scoped, absence)
         happened = len(wanted) >= int(params.get("min_count", 1))
         condition = _condition(record)
         outcome = _outcome(record, wanted)
@@ -372,16 +403,17 @@ class OutcomeEvent:
             # The rule's outcome is the event's absence, so that is what is observed.
             if happened:
                 return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition, outcome)
-            return FamilyMatch(Polarity.FIRES, True, condition)
+            return FamilyMatch(Polarity.FIRES, True, condition) if absence else None
         if happened:
             return FamilyMatch(Polarity.FIRES, True, condition, outcome)
-        if not scoped:
+        if not scoped or not absence:
             return None
         return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition)
 
     @staticmethod
     def _qualified(record: EffectRecord, params: Mapping[str, Any], wanted: list[Event],
-                   listed: tuple[Event, ...], scoped: bool) -> FamilyMatch | None:
+                   listed: tuple[Event, ...], scoped: bool,
+                   absence: bool = True) -> FamilyMatch | None:
         """The rule's side among the events that happened, by its qualifiers."""
         record_ok = all((
             "with_event" not in params or _holds(listed, params["with_event"]),
@@ -393,6 +425,8 @@ class OutcomeEvent:
         condition = _condition(record)
         if len(meeting) >= int(params.get("min_count", 1)):
             return FamilyMatch(Polarity.FIRES, True, condition, _outcome(record, meeting))
+        if not absence:
+            return None
         if read:
             return FamilyMatch(Polarity.DOES_NOT_FIRE, False, condition,
                                _outcome(record, [e for e, _ in read if e not in meeting]))

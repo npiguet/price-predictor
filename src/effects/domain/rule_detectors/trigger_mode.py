@@ -117,8 +117,7 @@ class TriggerMode:
     def needs(self, params: Mapping[str, Any]) -> frozenset[str]:
         return frozenset({"designations"}) if "source_designation" in params else frozenset()
 
-    def match(self, record: EffectRecord, lines: SidecarLookup | None,
-              params: Mapping[str, Any]) -> FamilyMatch | None:
+    def validate(self, params: Mapping[str, Any]) -> None:
         keyword = params.get("keyword")
         spawned_by, step = params.get("spawned_by"), params.get("step")
         if keyword is not None and set(params) & _SEGMENT_PARAMS:
@@ -134,6 +133,12 @@ class TriggerMode:
             raise ValueError(f"trigger_mode: step {step!r} is none of {PHASE_ORDER}")
         if "named" in str(params.get("selector", "")).lower():
             raise ValueError("trigger_mode: a selector naming a card fixes one scenario's board")
+
+    def match(self, record: EffectRecord, lines: SidecarLookup | None,
+              params: Mapping[str, Any]) -> FamilyMatch | None:
+        self.validate(params)
+        keyword = params.get("keyword")
+        spawned_by, step = params.get("spawned_by"), params.get("step")
         if record.kind is not RecordKind.TRIGGER:
             return None
         if step is not None and (record.state.global_.phase or "").lower() != step:
