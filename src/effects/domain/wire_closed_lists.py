@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 
-from effects.domain.effect_head_input import PHASE_ALIASES, PHASES
 from effects.domain.event_schema import EventType
 from effects.domain.relation_types import FAMILIES
 from effects.domain.state_snapshot import (
@@ -23,19 +22,33 @@ from effects.domain.state_snapshot import (
     EntityRole,
     FaceState,
     LineKind,
-    Zone,
 )
 
 #: The spelling of a member a record that should carry it leaves out.
 ABSENT = "<absent>"
 
-_ZONES = frozenset(Zone)
-#: An entity's zone: a zone, or ``merged`` for a mutated permanent's merged
-#: card (role ``mutate_component``), which no zone slot names.
-_ENTITY_ZONES = _ZONES | {"merged"}
-#: A ``zone_change``'s ends: a zone, ``none`` (to no zone at all) or null.
-_MOVE_ENDS = _ZONES | {"none", None}
-_PHASES = frozenset(PHASES) | frozenset(PHASE_ALIASES)
+#: Every zone the collector can name: Forge's ``ZoneType`` constants, as
+#: ``CardSpelling.zoneName`` lower-cases them (``merged`` is a mutated
+#: permanent's merged card, ``none`` a move to no zone at all). Pinned to
+#: ``ZoneType.java`` by a test.
+FORGE_ZONES: tuple[str, ...] = (
+    "hand", "library", "graveyard", "battlefield", "exile", "flashback", "command",
+    "stack", "sideboard", "ante", "merged", "schemedeck", "planardeck",
+    "attractiondeck", "junkyard", "contraptiondeck", "subgame", "extrahand", "none",
+)
+#: Every phase the snapshot can name: Forge's ``PhaseType`` constants,
+#: lower-cased (``SnapshotBuilder.phaseName``). Pinned to ``PhaseType.java``.
+FORGE_PHASES: tuple[str, ...] = (
+    "untap", "upkeep", "draw", "main1", "combat_begin", "combat_declare_attackers",
+    "combat_declare_blockers", "combat_first_strike_damage", "combat_damage",
+    "combat_end", "main2", "end_of_turn", "cleanup",
+)
+
+#: An entity's zone and a ``zone_change``'s ends: a zone, or null for a
+#: last-known card no zone holds and a move whose end Forge does not name.
+_ZONES = frozenset(FORGE_ZONES) | {None}
+#: The phase, null where the game has none yet.
+_PHASES = frozenset(FORGE_PHASES) | {None}
 _SUBSTEPS = frozenset(CombatSubstep) | {None}
 _DAY_NIGHT = frozenset(DayNight) | {None}
 _DURATIONS = frozenset(EffectDuration)
@@ -90,7 +103,7 @@ def _global(block: Mapping) -> Iterator[tuple[str, object]]:
 
 
 def _entity(entity: Mapping) -> Iterator[tuple[str, object]]:
-    if _outside(entity.get("zone"), _ENTITY_ZONES):
+    if _outside(entity.get("zone"), _ZONES):
         yield "entity.zone", entity.get("zone")
     if _outside(entity.get("face_state"), _FACE_STATES):
         yield "entity.face_state", entity.get("face_state")
@@ -119,5 +132,5 @@ def _event(event: Mapping) -> Iterator[tuple[str, object]]:
     if event.get("type") == EventType.ZONE_CHANGE:
         params = event.get("params") or {}
         for end in ("from_zone", "to_zone"):
-            if _outside(params.get(end), _MOVE_ENDS):
+            if _outside(params.get(end), _ZONES):
                 yield f"zone_change.{end}", params.get(end)
