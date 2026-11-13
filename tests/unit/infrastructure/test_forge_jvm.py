@@ -20,14 +20,14 @@ from price_predictor.infrastructure.forge_jvm import (
     parse_java_feature_version,
     resolve_connector_jar,
 )
+from price_predictor.infrastructure.forge_jvm import (
+    clear_stale_staging as real_clear_stale_staging,
+)
 
 # Bound at import, before the unit-test conftest swaps the module attribute
 # for a stub, so the probe itself can still be exercised here.
 from price_predictor.infrastructure.forge_jvm import (
     java_feature_version as real_java_feature_version,
-)
-from price_predictor.infrastructure.forge_jvm import (
-    clear_stale_staging as real_clear_stale_staging,
 )
 from price_predictor.infrastructure.forge_jvm import (
     kill_process_tree as real_kill_process_tree,
