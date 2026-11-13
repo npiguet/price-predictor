@@ -404,17 +404,19 @@ public final class RandomSeatController extends PlayerControllerAi {
                 return false;
             }
             sa.setChosenList(modes);
-            for (AbilitySub mode : modes) {
+        }
+        // X before the targets (601.2b, 601.2c): a divided amount of X, and
+        // a bound across the targets that reads X (MaxTotalTargetCMC), are
+        // read as the targets are drawn.
+        choices.announceX(sa, player, 0);
+        if (sa.getChosenList() != null) {
+            for (AbilitySub mode : sa.getChosenList()) {
                 if (!choices.chooseTargets(mode)) {
                     return false;
                 }
             }
         }
-        if (!choices.chooseTargets(sa)) {
-            return false;
-        }
-        choices.announceX(sa, player, 0);
-        return true;
+        return choices.chooseTargets(sa);
     }
 
     /**

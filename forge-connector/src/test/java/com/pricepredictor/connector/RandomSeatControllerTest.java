@@ -168,6 +168,87 @@ class RandomSeatControllerTest {
     }
 
     /**
+     * The seat never strands a card in the stack zone (V3 #7): Fireball with
+     * two Mountains against three creatures costs {1} more per target past
+     * the first, which the rules-only affordability does not see. The AI's
+     * payment is asked before the card moves, so a draw it cannot pay is
+     * redrawn, never cast and left in the stack zone with an empty stack.
+     */
+    @Test
+    void theSeatNeverStrandsACardInTheStackZone() {
+        for (long seed = 1; seed <= 6; seed++) {
+            Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, seed);
+            Player a = game.getPlayers().get(0);
+            Player b = game.getPlayers().get(1);
+            TestBoard.inPlay(game, a, "Mountain");
+            TestBoard.inPlay(game, a, "Mountain");
+            for (String name : List.of("Grizzly Bears", "Hill Giant", "Gray Ogre")) {
+                TestBoard.inPlay(game, b, name);
+            }
+            TestBoard.inHand(game, a, "Fireball");
+            RandomSeatController seat = seatOf(game);
+            seat.attach(game, null, null);
+            java.io.PrintStream out = System.out;
+            java.io.ByteArrayOutputStream printed = new java.io.ByteArrayOutputStream();
+
+            List<SpellAbility> chosen = seat.chooseSpellAbilityToPlay();
+            System.setOut(new java.io.PrintStream(printed, true));
+            try {
+                if (chosen != null) {
+                    seat.playChosenSpellAbility(chosen.get(0));
+                }
+            } finally {
+                System.setOut(out);
+            }
+
+            assertFalse(printed.toString().contains("random seat failed to play"),
+                    "seed " + seed + ": " + printed);
+            assertTrue(!game.getStack().isEmpty() || game.getCardsIn(ZoneType.Stack).isEmpty(),
+                    "seed " + seed + ": a card in the stack zone with an empty stack");
+        }
+    }
+
+    /**
+     * A divided X the seat draws is announced before the targets (601.2b,
+     * 601.2c): Rolling Thunder deals exactly the X paid, every target at
+     * least one, where targets drawn before X shared an amount of zero.
+     */
+    @Test
+    void aDividedXTheSeatDrewDealsItsX() {
+        java.util.Set<Integer> xs = new java.util.TreeSet<>();
+        for (long seed = 1; seed <= 10; seed++) {
+            Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, seed);
+            Player a = game.getPlayers().get(0);
+            Player b = game.getPlayers().get(1);
+            for (int i = 0; i < 7; i++) {
+                TestBoard.inPlay(game, a, "Mountain");
+            }
+            TestBoard.inPlay(game, b, "Darksteel Colossus");
+            TestBoard.inHand(game, a, "Rolling Thunder");
+            RandomSeatController seat = seatOf(game);
+            seat.attach(game, null, null);
+            int life = a.getLife() + b.getLife();
+
+            SpellAbility thunder = seat.chooseSpellAbilityToPlay().get(0);
+            assertTrue(seat.playChosenSpellAbility(thunder), "seed " + seed);
+            int x = thunder.getXManaCostPaid() == null ? 0 : thunder.getXManaCostPaid();
+            for (Object target : thunder.getTargets().getTargetEntities()) {
+                assertTrue(thunder.getDividedValue((forge.game.GameObject) target) >= 1,
+                        "seed " + seed + ": every target takes at least one");
+            }
+            game.getStack().resolveStack();
+
+            int dealt = life - a.getLife() - b.getLife();
+            for (Card card : b.getCardsIn(ZoneType.Battlefield)) {
+                dealt += card.getDamage();
+            }
+            assertEquals(x, dealt, "seed " + seed + ": the damage dealt is the X paid");
+            xs.add(x);
+        }
+        assertTrue(xs.stream().anyMatch(x -> x > 0), "some draw paid an X: " + xs);
+    }
+
+    /**
      * Scenario 18: holding a playable land with the drop unused, the seat
      * makes no draw and the AI decides; once the drop is used, it draws.
      */

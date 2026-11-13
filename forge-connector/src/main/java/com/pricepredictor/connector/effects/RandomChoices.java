@@ -208,6 +208,16 @@ public final class RandomChoices {
         List<GameEntity> candidates = clause.getTargetRestrictions().getAllCandidates(clause);
         int min = Math.max(0, clause.getMinTargets());
         int max = Math.min(clause.getMaxTargets(), candidates.size());
+        if (clause.isDividedAsYouChoose()) {
+            // Each target takes at least one of the amount (601.2d): no more
+            // targets than the amount, which an announced X decides, and at
+            // least one target for an amount to divide at all.
+            int amount = dividedAmount(clause);
+            max = Math.min(max, amount);
+            if (amount > 0) {
+                min = Math.max(min, 1);
+            }
+        }
         if (max < min) {
             return false;
         }
@@ -229,6 +239,16 @@ public final class RandomChoices {
         return true;
     }
 
+    /** The amount a divided clause splits, with its X as announced; never below zero. */
+    private static int dividedAmount(SpellAbility clause) {
+        Integer amount = clause.getDividedValue();
+        if (amount == null) {
+            amount = AbilityUtils.calculateAmount(
+                    clause.getHostCard(), clause.getParam("DividedAsYouChoose"), clause);
+        }
+        return Math.max(0, amount);
+    }
+
     /**
      * Split a divided clause's amount among its targets at random: each
      * target one while the amount lasts, the rest one at a time to a
@@ -240,13 +260,8 @@ public final class RandomChoices {
         if (targets.isEmpty()) {
             return;
         }
-        Integer amount = clause.getDividedValue();
-        if (amount == null) {
-            amount = AbilityUtils.calculateAmount(
-                    clause.getHostCard(), clause.getParam("DividedAsYouChoose"), clause);
-        }
         int[] shares = new int[targets.size()];
-        int left = Math.max(0, amount);
+        int left = dividedAmount(clause);
         for (int i = 0; i < shares.length && left > 0; i++, left--) {
             shares[i] = 1;
         }

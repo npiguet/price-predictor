@@ -178,6 +178,40 @@ class RandomChoicesTest {
     }
 
     /**
+     * A fixed amount smaller than the targets the clause allows is drawn
+     * over no more targets than the amount, each taking at least one
+     * (601.2d): 2 damage over up to four targets.
+     */
+    @Test
+    void aDividedAmountSmallerThanTheMaximumLimitsTheTargets() {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player other = game.getPlayers().get(1);
+        for (String name : List.of("Grizzly Bears", "Hill Giant", "Gray Ogre", "Craw Wurm")) {
+            TestBoard.inPlay(game, other, name);
+        }
+        SpellAbility split = AbilityFactory.getAbility(
+                "SP$ DealDamage | ValidTgts$ Creature | NumDmg$ 2 | TargetMin$ 1 | TargetMax$ 4"
+                        + " | DividedAsYouChoose$ 2",
+                TestBoard.card(game, caster, "Forked Bolt"));
+        split.setActivatingPlayer(caster);
+
+        Set<Integer> counts = new TreeSet<>();
+        for (int seed = 0; seed < SEEDS; seed++) {
+            assertTrue(drawsFor(seed).chooseTargets(split));
+            int total = 0;
+            for (Object target : split.getTargets().getTargetEntities()) {
+                int share = split.getDividedValue((forge.game.GameObject) target);
+                assertTrue(share >= 1, "seed " + seed + ": every target takes one");
+                total += share;
+            }
+            assertEquals(2, total);
+            counts.add(split.getTargets().size());
+        }
+        assertEquals(Set.of(1, 2), counts);
+    }
+
+    /**
      * A constraint across a clause's targets is honoured (V3 #4): Cannibalize
      * takes two creatures one player controls, never one of each player's.
      */
