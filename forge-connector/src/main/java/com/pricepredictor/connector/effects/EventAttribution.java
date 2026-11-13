@@ -321,13 +321,16 @@ final class EventAttribution {
      * shared damage map when its last clause resolves (Arc Trail's 2 to one
      * target and 1 to another), so the resolving clause is the last link for
      * every damage. A damage whose subject that clause does not target but an
-     * earlier link does is that link's.
+     * earlier link does is that link's, and so is every other event the map's
+     * application publishes at a {@code DamageResolve} clause (the life a
+     * damaged player loses, a wither's counters).
      *
      * @param byPointer the attribution the resolving clause gives
      */
     static String damageLink(EffectEvent event, Object pointer, String byPointer) {
-        if (event.type() != EventType.DAMAGE_DEALT || event.subjects().isEmpty()
-                || !(pointer instanceof SpellAbility clause)) {
+        if (event.subjects().isEmpty() || !(pointer instanceof SpellAbility clause)
+                || event.type() != EventType.DAMAGE_DEALT
+                        && clause.getApi() != forge.game.ability.ApiType.DamageResolve) {
             return byPointer;
         }
         String subject = event.subjects().get(0);
