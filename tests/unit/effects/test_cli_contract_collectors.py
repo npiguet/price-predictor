@@ -18,6 +18,9 @@ from effects.infrastructure.cli import (
     run_collect_coverage,
     run_collect_variants,
 )
+from price_predictor.infrastructure.forge_jvm import (
+    check_worker_prerequisites as real_check_worker_prerequisites,
+)
 from sealed.infrastructure.cli import build_parser as sealed_parser
 
 #: Every cap and its default, read off the dataclass the workers receive.
@@ -654,3 +657,167 @@ class TestTheSteeredRoundNeedsGen3Counts:
 
         with patch("effects.application.collect_variants.run", return_value=0):
             assert run_collect_variants(parse("collect-variants", "--exclude-cards", "h.txt")) == 0
+
+
+class TestTheBounds:
+    """V4 #9: ``--workers 0`` never stopped, no flag capped the workers at the
+    machine's twelve processes, ``--decks-per-round 0`` exited 0 having
+    played nothing, and a negative per-game budget was accepted."""
+
+    @pytest.mark.parametrize(("command", "argv"), [
+        ("collect-coverage", ("--workers", "0")),
+        ("collect-coverage", ("--workers", "13")),
+        ("collect-variants", ("--workers", "0")),
+        ("collect-coverage", ("--decks-per-round", "0")),
+        ("collect-variants", ("--decks-per-round", "0")),
+        ("collect-coverage", ("--target-records", "0")),
+        ("collect-coverage", ("--no-progress-rounds", "0")),
+        ("collect-coverage", ("--min-text-games", "0")),
+        ("collect-variants", ("--variant-games", "0")),
+        ("collect-variants", ("--steer-iterations", "0")),
+        ("collect-variants", ("--steer-min-gain", "-1")),
+        ("collect-coverage", ("--probes-per-game", "-1")),
+        ("collect-coverage", ("--interventions-per-game", "-1")),
+        ("collect-coverage", ("--mana-cap", "-1")),
+        ("collect-variants", ("--directed-forks-per-game", "-1")),
+    ])
+    def test_an_out_of_range_value_is_a_usage_error(self, command, argv):
+        with pytest.raises(SystemExit):
+            parse(command, *argv)
+
+    @pytest.mark.parametrize("argv", [
+        ("--workers", "1"), ("--workers", "12"), ("--probes-per-game", "0"),
+        ("--interventions-per-game", "0"), ("--mana-cap", "0"),
+    ])
+    def test_the_edges_are_accepted(self, argv):
+        parse("collect-coverage", *argv)
+
+    def test_the_budget_bounds_hold_on_match_outcomes_too(self):
+        with pytest.raises(SystemExit):
+            sealed_parser().parse_args(
+                ["match-outcomes", "--effect-records", "x", "--probes-per-game", "-1"],
+            )
+
+    @COLLECTORS
+    def test_every_list_file_is_checked_before_any_worker(
+        self, command, module, runner, _workers_could_start,
+    ):
+        """A missing ``--wording-cards`` or ``--split-from`` was a traceback."""
+        from unittest.mock import patch
+
+        with patch(module, return_value=0):
+            runner(parse(command, "--split-from", "latest.pt"))
+        files = _workers_could_start.call_args.kwargs["files"]
+        assert files["--split-from"] == Path("latest.pt")
+        assert "--wording-cards" in files
+
+    def test_a_missing_wording_list_exits_1_naming_it(self, tmp_path, caplog):
+        from unittest.mock import patch
+
+        def files_only(*, files):
+            """The real check of the list files, without the JAR and java."""
+            with patch("price_predictor.infrastructure.forge_jvm.resolve_connector_jar"), \
+                 patch("shutil.which", return_value="java"):
+                real_check_worker_prerequisites(files=files)
+
+        held = tmp_path / "h.txt"
+        held.write_text("fire\n", encoding="utf-8")
+        missing = tmp_path / "wording.txt"
+        with patch(PREREQUISITES, side_effect=files_only), \
+             patch("effects.application.collect_coverage.run") as collect:
+            assert run_collect_coverage(parse(
+                "collect-coverage", "--exclude-cards", str(held),
+                "--wording-cards", str(missing),
+            )) == 1
+        collect.assert_not_called()
+        assert f"--wording-cards: no such file {missing}" in caplog.text
+
+
+class TestCountFrom:
+    """V4 #5: ``--count-from DIR`` counts an earlier run's coverage, read-only."""
+
+    def test_it_is_off_by_default(self):
+        assert parse("collect-coverage").count_from is None
+
+    def test_the_directories_reach_the_config(self, tmp_path):
+        from unittest.mock import patch
+
+        first, second = tmp_path / "a", tmp_path / "b"
+        first.mkdir()
+        second.mkdir()
+        with patch("effects.application.collect_coverage.run", return_value=0) as collect:
+            assert run_collect_coverage(parse(
+                "collect-coverage", "--exclude-cards", "h.txt",
+                "--effect-records", str(tmp_path / "records"),
+                "--count-from", str(first), "--count-from", str(second),
+            )) == 0
+        assert collect.call_args.args[0].count_from == (first, second)
+
+    def test_the_run_s_own_directory_is_refused(self, tmp_path, caplog):
+        from unittest.mock import patch
+
+        (tmp_path / "records").mkdir()
+        with patch("effects.application.collect_coverage.run") as collect:
+            assert run_collect_coverage(parse(
+                "collect-coverage", "--exclude-cards", "h.txt",
+                "--effect-records", str(tmp_path / "records"),
+                "--count-from", str(tmp_path / "records"),
+            )) == 1
+        collect.assert_not_called()
+        assert "overlaps --effect-records" in caplog.text
+
+    def test_collect_variants_takes_none(self):
+        with pytest.raises(SystemExit):
+            parse("collect-variants", "--count-from", "x")
+
+
+class TestContinues:
+    """V4 #6: ``collect-variants --continues RUN_ID`` resumes an interrupted
+    run; a run id naming no shard, or the steered round, is refused."""
+
+    def _records_of(self, tmp_path, run_id):
+        records = tmp_path / "records"
+        records.mkdir(exist_ok=True)
+        (records / f"{run_id}.0-abc.jsonl").write_text("{}\n", encoding="utf-8")
+        return records
+
+    def test_it_is_off_by_default(self):
+        assert parse("collect-variants").continues is None
+
+    def test_the_run_ids_reach_the_config(self, tmp_path):
+        from unittest.mock import patch
+
+        records = self._records_of(tmp_path, "u-1")
+        with patch("effects.application.collect_variants.run", return_value=0) as collect:
+            assert run_collect_variants(parse(
+                "collect-variants", "--exclude-cards", "h.txt",
+                "--effect-records", str(records), "--continues", "u-1",
+            )) == 0
+        assert collect.call_args.args[0].continues == ("u-1",)
+
+    def test_a_run_id_with_no_shard_is_refused(self, tmp_path, caplog):
+        from unittest.mock import patch
+
+        records = self._records_of(tmp_path, "u-1")
+        with patch("effects.application.collect_variants.run") as collect:
+            assert run_collect_variants(parse(
+                "collect-variants", "--exclude-cards", "h.txt",
+                "--effect-records", str(records), "--continues", "u-2",
+            )) == 1
+        collect.assert_not_called()
+        assert "--continues u-2: no shard" in caplog.text
+
+    def test_the_steered_round_is_refused(self, tmp_path, caplog):
+        from unittest.mock import patch
+
+        records = self._records_of(tmp_path, "u-1")
+        counts = tmp_path / "counts.json"
+        counts.write_text('{"generation": "gen-3", "rules": {}}', encoding="utf-8")
+        with patch("effects.application.collect_variants.run") as collect:
+            assert run_collect_variants(parse(
+                "collect-variants", "--exclude-cards", "h.txt", "--round", "steered",
+                "--rule-counts", str(counts), "--effect-records", str(records),
+                "--continues", "u-1",
+            )) == 1
+        collect.assert_not_called()
+        assert "untargeted round only" in caplog.text

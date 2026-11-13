@@ -9,7 +9,6 @@ unconditional.
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -50,16 +49,19 @@ class TestCollectorSupervisorWorkerLogs:
         assert log_file.closed is False
         supervisor.stop()
 
-    def test_the_log_file_lives_under_the_records_directory_named_by_run_and_worker(
+    def test_the_log_file_lives_under_the_run_s_logs_named_by_run_and_worker(
         self, tmp_path,
     ):
+        """V4 #20: the artifact layout puts every worker log under the run
+        directory's ``logs/``, never beside the shards."""
         records = tmp_path / "records"
         supervisor = _supervisor(records, run_id="run-xyz")
         _rigged(supervisor)
 
         supervisor.start_worker(2, tmp_path / "decks.txt")
 
-        assert (records / "run-xyz.2.log").exists()
+        assert (records / "logs" / "run-xyz.2.log").exists()
+        assert not list(records.glob("*.log"))
         supervisor.stop()
 
     def test_a_respawned_slot_reuses_the_same_log_file(self, tmp_path):
@@ -97,16 +99,6 @@ class TestCollectorSupervisorWorkerLogs:
 
         assert log_file.closed
 
-    def test_records_only_mode_is_unaffected_by_the_log_file(self, tmp_path):
-        """The pre-existing records-only guard (output_file=None) must not be
-        disturbed by adding a log destination."""
-        supervisor = _supervisor(tmp_path)
-        fake_connector = _rigged(supervisor)
-
-        supervisor.start_worker(0, tmp_path / "decks.txt")
-
-        assert fake_connector.start.call_args.args[0] is None
-        supervisor.stop()
 
 
 class TestPlayRound:
@@ -132,16 +124,24 @@ class TestPlayRound:
         assert stop(500) is True
         assert stop(501) is True
 
-    def test_progress_is_counted_from_a_file_not_a_directory(self, tmp_path):
+    def test_each_round_counts_its_own_progress_file_under_logs(self, tmp_path):
+        """V4 #8: a worker the kill could not end appends to the progress
+        file it was started with; a second round sharing that file counted
+        the survivor's matches as its own. V4 #20: the file is under ``logs/``."""
         supervisor = self._supervisor(tmp_path)
         with patch(
             "effects.infrastructure.collector_connector.ForgeWorkerPool"
         ) as pool:
             supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=10)
+            first = pool.call_args.kwargs["output_path"]
+            first.write_text("a survivor's match\n", encoding="utf-8")
+            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=10)
+            second = pool.call_args.kwargs["output_path"]
 
-        output_path = pool.call_args.kwargs["output_path"]
-        assert output_path.is_file() or not output_path.exists()
-        assert output_path != Path(tmp_path)
+        assert first.parent == second.parent == tmp_path / "logs"
+        assert first != second
+        assert second.read_text(encoding="utf-8") == ""
+        assert first.read_text(encoding="utf-8") == "a survivor's match\n"
 
     def test_the_decks_file_reaches_the_worker_on_both_sides(self, tmp_path):
         """Through the spawn the round hands its pool, the round's own file."""
@@ -155,9 +155,17 @@ class TestPlayRound:
             pool.call_args.kwargs["spawn_worker"](0)
 
         kwargs = connector.start.call_args.kwargs
+        assert connector.start.call_args.args[0] is None, "records-only: no output file"
         assert kwargs["side_a_decks_path"] == decks
         assert kwargs["side_b_decks_path"] == decks
         assert kwargs["decks_only"] is True
+        assert kwargs["run_id"] == "run"
+        assert kwargs["worker_index"] == 0
+        assert kwargs["best_of"] == 1
+        assert kwargs["effect_records_dir"] == tmp_path
+        assert kwargs["collection_caps"] == CollectionCaps().as_system_properties()
+        assert kwargs["variant_scripts"] is None
+        assert kwargs["progress_file"] == supervisor.progress_path
 
     def test_the_progress_file_reaches_the_worker_without_becoming_output_file(
         self, tmp_path,
@@ -255,9 +263,98 @@ class TestTheRoundShutsTheRealPoolDown:
         supervisor = self._played_round(tmp_path)
         supervisor.stop()
 
-        with patch.object(ForgeWorkerPool, "run", autospec=True):
+        with patch.object(ForgeWorkerPool, "run", autospec=True) as run:
             supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
         supervisor.stop()
+
+        assert run.call_count == 1
+        assert supervisor.rounds == 2
+
+
+class TestTheRoundReportsItsWorkerLogs:
+    """V4 #3 / P1 #3: worker failure lines went to the logs and nowhere else;
+    nothing read them, so a run losing its matches reported success."""
+
+    def _round_logging(self, tmp_path, lines_by_slot, *, workers=2, survivors=()):
+        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+
+        supervisor = _supervisor(tmp_path, workers=workers)
+
+        def _fake_run(pool):
+            for slot, lines in lines_by_slot.items():
+                path = supervisor._worker_logs.path_for(slot)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with open(path, "ab") as handle:
+                    handle.write("".join(f"{line}\n" for line in lines).encode("utf-8"))
+            pool._survivors.extend(survivors)
+
+        with patch.object(ForgeWorkerPool, "run", _fake_run):
+            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
+        return supervisor
+
+    def test_a_round_s_failure_lines_are_reported_by_kind(self, tmp_path, caplog):
+        supervisor = self._round_logging(tmp_path, {
+            0: ["Worker: 10 matches generated", "Error generating match: boom"],
+            1: ["Error generating match: deck cannot be materialized: 1 of 40"],
+        })
+
+        assert supervisor.worker_failures.as_dict() == {"match_error": 1, "unresolved_deck": 1}
+        assert "Round 1 worker logs: 1 match_error, 1 unresolved_deck" in caplog.text
+
+    def test_a_later_round_reports_only_its_own_lines(self, tmp_path, caplog):
+        import logging
+
+        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+
+        supervisor = self._round_logging(tmp_path, {0: ["Error generating match: a"]})
+        with patch.object(ForgeWorkerPool, "run", autospec=True), caplog.at_level(logging.INFO):
+            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
+
+        assert "Round 2 worker logs: no failure lines" in caplog.text
+        assert supervisor.worker_failures.as_dict() == {"match_error": 1}
+
+    def test_a_worker_that_outlived_the_kill_is_reported(self, tmp_path, caplog):
+        supervisor = self._round_logging(tmp_path, {}, survivors=[4242])
+
+        assert supervisor.survivors == [4242]
+        assert "outlived the kill (PID 4242)" in caplog.text
+
+    def test_the_run_s_totals_reach_its_manifest(self, tmp_path):
+        """V4 #3, #4: the run id, the resolved caps and the failures land in
+        the running command's entry of ``run.json``."""
+        import json
+
+        from price_predictor.infrastructure.run_manifest import run_recorded
+
+        def body():
+            supervisor = self._round_logging(tmp_path, {
+                1: ["Error generating match: a", "Error generating match: b"],
+            })
+            supervisor.stop()
+            return 0
+
+        run_recorded(tmp_path, body, command="python -m effects collect-coverage")
+
+        entry = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))["invocations"][0]
+        assert entry["run_id"] == "run"
+        assert entry["caps"]["max_records_per_game"] == CollectionCaps().max_records_per_game
+        assert entry["caps"]["aimed_at"] is None
+        assert entry["rounds"] == 1
+        assert entry["worker_failures"] == {"match_error": 2}
+        assert entry["worker_failure_examples"] == {"match_error": "Error generating match: a"}
+        assert entry["worker_survivors"] == []
+
+
+class TestTheDecksFileIsTheRunsOwn:
+    """V4 #20: the decks file the workers read sits under the run's
+    ``decks/``, named by the run id, so two runs never share one."""
+
+    def test_the_decks_path_is_under_decks_and_names_the_run(self, tmp_path):
+        supervisor = _supervisor(tmp_path, run_id="run-123")
+
+        assert supervisor.decks_path("coverage") == (
+            tmp_path / "decks" / "coverage-decks.run-123.txt"
+        )
 
 
 class TestInterruptIsVisibleToTheCaller:

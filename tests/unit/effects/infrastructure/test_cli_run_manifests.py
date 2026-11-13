@@ -114,3 +114,32 @@ def test_shard_discovery_never_takes_the_manifest_for_a_shard(tmp_path: Path):
 
 def test_the_manifest_is_no_sidecar():
     assert not "run.json".endswith(SIDECAR_SUFFIX)
+
+
+class TestTheCollectorsListWhatTheyRead:
+    """P1 #10: ``collect-variants`` listed neither the variant tree it reads
+    and extends nor the rules catalogue its steered round reads; V4 #5:
+    ``collect-coverage --count-from`` reads earlier runs."""
+
+    def test_collect_variants_lists_its_variant_tree(self):
+        args = cli.build_parser().parse_args([
+            "collect-variants", "--variant-scripts", "output/effects/gen3/inputs/variants",
+        ])
+        inputs = cli.RUN_MANIFESTS["collect-variants"].input_paths(args)
+        assert Path("output/effects/gen3/inputs/variants") in inputs
+        assert Path("rules") not in inputs, "the untargeted round reads no catalogue"
+
+    def test_the_steered_round_lists_the_rules_catalogue(self):
+        args = cli.build_parser().parse_args([
+            "collect-variants", "--round", "steered", "--rule-counts", "counts.json",
+        ])
+        inputs = cli.RUN_MANIFESTS["collect-variants"].input_paths(args)
+        assert Path("rules") in inputs
+        assert Path("counts.json") in inputs
+
+    def test_collect_coverage_lists_every_count_from_directory(self):
+        args = cli.build_parser().parse_args([
+            "collect-coverage", "--count-from", "runs/a", "--count-from", "runs/b",
+        ])
+        inputs = cli.RUN_MANIFESTS["collect-coverage"].input_paths(args)
+        assert {Path("runs/a"), Path("runs/b")} <= set(inputs)

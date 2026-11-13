@@ -63,7 +63,7 @@ DROPPED_EVENTS_SUFFIX = ".dropped-events.tsv"
 
 def add_cap_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--mana-cap", type=int, default=EFFECT_MANA_CAP,
+        "--mana-cap", type=non_negative_int, default=EFFECT_MANA_CAP,
         help=(
             "Records per unique mana ability and mana produced, per game "
             "(default: %(default)s): repeat taps observe a board that barely moved"
@@ -94,12 +94,12 @@ def add_cap_flags(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--interventions-per-game", type=int,
+        "--interventions-per-game", type=non_negative_int,
         default=EFFECT_INTERVENTIONS_PER_GAME,
         help="Interventional resolutions per game (default: %(default)s)",
     )
     parser.add_argument(
-        "--probes-per-game", type=int, default=EFFECT_PROBES_PER_GAME,
+        "--probes-per-game", type=non_negative_int, default=EFFECT_PROBES_PER_GAME,
         help=(
             "Damage-step probe forks per game (default: %(default)s); a budget "
             "spent only on keywords --probe-keywords names"
@@ -154,6 +154,15 @@ def positive_int(text: str) -> int:
     return value
 
 
+def non_negative_int(text: str) -> int:
+    """An integer of at least 0, for a per-game budget: a negative one is no
+    budget the worker can spend."""
+    value = int(text)
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"must be at least 0, got {value}")
+    return value
+
+
 def probe_keyword_list(text: str) -> str:
     """``--probe-keywords``: each keyword spelled as the JVM compares it
     (``KeywordEdit.normalize``: lower case, spaces as ``_``), blanks dropped.
@@ -193,7 +202,8 @@ def add_directed_fork_flags(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--directed-forks-per-game", type=int, default=EFFECT_DIRECTED_FORKS_PER_GAME,
+        "--directed-forks-per-game", type=non_negative_int,
+        default=EFFECT_DIRECTED_FORKS_PER_GAME,
         help=(
             "Directed forks per game, kept or discarded, a budget beside the "
             "other forks' (default: %(default)s)"

@@ -104,12 +104,42 @@ the same three rates (FR-059a).
 | Flag | Default | Meaning |
 |---|---|---|
 | `--wording-cards PATH` | none | one card name per line; a coverage round over them |
+| `--count-from DIR` | none | repeatable; an earlier run's records directory whose coverage counts toward satisfaction, read once at the start and never written |
 | `--count-dropped-events` | off | as `match-outcomes` |
 | `--max-records-per-game N` | 5000 | as `match-outcomes` |
 | `--directed-fork-rules LIST` | none | a label only: rule ids written to every record's `aimed_at`; no directed fork runs, and no startup check applies |
 
 `--wording-cards` beside `--only-cards` exits 1. A run with none of `--exclude-cards`,
-`--split-from` and `--training-corpus` exits 1 (FR-058g).
+`--split-from` and `--training-corpus` exits 1 (FR-058g). A `--count-from` directory that does not
+exist, or that holds or is held by `--effect-records` or another `--count-from`, exits 1. A card the
+castability consult leaves unanswered, when it answers any, is not in Forge's card database: it
+leaves the coverage unit and the decks, named in a warning. A run that plays rounds and writes no
+record exits 1.
+
+## Both collectors (existing)
+
+| Flag | Bound | Exit |
+|---|---|---|
+| `--workers N` | 1 to 12 | 2 (usage) |
+| `--decks-per-round`, `--target-records`, `--no-progress-rounds`, `--min-text-games`, `--variant-games`, `--steer-floor`, `--steer-variants`, `--steer-iterations` | at least 1 | 2 (usage) |
+| `--steer-min-gain`, and on every collecting command `--mana-cap`, `--interventions-per-game`, `--probes-per-game`, `--directed-forks-per-game` | at least 0 | 2 (usage) |
+
+A missing `--exclude-cards`, `--only-cards`, `--split-from` or `--wording-cards` file exits 1
+naming it, before any worker starts.
+
+The run directory is `--effect-records` (or `--training-corpus`). It holds the shards at its top
+level, `run.json`, every worker log and each round's progress file under `logs/`
+(`logs/<run id>.<slot>.log`, `logs/<run id>.round-NNNN.progress.txt`), and the decks file the
+workers read under `decks/` (`decks/coverage-decks.<run id>.txt`, `decks/variant-decks.<run id>.txt`).
+After each round the collector scans the round's additions to the worker logs for failure lines
+(`effects.domain.worker_failures`: unresolved deck, match error, worker gave up, hook, emitter,
+boundary step, withheld records, fork score mismatch, fork fidelity, staging, JVM error and the
+rest), prints them by kind, and names any worker the kill could not end. The running command's
+entry in `run.json`'s `invocations` records `run_id` (the supervisor's), `caps` (every
+`CollectionCaps` field, resolved), `rounds`, `worker_failures` (kind to line count),
+`worker_failure_examples` (kind to its first line) and `worker_survivors` (PIDs). A one-shot JVM
+(the castability consult, the sidecar pass) is killed after 3600 s: the consult then ranks every
+card castable, the sidecar pass exits 1.
 
 ## `python -m effects collect-variants` (existing)
 
@@ -129,10 +159,15 @@ two decks). A protection keyword line of a source script swaps its quality for a
 | `--steer-variants N` | 2000 | variants per iteration, split over the short pairs by shortfall |
 | `--steer-min-gain N` | 1 | records of its short polarity an iteration must add to keep a rule |
 | `--steer-iterations N` | 5 | iterations at most |
+| `--continues RUN_ID` | none | repeatable; the supervisor run id of an interrupted run into the same `--effect-records`: its shards' games count before the first round |
 
 `--variant-volume` is removed. Startup, exit 1: no holdout source (`--exclude-cards`,
 `--split-from`, `--training-corpus`); `--round steered` without `--rule-counts`, or with a counts
-file whose `generation` is not `gen-3`. A steered round's deck file adds a fourth column, the
+file whose `generation` is not `gen-3`; `--continues` with `--round steered`, or naming a run id no
+shard under `--effect-records` carries. A run whose variants all have their games before the first
+round plays none and exits 0; one that plays rounds and writes no record exits 1. The manifest's
+inputs list `--variant-scripts`, which the run reads and extends, and `rules/` in the steered round.
+A steered round's deck file adds a fourth column, the
 deck's rule (`LABEL;SET_CODE;Card1|...|Card40;RULE`); the worker stamps every record of a game
 whose decks carry one with `aimed_at` listing its two decks' rules. The loadable list is `loadable.lst` in the variant tree, never a `.txt` file, and a round
 removes its staged variants from Forge's custom-cards directory when it ends (FR-058b).

@@ -418,7 +418,10 @@ class TestTheVariantRoundPlaysTheVariants:
                     effect_records=records,
                     forge_cards_path=source,
                     variant_scripts=tmp_path / "variants",
-                    decks_per_round=3,
+                    decks_per_round=3, workers=1,
+                    # No converted tree: the held-out text check is skipped,
+                    # rather than reading the machine's real output tree.
+                    cards_folders=(tmp_path / "no-converted-cards",),
                 )
             )
 
@@ -426,10 +429,11 @@ class TestTheVariantRoundPlaysTheVariants:
         assert constructed["variant_scripts"] == tmp_path / "variants"
         assert fake_supervisor.play_round.call_args.args[0], "no variant decks"
         assert fake_supervisor.play_round.call_args.kwargs["matches"] == 3
-        # The run's own decks file: every worker reloads it at its start, so
-        # two runs on one records directory would play each other's decks.
-        assert fake_supervisor.play_round.call_args.args[1] == (
-            records / f"variant-decks.{fake_supervisor.run_id}.txt"
+        # The run's own decks file (its path is the supervisor's: every
+        # worker reloads it at its start, so two runs never share one).
+        fake_supervisor.decks_path.assert_called_with("variant")
+        assert fake_supervisor.play_round.call_args.args[1] is (
+            fake_supervisor.decks_path.return_value
         )
 
 
@@ -594,6 +598,7 @@ class TestTheUntargetedRound:
         supervisor.play_round.side_effect = _round_writes(records, *rounds)
         forge_cards = tmp_path / "forge-cards"
         forge_cards.mkdir()
+        config.setdefault("cards_folders", (tmp_path / "no-converted-cards",))
         return collect_variants, CollectVariantsConfig(
             effect_records=records, forge_cards_path=forge_cards,
             variant_scripts=tmp_path / "variant-scripts", decks_per_round=4,
@@ -682,6 +687,45 @@ class TestTheUntargetedRound:
         )
         assert collect_variants.run(config) == 1
 
+    def test_a_continued_run_s_games_count_and_its_finished_variants_are_not_replayed(
+        self, tmp_path, monkeypatch, fake_supervisor,
+    ):
+        """V4 #6: an interrupted run restarted with the same seed replayed
+        every variant it had finished, doubling their games. ``--continues``
+        counts the earlier run's shards first."""
+        from effects.infrastructure.shard_io import write_shard
+
+        rounds = [self._games(self.SHOCK, "g1", "g2")]
+        collect_variants, config = self._fixture(
+            tmp_path, monkeypatch, fake_supervisor, *rounds, continues=("earlier",),
+        )
+        write_shard(
+            config.effect_records / "earlier.0-a.jsonl.gz", self._games(self.BOLT, "x1", "x2"),
+        )
+
+        assert collect_variants.run(config) == 0
+
+        decked = {name for call in fake_supervisor.play_round.call_args_list
+                  for deck in call.args[0] for name in deck}
+        assert "Bolt Variant 0a1b2c3d" not in decked
+        assert "Shock Variant 99aa00ff" in decked
+
+    def test_a_continued_run_with_nothing_left_plays_no_round_and_succeeds(
+        self, tmp_path, monkeypatch, fake_supervisor,
+    ):
+        from effects.infrastructure.shard_io import write_shard
+
+        collect_variants, config = self._fixture(
+            tmp_path, monkeypatch, fake_supervisor, continues=("earlier",),
+        )
+        write_shard(
+            config.effect_records / "earlier.0-a.jsonl.gz",
+            self._games(self.BOLT, "x1", "x2") + self._games(self.SHOCK, "x1", "x2"),
+        )
+
+        assert collect_variants.run(config) == 0
+        fake_supervisor.play_round.assert_not_called()
+
     def test_a_variant_shown_without_a_new_game_retires(
         self, tmp_path, monkeypatch, fake_supervisor, caplog,
     ):
@@ -747,6 +791,21 @@ class TestTheUntargetedRound:
 
         assert collect_variants.run(config) == 3
         fake_supervisor.play_round.assert_not_called()
+
+    def test_a_sidecar_pass_past_its_timeout_ends_the_run_with_1(
+        self, tmp_path, monkeypatch, fake_supervisor, caplog,
+    ):
+        """P1 #12: the one-shot JVM is killed at its timeout; the run says so."""
+        from price_predictor.infrastructure.forge_jvm import ForgeWorkerTimeout
+
+        collect_variants, config = self._fixture(tmp_path, monkeypatch, fake_supervisor)
+        monkeypatch.setattr(collect_variants, "write_variant_sidecars", MagicMock(
+            side_effect=ForgeWorkerTimeout("VariantSidecarMain ran past its 3600 s timeout"),
+        ))
+
+        assert collect_variants.run(config) == 1
+        fake_supervisor.play_round.assert_not_called()
+        assert "ran past its 3600 s timeout" in caplog.text
 
     @pytest.mark.parametrize("sidecar_code, plays", [(0, True), (0, False), (3, False)])
     def test_the_round_s_staged_variants_are_taken_out_however_it_ends(

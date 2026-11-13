@@ -8,6 +8,7 @@ everything here is the plumbing beneath both, so neither imports the other.
 
 from __future__ import annotations
 
+import argparse
 import random
 import uuid
 from collections.abc import Iterator, Mapping
@@ -27,9 +28,40 @@ if TYPE_CHECKING:
     from effects.infrastructure.collector_connector import CollectorSupervisor
     from effects.infrastructure.converted_trees import SourceTrees
 
-#: Java worker processes, for both collectors.
+#: Java worker processes, for both collectors, and the most a run may take:
+#: the machine runs at most twelve CPU-busy processes, and a collector's
+#: workers and its shard counters each run that many.
 DEFAULT_WORKERS = 12
+MAX_WORKERS = 12
 DEFAULT_DECKS_PER_ROUND = 500
+
+
+def positive_int(text: str) -> int:
+    """A count of at least 1: a round of no decks, a target of no records or
+    no rounds before retiring is no run (V4 #9)."""
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, got {value}")
+    return value
+
+
+def non_negative_int(text: str) -> int:
+    """A count of at least 0."""
+    value = int(text)
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"must be at least 0, got {value}")
+    return value
+
+
+def worker_count(text: str) -> int:
+    """``--workers``: 1 to :data:`MAX_WORKERS`. With none the pool never
+    starts a worker and never stops; past the cap the machine is oversubscribed."""
+    value = int(text)
+    if not 1 <= value <= MAX_WORKERS:
+        raise argparse.ArgumentTypeError(
+            f"must be between 1 and {MAX_WORKERS}, got {value}"
+        )
+    return value
 
 #: Seeds both collectors' deck draws, and the variant collector's perturbations.
 RANDOM_SEED = 42
@@ -78,10 +110,15 @@ class CollectorConfig:
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     deck_holdout: DeckHoldout = DeckHoldout()
     decks_per_round: int = field(default=DEFAULT_DECKS_PER_ROUND, metadata={
+        "type": positive_int,
         "help": "Decks played as matches per round (default: %(default)s)",
     })
     workers: int = field(default=DEFAULT_WORKERS, metadata={
-        "help": "Parallel Java worker processes (default: %(default)s)",
+        "type": worker_count,
+        "help": (
+            f"Parallel Java worker processes, and shard-counting processes, 1 to "
+            f"{MAX_WORKERS} (default: %(default)s)"
+        ),
     })
     #: Every record a collector writes is aimed (FR-009a): at the run's
     #: ``--directed-fork-rules``, and at no rule, ``[]``, where it names none.

@@ -1,15 +1,25 @@
-"""Supervises the records-only worker over coverage and variant decks."""
+"""Supervises the records-only worker over coverage and variant decks.
+
+A collector's run directory is its ``--effect-records`` directory
+(``.claude/skills/artifact-layout/SKILL.md``): the workers' shards go to its
+top level, where they always have, every worker log and each round's progress
+file under ``logs/``, and the decks file the workers read under ``decks/``.
+"""
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import logging
 import subprocess
 from pathlib import Path
 
 from effects.domain.collection_caps import CollectionCaps
+from effects.domain.worker_failures import WorkerFailures
 from effects.infrastructure.deck_file import write_deck_file
+from effects.infrastructure.worker_log_scan import WorkerLogScan
 from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool, WorkerLogFiles
+from price_predictor.infrastructure.run_manifest import annotate_run
 from sealed.infrastructure.effect_collection_flags import dropped_events_report
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 
@@ -18,9 +28,27 @@ logger = logging.getLogger(__name__)
 #: One game each: the question is whether a card reached a game at all.
 COVERAGE_BEST_OF = 1
 
+#: Under the run directory: every worker log and each round's progress file.
+LOGS_DIR = "logs"
+#: Under the run directory: the decks file each round's workers read.
+DECKS_DIR = "decks"
+
+
+def caps_document(caps: CollectionCaps) -> dict:
+    """The resolved caps as ``run.json`` records them, every field by name."""
+    return {
+        name: list(value) if isinstance(value, tuple) else value
+        for name, value in dataclasses.asdict(caps).items()
+    }
+
 
 class CollectorSupervisor:
-    """Runs records-only workers until the caller stops asking for rounds."""
+    """Runs records-only workers until the caller stops asking for rounds.
+
+    After every round it scans the workers' logs for failure lines, reports
+    them, and records the run's totals, with its run id and resolved caps,
+    in the running command's entry of ``run.json`` (``annotate_run``).
+    """
 
     def __init__(
         self,
@@ -41,11 +69,32 @@ class CollectorSupervisor:
         self._interrupted = False
         # A real log destination, or the JVM's latched emitter-failure reports
         # vanish into DEVNULL and look like a mechanic that never occurred.
-        self._worker_logs = WorkerLogFiles(self._effect_records, self._run_id)
+        self._worker_logs = WorkerLogFiles(self.logs_dir, self._run_id)
+        self._log_scan = WorkerLogScan()
+        #: Every failure line the run's workers logged, by kind.
+        self.worker_failures = WorkerFailures()
+        #: PIDs of workers a round's kill could not end.
+        self.survivors: list[int] = []
+        self._rounds = 0
+        annotate_run(self._effect_records, run_id=run_id, caps=caps_document(caps))
 
     @property
     def run_id(self) -> str:
         return self._run_id
+
+    @property
+    def rounds(self) -> int:
+        """Rounds played so far."""
+        return self._rounds
+
+    @property
+    def logs_dir(self) -> Path:
+        return self._effect_records / LOGS_DIR
+
+    def decks_path(self, kind: str) -> Path:
+        """The run's own decks file for ``kind`` (``coverage``, ``variant``):
+        every worker reloads it at its start, so two runs must never share one."""
+        return self._effect_records / DECKS_DIR / f"{kind}-decks.{self._run_id}.txt"
 
     @property
     def interrupted(self) -> bool:
@@ -82,17 +131,20 @@ class CollectorSupervisor:
 
     @property
     def progress_path(self) -> Path:
-        """The per-run scratch file a round's completed matches are counted
-        from, never the sealed corpus (FR-052, FR-059)."""
-        return self._effect_records / f"{self._run_id}.progress.txt"
+        """The current round's scratch file its completed matches are counted
+        from, never the sealed corpus (FR-052, FR-059). One per round: a
+        worker the kill could not end keeps appending to its own round's
+        file, never to the next round's count."""
+        return self.logs_dir / f"{self._run_id}.round-{self._rounds:04d}.progress.txt"
 
     def play_round(
         self, decks: list[list[str]], decks_file: Path, *, label: str, matches: int,
         rules: list[str | None] | None = None,
     ) -> None:
         """Write ``decks`` to ``decks_file``, the file the workers read, and
-        play ``matches`` matches from it, then stop. ``rules`` gives each
-        steered deck its rule column (``deck_file``).
+        play ``matches`` matches from it, then stop and report what the
+        workers logged. ``rules`` gives each steered deck its rule column
+        (``deck_file``).
 
         No deck raises before any worker spawns: every worker is decks-only,
         so no worker could play at all.
@@ -103,6 +155,7 @@ class CollectorSupervisor:
                 f"{decks_file}: a decks-only round cannot run without decks "
                 "(no deck to write)"
             )
+        self._rounds += 1
         self.progress_path.parent.mkdir(parents=True, exist_ok=True)
         self.progress_path.write_text("", encoding="utf-8")
         self._interrupted = self.interrupted
@@ -113,12 +166,45 @@ class CollectorSupervisor:
             should_stop=lambda completed: completed >= matches,
         )
         logger.info("Playing %d matches from %d decks", matches, deck_count)
-        self._pool.run()
+        try:
+            self._pool.run()
+        finally:
+            self._report_round(self._pool)
+
+    def _report_round(self, pool: ForgeWorkerPool) -> None:
+        """Say what the round's workers logged and which outlived the kill,
+        and record the run's totals in ``run.json``."""
+        failures = self._log_scan.scan(
+            self._worker_logs.path_for(slot) for slot in range(self._worker_count)
+        )
+        self.worker_failures.merge(failures)
+        if failures:
+            logger.warning(
+                "Round %d worker logs: %s (under %s)",
+                self._rounds, failures.render(), self.logs_dir,
+            )
+        else:
+            logger.info("Round %d worker logs: no failure lines", self._rounds)
+        survived = [pid for pid in pool.survivors if pid not in self.survivors]
+        if survived:
+            self.survivors.extend(survived)
+            logger.warning(
+                "Round %d: %d worker(s) outlived the kill (PID %s); their shards "
+                "were counted as they stood and may still grow",
+                self._rounds, len(survived), ", ".join(map(str, survived)),
+            )
+        annotate_run(
+            self._effect_records,
+            rounds=self._rounds,
+            worker_failures=self.worker_failures.as_dict(),
+            worker_failure_examples=dict(self.worker_failures.examples),
+            worker_survivors=list(self.survivors),
+        )
 
     def stop(self) -> None:
-        """End the run: flush the worker logs, stop the pool, and print the
-        dropped-event table summed over every round's workers when the run
-        counted dropped events (FR-041)."""
+        """End the run: flush the worker logs, stop the pool, report the run's
+        worker-log failures, and print the dropped-event table summed over
+        every round's workers when the run counted dropped events (FR-041)."""
         self._worker_logs.close_all()
         self._interrupted = self.interrupted
         if self._pool is not None:
@@ -126,5 +212,10 @@ class CollectorSupervisor:
             # the run's report and return code.
             self._pool.request_shutdown()
             self._pool = None
+        if self._rounds:
+            logger.info(
+                "Worker logs over %d round(s): %s",
+                self._rounds, self.worker_failures.render(),
+            )
         if self._caps.count_dropped_events:
             print(dropped_events_report(self._effect_records, self._run_id))

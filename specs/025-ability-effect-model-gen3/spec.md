@@ -1023,8 +1023,9 @@ and that the reporting half never enters the control score.
   holdout, perturbable) and play rounds of `--decks-per-round` matches, each variant weighted by the
   games it lacks, until every variant has `--variant-games` (default 2) games or has retired after
   `--no-progress-rounds` (default 3) rounds without a new game. A variant's games are the distinct
-  games holding a record whose acting key or decision candidate's key names its script file. Its
-  records carry `aimed_at = []`.
+  games holding a record whose acting key or decision candidate's key names its script file, in
+  this run's shards and in those of each run `--continues` names. Its records carry
+  `aimed_at = []`.
 - **FR-058b**: A variant MUST be named `<card> Variant <h>`, `h` the first eight hex digits of the
   SHA-256 of its perturbed script; an existing file of that name MUST be reused, never rewritten.
   Every variant of either round MUST be written to the variant tree with its sidecar before any deck
@@ -1060,7 +1061,9 @@ and that the reporting half never enters the control score.
   lines its tags act through and their record counts.
 - **FR-058g**: `collect-coverage` and `collect-variants` MUST exit 1 at startup without a holdout
   source (`--exclude-cards`, `--split-from` or `--training-corpus`); the steered round MUST exit 1
-  without `--rule-counts` or on counts of gen-2 records.
+  without `--rule-counts` or on counts of gen-2 records. Both MUST exit 1 when they play rounds and
+  write no record, and MUST report their workers' failure lines by kind after each round and in
+  `run.json` (contracts/cli.md § Both collectors).
 - **FR-059**: The game-disjoint stratum MUST keep only games between two Forge AIs; the card-disjoint
   stratum MUST keep every game naming a held-out card, random-seat games included. A permanent spell's
   resolution record MUST survive `build-corpus`, keyed to the permanent's card. A decision record

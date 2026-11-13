@@ -48,6 +48,9 @@ _ALLOWED: dict[str, set[str] | None] = {
     "price_predictor.infrastructure.cli_run_manifest": {
         "READ_ONLY", "ManifestTable", "Writes", "dispatch", "tag_subcommands",
     },
+    # A collector's supervisor writes its run id, resolved caps and worker-log
+    # failures into the running command's run.json entry (V4 #3, #4).
+    "price_predictor.infrastructure.run_manifest": {"annotate_run"},
     "sealed.domain.manabase": {"compute_basic_lands"},
     "sealed.infrastructure.converted_card_locator": {"ConvertedCardLocator"},
     # The cap flags every collecting supervisor carries, one definition for

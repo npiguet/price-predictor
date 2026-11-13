@@ -102,6 +102,12 @@ python -u -m effects collect-variants --round steered --rule-counts <counts> --e
 The steered round runs last, on counts of everything collected before it (FR-058c). Every
 collecting command takes the same three decision-sampling rates (FR-059a).
 
+Each collector's run directory is its `--effect-records`: worker logs under `logs/`, the round's
+failure lines printed after each round and kept in `run.json`. A `collect-coverage` run in a new run
+directory passes each earlier run's directory as `--count-from`, so their coverage counts. An
+interrupted `collect-variants` restarts into the same directory with the same `--seed` and
+`--continues <run id>`, the run id its `run.json` records.
+
 ## Stage 6 — curate and freeze (story 6, story 8)
 
 ```bash
