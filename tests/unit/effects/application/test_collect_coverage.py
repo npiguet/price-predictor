@@ -392,7 +392,8 @@ class TestARoundEndsInItsReport:
         def pool_run(pool):
             played.append(pool)
             record = _record([make_entity("E1", "aa")], source="E1")
-            write_plain_shard(tmp_path / "records", f"round{len(played)}", [record])
+            run_id = pool._spawn_worker.func.__self__.run_id
+            write_plain_shard(tmp_path / "records", f"r{len(played)}", [record], run_id=run_id)
 
         code = self._run(tmp_path, caplog, pool_run)
 
@@ -1594,10 +1595,81 @@ class TestACardForgeCannotResolve:
 
         assert "aa" in written
         assert "zz" not in written
-        assert "left unanswered" in caplog.text
+        assert "not in Forge's card database" in caplog.text
+
+    def test_the_dropped_count_and_share_are_loud_and_recorded(
+        self, tmp_path, fake_supervisor, caplog,
+    ):
+        """No floor stops the run, but the report cannot be missed: the count,
+        the share of the pool, what a large share means, and run.json."""
+        self._run(tmp_path, fake_supervisor, {"aa": ConsultVerdict.CASTABLE})
+
+        assert "1 of 2 card(s) (50.0%)" in caplog.text
+        assert "../forge is older than the converted cards" in caplog.text
+        fake_supervisor.record.assert_any_call(
+            unresolved_cards=1, unresolved_share=0.5, unresolved_examples=["zz"],
+        )
 
     def test_a_consult_that_answered_nothing_drops_nothing(self, tmp_path, fake_supervisor):
         """A consult that could not run proves nothing about any card."""
         written = self._run(tmp_path, fake_supervisor, {})
 
         assert {"aa", "zz"} <= set(written)
+
+
+class TestWhatTheRunItselfPlayedAndWrote:
+    """The zero-record check counts this run's own shards, and a run that
+    could deck nothing has played no round."""
+
+    def _config(self, tmp_path):
+        cards = _two_cards(tmp_path, "aa", "bb")
+        return CollectCoverageConfig(
+            effect_records=tmp_path / "records", cards_folders=(cards,),
+            target_records=1, decks_per_round=2, no_progress_rounds=1, workers=1,
+        )
+
+    def test_another_run_s_shard_is_no_record_of_this_run(
+        self, tmp_path, fake_supervisor, caplog,
+    ):
+        from effects.application import collect_coverage
+
+        fake_supervisor.run_id = "this-run"
+        played = []
+
+        def other_run_writes(*_args, **_kwargs):
+            played.append(1)
+            record = _record([make_entity("E9", "zz")], source="E9")
+            write_plain_shard(
+                tmp_path / "records", f"r{len(played)}", [record], run_id="other-run",
+            )
+
+        fake_supervisor.play_round.side_effect = other_run_writes
+        with patch.object(collect_coverage, "consult_castability", return_value={}):
+            assert collect_coverage.run(self._config(tmp_path)) == 1
+        assert played
+        assert "no new effect record" in caplog.text
+
+    def test_this_run_s_own_shard_counts(self, tmp_path, fake_supervisor):
+        from effects.application import collect_coverage
+
+        fake_supervisor.run_id = "this-run"
+
+        def own_run_writes(*_args, **_kwargs):
+            record = _record([make_entity("E1", "aa")], source="E1")
+            write_plain_shard(tmp_path / "records", "a", [record], run_id="this-run")
+
+        fake_supervisor.play_round.side_effect = own_run_writes
+        with patch.object(collect_coverage, "consult_castability", return_value={}):
+            assert collect_coverage.run(self._config(tmp_path)) == 0
+
+    def test_a_run_that_could_deck_nothing_played_no_round_and_fails(
+        self, tmp_path, fake_supervisor, caplog,
+    ):
+        from effects.application import collect_coverage
+
+        with patch.object(collect_coverage, "consult_castability", return_value={}), \
+             patch.object(collect_coverage, "build_coverage_decks", return_value=[]):
+            assert collect_coverage.run(self._config(tmp_path)) == 1
+        fake_supervisor.play_round.assert_not_called()
+        assert "No round was played" in caplog.text
+        assert "round 1" not in caplog.text

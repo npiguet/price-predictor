@@ -64,7 +64,7 @@ LINES = {
 }
 
 
-@pytest.mark.parametrize("kind", list(WorkerFailure))
+@pytest.mark.parametrize("kind", [kind for kind in WorkerFailure if kind in LINES])
 def test_each_kind_is_recognised_by_the_line_the_worker_prints(kind):
     assert classify(LINES[kind]) is kind
 
@@ -118,3 +118,36 @@ def test_merging_adds_counts_and_keeps_the_earlier_example():
 def test_no_failure_reads_as_empty():
     assert not WorkerFailures()
     assert WorkerFailures().render() == "no failure lines"
+
+
+@pytest.mark.parametrize("kind", [
+    WorkerFailure.MATCH_ERROR, WorkerFailure.RECORDS_WITHHELD, WorkerFailure.HOOK_FAILURE,
+    WorkerFailure.WORKER_GAVE_UP, WorkerFailure.JVM_ERROR,
+])
+def test_a_failure_line_behind_interleaved_output_is_still_found(kind):
+    """stdout and stderr share the log and interleave mid-line, so a failure
+    line can start after another stream's unfinished text."""
+    assert classify("Worker: 10 matches gen" + LINES[kind]) is kind
+
+
+@pytest.mark.parametrize("line", [
+    "Match format: best-of-1",
+    "Eligible sets: 120",
+    "Loaded 500 coverage decks.",
+    "Loading coverage decks from x",
+    "Directed forks: none",
+    "Random seat: share=0.25 probability=0.5",
+    "effect-record hook failures so far, listener calls that threw and lost their records: {}",
+    "[Forge] random seat failed to play Shock",
+    "Effect records: dropping a probe branch taken on turn 3 that would mirror x",
+])
+def test_routine_worker_output_is_no_failure(line):
+    assert classify(line) is None
+
+
+def test_an_unread_generation_is_counted_with_where_it_was():
+    failures = WorkerFailures()
+    failures.add(WorkerFailure.LOG_UNREAD, "logs/run.0.log: rotated twice")
+
+    assert failures.as_dict() == {"log_unread": 1}
+    assert failures.examples["log_unread"] == "logs/run.0.log: rotated twice"

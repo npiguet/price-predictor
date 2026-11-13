@@ -56,3 +56,24 @@ def test_every_slot_s_log_is_read(tmp_path):
         _append(log, "Error generating match: x\n")
 
     assert WorkerLogScan().scan(logs).as_dict() == {"match_error": 3}
+
+
+def test_a_log_rotated_twice_between_scans_reports_the_lost_generation(tmp_path):
+    """The first generation is gone (the second rotation replaced its .1);
+    the second is read whole from .1 and the loss is reported, not hidden."""
+    log = tmp_path / "run.0.log"
+    rotated = log.with_name(log.name + ".1")
+    _append(log, "Error generating match: a\n")
+    scan = WorkerLogScan()
+    scan.scan([log])
+    _append(log, "Error generating match: in the lost generation\n")
+    log.rename(rotated)
+    _append(log, "Error generating match: second generation\n")
+    rotated.unlink()
+    log.rename(rotated)
+    _append(log, "Worker giving up after 50 consecutive failed attempts\n")
+
+    found = scan.scan([log])
+
+    assert found.as_dict() == {"match_error": 1, "worker_gave_up": 1, "log_unread": 1}
+    assert str(log) in found.examples["log_unread"]

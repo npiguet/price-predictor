@@ -2,8 +2,8 @@
 
 A collector's run directory is its ``--effect-records`` directory
 (``.claude/skills/artifact-layout/SKILL.md``): the workers' shards go to its
-top level, where they always have, every worker log and each round's progress
-file under ``logs/``, and the decks file the workers read under ``decks/``.
+top level, every worker log and each round's progress file under ``logs/``,
+and the decks file the workers read under ``decks/``.
 """
 
 from __future__ import annotations
@@ -200,6 +200,11 @@ class CollectorSupervisor:
             worker_failure_examples=dict(self.worker_failures.examples),
             worker_survivors=list(self.survivors),
         )
+
+    def record(self, **fields) -> None:
+        """Keep ``fields``, facts the caller learned about this run, in the
+        running command's entry of ``run.json``."""
+        annotate_run(self._effect_records, **fields)
 
     def stop(self) -> None:
         """End the run: flush the worker logs, stop the pool, report the run's

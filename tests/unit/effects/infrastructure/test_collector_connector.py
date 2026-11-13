@@ -433,3 +433,22 @@ class TestACtrlCBetweenRoundsIsNotLost:
         finally:
             for sig, handler in saved.items():
                 signal.signal(sig, handler)
+
+
+class TestTheSupervisorRecordsWhatItIsTold:
+    """P1 #11: the application's facts about a run (the cards Forge cannot
+    resolve) reach the running command's run.json entry through the supervisor."""
+
+    def test_record_writes_into_the_running_command_s_entry(self, tmp_path):
+        import json
+
+        from price_predictor.infrastructure.run_manifest import run_recorded
+
+        def body():
+            _supervisor(tmp_path).record(unresolved_cards=3, unresolved_share=0.25)
+            return 0
+
+        run_recorded(tmp_path, body, command="python -m effects collect-coverage")
+
+        entry = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))["invocations"][0]
+        assert (entry["unresolved_cards"], entry["unresolved_share"]) == (3, 0.25)

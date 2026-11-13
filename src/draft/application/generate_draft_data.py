@@ -814,7 +814,7 @@ class GenerateDraftDataSupervisor:
             return "?"
 
     @staticmethod
-    def _terminate(proc: Any, kill_process_tree: Callable[[Any], None]) -> None:
+    def _terminate(proc: Any, kill_process_tree: Callable[[Any], bool]) -> None:
         try:
             if hasattr(proc, "pid"):
                 kill_process_tree(proc)

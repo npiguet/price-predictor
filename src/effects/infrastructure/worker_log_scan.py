@@ -4,7 +4,9 @@ Each scan reads only what the logs gained since the last one, from the last
 complete line on, so a line the worker is still writing is read whole next
 time. A slot's log rotated past its size cap (``WorkerLogFiles``) is noticed
 by its file changing identity: the rest of the rotated file is read before
-the new one.
+the new one. Rotated twice between scans, the generation read so far is gone
+(the second rotation replaced its ``.1``): the loss is counted as
+``log_unread``, and the ``.1`` there now, never read, is read whole.
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ import os
 from collections.abc import Iterable
 from pathlib import Path
 
-from effects.domain.worker_failures import WorkerFailures
+from effects.domain.worker_failures import WorkerFailure, WorkerFailures
 
 
 class WorkerLogScan:
@@ -37,13 +39,23 @@ class WorkerLogScan:
             return
         known, offset = self._read.get(path, (identity, 0))
         if known != identity:
-            # Rotated: the file read so far is now ``.1``; finish it first.
+            # Rotated: the file read so far is ``.1`` now, unless a second
+            # rotation replaced it; finish whichever generation is there.
             rotated = path.with_name(path.name + ".1")
             try:
-                if os.stat(rotated).st_ino == known:
-                    _read_lines(rotated, offset, failures)
+                rotated_identity = os.stat(rotated).st_ino
             except OSError:
-                pass
+                rotated_identity = None
+            if rotated_identity == known:
+                _read_lines(rotated, offset, failures)
+            else:
+                failures.add(
+                    WorkerFailure.LOG_UNREAD,
+                    f"{path}: rotated at least twice between scans; the "
+                    "generation read so far is gone",
+                )
+                if rotated_identity is not None:
+                    _read_lines(rotated, 0, failures)
             offset = 0
         self._read[path] = (identity, _read_lines(path, offset, failures))
 

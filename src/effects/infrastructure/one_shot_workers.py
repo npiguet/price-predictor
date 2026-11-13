@@ -53,7 +53,10 @@ def castability_verdicts(names: list[str]) -> dict[str, str]:
 
     The verdict only ranks, never drops a card (an uncastable card is exactly
     the one an intervention has to force into play). A name left unanswered is
-    absent, which the caller ranks as castable, the safe direction.
+    absent: Forge's card database does not hold it, so no deck can name it,
+    and ``collect-coverage`` leaves it out of the unit and the decks. That is
+    a separate rule from the verdict. A failed consult answers nothing, and
+    then every card ranks as castable, the safe direction.
     """
     with tempfile.TemporaryDirectory(prefix="effects-consult-") as scratch:
         request = Path(scratch) / "cards.txt"

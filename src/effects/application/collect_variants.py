@@ -749,11 +749,19 @@ def finish(
         )
         return 130
     if counter.rounds == 0:
-        logger.info(
-            "Every one of %d variants already has its %d games or has retired; "
-            "no round to play", len(units), config.variant_games,
+        if is_complete(units, config.variant_games):
+            logger.info(
+                "Every one of %d variants already has its %d games or has retired; "
+                "no round to play", len(units), config.variant_games,
+            )
+            return 0
+        logger.error(
+            "No round was played and %d variant(s) still short of %d games: "
+            "none of them could be decked.",
+            sum(1 for unit in units.values() if not unit.done(config.variant_games)),
+            config.variant_games,
         )
-        return 0
+        return 1
     if counter.records <= 0:
         logger.error(
             "The variant round played its matches and added no new effect "

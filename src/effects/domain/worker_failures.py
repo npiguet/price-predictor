@@ -8,9 +8,12 @@ from its shards, like a run that played half as many games. The collectors
 scan their workers' logs after every round and report these lines by kind
 (``collector_connector.CollectorSupervisor``).
 
-Each kind is recognised by the start of the line the Java side prints; the
+Each kind is recognised by the text the Java side prints, found anywhere in
+a line: a worker's stdout and stderr share one log and interleave mid-line,
+so a failure line can begin after another stream's unfinished text. The
 fragment each pattern is built from is checked against the connector's
-sources by ``tests/unit/effects/domain/test_worker_failures.py``.
+sources by ``tests/unit/effects/domain/test_worker_failures.py``, and the
+same tests hold routine worker output to no match.
 """
 
 from __future__ import annotations
@@ -57,6 +60,8 @@ class WorkerFailure(StrEnum):
     STACK_UNREADABLE = "stack_unreadable"
     #: The JVM itself: an uncaught exception, out of memory.
     JVM_ERROR = "jvm_error"
+    #: A log generation rotated away before it was scanned; never a line.
+    LOG_UNREAD = "log_unread"
 
 
 @dataclass(frozen=True)
@@ -76,39 +81,39 @@ def _pattern(kind: WorkerFailure, regex: str, fragment: str | None) -> FailurePa
 #: In match order: the first pattern a line matches decides its kind.
 FAILURE_PATTERNS: tuple[FailurePattern, ...] = (
     _pattern(WorkerFailure.UNRESOLVED_DECK,
-             r"^Error generating match: .*deck cannot be materialized",
+             r"Error generating match: .*deck cannot be materialized",
              "deck cannot be materialized: "),
-    _pattern(WorkerFailure.MATCH_ERROR, r"^Error generating match: ", "Error generating match"),
-    _pattern(WorkerFailure.WORKER_GAVE_UP, r"^Worker giving up after ", "Worker giving up after "),
-    _pattern(WorkerFailure.HOOK_FAILURE, r"^effect-record hook \S+: its listener threw",
+    _pattern(WorkerFailure.MATCH_ERROR, r"Error generating match: ", "Error generating match"),
+    _pattern(WorkerFailure.WORKER_GAVE_UP, r"Worker giving up after ", "Worker giving up after "),
+    _pattern(WorkerFailure.HOOK_FAILURE, r"effect-record hook \S+: its listener threw",
              ": its listener threw, which loses what"),
-    _pattern(WorkerFailure.EMITTER_FAILURE, r"^ApiEvents: the (emitter|memo) for ",
+    _pattern(WorkerFailure.EMITTER_FAILURE, r"ApiEvents: the (emitter|memo) for ",
              "ApiEvents: the emitter for "),
     _pattern(WorkerFailure.UNKNOWN_OUTCOME_TYPE,
-             r"^ClauseOutcomeRouter: outcomeHandler\(\) received",
+             r"ClauseOutcomeRouter: outcomeHandler\(\) received",
              "ClauseOutcomeRouter: outcomeHandler() received "),
-    _pattern(WorkerFailure.BOUNDARY_STEP_FAILED, r"^Effect records: the phase boundary's ",
+    _pattern(WorkerFailure.BOUNDARY_STEP_FAILED, r"Effect records: the phase boundary's ",
              "Effect records: the phase boundary's "),
     _pattern(WorkerFailure.RECORDS_WITHHELD,
-             r"^Effect records: game \S+ reached --max-records-per-game",
+             r"Effect records: game \S+ reached --max-records-per-game",
              " reached --max-records-per-game "),
-    _pattern(WorkerFailure.FORK_SCORE_MISMATCH, r"^Effect records: discarding a fork whose score",
+    _pattern(WorkerFailure.FORK_SCORE_MISMATCH, r"Effect records: discarding a fork whose score",
              "Effect records: discarding a fork whose score "),
-    _pattern(WorkerFailure.FORK_CHECK_FAILED, r"^Effect records: fork score check failed",
+    _pattern(WorkerFailure.FORK_CHECK_FAILED, r"Effect records: fork score check failed",
              "Effect records: fork score check failed ("),
-    _pattern(WorkerFailure.FORK_FIDELITY, r"^Effect records: fork fidelity",
+    _pattern(WorkerFailure.FORK_FIDELITY, r"Effect records: fork fidelity",
              "Effect records: fork fidelity"),
-    _pattern(WorkerFailure.STAGING_FAILED, r"^Could not stage custom cards ",
+    _pattern(WorkerFailure.STAGING_FAILED, r"Could not stage custom cards ",
              "Could not stage custom cards from "),
-    _pattern(WorkerFailure.VARIANT_NAMES_UNREADABLE, r"^Could not read variant names ",
+    _pattern(WorkerFailure.VARIANT_NAMES_UNREADABLE, r"Could not read variant names ",
              "Could not read variant names from "),
-    _pattern(WorkerFailure.DROPPED_EVENTS_UNWRITABLE, r"^cannot append dropped-event counts",
+    _pattern(WorkerFailure.DROPPED_EVENTS_UNWRITABLE, r"cannot append dropped-event counts",
              "cannot append dropped-event counts to "),
     _pattern(WorkerFailure.STACK_UNREADABLE,
-             r"^effect records: MagicStack\.primaryAbility cannot be read",
+             r"effect records: MagicStack\.primaryAbility cannot be read",
              "effect records: MagicStack.primaryAbility cannot be read ("),
     _pattern(WorkerFailure.JVM_ERROR,
-             r"^(Exception in thread |java\.lang\.OutOfMemoryError|# There is insufficient memory)",
+             r"(Exception in thread |java\.lang\.OutOfMemoryError|# There is insufficient memory)",
              None),
 )
 
@@ -116,7 +121,7 @@ FAILURE_PATTERNS: tuple[FailurePattern, ...] = (
 def classify(line: str) -> WorkerFailure | None:
     """The kind of failure ``line`` reports, or None for any other line."""
     for failure in FAILURE_PATTERNS:
-        if failure.pattern.match(line):
+        if failure.pattern.search(line):
             return failure.kind
     return None
 
@@ -137,9 +142,13 @@ class WorkerFailures:
         """Count ``line`` when it reports a failure; its kind, or None."""
         kind = classify(line)
         if kind is not None:
-            self.counts[kind.value] += 1
-            self.examples.setdefault(kind.value, line.rstrip()[:EXAMPLE_LENGTH])
+            self.add(kind, line)
         return kind
+
+    def add(self, kind: WorkerFailure, example: str) -> None:
+        """Count one failure of ``kind``, ``example`` saying what it was."""
+        self.counts[kind.value] += 1
+        self.examples.setdefault(kind.value, example.rstrip()[:EXAMPLE_LENGTH])
 
     def merge(self, other: WorkerFailures) -> None:
         self.counts.update(other.counts)

@@ -710,6 +710,19 @@ class TestTheUntargetedRound:
         assert "Bolt Variant 0a1b2c3d" not in decked
         assert "Shock Variant 99aa00ff" in decked
 
+    def test_a_run_that_could_deck_nothing_fails_and_says_so(
+        self, tmp_path, monkeypatch, fake_supervisor, caplog,
+    ):
+        """No unfinished variant yields a deck: no round is played, the
+        variants still lack their games, and the run must not read as done."""
+        collect_variants, config = self._fixture(tmp_path, monkeypatch, fake_supervisor)
+        monkeypatch.setattr(collect_variants, "build_coverage_decks", lambda *a, **k: [])
+
+        assert collect_variants.run(config) == 1
+        fake_supervisor.play_round.assert_not_called()
+        assert "already has its" not in caplog.text
+        assert "2 variant(s) still short" in caplog.text
+
     def test_a_continued_run_with_nothing_left_plays_no_round_and_succeeds(
         self, tmp_path, monkeypatch, fake_supervisor,
     ):

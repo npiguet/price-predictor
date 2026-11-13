@@ -228,9 +228,11 @@ class _ShardCounter:
     """Counts each shard once across a whole run, not once per round.
 
     Sound because a shard is final once counted: a round's workers are all
-    terminated before ``play_round`` returns (a worker spawned while the pool
+    killed before ``play_round`` returns (a worker spawned while the pool
     shuts down is killed by the pool too), and a shard's name carries its JVM
-    lifetime, so no later round reopens it.
+    lifetime, so no later round reopens it. A worker the kill could not end
+    is the exception: the supervisor names it, and its shard is counted as it
+    stood when read.
     """
 
     def __init__(self, progress_every: int = PROGRESS_EVERY_SHARDS) -> None:
@@ -238,8 +240,13 @@ class _ShardCounter:
         self._progress_every = progress_every
         #: Every card the shards of the last ``update`` showed.
         self.seen: set[str] = set()
-        #: Records in every shard counted so far.
-        self.records = 0
+        #: Records per shard counted so far.
+        self._records: dict[Path, int] = {}
+
+    def records_of(self, run_id: str) -> int:
+        """Records in the counted shards of run ``run_id`` (``{run_id}.*``)."""
+        prefix = f"{run_id}."
+        return sum(n for shard, n in self._records.items() if shard.name.startswith(prefix))
 
     def _count_fresh[T](
         self,
@@ -258,12 +265,12 @@ class _ShardCounter:
             shard for shard in iter_shards(records_dir)
             if shard not in self._counted
         ]
-        for part in run_parallel(
+        for shard, part in zip(fresh, run_parallel(
             fresh, count, workers=workers, label="Counted",
             progress_every=self._progress_every,
-        ):
+        ), strict=True):
             apply(part)
-            self.records += part.records
+            self._records[shard] = part.records
         self._counted.update(fresh)
         return len(fresh)
 
@@ -353,6 +360,27 @@ def non_deck_names(texts: Mapping[str, str]) -> set[str]:
     return {name for name, text in texts.items() if not is_deckable(text)}
 
 
+@dataclass(frozen=True)
+class Unresolved:
+    """The cards Forge's card database does not hold, out of the pool the
+    consult was asked about (P1 #11)."""
+
+    cards: tuple[str, ...] = ()
+    pool: int = 0
+
+    @property
+    def share(self) -> float:
+        return len(self.cards) / self.pool if self.pool else 0.0
+
+    def fields(self) -> dict:
+        """What ``run.json`` records: the count, the share, and some names."""
+        return {
+            "unresolved_cards": len(self.cards),
+            "unresolved_share": round(self.share, 4),
+            "unresolved_examples": list(self.cards[:20]),
+        }
+
+
 @dataclass(kw_only=True)
 class CoverageRounds(ABC):
     """What the round loop needs from one kind of coverage unit, and what both
@@ -369,6 +397,8 @@ class CoverageRounds(ABC):
     candidates: dict[str, DeckCandidate]
     #: Processes counting shards: the run's ``--workers``, never the CPU count.
     workers: int | None = None
+    #: The cards left out because Forge's card database does not hold them.
+    unresolved: Unresolved = field(default_factory=Unresolved)
     #: Logged when the weighted cards yield no deck at all.
     no_decks: ClassVar[str]
 
@@ -438,7 +468,6 @@ def play_rounds(
     rng = random.Random(config.seed)
     round_number = 0
     while not is_complete(rounds.awaited, rounds.target):
-        round_number += 1
         previous = {key: unit.progress for key, unit in rounds.units.items()}
         weights = rounds.weights()
         if not weights:
@@ -449,6 +478,7 @@ def play_rounds(
         if not decks:
             logger.error("%s", rounds.no_decks)
             break
+        round_number += 1
         written = {name for deck in decks for name in deck}
         supervisor.play_round(
             decks, decks_file, label="coverage", matches=config.decks_per_round,
@@ -479,17 +509,27 @@ def _play_to_completion(
 ) -> int:
     """Play ``rounds`` under a supervisor and report what they left; 130 when
     Ctrl-C ended them, 1 when they played and wrote no record at all."""
-    before = rounds.counter.records
     with collector_supervisor(
         workers=config.workers, effect_records=config.effect_records, caps=caps,
     ) as supervisor:
+        if rounds.unresolved.pool:
+            supervisor.record(**rounds.unresolved.fields())
         played = play_rounds(rounds, supervisor, config)
     logger.info("%s", rounds.report())
     # Residues print either way, but an interrupted run did not finish.
     if played.interrupted:
         return 130
-    written = rounds.counter.records - before
-    if played.rounds and written <= 0:
+    if not played.rounds:
+        if is_complete(rounds.awaited, rounds.target):
+            return 0
+        logger.error(
+            "No round was played and %d unit(s) are still unfinished: none of "
+            "them could be decked.",
+            sum(1 for unit in rounds.awaited.values() if not unit.done(rounds.target)),
+        )
+        return 1
+    written = rounds.counter.records_of(supervisor.run_id)
+    if written <= 0:
         logger.error(
             "%d round(s) played and no new effect record written under %s. "
             "The worker logs say why (under logs/, summed above): every match "
@@ -497,8 +537,7 @@ def _play_to_completion(
             "not hold.", played.rounds, config.effect_records,
         )
         return 1
-    if played.rounds:
-        logger.info("Collected %d new effect records over %d round(s)", written, played.rounds)
+    logger.info("Collected %d new effect records over %d round(s)", written, played.rounds)
     return 0
 
 
@@ -573,7 +612,8 @@ def run(config: CollectCoverageConfig) -> int:
     )
 
     verdicts = consult_castability(sorted(coverage))
-    for name in unresolvable(coverage, verdicts):
+    unresolved = unresolvable(coverage, verdicts)
+    for name in unresolved.cards:
         del coverage[name]
     if not coverage:
         logger.error("No card under %s is in Forge's card database", trees.cards_folder)
@@ -583,7 +623,7 @@ def run(config: CollectCoverageConfig) -> int:
             coverage[name].verdict = verdict
 
     rounds = CardRounds(
-        coverage=coverage, verdicts=verdicts, counter=counter,
+        coverage=coverage, verdicts=verdicts, counter=counter, unresolved=unresolved,
         records_dir=records_dir, target=config.target_records, workers=config.workers,
         candidates={
             name: DeckCandidate.from_converted_text(name, text)
@@ -608,25 +648,33 @@ def _count_existing(
     return seeded
 
 
-def unresolvable(units: Iterable[str], verdicts: Mapping[str, ConsultVerdict]) -> set[str]:
-    """The cards the consult left unanswered, logged; none when it answered
+def unresolvable(units: Iterable[str], verdicts: Mapping[str, ConsultVerdict]) -> Unresolved:
+    """The cards the consult left unanswered, reported; none when it answered
     nothing at all (a consult that could not run proves nothing).
 
-    The consult answers every name Forge's card database holds, and a
-    decks-only round refuses a whole deck naming any other card: one such
-    card, unrecorded and so weighted the most, would fail every match whose
-    deck holds it until it retired unseen (P1 #11). So it leaves the unit
-    and the decks instead."""
+    The castability verdict only ranks and never drops a card. This is a
+    different rule: the consult answers every name Forge's card database
+    holds, and a decks-only round refuses a whole deck naming any other card,
+    so a card left unanswered cannot be decked at all. Kept, it would be
+    unrecorded and so weighted the most, failing every match whose deck holds
+    it until it retired unseen (P1 #11); it leaves the unit and the decks
+    instead. No share stops the run; the report says how many, out of how
+    many, and what a large share means."""
+    pool = sorted(units)
     if not verdicts:
-        return set()
-    missing = {name for name in units if name not in verdicts}
+        return Unresolved(pool=len(pool))
+    missing = tuple(name for name in pool if name not in verdicts)
+    result = Unresolved(missing, len(pool))
     if missing:
         logger.warning(
-            "%d card(s) the castability consult left unanswered, so not in "
-            "Forge's card database, are left out of the unit and the decks: %s",
-            len(missing), ", ".join(sorted(missing)[:20]) + (" ..." if len(missing) > 20 else ""),
+            "%d of %d card(s) (%.1f%%) are not in Forge's card database (the "
+            "castability consult left them unanswered) and are left out of the "
+            "unit and the decks. A large share means ../forge is older than the "
+            "converted cards: rebuild Forge or reconvert. %s",
+            len(missing), len(pool), 100.0 * result.share,
+            ", ".join(missing[:20]) + (" ..." if len(missing) > 20 else ""),
         )
-    return missing
+    return result
 
 
 def wording_cards_of[C](converted: Mapping[str, C], path: Path) -> dict[str, C]:
@@ -887,7 +935,8 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
         return 1
 
     verdicts = consult_castability(sorted(present))
-    missing = unresolvable(present, verdicts)
+    unresolved = unresolvable(present, verdicts)
+    missing = frozenset(unresolved.cards)
     present = present - missing
     carriers = {
         text: cards - missing for text, cards in carriers.items() if cards - missing
@@ -906,7 +955,7 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
     )
 
     rounds = TextRounds(
-        coverage=coverage, carriers=carriers, verdicts=verdicts,
+        coverage=coverage, carriers=carriers, verdicts=verdicts, unresolved=unresolved,
         counter=counter, records_dir=records_dir, target=floor, workers=config.workers,
         candidates={
             name: DeckCandidate.from_converted_text(name, text)
