@@ -108,6 +108,10 @@ Send each to the package's own implementer (resume it), in this order, once no o
 
 **Order of the queue:** full unit suite + connector suite (running) -> WP3 verifier (running) -> WP3 gaps -> WP4 -> WP7 -> WP5 -> WP6 (each: implementer, suites, verifier, gaps) -> WP11 verifier and WP10 second round between connector packages as convenient -> WP9/WP10/WP11/WP8 wire-dependent parts -> WP12 -> WP13.
 
+**WP11 follow-up** (implementer agent `a6324018cfe92cfe8`; send with its verifier's gaps):
+- Unit suite on `abc88b88`: 5994 passed, 3 failed, all in `tests/unit/effects/infrastructure/test_cli_shard_refusals.py` for `validate-corpus` (`test_each_reader_exits_1_on_a_refused_shard[error0|error1-run_validate_corpus]`, `test_validate_corpus_exits_1_naming_the_line_that_does_not_decode`). WP9 made `validate-corpus` exit 1 through the located decode error; WP11 made an undecodable line a failed judged invariant ("every shard line decodes") while the other shards are still read. Keep WP11's behaviour (a check reports); make the exit code, the message naming shard and line, and those three tests agree with it.
+- Connector suite on the changed scenario files: 1708 passed.
+
 **WP10 second round** (verifier report of 2026-11-13; implementer agent `a0338cfade4abdd1f`):
 1. A surveyed game's late records still train (reproduced: 40 records appended to a game already placed in training, 19 written to `training/`, `dropped-unsurveyed` 0). `GameStrata.surveyed` is per game (`corpus_plan.py:528`). Fix: the survey records each shard's record count (or bytes read) and `_ShardWriter.observe` sends every record past it to `DROPPED_UNSURVEYED`; reword `build_corpus._warn_on_resized_shards`; name every resized shard (the code names five, the docs say all).
 2. False "the corpus changed between the passes" warning on every real build with a join gap (`corpus_report.py:148`): the two passes ask the sidecars different numbers of times. Compare only the decode tally (`off_list`, `damaged_tails`).
