@@ -162,6 +162,106 @@ class BusOutcomeEventsTest {
         assertEquals("LifeReachedZero", params(told.get(0)).get("reason"), outcome.get(0));
     }
 
+    /**
+     * Door to Nothingness makes its target lose: Forge ends the game while
+     * the ability resolves, and the ability's effect half holds the loss and
+     * the win it made, written once in the game.
+     */
+    @Test
+    void aLoseTheGameAbilitysHalfHoldsTheLossAndTheWin() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card door = TestBoard.inPlay(game, caster, "Door to Nothingness");
+        SpellAbility loses = TestBoard.ability(door, forge.game.ability.ApiType.LosesGame);
+        loses.setActivatingPlayer(caster);
+        loses.resetTargets();
+        loses.getTargets().add(opponent);
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            game.getStack().add(loses);
+            game.getStack().resolveStack();
+            assertTrue(game.isGameOver(), "the opponent lost");
+        });
+
+        String half = only(records, "resolution", "cardsfolder/d/door_to_nothingness.txt");
+        assertGameEndWrittenOnceIn(records, half, opponent, "SpellEffect", caster);
+    }
+
+    /**
+     * Halo Fountain's "you win the game": the ability's effect half holds
+     * the win and the opponent's loss, written once in the game.
+     */
+    @Test
+    void aWinTheGameAbilitysHalfHoldsTheWinAndTheLoss() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card fountain = TestBoard.inPlay(game, caster, "Halo Fountain");
+        SpellAbility wins = TestBoard.ability(fountain, forge.game.ability.ApiType.WinsGame);
+        wins.setActivatingPlayer(caster);
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            game.getStack().add(wins);
+            game.getStack().resolveStack();
+            assertTrue(game.isGameOver(), "the caster won");
+        });
+
+        String half = only(records, "resolution", "cardsfolder/h/halo_fountain.txt");
+        assertGameEndWrittenOnceIn(records, half, opponent, "OpponentWon", caster);
+    }
+
+    /**
+     * Both players at 1 life lose 1 at once: a draw. Each gets a {@code
+     * player_lost}, in the record the game's outcome is written in, and no
+     * {@code player_won} is written.
+     */
+    @Test
+    void aSimultaneousLossNamesBothLosersAndNoWinner() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        caster.setLife(1, null);
+        opponent.setLife(1, null);
+        SpellAbility drain = forge.game.ability.AbilityFactory.getAbility(
+                "SP$ LoseLife | Defined$ Player | LifeAmount$ 1",
+                TestBoard.inHand(game, caster, "Lightning Bolt"));
+        drain.setActivatingPlayer(caster);
+
+        List<String> records = ShardRun.observed(tempDir, game, collector -> {
+            TestBoard.castAndResolve(game, drain);
+            assertTrue(game.isGameOver(), "both players lost");
+            collector.finishGame(Set.of());
+        });
+
+        List<String> outcome = withEventOfType(records, "player_lost");
+        assertEquals(1, outcome.size(), records.toString());
+        List<Object> losers = events(outcome.get(0)).stream()
+                .filter(event -> "player_lost".equals(event.get("type")))
+                .<Object>map(event -> ((List<?>) event.get("subjects")).get(0)).toList();
+        assertEquals(Set.of(Refs.of(caster), Refs.of(opponent)), Set.copyOf(losers), outcome.get(0));
+        assertEquals(2, losers.size(), outcome.get(0));
+        assertEquals(List.of(), withEventOfType(records, "player_won"), records.toString());
+    }
+
+    /**
+     * The game's end is in {@code half}: one {@code player_lost} naming the
+     * loser with {@code reason}, then one {@code player_won} naming the
+     * winner, and no other record of the game writes either.
+     */
+    private static void assertGameEndWrittenOnceIn(
+            List<String> records, String half, Player loser, String reason, Player winner) {
+        List<Map<String, Object>> told = events(half).stream()
+                .filter(event -> event.get("type").toString().startsWith("player_")).toList();
+        assertEquals(List.of("player_lost", "player_won"),
+                told.stream().map(event -> event.get("type")).toList(), half);
+        assertEquals(List.of(Refs.of(loser)), told.get(0).get("subjects"), half);
+        assertEquals(reason, params(told.get(0)).get("reason"), half);
+        assertEquals(List.of(Refs.of(winner)), told.get(1).get("subjects"), half);
+        assertEquals(List.of(half), withEventOfType(records, "player_lost"), records.toString());
+        assertEquals(List.of(half), withEventOfType(records, "player_won"), records.toString());
+    }
+
     /** The types of the record's events naming {@code ref}, in order. */
     private static List<Object> typesNaming(String record, String ref) {
         return events(record).stream()

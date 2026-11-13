@@ -444,8 +444,9 @@ final class BusEvents {
      * card: {@code attached} with {@code attached_to}, the entity it now
      * hangs on, or {@code unattached} with {@code detached_from}, the one it
      * left, as the trigger path's run parameters name them. A move from one
-     * host to another is one {@code attached}, whose old host the record's
-     * board shows.
+     * host to another is an {@code unattached} from the old host, then an
+     * {@code attached} to the new one: {@code Card.attachToEntity} unattaches
+     * first.
      */
     static EffectEvent attachment(GameEventCardAttachment event) {
         if (event.equipment() == null) {

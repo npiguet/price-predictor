@@ -121,6 +121,21 @@ public final class BusBracketCollector extends BusEventReader {
     /** Whether something went on the stack during the state-based loop running now. */
     private boolean stackUsedInLoop;
 
+    /**
+     * Whether the game has moved on to another step inside the resolution
+     * running now: an effect that ends the turn or the combat phase
+     * (Time Stop's {@code EndTurn}, Mandate of Peace's {@code
+     * EndCombatPhase}) has run its own state-based check and handed the game
+     * to the step it skips to, whose own actions follow while the stack
+     * still resolves. From here to the resolution's end what the bus
+     * publishes is that step's, routed as in an ordinary step ({@link
+     * #route}), and not the resolving spell's. Set at the end of the
+     * effect's own check, and at a phase event that arrives while the stack
+     * resolves where no loop signal came; cleared when a resolution starts
+     * or ends, and at a priority.
+     */
+    private boolean stepTakenOver;
+
     /** Where this game's {@link PhaseSignals} deliver the loop's two signals. */
     private final PhaseSignals.Sink phaseSink = new PhaseSignals.Sink() {
         @Override
@@ -258,6 +273,7 @@ public final class BusBracketCollector extends BusEventReader {
      *                none of the item's clauses will run
      */
     void resolutionStarting(SpellAbility item, boolean fizzled) {
+        stepTakenOver = false;
         if (!inStateBasedLoop) {
             onNextAction();
         }
@@ -472,6 +488,7 @@ public final class BusBracketCollector extends BusEventReader {
      *                  in which case it never ran at all
      */
     void endBracket(int abilityId, boolean fizzled) {
+        stepTakenOver = false;
         // Another resolution has run since the held one ended, so the held
         // one's state-based check is over: what dies after this is this
         // resolution's doing, or a mix nobody can untangle.
@@ -497,6 +514,11 @@ public final class BusBracketCollector extends BusEventReader {
         boolean free = resolved.costs != null && resolved.ability.isActivatedAbility()
                 && resolved.costs.spentNoManaAndMovedNoCard();
         heldResolution.hold(resolved, outcome, free);
+        if (game != null && game.isGameOver()) {
+            // The resolution ended the game (a "loses the game", a "wins the
+            // game" ability): no next action or loop end will write it.
+            onNextAction();
+        }
     }
 
     /**
@@ -531,6 +553,11 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Subscribe
     public void onPhase(GameEventTurnPhase event) {
+        if (game.getStack().isResolving()) {
+            // A step begun by the resolving effect itself: what follows is
+            // the step's, not the effect's.
+            stepTakenOver = true;
+        }
         turnActions.close();
         onStepBoundary();
         // An effect that empties the stack -- ending the turn, ending combat --
@@ -610,11 +637,23 @@ public final class BusBracketCollector extends BusEventReader {
      */
     void endStateBasedLoop() {
         inStateBasedLoop = false;
+        if (game.getStack().isResolving() && endsTheStep(PatchHooks.currentSubAbility())) {
+            // The effect's own check is the last thing it does itself; the
+            // step it ends, and the one it skips to, follow.
+            stepTakenOver = true;
+        }
         onNextAction();
         if (stackUsedInLoop) {
             combatStep.closeWindow();
         }
         stackUsedInLoop = false;
+    }
+
+    /** Whether a resolving clause ends the turn or the combat phase. */
+    private static boolean endsTheStep(Object clause) {
+        return clause instanceof SpellAbility ending && ending.getApi() != null
+                && (ending.getApi() == forge.game.ability.ApiType.EndTurn
+                        || ending.getApi() == forge.game.ability.ApiType.EndCombatPhase);
     }
 
     /** This game's events that reached no record so far. */
@@ -720,6 +759,20 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Override
     void fileOutcome(EffectEvent event, String namedCause) {
+        if (event.type() == EventType.UNATTACHED && heldResolution.isHolding()
+                && (inStateBasedLoop || game.getTracker().isFrozen())
+                && !event.subjects().isEmpty()) {
+            // An Aura or Equipment the state-based check takes off a
+            // permanent the held resolution killed or changed: part of that
+            // check's moves, as the Aura's own move to the graveyard is,
+            // filed with the half that names the permanent it left. The
+            // check is told as fileMove tells it: the loop's signals, or a
+            // frozen tracker without them.
+            Object host = event.params().get("detached_from");
+            heldResolution.fileConsequence(
+                    event, host instanceof String left ? left : event.subjects().get(0));
+            return;
+        }
         route(event, namedCause, Filing.OUTCOME);
     }
 
@@ -931,8 +984,34 @@ public final class BusBracketCollector extends BusEventReader {
                             DroppedEvents.phaseOf(game));
                 }
             }
-            case RESOLUTION -> brackets.file(
-                    EventAttribution.stamp(event, brackets.resolving(), namedCause),
+            case RESOLUTION -> {
+                if (stepTakenOver) {
+                    fileAsTheStepsOwn(event, namedCause, filing);
+                } else {
+                    brackets.file(
+                            EventAttribution.stamp(event, brackets.resolving(), namedCause),
+                            DroppedEvents.phaseOf(game));
+                }
+            }
+        }
+    }
+
+    /**
+     * An event of the step a resolving effect handed the game to ({@link
+     * #stepTakenOver}), routed as the same event of an ordinary step with no
+     * bracket open: a turn-based action's into its window (the cleanup's
+     * discard to hand size, a {@code cleanup_discard} record), a state-based
+     * death with nothing holding it counted as dropped (FR-029), and any
+     * other — damage wearing off, an "until end of turn" or "until end of
+     * combat" effect ending — to the orphans, which count it as dropped when
+     * they are discarded, as an ordinary cleanup's are.
+     */
+    private void fileAsTheStepsOwn(EffectEvent event, String namedCause, Filing filing) {
+        if (filing == Filing.STATE_BASED_DEATH) {
+            dropped.count(event.type(), DroppedEvents.phaseOf(game));
+        } else if (!turnActions.take(event, namedCause)) {
+            brackets.fileOrphan(
+                    EventAttribution.stampAt(event, null, null, namedCause),
                     DroppedEvents.phaseOf(game));
         }
     }
@@ -960,6 +1039,7 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Subscribe
     public void onPriority(GameEventPlayerPriority event) {
+        stepTakenOver = false;
         brackets.finished();
         castsUnderWay.abandonAll();
         // A cast started before priority and never pushed was given up.

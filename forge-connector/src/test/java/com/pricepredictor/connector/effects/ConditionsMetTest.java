@@ -150,6 +150,38 @@ class ConditionsMetTest {
         assertEquals(List.of(), conditionsOf(half), half);
     }
 
+    /**
+     * A chosen charm mode's conditional sub-ability is on the mode's line:
+     * Archdruid's Charm's first mode searches out a Forest and its
+     * sub-ability puts it onto the battlefield only if it is a land. The
+     * mode's half writes that clause's condition, counted down the option
+     * line, met.
+     */
+    @Test
+    void aChosenModesConditionalClauseIsTheModesHalfs() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card forest = TestBoard.card(game, caster, "Forest");
+        game.getAction().moveToLibrary(forest, null, null);
+        Card charmCard = TestBoard.inHand(game, caster, "Archdruid's Charm");
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            Card onStack = game.getAction().moveToStack(charmCard, null);
+            SpellAbility charm = TestBoard.charmOf(onStack, caster);
+            TestBoard.chain(charm, 0);
+            game.getStack().add(charm);
+            game.getStack().resolveStack();
+            game.getAction().checkStateEffects(false);
+            nextStep(game);
+        });
+
+        assertTrue(game.getCardsIn(forge.game.zone.ZoneType.Battlefield).stream()
+                .anyMatch(card -> card.getId() == forest.getId()), "the Forest entered");
+        String half = RecordLines.only(records, "resolution", "cardsfolder/a/archdruids_charm.txt");
+        assertEquals(0L, RecordLines.optionOf(half), half);
+        assertEquals(List.of(Map.of("segment", "0", "met", true)), conditionsOf(half), half);
+    }
+
     /** A forced resolution reads its clauses' conditions as an observed one does. */
     @Test
     void aForcedResolutionCarriesItsConditions() throws java.io.IOException {

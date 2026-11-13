@@ -253,8 +253,18 @@ final class HeldResolutionWindow {
      * <p>Only while {@link #isHolding}.
      */
     void fileDeath(EffectEvent moved, CardView card) {
-        held.halves.fileDeath(
-                EventAttribution.stampAt(moved, held.root, null, null), Refs.of(card));
+        fileConsequence(moved, Refs.of(card));
+    }
+
+    /**
+     * File another event of the state-based check into the held resolution,
+     * as {@link #fileDeath} files a death: an Aura or Equipment taken off a
+     * permanent, filed with the half that names {@code subject}.
+     *
+     * <p>Only while {@link #isHolding}.
+     */
+    void fileConsequence(EffectEvent event, String subject) {
+        held.halves.fileDeath(EventAttribution.stampAt(event, held.root, null, null), subject);
     }
 
     /**

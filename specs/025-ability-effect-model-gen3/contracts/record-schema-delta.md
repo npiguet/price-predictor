@@ -257,12 +257,12 @@ member, or the provenance `mode` any event may carry. `state_flag_change` gains 
 | `state_flag_change` | `flag` `paired` | `value` true; subjects every battlefield permanent paired after a `Bond` clause and not before (both creatures of the pair) |
 | `state_flag_change` | `flag` `merged` | `value` true; subject the permanent a `Mutate` clause's spell merged into (`getMergedToCard`) |
 | `damage_dealt` | `damage_type` | on damage to a creature (bus `GameEventCardDamaged`), after `combat`: `normal` (marked damage), `m1m1_counters` (wither or infect, 120.3d: the same record's `counter_change` adds the -1/-1 counters and no damage is marked), `deathtouch` (a deathtouch source, whatever else it has: a deathtouch source with wither or infect reads `deathtouch`), `loyalty_loss` (Forge's value, never published). Absent on damage to a player, and on a `damage_dealt` read off a trigger's or replacement's map |
-| `attached` | `attached_to` | on the bus event too: the ref (`E`, or `P` for a player) of what the Aura, Equipment or Fortification now hangs on. A move from one host to another is one `attached` |
-| `unattached` | `detached_from` | on the bus event too: the ref of what it left |
-| `destroyed` | resolution, combat and `turn_action` records | subjects the permanent, written just before its `zone_change` off the battlefield and filed where that move is filed (a state-based destruction joins the held half or the damage step's record its death joins). No `regenerable` (Forge's bus event does not say); a destruction a replacement or regeneration stopped writes nothing |
-| `sacrificed` | resolution, combat and `turn_action` records | subjects the permanent, just before its `zone_change` off the battlefield, filed where that move is filed. A sacrifice paid as a cost is the payment's and reaches no record |
+| `attached` | `attached_to` | on the bus event too: the ref (`E`, or `P` for a player) of what the Aura, Equipment or Fortification now hangs on. A move from one host to another is an `unattached` from the old host, then an `attached` to the new one |
+| `unattached` | `detached_from` | on the bus event too: the ref of what it left. One the state-based check makes while a resolution's effect half is held (an Aura falling off the creature the resolution killed) is in that held half, with the half that names the permanent it left |
+| `destroyed` | resolution, combat and `turn_action` records | subjects the permanent, `cause` the host of the line the record attributes it to (as every bracket event's), written just before its `zone_change` off the battlefield and filed where that move is filed (a state-based destruction joins the held half or the damage step's record its death joins). No `regenerable` (Forge's bus event does not say); a destruction a replacement or regeneration stopped writes nothing |
+| `sacrificed` | resolution, combat and `turn_action` records | subjects the permanent, `cause` as on `destroyed`, just before its `zone_change` off the battlefield, filed where that move is filed. A sacrifice paid as a cost is the payment's and reaches no record |
 | `face_change` | resolution, combat and `turn_action` records | subjects the permanent, `to_state` the face now up: `front`, `back`, `flipped`, `melded` or `face_down` (an entity's `face_state` values), written when a battlefield permanent's face differs from the one last read (transformed, flipped, turned face up or face down), beside the stat changes the new face makes |
-| `player_lost` | the game-end record | subjects the player, `reason` Forge's `GameLossReason` name (`LifeReachedZero`, `Milled`, `Poisoned`, `SpellEffect`, `Conceded`, `CommanderDamage`, `OpponentWon`), one per losing player, before `player_won`, in the record `player_won` is written in. A player who agreed to a draw writes none |
+| `player_lost` | the record the game's outcome is written in | subjects the player, `reason` Forge's `GameLossReason` name (`LifeReachedZero`, `Milled`, `Poisoned`, `SpellEffect`, `Conceded`, `CommanderDamage`, `OpponentWon`), one per losing player, before `player_won` when there is a winner. The record is the effect half of the `LosesGame` or `WinsGame` ability whose resolution ended the game (Door to Nothingness, a "you win the game"), which holds `player_lost` and `player_won`; for any other end of the game, the game-end record. Each is written once per game. A draw (every player lost at once) writes a `player_lost` per player and no `player_won`; a player who agreed to a draw writes none |
 | `card_revealed` | `from_zone` | a zone as an entity's `zone` spells it (`library`, `hand`, …); absent when Forge names none |
 | `card_made` | `to_zone` | a zone as an entity's `zone` spells it; absent when Forge names none |
 | `choice_made` | `choice_kind`, `value` | read from the accessor of the clause's own API: `ChooseColor` `color`, `ChooseType` `type`, `ChooseNumber` `number`, `NameCard` `card_name`, `ChoosePlayer` `player`, `ChooseCard` and `ChooseSource` `cards` (the count chosen), `ChooseDirection` `direction`, `ChooseEvenOdd` `even_odd`, `GenericChoice` `mode`; no event when that accessor holds nothing |
@@ -297,15 +297,20 @@ position a card left a library from, and a search of another player's library.
   paying an unless cost while the asking ability resolves is that resolution's event, one flipped
   paying for a cast or an activation is the payment's.
 - An event a cost payment publishes (a tap, a sacrifice, a pain land's damage, a counter removed)
-  reaches no record: the cost half's `costs` and a mana record hold what was paid. Each such event
-  is counted as dropped.
+  reaches no record and is counted as dropped. What was paid is read off the payment itself: the
+  cost half's `costs`, and a mana record's `tapped` and `mana_produced`. What else a payment does,
+  such as a pain land's damage to its controller, is in no record.
 - A bestowed Aura spell or a mutating creature spell whose target is illegal when it resolves
   resolves as a creature spell (702.103e, 702.140b): its effect half reads `resolved` and holds its
   events, the permanent's arrival included.
 - An effect that ends the turn or the combat phase (`EndTurn`, `EndCombatPhase`) writes its effect
-  half: its `turn_ended`, the exile of every card on the stack (its own included), and what the
-  state-based checks and the steps it runs while it resolves do (a death in its own check, the
-  cleanup step's discard).
+  half: its `turn_ended`, the exile of every card on the stack (its own included), and what its own
+  state-based check does (a death there). What follows its own check while it still resolves is the
+  step's it skips to, recorded as in an ordinary step: the cleanup's discard to hand size is a
+  `cleanup_discard` `turn_action` record; an "until end of turn" effect ending, damage wearing off,
+  an "until end of combat" effect ending after an `EndCombatPhase` effect's own check, and a death in
+  the phase end's own check reach no record and are counted as dropped. `EndTurn` removes creatures
+  from combat before its own check, so an "until end of combat" effect it ends is its half's.
 - A refusal made between a cast and the start of its resolution does not make the effect half
   `declined`.
 - `conditions_met` lists the conditional clauses of the line the effect half keys to; a clause of

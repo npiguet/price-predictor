@@ -129,6 +129,17 @@ final class StackBrackets {
     }
 
     /**
+     * File an event as the orphans, whatever bracket is open: an event of a
+     * step the resolving effect handed the game to, which no bracket takes in
+     * an ordinary step either.
+     */
+    void fileOrphan(EffectEvent event, String phase) {
+        if (orphans.file(event)) {
+            orphanPhases.add(phase);
+        }
+    }
+
+    /**
      * Whether the action in progress is the open bracket's own cast, the rest
      * of whose {@code MagicStack.add} runs after the cast is published. An
      * activation is pushed as a copy of the ability the action names.

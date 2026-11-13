@@ -84,6 +84,55 @@ class EffectEndingTheTurnTest {
     }
 
     /**
+     * The cleanup step Time Stop skips to is the step's own, not the spell's:
+     * its controller holds nine cards once it is cast, and a Giant Growth'd
+     * Grizzly Bears.
+     * The discard to hand size is a {@code cleanup_discard} turn-action
+     * record, as in any cleanup, and the pump wearing off reaches no record,
+     * as in any cleanup; Time Stop's half keeps the turn's end and its exile.
+     */
+    @Test
+    void theCleanupStepTimeStopSkipsToIsTheSteps() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card bears = TestBoard.inPlay(game, caster, "Grizzly Bears");
+        TestBoard.cast(game, TestBoard.inHand(game, caster, "Giant Growth"), caster, bears);
+        game.getStack().resolveStack();
+        game.getAction().checkStateEffects(false);
+        assertEquals(5, bears.getNetPower(), "the bears are pumped until end of turn");
+        Card timeStop = TestBoard.inHand(game, caster, "Time Stop");
+        for (int card = 0; card < 9; card++) {
+            TestBoard.inHand(game, caster, "Mountain");
+        }
+        assertEquals(10, caster.getCardsIn(ZoneType.Hand).size(), "nine once Time Stop is cast");
+
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, game, "for the resolution and state-based-loop hooks", () -> {
+                    castWithoutTarget(game, timeStop, caster);
+                    game.getStack().resolveStack();
+                    stepUntilPhase(game, PhaseType.UPKEEP);
+                });
+
+        assertEquals(7, caster.getCardsIn(ZoneType.Hand).size(), "the cleanup discarded two");
+        String half = only(records, "resolution", TIME_STOP);
+        List<String> types = eventTypes(half);
+        assertTrue(types.contains("turn_ended"), half);
+        assertTrue(!types.contains("card_discarded") && !types.contains("pt_change"),
+                "the cleanup's discard and the pump wearing off are not the spell's: " + half);
+        assertTrue(events(half).stream().noneMatch(event -> "hand".equals(params(event).get("from_zone"))),
+                half);
+        List<String> discards = records.stream()
+                .filter(record -> "cleanup_discard".equals(RecordLines.parse(record).get("subkind")))
+                .toList();
+        assertEquals(1, discards.size(), records.toString());
+        assertEquals(2, eventTypes(discards.get(0)).stream()
+                .filter("card_discarded"::equals).count(), discards.get(0));
+        assertTrue(events(discards.get(0)).stream()
+                        .allMatch(event -> "unresolved".equals(event.get("attributed_to"))),
+                "a turn-based action's events name no clause: " + discards.get(0));
+    }
+
+    /**
      * Mandate of Peace ends the combat phase: its own state-based check and
      * the phase end's both run inside its resolution, and its effect half
      * keeps what it did, written once.

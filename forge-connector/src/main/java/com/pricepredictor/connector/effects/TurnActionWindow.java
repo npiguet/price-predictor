@@ -109,7 +109,7 @@ final class TurnActionWindow {
             return false;
         }
         actions.computeIfAbsent(action, ignored -> new EventBuffer())
-                .file(EventAttribution.stamp(event, null, namedCause));
+                .file(EventAttribution.stampAt(event, null, null, namedCause));
         return true;
     }
 
