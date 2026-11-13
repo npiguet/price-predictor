@@ -1066,6 +1066,11 @@ and that the reporting half never enters the control score.
   report their workers' failure lines by kind after each round and in `run.json`
   (contracts/cli.md § Both collectors); `match-outcomes --effect-records` MUST do the same at each
   status line and exit 1 when its matches wrote no effect record.
+- **FR-058h**: A card Forge's card database does not hold MUST NOT be decked: `collect-coverage`
+  MUST take every card the castability consult leaves unanswered, when the consult answers any,
+  out of the coverage unit and the decks, and MUST report their count and share of the consulted
+  pool and record both in `run.json`; no share stops the run. This is distinct from the castability
+  verdict, which only ranks a card and never drops one.
 - **FR-059**: The game-disjoint stratum MUST keep only games between two Forge AIs; the card-disjoint
   stratum MUST keep every game naming a held-out card, random-seat games included. A permanent spell's
   resolution record MUST survive `build-corpus`, keyed to the permanent's card. A decision record

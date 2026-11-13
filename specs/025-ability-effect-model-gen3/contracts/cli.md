@@ -55,7 +55,7 @@ the polarity its counts lack first and starred.
 | `--cards-folder DIR` | `output/cardsfolder` and `output/tokenscripts` | sidecars the detectors read; repeatable, as `build-corpus` |
 | `--variant-scripts DIR` | `output/effects/variant-scripts` | variant sidecars |
 | `--rules-dir DIR` | `rules` | scenarios and their detector declarations |
-| `--workers N` | the CPU count, as `build-corpus` | parallel shard readers |
+| `--workers N` | 12, as `build-corpus` | parallel shard readers, 1 to 12 (exit 2, usage); never the CPU count |
 
 Prints one line per rule, grouped by unit: `fires` and `does_not_fire` counts, each split
 `random_seat / forge_ai / aimed`; then the rules declared `none` with their reasons, the rules not
@@ -104,7 +104,7 @@ the shards at its top level, every worker log under `DIR/logs/` (`<run id>.<slot
 beside the shards). At every status line and at the end the supervisor scans what the logs gained
 for failure lines (`price_predictor.domain.worker_failures`, as on the collectors) and prints them
 by kind; at the end it prints the run's totals and records in its `run.json` entry `run_id`,
-`effect_records` (records the run's shards hold), `matches`, `worker_failures`,
+`matches`, `worker_failures`,
 `worker_failure_examples` and `worker_survivors`. A run that completed matches and wrote no effect
 record exits 1. `match-outcomes.txt` and `cards-played.txt` stay at `output/sealed/`.
 
@@ -162,7 +162,12 @@ consult then ranks every card castable, the sidecar pass exits 1.
 
 The first JVM any command starts removes the variant scripts a `collect-variants` killed before
 it could unstage them left in Forge's custom-cards directory (the files its staging list names),
-and prints how many.
+and prints how many. A `collect-variants` records itself as the staging's owner before its sidecar
+pass stages anything (`.staged-by-effects.owner` beside `.staged-by-effects.list`: its PID and its
+process start time) and drops the record when it unstages. While the recorded process runs, PID
+and start time both matching (a reused PID is no owner), every other command leaves the staging in
+place and prints that it did. A staging list that cannot be read is reported and stops nothing; an
+entry that resolves outside the custom-cards directory is never deleted.
 
 ## `python -m effects collect-variants` (existing)
 

@@ -88,7 +88,7 @@ be compared under two builders.
 
 - Each pairing is played as one best-of-`--best-of` match, default 3. `--best-of` is a
   positive odd integer.
-- `--workers` sets how many Forge worker processes play concurrently, default 12.
+- `--workers` sets how many Forge worker processes play concurrently, 1 to 12, default 12.
 - A pairing whose match fails is skipped and produces no output rows. A crashed worker is
   restarted.
 - Workers are recycled as the sealed `match-outcomes` supervisor recycles them. A pairing
