@@ -222,9 +222,15 @@ rule → polarity → `RuleRow`), `record_flags` (class → `fork` | `interventi
 `degraded` → kept records read), `placement_thresholds` (`min_games_per_half`, `max_item_error`,
 `max_component_error`, null where infinite), `keyword_definitions_digest` (sha256 of the file read, ""
 without one), `decode_off_list` (`"<member> <repr of value>"` → times read outside the wire's closed
-lists), `damaged_tails` ([shard, byte] a damaged last gzip member ended) and `join_gaps`
+lists), `damaged_tails` ([shard path under `--records-dir`, byte] a damaged last gzip member
+ended) and `join_gaps`
 (`unresolved` | `undescribed` → script file → keys, `unconfigured` → source tree → keys: keys read as
-no line), all three the survey's. `per_stratum` counts `dropped-unsurveyed`: records of games the survey never saw (a shard
+no line), all three the survey's; `unsupervised_events` (kind → events no output column reads),
+`code_version` (`git rev-parse HEAD`, "" outside a checkout) and `sidecar_digest` (sha256 over the
+sidecars by tree, path and size). These six are outside the digest; `record_flags` also counts
+`runtime_only` resolutions. `rule_counts` carries `declared_zero`, `none`, `untaggable` and
+`same_as` (`CatalogueStanding`). `per_stratum` counts `dropped-unsurveyed`: records past those the
+survey read in their shard, a new game's or a placed game's (a shard
 grown between the two passes), written to no stratum. Gen-3 manifests only; no gen-2 compatibility.
 
 ### Placement (new, `stratum_placement.py`)
@@ -234,7 +240,7 @@ games, per-game inventories `game → {(rule, polarity): n}` of rule-test-eligib
 `PlacementRule` (gen-2's draws, the pool factor, the half minimum, the item error). Only Forge-AI
 games enter a validation stratum. Output: `GameStrata` gains `halves`, `left_out_of_half` and
 `surveyed` (every game the survey saw); a game outside `surveyed` is `dropped-unsurveyed`, never
-training.
+training, as is every record past the survey's count of its shard (`WriteTask.surveyed`).
 Deterministic for a given corpus; not stable across corpus growth (R3).
 
 ## Model

@@ -255,8 +255,8 @@ No new flag. Behaviour:
   decode or a `generation` naming none: before `--output` is cleared when the survey meets it, and
   saying the dataset was already cleared when the write pass meets it (a shard changed between the
   passes).
-- Warns, naming them, on raw shards whose size changed since the survey; records of games the survey
-  never saw go to no stratum (`dropped-unsurveyed` in `per_stratum`).
+- Warns, naming every one, on raw shards whose size changed since the survey; the records past those
+  the survey read in a shard go to no stratum (`dropped-unsurveyed` in `per_stratum`).
 - Writes no `turn_action` record; counts them by subkind.
 - Writes a `curation` member on every record it writes, and each protection copy drawn as a
   synthetic record `<record_id>~pc<i>`.

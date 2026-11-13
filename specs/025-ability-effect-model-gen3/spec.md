@@ -1060,11 +1060,16 @@ and that the reporting half never enters the control score.
   quality as a whitelisted selector, and from interventional forks granting protection mid-game, in
   amounts per-rule rebalancing sets. A rule-labelled copy MUST be made only where the snapshot shows
   what the rule reads: a target-illegal copy from a candidate acting through the first face its card
-  shows (no Adventure, back face or split half); a damage-prevented copy of a resolution whose acting
-  chain targets nowhere but its root and is no charm mode (`refs.targets` holds the root's targets
-  alone); an Aura-to-graveyard copy of an Aura without bestow, written with `outcome` `fizzled`; and
-  no quality, nor protection from everything, that an Aura or Equipment attached to the protected
-  permanent has (702.16c-d).
+  shows (no Adventure, back face or split half); a damage-prevented copy of a permanent no clause or
+  mode of the acting chain targets (`refs.targets_at_cast` and `refs.targets`), refused on a half
+  without `targets_at_cast`, on damage that can't be prevented (`NoPrevention$` in the chain, an
+  active `Mode$ CantPreventDamage` static on the board) and on a chain with a later clause the
+  prevention would change unseen (remembering or storing what was dealt, an amount read from a
+  variable); an Aura-to-graveyard copy of an Aura without bestow, its targets read as cast, written
+  in a fizzled spell's shape (608.2b: `outcome` `fizzled`, its one event the card's move off the
+  stack, `refs.targets` empty and `refs.targets_at_cast` the target); and no quality, nor
+  protection from everything, that an Aura or Equipment attached to the protected permanent has
+  (702.16c-d).
 - **FR-058a**: `collect-variants --round untargeted|steered` (default `untargeted`, root § 8.15)
   MUST replace the single variant round and `--variant-volume`. The untargeted round MUST generate
   one variant of every eligible source script (single-faced, not held out under `build-corpus`'s
@@ -1137,13 +1142,19 @@ and that the reporting half never enters the control score.
   and rule the records available, share, written and shortfall, each split by polarity and by the
   same three sources, for the training stratum and for each validation stratum, the one-sided conditions
   and one-sided rules (FR-054a), the unbudgeted rules with their counts (FR-054), and the closed subtype
-  and keyword lists of FR-052/FR-053; and, per class, the kept records collected as forks,
-  interventions, directed forks, aimed or degraded, the placement thresholds and the
-  keyword-definition file's hash the build ran under, and what reading met without stopping (values
-  outside the wire's closed lists, shards a damaged last member ended, keys of a tree with no root).
-- **FR-060b**: `build-corpus` MUST refuse a rules directory holding no scenario or no heads line, and a
-  raw shard it cannot read whole, before it clears `--output`. A game the write pass meets that the
-  survey never saw MUST go to no stratum and be counted (`dropped-unsurveyed`).
+  and keyword lists of FR-052/FR-053; per class, the kept records collected as forks,
+  interventions, directed forks, aimed or degraded, and the resolutions acting only through
+  runtime-only keys; the placement thresholds and the keyword-definition file's hash the build ran
+  under; and, outside the digest, what the survey's reading met without stopping (values outside
+  the wire's closed lists, shards a damaged last member ended, by path under `--records-dir`, keys
+  read as no line: unresolved, undescribed or of a tree with no root), the events no output column
+  reads by kind, the commit the build ran on and a hash of the sidecar trees.
+- **FR-060b**: `build-corpus` MUST refuse a rules directory holding no scenario or no heads line
+  before the survey, and a raw shard the survey cannot read whole before it clears `--output`; a
+  shard that turns unreadable only in the write pass stops the build after `--output` was cleared,
+  saying so. The write pass MUST write no record past those the survey read in its shard (a shard
+  grown between the passes) and count each as `dropped-unsurveyed`. Two builds of one raw corpus
+  MUST reach one digest wherever it sits and whatever ran before in the process.
 - **FR-060a**: `build-corpus` MUST read the rules-to-fields map (`rules/heads/`) once, and write
   into the manifest, for every tagged rule, its map verdict and the outputs the map names for it,
   with the map's content hash, and each rule's effective outputs: the outputs of its map entry at
