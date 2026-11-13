@@ -104,3 +104,39 @@ class TestTheNewEvents:
                 "duration": None, "attributed_to": "root"}
         event = Event.from_dict(data)
         assert event.as_dict() == data
+
+
+class TestTheSupersededShape:
+    """The refusal of a gen-3 resolution record in the replaced payload shape,
+    behind one switch the fixture's regeneration turns on."""
+
+    @pytest.fixture
+    def refusing(self, monkeypatch):
+        from effects.infrastructure import record_codec
+
+        monkeypatch.setattr(record_codec, "REFUSE_SUPERSEDED_GEN3_PAYLOADS", True)
+
+    def test_every_java_golden_is_in_the_current_shape(self, refusing):
+        for raw in java_golden_records():
+            record_from_dict(raw)
+
+    @pytest.mark.parametrize(("moment", "payload"), [
+        ("activation", {"costs": {}, "outcome": "resolved"}),
+        ("activation", {"events": [], "costs": {}, "outcome": "resolved"}),
+        ("resolution", {"events": []}),
+    ])
+    def test_a_superseded_half_is_refused(self, refusing, moment, payload):
+        from effects.infrastructure.record_codec import SupersededPayloadError
+
+        raw = _golden(lambda r: r.get("moment") == moment) | {"payload": payload}
+        with pytest.raises(SupersededPayloadError):
+            record_from_dict(raw)
+
+    def test_the_switch_is_off_until_the_fixture_is_regenerated(self):
+        from effects.infrastructure.record_codec import REFUSE_SUPERSEDED_GEN3_PAYLOADS
+
+        raw = _golden(lambda r: r.get("moment") == "resolution") | {
+            "payload": {"events": []}}
+        assert not REFUSE_SUPERSEDED_GEN3_PAYLOADS
+        assert record_from_dict(raw).payload.outcome is None
+
