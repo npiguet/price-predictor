@@ -16,7 +16,8 @@ masked. ``soft``: every copy trains every output,
 outputs other than the drawn rules' weighing ``natural_share / copies``.
 Under both a natural copy of a record no copy was drawn for trains everything
 at full weight. A natural copy of an aimed record (a directed fork's, or one
-collected aimed at a rule) trains everything at full weight; its added copies
+collected by ``collect-coverage`` or ``collect-variants``, ``aimed_at`` set
+whatever its value, an empty list included) trains everything at full weight; its added copies
 are masked like any other. A record with no ``curation`` (a lethality copy, a
 record no build curated) trains at full weight.
 
@@ -97,7 +98,9 @@ def copy_weights(
     curation = getattr(record, "curation", None)
     if mode is None or curation is None:
         return FULL_WEIGHT
-    if not curation.is_added and getattr(record, "aimed_at", None):
+    # Aimed whatever its value (FR-009): ``[]`` marks a coverage or variants
+    # record of a run naming no rule.
+    if not curation.is_added and getattr(record, "aimed_at", None) is not None:
         return FULL_WEIGHT
     full = frozenset(
         output for rule in curation.drawn_rules for output in rule_outputs.get(rule, ())

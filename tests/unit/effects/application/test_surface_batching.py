@@ -897,6 +897,18 @@ def test_an_aimed_natural_copy_and_an_uncurated_record_train_at_full_weight():
         assert copy_weights(uncurated, mode, _RULE_OUTPUTS) is FULL_WEIGHT
 
 
+def test_a_natural_copy_of_a_coverage_record_aimed_at_no_rule_trains_at_full_weight():
+    """``aimed_at: []`` (a ``collect-coverage`` or ``collect-variants`` run naming
+    no rule) is aimed all the same (FR-009: whatever its value), so its
+    natural copy trains every output at full weight under both masks, as an
+    absent one does not under ``soft``."""
+    aimed = _copy(natural_share=1, copies=4, drawn_rules=("702.2",), aimed_at=())
+    natural = _copy(natural_share=1, copies=4, drawn_rules=("702.2",), aimed_at=None)
+    for mode in RuleMask:
+        assert copy_weights(aimed, mode, _RULE_OUTPUTS) is FULL_WEIGHT
+    assert copy_weights(natural, RuleMask.SOFT, _RULE_OUTPUTS).elsewhere == 0.25
+
+
 def test_the_verdict_head_takes_the_rule_mask():
     """A verdict or global field is an output the map names too (FR-060a)."""
     names = [str(spec.name) for spec in VERDICT_LAYOUT.fields]

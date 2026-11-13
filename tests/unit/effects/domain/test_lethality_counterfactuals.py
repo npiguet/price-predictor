@@ -48,12 +48,12 @@ def _creature(entity_id: str, toughness: int, *, damage: int = 0, **overrides) -
     )
 
 
-def _record(events, entities, *, x=None, targets=("E1",)) -> EffectRecord:
+def _record(events, entities, *, x=None, targets=("E1",), source_x_paid=None) -> EffectRecord:
     state = make_snapshot(
         global_=GlobalState(turn=3, phase="main1", active="P0", priority="P0", stack_size=1),
         players=(PlayerState(id="P0", life=20, hand=3, library=30, graveyard=0),
                  PlayerState(id="P1", life=20, hand=3, library=30, graveyard=0)),
-        entities=(make_entity("S1", "spell", zone="stack"), *entities),
+        entities=(make_entity("S1", "spell", zone="stack", x_paid=source_x_paid), *entities),
         refs=Refs(targets=targets, source="S1", x=x),
     )
     return make_record(
@@ -162,6 +162,19 @@ class TestQualify:
         effect = qualified.effect
         assert (effect.kind, effect.amount, effect.symmetric) == ("shrink", 2, True)
 
+    def test_no_fork_intervention_directed_fork_or_synthetic_record_is_copied(self):
+        """Only natural records are copy material, as for the other two
+        derivations (``protection_copies.qualifies``, the damage grid)."""
+        from effects.domain.records import DirectedTag
+
+        record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
+        assert _qualify(record) is not None
+        directed = DirectedTag(variant="v", operation="script_edit")
+        for flags in ({"fork": True}, {"fork": True, "interventional": True},
+                      {"fork": True, "directed": directed, "aimed_at": ("702.2b",)},
+                      {"synthetic": True}):
+            assert _qualify(replace(record, **flags)) is None, flags
+
 
 class TestCopies:
     def test_every_copy_follows_the_rule_whatever_was_drawn(self):
@@ -191,14 +204,28 @@ class TestCopies:
         assert copy.record.record_id == "r.0-0.1~cf0"
         assert record.state.entity("E1").pt.base == (2, 2)
 
-    def test_a_paid_x_is_edited_in_the_references_not_the_text(self):
-        record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)], x=4)
+    def test_a_paid_x_is_edited_in_the_references_and_on_the_source_not_the_text(self):
+        record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)], x=4,
+                         source_x_paid=4)
         text = BOLT.replace("NumDmg$ 3", "NumDmg$ X")
         qualified = _qualify(record, text)
-        copy = counterfactual(record, qualified, derive_targets(record), _line(text), text,
-                              random.Random(3), 0)
-        assert copy.edit.key is None and copy.edit.text is None
-        assert copy.targets["E1"].fields["damage_taken"] == copy.record.state.refs.x
+        for seed in range(6):
+            copy = counterfactual(record, qualified, derive_targets(record), _line(text), text,
+                                  random.Random(seed), 0)
+            assert copy.edit.key is None and copy.edit.text is None
+            x = copy.record.state.refs.x
+            assert copy.targets["E1"].fields["damage_taken"] == x
+            # Both inputs the model reads the paid X through move together.
+            assert copy.record.state.entity("S1").x_paid == x
+
+    def test_an_x_the_source_did_not_pay_leaves_the_source_alone(self):
+        """``refs.x`` read from an ``SVar:X`` the chain names: the source paid
+        no X, so its ``x_paid`` stays absent."""
+        record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)], x=4)
+        text = BOLT.replace("NumDmg$ 3", "NumDmg$ X")
+        copy = counterfactual(record, _qualify(record, text), derive_targets(record),
+                              _line(text), text, random.Random(3), 0)
+        assert copy.record.state.entity("S1").x_paid is None
 
     def test_a_player_s_life_follows_the_amount(self):
         life = Event(type=EventType.LIFE_CHANGE, subjects=("P1",), params={"delta": -3})
@@ -273,8 +300,8 @@ class TestThePinnedOutput:
             copy.record, record_id=record.record_id, ability=record.ability,
             state=replace(state, entities=record.state.entities, refs=record.state.refs),
         ) == record
-        assert [replace(entity, pt=None, damage=0) for entity in state.entities] == [
-            replace(entity, pt=None, damage=0) for entity in record.state.entities
+        assert [replace(entity, pt=None, damage=0, x_paid=None) for entity in state.entities] == [
+            replace(entity, pt=None, damage=0, x_paid=None) for entity in record.state.entities
         ]
         assert replace(state.refs, x=None) == replace(record.state.refs, x=None)
         if copy.edit.key is None:
@@ -286,6 +313,8 @@ class TestThePinnedOutput:
             copy.record.record_id,
             None if copy.edit.key is None else copy.edit.key.script_file,
             state.refs.x,
+            tuple((entity.id, entity.x_paid) for entity in state.entities
+                  if entity.x_paid is not None),
             tuple((entity.id, entity.pt.base, entity.damage)
                   for entity in state.entities if entity.pt is not None),
             copy.edit.text, copy.edit.script,
@@ -345,7 +374,7 @@ class TestThePinnedOutput:
     def test_a_paid_x_with_a_player_hit(self):
         text = BOLT.replace("NumDmg$ 3", "NumDmg$ X")
         life = Event(type=EventType.LIFE_CHANGE, subjects=("P1",), params={"delta": -4})
-        record = _record([_damage("E1", 4), life], [_creature("E1", 6)], x=4)
+        record = _record([_damage("E1", 4), life], [_creature("E1", 6)], x=4, source_x_paid=4)
         got = self._copies(record, text, _line(text), seed=31)
         assert got == PINNED_X
 
@@ -389,45 +418,45 @@ def _life(amount: int) -> list:
 _SPANS = ((0, 27, "effect"), (27, 57, "target-spec"))
 
 PINNED_SWEEP = [
-    ("r.0-0.1~cf0", _cf(5), None, (("E1", (2, 1), 0), ("E2", (1, 1), 1), ("E3", (2, 12), 0)),
+    ("r.0-0.1~cf0", _cf(5), None, (), (("E1", (2, 1), 0), ("E2", (1, 1), 1), ("E3", (2, 12), 0)),
      *_sweep(5), _SPANS,
      (("E1", True, _hit("damage", 5, dies=True)), ("E2", True, _hit("damage", 5, dies=True)),
       ("E3", True, _hit("damage", 5, dies=False)), ("P0", True, _life(5)),
       ("P1", True, _life(5)))),
-    ("r.0-0.1~cf1", _cf(5), None, (("E1", (2, 2), 0), ("E2", (1, 5), 0), ("E3", (2, 12), 0)),
+    ("r.0-0.1~cf1", _cf(5), None, (), (("E1", (2, 2), 0), ("E2", (1, 5), 0), ("E3", (2, 12), 0)),
      *_sweep(5), _SPANS,
      (("E1", True, _hit("damage", 5, dies=True)), ("E2", True, _hit("damage", 5, dies=False)),
       ("E3", True, _hit("damage", 5, dies=False)), ("P0", True, _life(5)),
       ("P1", True, _life(5)))),
-    ("r.0-0.1~cf2", _cf(6), None, (("E1", (2, 4), 0), ("E2", (1, 1), 1), ("E3", (2, 12), 0)),
+    ("r.0-0.1~cf2", _cf(6), None, (), (("E1", (2, 4), 0), ("E2", (1, 1), 1), ("E3", (2, 12), 0)),
      *_sweep(6), _SPANS,
      (("E1", True, _hit("damage", 6, dies=True)), ("E2", True, _hit("damage", 6, dies=True)),
       ("E3", True, _hit("damage", 6, dies=False)), ("P0", True, _life(6)),
       ("P1", True, _life(6)))),
 ]
 PINNED_WEAKEN = [
-    ("r.0-0.1~cf0", _cf(4), None, (("E1", (2, 3), 0), ("E2", (2, 2), 0)), *_weaken(4), (),
+    ("r.0-0.1~cf0", _cf(4), None, (), (("E1", (2, 3), 0), ("E2", (2, 2), 0)), *_weaken(4), (),
      (("E1", True, _hit("shrink", 4, dies=True)), ("E2", True, _hit("shrink", 4, dies=True)))),
-    ("r.0-0.1~cf1", _cf(7), None, (("E1", (2, 3), 0), ("E2", (2, 3), 0)), *_weaken(7), (),
+    ("r.0-0.1~cf1", _cf(7), None, (), (("E1", (2, 3), 0), ("E2", (2, 3), 0)), *_weaken(7), (),
      (("E1", True, _hit("shrink", 7, dies=True)), ("E2", True, _hit("shrink", 7, dies=True)))),
-    ("r.0-0.1~cf2", _cf(2), None, (("E1", (2, 1), 0), ("E2", (2, 6), 0)), *_weaken(2), (),
+    ("r.0-0.1~cf2", _cf(2), None, (), (("E1", (2, 1), 0), ("E2", (2, 6), 0)), *_weaken(2), (),
      (("E1", True, _hit("shrink", 2, dies=True)),
       ("E2", True, _hit("shrink", 2, dies=False)))),
 ]
 PINNED_SHRINK = [
-    ("r.0-0.1~cf0", _cf(8), None, (("E1", (2, 5), 0),), *_shrink(8), (),
+    ("r.0-0.1~cf0", _cf(8), None, (), (("E1", (2, 5), 0),), *_shrink(8), (),
      (("E1", True, _hit("shrink", 8, dies=True, symmetric=True)),)),
-    ("r.0-0.1~cf1", _cf(3), None, (("E1", (2, 1), 0),), *_shrink(3), (),
+    ("r.0-0.1~cf1", _cf(3), None, (), (("E1", (2, 1), 0),), *_shrink(3), (),
      (("E1", True, _hit("shrink", 3, dies=True, symmetric=True)),)),
-    ("r.0-0.1~cf2", _cf(6), None, (("E1", (2, 2), 0),), *_shrink(6), (),
+    ("r.0-0.1~cf2", _cf(6), None, (), (("E1", (2, 2), 0),), *_shrink(6), (),
      (("E1", True, _hit("shrink", 6, dies=True, symmetric=True)),)),
 ]
 PINNED_X = [
-    ("r.0-0.1~cf0", None, 1, (("E1", (2, 2), 0),), None, None, (),
+    ("r.0-0.1~cf0", None, 1, (("S1", 1),), (("E1", (2, 2), 0),), None, None, (),
      (("E1", True, _hit("damage", 1, dies=False)), ("P1", True, _life(1)))),
-    ("r.0-0.1~cf1", None, 7, (("E1", (2, 1), 0),), None, None, (),
+    ("r.0-0.1~cf1", None, 7, (("S1", 7),), (("E1", (2, 1), 0),), None, None, (),
      (("E1", True, _hit("damage", 7, dies=True)), ("P1", True, _life(7)))),
-    ("r.0-0.1~cf2", None, 3, (("E1", (2, 4), 0),), None, None, (),
+    ("r.0-0.1~cf2", None, 3, (("S1", 3),), (("E1", (2, 4), 0),), None, None, (),
      (("E1", True, _hit("damage", 3, dies=False)), ("P1", True, _life(3)))),
 ]
 

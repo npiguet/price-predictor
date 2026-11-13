@@ -12,7 +12,10 @@ the rule decides:
 - every creature on the battlefield the amount hit changes in nothing but the
   amount and its zone, and every player it hit loses exactly the amount;
 - the source carries no deathtouch, wither, infect or lifelink, and no hit
-  creature carries indestructible, a shield counter or an attachment.
+  creature carries indestructible, a shield counter or an attachment;
+- the record is natural: no fork, intervention, directed fork or synthetic record.
+
+A paid X is redrawn in ``refs.x`` and in the source's ``x_paid`` together.
 """
 
 from __future__ import annotations
@@ -280,8 +283,14 @@ def _creature_hit(entity: EntityState | None, fields: dict, found: StatedEffect,
 
 def qualify(record: EffectRecord, line: SidecarLine | None, targets: dict[str, EntityTargets],
             keywords_of: KeywordsOf) -> Qualified | None:
-    """``record`` as copy material, or None. ``keywords_of(entity)`` names its keywords."""
+    """``record`` as copy material, or None. ``keywords_of(entity)`` names its keywords.
+
+    Only natural records qualify, as for the other two derivations: no fork,
+    intervention, directed fork or other synthetic record.
+    """
     if record.kind is not RecordKind.RESOLUTION or record.moment is not Moment.RESOLUTION:
+        return None
+    if record.fork or record.interventional or record.synthetic or record.directed is not None:
         return None
     if line is None or not line.script_text:
         return None
@@ -410,6 +419,19 @@ def _with_toughness(entities: tuple[EntityState, ...], chosen: str, toughness: i
                  for entity in entities)
 
 
+def _with_x_paid(entities: tuple[EntityState, ...], refs, drawn: int
+                 ) -> tuple[EntityState, ...]:
+    """``entities`` with the source's paid X set to ``drawn`` where it paid the
+    X the copy redraws, so the source's ``x_paid`` and ``refs.x``, both of
+    which the model reads, still agree; an X the source did not pay (an
+    ``SVar:X`` the chain names) leaves it alone."""
+    return tuple(
+        replace(entity, x_paid=drawn)
+        if entity.id == refs.source and entity.x_paid is not None and entity.x_paid == refs.x
+        else entity
+        for entity in entities)
+
+
 def _relabelled_targets(targets: dict[str, EntityTargets], qualified: Qualified, amount: int,
                         entities: tuple[EntityState, ...]) -> dict[str, EntityTargets]:
     """``targets`` with every creature and player the amount hit labelled by the rule."""
@@ -440,11 +462,12 @@ def counterfactual(record: EffectRecord, qualified: Qualified,
     chosen = rng.choice(qualified.hit)
     toughness = rng.randint(low, high)
     refs = record.state.refs
+    entities = _with_toughness(record.state.entities, chosen, toughness)
     if qualified.effect.stated is Stated.X:
         edit, refs = TextEdit(drawn), replace(refs, x=drawn)
+        entities = _with_x_paid(entities, record.state.refs, drawn)
     else:
         edit = amount_edit(record, qualified.effect, line, text, drawn)
-    entities = _with_toughness(record.state.entities, chosen, toughness)
     copied = replace(
         record,
         record_id=f"{record.record_id}~cf{copy}",
