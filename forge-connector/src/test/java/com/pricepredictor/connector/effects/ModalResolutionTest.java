@@ -15,6 +15,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
 import static com.pricepredictor.connector.effects.RecordLines.linkOf;
@@ -418,6 +419,38 @@ class ModalResolutionTest {
     }
 
     /** Grizzly Bears for the second seat and Fiery Confluence in the first's hand, in play. */
+    /**
+     * A forced Kolaghan's Command's halves read the targets as the live
+     * bracket reads them: each half's {@code targets_at_cast} is the hook's,
+     * never null, and every card it names is an entity of that half's board
+     * (follow-up item 6).
+     */
+    @Test
+    void aForcedCharmsHalvesCarryTheirTargetsAsCast() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");
+        TestBoard.onBattlefield(game, game.getPlayers().get(1), "Ornithopter");
+        Player caster = game.getPlayers().get(0);
+        Card command = TestBoard.inHand(game, caster, "Kolaghan's Command");
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                tempDir, game, TestCaps.caps().manaCap(2000).probes(0).build(), 7L,
+                TestBoard.charmOf(command, caster), STOCK_FORK);
+        assertTrue(fork.wrote(), "the forced resolution observed something");
+
+        for (String half : fork.records()) {
+            Map<String, Object> state = RecordLines.asMap(RecordLines.parse(half).get("state"));
+            Object atCast = RecordLines.asMap(state.get("refs")).get("targets_at_cast");
+            assertNotNull(atCast, half);
+            List<Object> ids = ((List<?>) state.get("entities")).stream()
+                    .map(entity -> RecordLines.asMap(entity).get("id")).toList();
+            for (Object ref : (List<?>) atCast) {
+                if (!String.valueOf(ref).startsWith("P")) {
+                    assertTrue(ids.contains(ref), ref + " is an entity: " + half);
+                }
+            }
+        }
+    }
+
     private static Game confluenceBoard() {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");

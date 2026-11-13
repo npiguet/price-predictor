@@ -106,6 +106,120 @@ class ChainTargetsRecordTest {
                 "the target as cast is an entity of the half's board: " + effect);
     }
 
+    /** The entity of {@code record}'s board whose id is {@code id}, or null. */
+    private static Map<String, Object> entity(String record, String id) {
+        List<?> entities = (List<?>) asMap(parse(record).get("state")).get("entities");
+        return entities.stream().map(RecordLines::asMap)
+                .filter(entity -> id.equals(entity.get("id"))).findFirst().orElse(null);
+    }
+
+    /**
+     * Shock at a Soldier token destroyed in response: the token has ceased
+     * to exist, so the fizzled half names it as it last existed, {@code L},
+     * role {@code last_known}, in no zone, and holds no {@code E} entity for
+     * a card that is gone.
+     */
+    @Test
+    void aTargetThatCeasedToExistIsNamedAsItLastExisted() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card shock = TestBoard.inHand(game, caster, "Shock");
+        Card[] soldier = {null};
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            soldier[0] = soldierToken(game, opponent);
+            TestBoard.cast(game, shock, caster, soldier[0]);
+            game.getAction().destroy(soldier[0], null, false, null);
+            game.getAction().checkStateEffects(true);
+            game.getStack().resolveStack();
+            TestBoard.priority(game);
+            TestBoard.nextStep(game);
+        });
+
+        String effect = records(records, "resolution").get(0);
+        assertEquals("fizzled", outcomeOf(effect), effect);
+        String lastKnown = "L" + soldier[0].getId();
+        assertEquals(List.of(lastKnown), refsOf(effect).get("targets_at_cast"), effect);
+        Map<String, Object> gone = entity(effect, lastKnown);
+        assertEquals("last_known", gone.get("role"), effect);
+        assertNull(gone.get("zone"), effect);
+        assertNull(entity(effect, Refs.of(soldier[0])), "no entity for a card that is gone: " + effect);
+    }
+
+    /**
+     * Shock at a creature flickered in response: the creature on the
+     * battlefield is a new object, so the fizzled half names the target as
+     * it last existed, {@code L}, beside the new object's {@code E}.
+     */
+    @Test
+    void aTargetThatBecameANewObjectIsNamedAsItLastExisted() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card bears = TestBoard.inPlay(game, opponent, "Grizzly Bears");
+        Card shock = TestBoard.inHand(game, caster, "Shock");
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            TestBoard.cast(game, shock, caster, bears);
+            Card exiled = game.getAction().exile(bears, null, null);
+            game.getAction().moveToPlay(exiled, opponent, null, null);
+            game.getStack().resolveStack();
+            TestBoard.priority(game);
+            TestBoard.nextStep(game);
+        });
+
+        String effect = records(records, "resolution").get(0);
+        assertEquals("fizzled", outcomeOf(effect), effect);
+        String lastKnown = "L" + bears.getId();
+        assertEquals(List.of(lastKnown), refsOf(effect).get("targets_at_cast"), effect);
+        assertEquals("last_known", entity(effect, lastKnown).get("role"), effect);
+        assertEquals("battlefield", entity(effect, Refs.of(bears)).get("zone"),
+                "the new object is on the battlefield under its own E: " + effect);
+    }
+
+    /**
+     * Counterspell at a Shock on the stack names the Shock by its card and
+     * lists it among the targets on the stack; Shock at a creature lists none
+     * (follow-up item 8).
+     */
+    @Test
+    void aTargetedSpellIsListedAmongTheTargetsOnTheStack() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card bears = TestBoard.inPlay(game, caster, "Grizzly Bears");
+        Card shock = TestBoard.inHand(game, opponent, "Shock");
+        Card counterspell = TestBoard.inHand(game, caster, "Counterspell");
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            SpellAbility bolt = TestBoard.cast(game, shock, opponent, bears);
+            SpellAbility counter = TestBoard.spellOf(
+                    game.getAction().moveToStack(counterspell, null), caster);
+            counter.resetTargets();
+            counter.getTargets().add(bolt);
+            game.getStack().add(counter);
+            game.getStack().resolveStack();
+            TestBoard.priority(game);
+            TestBoard.nextStep(game);
+        });
+
+        String shockCost = RecordLines.only(records, "activation", "cardsfolder/s/shock.txt");
+        assertEquals(List.of(Refs.of(bears)), refsOf(shockCost).get("targets"), shockCost);
+        assertEquals(List.of(), refsOf(shockCost).get("targets_on_stack"), shockCost);
+        String counterHalf = RecordLines.only(records, "resolution", "cardsfolder/c/counterspell.txt");
+        String shockRef = Refs.of(game.getCardState(shock));
+        assertEquals(List.of(shockRef), refsOf(counterHalf).get("targets_at_cast"), counterHalf);
+        assertEquals(List.of(shockRef), refsOf(counterHalf).get("targets_on_stack"), counterHalf);
+    }
+
+    /** A 1/1 Soldier token for {@code owner}, on the battlefield. */
+    private static Card soldierToken(Game game, Player owner) {
+        Card token = forge.game.card.CardFactory.getCard(
+                forge.StaticData.instance().getAllTokens().getToken("w_1_1_soldier"), owner, game);
+        return game.getAction().moveToPlay(token, owner, null, null);
+    }
+
     /**
      * Kolaghan's Command with a discard at the opponent and 2 damage at a
      * creature that left before it resolved: each mode's half names its own
@@ -146,7 +260,8 @@ class ChainTargetsRecordTest {
         assertEquals(List.of(Refs.of(opponent)), refsOf(discard).get("targets"), discard);
         assertEquals(List.of(Refs.of(opponent)), refsOf(discard).get("targets_at_cast"), discard);
         assertEquals(List.of(), refsOf(damage).get("targets"), damage);
-        assertEquals(List.of(Refs.of(bears)), refsOf(damage).get("targets_at_cast"), damage);
+        // Exiled, the bears are a new object: named as they last existed.
+        assertEquals(List.of("L" + bears.getId()), refsOf(damage).get("targets_at_cast"), damage);
         assertEquals("partially_fizzled", outcomeOf(discard), discard);
     }
 }

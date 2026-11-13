@@ -55,8 +55,17 @@ final class EntityJson {
      *             {@code mutate_component} or {@code last_known}; null for an
      *             entity of the tiers
      */
-    record Beyond(String id, String zone, Integer rank, String role) {
+    record Beyond(String id, String zone, Integer rank, String role, boolean zoneless) {
         static final Beyond NONE = new Beyond(null, null, null, null);
+
+        Beyond(String id, String zone, Integer rank, String role) {
+            this(id, zone, rank, role, false);
+        }
+
+        /** A card as it last existed, which no zone holds: zone and rank null. */
+        static Beyond lastKnown(String id, String role) {
+            return new Beyond(id, null, null, role, true);
+        }
     }
 
     /** One entity, written as {@code beyond} says. */
@@ -67,7 +76,8 @@ final class EntityJson {
         return Json.object()
                 .value("id", beyond.id() != null ? beyond.id() : Refs.of(card))
                 .value("name", card.getName())
-                .value("zone", beyond.zone() != null ? beyond.zone() : zoneName(card))
+                .value("zone", beyond.zoneless() ? null
+                        : beyond.zone() != null ? beyond.zone() : zoneName(card))
                 .value("owner", CardFacts.ownerOf(card))
                 .value("controller", Refs.ofNullable(board.controller(card)))
                 .value("face", faceOf(card))
@@ -97,7 +107,7 @@ final class EntityJson {
                 .raw("chosen", CardFacts.chosenJson(card))
                 .raw("costs_paid", CardFacts.costsPaidJson(card, cast))
                 .raw("history", CardFacts.historyJson(game, card))
-                .value("order_rank", beyond.rank() != null
+                .value("order_rank", beyond.zoneless() ? null : beyond.rank() != null
                         ? beyond.rank() : CardFacts.orderRank(game, card))
                 .raw("granted_temporary", grantedTemporaryJson(card, board))
                 .raw("lines", CardLines.render(game, card, board))

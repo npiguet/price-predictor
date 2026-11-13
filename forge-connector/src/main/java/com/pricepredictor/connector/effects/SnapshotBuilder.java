@@ -109,7 +109,7 @@ public final class SnapshotBuilder {
      *                   they sit in (tier 1)
      */
     Snapshot ofAbility(SpellAbility acting, Iterable<Card> referenced) {
-        return snapshot(referenced, StaticSuppression.NONE, acting, null, null, true);
+        return snapshot(referenced, StaticSuppression.NONE, acting, null, null, true, List.of());
     }
 
     /**
@@ -126,7 +126,7 @@ public final class SnapshotBuilder {
     Snapshot ofCandidate(SpellAbility candidate) {
         Card host = candidate.getHostCard();
         return snapshot(host == null ? List.of() : List.of(host), StaticSuppression.NONE,
-                candidate, host, null, false);
+                candidate, host, null, false, List.of());
     }
 
     /**
@@ -138,18 +138,26 @@ public final class SnapshotBuilder {
     }
 
     /**
-     * {@link #ofResolving} with more cards referenced: an effect half's
-     * targets as cast, which Forge's check for illegal targets has taken
-     * off the ability by the time its resolution starts.
+     * {@link #ofResolving} with an effect half's targets as cast too, which
+     * Forge's check for illegal targets has taken off the ability by the
+     * time its resolution starts: each that is still that object referenced
+     * (tier 1), and each that ceased to exist or became a new object as it
+     * was targeted, {@code L<id>} with role {@code last_known} and no zone.
+     *
+     * @param atCast the targets as cast, or null where they are unknown
      */
-    Snapshot ofResolving(SpellAbility acting, List<Card> targetedAtCast) {
+    Snapshot ofResolving(SpellAbility acting, ChainTargets atCast) {
         List<Card> referenced = referencedOf(acting);
-        for (Card card : targetedAtCast) {
+        if (atCast == null) {
+            return ofAbility(acting, referenced);
+        }
+        for (Card card : atCast.cards()) {
             if (!referenced.contains(card)) {
                 referenced.add(card);
             }
         }
-        return ofAbility(acting, referenced);
+        return snapshot(referenced, StaticSuppression.NONE, acting, null, null, true,
+                atCast.lastKnown());
     }
 
     /**
@@ -158,7 +166,7 @@ public final class SnapshotBuilder {
      * block is the empty shape.
      */
     Snapshot ofBoard() {
-        return snapshot(List.of(), StaticSuppression.NONE, null, null, null, true);
+        return snapshot(List.of(), StaticSuppression.NONE, null, null, null, true, List.of());
     }
 
     /**
@@ -167,7 +175,7 @@ public final class SnapshotBuilder {
      * the answer the record labels.
      */
     Snapshot ofBoardWithout(StaticAbility stat) {
-        return snapshot(List.of(), StaticSuppression.of(stat), null, null, null, true);
+        return snapshot(List.of(), StaticSuppression.of(stat), null, null, null, true, List.of());
     }
 
     /**
@@ -190,7 +198,7 @@ public final class SnapshotBuilder {
      */
     Snapshot ofTrait(Card source, EffectEvent pending) {
         return snapshot(source == null ? List.of() : List.of(source), StaticSuppression.NONE,
-                null, source, pending, true);
+                null, source, pending, true, List.of());
     }
 
     /**
@@ -208,13 +216,21 @@ public final class SnapshotBuilder {
      */
     private Snapshot snapshot(
             Iterable<Card> referenced, StaticSuppression board, SpellAbility acting, Card source,
-            EffectEvent pending, boolean chosen) {
+            EffectEvent pending, boolean chosen, List<Card> lastKnownTargets) {
         Set<Card> tiers = collectEntities(referenced);
         List<String> entities = new ArrayList<>();
         Set<String> present = new HashSet<>();
         for (Card card : tiers) {
             entities.add(renderTier(card, acting, board));
             present.add(Refs.of(card));
+        }
+        for (Card gone : lastKnownTargets) {
+            // A target that ceased to exist or became a new object, as it was
+            // targeted: no zone holds that object any more.
+            if (present.add(ChainTargets.lastKnownRef(gone))) {
+                entities.add(EntityJson.render(game, gone, board, EntityJson.Beyond.lastKnown(
+                        ChainTargets.lastKnownRef(gone), ROLE_LAST_KNOWN)));
+            }
         }
         LibraryCapture libraries = LibraryCapture.of(game, board, present);
         List<Card> cards = new ArrayList<>(tiers);

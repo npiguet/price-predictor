@@ -251,9 +251,10 @@ final class HeldResolutionWindow {
             OpenResolution resolved, ModeSplit.ModeHalf half, int index, int halves,
             List<EffectEvent> events) {
         Integer option = half.mode().option();
-        return RefsJson.renderHalf(resolved.ability, events, resolved.x(),
-                resolved.targetsOfHalf(index, halves, option),
-                resolved.targetsAtCastOfHalf(index, halves, option));
+        List<String> targets = resolved.targetsOfHalf(index, halves, option);
+        List<String> atCast = resolved.targetsAtCastOfHalf(index, halves, option);
+        return RefsJson.renderHalf(resolved.ability, events, resolved.x(), targets, atCast,
+                resolved.onStackOf(targets, atCast));
     }
 
     /**

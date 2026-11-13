@@ -36,7 +36,7 @@ final class RefsJson {
      *                       an acting ability still names its own host
      */
     static String render(SpellAbility acting, Card sourceOverride) {
-        return render(acting, sourceOverride, announcedX(acting), "null", targetsOf(acting), null);
+        return renderNow(acting, sourceOverride, announcedX(acting), "null");
     }
 
     /**
@@ -44,7 +44,7 @@ final class RefsJson {
      * read once when its costs were paid (B3).
      */
     static String renderWithX(SpellAbility acting, Integer x) {
-        return render(acting, null, x, "null", targetsOf(acting), null);
+        return renderNow(acting, null, x, "null");
     }
 
     /**
@@ -58,7 +58,7 @@ final class RefsJson {
      * @param x        the X read before the resolution, or null
      */
     static String renderResolved(SpellAbility acting, List<EffectEvent> resolved, Integer x) {
-        return render(acting, null, x, randomJson(resolved), targetsOf(acting), null);
+        return renderNow(acting, null, x, randomJson(resolved));
     }
 
     /**
@@ -71,8 +71,8 @@ final class RefsJson {
      */
     static String renderHalf(
             SpellAbility acting, List<EffectEvent> resolved, Integer x,
-            List<String> targets, List<String> targetsAtCast) {
-        return render(acting, null, x, randomJson(resolved), targets, targetsAtCast);
+            List<String> targets, List<String> targetsAtCast, List<String> onStack) {
+        return render(acting, null, x, randomJson(resolved), targets, targetsAtCast, onStack);
     }
 
     /**
@@ -94,7 +94,8 @@ final class RefsJson {
      * targets_at_cast} replaced by one effect half's; for a caller that holds
      * the rendered block rather than the ability (a forced resolution's).
      */
-    static String withTargets(String refs, List<String> targets, List<String> targetsAtCast) {
+    static String withTargets(
+            String refs, List<String> targets, List<String> targetsAtCast, List<String> onStack) {
         String opening = "{\"targets\":";
         int rest = refs == null ? -1 : refs.indexOf(",\"source\":");
         if (rest < 0 || !refs.startsWith(opening)) {
@@ -103,6 +104,7 @@ final class RefsJson {
         return "{\"targets\":" + Json.stringArray(targets)
                 + ",\"targets_at_cast\":"
                 + (targetsAtCast == null ? "null" : Json.stringArray(targetsAtCast))
+                + ",\"targets_on_stack\":" + Json.stringArray(onStack)
                 + refs.substring(rest);
     }
 
@@ -147,13 +149,21 @@ final class RefsJson {
      * once: a charm's modes' and a {@code SubAbility$}'s as well as the
      * root's; a spell or ability on the stack by its card.
      */
-    private static List<String> targetsOf(SpellAbility acting) {
-        return acting == null ? List.of() : ChainTargets.now(acting).all();
+    /** A refs block whose targets are the ones the acting ability's chain holds now. */
+    private static String renderNow(
+            SpellAbility acting, Card sourceOverride, Integer x, String random) {
+        if (acting == null) {
+            return render(null, sourceOverride, x, random, List.of(), null, List.of());
+        }
+        ChainTargets now = ChainTargets.now(acting);
+        List<String> targets = now.all();
+        return render(acting, sourceOverride, x, random, targets, null,
+                ChainTargets.onStackOf(targets, now));
     }
 
     private static String render(
             SpellAbility acting, Card sourceOverride, Integer x, String random,
-            List<String> targets, List<String> targetsAtCast) {
+            List<String> targets, List<String> targetsAtCast, List<String> onStack) {
         String source = Refs.ofNullable(sourceOverride);
         if (acting != null && acting.getHostCard() != null) {
             source = Refs.of(acting.getHostCard());
@@ -162,6 +172,7 @@ final class RefsJson {
                 .raw("targets", Json.stringArray(targets))
                 .raw("targets_at_cast",
                         targetsAtCast == null ? "null" : Json.stringArray(targetsAtCast))
+                .raw("targets_on_stack", Json.stringArray(onStack))
                 .value("source", source)
                 .raw("modes", modesJson(acting))
                 .value("x", x)

@@ -171,9 +171,14 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             }
             String read = RefsJson.withRandom(refs, events);
             if (resolving != null) {
-                read = RefsJson.withTargets(read,
-                        resolving.ofHalf(index, count, mode.option()),
-                        atCast == null ? null : atCast.ofHalf(index, count, mode.option()));
+                List<String> now = resolving.ofHalf(index, count, mode.option());
+                List<String> cast = atCast == null ? null : atCast.ofHalf(index, count, mode.option());
+                List<String> written = new java.util.ArrayList<>(now);
+                if (cast != null) {
+                    written.addAll(cast);
+                }
+                read = RefsJson.withTargets(read, now, cast,
+                        ChainTargets.onStackOf(written, resolving, atCast));
             }
             return board.withRefs(read).withEventCards(events).render();
         }
@@ -294,8 +299,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
                     fizzled[0] = itemFizzled;
                     targets[0] = ChainTargets.now(item);
                     targets[1] = ChainTargets.atCast(item, targetsAtCast);
-                    sink.resolutionStarted(snapshots.ofResolving(onStack,
-                            targets[1] == null ? List.of() : targets[1].cards()));
+                    sink.resolutionStarted(snapshots.ofResolving(onStack, targets[1]));
                 }
             }
 
@@ -303,7 +307,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             public void clauseResolving(SpellAbility clause) {
                 CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
                 if (start != null && start.charm() == onStack) {
-                    sink.beginMode(start.option(), snapshots.ofResolving(onStack));
+                    sink.beginMode(start.option(), snapshots.ofResolving(onStack, targets[1]));
                 }
             }
 
@@ -325,9 +329,38 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
             return null;
         });
+        // Counted as the live bracket counts: the hook's targets as cast
+        // against those left when the resolution started, every link's.
         ActivationOutcome outcome = fizzled[0] ? ActivationOutcome.FIZZLED
-                : OpenResolution.outcomeOf(cast.targetsAtCast(), onStack);
-        return new ForcedResolution(cast.refs(), sink.halves(), outcome, targets[0], targets[1]);
+                : targets[0] != null && targets[1] != null
+                        ? OpenResolution.outcomeOf(targets[1].count(), targets[0].count())
+                        : OpenResolution.outcomeOf(cast.targetsAtCast(), onStack);
+        List<HeldHalves.Half<ModeSplit.ModeHalf>> halves = sink.halves();
+        if (outcome == ActivationOutcome.FIZZLED) {
+            halves = onlyMoveOffTheStack(halves, onStack);
+        }
+        return new ForcedResolution(cast.refs(), halves, outcome, targets[0], targets[1]);
+    }
+
+    /**
+     * A fizzled forced item's halves as a live one's (608.2b): nothing but a
+     * spell's own card's move off the stack, in the last half; nothing for
+     * an ability, or a copy, which leaves no card behind.
+     */
+    private static List<HeldHalves.Half<ModeSplit.ModeHalf>> onlyMoveOffTheStack(
+            List<HeldHalves.Half<ModeSplit.ModeHalf>> halves, SpellAbility onStack) {
+        String card = onStack.isSpell() && onStack.getHostCard() != null
+                ? Refs.of(onStack.getHostCard()) : null;
+        HeldHalves<ModeSplit.ModeHalf> kept = new HeldHalves<>();
+        for (HeldHalves.Half<ModeSplit.ModeHalf> half : halves) {
+            List<EffectEvent> move = half.events().stream()
+                    .filter(event -> card != null && event.type() == EventType.ZONE_CHANGE
+                            && List.of(card).equals(event.subjects())
+                            && "stack".equals(event.params().get("from_zone")))
+                    .limit(1).toList();
+            kept.add(half.about(), move);
+        }
+        return kept.halves();
     }
 
     /**

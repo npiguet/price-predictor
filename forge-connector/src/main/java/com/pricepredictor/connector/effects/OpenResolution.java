@@ -136,12 +136,26 @@ final class OpenResolution {
     }
 
     /**
-     * The cards it targeted before Forge's check for illegal targets, which
-     * its effect half's boards carry whatever zone they are in now: the
-     * card that made it fizzle is among them. Empty where they are unknown.
+     * Its targets before Forge's check for illegal targets, which its effect
+     * half's boards carry whatever zone they are in now, or as they last
+     * existed: the card that made it fizzle is among them. Null where they
+     * are unknown.
      */
-    java.util.List<forge.game.card.Card> castTargetCards() {
-        return castTargets == null ? java.util.List.of() : castTargets.cards();
+    ChainTargets castTargets() {
+        return castTargets;
+    }
+
+    /**
+     * Of a half's {@code targets} and {@code targets_at_cast}, the refs that
+     * name a spell or ability on the stack, in the order written.
+     */
+    java.util.List<String> onStackOf(java.util.List<String> targets, java.util.List<String> atCast) {
+        java.util.List<String> written = new java.util.ArrayList<>(targets);
+        if (atCast != null) {
+            written.addAll(atCast);
+        }
+        ChainTargets now = resolvingTargets != null ? resolvingTargets : ChainTargets.now(ability);
+        return ChainTargets.onStackOf(written, now, castTargets);
     }
 
     /** One effect half's {@code targets_at_cast}, or null where they are unknown. */
@@ -231,7 +245,8 @@ final class OpenResolution {
         return outcomeOf(targetsAtCast, targetCount(resolved));
     }
 
-    private static ActivationOutcome outcomeOf(int targetsAtCast, int surviving) {
+    /** The outcome from the chain's target counts before and after the illegal-target check. */
+    static ActivationOutcome outcomeOf(int targetsAtCast, int surviving) {
         return surviving > 0 && surviving < targetsAtCast
                 ? ActivationOutcome.PARTIALLY_FIZZLED
                 : ActivationOutcome.RESOLVED;

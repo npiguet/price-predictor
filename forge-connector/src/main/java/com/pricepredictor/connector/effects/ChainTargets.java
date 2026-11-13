@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
@@ -22,6 +23,15 @@ import java.util.Set;
  * <p>A link belongs to the last mode clone at or before it in the chain
  * ({@link CharmModes#isModeClone}); the links before the first clone are the
  * root's, which every mode's half shares.
+ *
+ * <p>A card target is named {@code E<id>} while the game's card for it is
+ * still the object that was targeted; one that has ceased to exist (a token
+ * that died) or become a new object (a creature flickered) is the card as it
+ * last existed, {@code L<id>}, Forge's own test for a target gone illegal
+ * ({@code Card.equalsWithGameTimestamp}, {@code MagicStack.hasFizzled}). A
+ * spell or ability on the stack is named by its host card's {@code E<id>},
+ * and listed among {@link #onStack} too, which is how it is told from that
+ * card targeted itself.
  */
 final class ChainTargets {
 
@@ -31,17 +41,24 @@ final class ChainTargets {
     private final List<ModeTargets> modes;
     /** How many targets the chain holds, counted per link. */
     private final int count;
-    /** The cards among the targets, every link's, root first. */
+    /** The cards the targets name that still are those objects, hosts of stack targets included. */
     private final List<Card> cards;
+    /** The targeted cards that ceased to exist or became new objects, as targeted. */
+    private final List<Card> lastKnown;
+    /** The refs that name a spell or ability on the stack, by its host card. */
+    private final Set<String> onStack;
 
     private record ModeTargets(Integer option, List<String> targets) {
     }
 
-    private ChainTargets(List<String> root, List<ModeTargets> modes, int count, List<Card> cards) {
+    private ChainTargets(List<String> root, List<ModeTargets> modes, int count, List<Card> cards,
+                         List<Card> lastKnown, Set<String> onStack) {
         this.root = root;
         this.modes = modes;
         this.count = count;
         this.cards = cards;
+        this.lastKnown = lastKnown;
+        this.onStack = onStack;
     }
 
     /** The targets the chain holds now. */
@@ -78,10 +95,13 @@ final class ChainTargets {
     }
 
     private static ChainTargets of(SpellAbility item, List<Collection<?>> links) {
+        Game game = item.getHostCard() == null ? null : item.getHostCard().getGame();
         List<String> root = new ArrayList<>();
         List<ModeTargets> modes = new ArrayList<>();
         List<String> into = root;
         List<Card> cards = new ArrayList<>();
+        List<Card> lastKnown = new ArrayList<>();
+        Set<String> onStack = new LinkedHashSet<>();
         int count = 0;
         int index = 0;
         for (SpellAbility link = item; link != null; link = link.getSubAbility(), index++) {
@@ -92,22 +112,54 @@ final class ChainTargets {
             }
             for (Object target : links.get(index)) {
                 count++;
+                String ref = null;
                 if (target instanceof Card card) {
-                    cards.add(card);
+                    if (isGone(game, card)) {
+                        lastKnown.add(card);
+                        ref = lastKnownRef(card);
+                    } else {
+                        cards.add(card);
+                        ref = Refs.of(card);
+                    }
+                } else if (target instanceof SpellAbility ability && ability.getHostCard() != null) {
+                    Card host = ability.getHostCard();
+                    ref = Refs.of(host);
+                    onStack.add(ref);
+                    if (game == null || game.getCardState(host, null) != null) {
+                        cards.add(host);
+                    }
+                } else if (target instanceof Player player) {
+                    ref = Refs.of(player);
                 }
-                String ref = refOf(target);
                 if (ref != null) {
                     into.add(ref);
                 }
             }
         }
-        return new ChainTargets(root, modes, count, List.copyOf(cards));
+        return new ChainTargets(root, modes, count, List.copyOf(cards), List.copyOf(lastKnown),
+                Set.copyOf(onStack));
     }
 
     /**
-     * A target as a ref: a card or a player as itself, a spell or an ability
-     * on the stack by its host card, which is the entity the snapshot holds
-     * for it.
+     * Whether a targeted card is no longer the game's object for it: it has
+     * ceased to exist, or it moved and the game's card is a new object.
+     */
+    static boolean isGone(Game game, Card target) {
+        if (game == null) {
+            return false;
+        }
+        Card current = game.getCardState(target, null);
+        return current == null || !current.equalsWithGameTimestamp(target);
+    }
+
+    /** The ref of a card as it last existed: {@code L<id>}. */
+    static String lastKnownRef(Card card) {
+        return "L" + card.getId();
+    }
+
+    /**
+     * A target as a ref, a game's state aside: a card or a player as itself,
+     * a spell or an ability on the stack by its host card.
      */
     static String refOf(Object target) {
         if (target instanceof SpellAbility ability) {
@@ -165,13 +217,47 @@ final class ChainTargets {
         return List.copyOf(targets);
     }
 
-    /** The cards among the targets, every link's, root first. */
+    /**
+     * The cards a snapshot holds for these targets: each targeted card that
+     * is still that object, and the host card of each targeted spell or
+     * ability, root first.
+     */
     List<Card> cards() {
         return cards;
     }
 
-    /** The cards among a chain's targets now, every link's, root first. */
+    /** The targeted cards that ceased to exist or became new objects, as they were targeted. */
+    List<Card> lastKnown() {
+        return lastKnown;
+    }
+
+    /** The refs that name a spell or ability on the stack by its host card. */
+    Set<String> onStack() {
+        return onStack;
+    }
+
+    /** The cards a snapshot holds for a chain's targets now, root first. */
     static List<Card> cardsOf(SpellAbility item) {
         return now(item).cards();
+    }
+
+    /**
+     * Of {@code written}, the refs that name a spell or ability on the
+     * stack in either reading, in the order written.
+     */
+    static List<String> onStackOf(List<String> written, ChainTargets... readings) {
+        Set<String> stack = new LinkedHashSet<>();
+        for (ChainTargets reading : readings) {
+            if (reading != null) {
+                stack.addAll(reading.onStack());
+            }
+        }
+        List<String> named = new ArrayList<>();
+        for (String ref : written) {
+            if (stack.contains(ref) && !named.contains(ref)) {
+                named.add(ref);
+            }
+        }
+        return named;
     }
 }

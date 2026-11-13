@@ -54,7 +54,7 @@ class SnapshotBuilderTest {
     @Test
     void refsRenderTheirFullShapeWithNoActingLine() {
         assertEquals(
-                "{\"targets\":[],\"targets_at_cast\":null,\"source\":null,\"modes\":[],\"x\":null,"
+                "{\"targets\":[],\"targets_at_cast\":null,\"targets_on_stack\":[],\"source\":null,\"modes\":[],\"x\":null,"
                         + "\"choices\":{},\"random\":null}",
                 RefsJson.render(null));
     }

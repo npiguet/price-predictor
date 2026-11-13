@@ -292,8 +292,7 @@ public final class BusBracketCollector extends BusEventReader {
         }
         brackets.countDropped(resolving, DroppedEvents.phaseOf(game));
         ChainTargets atCast = ChainTargets.atCast(item, targetsAtCast);
-        Snapshot board = snapshots.ofResolving(
-                resolving.ability, atCast == null ? List.of() : atCast.cards());
+        Snapshot board = snapshots.ofResolving(resolving.ability, atCast);
         resolving.resolutionStarted(board, ChainTargets.now(item), atCast);
         if (fizzled) {
             for (Integer option : CharmModes.chosenOptions(item)) {
@@ -1090,7 +1089,7 @@ public final class BusBracketCollector extends BusEventReader {
         if (open == null || !fromOpenBracket(cause) || !open.hosts(clause)) {
             return;
         }
-        open.modes.begin(option, snapshots.ofResolving(open.ability, open.castTargetCards()));
+        open.modes.begin(option, snapshots.ofResolving(open.ability, open.castTargets()));
         rebaselineAtSnapshot();
     }
 
