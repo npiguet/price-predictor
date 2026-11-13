@@ -82,14 +82,14 @@ After WP1-WP11: the fork fidelity audit (tasks.md T181, quickstart stage 5), a s
 | WP | State | Commit(s) | Notes |
 |---|---|---|---|
 | WP0 | done; verified twice (all gaps closed); connector default suite 1657 passed with `VariantStagingTest` out of it. A full unit run on `f26fefea` still to run (comes with WP1) | `1cffd83a`, `2e85c898`, `f26fefea` | Unit suite 5561 passed on `1cffd83a`. Kill patched session-long at every binding found by scan; effects tests fail on an unrequested process pool (`workers=None` or wider than 4). Left: scan covers module attributes of the four packages only |
-| WP1 | implemented and verified (all findings fixed; `newPTText` of F1 #6 did not reproduce); implementer closing four verifier gaps (copy cost of the last-known-board mapping, extra-turn ability lost when unmapped, bound abilities keeping original-game state, weak tests) | forge `34fa64c2ce5` | Forge installed, connector rebuilt, connector suite 1657 passed. For WP5: `AbilityMapper.map` may return null; forks now fire dies/leaves triggers for creatures killed before the first resolution; `BoardEdit.settle` should call `copyLastState()` after an edit |
-| WP2 | not started | | |
+| WP1 | done; verified twice, third commit closes the last three verifier gaps (not re-verified; red run by the implementer). Connector suite on the third commit running | forge `34fa64c2ce5`, `29c85cb1f25`, `4152a7d59c5` | `newPTText`, `loseLifeMap`, `pipsToReduce`, `rollbackEffects` did not reproduce at a fork point. `makeCopy` 7.2 ms on a 24-permanent board. For WP5: `AbilityMapper.map` may return null; forks fire dies/leaves triggers for creatures killed before the first resolution; `BoardEdit.settle` should call `copyLastState()` after an edit; last-known copies are one shared object per card per fork (never mutate one); a fork's extra-turn ability with no counterpart is dropped and counted. Left: a chosen-card holder copied early keeps its early last-known snapshot; hooks firing against the copy's game during `makeCopy` has no test (WP12) |
+| WP2 | implementer running | | |
 | WP3 | not started | | |
 | WP4 | not started | | |
 | WP5 | not started | | |
 | WP6 | not started | | |
 | WP7 | not started | | |
-| WP8 | Java-independent part implemented (verifier running, full unit suite running); stop-protocol part (`V4 #1`, `P1 #1`) waits for WP7 | `de0acbab`, `fc191cfb`, `df1a29b7`, `5bfd62ca` | `P1 #13`, `P1 #14` did not reproduce. New: `--count-from`, `--continues`, `run.json` `invocations`, logs under `logs/`, decks under `decks/`, per-round progress files, job-object binding of worker JVMs, zero-record exit 1. Not done: counting crashed random-seat matches |
+| WP8 | Java-independent part implemented (unit suite 5690 passed; verifier found eleven gaps, implementer closing them); stop-protocol part (`V4 #1`, `P1 #1`) waits for WP7 | `de0acbab`, `fc191cfb`, `df1a29b7`, `5bfd62ca` | `P1 #13`, `P1 #14` did not reproduce. New: `--count-from`, `--continues`, `run.json` `invocations`, logs under `logs/`, decks under `decks/`, per-round progress files, job-object binding of worker JVMs, zero-record exit 1. Not done: counting crashed random-seat matches |
 | WP9 | not started | | |
 | WP10 | not started | | |
 | WP11 | not started | | |
