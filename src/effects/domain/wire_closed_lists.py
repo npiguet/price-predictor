@@ -44,6 +44,25 @@ FORGE_PHASES: tuple[str, ...] = (
     "combat_end", "main2", "end_of_turn", "cleanup",
 )
 
+#: A ``damage_dealt``'s ``damage_type`` (Forge's ``GameEventCardDamaged.DamageType``
+#: as ``BusEvents.damageType`` spells it). Pinned to that source by a test.
+DAMAGE_TYPES: tuple[str, ...] = ("normal", "m1m1_counters", "deathtouch", "loyalty_loss")
+#: A ``player_lost``'s ``reason``: Forge's ``GameLossReason`` names. Pinned to
+#: ``GameLossReason.java`` by a test.
+GAME_LOSS_REASONS: tuple[str, ...] = (
+    "Conceded", "LifeReachedZero", "Milled", "Poisoned", "SpellEffect",
+    "CommanderDamage", "OpponentWon", "IntentionalDraw",
+)
+#: A ``choice_made``'s ``choice_kind``, decided by the clause's API
+#: (``ApiEvents``' choice readings). Pinned to that source by a test.
+CHOICE_KINDS: tuple[str, ...] = (
+    "color", "type", "number", "card_name", "player", "cards", "direction",
+    "even_odd", "mode",
+)
+#: An event's ``duration`` (``EventDuration.java``): instant, end of turn or
+#: permanent, null on an event that writes none.
+EVENT_DURATIONS: tuple[str, ...] = ("instant", "end_of_turn", "permanent")
+
 #: An entity's zone and a ``zone_change``'s ends: a zone, or null for a
 #: last-known card no zone holds and a move whose end Forge does not name.
 _ZONES = frozenset(FORGE_ZONES) | {None}
@@ -57,6 +76,17 @@ _ROLES = frozenset(EntityRole) | {None}
 _LINE_KINDS = frozenset(LineKind)
 _LINK_TYPES = frozenset(FAMILIES)
 _ATTRIBUTION_SENTINELS = frozenset({"root", "unresolved"})
+_EVENT_DURATIONS = frozenset(EVENT_DURATIONS) | {None}
+#: ``(event type, parameter) -> the values it may take``; a parameter the
+#: event does not carry is not checked.
+_EVENT_PARAM_LISTS: dict[tuple[str, str], frozenset] = {
+    (EventType.ZONE_CHANGE, "from_zone"): _ZONES,
+    (EventType.ZONE_CHANGE, "to_zone"): _ZONES,
+    (EventType.FACE_CHANGE, "to_state"): frozenset(FaceState),
+    (EventType.DAMAGE_DEALT, "damage_type"): frozenset(DAMAGE_TYPES),
+    (EventType.PLAYER_LOST, "reason"): frozenset(GAME_LOSS_REASONS),
+    (EventType.CHOICE_MADE, "choice_kind"): frozenset(CHOICE_KINDS),
+}
 
 
 def off_list_values(raw: Mapping) -> Iterator[tuple[str, object]]:
@@ -129,8 +159,11 @@ def _event(event: Mapping) -> Iterator[tuple[str, object]]:
             isinstance(attributed, str)
             and (attributed in _ATTRIBUTION_SENTINELS or attributed.isdigit())):
         yield "event.attributed_to", attributed
-    if event.get("type") == EventType.ZONE_CHANGE:
-        params = event.get("params") or {}
-        for end in ("from_zone", "to_zone"):
-            if _outside(params.get(end), _ZONES):
-                yield f"zone_change.{end}", params.get(end)
+    if _outside(event.get("duration"), _EVENT_DURATIONS):
+        yield "event.duration", event.get("duration")
+    kind = event.get("type")
+    params = event.get("params") or {}
+    for (event_type, name), allowed in _EVENT_PARAM_LISTS.items():
+        if kind == event_type and (name in params or event_type == EventType.ZONE_CHANGE):
+            if _outside(params.get(name), allowed):
+                yield f"{event_type}.{name}", params.get(name)

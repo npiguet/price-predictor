@@ -16,8 +16,12 @@ import pytest
 
 from effects.domain.wire_closed_lists import (
     ABSENT,
+    CHOICE_KINDS,
+    DAMAGE_TYPES,
+    EVENT_DURATIONS,
     FORGE_PHASES,
     FORGE_ZONES,
+    GAME_LOSS_REASONS,
     off_list_values,
 )
 from tests.unit.effects.builders import EFFECTS_FIXTURES, java_golden_records
@@ -66,6 +70,16 @@ def _entity(**members) -> dict:
      ("zone_change.to_zone", "outside")),
     (_record(pending_event={"type": "life_change", "attributed_to": "sub"}),
      ("event.attributed_to", "sub")),
+    (_record(pending_event={"type": "face_change", "params": {"to_state": "transformed"}}),
+     ("face_change.to_state", "transformed")),
+    (_record(pending_event={"type": "damage_dealt", "params": {"damage_type": "infect"}}),
+     ("damage_dealt.damage_type", "infect")),
+    (_record(pending_event={"type": "player_lost", "params": {"reason": "Decked"}}),
+     ("player_lost.reason", "Decked")),
+    (_record(pending_event={"type": "choice_made", "params": {"choice_kind": "colour"}}),
+     ("choice_made.choice_kind", "colour")),
+    (_record(pending_event={"type": "pt_change", "duration": "until_leaves"}),
+     ("event.duration", "until_leaves")),
 ])
 def test_a_value_outside_its_list_is_named(raw, found):
     assert list(off_list_values(raw)) == [found]
@@ -113,6 +127,37 @@ def test_the_zones_are_forge_s_zone_types_lower_cased():
     the list is Forge's enum and drifts with it only through this test."""
     names = _enum_constants(_FORGE_GAME / "zone" / "ZoneType.java", "ZoneType")
     assert sorted(FORGE_ZONES) == sorted(name.lower() for name in names)
+
+
+def test_the_game_loss_reasons_are_forge_s():
+    names = _enum_constants(_FORGE_GAME / "player" / "GameLossReason.java", "GameLossReason")
+    assert sorted(GAME_LOSS_REASONS) == sorted(names)
+
+
+#: The connector's effects package, which writes the event parameters.
+_CONNECTOR = (Path(__file__).resolve().parents[4] / "forge-connector" / "src" / "main"
+              / "java" / "com" / "pricepredictor" / "connector" / "effects")
+
+
+def test_the_damage_types_are_the_connector_s():
+    source = (_CONNECTOR / "BusEvents.java").read_text(encoding="utf-8")
+    body = source.split("static String damageType", 1)[1].split("static ", 1)[0]
+    assert sorted(DAMAGE_TYPES) == sorted(re.findall(r'case \w+ -> "([a-z0-9_]+)"', body))
+
+
+def test_the_choice_kinds_are_the_connector_s():
+    source = (_CONNECTOR / "ApiEvents.java").read_text(encoding="utf-8")
+    assert sorted(CHOICE_KINDS) == sorted(re.findall(r'new ChoiceReading\("([a-z_]+)"', source))
+
+
+def test_the_event_durations_are_the_connector_s():
+    source = (_CONNECTOR / "EventDuration.java").read_text(encoding="utf-8")
+    assert sorted(EVENT_DURATIONS) == sorted(re.findall(r'[A-Z_]+\("([a-z_]+)"\)', source))
+
+
+def test_a_last_known_entity_with_no_zone_is_on_the_list():
+    raw = _record(entities=[_entity(id="L5", zone=None, role="last_known")])
+    assert list(off_list_values(raw)) == []
 
 
 def test_the_phases_are_forge_s_phase_types_lower_cased():
