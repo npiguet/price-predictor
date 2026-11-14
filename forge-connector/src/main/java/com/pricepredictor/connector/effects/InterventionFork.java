@@ -76,7 +76,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             return false;
         }
         Forks.ForkRun run = new Forks.ForkRun(
-                game, () -> budget.spendIntervention(realResolutionId), perspective);
+                "intervention", game, () -> budget.spendIntervention(realResolutionId), perspective);
         Boolean written = run.take((verified, snapshots) -> {
             SpellAbility forked = Forks.mappedAbility(verified.copier(), ability);
             Player actor = forked == null
@@ -92,7 +92,7 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             // written, so this drops it.
             return resolution == null || resolution.isEmpty() ? null : resolution;
         }, (verified, resolution) -> {
-            write(resolution, ability, verified.perspective());
+            write(resolution, ability, verified);
             return Boolean.TRUE;
         });
         return Boolean.TRUE.equals(written);
@@ -101,15 +101,16 @@ final class InterventionFork implements InterventionScheduler.Forcing {
     /**
      * Write a forced resolution's effect halves.
      *
-     * @param perspective the live player the fork acted for
+     * @param verified the fork: the live player it acted for, and what its
+     *                 copy left out, which every half carries
      */
-    private void write(ForcedResolution resolution, SpellAbility ability, Player perspective) {
+    private void write(ForcedResolution resolution, SpellAbility ability, Forks.VerifiedFork verified) {
         // The *live* ability's keys, not the fork's. A provenance key
         // names a printed line, which the copy shares — but keying off
         // the copy would make the record's identity depend on a game
         // that no longer exists.
         ProvenanceKey.Resolved keys = ProvenanceResolver.resolve(ability);
-        String actorId = Refs.of(perspective);
+        String actorId = Refs.of(verified.perspective());
         // A modal resolution writes one half per chosen mode, by the same
         // rule the live bracket applies (FR-029f), each through the mode's
         // option line and with the board as it stood when that mode's
@@ -118,10 +119,10 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         List<HeldHalves.Half<ModeSplit.ModeHalf>> halves = resolution.halves();
         for (int index = 0; index < halves.size(); index++) {
             HeldHalves.Half<ModeSplit.ModeHalf> half = halves.get(index);
-            context.emit(forkedHalf(
+            context.emit(verified.stamp(forkedHalf(
                     actorId, keys.withOption(half.about().mode().option()),
                     resolution.render(half.about().mode(), half.events(), index, halves.size()),
-                    half.events(), half.about().conditions(), resolution.outcome()));
+                    half.events(), half.about().conditions(), resolution.outcome())));
         }
     }
 

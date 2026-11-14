@@ -6,6 +6,7 @@ import forge.game.card.Card;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A <b>damage-step probe</b>: a fork that re-runs one combat with a keyword
@@ -60,7 +61,7 @@ final class DamageStepProbe {
             return null;
         }
         Forks.ForkRun run = new Forks.ForkRun(
-                game,
+                "probe", game,
                 budget::spendProbe,
                 () -> game.getPhaseHandler() == null
                         ? null : game.getPhaseHandler().getPlayerTurn());
@@ -86,7 +87,7 @@ final class DamageStepProbe {
                     // carries the counter across (GameCopier hands it to
                     // devModeSet). Read here so the branch remembers the step it
                     // belongs to.
-                    liveTurn());
+                    liveTurn(), verified.copyDropped());
         }, (verified, held) -> held);
     }
 
@@ -154,7 +155,18 @@ final class DamageStepProbe {
     record HeldProbe(
             String keyword, String carrier, String state,
             List<EffectEvent> events, String actor, CombatShape combat,
-            DamageStep substep, int turn) {
+            DamageStep substep, int turn, Map<String, Integer> copyDropped) {
+
+        HeldProbe {
+            copyDropped = copyDropped == null ? Map.of() : Map.copyOf(copyDropped);
+        }
+
+        /** A branch whose copy left nothing out. */
+        HeldProbe(String keyword, String carrier, String state,
+                  List<EffectEvent> events, String actor, CombatShape combat,
+                  DamageStep substep, int turn) {
+            this(keyword, carrier, state, events, actor, combat, substep, turn, Map.of());
+        }
 
         /**
          * The branch's payload, naming what was perturbed.
@@ -221,6 +233,7 @@ final class DamageStepProbe {
                 .fork(true)
                 .interventional(false)
                 .mirrorOf(mirrorOfRecordId)
+                .copyDropped(held.copyDropped())
                 .actor(held.actor())
                 .state(held.state())
                 .payload(held.payload()));

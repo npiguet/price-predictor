@@ -115,7 +115,7 @@ class ForkPlayForwardTest {
             }
             taken = true;
             Forks.ForkRun run = new Forks.ForkRun(
-                    live, () -> { }, () -> live.getPhaseHandler().getPlayerTurn());
+                    "directed", live, () -> { }, () -> live.getPhaseHandler().getPlayerTurn());
             played = run.take(
                     (verified, snapshots) -> recording.playForward().play(verified.fork(), flags),
                     (verified, result) -> result);

@@ -9,8 +9,11 @@ import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.util.MyRandom;
 
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.TreeMap;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
@@ -215,7 +218,7 @@ final class Forks {
                 return false;
             }
             return true;
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | StackOverflowError e) {
             System.err.println(
                     "Effect records: fork score check failed (" + e.getMessage()
                             + "); discarding");
@@ -259,8 +262,41 @@ final class Forks {
      *
      * @param copier      maps the live game's objects to the copy's
      * @param perspective the live player the score was checked from
+     * @param copyDropped what the copier left out for want of a counterpart,
+     *                    by kind as a record spells it ({@link #dropped}):
+     *                    every record of the fork carries it as
+     *                    {@code copy_dropped}; empty for a lossless copy
      */
-    record VerifiedFork(GameCopier copier, Game fork, Player perspective) {
+    record VerifiedFork(GameCopier copier, Game fork, Player perspective,
+                        Map<String, Integer> copyDropped) {
+
+        VerifiedFork {
+            copyDropped = Map.copyOf(copyDropped);
+        }
+
+        /** Stamp {@code record} with what this fork's copy left out, if anything. */
+        EffectRecord stamp(EffectRecord record) {
+            return record.copyDropped(copyDropped);
+        }
+    }
+
+    /**
+     * The copier's tally of what a copy left out, as a record spells it: each
+     * kind with a drop, lower-cased ({@code GameCopier.NoCounterpart}'s
+     * names: {@code command}, {@code delayed_trigger}, {@code remembered},
+     * {@code link}, {@code attack}, {@code ability}, {@code activation}), to
+     * how many, in name order; kinds with none left out.
+     */
+    static Map<String, Integer> dropped(Map<?, Integer> tally) {
+        Map<String, Integer> dropped = new TreeMap<>();
+        if (tally != null) {
+            tally.forEach((kind, count) -> {
+                if (count != null && count > 0) {
+                    dropped.put(String.valueOf(kind).toLowerCase(Locale.ROOT), count);
+                }
+            });
+        }
+        return dropped;
     }
 
     /**
@@ -269,20 +305,27 @@ final class Forks {
      * ({@link ForkFidelity}), whose differences are reported and decide
      * nothing.
      *
+     * @param kind        the fork's kind, which names a copy that threw in
+     *                    the worker's failure report ({@code "fork <kind> copy"})
      * @param perspective read after the copy, because a game the copier cannot
      *                    read may not answer it either
      */
-    static Optional<VerifiedFork> copyAndVerify(Game live, Supplier<Player> perspective) {
+    static Optional<VerifiedFork> copyAndVerify(String kind, Game live, Supplier<Player> perspective) {
         GameCopier copier;
         Game fork;
         try {
             // Both inside the guard: the copier's own constructor reads the
             // game, so a game it cannot read fails here rather than at makeCopy.
+            // A board deep enough to overflow the copier's recursion is one
+            // it cannot copy, not one that should end the worker.
             copier = new GameCopier(live);
             fork = copier.makeCopy();
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | StackOverflowError e) {
+            HookFailures.countContained("fork " + kind + " copy", e);
             return Optional.empty();
         }
+        // Read once, now: mapping objects into the copy later adds nothing to it.
+        Map<String, Integer> copyDropped = dropped(copier.getNoCounterpartTally());
         // Before anything reads the fork: every builder over it, the audit's
         // and a played-forward recording's, reads the live game's notes too.
         FloatingEffects.ofFork(fork, live);
@@ -291,7 +334,7 @@ final class Forks {
         if (from == null || !scoreCheck(live, copier, fork, from)) {
             return Optional.empty();
         }
-        return Optional.of(new VerifiedFork(copier, fork, from));
+        return Optional.of(new VerifiedFork(copier, fork, from, copyDropped));
     }
 
     // ── one fork, start to finish ───────────────────────────────────────
@@ -329,12 +372,25 @@ final class Forks {
      * writer runs outside the guard, so a record that cannot be written
      * fails as a live one does.
      *
+     * <p>A copy or a body that throws is counted under {@code "fork <kind>
+     * copy"} or {@code "fork <kind> body"} in the worker's failure report
+     * ({@link HookFailures}), its first failure printed with its stack: a
+     * systematically failing fork leaves a trace, not just an empty corpus.
+     *
+     * <p>The whole span draws from a random stream of its own ({@link
+     * #isolated}), never from the live game's: a fork's AI, its stack and
+     * its effects all draw from Forge's one global stream, and a draw a fork
+     * took there is one the live game no longer takes.
+     *
+     * @param kind        the fork's kind, as the failure report names it:
+     *                    {@code intervention}, {@code probe}, {@code
+     *                    protection} or {@code directed}
      * @param live        the game the fork copies
      * @param spend       spends the fork's budget
      * @param perspective the live player the copy's score is checked from,
      *                    read after the copy
      */
-    record ForkRun(Game live, Runnable spend, Supplier<Player> perspective) {
+    record ForkRun(String kind, Game live, Runnable spend, Supplier<Player> perspective) {
 
         /**
          * Take the fork.
@@ -345,22 +401,44 @@ final class Forks {
         <R, W> W take(ForkBody<R> body, BiFunction<VerifiedFork, R, W> write) {
             // The whole span is the fork, not just its run: see FORK_RUNNING
             // for what a narrower scope left uncovered.
-            return asFork(() -> {
+            return asFork(() -> isolated(() -> {
                 spend.run();
-                Optional<VerifiedFork> verified = copyAndVerify(live, perspective);
+                Optional<VerifiedFork> verified = copyAndVerify(kind, live, perspective);
                 if (verified.isEmpty()) {
                     return null;
                 }
-                // The fork's own state, read against the live game it came from.
-                SnapshotBuilder snapshots = SnapshotBuilder.forFork(verified.get().fork(), live);
                 R produced;
                 try {
+                    // The fork's own state, read against the live game it came from.
+                    SnapshotBuilder snapshots = SnapshotBuilder.forFork(verified.get().fork(), live);
                     produced = body.run(verified.get(), snapshots);
                 } catch (RuntimeException | StackOverflowError e) {
+                    HookFailures.countContained("fork " + kind + " body", e);
                     return null;
                 }
                 return produced == null ? null : write.apply(verified.get(), produced);
-            });
+            }));
+        }
+    }
+
+    /** Seeds each fork's own random stream ({@link #isolated}); never the live game's. */
+    private static final java.util.concurrent.atomic.AtomicLong FORK_STREAMS =
+            new java.util.concurrent.atomic.AtomicLong();
+
+    /**
+     * Run {@code action} with Forge's global random stream ({@code MyRandom})
+     * replaced by a fresh one of the fork's own, and the live game's put back
+     * however the action ends, so the fork draws nothing from it. Nothing is
+     * lost by the fresh stream's seed: the live stream is an unseeded one,
+     * which no rerun reproduces anyway.
+     */
+    static <T> T isolated(Supplier<T> action) {
+        Random live = MyRandom.getRandom();
+        MyRandom.setRandom(new Random(GameRecording.scramble(FORK_STREAMS.incrementAndGet())));
+        try {
+            return action.get();
+        } finally {
+            MyRandom.setRandom(live);
         }
     }
 

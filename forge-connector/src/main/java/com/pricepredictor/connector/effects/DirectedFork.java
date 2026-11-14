@@ -59,11 +59,11 @@ final class DirectedFork {
         Consumer<EffectRecord> flags = flags(
                 rule.rule(), new DirectedTag(variant, application.operation()),
                 openRecordId.get());
-        Forks.ForkRun run = new Forks.ForkRun(game, () -> { }, perspective);
+        Forks.ForkRun run = new Forks.ForkRun("directed", game, () -> { }, perspective);
         ForkPlayForward.Played played = run.take((verified, snapshots) -> {
             Game fork = verified.fork();
             application.edit(binding.inFork(verified.copier())).apply(fork);
-            return playForward.play(fork, flags);
+            return playForward.play(fork, flags.andThen(verified::stamp));
         }, (verified, result) -> result);
         return played != null;
     }

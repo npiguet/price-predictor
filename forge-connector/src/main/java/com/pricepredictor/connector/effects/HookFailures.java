@@ -128,10 +128,6 @@ public final class HookFailures {
     }
 
     /**
-     * The failures counted so far, by hook, short call or subscriber, in name
-     * order; empty when none failed.
-     */
-    /**
      * A failure the connector contains outside a hook's listener and a bus
      * subscriber, counted under {@code key}: a phase boundary's step
      * ({@code "boundary step <name>"}), a decision candidate the rules check
@@ -141,6 +137,25 @@ public final class HookFailures {
         COUNTS.computeIfAbsent(key, name -> new AtomicLong()).incrementAndGet();
     }
 
+    /**
+     * The same, the first failure under {@code key} printed with its stack:
+     * a fork whose copy or whose body threw ({@code "fork <kind> copy"},
+     * {@code "fork <kind> body"}), which is discarded rather than failing the
+     * worker, and which would otherwise leave no trace.
+     */
+    static void countContained(String key, Throwable failure) {
+        if (COUNTS.computeIfAbsent(key, name -> new AtomicLong()).incrementAndGet() == 1) {
+            System.err.println("Effect records: " + key + " threw, and is discarded (later failures"
+                    + " are counted, not printed): " + failure
+                    + Arrays.stream(failure.getStackTrace()).limit(FRAMES_SHOWN)
+                    .map(frame -> "\n\tat " + frame).collect(Collectors.joining()));
+        }
+    }
+
+    /**
+     * The failures counted so far, by hook, short call, subscriber or
+     * contained failure, in name order; empty when none failed.
+     */
     public static Map<String, Long> counts() {
         Map<String, Long> counts = new TreeMap<>();
         COUNTS.forEach((hook, failures) -> counts.put(hook, failures.get()));
