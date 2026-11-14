@@ -86,7 +86,8 @@ from effects.domain.state_snapshot import (
 _KNOWN_ENVELOPE_KEYS = frozenset({
     "record_id", "generation", "run_id", "timestamp", "game_id", "kind", "moment", "subkind",
     "link_id", "mirror_of", "variant_of", "mode", "interventional", "fork",
-    "synthetic", "random_seat", "what_if", "aimed_at", "directed", "curation", "actor_player",
+    "synthetic", "random_seat", "what_if", "aimed_at", "directed", "copy_dropped", "curation",
+    "actor_player",
     "ability",
     "ability_unresolved", "state", "payload",
 })
@@ -1114,6 +1115,8 @@ def record_to_dict(record: EffectRecord) -> dict:
     if record.directed is not None:
         out["directed"] = {"variant": record.directed.variant,
                            "operation": record.directed.operation.value}
+    if record.copy_dropped is not None:
+        out["copy_dropped"] = dict(record.copy_dropped)
     if record.curation is not None:
         out["curation"] = _curation_to_json(record.curation)
     out |= {
@@ -1203,6 +1206,7 @@ def record_from_dict(data: dict) -> EffectRecord:
     ability = data.get("ability")
     aimed_at = data.get("aimed_at")
     directed = data.get("directed")
+    copy_dropped = data.get("copy_dropped")
     curation = data.get("curation")
     return EffectRecord(
         record_id=data["record_id"],
@@ -1228,6 +1232,8 @@ def record_from_dict(data: dict) -> EffectRecord:
         aimed_at=tuple(aimed_at) if aimed_at is not None else None,
         directed=(DirectedTag(directed["variant"], ForkOperation(directed["operation"]))
                   if directed is not None else None),
+        copy_dropped=(tuple(sorted((str(kind), int(count)) for kind, count in copy_dropped.items()))
+                      if copy_dropped is not None else None),
         curation=_curation_from_json(curation) if curation is not None else None,
         ability=_keys_from_json(ability) if ability is not None else None,
         ability_unresolved=data.get("ability_unresolved"),

@@ -392,6 +392,8 @@ class TestTheGen3Fields:
             *(f"record.payload<{payload}>.forbidden[].{name}"
               for payload in ("PlayabilityAttackersPayload", "PlayabilityBlockersPayload")
               for name in ("responsible_own", "responsible_unresolved")),
+            # Both pilots predate WP5's copy_dropped: absent on every record.
+            "record.copy_dropped",
         }, sorted(constant)
 
     def test_the_report_rows_each_gen3_field(self):

@@ -1,0 +1,71 @@
+"""The gen-3 wire as the connector writes it after WP5 (contract
+``record-schema-delta.md``): a fork record's ``copy_dropped``, and a forced
+resolution holding the events the engine hooks report.
+
+Read off the Java golden ``record-intervention-hooked.jsonl``, a forced
+Raise the Alarm through the hooks on a copy that left one remembered object
+out.
+"""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from effects.domain.event_schema import EventType
+from effects.domain.records import EffectRecord
+from effects.domain.rule_detectors.emittable_events import absence_readable
+from effects.domain.wire_closed_lists import off_list_values
+from effects.infrastructure.record_codec import format_record_line, record_from_dict
+from tests.unit.effects.builders import java_golden_records, make_record
+
+
+def _lossy_golden() -> dict:
+    return next(raw for raw in java_golden_records()
+                if raw.get("copy_dropped") and raw.get("interventional"))
+
+
+class TestCopyDropped:
+    def test_a_lossy_fork_record_reads_what_its_copy_left_out(self):
+        record = record_from_dict(_lossy_golden())
+        assert record.fork
+        assert record.copy_dropped == (("remembered", 1),)
+
+    def test_it_writes_back_after_directed_as_the_collector_wrote_it(self):
+        raw = _lossy_golden()
+        written = json.loads(format_record_line(record_from_dict(raw)))
+        assert written["copy_dropped"] == raw["copy_dropped"]
+        keys = list(written)
+        assert keys.index("copy_dropped") < keys.index("actor_player")
+
+    def test_a_record_whose_copy_left_nothing_out_carries_none(self):
+        for raw in java_golden_records():
+            if "copy_dropped" not in raw:
+                assert record_from_dict(raw).copy_dropped is None
+                assert "copy_dropped" not in json.loads(
+                    format_record_line(record_from_dict(raw)))
+                return
+        pytest.fail("every golden carries copy_dropped")
+
+    def test_only_a_fork_carries_it(self):
+        with pytest.raises(ValueError, match="copy_dropped"):
+            make_record(copy_dropped=(("command", 1),))
+
+    def test_the_golden_s_kinds_are_on_the_closed_list(self):
+        assert list(off_list_values(_lossy_golden())) == []
+
+    def test_a_kind_off_the_list_is_named(self):
+        raw = dict(_lossy_golden(), copy_dropped={"remembered": 1, "spellbook": 2})
+        assert ("copy_dropped", "spellbook") in list(off_list_values(raw))
+
+
+class TestAForcedResolutionHearsTheHooks:
+    def test_the_golden_s_forced_half_holds_the_token_the_outcome_hook_reported(self):
+        record: EffectRecord = record_from_dict(_lossy_golden())
+        types = [event.type for event in record.payload.events]
+        assert EventType.TOKEN_CREATED in types
+
+    def test_a_missing_hook_derived_event_on_it_reads_as_not_happened(self):
+        record = record_from_dict(_lossy_golden())
+        assert absence_readable(record, EventType.COIN_FLIPPED)

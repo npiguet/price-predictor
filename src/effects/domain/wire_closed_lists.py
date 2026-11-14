@@ -59,6 +59,11 @@ CHOICE_KINDS: tuple[str, ...] = (
     "color", "type", "number", "card_name", "player", "cards", "direction",
     "even_odd", "mode",
 )
+#: A fork record's ``copy_dropped`` kinds: Forge's ``GameCopier.NoCounterpart``
+#: names lower-cased (``Forks.dropped``). Pinned to ``GameCopier.java`` by a test.
+COPY_DROPPED_KINDS: tuple[str, ...] = (
+    "command", "delayed_trigger", "remembered", "link", "attack", "ability", "activation",
+)
 #: An event's ``duration`` (``EventDuration.java``): instant, end of turn or
 #: permanent, null on an event that writes none.
 EVENT_DURATIONS: tuple[str, ...] = ("instant", "end_of_turn", "permanent")
@@ -77,6 +82,7 @@ _LINE_KINDS = frozenset(LineKind)
 _LINK_TYPES = frozenset(FAMILIES)
 _ATTRIBUTION_SENTINELS = frozenset({"root", "unresolved"})
 _EVENT_DURATIONS = frozenset(EVENT_DURATIONS) | {None}
+_COPY_DROPPED_KINDS = frozenset(COPY_DROPPED_KINDS)
 #: ``(event type, parameter) -> the values it may take``; a parameter the
 #: event does not carry is not checked.
 _EVENT_PARAM_LISTS: dict[tuple[str, str], frozenset] = {
@@ -95,6 +101,9 @@ def off_list_values(raw: Mapping) -> Iterator[tuple[str, object]]:
     where present."""
     if raw.get("generation") == 3 and "mode" not in raw:
         yield "mode", ABSENT
+    for kind in raw.get("copy_dropped") or ():
+        if _outside(kind, _COPY_DROPPED_KINDS):
+            yield "copy_dropped", kind
     state = raw.get("state") or {}
     yield from _global(state.get("global") or {})
     for entity in state.get("entities") or ():

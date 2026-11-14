@@ -1819,6 +1819,30 @@ class TestProbeVisibility:
         )
 
 
+class TestLossyForks:
+    """The share of fork records whose copy left something out, by kind:
+    watched, since a lossy fork is kept and trained on."""
+
+    def test_a_window_with_no_forks_reports_none(self):
+        finding = _named(validate_corpus(_healthy()), "copy left something out")
+        assert finding.watched and finding.ok
+        assert finding.measured == "0/0 fork records; by kind: none"
+
+    def test_the_share_is_counted_per_kind_over_every_fork_record(self):
+        records = _healthy() + [
+            _resolution("run.0-L1.900", interventional=True, fork=True,
+                        copy_dropped=(("command", 2), ("remembered", 1))),
+            _resolution("run.0-L1.901", interventional=True, fork=True,
+                        copy_dropped=(("remembered", 1),)),
+            _resolution("run.0-L1.902", interventional=True, fork=True),
+            _resolution("run.0-L1.903", interventional=True, fork=True),
+        ]
+        finding = _named(validate_corpus(records), "copy left something out")
+        assert finding.watched and finding.ok
+        assert finding.measured == (
+            "2/4 fork records; by kind: command 1/4 (25.0%), remembered 2/4 (50.0%)")
+
+
 class TestAForksTurnAgreesWithItsMirror:
     """The residue of the game_id check, named where it can be acted on.
 
@@ -2131,6 +2155,7 @@ class TestEventTypeCoverage:
         "agrees with the record it mirrors",
         "non-keyword provenance keys",
         "probe forks",
+        "copy left something out",
         "name the mana they made",
         "event types",
     ],

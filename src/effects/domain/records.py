@@ -209,7 +209,7 @@ KINDS_WITHOUT_ACTING_ABILITY: frozenset[RecordKind] = frozenset({
 #: was: none of them may reach the model (compatibility rule 4).
 COLLECTION_METADATA_FIELDS: frozenset[str] = frozenset({
     "mode", "interventional", "fork", "synthetic", "ability_unresolved", "random_seat",
-    "what_if", "generation", "aimed_at", "directed",
+    "what_if", "generation", "aimed_at", "directed", "copy_dropped",
 })
 
 
@@ -875,6 +875,12 @@ class EffectRecord:
     aimed_at: tuple[str, ...] | None = None
     #: A directed fork's variant and operation; None elsewhere. Collection metadata.
     directed: DirectedTag | None = None
+    #: What the copier left out of a fork's copy for want of a counterpart in
+    #: it, ``(kind, count)`` pairs in kind order (``GameCopier.NoCounterpart``
+    #: lower-cased, ``wire_closed_lists.COPY_DROPPED_KINDS``); None on a live
+    #: record and on a fork whose copy left nothing out. Collection metadata:
+    #: it decides nothing, it is counted (``validate-corpus``).
+    copy_dropped: tuple[tuple[str, int], ...] | None = None
     #: How ``build-corpus`` copied the record (research T1); None on every
     #: collected record. Curation metadata.
     curation: Curation | None = None
@@ -946,6 +952,8 @@ class EffectRecord:
             raise ValueError("an interventional record is always a fork")
         if self.mirror_of is not None and not self.fork:
             raise ValueError("mirror_of names the real record a fork mirrors")
+        if self.copy_dropped is not None and not self.fork:
+            raise ValueError("copy_dropped says what a fork's copy left out")
         if self.variant_of is not None and not self.synthetic:
             raise ValueError("variant_of names the card a synthetic script came from")
         if self.directed is not None:

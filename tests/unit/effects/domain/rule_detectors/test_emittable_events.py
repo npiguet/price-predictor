@@ -72,19 +72,24 @@ def test_the_game_s_end_reads_on_a_game_ending_line_alone():
     assert carries("resolution", "player_lost")
 
 
-def test_a_protection_fork_s_records_read_absences_as_any_record_does():
-    """A forced resolution's lone half heard no clause hook; a protection
-    fork's linked halves were played forward with the hooks routed to them."""
+def test_every_fork_s_records_read_absences_as_any_patched_record_does():
+    """A forced resolution's lone half hears the clause and outcome hooks
+    (``ForkHooks``), as a protection fork's linked halves, played forward with
+    the hooks routed to them, do: a missing hook-derived event did not
+    happen. On a degraded worker's record it says nothing."""
     forced = make_record(moment=Moment.RESOLUTION, interventional=True, fork=True,
                          mode=CollectionMode.PATCHED)
     protection = make_record(moment=Moment.RESOLUTION, interventional=True, fork=True,
                              mode=CollectionMode.PATCHED, link_id="L1")
-    assert not absence_readable(forced, EventType.TOKEN_CREATED)
-    assert absence_readable(protection, EventType.TOKEN_CREATED)
-    assert absence_readable(forced, EventType.MANA_PRODUCED)
+    for event in (EventType.TOKEN_CREATED, EventType.DAMAGE_PREVENTED, EventType.MANA_PRODUCED):
+        assert absence_readable(forced, event)
+        assert absence_readable(protection, event)
     trigger = make_record(RecordKind.TRIGGER, interventional=True, fork=True,
                           mode=CollectionMode.PATCHED)
     assert absence_readable(trigger, EventType.TOKEN_CREATED)
+    degraded = make_record(moment=Moment.RESOLUTION, interventional=True, fork=True,
+                           mode=CollectionMode.DEGRADED)
+    assert not absence_readable(degraded, EventType.TOKEN_CREATED)
 
 
 def _source(name: str) -> str:

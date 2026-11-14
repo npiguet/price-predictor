@@ -80,7 +80,7 @@ _ATTACKERS = "record.payload<PlayabilityAttackersPayload>"
 #: varying, being listed as constant, or being absent for a reason the
 #: operator accepts (SC-003), so the report gives every one its own row.
 GEN3_FIELDS: tuple[str, ...] = (
-    "record.generation", "record.aimed_at", "record.directed",
+    "record.generation", "record.aimed_at", "record.directed", "record.copy_dropped",
     *(f"{_ENTITY}.{name}" for name in (
         "owner", "face_state", "mana_cost", "printed_loyalty", "printed_defense",
         "real_face", "designations", "x_paid", "chosen", "costs_paid", "history",

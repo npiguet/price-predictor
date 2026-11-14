@@ -57,7 +57,7 @@ Torch-free.
 from __future__ import annotations
 
 from effects.domain.event_schema import EventType as E
-from effects.domain.records import CollectionMode, EffectRecord, Moment, RecordKind
+from effects.domain.records import CollectionMode, EffectRecord, RecordKind
 
 #: Built from the event bus (``BusEvents``, ``BusEventReader``, ``StatDiffer``).
 BUS: frozenset[E] = frozenset({
@@ -123,13 +123,9 @@ EMITTABLE: dict[RecordKind, frozenset[E]] = {
 }
 
 #: Events only the engine hooks build on a resolution: missing on a degraded
-#: worker's records whatever happened.
+#: worker's records whatever happened. A forced resolution and a probe hear
+#: them as a live record does (``ForkHooks.clauseEvent``, ``ForkHooks.outcome``).
 HOOK_DERIVED: frozenset[E] = CLAUSE_HOOKS - BUS
-#: The hook-derived events a forced resolution still hears (``ForkHooks``:
-#: resolution start, mode starts, conditions, mana); the rest it misses until
-#: the connector forwards the clause and outcome hooks to it.
-_FORCED_HEARD: frozenset[E] = frozenset({E.MANA_PRODUCED})
-_FORCED_MISSING: frozenset[E] = HOOK_DERIVED - _FORCED_HEARD
 
 
 def carries(kind: RecordKind | str, event: E | str, *, acting_line: bool = False,
@@ -150,19 +146,11 @@ def carries_buffered(event: E | str) -> bool:
     return E(event) in BUFFERED
 
 
-def is_forced_resolution(record: EffectRecord) -> bool:
-    """A forced resolution: an interventional fork's effect half, written
-    alone with no ``link_id`` (a protection fork's halves link)."""
-    return (record.interventional and record.kind is RecordKind.RESOLUTION
-            and record.moment is Moment.RESOLUTION and record.link_id is None)
-
-
 def absence_readable(record: EffectRecord, event: E) -> bool:
     """Whether ``record`` lacking an ``event`` means it did not happen: false
-    for a hook-derived event on a degraded worker's record or a forced
-    resolution, which no hook told of it."""
+    for a hook-derived event on a degraded worker's record, which no hook
+    told of it. A patched worker's forced resolution hears the hooks as a
+    live record does."""
     if record.mode is CollectionMode.DEGRADED:
         return event not in HOOK_DERIVED
-    if is_forced_resolution(record):
-        return event not in _FORCED_MISSING
     return True

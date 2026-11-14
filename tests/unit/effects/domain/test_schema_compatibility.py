@@ -98,6 +98,8 @@ _FROZEN_ENVELOPE: dict[str, str] = {
     "generation": "int | None",
     "aimed_at": "tuple[str, ...] | None",
     "directed": "DirectedTag | None",
+    # What a fork's copy left out (WP5), by kind; None on live records.
+    "copy_dropped": "tuple[tuple[str, int], ...] | None",
     # Written by build-corpus on curated records only (research T1): how
     # curation copied the record, never collected.
     "curation": "Curation | None",
@@ -348,12 +350,17 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
                            directed=DirectedTag("tougher", ForkOperation.PT))
         assert _surface(directed) == _surface(fork)
 
+    def test_a_lossy_fork_s_surface_is_its_lossless_fork_s(self):
+        fork = make_record(state=_board(), ability=(_ACTING,), fork=True)
+        lossy = replace(fork, copy_dropped=(("command", 2), ("remembered", 1)))
+        assert _surface(lossy) == _surface(fork)
+
     def test_every_listed_metadata_field_is_flipped_here(self):
         from effects.domain.records import COLLECTION_METADATA_FIELDS
 
         assert COLLECTION_METADATA_FIELDS == {
             "mode", "interventional", "fork", "synthetic", "ability_unresolved",
-            "random_seat", "what_if", "generation", "aimed_at", "directed",
+            "random_seat", "what_if", "generation", "aimed_at", "directed", "copy_dropped",
         }
 
     def test_an_unresolved_reason_leaves_the_surface_alone(self):

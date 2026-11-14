@@ -713,3 +713,32 @@ class ProbeForks:
                 "--probes-per-game, is what turns the path on",
             ),
         )
+
+
+class LossyForks:
+    """What share of the fork records came from a copy that left something
+    out (``copy_dropped``), by kind. Watched: a lossy fork is kept and
+    trained on, so the share is what the fork fidelity audit reads."""
+
+    def __init__(self) -> None:
+        self.forks = 0
+        self.lossy = 0
+        self.by_kind: Counter[str] = Counter()
+
+    def add(self, record: EffectRecord) -> None:
+        if not record.fork:
+            return
+        self.forks += 1
+        if record.copy_dropped:
+            self.lossy += 1
+            for kind, _count in record.copy_dropped:
+                self.by_kind[kind] += 1
+
+    def findings(self, limits: Thresholds) -> Iterator[Finding]:
+        shown = ", ".join(
+            f"{kind} {count}/{self.forks} ({count / self.forks:.1%})"
+            for kind, count in sorted(self.by_kind.items())) or "none"
+        yield Finding.watch(
+            name="fork records whose copy left something out",
+            measured=f"{self.lossy}/{self.forks} fork records; by kind: {shown}",
+        )

@@ -17,6 +17,7 @@ import pytest
 from effects.domain.wire_closed_lists import (
     ABSENT,
     CHOICE_KINDS,
+    COPY_DROPPED_KINDS,
     DAMAGE_TYPES,
     EVENT_DURATIONS,
     FORGE_PHASES,
@@ -137,6 +138,22 @@ def test_the_zones_are_forge_s_zone_types_lower_cased():
     the list is Forge's enum and drifts with it only through this test."""
     names = _enum_constants(_FORGE_GAME / "zone" / "ZoneType.java", "ZoneType")
     assert sorted(FORGE_ZONES) == sorted(name.lower() for name in names)
+
+
+def test_the_copy_dropped_kinds_are_the_copier_s_lower_cased():
+    """``Forks.dropped`` writes ``GameCopier.NoCounterpart.name()``
+    lower-cased, so the list is Forge's enum and drifts with it only through
+    this test."""
+    copier = (_FORGE_GAME.parents[3] / "forge-ai" / "src" / "main" / "java" / "forge" / "ai"
+              / "simulation" / "GameCopier.java")
+    names = _enum_constants(copier, "NoCounterpart")
+    assert sorted(COPY_DROPPED_KINDS) == sorted(name.lower() for name in names)
+
+
+def test_the_connector_spells_the_copy_dropped_kinds_lower_cased():
+    source = (_CONNECTOR / "Forks.java").read_text(encoding="utf-8")
+    body = source.split("static Map<String, Integer> dropped(", 1)[1].split("return dropped;", 1)[0]
+    assert "toLowerCase(Locale.ROOT)" in body
 
 
 def test_the_game_loss_reasons_are_forge_s():

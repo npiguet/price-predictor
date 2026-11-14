@@ -45,13 +45,10 @@ def test_the_same_resolution_edited_to_create_nothing_is_the_near_miss_of_its_ap
     assert FAMILY.match(edited, gen2_sidecars, {"event": "token_created"}) is None
 
 
-@pytest.mark.parametrize("hookless", [
-    {"mode": CollectionMode.DEGRADED},
-    {"interventional": True, "fork": True, "link_id": None}])
+@pytest.mark.parametrize("hookless", [{"mode": CollectionMode.DEGRADED}])
 def test_a_hookless_record_without_a_hook_event_shows_no_side(by_kind, gen2_sidecars, hookless):
-    """V5 #15: a degraded worker hears no hook, and a forced resolution none but
-    its start, modes, conditions and mana, so a missing ``token_created`` (an
-    outcome-hook event) may have happened: neither the near miss nor an
+    """V5 #15: a degraded worker hears no hook, so a missing ``token_created``
+    (an outcome-hook event) may have happened: neither the near miss nor an
     ``absent`` declaration's ``fires`` side is read; the event present still fires."""
     record = _token_maker(by_kind, gen2_sidecars)
     api = acting_api(record, gen2_sidecars)
@@ -69,6 +66,19 @@ def test_a_hookless_record_without_a_hook_event_shows_no_side(by_kind, gen2_side
     bus = FAMILY.match(replace(emptied, **hookless), gen2_sidecars,
                        {"event": "zone_change", "api": api, "to_zone": "exile"})
     assert bus is not None
+
+
+def test_a_forced_resolution_without_a_hook_event_is_a_near_miss(by_kind, gen2_sidecars):
+    """A patched worker's forced resolution hears the clause and outcome
+    hooks (``ForkHooks``), so its missing ``token_created`` did not happen,
+    as on a live record."""
+    record = _token_maker(by_kind, gen2_sidecars)
+    api = acting_api(record, gen2_sidecars)
+    kept = tuple(e for e in record.payload.events if e.type is not EventType.TOKEN_CREATED)
+    forced = replace(record, interventional=True, fork=True, link_id=None,
+                     payload=ResolutionPayload(events=kept))
+    found = FAMILY.match(forced, gen2_sidecars, {"event": "token_created", "api": api})
+    assert found is not None and found.polarity is Polarity.DOES_NOT_FIRE
 
 
 def test_another_api_shows_nothing(by_kind, gen2_sidecars):
