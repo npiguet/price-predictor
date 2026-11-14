@@ -424,7 +424,8 @@ position a card left a library from, and a search of another player's library.
 - A forced resolution that began to resolve is written whatever it did, as a live one is: one that
   did nothing has empty halves (`events: []`, `outcome: resolved`); a fizzled spell's half holds its
   card's move off the stack, a fizzled ability's half nothing, both `outcome: fizzled`. One that
-  never began to resolve writes nothing.
+  never began to resolve writes nothing. One whose controller turned down a "you may" while it
+  resolved and that did nothing else reads `outcome: declined`, as a live one does.
 - A forced spell's X is announced before its targets are drawn, so a clause dividing X among its
   targets divides the X announced.
 - A forced bestowed Aura or mutating spell whose target is illegal as it resolves is `resolved`, as

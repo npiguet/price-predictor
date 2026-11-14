@@ -305,6 +305,9 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         // is about, and a clause or a producer its chain.
         boolean[] fizzled = {false};
         boolean[] started = {false};
+        // Whether the forced item's controller turned down a "you may" while
+        // it resolved, told by the confirm hook as the live bracket is told.
+        boolean[] declined = {false};
         // The forced item's targets as its resolution started and as cast,
         // read as the live bracket reads them.
         ChainTargets[] targets = {null, null};
@@ -362,6 +365,18 @@ final class InterventionFork implements InterventionScheduler.Forcing {
             public void outcome(SpellAbility ability, EffectEvent event) {
                 sink.fileOutcome(event, null);
             }
+
+            // While the forced item resolves: its start told, its end not yet
+            // (the refs are read at its end), as the live bracket scopes a
+            // refusal to the bracket that is open.
+            @Override
+            public void declined(SpellAbility offered) {
+                if (started[0] && cast.refs() == null
+                        && (offered == null || offered.getRootAbility() == onStack
+                                || offered.getId() == onStack.getId())) {
+                    declined[0] = true;
+                }
+            }
         };
         Forks.listeningForHooks(hooks, () -> {
             GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
@@ -369,15 +384,37 @@ final class InterventionFork implements InterventionScheduler.Forcing {
         });
         // Counted as the live bracket counts: the hook's targets as cast
         // against those left when the resolution started, every link's.
+        List<HeldHalves.Half<ModeSplit.ModeHalf>> halves = sink.halves();
+        // A refusal is the outcome only where nothing happened but the
+        // spell's card leaving the stack, as live (OpenResolution.wasDeclined).
         ActivationOutcome outcome = fizzled[0] ? ActivationOutcome.FIZZLED
+                : declined[0] && nothingButTheMoveOffTheStack(halves, onStack)
+                        ? ActivationOutcome.DECLINED
                 : targets[0] != null && targets[1] != null
                         ? OpenResolution.outcomeOf(targets[1].count(), targets[0].count())
                         : OpenResolution.outcomeOf(cast.targetsAtCast(), onStack);
-        List<HeldHalves.Half<ModeSplit.ModeHalf>> halves = sink.halves();
         if (outcome == ActivationOutcome.FIZZLED) {
             halves = onlyMoveOffTheStack(halves, onStack);
         }
         return new ForcedResolution(cast.refs(), halves, outcome, targets[0], targets[1], started[0]);
+    }
+
+    /** Whether no half holds anything but the forced spell's own card leaving the stack. */
+    private static boolean nothingButTheMoveOffTheStack(
+            List<HeldHalves.Half<ModeSplit.ModeHalf>> halves, SpellAbility onStack) {
+        String card = onStack.isSpell() && onStack.getHostCard() != null
+                ? Refs.of(onStack.getHostCard()) : null;
+        for (HeldHalves.Half<ModeSplit.ModeHalf> half : halves) {
+            for (EffectEvent event : half.events()) {
+                boolean move = card != null && event.type() == EventType.ZONE_CHANGE
+                        && List.of(card).equals(event.subjects())
+                        && "stack".equals(event.params().get("from_zone"));
+                if (!move) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /**

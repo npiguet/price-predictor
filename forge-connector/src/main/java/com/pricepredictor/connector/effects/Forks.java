@@ -166,6 +166,16 @@ final class Forks {
          */
         default void outcome(SpellAbility ability, EffectEvent event) {
         }
+
+        /**
+         * Some other game's controller turned down a "you may" (the confirm
+         * hook answered false).
+         *
+         * @param offered the ability asked about, or null where the engine
+         *                named none
+         */
+        default void declined(SpellAbility offered) {
+        }
     }
 
     /**

@@ -1284,14 +1284,31 @@ public final class BusBracketCollector extends BusEventReader {
             // pays a cost or resolves an optional clause (GameSimulator builds
             // its own PlayerControllerAi over the forked Game, but the static
             // listener it calls is this game's). args[0] is declared
-            // SpellAbility on Forge's side; a value this cannot identify
-            // still counts as this game's refusal.
+            // SpellAbility on Forge's side. A refusal of another game's
+            // ability, and one naming no ability while a fork that is not
+            // this collector's game runs on this thread, is handed to the
+            // forced resolution listening there (Forks.forkHooks), as the
+            // clause and outcome handlers hand theirs.
+            if (!Boolean.FALSE.equals(args.get(1))) {
+                return;
+            }
             SpellAbility offered = args.get(0, SpellAbility.class);
-            if (Boolean.FALSE.equals(args.get(1))
-                    && (offered == null || belongsToLiveGame(offered))) {
+            boolean ours = offered != null ? belongsToLiveGame(offered) : ownsNullConfirm();
+            if (ours) {
                 noteDeclined();
+            } else {
+                Forks.forkHooks().declined(offered);
             }
         });
+    }
+
+    /**
+     * Whether a refusal naming no ability is this game's: not while a fork
+     * runs on this thread, unless it is the fork played on that this
+     * collector records.
+     */
+    private boolean ownsNullConfirm() {
+        return !Forks.isForkRunningOnThisThread() || Forks.playingForwardOnThisThread() == game;
     }
 
     /**
