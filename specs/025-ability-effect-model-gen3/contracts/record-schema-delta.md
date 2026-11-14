@@ -386,9 +386,10 @@ position a card left a library from, and a search of another player's library.
   resolves as a creature spell (702.103e, 702.140b): its effect half reads `resolved` and holds its
   events, the permanent's arrival included.
 - An effect that ends the turn or the combat phase (`EndTurn`, `EndCombatPhase`) writes its effect
-  half: its `turn_ended`, the exile of every card on the stack (its own included), and what its own
-  state-based check does (a death there). What follows its own check while it still resolves is the
-  step's it skips to, recorded as in an ordinary step: the cleanup's discard to hand size is a
+  half: its `turn_ended` or `combat_ended` (subject: the attacking player; told at the clause's end,
+  after the step it skips to has begun, and still the effect's), the exile of every card on the stack
+  (its own included), and what its own state-based check does (a death there). What follows its own
+  check while it still resolves is the step's it skips to, recorded as in an ordinary step: the cleanup's discard to hand size is a
   `cleanup_discard` `turn_action` record; an "until end of turn" effect ending, damage wearing off,
   an "until end of combat" effect ending after an `EndCombatPhase` effect's own check, and a death in
   the phase end's own check reach no record and are counted as dropped. `EndTurn` removes creatures
