@@ -259,6 +259,12 @@ class TestOneObjectCannotBeNamedTwice:
         found = VERDICT.match(self._undo(("E2", "E3"), True), self.UNDO, self.PARAMS)
         assert found.polarity is Polarity.DOES_NOT_FIRE
 
+    def test_enough_legal_objects_and_no_legal_choice_is_on_neither_side(self):
+        """Two legal creatures a different-controllers restriction keeps from
+        being chosen together: the clause has as many legal objects as it must
+        name, so another restriction, not 601.2c, leaves it without a choice."""
+        assert VERDICT.match(self._undo(("E2", "E3"), False), self.UNDO, self.PARAMS) is None
+
     def test_no_legal_object_at_all_is_on_neither_side(self):
         assert VERDICT.match(self._undo((), False), self.UNDO, self.PARAMS) is None
 

@@ -63,7 +63,11 @@ The candidates a rule speaks for, each filter narrowing both sides:
   dropped is unreadable. Its ``legal_targets`` are then that clause's, and
   with ``some_legal_target`` the ``fires`` side of ``has_legal_target``
   false is a clause that has a legal object but fewer than it must name,
-  which it cannot name twice (601.2c: Undo with one creature out);
+  which it cannot name twice (601.2c: Undo with one creature out). A
+  candidate with no legal choice whose clause has as many legal objects as
+  its ``TargetMin$`` or more is on neither side: a restriction over the
+  chosen set (different controllers, a shared type) decides it, not the
+  count;
 - ``some_legal_target``: the candidate's ``legal_targets`` list is (true) or
   is not (false) empty;
 - ``candidate_face``: ``front`` for a candidate acting through its card's
@@ -275,6 +279,8 @@ def _passes(candidate: Candidate, lines: SidecarLookup | None,
         minimum = sole_clause_minimum(candidate, lines)
         if minimum is None or minimum < params["min_targets"]:
             return False
+        if not candidate.has_legal_target and len(set(candidate.legal_targets)) >= minimum:
+            return False  # enough legal objects: a restriction on the set decides it
     if "some_legal_target" in params and bool(candidate.legal_targets) is not bool(
             params["some_legal_target"]):
         return False
