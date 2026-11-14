@@ -225,16 +225,17 @@ class GameRecordingTest {
         try (GameRecording recording = new GameRecording(game, writer, ShardRun.GAME_ID, caps, 7L, null,
                 ForkSeats.NONE, com.pricepredictor.connector.effects.directed.DirectedRules.of(atUntap), tally)) {
             recording.open();
-            // Enough untap boundaries for the forced resolutions' gate to
-            // pass at several, were it drawn there.
-            for (int boundary = 0; boundary < 200; boundary++) {
-                TestBoard.enterStep(game, forge.game.phase.PhaseType.UNTAP);
+            // Enough untap boundaries, each in a game turn of its own, for
+            // the forced resolutions' gate (drawn once a turn) to open at
+            // several, were it asked there; devModeSet publishes the step.
+            forge.game.phase.PhaseHandler phases = game.getPhaseHandler();
+            for (int boundary = 0; boundary < 40; boundary++) {
+                phases.devModeSet(forge.game.phase.PhaseType.UNTAP, active, phases.getTurn() + 1);
             }
             assertEquals(1, tally.taken("A"), "the directed rule bound at UNTAP forked there");
 
-            game.getPhaseHandler().devModeSet(forge.game.phase.PhaseType.UPKEEP, active);
-            for (int boundary = 0; boundary < 200; boundary++) {
-                TestBoard.enterStep(game, forge.game.phase.PhaseType.UPKEEP);
+            for (int boundary = 0; boundary < 40; boundary++) {
+                phases.devModeSet(forge.game.phase.PhaseType.UPKEEP, active, phases.getTurn() + 1);
             }
         } finally {
             writer.close();
