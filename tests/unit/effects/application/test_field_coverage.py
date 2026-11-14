@@ -380,7 +380,15 @@ class TestTheGen3Fields:
             # Both pilots predate the record moments (FR-042a, FR-042b): no
             # cost half lists its events, no effect half its outcome.
             "record.payload<ActivationPayload>.events",
-            "record.payload<ResolutionPayload>.outcome"}, sorted(constant)
+            "record.payload<ResolutionPayload>.outcome",
+            # Both pilots predate WP7's members: no marker (each turn action
+            # writes no withheld count), no rewrite with an unknown incoming
+            # event or a set-aside ability, no lure-bound blocker.
+            "record.payload<TurnActionPayload>.records_withheld",
+            *(f"record.payload<RewritePayload>.{name}" for name in (
+                "incoming_unknown", "buffered", "buffered_ran", "buffered_events")),
+            "record.payload<PlayabilityBlockersPayload>.forbidden[].required_elsewhere",
+        }, sorted(constant)
 
     def test_the_report_rows_each_gen3_field(self):
         lines = gen3_report_lines(field_coverage(self._golden()))
@@ -392,7 +400,12 @@ class TestTheGen3Fields:
             status[rest.split()[0]] = tag.strip()
         assert list(status) == list(GEN3_FIELDS)
         assert status["record.state.entities[].owner"] == "varies"
-        assert status["record.payload<TurnActionPayload>.events"] == "absent"
+        # The goldens' one turn action is the game-end marker, whose events are
+        # always empty.
+        assert status["record.payload<TurnActionPayload>.events"] == "const"
+        assert status["record.payload<RewritePayload>.buffered_events"] == "varies"
+        assert status[
+            "record.payload<PlayabilityBlockersPayload>.forbidden[].required_elsewhere"] == "varies"
         assert status["record.state.global_.dungeons"] == "const"
 
     def test_a_corpus_without_gen3_records_gets_no_section(self):

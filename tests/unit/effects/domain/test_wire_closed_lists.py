@@ -92,6 +92,16 @@ def test_every_payload_s_events_are_read():
     assert list(off_list_values(raw)) == [("zone_change.to_zone", "outside")]
 
 
+def test_a_buffered_ability_s_events_are_read():
+    """A rewrite's ``buffered_events`` are the set-aside ability's run (WP7)."""
+    raw = _record() | {"kind": "rewrite", "payload": {
+        "incoming": {"type": "damage_dealt", "params": {"amount": 2}},
+        "outgoing": None, "buffered": [], "buffered_ran": True,
+        "buffered_events": [{"type": "zone_change", "params": {"to_zone": "outside"},
+                             "attributed_to": "root"}]}}
+    assert list(off_list_values(raw)) == [("zone_change.to_zone", "outside")]
+
+
 @pytest.mark.parametrize("zone", [*FORGE_ZONES, None])
 def test_every_zone_forge_names_is_on_the_list_for_a_move_and_an_entity(zone):
     """``merged``, ``sideboard`` and the rest are zones the collector really

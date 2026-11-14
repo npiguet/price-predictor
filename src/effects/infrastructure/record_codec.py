@@ -761,22 +761,37 @@ def _resolution_from_json(data: dict) -> ResolutionPayload:
 
 
 def _rewrite_to_json(payload: RewritePayload) -> dict:
-    return {
+    """Gen-3's members after ``replaced_by``, each only where the collector
+    writes it: ``incoming_unknown`` when true, the buffered three on a
+    replacement that set an ability aside."""
+    out = {
         "incoming": payload.incoming.as_dict(),
         "outgoing": payload.outgoing.as_dict() if payload.outgoing else None,
         "result": payload.result.value if payload.result else None,
         "replaced_by": _keys_to_json(payload.replaced_by),
     }
+    if payload.incoming_unknown:
+        out["incoming_unknown"] = True
+    if payload.buffered is not None:
+        out["buffered"] = _keys_to_json(payload.buffered)
+        out["buffered_ran"] = bool(payload.buffered_ran)
+        out["buffered_events"] = _events_to_json(payload.buffered_events)
+    return out
 
 
 def _rewrite_from_json(data: dict) -> RewritePayload:
     outgoing = data.get("outgoing")
     result = data.get("result")
+    buffered = data.get("buffered")
     return RewritePayload(
         incoming=_event_from_json(data["incoming"]),
         outgoing=_event_from_json(outgoing) if outgoing else None,
         result=RewriteResult(result) if result else None,
         replaced_by=_keys_from_json(data.get("replaced_by")),
+        incoming_unknown=bool(data.get("incoming_unknown", False)),
+        buffered=_keys_from_json(buffered) if buffered is not None else None,
+        buffered_ran=bool(data.get("buffered_ran")) if buffered is not None else None,
+        buffered_events=_events_from_json(data.get("buffered_events")),
     )
 
 
@@ -931,10 +946,12 @@ def _decision_from_json(data: dict) -> PlayabilityDecisionPayload:
 
 
 def _forbidden_to_json(forbidden: tuple[ForbiddenEntity, ...]) -> list[dict]:
+    """``required_elsewhere`` last, only when true, as the collector writes it."""
     return [
         {
             "entity": f.entity,
             "responsible_static": _keys_to_json(f.responsible_static),
+            **({"required_elsewhere": True} if f.required_elsewhere else {}),
         }
         for f in forbidden
     ]
@@ -945,6 +962,7 @@ def _forbidden_from_json(data: Any) -> tuple[ForbiddenEntity, ...]:
         ForbiddenEntity(
             entity=f["entity"],
             responsible_static=_keys_from_json(f.get("responsible_static")),
+            required_elsewhere=bool(f.get("required_elsewhere", False)),
         )
         for f in data or ()
     )
@@ -1001,11 +1019,16 @@ def _blockers_from_json(data: dict) -> PlayabilityBlockersPayload:
 
 
 def _turn_action_to_json(payload: TurnActionPayload) -> dict:
-    return {"events": _events_to_json(payload.events)}
+    """The game-end marker's ``records_withheld`` after its (empty) events."""
+    out: dict = {"events": _events_to_json(payload.events)}
+    if payload.records_withheld is not None:
+        out["records_withheld"] = payload.records_withheld
+    return out
 
 
 def _turn_action_from_json(data: dict) -> TurnActionPayload:
-    return TurnActionPayload(events=_events_from_json(data.get("events")))
+    return TurnActionPayload(events=_events_from_json(data.get("events")),
+                             records_withheld=data.get("records_withheld"))
 
 
 @dataclass(frozen=True, slots=True)

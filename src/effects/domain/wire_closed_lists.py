@@ -145,8 +145,10 @@ def _entity(entity: Mapping) -> Iterator[tuple[str, object]]:
 
 
 def _payload_events(payload: Mapping) -> Iterator[Mapping]:
-    """Every event a payload of any kind carries."""
+    """Every event a payload of any kind carries, a rewrite's buffered
+    ability's run included."""
     yield from payload.get("events") or ()
+    yield from payload.get("buffered_events") or ()
     for member in ("incoming", "outgoing", "event"):
         event = payload.get(member)
         if isinstance(event, Mapping):

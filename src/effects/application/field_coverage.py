@@ -99,6 +99,12 @@ GEN3_FIELDS: tuple[str, ...] = (
         "anchor_attacker", "legal_defenders", "must_attack", "tapped_by_attack")),
     "record.payload<PlayabilityBlockersPayload>.must_block",
     "record.payload<TurnActionPayload>.events",
+    # WP7: the game-end marker's withheld count, a rewrite's unknown incoming
+    # event and set-aside ability, a blocker a lure requires elsewhere.
+    "record.payload<TurnActionPayload>.records_withheld",
+    *(f"record.payload<RewritePayload>.{name}" for name in (
+        "incoming_unknown", "buffered", "buffered_ran", "buffered_events")),
+    "record.payload<PlayabilityBlockersPayload>.forbidden[].required_elsewhere",
 )
 
 

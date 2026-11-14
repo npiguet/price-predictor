@@ -54,6 +54,10 @@ class TurnActionSubkind(StrEnum):
     PHASING = "phasing"
     DAY_NIGHT = "day_night"
     LORE_COUNTER = "lore_counter"
+    #: The game-end marker: a game's last record, written only for a game that
+    #: ended with every end-of-game write done. A game with none in its shard
+    #: was cut (contract ``record-schema-delta.md`` § Kinds).
+    GAME_END = "game_end"
 
 
 #: The kinds whose ``subkind`` is set, each with its own subkind vocabulary.
@@ -377,6 +381,16 @@ class RewritePayload(_PayloadQueries):
     structures in place, so a shallow copy would record the outgoing event in
     both slots. Forge mostly substitutes by running a different ability rather
     than editing the event, which ``result`` and ``replaced_by`` record.
+
+    Gen-3: ``incoming_unknown`` says Forge could not copy the event as it
+    arrived; ``incoming`` then holds the event as it left and ``outgoing`` is
+    None, which says nothing about an in-place edit (:attr:`arrived`,
+    :attr:`departed`, :attr:`rewritten`). A damage replacement that set an
+    ability aside (Swans of Bryn Argoll's draw, a ``Prevent$ True`` rider)
+    names it in ``buffered``, says in ``buffered_ran`` whether Forge ran it,
+    and holds its run's events in ``buffered_events``: the outcome of this
+    record, which no resolution half holds. Several records waiting on one
+    run: the oldest holds the events, the others ran with none.
     """
 
     incoming: Event
@@ -387,24 +401,56 @@ class RewritePayload(_PayloadQueries):
     result: RewriteResult | None = None
     #: The ability that ran instead, keyed like the record's ``ability``.
     replaced_by: tuple[ProvenanceKey, ...] = field(default_factory=tuple)
+    #: Gen-3: ``incoming`` is the event as it left, what came in unknown.
+    incoming_unknown: bool = False
+    #: Gen-3: the provenance keys of the ability the replacement set aside
+    #: (``()`` where it keys to no printed line); None where it set none aside.
+    buffered: tuple[ProvenanceKey, ...] | None = None
+    #: Whether Forge ran the set-aside ability; None where none was set aside.
+    buffered_ran: bool | None = None
+    #: The events of the set-aside ability's run this record took, attributed
+    #: on that ability's chain.
+    buffered_events: tuple[Event, ...] = ()
 
     @property
-    def rewritten(self) -> bool:
-        """Whether the event's parameter map was edited in place."""
+    def arrived(self) -> Event | None:
+        """The event as it arrived at the replacement; None when unknown."""
+        return None if self.incoming_unknown else self.incoming
+
+    @property
+    def departed(self) -> Event:
+        """The event as it left: the edited one, else the one that arrived
+        (or, when that is unknown, the one ``incoming`` holds)."""
+        return self.outgoing if self.outgoing is not None else self.incoming
+
+    @property
+    def rewritten(self) -> bool | None:
+        """Whether the event's parameter map was edited in place; None when
+        what arrived is unknown, so no edit can be told."""
+        if self.incoming_unknown:
+            return None
         return self.outgoing is not None
+
+    @property
+    def holds_buffered_run(self) -> bool:
+        """Whether this record holds events of its set-aside ability's run
+        (the one record of a shared run that took them)."""
+        return bool(self.buffered_ran and self.buffered_events)
 
     def happened_events(self) -> tuple[Event, ...]:
         # The incoming event is what was proposed, not what happened; returning
-        # it would train the head on the replaced event.
-        return (self.outgoing,) if self.outgoing is not None else ()
+        # it would train the head on the replaced event. The set-aside
+        # ability's run did happen, and no other record holds it.
+        edited = (self.outgoing,) if self.outgoing is not None else ()
+        return (*edited, *self.buffered_events)
 
     def all_events(self) -> tuple[Event, ...]:
-        if self.outgoing is None:
-            return (self.incoming,)
-        return (self.incoming, self.outgoing)
+        pair = (self.incoming,) if self.outgoing is None else (self.incoming, self.outgoing)
+        return (*pair, *self.buffered_events)
 
     def provenance_keys(self) -> Iterator[ProvenanceKey]:
-        return iter(self.replaced_by)
+        yield from self.replaced_by
+        yield from self.buffered or ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -618,10 +664,19 @@ class PlayabilityDecisionPayload(_PayloadQueries):
 
 @dataclass(frozen=True, slots=True)
 class ForbiddenEntity:
-    """An entity a static effect keeps out of a legal set, and which static."""
+    """An entity a static effect keeps out of a legal set, and which static.
+
+    Gen-3 blockers: ``responsible_static`` the static keeping the creature
+    from blocking the anchor, else the one keeping it from blocking at all
+    (Pacifism), else empty (a hidden keyword with no static, Panic's "can't
+    block"); ``required_elsewhere`` when a requirement makes it block another
+    attacker and none makes it block the anchor, which the restrictions alone
+    would allow (a lure, 509.1c).
+    """
 
     entity: str
     responsible_static: tuple[ProvenanceKey, ...] = ()
+    required_elsewhere: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -669,9 +724,13 @@ class PlayabilityBlockersPayload(_PayloadQueries):
 
 @dataclass(frozen=True, slots=True)
 class TurnActionPayload(_PayloadQueries):
-    """``turn_action``: the events of one turn-based action, which no ability caused."""
+    """``turn_action``: the events of one turn-based action, which no ability
+    caused; on the game-end marker none, and the records the cap withheld."""
 
     events: tuple[Event, ...] = ()
+    #: The game-end marker's: the game's records ``--max-records-per-game``
+    #: kept out of the shard. None on every other turn action.
+    records_withheld: int | None = None
 
     def happened_events(self) -> tuple[Event, ...]:
         return self.events
@@ -896,6 +955,11 @@ class EffectRecord:
             and not self.interventional
             and self.directed is None
         )
+
+
+def is_game_end(record: EffectRecord) -> bool:
+    """Whether ``record`` is a game-end marker: no outcome, no detector reads it."""
+    return record.subkind is TurnActionSubkind.GAME_END
 
 
 def events_of(record: EffectRecord) -> tuple[Event, ...]:

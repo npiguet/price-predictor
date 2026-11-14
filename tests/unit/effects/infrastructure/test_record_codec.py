@@ -1201,7 +1201,10 @@ class TestTheGen3Fixture:
 
     def test_every_turn_action_subkind_reads_with_its_events(self):
         actions = [r for r in self._records() if r.kind is RecordKind.TURN_ACTION]
-        assert {r.subkind for r in actions} == set(TurnActionSubkind)
+        # The fixture predates the game-end marker (WP7); its regeneration
+        # (D8) brings one per finished game, and this exception goes.
+        assert {r.subkind for r in actions} == set(TurnActionSubkind) - {
+            TurnActionSubkind.GAME_END}
         assert all(r.ability is None and r.payload.events for r in actions)
         draws = [r for r in actions if r.subkind is TurnActionSubkind.DRAW]
         assert all({EventType.CARD_DRAWN, EventType.ZONE_CHANGE}

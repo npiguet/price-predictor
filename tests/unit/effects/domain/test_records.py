@@ -299,6 +299,18 @@ def test_python_and_java_spell_the_playability_checks_alike_in_order():
     assert java and tuple(java) == tuple(check.value for check in PlayabilityCheck)
 
 
+def test_python_and_java_spell_the_turn_action_subkinds_alike():
+    """A subkind the collector writes and the reader does not know fails the
+    whole record's decode (the game-end marker did until WP7's Python side)."""
+    from effects.domain.records import TurnActionSubkind
+
+    source = _JAVA_UNRESOLVED_REASON.with_name("TurnActionSubkind.java").read_text(
+        encoding="utf-8")
+    java = re.findall(r'^\s*[A-Z_]+\("([a-z_]+)"\)[,;]', source, re.MULTILINE)
+    assert "game_end" in java
+    assert tuple(java) == tuple(subkind.value for subkind in TurnActionSubkind)
+
+
 def test_the_land_play_limit_is_a_check_of_its_own_after_the_activation_limit():
     """A land play's limit counts the turn's land plays, not one ability's
     activations (FR-032), and a candidate before gen-3 says nothing of land plays."""
