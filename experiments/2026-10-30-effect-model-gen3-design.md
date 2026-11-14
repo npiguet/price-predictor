@@ -1962,9 +1962,9 @@ how a card is scripted. About 90 need setup state that a starting-state file may
 as a designation or a turn's history. About 75 name a suspected Forge departure from the rules, such
 as connive 0 firing the "connives" trigger. `rules/FINDINGS.md` lists ten to test first.
 
-### Collection keeps four known limits, in mana counting, fork speed and two constant fields
+### Collection keeps six known limits, in mana counting, fork speed, two constant fields, one kind of cast and the rules without a detector
 
-**Four limits of collection were found and left in place.**
+**Six limits of collection were found and left in place.**
 - The untapped mana production counts a mana ability with a mana cost of its own, such as a filter
   land's, without checking that its {1} can be paid.
 - The affordability check that decides whether a decision candidate's mana cost can be paid counts
@@ -1976,6 +1976,18 @@ as connive 0 firing the "connives" trigger. `rules/FINDINGS.md` lists ten to tes
 - `field-coverage` found two snapshot fields constant on the audit shards. A player's rad counters
   come only from Fallout cards, which sealed pools do not hold, and unlimited land plays are rare.
   Both are checked again after the coverage round.
+- A spell that may be cast at instant speed for an extra cost is listed as one decision candidate,
+  at its printed timing. Rout can be cast as though it had flash for {2} more. At instant speed
+  its candidate fails the timing check, although the cast with the extra cost is legal. The
+  records never show that cast as a legal play.
+- About 150 rule scenarios have no detector although a record field holds what decides them. A
+  detector is the declaration that says which records show a rule firing and which show it not
+  firing. For these scenarios no detector parameter reads the field. `rule-counts` therefore
+  reports no examples for their rules, and neither a rule test nor a directed fork can be aimed at
+  them. The largest groups need a condition on a decision candidate, such as why a target or a
+  cost is illegal, a parameter of an event, a qualifier on a trigger, or the kind of replacement
+  that applied. Each scenario states what is missing in its declaration, in a reason that starts
+  with "Could not express".
 
 ### The deviance floor is 0.04 nats, where gen-2's output fields turn noisy
 
@@ -2043,5 +2055,8 @@ line gives every field's card-disjoint explained deviance, and each run's "Const
   written before it, and measure its step time and peak memory on a fixed shard.
 - **Train with the hard mask on rule-drawn records first**, and move to the soft mask only if a
   comparison shows the hard mask costs the other outputs.
+- **Give the detectors the parameters the scenarios without a detector need, and list a cast at
+  instant speed for an extra cost as a candidate of its own**, in a later generation. Both are
+  limits collection keeps for now.
 - **Draw more of the records a weak output field needs, in gen-4** ([gen-4 record](XXXX-XX-XX-effect-model-gen4-design.md)),
   starting from the fields gen-3's model leaves weak.
