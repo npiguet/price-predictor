@@ -149,7 +149,7 @@ public final class GameRecording implements AutoCloseable {
                         game, new InterventionFork(game, forkContext, budget, seed),
                         caps.interventionsPerGame() > 0
                                 ? new ProtectionFork(game, budget, playForward, seed) : null,
-                        decks.steered()))
+                        decks.steered(), InterventionScheduler.drawnPerBoundary(seed)))
                 : Optional.empty();
         this.probes = forking
                 ? Optional.of(new ProbeScheduler(
@@ -393,6 +393,7 @@ public final class GameRecording implements AutoCloseable {
         @Subscribe
         public void onPhase(GameEventTurnPhase event) {
             boolean collecting = collectsTheBoard(event.phase());
+            boolean forking = forksAt(game);
             eachGuarded(
                     new BoundaryStep("continuous", () -> {
                         if (collecting) {
@@ -400,7 +401,7 @@ public final class GameRecording implements AutoCloseable {
                         }
                     }),
                     new BoundaryStep("interventions", () -> interventions.ifPresent(scheduler -> {
-                        if (collecting) {
+                        if (collecting && forking) {
                             scheduler.collect(event.phase());
                         }
                     })),
@@ -408,12 +409,19 @@ public final class GameRecording implements AutoCloseable {
                     // phase event fires ahead of it, which is the only moment
                     // a probe can fork from a board where nothing has been
                     // dealt yet.
-                    new BoundaryStep("probes", () -> probes.ifPresent(ProbeScheduler::collect)),
+                    new BoundaryStep("probes", () -> probes.ifPresent(probe -> {
+                        if (forking) {
+                            probe.collect();
+                        }
+                    })),
                     // Last: a directed fork plays the turn on, and the
                     // boundary's other collection reads the live board before
                     // any fork is taken.
-                    new BoundaryStep("directed forks", () -> directed.ifPresent(
-                            scheduler -> scheduler.collect(event.phase()))));
+                    new BoundaryStep("directed forks", () -> directed.ifPresent(scheduler -> {
+                        if (forking) {
+                            scheduler.collect(event.phase());
+                        }
+                    })));
         }
     }
 
@@ -430,6 +438,17 @@ public final class GameRecording implements AutoCloseable {
      */
     static boolean collectsTheBoard(PhaseType phase) {
         return phase != PhaseType.UNTAP;
+    }
+
+    /**
+     * Whether a fork may be taken at a phase event now: not while the stack
+     * resolves. An effect that ends the turn or the combat phase fires the
+     * phase events of the steps it moves to from inside its own resolution,
+     * and a copy taken there is a game mid-resolution, which no fork is
+     * built to play on.
+     */
+    static boolean forksAt(Game game) {
+        return !game.getStack().isResolving();
     }
 
     /** One named step of a phase boundary's collection. */

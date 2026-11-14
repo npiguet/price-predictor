@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import forge.game.Game;
+import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
@@ -10,7 +11,9 @@ import forge.game.zone.ZoneType;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 
 /**
@@ -31,6 +34,12 @@ import java.util.function.Predicate;
  * <p>Costs a game copy and a stack resolution each, which is why
  * {@code --interventions-per-game} defaults low and why nothing happens at all
  * when it is zero.
+ *
+ * <p>Spread over the game rather than spent where it starts: a boundary forces
+ * a line only when it draws one, with probability {@link #PROBABILITY} from
+ * the game's own generator, and then exactly one line. Forced greedily from
+ * the game's first boundary on, every budget went on the opening hand over an
+ * empty board.
  */
 final class InterventionScheduler {
 
@@ -44,6 +53,16 @@ final class InterventionScheduler {
         boolean mayIntervene(int realResolutionId);
 
         /**
+         * Whether {@code ability} has the modes and targets a forced
+         * resolution needs, for {@code holder}, on the board as it stands:
+         * one that has none would spend a fork on a resolution that cannot
+         * happen. Asked of the live board without changing it.
+         */
+        default boolean hasChoices(SpellAbility ability, Player holder) {
+            return true;
+        }
+
+        /**
          * Fork the game and force {@code ability}, resolved for {@code holder}.
          *
          * @return whether a record was written
@@ -51,8 +70,29 @@ final class InterventionScheduler {
         boolean intervene(SpellAbility ability, int realResolutionId, Player holder);
     }
 
+    /**
+     * The chance a boundary forces a line: about one boundary in twenty, so
+     * a budget of a few forks lasts into the game's middle turns, past the
+     * empty boards of its first.
+     */
+    static final double PROBABILITY = 0.05;
+
+    /** Kept apart from the other streams the same game seed seeds. */
+    private static final long SEED_SALT = 0x2545F4914F6CDD1DL;
+
+    /** A gate every boundary passes, for a caller that forces at each one. */
+    static final BooleanSupplier EVERY_BOUNDARY = () -> true;
+
+    /** The game's draw against {@link #PROBABILITY}, from a generator seeded by the game's seed. */
+    static BooleanSupplier drawnPerBoundary(long seed) {
+        Random random = new Random(GameRecording.scramble(seed ^ SEED_SALT));
+        return () -> random.nextDouble() < PROBABILITY;
+    }
+
     private final Game game;
     private final Forcing forks;
+    /** Whether a boundary forces a line: asked once per boundary. */
+    private final BooleanSupplier gate;
     /** Grants the rare protections, or null when the run takes none. */
     private final ProtectionFork protection;
     /**
@@ -65,24 +105,24 @@ final class InterventionScheduler {
     /** Lines already forced on another player's turn (FR-057), apart from the above. */
     private final Set<String> offTurnSeen = new LinkedHashSet<>();
 
+    /** An unsteered game's scheduler forcing at every boundary and granting no protection. */
     InterventionScheduler(Game game, Forcing forks) {
-        this(game, forks, null, false);
-    }
-
-    /** An unsteered game's scheduler; @param protection grants the rare protections, or null */
-    InterventionScheduler(Game game, Forcing forks, ProtectionFork protection) {
-        this(game, forks, protection, false);
+        this(game, forks, null, false, EVERY_BOUNDARY);
     }
 
     /**
      * @param protection grants the rare protections, or null for none
      * @param steered    whether either deck of the game carries a rule
+     * @param gate       whether a boundary forces a line, asked once per
+     *                   boundary ({@link #drawnPerBoundary} in a worker)
      */
-    InterventionScheduler(Game game, Forcing forks, ProtectionFork protection, boolean steered) {
+    InterventionScheduler(Game game, Forcing forks, ProtectionFork protection, boolean steered,
+                          BooleanSupplier gate) {
         this.game = game;
         this.forks = forks;
         this.protection = protection;
         this.steered = steered;
+        this.gate = gate;
     }
 
     /**
@@ -101,11 +141,16 @@ final class InterventionScheduler {
     }
 
     /**
-     * Force what the players hold and nobody would play: in a steered game,
-     * first the lines of the variant cards each player holds, the player whose
-     * turn it is first (FR-058e); then, for every player but the one whose
-     * turn it is, a line whose branch turns on whose turn it is (FR-057); then
-     * everything the player whose turn it is holds.
+     * Force one line the players hold and nobody would play, if this boundary
+     * draws one ({@link #gate}): in a steered game, first among the lines of
+     * the variant cards each player holds, the player whose turn it is first
+     * (FR-058e); then, for every player but the one whose turn it is, a line
+     * whose branch turns on whose turn it is (FR-057); then anything the
+     * player whose turn it is holds.
+     *
+     * <p>A line without the modes or targets its resolution needs on this
+     * board is passed over and not marked forced, so a removal spell held
+     * over an empty board is forced once a target has arrived.
      *
      * <p>A steered game's variants go first because they are what its decks
      * were built for: the rule its decks aim at is short of records, and the
@@ -116,46 +161,52 @@ final class InterventionScheduler {
      *
      * <p>FR-057's lines go first because they are few and a boundary of the
      * other player's turn is the only place they show their other branch: the
-     * budget the second pass spends greedily from the game's first boundary on
-     * would otherwise never leave one for them. Each line is forced at most
+     * last pass, over everything the active player holds, would otherwise
+     * take every boundary that draws a line. Each line is forced at most
      * once on its holder's turn and once on another's, so both branches can
      * be seen in one game.
      */
     void collect() {
         Player active = game.getPhaseHandler() == null
                 ? null : game.getPhaseHandler().getPlayerTurn();
-        if (active == null) {
+        if (active == null || !gate.getAsBoolean()) {
             return;
         }
-        if (steered && !forceVariants(active)) {
+        if (steered && forceVariants(active) == Pass.DONE) {
             return;
         }
         for (Player other : game.getPlayers()) {
             if (other != active && !other.hasLost()
-                    && !force(other, offTurnSeen, TurnConditions::branchesOnWhoseTurn)) {
+                    && force(other, offTurnSeen, TurnConditions::branchesOnWhoseTurn) == Pass.DONE) {
                 return;
             }
         }
         force(active, interveneSeen, candidate -> true);
     }
 
+    /** What a pass over a player's lines ends with. */
+    private enum Pass {
+        /** A line was forced, or the budget refused one: the boundary is over. */
+        DONE,
+        /** Nothing was forced: the next pass may force a line. */
+        GO_ON
+    }
+
     /**
      * The steered game's first pass: the variant cards' lines each player
      * holds, the active player's on its own turn, the others' off it.
-     *
-     * @return false once the budget refuses a fork, which ends the boundary
      */
-    private boolean forceVariants(Player active) {
-        if (!force(active, interveneSeen, InterventionScheduler::ofAVariant)) {
-            return false;
+    private Pass forceVariants(Player active) {
+        if (force(active, interveneSeen, InterventionScheduler::ofAVariant) == Pass.DONE) {
+            return Pass.DONE;
         }
         for (Player other : game.getPlayers()) {
             if (other != active && !other.hasLost()
-                    && !force(other, offTurnSeen, InterventionScheduler::ofAVariant)) {
-                return false;
+                    && force(other, offTurnSeen, InterventionScheduler::ofAVariant) == Pass.DONE) {
+                return Pass.DONE;
             }
         }
-        return true;
+        return Pass.GO_ON;
     }
 
     /** Whether the line is a staged variant card's ({@link VariantRegistry}). */
@@ -164,13 +215,11 @@ final class InterventionScheduler {
     }
 
     /**
-     * Force each line {@code holder} holds in the {@link #FORCED_ZONES} that
-     * {@code wanted} accepts and {@code seen} does not hold yet, for
-     * {@code holder}.
-     *
-     * @return false once the budget refuses a fork, which ends the boundary
+     * Force the first line {@code holder} holds in the {@link #FORCED_ZONES}
+     * that {@code wanted} accepts, {@code seen} does not hold yet, and that
+     * has the choices its resolution needs, for {@code holder}.
      */
-    private boolean force(Player holder, Set<String> seen, Predicate<SpellAbility> wanted) {
+    private Pass force(Player holder, Set<String> seen, Predicate<SpellAbility> wanted) {
         for (ZoneType zone : FORCED_ZONES) {
             for (Card card : holder.getCardsIn(zone)) {
                 for (SpellAbility candidate : forcedFrom(card, zone)) {
@@ -178,14 +227,37 @@ final class InterventionScheduler {
                         continue;
                     }
                     if (!forks.mayIntervene(candidate.getId())) {
-                        return false;
+                        return Pass.DONE;
                     }
-                    seen.add(AbilityLines.key(candidate));
+                    if (!forks.hasChoices(candidate, holder)) {
+                        // Not marked: the board may offer a target later.
+                        continue;
+                    }
+                    seen.add(lineKey(candidate));
                     forks.intervene(candidate, candidate.getId(), holder);
+                    return Pass.DONE;
                 }
             }
         }
-        return true;
+        return Pass.GO_ON;
+    }
+
+    /**
+     * The line a candidate is, for forcing each once a game: its printed
+     * line's provenance key, so two lines of one card with the same effect
+     * API are two lines and a card redrawn is the same one; for a line that
+     * keys to none, its API, its host's name and its text.
+     */
+    static String lineKey(SpellAbility candidate) {
+        ProvenanceKey.Resolved resolved;
+        try {
+            resolved = ProvenanceResolver.resolve(candidate);
+        } catch (RuntimeException e) {
+            resolved = ProvenanceKey.Resolved.UNKNOWN;
+        }
+        return resolved.key() != null
+                ? resolved.key().toString()
+                : AbilityLines.key(candidate) + "|" + candidate.getDescription();
     }
 
     /**
@@ -246,14 +318,29 @@ final class InterventionScheduler {
      * and activated abilities the AI passed over, which is the population the
      * intervention exists for.
      *
+     * <p>A line that restarts the game (Karn Liberated's) is never forced:
+     * Forge's restart resets the JVM-wide trigger id counter
+     * ({@code Trigger.resetIDs}), so a fork forcing one would hand the live
+     * game's next triggers ids its existing ones hold.
+     *
      * <p>Once per line per game in each set: a card redrawn or returned to
      * hand is the same line, and forcing it twice buys the second copy of one
      * observation.
      */
     static boolean worthIntervening(SpellAbility candidate, Set<String> seen) {
-        if (candidate.isLandAbility() || candidate.isManaAbility()) {
+        if (candidate.isLandAbility() || candidate.isManaAbility() || restartsTheGame(candidate)) {
             return false;
         }
-        return !seen.contains(AbilityLines.key(candidate));
+        return !seen.contains(lineKey(candidate));
+    }
+
+    /** Whether a clause of the line's chain restarts the game. */
+    static boolean restartsTheGame(SpellAbility candidate) {
+        for (SpellAbility clause = candidate; clause != null; clause = clause.getSubAbility()) {
+            if (clause.getApi() == ApiType.RestartGame) {
+                return true;
+            }
+        }
+        return false;
     }
 }

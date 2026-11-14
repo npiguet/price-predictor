@@ -373,14 +373,42 @@ final class InterventionFork implements InterventionScheduler.Forcing {
      */
     private boolean drawForcedChoices(SpellAbility ability, Player actor) {
         ability.setActivatingPlayer(actor);
-        if (!choices.chooseModes(ability) || !choices.chooseTargets(ability)) {
+        return drawChoices(choices, ability, actor);
+    }
+
+    /**
+     * Modes, then X, then targets, the order a cast takes them (601.2b-c):
+     * a clause dividing X among its targets splits the X just announced, and
+     * one drawn before it split nothing.
+     *
+     * @param payer whose leftover mana bounds X, or null to announce the floor
+     */
+    private static boolean drawChoices(RandomChoices from, SpellAbility ability, Player payer) {
+        if (!from.chooseModes(ability)) {
             return false;
         }
         // Floor one: an X of zero resolves into the same silence a
         // missing target does, and the fork never pays, so the leftover mana of
         // the forked actor is what bounds the draw above it.
-        choices.announceX(ability, actor, 1);
-        return true;
+        from.announceX(ability, payer, 1);
+        return from.chooseTargets(ability);
+    }
+
+    /**
+     * Whether {@code ability} has a mode and targets for {@code holder} on
+     * the live board: the forced choices tried on a copy of it, with draws
+     * of their own, so neither the live ability nor any stream is touched.
+     * A copy that cannot be tried is let through, to the fork's own guard.
+     */
+    @Override
+    public boolean hasChoices(SpellAbility ability, Player holder) {
+        try {
+            SpellAbility trial = ability.copy(ability.getHostCard(), holder, true);
+            trial.setActivatingPlayer(holder);
+            return drawChoices(new RandomChoices(new Random(0L)), trial, null);
+        } catch (RuntimeException e) {
+            return true;
+        }
     }
 
     /**

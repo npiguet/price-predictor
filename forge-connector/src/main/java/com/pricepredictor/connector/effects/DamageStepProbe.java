@@ -72,8 +72,13 @@ final class DamageStepProbe {
                 return null;
             }
             // A stripped keyword reaches combat states ordinary play does
-            // not; Forks.ForkRun discards the fork when one throws.
-            KeywordEdit.remove(fork, forkCarrier, keyword);
+            // not; Forks.ForkRun discards the fork when one throws. Every
+            // spelling the carrier has of it (trample, and trample over
+            // planeswalkers): one left behind keeps the keyword working.
+            List<String> spellings = KeywordEdit.carried(forkCarrier, keyword);
+            for (String spelling : spellings.isEmpty() ? List.of(keyword) : spellings) {
+                KeywordEdit.remove(fork, forkCarrier, spelling);
+            }
             // The state is the board as the step began, with the keyword
             // already gone: that is the input the counterfactual answers for.
             String state = snapshots.ofBoard().render();

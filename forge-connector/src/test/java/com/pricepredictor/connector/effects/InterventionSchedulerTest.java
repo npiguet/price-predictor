@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -52,8 +53,11 @@ class InterventionSchedulerTest {
         Set<String> seen = new HashSet<>();
 
         assertTrue(InterventionScheduler.worthIntervening(bolt, seen));
-        seen.add(AbilityLines.key(bolt));
+        seen.add(InterventionScheduler.lineKey(bolt));
         assertFalse(InterventionScheduler.worthIntervening(bolt, seen));
+        assertFalse(InterventionScheduler.worthIntervening(
+                TestCards.build("Lightning Bolt").getFirstSpellAbility(), seen),
+                "another copy of the card is the same line");
     }
 
     @Test
@@ -122,8 +126,10 @@ class InterventionSchedulerTest {
     void aSteeredGameForcesTheVariantCardsFirst(@TempDir Path dir) throws IOException {
         Board board = variantBoard(dir);
 
+        assertEquals(List.of("Volcanic Hammer@0"), board.forced(true, 10, 1),
+                "one line a boundary");
         assertEquals(List.of("Volcanic Hammer@0", "Searing Spear@1", "Lightning Bolt@0"),
-                board.forced(true, 10));
+                board.forced(true, 10, 10));
     }
 
     /** Without a steered deck the variants are lines like any other. */
@@ -131,7 +137,7 @@ class InterventionSchedulerTest {
     void anUnsteeredGameHasNoVariantPass(@TempDir Path dir) throws IOException {
         Board board = variantBoard(dir);
 
-        assertEquals(List.of("Lightning Bolt@0", "Volcanic Hammer@0"), board.forced(false, 10));
+        assertEquals(List.of("Lightning Bolt@0", "Volcanic Hammer@0"), board.forced(false, 10, 10));
     }
 
     /** The first pass spends the one budget the other passes share. */
@@ -139,7 +145,55 @@ class InterventionSchedulerTest {
     void theVariantPassSpendsTheSameBudget(@TempDir Path dir) throws IOException {
         Board board = variantBoard(dir);
 
-        assertEquals(List.of("Volcanic Hammer@0"), board.forced(true, 1));
+        assertEquals(List.of("Volcanic Hammer@0"), board.forced(true, 1, 10));
+    }
+
+    /**
+     * A boundary that does not draw a line forces nothing, so the budget is
+     * not all spent where the game starts; the gate is drawn once a boundary.
+     */
+    @Test
+    void aBoundaryThatDrawsNoLineForcesNothing(@TempDir Path dir) throws IOException {
+        Board board = variantBoard(dir);
+        List<String> forced = new ArrayList<>();
+        int[] draws = {0};
+        InterventionScheduler scheduler = new InterventionScheduler(
+                board.game(), board.recording(forced, 10), null, false, () -> draws[0]++ == 1);
+
+        scheduler.collect();
+        assertEquals(List.of(), forced);
+        scheduler.collect();
+        assertEquals(1, forced.size(), forced.toString());
+        assertEquals(2, draws[0]);
+    }
+
+    /** The worker's gate passes about one boundary in twenty, the same boundaries for one seed. */
+    @Test
+    void theWorkersGatePassesAboutOneBoundaryInTwenty() {
+        BooleanSupplier gate = InterventionScheduler.drawnPerBoundary(7L);
+        BooleanSupplier again = InterventionScheduler.drawnPerBoundary(7L);
+        int passed = 0;
+        for (int boundary = 0; boundary < 4000; boundary++) {
+            boolean drawn = gate.getAsBoolean();
+            assertEquals(drawn, again.getAsBoolean(), "the draws depend on the game's seed alone");
+            passed += drawn ? 1 : 0;
+        }
+        assertTrue(passed > 150 && passed < 250, passed + " of 4000");
+    }
+
+    /**
+     * Karn Liberated's restart resets the JVM-wide trigger id counter
+     * ({@code RestartGameEffect} calls {@code Trigger.resetIDs()}), which a
+     * fork would do under the live game: the line is never forced.
+     */
+    @Test
+    void aLineThatRestartsTheGameIsNeverForced() {
+        Card karn = TestCards.build("Karn Liberated");
+        List<SpellAbility> restarts = karn.getAllSpellAbilities().stream()
+                .filter(InterventionScheduler::restartsTheGame).toList();
+
+        assertEquals(1, restarts.size(), karn.getAllSpellAbilities().toString());
+        assertFalse(InterventionScheduler.worthIntervening(restarts.get(0), new HashSet<>()));
     }
 
     /**
@@ -163,10 +217,26 @@ class InterventionSchedulerTest {
 
     private record Board(Game game) {
 
-        /** What a scheduler forces at one boundary, as {@code card@holder index}, under {@code budget}. */
-        List<String> forced(boolean steered, int budget) {
+        /**
+         * What a scheduler forces over {@code boundaries} boundaries, each
+         * drawing a line, as {@code card@holder index}, under {@code budget}.
+         */
+        List<String> forced(boolean steered, int budget, int boundaries) {
             List<String> forced = new ArrayList<>();
-            InterventionScheduler.Forcing recording = new InterventionScheduler.Forcing() {
+            InterventionScheduler scheduler = new InterventionScheduler(
+                    game, recording(forced, budget), null, steered, InterventionScheduler.EVERY_BOUNDARY);
+            for (int boundary = 0; boundary < boundaries; boundary++) {
+                scheduler.collect();
+            }
+            return forced.stream()
+                    .filter(line -> line.startsWith("Lightning Bolt") || line.startsWith("Volcanic")
+                            || line.startsWith("Searing"))
+                    .toList();
+        }
+
+        /** A stand-in for the forks that writes down what it is asked to force. */
+        InterventionScheduler.Forcing recording(List<String> forced, int budget) {
+            return new InterventionScheduler.Forcing() {
                 @Override
                 public boolean mayIntervene(int realResolutionId) {
                     return forced.size() < budget;
@@ -178,11 +248,6 @@ class InterventionSchedulerTest {
                     return true;
                 }
             };
-            new InterventionScheduler(game, recording, null, steered).collect();
-            return forced.stream()
-                    .filter(line -> line.startsWith("Lightning Bolt") || line.startsWith("Volcanic")
-                            || line.startsWith("Searing"))
-                    .toList();
         }
     }
 }

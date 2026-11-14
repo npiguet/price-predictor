@@ -689,7 +689,7 @@ class ForkRecordsTest {
         ForkBudget budget = new ForkBudget(forkCaps().interventions(1).probes(0).build());
         try {
             InterventionScheduler scheduler = new InterventionScheduler(game, new InterventionFork(
-                    game, TestCollectors.context(shard, ShardRun.GAME_ID), budget, 1L), null);
+                    game, TestCollectors.context(shard, ShardRun.GAME_ID), budget, 1L));
             scheduler.collect(PhaseType.COMBAT_BEGIN);
             assertTrue(budget.mayIntervene(-1), "an intervention was forced at the beginning of combat");
             scheduler.collect(PhaseType.MAIN2);

@@ -6,7 +6,9 @@ import forge.game.card.Card;
 import forge.game.keyword.KeywordInterface;
 import forge.game.zone.ZoneType;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * When a damage step is forked for a probe, and which real record each
@@ -51,6 +53,9 @@ final class ProbeScheduler {
         if (step == null) {
             return;
         }
+        // Before anything else: a branch of a step left behind has nothing
+        // to mirror whether or not this step is probed.
+        discardStaleProbes(step);
         boolean firstStrike = step == DamageStep.FIRST_STRIKE;
         if (firstStrike && !anyFirstStriker()) {
             // Forge always enters the first-strike step and skips it when no
@@ -61,7 +66,6 @@ final class ProbeScheduler {
             // branches would be completed against the *regular* step's record.
             return;
         }
-        discardStaleProbes(step);
         // One keyword per game rather than whichever the battlefield order
         // reaches first. With eight probed keywords and a budget of two,
         // battlefield order would probe the same few keywords game after game
@@ -108,6 +112,11 @@ final class ProbeScheduler {
             if (!inCombat(card)) {
                 continue;
             }
+            // One probe per keyword a creature carries, however many
+            // spellings it has of it (trample, and trample over
+            // planeswalkers): the probe strips them all, so a second
+            // spelling's branch is the first's again.
+            Set<String> probed = new HashSet<>();
             for (KeywordInterface keyword : card.getKeywords()) {
                 String original = keyword.getOriginal();
                 if (original == null || original.isEmpty()) {
@@ -119,7 +128,9 @@ final class ProbeScheduler {
                 // so neither side has to guess the other's.
                 String normalized = KeywordEdit.normalize(original);
                 if (!caps.probeKeywords().contains(normalized)
-                        || (focus != null && !focus.equals(normalized))) {
+                        || (focus != null && !focus.equals(normalized))
+                        || (step == DamageStep.REGULAR && FIRST_STRIKE.equals(normalized))
+                        || !probed.add(normalized)) {
                     continue;
                 }
                 DamageStepProbe.HeldProbe held =
@@ -132,6 +143,14 @@ final class ProbeScheduler {
         }
         return taken;
     }
+
+    /**
+     * First strike, as the flag spells it. Never probed at the regular
+     * step: a creature with it dealt its damage in the first-strike step and
+     * deals none in this one with it or without it (702.7b-c), so the branch
+     * would be the real step again.
+     */
+    static final String FIRST_STRIKE = "first_strike";
 
     /** Is anything in this combat going to deal first-strike damage? */
     private boolean anyFirstStriker() {
