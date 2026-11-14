@@ -983,10 +983,15 @@ class TestTheGen3EntityShape:
                       for c in r.payload.candidates]
         assert candidates and all(c.timing is True and c.failed_checks == ()
                                   and c.land_play is False for c in candidates)
+        # The live goldens' attackers; a fork played on to the turn's end
+        # writes its own (a summoning-sick creature that may not attack).
         attackers = [r.payload for r in records
-                     if isinstance(r.payload, PlayabilityAttackersPayload)]
+                     if isinstance(r.payload, PlayabilityAttackersPayload) and not r.fork]
         assert {(a.anchor_attacker, a.legal_defenders, a.must_attack, a.tapped_by_attack)
                 for a in attackers} == {("E2", ("P1",), False, True), ("E3", (), False, None)}
+        forked = [r.payload for r in records
+                  if isinstance(r.payload, PlayabilityAttackersPayload) and r.fork]
+        assert forked and all(a.legal_attackers == () for a in forked)
         blockers = [r.payload for r in records
                     if isinstance(r.payload, PlayabilityBlockersPayload)]
         assert blockers and all(b.must_block == () for b in blockers)

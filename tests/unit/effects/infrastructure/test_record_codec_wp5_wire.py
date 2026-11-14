@@ -14,11 +14,12 @@ import json
 import pytest
 
 from effects.domain.event_schema import EventType
-from effects.domain.records import EffectRecord
+from effects.domain.fork_operation import ForkOperation
+from effects.domain.records import DirectedTag, EffectRecord, ResolutionOutcome
 from effects.domain.rule_detectors.emittable_events import absence_readable
 from effects.domain.wire_closed_lists import off_list_values
 from effects.infrastructure.record_codec import format_record_line, record_from_dict
-from tests.unit.effects.builders import java_golden_records, make_record
+from tests.unit.effects.builders import JAVA_GOLDENS, java_golden_records, make_record
 
 
 def _lossy_golden() -> dict:
@@ -77,3 +78,50 @@ class TestAForcedResolutionHearsTheHooks:
     def test_a_missing_hook_derived_event_on_it_reads_as_not_happened(self):
         record = record_from_dict(_lossy_golden())
         assert absence_readable(record, EventType.COIN_FLIPPED)
+
+
+def _golden(name: str) -> list[EffectRecord]:
+    """One Java golden's records, decoded."""
+    path = JAVA_GOLDENS / name
+    return [record_from_dict(json.loads(line))
+            for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+class TestTheForkShapesPythonReads:
+    """Each fork shape the connector writes, read off its Java golden
+    (``RecordCharacterizationTest``)."""
+
+    def test_a_directed_fork_names_its_rule_variant_and_operation(self):
+        records = _golden("record-directed-fork.jsonl")
+        assert records
+        for record in records:
+            assert record.fork and not record.interventional
+            assert record.aimed_at == ("704.5f",)
+            assert record.directed == DirectedTag("tougher", ForkOperation.PT)
+            assert record.mirror_of is None
+
+    def test_a_protection_fork_is_interventional_and_undirected(self):
+        records = _golden("record-protection-fork.jsonl")
+        assert records
+        for record in records:
+            assert record.fork and record.interventional
+            assert record.directed is None
+
+    def test_a_forced_spell_that_fizzled_holds_its_move_off_the_stack_and_an_ability_nothing(self):
+        spell, ability = _golden("record-intervention-fizzled.jsonl")
+        for record in (spell, ability):
+            assert record.fork and record.interventional and record.link_id is None
+            assert record.payload.outcome is ResolutionOutcome.FIZZLED
+        assert [event.type for event in spell.payload.events] == [EventType.ZONE_CHANGE]
+        assert ability.payload.events == ()
+
+    def test_a_forced_you_may_declined_reads_declined(self):
+        (record,) = _golden("record-intervention-declined.jsonl")
+        assert record.payload.outcome is ResolutionOutcome.DECLINED
+        assert [event.type for event in record.payload.events] == [EventType.ZONE_CHANGE]
+
+    def test_a_probe_s_combat_record_holds_the_prevented_damage(self):
+        (record,) = _golden("record-combat-probe-prevented.jsonl")
+        assert record.fork and not record.interventional
+        assert record.payload.probed_keyword == "trample"
+        assert EventType.DAMAGE_PREVENTED in [event.type for event in record.payload.events]
