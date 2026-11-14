@@ -371,9 +371,13 @@ public class MatchWorkerMain {
             System.out.println("Dropped events: counted per game into "
                     + GameRecording.droppedEventsFile(effectRecords));
         }
-        // The worker loops until the supervisor terminates it, so close()
-        // is never reached on the normal path. Without this the block in
-        // flight — up to a few hundred records — is lost on every stop.
+        // A graceful stop closes the shard itself (stopGracefully), and every
+        // game end writes the block in flight (RecordShardWriter.endGame).
+        // This hook covers the JVM's other orderly exits: a worker giving up,
+        // an Error that ends it, a console Ctrl-C reaching a worker started
+        // outside the stop protocol. It writes the cut game's records so
+        // far, which carry no marker. A kill (taskkill /F) runs no hook and
+        // loses the game in progress only.
         Runtime.getRuntime().addShutdownHook(new Thread(effectRecords::close));
         return effectRecords;
     }
