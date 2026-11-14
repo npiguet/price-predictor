@@ -129,11 +129,18 @@ final class ForkPlayForward {
         }
     }
 
-    /** Whether the next main-loop step ends the turn: a cleanup step with nothing left to resolve. */
+    /**
+     * Whether the next main-loop step ends the turn: a cleanup step with
+     * nothing left to resolve, and none to repeat. A cleanup in which a
+     * player got priority (a state-based action or a trigger, 514.3a) is
+     * followed by another cleanup step, whose turn-based actions are the
+     * turn's too.
+     */
     static boolean turnWouldEnd(Game fork) {
         return fork.getPhaseHandler().is(PhaseType.CLEANUP)
                 && fork.getStack().isEmpty()
-                && !fork.getStack().hasSimultaneousStackEntries();
+                && !fork.getStack().hasSimultaneousStackEntries()
+                && !PhaseStart.repeatsCleanup(fork.getPhaseHandler());
     }
 
     /**
@@ -152,24 +159,47 @@ final class ForkPlayForward {
 
         private static final Method ON_PHASE_BEGIN;
         private static final Field GIVE_PRIORITY;
+        /** {@code PhaseHandler.bRepeatCleanup}: the cleanup step is to be taken again (514.3a). */
+        private static final Field REPEAT_CLEANUP;
 
         static {
             Method begin = null;
             Field give = null;
+            Field repeat = null;
             try {
                 begin = PhaseHandler.class.getDeclaredMethod("onPhaseBegin");
                 begin.setAccessible(true);
                 give = PhaseHandler.class.getDeclaredField("givePriorityToPlayer");
                 give.setAccessible(true);
+                repeat = PhaseHandler.class.getDeclaredField("bRepeatCleanup");
+                repeat.setAccessible(true);
             } catch (ReflectiveOperationException | RuntimeException e) {
                 begin = null;
                 give = null;
+                repeat = null;
             }
             ON_PHASE_BEGIN = begin;
             GIVE_PRIORITY = give;
+            REPEAT_CLEANUP = repeat;
         }
 
         private PhaseStart() {
+        }
+
+        /**
+         * Whether the engine will take the cleanup step again; private in
+         * {@code PhaseHandler}, so read by reflection. A Forge without the
+         * field fails the fork rather than ending it a step early.
+         */
+        static boolean repeatsCleanup(PhaseHandler phases) {
+            if (REPEAT_CLEANUP == null) {
+                throw new IllegalStateException("this Forge's PhaseHandler cannot say whether cleanup repeats");
+            }
+            try {
+                return REPEAT_CLEANUP.getBoolean(phases);
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException(e);
+            }
         }
 
         static void begin(PhaseHandler phases) {

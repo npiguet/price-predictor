@@ -48,6 +48,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class ForkPlayForwardTest {
 
+    /**
+     * A cleanup step in which a player got priority is taken again (514.3a),
+     * and its turn-based actions are the turn's: the fork does not stop
+     * before it, as it stops before a cleanup that ends the turn.
+     */
+    @Test
+    void aCleanupToBeTakenAgainDoesNotEndTheTurn() throws ReflectiveOperationException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.CLEANUP);
+        assertTrue(ForkPlayForward.turnWouldEnd(game), "an ordinary cleanup ends the turn");
+        java.lang.reflect.Field repeat =
+                forge.game.phase.PhaseHandler.class.getDeclaredField("bRepeatCleanup");
+        repeat.setAccessible(true);
+        repeat.setBoolean(game.getPhaseHandler(), true);
+
+        assertFalse(ForkPlayForward.turnWouldEnd(game));
+    }
+
+
     @TempDir
     Path tempDir;
 
