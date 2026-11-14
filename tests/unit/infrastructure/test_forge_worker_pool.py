@@ -155,14 +155,22 @@ class TestStopCondition:
     def test_no_recycle_when_stopping(self, tmp_path):
         out = tmp_path / "out.txt"
         out.write_text("a\n", encoding="utf-8")
-        pool = _pool(
-            out, worker_count=1, status_interval=0, should_stop=lambda count: True,
-        )
+        # Not yet at the loop's first poll, then met at the status tick: the
+        # stop checked after the report, the branch that skips the recycle.
+        answers = iter([False, True])
+        polls: list[int] = []
+
+        def should_stop(count: int) -> bool:
+            polls.append(count)
+            return next(answers)
+
+        pool = _pool(out, worker_count=1, status_interval=0, should_stop=should_stop)
         pool._start_times = {_FakeProc(1): 1.0}
 
         with patch(KILL) as killer:
             pool._supervisor_loop()
 
+        assert len(polls) == 2, "the tick's own stop check was reached"
         # Only _terminate_all's kills; the recycle is skipped on the stopping tick.
         assert killer.call_count == 0
 

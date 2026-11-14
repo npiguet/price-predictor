@@ -70,6 +70,24 @@ def test_adding_unrelated_cards_does_not_move_an_existing_text() -> None:
     assert "Alpha" in after.cards
 
 
+@pytest.mark.parametrize(("text", "residue"), [
+    ("SP$ DealDamage | NumDmg$ 3", 662),
+    ("SP$ Draw | NumCards$ 2", 842),
+])
+def test_a_text_s_verdict_is_its_crc_residue_against_the_permille(text, residue) -> None:
+    """Pinned literally, at the edge on both sides: the tests above hold every
+    text in or none, which any hash passes, and a corpus already depleted
+    against today's list must keep its verdicts (FR-088a)."""
+    from effects.domain.text_holdout import text_is_held_out
+
+    assert not text_is_held_out(text, permille=residue)
+    assert text_is_held_out(text, permille=residue + 1)
+    selected = select_holdout({"Card": [text]}, permille=residue + 1, max_carriers=8, unit=TEXT)
+    assert selected.texts == {text}
+    assert select_holdout({"Card": [text]}, permille=residue, max_carriers=8,
+                          unit=TEXT).texts == frozenset()
+
+
 def test_the_hash_is_stable_across_processes() -> None:
     """`hash()` over `str` is salted per process; a drifting holdout is useless."""
     import subprocess

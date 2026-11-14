@@ -392,3 +392,44 @@ class TestAWorkerUnderTheStopProtocolHasAProcessGroupOfItsOwn:
         options = mock_popen.call_args.kwargs
         assert "creationflags" not in options
         assert options["start_new_session"] is True
+
+
+class TestEveryPropertyTheWorkerReadsIsOneTheLauncherWrites:
+    """The worker's own property names (``MatchWorkerMain``, ``HoldoutCards``,
+    ``WorkerStop``) beside the caps (pinned in ``test_collection_caps.py``):
+    a launch with every option set writes each of them, and nothing else."""
+
+    @staticmethod
+    def _java_properties() -> set[str]:
+        import re
+
+        from tests.unit.forge_sources import connector_source
+
+        found: set[str] = set()
+        for source in ("MatchWorkerMain.java", "HoldoutCards.java", "WorkerStop.java"):
+            found |= set(re.findall(r'static final String [A-Z_]+ = "([a-z]+(?:\.[a-z]+)+)";',
+                                    connector_source(source)))
+        return found
+
+    def test_a_full_launch_writes_exactly_the_worker_s_properties(self, tmp_path, stub_classpath):
+        connector = MatchWorkerConnector()
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            connector.start(
+                tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF,
+                side_a_decks_path=tmp_path / "a.txt", side_b_decks_path=tmp_path / "b.txt",
+                side_b_decks_weight=6, effect_records_dir=tmp_path / "records",
+                worker_index=4, exclude_cards_path=tmp_path / "holdout.txt",
+                decks_only=True, progress_file=tmp_path / "progress.txt",
+                variant_scripts=tmp_path / "variants", stop_file=tmp_path / "w.stop",
+                recycle_seconds=600,
+            )
+        cmd = mock_popen.call_args[0][0]
+        written = {arg[2:].split("=", 1)[0] for arg in cmd if arg.startswith("-D")}
+
+        java = self._java_properties()
+        assert {"output.file", "sealed.exclude.cards", "effect.variant.scripts",
+                "worker.stop.file", "worker.recycle.seconds"} <= java
+        assert written == java
+        assert f"-Dsealed.exclude.cards={tmp_path / 'holdout.txt'}" in cmd
+        assert f"-Deffect.variant.scripts={tmp_path / 'variants'}" in cmd

@@ -57,7 +57,23 @@ class TestSamplingClass:
         assert sampling_class(make_record(RecordKind.REWRITE)) == SamplingClass.REWRITE
 
     def test_every_class_is_reachable(self):
-        assert set(SAMPLING_CLASSES) == set(DEFAULT_KIND_MIX)
+        """Every record shape the schema has (a turn action never reaches the
+        training stratum) lands in a class, and every class is landed in and
+        has a share of the default mixture."""
+        from effects.domain.records import PAYLOAD_TYPES, Moment
+
+        reached = set()
+        for kind, discriminator in PAYLOAD_TYPES:
+            if kind is RecordKind.TURN_ACTION:
+                continue
+            if isinstance(discriminator, Moment):
+                record = make_record(kind, moment=discriminator)
+            elif discriminator is not None:
+                record = make_record(kind, subkind=discriminator)
+            else:
+                record = make_record(kind)
+            reached.add(sampling_class(record))
+        assert reached == set(SamplingClass) == set(SAMPLING_CLASSES) == set(DEFAULT_KIND_MIX)
 
 
 class TestMixture:

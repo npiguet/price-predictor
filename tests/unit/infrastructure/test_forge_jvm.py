@@ -232,19 +232,23 @@ class TestWorkerLogFiles:
         """Stands in for what a real worker does: write through the handle
         Popen was given, exit, and the next Popen call reuses the slot's log
         rather than losing what was already written to it."""
-        logs = WorkerLogFiles(tmp_path, "run-1")
-        first = logs.get(0)
-        first.write(b"reporter line from JVM lifetime 1\n")
-        first.flush()
+        import subprocess
+        import sys
 
-        second = logs.get(0)  # the same slot, a new JVM
-        second.write(b"reporter line from JVM lifetime 2\n")
-        second.flush()
+        logs = WorkerLogFiles(tmp_path, "run-1")
+        for lifetime in (1, 2):  # the same slot, a new process each time
+            handle = logs.get(0)
+            subprocess.run(
+                [sys.executable, "-c",
+                 f"import sys; print('reporter line from JVM lifetime {lifetime}');"
+                 f" print('on stderr {lifetime}', file=sys.stderr)"],
+                stdout=handle, stderr=subprocess.STDOUT, check=True, timeout=60,
+            )
         logs.close_all()
 
         content = logs.path_for(0).read_text(encoding="utf-8")
-        assert "lifetime 1" in content
-        assert "lifetime 2" in content
+        assert "lifetime 1" in content and "on stderr 1" in content
+        assert "lifetime 2" in content and "on stderr 2" in content
 
     def test_rotates_past_the_cap_and_keeps_one_backup_generation(self, tmp_path):
         logs = WorkerLogFiles(tmp_path, "run-1", max_bytes=10)

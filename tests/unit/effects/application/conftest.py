@@ -75,16 +75,17 @@ def corpus(tmp_path_factory, records):
 def fake_supervisor(monkeypatch):
     """The records-only supervisor a collector builds, stood in for.
 
-    ``spec``-ed, so a method the real one lacks fails here as it would there,
-    and never interrupted; the stand-in constructor is ``.constructor``, for
-    the keywords a collector built it with.
+    Auto-specced, so a method the real one lacks, or a call its signature
+    refuses, fails here as it would there; never interrupted. The stand-in
+    constructor is ``.constructor``, for the keywords a collector built it with.
     """
-    from unittest.mock import MagicMock
+    from unittest.mock import create_autospec
 
     from effects.infrastructure import collector_connector
 
-    supervisor = MagicMock(spec=collector_connector.CollectorSupervisor)
+    supervisor = create_autospec(collector_connector.CollectorSupervisor, instance=True)
     supervisor.interrupted = False
-    supervisor.constructor = MagicMock(return_value=supervisor)
+    supervisor.constructor = create_autospec(
+        collector_connector.CollectorSupervisor, return_value=supervisor)
     monkeypatch.setattr(collector_connector, "CollectorSupervisor", supervisor.constructor)
     return supervisor

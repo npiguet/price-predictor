@@ -130,6 +130,12 @@ def test_effects_imports_only_the_declared_surface() -> None:
             allowed_names = _ALLOWED[module]
             if allowed_names is None:
                 continue
+            if not names:
+                # ``import pkg.module`` reaches every name the module has.
+                violations.append(
+                    f"{where}:{lineno} imports {module} whole; FR-002 declares "
+                    f"only {sorted(allowed_names)}"
+                )
             for name in names:
                 if name not in allowed_names:
                     violations.append(

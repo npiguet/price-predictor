@@ -619,3 +619,46 @@ class TestTheSupervisorRecordsWhatItIsTold:
 
         entry = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))["invocations"][0]
         assert (entry["unresolved_cards"], entry["unresolved_share"]) == (3, 0.25)
+
+
+class TestTheCapsReachTheJavaCommandLine:
+    """TP1: the cap flag to ``-D`` property chain was tested in links with the
+    joints untested. Here the whole chain: a collector's argv, the config the
+    CLI builds from it, the supervisor that config's caps go to, and the
+    command line the real launcher builds for a worker."""
+
+    def test_every_flagged_cap_is_a_property_on_the_worker_s_command(self, tmp_path):
+        from effects.application.collect_coverage import CollectCoverageConfig
+        from effects.infrastructure.cli import build_parser, collector_config
+
+        args = build_parser().parse_args([
+            "collect-coverage", "--exclude-cards", str(tmp_path / "h.txt"),
+            "--effect-records", str(tmp_path / "records"),
+            "--mana-cap", "7", "--playability-rate", "0.5", "--probes-per-game", "4",
+            "--probe-keywords", "wither", "--max-records-per-game", "300",
+            "--count-dropped-events", "--directed-fork-rules", "704.5f",
+        ])
+        config = collector_config(CollectCoverageConfig, args)
+        supervisor = CollectorSupervisor(
+            worker_count=1, effect_records=config.effect_records, run_id="run",
+            caps=config.caps, stop=_QUICK_STOP,
+        )
+        with patch("sealed.infrastructure.match_worker_connector.build_forge_classpath",
+                   return_value="cp"), patch("subprocess.Popen") as popen:
+            popen.return_value = MagicMock()
+            supervisor.start_worker(0, tmp_path / "decks.txt")
+        supervisor.stop()
+
+        properties = dict(arg[2:].split("=", 1) for arg in popen.call_args[0][0]
+                          if arg.startswith("-Deffect."))
+        assert {key: properties[key] for key in (
+            "effect.mana.cap", "effect.playability.rate", "effect.probes.per.game",
+            "effect.probe.keywords", "effect.max.records.per.game",
+            "effect.count.dropped.events", "effect.aimed.at", "effect.directed.fork.rules",
+        )} == {
+            "effect.mana.cap": "7", "effect.playability.rate": "0.5",
+            "effect.probes.per.game": "4", "effect.probe.keywords": "wither",
+            "effect.max.records.per.game": "300", "effect.count.dropped.events": "true",
+            "effect.aimed.at": "704.5f", "effect.directed.fork.rules": "",
+        }
+        assert set(properties) >= set(config.caps.as_system_properties())

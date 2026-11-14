@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import re
+from dataclasses import fields
 from pathlib import Path
 
 import pytest
@@ -361,3 +362,63 @@ class TestTheDirectedForks:
         assert defaults is not None
         assert int(defaults.group(1)) == DEFAULT_DIRECTED_FORKS_PER_GAME
         assert float(defaults.group(2)) == DEFAULT_DIRECTED_FORK_PROBABILITY
+
+
+class TestTheJvmDefaultsAreThePythonDefaultsArgumentByArgument:
+    """Every positional argument of the Java ``CollectionCaps.defaults()``,
+    against the Python field of the same place: the classes above read some
+    of them, which is how a divergence in the others passed."""
+
+    @staticmethod
+    def _java_defaults() -> dict[str, str]:
+        source = _JAVA_CAPS.read_text(encoding="utf-8")
+        components = re.search(r"public record CollectionCaps\((.*?)\) \{", source, re.S).group(1)
+        names = [part.split()[-1] for part in re.sub(r"<[^<>]*(<[^<>]*>)?[^<>]*>", "", components)
+                 .split(",")]
+        body = re.search(
+            r"static CollectionCaps defaults\(\) \{\s*return new CollectionCaps\((.*?)\);",
+            source, re.S).group(1)
+        values = [value.strip() for value in body.split(",")]
+        assert len(names) == len(values) == len(fields(CollectionCaps))
+        return dict(zip(names, values, strict=True))
+
+    @staticmethod
+    def _python(name: str):
+        return getattr(CollectionCaps(), name)
+
+    @staticmethod
+    def _camel(name: str) -> str:
+        head, *rest = name.split("_")
+        return head + "".join(word.title() for word in rest)
+
+    def test_the_components_are_the_python_fields_in_order(self):
+        assert list(self._java_defaults()) == [self._camel(f.name) for f in fields(CollectionCaps)]
+
+    @pytest.mark.parametrize("name", [f.name for f in fields(CollectionCaps)
+                                      if f.name not in ("probe_keywords", "aimed_at")])
+    def test_each_default_is_the_python_one(self, name):
+        java = self._java_defaults()[self._camel(name)]
+        python = self._python(name)
+        if java == "DEFAULT_MAX_RECORDS_PER_GAME":
+            java = re.search(r"DEFAULT_MAX_RECORDS_PER_GAME = (\d+);",
+                             _JAVA_CAPS.read_text(encoding="utf-8")).group(1)
+        if isinstance(python, bool):
+            assert java == str(python).lower()
+        elif isinstance(python, tuple):
+            assert java == "List.of()" and python == ()
+        else:
+            assert type(python)(java) == python
+
+    def test_an_unaimed_worker_reads_no_rule_as_aimed(self):
+        """Python's ``None`` and Java's ``Optional.empty()``: no ``aimed_at``."""
+        assert self._java_defaults()["aimedAt"] == "Optional.empty()"
+        assert CollectionCaps().aimed_at is None
+
+    @pytest.mark.xfail(strict=True, reason=(
+        "TP1 strengthen / C5 readability: CollectionCaps.defaults() names no probe "
+        "keyword where Python's default names all eight, so a worker started "
+        "without the property probes nothing (a Java fix: TC4's "
+        "CollectionCapsTest.theDefaultCapsAreTheContracts pins the empty list)"))
+    def test_the_probe_keywords_default_is_the_python_one(self):
+        java = self._java_defaults()["probeKeywords"]
+        assert java != "List.of()", "the JVM's default probes no keyword"

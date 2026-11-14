@@ -40,10 +40,14 @@ def test_the_consult_is_given_only_the_card_list_and_the_output_path():
     assert flags == ["--cards", "--output"]
 
 
-def test_a_failed_consult_yields_no_verdicts():
-    _, launch = _run_with(None, returncode=1)
-    with launch:
+@pytest.mark.parametrize("answer", [None, {"Forest": "uncastable"}])
+def test_a_failed_consult_yields_no_verdicts_and_says_so(answer, caplog):
+    """Whether or not it left an answer behind: a consult that exited non-zero
+    is not trusted, and every card then ranks as castable."""
+    _, launch = _run_with(answer, returncode=1)
+    with launch, caplog.at_level("WARNING"):
         assert one_shot_workers.castability_verdicts(["Forest"]) == {}
+    assert "exited with 1; no verdicts" in caplog.text
 
 
 @pytest.mark.parametrize(("write", "main", "flag"), [
