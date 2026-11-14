@@ -129,7 +129,10 @@ declaration speaks for it; absent from both is not "not countable".
 `generation`, `aimed_at`, `directed`, `copy_dropped` are collection metadata;
 `test_schema_compatibility.py` checks that flipping them leaves `SurfaceBuilder.build` unchanged.
 `copy_dropped` gates nothing: a lossy fork's records are kept, trained on and counted like any
-other fork's, and `validate-corpus` reports the share of fork records carrying each kind.
+other fork's, and `validate-corpus` reports the share of fork records carrying each kind, and of
+forks: the wire names no fork, so a fork is counted as the fork records alike in game, game turn
+and kind of fork (a probe also by its `mirror_of`, a directed fork by its `directed`), a lower bound
+on the forks taken. A `copy_dropped` that is empty or holds a count below 1 is refused.
 
 Flag signatures added: directed fork = any kind, `interventional = false`, `fork = true`, `directed`
 set; protection fork (FR-058) = any kind, `interventional = true`, `fork = true`, its cost halves

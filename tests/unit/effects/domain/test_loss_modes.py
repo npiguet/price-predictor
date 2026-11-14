@@ -10,16 +10,15 @@ from pathlib import Path
 import pytest
 
 from effects.domain.event_schema import LOSS_MODES, Event, EventType, signed_delta
+from tests.unit.forge_sources import FORGE_GAME, forge_source
 
 #: The sibling Forge checkout the collector compiles against.
-_FORGE_GAME = (Path(__file__).resolve().parents[4].parent / "forge" / "forge-game" / "src"
-               / "main" / "java" / "forge" / "game")
+_FORGE_GAME = FORGE_GAME
 
 
 def _enum_constants(path: Path, enum: str) -> set[str]:
     """The constants an enum declares, read off its source."""
-    if not path.exists():
-        pytest.skip(f"no Forge checkout at {path}")
+    forge_source(path)
     source = re.sub(r"//[^\n]*|/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S)
     body = source.split(f"enum {enum}", 1)[1].split("{", 1)[1].split(";", 1)[0]
     body = re.sub(r"\([^()]*\)", "", body)

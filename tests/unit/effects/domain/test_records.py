@@ -40,6 +40,7 @@ from effects.domain.records import (
     UnresolvedReason,
 )
 from tests.unit.effects.builders import make_record as build_record
+from tests.unit.forge_sources import FORGE_GAME, forge_source
 
 
 class TestFlagSignatures:
@@ -408,11 +409,7 @@ class TestPlayabilityCarriesNoPolicy:
 
 #: Forge's own enum, in the sibling checkout the converter and the collector
 #: both already assume (``collect_variants`` defaults to ``../forge``).
-_REPLACEMENT_RESULT_JAVA = (
-    Path(__file__).resolve().parents[4].parent
-    / "forge" / "forge-game" / "src" / "main" / "java" / "forge" / "game"
-    / "replacement" / "ReplacementResult.java"
-)
+_REPLACEMENT_RESULT_JAVA = FORGE_GAME / "replacement" / "ReplacementResult.java"
 
 
 def _java_replacement_results() -> tuple[str, ...]:
@@ -452,8 +449,7 @@ class TestRewriteResultTracksForge:
 
     @pytest.fixture(scope="class")
     def java_members(self) -> tuple[str, ...]:
-        if not _REPLACEMENT_RESULT_JAVA.exists():
-            pytest.skip(f"no Forge checkout at {_REPLACEMENT_RESULT_JAVA}")
+        forge_source(_REPLACEMENT_RESULT_JAVA)
         return _java_replacement_results()
 
     def test_every_forge_member_has_a_python_value(self, java_members):

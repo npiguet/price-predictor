@@ -52,6 +52,14 @@ class TestCopyDropped:
         with pytest.raises(ValueError, match="copy_dropped"):
             make_record(copy_dropped=(("command", 1),))
 
+    @pytest.mark.parametrize("dropped", [{}, {"command": 0}, {"remembered": 1, "command": -1}])
+    def test_an_empty_member_or_a_count_below_one_is_refused(self, dropped):
+        """The connector writes the member only for a lossy copy, and each
+        kind only with at least one drop."""
+        raw = dict(_lossy_golden(), copy_dropped=dropped)
+        with pytest.raises(ValueError, match="copy_dropped"):
+            record_from_dict(raw)
+
     def test_the_golden_s_kinds_are_on_the_closed_list(self):
         assert list(off_list_values(_lossy_golden())) == []
 

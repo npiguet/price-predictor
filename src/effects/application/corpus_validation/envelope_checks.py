@@ -717,28 +717,61 @@ class ProbeForks:
 
 class LossyForks:
     """What share of the fork records came from a copy that left something
-    out (``copy_dropped``), by kind. Watched: a lossy fork is kept and
-    trained on, so the share is what the fork fidelity audit reads."""
+    out (``copy_dropped``), by kind, and what share of the forks. Watched: a
+    lossy fork is kept and trained on, so the share is what the fork fidelity
+    audit reads.
+
+    Every record of a fork carries its copy's ``copy_dropped``, so a
+    protection fork's ten records count ten times among the records. The
+    wire names no fork, so the forks are counted as groups of records alike
+    in game, game turn and kind of fork (a probe also by the record it
+    mirrors, a directed fork by its variant and operation): two forks of one
+    kind taken in one turn of one game, and an intervention and a protection
+    fork there (no flag tells the two apart), count once, so the fork count
+    is a lower bound and both figures are reported.
+    """
 
     def __init__(self) -> None:
         self.forks = 0
         self.lossy = 0
         self.by_kind: Counter[str] = Counter()
+        self.groups: dict[tuple, set[str]] = {}
+
+    @staticmethod
+    def group_of(record: EffectRecord) -> tuple:
+        """The fork a record belongs to, as near as the wire says."""
+        if record.directed is not None:
+            kind: tuple = ("directed", record.directed.variant, record.directed.operation.value)
+        elif record.interventional:
+            kind = ("interventional",)
+        else:
+            kind = ("probe", record.mirror_of)
+        return (record.game_id, record.state.global_.turn, *kind)
 
     def add(self, record: EffectRecord) -> None:
         if not record.fork:
             return
         self.forks += 1
+        dropped = self.groups.setdefault(self.group_of(record), set())
         if record.copy_dropped:
             self.lossy += 1
             for kind, _count in record.copy_dropped:
                 self.by_kind[kind] += 1
+                dropped.add(kind)
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         shown = ", ".join(
             f"{kind} {count}/{self.forks} ({count / self.forks:.1%})"
             for kind, count in sorted(self.by_kind.items())) or "none"
+        forks = len(self.groups)
+        by_fork: Counter[str] = Counter(kind for kinds in self.groups.values() for kind in kinds)
+        lossy_forks = sum(1 for kinds in self.groups.values() if kinds)
+        shown_forks = ", ".join(
+            f"{kind} {count}/{forks} ({count / forks:.1%})"
+            for kind, count in sorted(by_fork.items())) or "none"
         yield Finding.watch(
             name="fork records whose copy left something out",
-            measured=f"{self.lossy}/{self.forks} fork records; by kind: {shown}",
+            measured=(f"{self.lossy}/{self.forks} fork records; by kind: {shown}; "
+                      f"{lossy_forks}/{forks} forks (at least; by game, turn and kind of fork); "
+                      f"by kind: {shown_forks}"),
         )

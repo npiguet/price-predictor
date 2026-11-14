@@ -954,6 +954,12 @@ class EffectRecord:
             raise ValueError("mirror_of names the real record a fork mirrors")
         if self.copy_dropped is not None and not self.fork:
             raise ValueError("copy_dropped says what a fork's copy left out")
+        if self.copy_dropped is not None and (
+                not self.copy_dropped or any(count < 1 for _kind, count in self.copy_dropped)):
+            # The connector writes the member only for a lossy copy, and each
+            # kind only with at least one drop (Forks.dropped).
+            raise ValueError(
+                f"copy_dropped names kinds with at least one drop: {self.copy_dropped}")
         if self.variant_of is not None and not self.synthetic:
             raise ValueError("variant_of names the card a synthetic script came from")
         if self.directed is not None:

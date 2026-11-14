@@ -26,6 +26,7 @@ from effects.domain.wire_closed_lists import (
     off_list_values,
 )
 from tests.unit.effects.builders import EFFECTS_FIXTURES, java_golden_records
+from tests.unit.forge_sources import FORGE_AI, FORGE_GAME, forge_source
 
 
 def _fixture(name: str) -> list[dict]:
@@ -118,17 +119,18 @@ def test_every_phase_forge_names_is_on_the_list(phase):
 
 
 #: The sibling Forge checkout the collector compiles against.
-_FORGE_GAME = (Path(__file__).resolve().parents[4].parent / "forge" / "forge-game" / "src"
-               / "main" / "java" / "forge" / "game")
+_FORGE_GAME = FORGE_GAME
 
 
 def _enum_constants(path: Path, enum: str) -> tuple[str, ...]:
     """The constants an enum declares, read off its source: everything
-    between the enum's brace and the first ``;``, each name before its ``(``."""
-    if not path.exists():
-        pytest.skip(f"no Forge checkout at {path}")
+    between the enum's brace and the first ``;`` or ``}``, each name before
+    its ``(``."""
+    forge_source(path)
     source = re.sub(r"//[^\n]*|/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S)
-    body = source.split(f"enum {enum}", 1)[1].split("{", 1)[1].split(";", 1)[0]
+    # The constants end at the first ";", or at the enum's own "}" when it
+    # declares nothing after them.
+    body = re.split(r"[;}]", source.split(f"enum {enum}", 1)[1].split("{", 1)[1], maxsplit=1)[0]
     body = re.sub(r"\([^()]*\)", "", body)
     return tuple(name.strip() for name in body.split(",") if name.strip())
 
@@ -144,8 +146,7 @@ def test_the_copy_dropped_kinds_are_the_copier_s_lower_cased():
     """``Forks.dropped`` writes ``GameCopier.NoCounterpart.name()``
     lower-cased, so the list is Forge's enum and drifts with it only through
     this test."""
-    copier = (_FORGE_GAME.parents[3] / "forge-ai" / "src" / "main" / "java" / "forge" / "ai"
-              / "simulation" / "GameCopier.java")
+    copier = FORGE_AI / "simulation" / "GameCopier.java"
     names = _enum_constants(copier, "NoCounterpart")
     assert sorted(COPY_DROPPED_KINDS) == sorted(name.lower() for name in names)
 

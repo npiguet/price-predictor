@@ -1826,7 +1826,9 @@ class TestLossyForks:
     def test_a_window_with_no_forks_reports_none(self):
         finding = _named(validate_corpus(_healthy()), "copy left something out")
         assert finding.watched and finding.ok
-        assert finding.measured == "0/0 fork records; by kind: none"
+        assert finding.measured == (
+            "0/0 fork records; by kind: none; 0/0 forks (at least; by game, turn and kind of"
+            " fork); by kind: none")
 
     def test_the_share_is_counted_per_kind_over_every_fork_record(self):
         records = _healthy() + [
@@ -1840,7 +1842,21 @@ class TestLossyForks:
         finding = _named(validate_corpus(records), "copy left something out")
         assert finding.watched and finding.ok
         assert finding.measured == (
-            "2/4 fork records; by kind: command 1/4 (25.0%), remembered 2/4 (50.0%)")
+            "2/4 fork records; by kind: command 1/4 (25.0%), remembered 2/4 (50.0%); "
+            "1/1 forks (at least; by game, turn and kind of fork); "
+            "by kind: command 1/1 (100.0%), remembered 1/1 (100.0%)")
+
+    def test_a_fork_of_many_records_is_one_fork(self):
+        """A protection fork's ten records carry its copy's copy_dropped each:
+        ten lossy records, one lossy fork; another game's fork is another."""
+        lossy = [_resolution(f"run.0-L1.{900 + i}", interventional=True, fork=True,
+                             copy_dropped=(("command", 1),)) for i in range(10)]
+        clean = [_resolution("run.0-L1.950", game_id="run.0-L1.1", interventional=True,
+                             fork=True)]
+        finding = _named(validate_corpus(_healthy() + lossy + clean), "copy left something out")
+        assert finding.measured.startswith("10/11 fork records; by kind: command 10/11 (90.9%); "
+                                           "1/2 forks"), finding.measured
+        assert finding.measured.endswith("by kind: command 1/2 (50.0%)"), finding.measured
 
 
 class TestAForksTurnAgreesWithItsMirror:

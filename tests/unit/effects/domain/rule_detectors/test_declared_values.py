@@ -14,10 +14,11 @@ import pytest
 from effects.domain.rule_detectors import DeclarationError, DetectorIndex
 from effects.domain.rule_detectors import declared_values as dv
 from tests.unit.effects.domain.rule_detectors.builders import catalogue, declaration, scenario
+from tests.unit.forge_sources import FORGE_GAME, FORGE_RES, forge_source
 
 _ROOT = Path(__file__).resolve().parents[5]
-_GAME = _ROOT.parent / "forge" / "forge-game" / "src" / "main" / "java" / "forge" / "game"
-_RES = _ROOT.parent / "forge" / "forge-gui" / "res"
+_GAME = FORGE_GAME
+_RES = FORGE_RES
 _CONNECTOR = (_ROOT / "forge-connector" / "src" / "main" / "java" / "com" / "pricepredictor"
               / "connector" / "effects")
 
@@ -55,8 +56,7 @@ def test_a_misspelt_value_is_refused_naming_its_scenario(family, kind, params):
 
 
 def _enum(path: Path, enum: str) -> set[str]:
-    if not path.exists():
-        pytest.skip(f"no Forge checkout at {path}")
+    forge_source(path)
     source = re.sub(r"//[^\n]*|/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S)
     body = source.split(f"enum {enum}", 1)[1].split("{", 1)[1].split(";", 1)[0]
     body = re.sub(r"\((?:[^()]|\([^()]*\))*\)", "", body)
@@ -74,8 +74,7 @@ def test_forge_s_names_are_its_enums():
 
 def test_each_keyword_line_beyond_the_enum_is_printed_by_some_script():
     folder = _RES / "cardsfolder"
-    if not folder.exists():
-        pytest.skip(f"no Forge checkout at {folder}")
+    forge_source(folder)
     printed: set[str] = set()
     for path in folder.rglob("*.txt"):
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -87,8 +86,7 @@ def test_each_keyword_line_beyond_the_enum_is_printed_by_some_script():
 
 def test_the_role_kinds_are_forge_s_role_tokens():
     folder = _RES / "tokenscripts"
-    if not folder.exists():
-        pytest.skip(f"no Forge checkout at {folder}")
+    forge_source(folder)
     assert dv.ROLE_KINDS == {p.stem.removeprefix("role_") for p in folder.glob("role_*.txt")}
 
 

@@ -120,8 +120,7 @@ def test_the_written_module_lists_the_scan_s_names(forge, tmp_path):
 
 # --- the real Forge checkout ------------------------------------------------------------
 
-_REAL = pytest.mark.skipif(not (skf.FORGE / skf.KEYWORD_ENUM).is_file(),
-                           reason="no sibling ../forge checkout")
+_REAL = pytest.mark.skipif(not skf.FORGE.is_dir(), reason="no sibling ../forge checkout")
 
 
 @pytest.fixture(scope="module")

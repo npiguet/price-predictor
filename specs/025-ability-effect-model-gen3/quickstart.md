@@ -85,7 +85,8 @@ Before the first long run, the fork fidelity audit (T181): collect for 20 minute
 directory, stop the run, and count the `fork fidelity:` lines by field in its `logs/` worker logs
 (the run's end prints their total as `fork_fidelity`). Then run `validate-corpus` on the scratch
 run: its watched line "fork records whose copy left something out" gives the share of fork records
-carrying each `copy_dropped` kind. The workers' hook-failure line counts the forks whose copy, score
+carrying each `copy_dropped` kind, and the share of forks (fork records grouped by game, game turn
+and kind of fork; the wire names no fork, so the count is a lower bound). The workers' hook-failure line counts the forks whose copy, score
 check, body or writer threw, as `fork <kind> copy`, `fork <kind> score check`, `fork <kind> body` and
 `fork <kind> write`, and the forks that changed the live game, as `fork <kind> moved the live game`;
 the refusal line (`Effect records: fork refusals so far, expected and no failure: {…}`) counts the
