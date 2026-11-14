@@ -349,9 +349,15 @@ class TestForwardCompatibility:
         assert record_to_dict(record_from_dict(data))["collector_build"] == "2027.1"
 
     def test_an_unknown_field_never_shadows_a_known_one(self):
-        record = _record()
-        restored = record_from_dict(record_to_dict(record))
-        assert restored.extra_fields == {}
+        """A kept field spelled like a known one is not written over it, and on
+        a read a known key always goes to its field, never into the extras."""
+        record = replace(_record(), extra_fields={"run_id": "shadow",
+                                                  "collector_build": "2027.1"})
+        data = record_to_dict(record)
+        assert (data["run_id"], data["collector_build"]) == (record.run_id, "2027.1")
+        restored = record_from_dict(data)
+        assert restored.run_id == record.run_id
+        assert restored.extra_fields == {"collector_build": "2027.1"}
 
     def test_ability_unresolved_round_trips(self):
         record = _record(ability=(), ability_unresolved="engine_effect")
@@ -953,6 +959,59 @@ class TestTheGen3EntityShape:
         blockers = [r.payload for r in records
                     if isinstance(r.payload, PlayabilityBlockersPayload)]
         assert blockers and all(b.must_block == () for b in blockers)
+
+    def test_every_golden_payload_member_reads_into_the_field_of_its_name(self):
+        """Per kind, each payload member the collector wrote is the value of
+        the field of that name, read off the decoded record rather than written
+        back: a member decoded into the wrong field and written back from it
+        again would pass the write-back test. Events compare by their parts;
+        members holding records of their own (costs, candidates, forbidden
+        entries, contributions) are left to their own tests."""
+        from enum import Enum
+
+        def plain(value):
+            if isinstance(value, Event):
+                return {"type": value.type.value, "subjects": list(value.subjects),
+                        "params": plain(value.params), "duration": value.duration,
+                        "attributed_to": value.attributed_to}
+            if isinstance(value, Enum):
+                return value.value
+            if isinstance(value, (tuple, list)):
+                return [plain(v) for v in value]
+            if isinstance(value, dict):
+                return {k: plain(v) for k, v in value.items()}
+            return value
+
+        def event_parts(raw: dict) -> dict:
+            return {"type": raw["type"], "subjects": raw.get("subjects", []),
+                    "params": raw.get("params", {}), "duration": raw.get("duration"),
+                    "attributed_to": raw.get("attributed_to")}
+
+        nested = {"costs", "candidates", "forbidden", "contributions"}
+        checked: set[tuple[str, str]] = set()
+        for raw in java_golden_records():
+            payload = record_from_dict(raw).payload
+            for member, value in _reader_spellings(raw["payload"]).items():
+                if member in nested:
+                    continue
+                if member in ("events", "buffered_events"):
+                    value = [event_parts(e) for e in value]
+                elif member in ("incoming", "outgoing", "event") and value is not None:
+                    value = event_parts(value)
+                elif member in ("replaced_by", "buffered"):
+                    value = [{k: v for k, v in key.items()} for key in value]
+                    assert [k.as_dict() for k in getattr(payload, member)] == value, (
+                        raw["record_id"], member)
+                    checked.add((raw["kind"], member))
+                    continue
+                assert plain(getattr(payload, member)) == value, (raw["record_id"], member)
+                checked.add((raw["kind"], member))
+        assert {("resolution", "outcome"), ("resolution", "conditions_met"),
+                ("resolution", "events"), ("trigger", "fired"), ("trigger", "event"),
+                ("combat", "blocks"), ("combat", "assignment_choices"),
+                ("rewrite", "result"), ("rewrite", "incoming"), ("rewrite", "replaced_by"),
+                ("playability", "legal_blockers"), ("playability", "min_blockers"),
+                ("continuous", "board_hash"), ("turn_action", "records_withheld")} <= checked
 
     def test_every_gen3_member_round_trips_where_set(self):
         """The members the goldens leave at their empty value, each set."""

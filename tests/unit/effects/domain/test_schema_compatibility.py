@@ -28,7 +28,7 @@ from dataclasses import fields, replace
 import pytest
 
 from effects.domain.effect_head_input import SurfaceBuilder
-from effects.domain.provenance import ProvenanceKey
+from effects.domain.provenance import ProvenanceKey, TraitKind
 from effects.domain.records import (
     PAYLOAD_TYPES,
     CollectionMode,
@@ -185,6 +185,30 @@ class TestTheActorPlayerException:
         assert _REDEFINED_IN_GEN2["actor_player"] == {
             s.value for s in PlayabilitySubkind
         }
+
+
+class TestTheEnvelopeEnumsAreTheWriters:
+    """Rule 2's frozen sets above compare Python with literals; these compare
+    Python with the enums the Java collector writes from, in order, so a
+    value the collector gains or renames fails here before any record does."""
+
+    @pytest.mark.parametrize(("java", "python"), [
+        ("RecordKind", RecordKind),
+        ("Moment", Moment),
+        ("PlayabilitySubkind", PlayabilitySubkind),
+        ("TurnActionSubkind", TurnActionSubkind),
+        ("AttributionMode", CollectionMode),
+        ("ActivationOutcome", ResolutionOutcome),
+        ("TraitKind", TraitKind),
+    ])
+    def test_python_spells_the_java_enum_alike_in_order(self, java, python):
+        import re
+
+        from tests.unit.forge_sources import connector_source
+
+        source = connector_source(f"effects/{java}.java")
+        constants = re.findall(r'^\s+[A-Z_]+\("([a-z_]+)"', source, flags=re.M)
+        assert constants and constants == [member.value for member in python]
 
 
 class TestRuleTwoEnumValuesMayBeAddedNotReused:

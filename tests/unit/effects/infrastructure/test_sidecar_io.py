@@ -293,6 +293,43 @@ class TestSidecarCache:
         assert cache.get(_TRIGGER.script_file).row_for(_TRIGGER) == 1
         assert cache.line_for(_TRIGGER).script_api_type == "PutCounter"
 
+    def test_keys_alike_but_for_their_file_join_each_its_own_card_s_line(self):
+        """Over the converter's own sidecars: two cards' keys that differ only
+        in ``script_file`` (both a first trigger, say) never join one card's
+        line; each joins the line its own sidecar renders for it."""
+        from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS
+
+        cache = SidecarCache({folder.name: folder for folder in GEN3_SIDECAR_FOLDERS})
+        sidecars = [read_sidecar(path) for folder in GEN3_SIDECAR_FOLDERS
+                    for path in sorted(folder.rglob("*.provenance.json"))]
+        by_shape: dict[tuple, list] = {}
+        for sidecar in sidecars:
+            for line in sidecar.lines:
+                for key in line.provenance:
+                    shape = (key.face, key.trait_kind, key.index_within_kind, key.option)
+                    by_shape.setdefault(shape, []).append((key, line))
+        shared = [pairs for pairs in by_shape.values()
+                  if len({key.script_file for key, _ in pairs}) > 1]
+        assert len(shared) > 10
+        for pairs in shared:
+            for key, line in pairs:
+                joined = cache.line_for(key)
+                assert key in joined.provenance, key
+                assert joined in cache.get(key.script_file).lines, key
+
+    @pytest.mark.xfail(strict=True, reason=(
+        "WP12-N1: the converter gives every chapter line of a saga every chapter's "
+        "trigger key, so the join reads chapter I's text for chapters II and III"))
+    def test_a_saga_s_chapter_trigger_joins_its_own_chapter_line(self):
+        from tests.unit.effects.builders import GEN3_SIDECAR_FOLDERS
+
+        cache = SidecarCache({folder.name: folder for folder in GEN3_SIDECAR_FOLDERS})
+        script = "cardsfolder/t/the_fall_of_lord_konda_fragment_of_konda.txt"
+        chapters = [line for line in cache.get(script).lines if line.line_kind == "chapter"]
+        assert len(chapters) == 3
+        for chapter, line in enumerate(chapters):
+            assert cache.line_for(ProvenanceKey(script, 0, "trigger", chapter)) == line
+
 
 class TestTheVariantTreeHasNoProse:
     """A variant's sidecar sits beside a Forge *source* script, not a converted

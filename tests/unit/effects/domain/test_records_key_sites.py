@@ -96,3 +96,33 @@ def test_a_gen3_entity_names_every_line_s_key_in_force_or_not(make_record, snaps
     ), granted_temporary=GrantedTemporary(abilities=(TEMPORARY,)))
     record = make_record(state=replace(snapshot, entities=(entity,)))
     assert list(key_sites(record)) == [ability_key, own, other_face, granted, TEMPORARY]
+
+
+def test_a_golden_record_names_its_floating_effects_and_link_ends():
+    """The collector's own boards: every floating effect's source line and
+    every line a link ends at is among the record's key sites, so the sidecar
+    join and the holdout split both see them."""
+    from effects.infrastructure.record_codec import record_from_dict
+    from tests.unit.effects.builders import java_golden_records
+
+    floating = ends = 0
+    for record in map(record_from_dict, java_golden_records()):
+        # Without its entities, whose lines name most of the same keys.
+        sites = set(key_sites(replace(record, state=replace(record.state, entities=()))))
+        for made in record.state.global_.floating_effects:
+            floating += len(made.source_lines)
+            assert set(made.source_lines) <= sites, record.record_id
+        for link in record.state.links or ():
+            ends += len(link.line_keys())
+            assert set(link.line_keys()) <= sites, record.record_id
+    assert floating and ends
+
+
+def test_a_delayed_trigger_names_its_source_line(make_record, snapshot):
+    """No golden holds a pending delayed trigger yet."""
+    from effects.domain.state_snapshot import CommandZoneObject
+
+    source = _key("astral_slide", "trigger")
+    board = replace(snapshot, global_=replace(snapshot.global_, delayed_triggers=(
+        CommandZoneObject(id="D7", source_lines=(source,)),)))
+    assert source in set(key_sites(make_record(state=board)))

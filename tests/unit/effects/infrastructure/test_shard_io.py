@@ -76,6 +76,23 @@ class TestCompressedShards:
         path.write_bytes(data[: len(data) - 12])
         assert [r.record_id for r in read_shard(path)] == ["run.0.1"]
 
+    def test_a_block_cut_midway_keeps_every_whole_record_before_the_cut(self, tmp_path):
+        """The Java writer's members are blocks of many records; a kill cuts
+        one midway. Every record whole before the cut reads, in order, and the
+        one the cut went through is dropped, never read as a broken line."""
+        path = tmp_path / "run.0.jsonl.gz"
+        block = [self._line(f"run.0.{i}") for i in range(2, 40)]
+        self._write_members(path, [[self._line("run.0.1")], block])
+        data = path.read_bytes()
+        first = len(gzip.compress((self._line("run.0.1") + "\n").encode("utf-8")))
+        path.write_bytes(data[: first + (len(data) - first) * 3 // 4])
+
+        read = [r.record_id for r in read_shard(path)]
+
+        expected = [f"run.0.{i}" for i in range(1, 40)]
+        assert 2 < len(read) < len(expected)
+        assert read == expected[: len(read)]
+
     def test_a_half_written_line_inside_a_member_is_skipped(self, tmp_path):
         path = tmp_path / "run.0.jsonl.gz"
         body = self._line("run.0.1") + "\n" + self._line("run.0.2")[:20]
@@ -353,6 +370,45 @@ class TestShardsInSubdirectories:
             "dira/run.0-a.jsonl.gz", "dira/run.0-z.jsonl", "dirb/run.0-b.jsonl",
             "dirc/run.0-c.jsonl.gz", "top.0-t.jsonl",
         ]
+
+
+class TestJavaWrittenShards:
+    """The shard writer's own lines (``ShardCharacterizationTest``), read
+    as a shard: what a gen-3 worker writes is what every reader here reads."""
+
+    @staticmethod
+    def _shard(tmp_path: Path, golden: str) -> Path:
+        from tests.unit.effects.builders import JAVA_GOLDENS
+
+        shard = tmp_path / "run.0-l1.jsonl.gz"
+        lines = (JAVA_GOLDENS / golden).read_text(encoding="utf-8")
+        shard.write_bytes(gzip.compress(lines.encode("utf-8")))
+        return shard
+
+    def test_a_finished_game_reads_whole_and_ends_in_its_marker(self, tmp_path):
+        from effects.domain.records import TurnActionSubkind
+        from effects.infrastructure.shard_io import ended_games, read_shard
+
+        shard = self._shard(tmp_path, "shard-game-end.jsonl")
+        records = list(read_shard(shard))
+
+        assert [r.kind for r in records] == [RecordKind.RESOLUTION] * 3 + [RecordKind.TURN_ACTION]
+        assert [r.record_id for r in records] == [f"run.0-l1.{i}" for i in range(4)]
+        assert {r.game_id for r in records} == {"run.0-l1.0"}
+        assert {r.generation for r in records} == {3}
+        marker = records[-1]
+        assert marker.subkind is TurnActionSubkind.GAME_END
+        assert (marker.payload.events, marker.payload.records_withheld) == ((), 0)
+        assert ended_games(shard) == {"run.0-l1.0"}
+
+    def test_a_game_without_its_marker_reads_as_cut(self, tmp_path):
+        from effects.infrastructure.shard_io import ended_games, read_shard
+
+        shard = self._shard(tmp_path, "shard-spell-and-combat.jsonl")
+
+        assert [r.kind for r in read_shard(shard)] == [
+            RecordKind.RESOLUTION, RecordKind.RESOLUTION, RecordKind.COMBAT]
+        assert ended_games(shard) == frozenset()
 
 
 def test_write_shard_round_trips_through_the_reader(tmp_path):
@@ -662,6 +718,22 @@ class TestReadRecordsMatching:
         record = _record(**ALL_KINDS["playability-blockers"])
         head = peek_envelope(format_record_line(record))
         assert head == (record.record_id, record.game_id, "playability")
+
+    def test_the_head_is_read_off_every_line_the_java_writer_wrote(self):
+        """The head regex is written against the Java writer's layout: on every
+        characterization line, of every kind, it reads what parsing reads."""
+        from effects.infrastructure.shard_io import peek_envelope
+        from tests.unit.effects.builders import JAVA_GOLDENS
+
+        lines = [line for path in sorted(JAVA_GOLDENS.glob("*.jsonl"))
+                 for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        kinds = set()
+        for line in lines:
+            raw = json.loads(line)
+            assert peek_envelope(line) == (raw["record_id"], raw["game_id"], raw["kind"]), line[:80]
+            kinds.add(raw["kind"])
+        assert {"resolution", "rewrite", "trigger", "combat", "playability", "continuous",
+                "turn_action"} <= kinds
 
     def test_a_head_of_another_shape_reads_as_none(self):
         from effects.infrastructure.shard_io import peek_envelope

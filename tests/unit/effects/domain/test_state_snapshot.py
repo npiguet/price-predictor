@@ -147,6 +147,21 @@ class TestAGen3EntityReadsAsTheGen2ReadersExpect:
         assert entity.ability_keys == own.keys
         assert entity.line_keys == (*own.keys, *pumped.keys)
 
+    def test_a_static_s_grant_on_a_golden_board_is_one_overlay_entry_and_no_token(self):
+        """The collector's own shape, not this file's: a creature under
+        Cryptolith Rite carries the granted mana ability as a granted line and
+        in ``granted_temporary.abilities``; it is counted once, by the overlay."""
+        from effects.infrastructure.record_codec import _entity_from_json
+
+        rite = ProvenanceKey("cardsfolder/c/cryptolith_rite.txt", 0, "static", 0)
+        bears = [bear for bear in (_entity_from_json(e) for e in java_golden_entities()
+                                   if e["name"] == "Grizzly Bears")
+                 if any(line.granted and rite in line.keys for line in bear.lines)]
+        assert bears
+        for bear in bears:
+            assert rite in bear.granted_temporary.abilities
+            assert rite in bear.line_keys and rite not in bear.ability_keys
+
     def test_a_keyword_line_reads_its_keyword_without_the_value(self):
         assert _line("a", "keyword", fragment="Ward:2").keyword == "ward"
         assert _line("a", "keyword", fragment="First Strike").keyword == "first_strike"
@@ -247,6 +262,23 @@ class TestTheGen3FactsRead:
         gone = [e for e in entities if e.role == "last_known"]
         assert gone and all(e.zone is None and e.order_rank is None for e in gone)
         assert any(e.history.entered_this_turn for e in entities)
+
+    def test_every_face_the_collector_names_reads_as_its_face_state(self):
+        """Every golden entity is on its front, so the other faces are read off
+        the writer (``CardFacts.faceState``) and decoded on a golden entity."""
+        import re
+
+        from effects.infrastructure.record_codec import _entity_from_json
+        from tests.unit.forge_sources import connector_source
+
+        source = connector_source("effects/CardFacts.java")
+        body = source[source.index("static String faceState(Card card)"):]
+        body = body[:body.index("\n    }\n")]
+        written = set(re.findall(r'"([a-z_]+)"', body))
+        assert written == {face.value for face in FaceState}
+        golden = java_golden_entities()[0]
+        for face in sorted(written):
+            assert _entity_from_json({**golden, "face_state": face}).face_state == FaceState(face)
 
     def test_a_mana_cost_counts_its_symbols_and_a_land_has_none(self):
         entities = self._entities()
