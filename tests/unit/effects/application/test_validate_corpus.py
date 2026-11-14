@@ -1485,6 +1485,14 @@ class TestABufferedReplacementAgreesWithItsPayload:
         records = _healthy() + [self._buffered("run.0-L1.900")]
         assert "3/3" in _named(validate_corpus(records), "ran instead").measured
 
+    def test_a_record_naming_its_ability_both_ways_counts_once(self):
+        """Forcefield's ``ReplaceDamage`` runs in place and sets its
+        sub-ability aside, so a real record carries both ``replaced_by`` and
+        ``buffered``: named once, never a share above one (a real run read
+        330/312)."""
+        records = _healthy() + [self._buffered("run.0-L1.900", replaced_by=(_KEY,))]
+        assert "3/3" in _named(validate_corpus(records), "ran instead").measured
+
 
 class TestRewritesNameTheAbilityThatRanInstead:
     """Watched, because a ``ReplacementResult$`` script runs no ability at all.

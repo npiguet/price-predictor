@@ -230,6 +230,10 @@ class _ResultCounts:
     with_replaced_by: int = 0
     #: Damage replacements naming the ability they set aside (``buffered``).
     with_buffered: int = 0
+    #: Records naming an ability either way, ``replaced_by`` or ``buffered``,
+    #: each counted once: a ``ReplaceDamage`` runs in place and sets its
+    #: sub-ability aside, so one record can carry both (Forcefield).
+    naming: int = 0
     seen: int = 0
 
 
@@ -259,6 +263,7 @@ class Rewrites:
         counts.with_outgoing += payload.outgoing is not None
         counts.with_replaced_by += bool(payload.replaced_by)
         counts.with_buffered += payload.buffered is not None
+        counts.naming += bool(payload.replaced_by) or payload.buffered is not None
         counts.seen += 1
         if payload.result is None:
             # Pre-contract shard: its writer always produced an identity
@@ -375,7 +380,7 @@ class Rewrites:
             if counts:
                 # A buffered damage replacement names its ability in
                 # ``buffered``, its ``replaced_by`` empty by design.
-                named += counts.with_replaced_by + counts.with_buffered
+                named += counts.naming
                 seen += counts.seen
         rate = share_of(named, seen)
         return floor_finding(
