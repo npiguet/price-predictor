@@ -1,8 +1,11 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import forge.game.Game;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
+import forge.game.phase.PhaseType;
+import forge.game.player.Player;
 import forge.game.replacement.ReplacementEffect;
 import forge.game.replacement.ReplacementResult;
 import forge.game.spellability.SpellAbility;
@@ -20,6 +23,7 @@ import java.util.Map;
 import static com.pricepredictor.connector.effects.TestCollectors.replacementOfMode;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A damage replacement's buffered ability (WP2's hooks, for WP7): its rewrite
@@ -138,6 +142,102 @@ class BufferedRewriteTest {
 
         lines.stream().filter(line -> line.contains("\"kind\":\"rewrite\"")).forEach(line ->
                 assertEquals(List.of(), rewrite(line).get("buffered_events"), line));
+    }
+
+    // ── played through the engine ──────────────────────────────────────
+
+    private static final String WHY = "for the replacement hook's buffered ability";
+
+    private static List<String> rewrites(List<String> records) {
+        return records.stream().filter(line -> line.contains("\"kind\":\"rewrite\"")).toList();
+    }
+
+    /**
+     * Shock at Swans of Bryn Argoll, played: the damage is prevented, the
+     * buffered draw runs, and the rewrite record takes the draws.
+     */
+    @Test
+    void swansOfBrynArgollsDrawIsItsRewritesBufferedEvents() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        for (int i = 0; i < 3; i++) {
+            game.getAction().moveToLibrary(TestBoard.inHand(game, you, "Island"), null, null);
+        }
+        Card swans = TestBoard.inPlay(game, opponent, "Swans of Bryn Argoll");
+        Card shock = TestBoard.inHand(game, you, "Shock");
+        int hand = you.getCardsIn(ZoneType.Hand).size();
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            TestBoard.cast(game, shock, you, swans);
+            game.getStack().resolveStack();
+            TestBoard.priority(game);
+            TestBoard.nextStep(game);
+        });
+
+        assertEquals(hand - 1 + 2, you.getCardsIn(ZoneType.Hand).size(), "Shock cast, two drawn");
+        List<String> rewrites = rewrites(records);
+        assertEquals(1, rewrites.size(), records.toString());
+        Map<String, Object> payload = rewrite(rewrites.get(0));
+        assertEquals(List.of(), payload.get("replaced_by"));
+        assertEquals(1, ((List<?>) payload.get("buffered")).size(), rewrites.get(0));
+        assertEquals(true, payload.get("buffered_ran"));
+        List<String> types = ((List<?>) payload.get("buffered_events")).stream()
+                .map(event -> String.valueOf(RecordLines.asMap(event).get("type"))).toList();
+        assertEquals(List.of("zone_change", "card_drawn", "zone_change", "card_drawn"), types,
+                rewrites.get(0));
+        for (String other : records) {
+            if (!other.contains("\"kind\":\"rewrite\"")) {
+                assertEquals(false, RecordLines.eventTypes(other).contains("card_drawn"),
+                        "the draws are the rewrite's alone: " + other);
+            }
+        }
+    }
+
+    /**
+     * Two blockers' damage to Rock Hydra, played: two replacements of one
+     * damage event, one buffered removal run. The first record takes the
+     * removal's counter change, the second says it ran.
+     */
+    @Test
+    void twoDamagesToRockHydraShareOneBufferedRun() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player you = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card hydra = TestBoard.inPlay(game, you, "Rock Hydra");
+        hydra.addCounterInternal(forge.game.card.CounterEnumType.P1P1, 5, you, false, null,
+                Map.of());
+        hydra.setSickness(false);
+        Card bears = TestBoard.inPlay(game, opponent, "Grizzly Bears");
+        Card ogre = TestBoard.inPlay(game, opponent, "Gray Ogre");
+
+        List<String> records = ShardRun.recordsWithClauseHook(tempDir, game, WHY, () -> {
+            game.getPhaseHandler().devModeSet(PhaseType.COMBAT_DAMAGE, you);
+            forge.game.combat.Combat combat = new forge.game.combat.Combat(you);
+            combat.addAttacker(hydra, opponent);
+            combat.addBlocker(hydra, bears);
+            combat.addBlocker(hydra, ogre);
+            combat.setBlocked(hydra, true);
+            combat.orderBlockersForDamageAssignment();
+            combat.orderAttackersForDamageAssignment();
+            game.getPhaseHandler().setCombat(combat);
+            combat.assignCombatDamage(false);
+            combat.dealAssignedDamage();
+            game.getAction().checkStateEffects(false);
+            game.getPhaseHandler().devModeSet(PhaseType.COMBAT_END, you);
+        });
+
+        assertEquals(1, hydra.getCounters(forge.game.card.CounterEnumType.P1P1),
+                "four damage prevented, four counters removed");
+        List<String> rewrites = rewrites(records);
+        assertEquals(2, rewrites.size(), records.toString());
+        List<Integer> taken = rewrites.stream()
+                .map(line -> ((List<?>) rewrite(line).get("buffered_events")).size()).toList();
+        assertEquals(List.of(1, 0), taken, "the oldest takes the run: " + rewrites);
+        assertEquals(-4L, ((Number) RecordLines.params(RecordLines.asMap(
+                ((List<?>) rewrite(rewrites.get(0)).get("buffered_events")).get(0)))
+                .get("delta")).longValue(), "the summed removal");
+        rewrites.forEach(line -> assertEquals(true, rewrite(line).get("buffered_ran"), line));
     }
 
     @Test
