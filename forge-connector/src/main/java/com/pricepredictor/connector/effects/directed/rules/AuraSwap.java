@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
@@ -25,11 +26,12 @@ import java.util.Optional;
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, it controls an attached Aura with Aura swap whose cost it has the
  * lands for, and its hand holds exactly one Aura card, which can enchant what
- * the attached Aura enchants. It binds that card and the attached Aura.
+ * the attached Aura enchants. It binds the active player, that card and the
+ * attached Aura.
  *
  * <p>Variant {@code no_aura_in_hand} ({@code move_card}): a Giant Growth is in
  * that card's place in the hand, so there is nothing to exchange with and the
- * attached Aura stays where it is.
+ * attached Aura stays where it is. The fork forces the swap ({@link #swap}).
  */
 public final class AuraSwap {
 
@@ -44,11 +46,21 @@ public final class AuraSwap {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, AuraSwap::bind, NO_AURA_IN_HAND,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.replace(fork.card("card"), GIANT_GROWTH)));
+                        fork -> MoveCardOperation.replace(fork.card("card"), GIANT_GROWTH))
+                        .forcing(swap()));
     }
 
     static Optional<Binding> bind(Game live) {
         return find(live, true);
+    }
+
+    /**
+     * The activation of the attached Aura's Aura swap by the active player,
+     * which the fork forces (FR-010b): Forge's AI swaps only for an Aura it
+     * prefers, and with nothing or a worse Aura in hand it never activates.
+     */
+    static ForcedPlay swap() {
+        return ForcedPlay.activate("player", "aura", ForcedPlay.Line.keyword("AURA_SWAP"));
     }
 
     /**
@@ -72,7 +84,7 @@ public final class AuraSwap {
                 .filter(aura -> aura.isAura() && aura.isAttachedToEntity() && swappable(aura, active)
                         && aura.getEntityAttachedTo().canBeAttached(card, null) == fits)
                 .findFirst()
-                .map(aura -> Binding.empty().with("card", card).with("aura", aura));
+                .map(aura -> Binding.empty().with("player", active).with("card", card).with("aura", aura));
     }
 
     /** Whether the Aura has Aura swap and {@code player} has as many untapped lands as its cost's mana value. */

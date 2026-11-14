@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
@@ -23,6 +24,7 @@ import java.util.Optional;
  *
  * <p>Variant {@code can_enchant} ({@code move_card}): a Holy Strength (enchant
  * creature) is in that card's place in the hand, so the exchange succeeds.
+ * The fork forces the swap ({@link AuraSwap#swap}).
  */
 public final class AuraSwapCantEnchant {
 
@@ -37,7 +39,8 @@ public final class AuraSwapCantEnchant {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, AuraSwapCantEnchant::bind, CAN_ENCHANT,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.replace(fork.card("card"), HOLY_STRENGTH)));
+                        fork -> MoveCardOperation.replace(fork.card("card"), HOLY_STRENGTH))
+                        .forcing(AuraSwap.swap()));
     }
 
     static Optional<Binding> bind(Game live) {

@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
@@ -24,11 +25,13 @@ import java.util.Optional;
  * began, with an activated ability that exchanges a target opponent's life
  * total with the permanent's toughness, and an opponent who can gain life has
  * less life than that toughness, so the exchange would raise it. It binds the
- * permanent and that opponent.
+ * active player, the permanent and that opponent.
  *
  * <p>Variant {@code cannot_gain_life} ({@code add_permanent}): Everlasting
  * Torment (players can't gain life) is on the battlefield under the
- * opponent's control, so no part of the exchange happens.
+ * opponent's control, so no part of the exchange happens. The fork forces
+ * the activation at that opponent (FR-010b), which Forge's AI does not make
+ * when the exchange gives the opponent nothing.
  */
 public final class LifeExchange {
 
@@ -43,7 +46,9 @@ public final class LifeExchange {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, LifeExchange::bind, CANNOT_GAIN_LIFE,
                 new Application(ForkOperation.ADD_PERMANENT,
-                        fork -> AddPermanentOperation.of(TORMENT, fork.player("opponent"), false)));
+                        fork -> AddPermanentOperation.of(TORMENT, fork.player("opponent"), false))
+                        .forcing(ForcedPlay.activate("player", "permanent",
+                                ForcedPlay.Line.api("ExchangeLifeVariant")).targeting("opponent")));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -58,6 +63,7 @@ public final class LifeExchange {
             for (Player opponent : active.getOpponents()) {
                 if (opponent.canGainLife() && opponent.getLife() < permanent.getNetToughness()) {
                     return Optional.of(Binding.empty()
+                            .with("player", active)
                             .with("permanent", permanent)
                             .with("opponent", opponent));
                 }

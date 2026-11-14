@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
@@ -35,6 +36,9 @@ import java.util.stream.Stream;
  * <p>Variant {@code card_found} ({@code move_card}): a Grizzly Bears (mana
  * value 2) is in that card's place, so the discovery finds it; the discover
  * trigger fires as before.
+ *
+ * <p>It also binds the active player and the discovering card with the
+ * largest N, whose cast the fork forces (FR-010b).
  */
 public final class DiscoverNothingFound {
 
@@ -51,7 +55,8 @@ public final class DiscoverNothingFound {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, DiscoverNothingFound::bind, CARD_FOUND,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.replace(fork.card("card"), BEARS)));
+                        fork -> MoveCardOperation.replace(fork.card("card"), BEARS))
+                        .forcing(ForcedPlay.cast("player", "discoverer")));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -60,17 +65,18 @@ public final class DiscoverNothingFound {
         }
         Player active = Boards.active(live);
         List<Card> library = List.copyOf(active.getCardsIn(ZoneType.Library));
-        Optional<Integer> most = active.getCardsIn(ZoneType.Hand).stream()
+        Optional<Card> discoverer = active.getCardsIn(ZoneType.Hand).stream()
                 .filter(card -> Boards.affordable(active, card))
-                .flatMap(DiscoverNothingFound::discovers)
-                .filter(n -> n >= BEARS_VALUE)
-                .max(Integer::compare);
+                .filter(card -> discovers(card).anyMatch(n -> n >= BEARS_VALUE))
+                .max(java.util.Comparator.comparingInt(card -> discovers(card).max(Integer::compare).orElse(0)));
+        Optional<Integer> most = discoverer.flatMap(card -> discovers(card).max(Integer::compare));
         if (library.isEmpty() || most.isEmpty() || library.stream()
                 .anyMatch(card -> !card.isLand() && card.getCMC() <= most.get())) {
             return Optional.empty();
         }
         Card bound = library.stream().filter(card -> !card.isLand()).findFirst().orElse(library.get(0));
-        return Optional.of(Binding.empty().with("card", bound));
+        return Optional.of(Binding.empty().with("player", active).with("discoverer", discoverer.get())
+                .with("card", bound));
     }
 
     /** The numbers N of the card's discover N, from its spells and the abilities its triggers execute. */

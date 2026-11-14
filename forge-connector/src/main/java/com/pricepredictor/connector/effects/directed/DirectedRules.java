@@ -50,7 +50,6 @@ import com.pricepredictor.connector.effects.directed.rules.Transmute;
 import com.pricepredictor.connector.effects.directed.rules.Unearth;
 import com.pricepredictor.connector.effects.directed.rules.UnleashCantBlock;
 import com.pricepredictor.connector.effects.directed.rules.VanishingInstances;
-import com.pricepredictor.connector.effects.directed.rules.VirtuousRole;
 import com.pricepredictor.connector.effects.directed.rules.WebSlinging;
 
 import java.util.Collection;
@@ -84,7 +83,6 @@ public final class DirectedRules {
             LifeTotalWin.rule(),
             PoisonLoss.rule(),
             SimultaneousLoss.rule(),
-            VirtuousRole.rule(),
             MutagenToken.rule(),
             ReplacedSacrificeCost.rule(),
             OptionalSearch.rule(),

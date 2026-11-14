@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.RemovePermanentOperation;
 import forge.game.Game;
@@ -25,11 +26,13 @@ import java.util.Optional;
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, it holds a card with champion that it has the mana to cast, and it
  * controls exactly one other permanent of the type the card champions. It
- * binds that permanent and the card.
+ * binds the active player, that permanent and the card.
  *
  * <p>Variant {@code no_creature_to_champion} ({@code remove_permanent}): the
  * permanent is not on the battlefield, so the champion ability exiles nothing,
- * the card is sacrificed, and nothing ever returns.
+ * the card is sacrificed, and nothing ever returns. The fork forces the
+ * card's cast (FR-010b), which Forge's AI does not make with nothing to
+ * champion.
  */
 public final class Champion {
 
@@ -43,7 +46,8 @@ public final class Champion {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Champion::bind, NO_CREATURE_TO_CHAMPION,
                 new Application(ForkOperation.REMOVE_PERMANENT,
-                        fork -> new RemovePermanentOperation(fork.card("creature"))));
+                        fork -> new RemovePermanentOperation(fork.card("creature")))
+                        .forcing(ForcedPlay.cast("player", "card")));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -58,7 +62,8 @@ public final class Champion {
             for (KeywordInterface champion : card.getKeywords(Keyword.CHAMPION)) {
                 List<Card> candidates = championable(champion, card, active);
                 if (candidates.size() == 1) {
-                    return Optional.of(Binding.empty().with("creature", candidates.get(0)).with("card", card));
+                    return Optional.of(Binding.empty().with("player", active)
+                            .with("creature", candidates.get(0)).with("card", card));
                 }
             }
         }

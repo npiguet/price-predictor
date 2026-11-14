@@ -3,6 +3,7 @@ package com.pricepredictor.connector;
 import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import com.pricepredictor.connector.effects.TestCaps;
+import com.pricepredictor.connector.effects.directed.rules.ReplacedSacrificeCost;
 import com.pricepredictor.connector.effects.directed.rules.SimultaneousDamage;
 import forge.deck.Deck;
 import forge.game.Match;
@@ -60,11 +61,15 @@ class ForkIsolationTest {
         return deck("Mountain", 16, "Lightning Bolt", 24);
     }
 
-    /** Creatures, first and double strikers, burn, tokens, an aura, a fog: what forks reach. */
+    /**
+     * Creatures, first and double strikers, burn, tokens, an aura, a fog, a
+     * sacrifice outlet: what forks reach, a directed fork forcing a play
+     * (118.11, a Siege-Gang Commander made to sacrifice a Goblin) among them.
+     */
     private static Deck boros() {
         return deck("Mountain", 9, "Plains", 8, "Pacifism", 2, "Serra Angel", 2, "Arc Trail", 2,
-                "Shock", 2, "Youthful Knight", 2, "Lightning Bolt", 2, "Boros Charm", 2, "Fireball", 1,
-                "Healing Salve", 1, "Raise the Alarm", 1, "Prodigal Pyromancer", 1, "Holy Day", 1,
+                "Siege-Gang Commander", 2, "Youthful Knight", 2, "Lightning Bolt", 2, "Boros Charm", 2, "Fireball", 1,
+                "Shock", 1, "Raise the Alarm", 1, "Prodigal Pyromancer", 1, "Holy Day", 1,
                 "Fencing Ace", 2, "Mogg Fanatic", 1, "Hill Giant", 1);
     }
 
@@ -74,7 +79,7 @@ class ForkIsolationTest {
 
     private static CollectionCaps allForks() {
         return TestCaps.caps().interventions(2).probes(4).probeKeywords("first_strike", "double_strike")
-                .directed(1, 1.0, SimultaneousDamage.RULE).build();
+                .directed(2, 1.0, SimultaneousDamage.RULE, ReplacedSacrificeCost.RULE).build();
     }
 
     /** The live records one seeded match writes, in order. */
@@ -198,6 +203,8 @@ class ForkIsolationTest {
         assertTrue(forkRecords.stream().anyMatch(r -> r.contains("\"interventional\":false")
                 && !r.contains("\"mirror_of\":null")), "probes");
         assertTrue(forkRecords.stream().anyMatch(r -> r.contains("\"directed\":{")), "directed forks");
+        assertTrue(forkRecords.stream().anyMatch(r -> r.contains("\"aimed_at\":[\"118.11\"]")),
+                "a directed fork whose variant forces a play");
         assertTrue(forkRecords.stream().anyMatch(r -> r.contains("\"interventional\":true")
                 && !r.contains("\"kind\":\"resolution\"")), "protection forks, which write every kind");
     }

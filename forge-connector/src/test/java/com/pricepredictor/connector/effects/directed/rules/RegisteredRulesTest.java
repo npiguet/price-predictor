@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.effects.BoardStates;
+import com.pricepredictor.connector.effects.ForcedPlayRun;
 import com.pricepredictor.connector.effects.TestBoard;
 import com.pricepredictor.connector.effects.TestForks;
 import com.pricepredictor.connector.effects.directed.Application;
@@ -432,17 +433,31 @@ class RegisteredRulesTest {
 
     // ── 104.3d, ten poison counters: counters ───────────────────────────
 
+    /** B at {@code poison} counters; A holds Ichor Rats over three Swamps. */
     private static Board poisonBoard(int poison) {
         Board board = new Board(PhaseType.MAIN1);
-        board.card(board.you, "Swamp");
+        for (int i = 0; i < 3; i++) {
+            board.card(board.you, "Swamp");
+        }
+        board.other = TestBoard.inHand(board.game, board.you, "Ichor Rats");
         board.opponent.setCounters(CounterEnumType.POISON, poison, null, false);
         return board;
     }
 
     @Test
-    void poisonLossBindsThePlayerTwoCountersShort() {
+    void poisonLossBindsThePlayerTwoCountersShortAndThePoisonSource() {
         Board board = poisonBoard(8);
-        assertEquals(board.opponent, PoisonLoss.bind(board.game).orElseThrow().player("player"));
+        Binding binding = PoisonLoss.bind(board.game).orElseThrow();
+        assertEquals(board.opponent, binding.player("player"));
+        assertEquals(board.other, binding.card("card"));
+        assertEquals(board.you, binding.player("caster"));
+    }
+
+    @Test
+    void poisonLossBindsNothingWithoutAPoisonSourceToCast() {
+        Board board = poisonBoard(8);
+        board.you.getLandsInPlay().forEach(land -> land.setTapped(true));
+        assertTrue(PoisonLoss.bind(board.game).isEmpty());
     }
 
     @Test
@@ -457,41 +472,9 @@ class RegisteredRulesTest {
         assertEquals(9, twin.fork().player("player").getPoisonCounters());
     }
 
-    // ── 111.10p, a Virtuous Role: remove_permanent ──────────────────────
+    // ── 111.10v, a Mutagen token: add_permanent, inverted ───────────────
 
-    private static Board elliverBoard() {
-        Board board = new Board(PhaseType.MAIN1);
-        for (String land : List.of("Forest", "Forest", "Forest", "Plains")) {
-            board.card(board.you, land);
-        }
-        board.subject = board.card(board.you, "Grizzly Bears");
-        board.other = TestBoard.inHand(board.game, board.you, "Ellivere of the Wild Court");
-        return board;
-    }
-
-    @Test
-    void virtuousRoleBindsTheOnlyOtherCreatureAndEllivere() {
-        Board board = elliverBoard();
-        Binding binding = VirtuousRole.bind(board.game).orElseThrow();
-        assertEquals(board.subject, binding.card("creature"));
-        assertEquals(board.other, binding.card("card"));
-    }
-
-    @Test
-    void virtuousRoleBindsNothingWithTwoTargets() {
-        Board board = elliverBoard();
-        board.card(board.you, "Hill Giant");
-        assertTrue(VirtuousRole.bind(board.game).isEmpty());
-    }
-
-    @Test
-    void virtuousRoleForksTheBoardWithoutTheCreature() {
-        Board board = elliverBoard();
-        assertOnlyRemoved(board.twin(VirtuousRole.rule()), board.subject, "creature");
-    }
-
-    // ── 111.10v, a Mutagen token: remove_permanent ──────────────────────
-
+    /** A Mutagen token beside Crustacean Commando, A's one Island {@code islandTapped}. */
     private static Board mutagenBoard(boolean islandTapped) {
         Board board = new Board(PhaseType.MAIN1);
         board.card(board.you, "Crustacean Commando");
@@ -505,25 +488,33 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void mutagenTokenBindsTheTokenAndTheLastManaSource() {
-        Board board = mutagenBoard(false);
+    void mutagenTokenBindsTheTokenWithNoManaForIt() {
+        Board board = mutagenBoard(true);
         Binding binding = MutagenToken.bind(board.game).orElseThrow();
         assertEquals(board.other, binding.card("token"));
-        assertEquals(board.subject, binding.card("mana source"));
+        assertEquals(board.you, binding.player("player"));
     }
 
     @Test
-    void mutagenTokenBindsNothingWithNoManaLeft() {
-        assertTrue(MutagenToken.bind(mutagenBoard(true).game).isEmpty());
+    void mutagenTokenBindsNothingWithTheManaForIt() {
+        assertTrue(MutagenToken.bind(mutagenBoard(false).game).isEmpty());
     }
 
     @Test
-    void mutagenTokenForksTheBoardWithoutTheManaSource() {
-        Board board = mutagenBoard(false);
-        assertOnlyRemoved(board.twin(MutagenToken.rule()), board.subject, "mana source");
+    void mutagenTokenForksAnUntappedIsland() {
+        Board board = mutagenBoard(true);
+        Twin twin = board.twin(MutagenToken.rule());
+        Card island = twin.forkGame().getPlayers().get(0).getCardsIn(ZoneType.Battlefield).stream()
+                .filter(card -> card.getName().equals(MutagenToken.ISLAND) && !card.isTapped())
+                .findFirst().orElseThrow();
+        for (String change : twin.changes()) {
+            assertTrue(change.equals("+" + id(island)) || change.startsWith("+link ") && change.contains("=" + id(island))
+                            || change.endsWith(".untapped_production"),
+                    "adding changed " + change + "; all: " + twin.changes());
+        }
     }
 
-    // ── 118.11, a replaced sacrifice cost: remove_permanent ─────────────
+    // ── 118.11, a replaced sacrifice cost: add_permanent, inverted ──────
 
     private static Board bombardmentBoard(boolean restInPeace) {
         Board board = new Board(PhaseType.MAIN1);
@@ -536,29 +527,43 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void replacedSacrificeCostBindsTheOnlyCreatureToSacrifice() {
-        Board board = bombardmentBoard(true);
+    void replacedSacrificeCostBindsACreatureToSacrificeAndTheOutlet() {
+        Board board = bombardmentBoard(false);
         Binding binding = ReplacedSacrificeCost.bind(board.game).orElseThrow();
         assertEquals(board.subject, binding.card("creature"));
         assertEquals(board.other, binding.card("permanent"));
+        assertEquals(board.you, binding.player("player"));
     }
 
     @Test
-    void replacedSacrificeCostBindsNothingWithoutAReplacement() {
-        assertTrue(ReplacedSacrificeCost.bind(bombardmentBoard(false).game).isEmpty());
+    void replacedSacrificeCostBindsNothingWhenTheSacrificeIsAlreadyReplaced() {
+        assertTrue(ReplacedSacrificeCost.bind(bombardmentBoard(true).game).isEmpty());
     }
 
     @Test
-    void replacedSacrificeCostBindsNothingWithTwoCreaturesToSacrifice() {
-        Board board = bombardmentBoard(true);
-        board.card(board.you, "Hill Giant");
+    void replacedSacrificeCostBindsNothingWithNoCreatureToSacrifice() {
+        Board board = new Board(PhaseType.MAIN1);
+        board.card(board.you, "Goblin Bombardment");
         assertTrue(ReplacedSacrificeCost.bind(board.game).isEmpty());
     }
 
+    /** An outlet whose cost may take the outlet itself (Mogg Raider sacrifices a Goblin, itself among them). */
     @Test
-    void replacedSacrificeCostForksTheBoardWithoutTheCreature() {
-        Board board = bombardmentBoard(true);
-        assertOnlyRemoved(board.twin(ReplacedSacrificeCost.rule()), board.subject, "creature");
+    void replacedSacrificeCostBindsAnOutletThatMaySacrificeItself() {
+        Board board = new Board(PhaseType.MAIN1);
+        Card raider = board.card(board.you, "Mogg Raider");
+        Binding binding = ReplacedSacrificeCost.bind(board.game).orElseThrow();
+        assertEquals(raider, binding.card("creature"));
+        assertEquals(raider, binding.card("permanent"));
+    }
+
+    @Test
+    void replacedSacrificeCostForksRestInPeace() {
+        Board board = bombardmentBoard(false);
+        Twin twin = board.twin(ReplacedSacrificeCost.rule());
+        assertOnlyAdded(twin, twin.fork().player("player"), ReplacedSacrificeCost.REST_IN_PEACE);
+        assertTrue(twin.forkGame().getCardsIn(ZoneType.Battlefield).stream()
+                .anyMatch(replacer -> Boards.replacesGraveyardMoveOf(replacer, twin.fork().card("creature"))));
     }
 
     // ── 118.12b, an optional search: move_card ──────────────────────────
@@ -2157,10 +2162,10 @@ class RegisteredRulesTest {
                 "Secrets of the Golden City").game).isEmpty());
     }
 
-    /** The AI holds an ascend instant for the opponent's turn, after the fork stops at this one's end. */
+    /** An ascend instant binds too: the fork forces its cast this turn (FR-010b). */
     @Test
-    void ascendBlessingBindsNothingForAnInstant() {
-        assertTrue(AscendBlessing.bind(ascendBoard(PhaseType.MAIN1, "Expel from Orazca").game).isEmpty());
+    void ascendBlessingBindsAnInstant() {
+        assertTrue(AscendBlessing.bind(ascendBoard(PhaseType.MAIN1, "Expel from Orazca").game).isPresent());
     }
 
     @Test
@@ -2305,11 +2310,6 @@ class RegisteredRulesTest {
     }
 
     @Test
-    void mutagenTokenBindsNothingWithALandToPlay() {
-        assertALandToPlayStopsTheBinding(mutagenBoard(false), MutagenToken.rule());
-    }
-
-    @Test
     void improviseBindsNothingWithALandToPlay() {
         assertALandToPlayStopsTheBinding(engineerBoard(3), Improvise.rule());
     }
@@ -2414,15 +2414,19 @@ class RegisteredRulesTest {
         assertTrue(UnleashCantBlock.bind(board.game).isEmpty(), "a 2/2 Cackler with 2 damage dies at 1 toughness");
     }
 
-    /** C4 #7: Leyline of the Void exiles only opponents' cards, so it does not replace its controller's sacrifice. */
+    /**
+     * C4 #7: Leyline of the Void exiles only opponents' cards, so its
+     * controller's sacrifice is not yet replaced and the inverted variant
+     * binds; an opponent's Leyline already replaces it.
+     */
     @Test
-    void replacedSacrificeCostBindsNothingWhenTheReplacementSparesTheSacrifice() {
+    void replacedSacrificeCostBindsWhenTheReplacementSparesTheSacrifice() {
         Board board = bombardmentBoard(false);
         board.card(board.you, "Leyline of the Void");
-        assertTrue(ReplacedSacrificeCost.bind(board.game).isEmpty());
+        assertTrue(ReplacedSacrificeCost.bind(board.game).isPresent());
         Board opposing = bombardmentBoard(false);
         opposing.card(opposing.opponent, "Leyline of the Void");
-        assertTrue(ReplacedSacrificeCost.bind(opposing.game).isPresent());
+        assertTrue(ReplacedSacrificeCost.bind(opposing.game).isEmpty());
     }
 
     /**
@@ -2684,7 +2688,10 @@ class RegisteredRulesTest {
             assertTrue(TestForks.scoreChecks(game, copier, fork), rule.rule() + ": the copy fails its score check");
 
             Binding forked = binding.inFork(copier);
-            rule.variants().values().iterator().next().edit(forked).apply(fork);
+            Application application = rule.variants().values().iterator().next();
+            assertEquals(Optional.empty(), ForcedPlayRun.dryRun(application, binding, game),
+                    rule.rule() + ": the forced play's dry run on the live board");
+            application.edit(forked).apply(fork);
 
             Map<String, Object> edited = BoardStates.of(fork);
             assertEquals(real, BoardStates.of(game), "the edit reached the live game");
@@ -2701,7 +2708,26 @@ class RegisteredRulesTest {
                 assertFalse(player.hasLost(), rule.rule() + ": the first state-based check lost " + player);
             }
             assertEquals(real, BoardStates.of(game), "the check reached the live game");
+            assertForcedPlayMayBeMade(rule, application, forked, fork);
             return new Twin(changes(real, edited), real, edited, forked, fork);
+        }
+
+        /**
+         * The variant's forced play (FR-010b), if it forces one, can be made
+         * on the edited copy: its source, line or attack is there, and a cast
+         * or an activation is playable now by the rules with its named
+         * targets, the line the forcing seat would choose at this priority.
+         */
+        private static void assertForcedPlayMayBeMade(
+                DirectedRule rule, Application application, Binding forked, Game fork) {
+            if (application.forced() == null) {
+                return;
+            }
+            ForcedPlayRun run = ForcedPlayRun.start(application, forked, fork);
+            if (run.play().playsALine()) {
+                assertTrue(run.choose(run.actor()) != null,
+                        rule.rule() + ": the forced line is playable on the edited copy");
+            }
         }
 
         /**

@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.BoardEdit;
 import com.pricepredictor.connector.effects.directed.operations.LifeOperation;
@@ -29,7 +30,8 @@ import java.util.Optional;
  *
  * <p>Variant {@code exchange-lowers} ({@code life}): the player's life total
  * is above the toughness, the scenario's 20 where that is above it, so the
- * exchange would lower it and happens.
+ * exchange would lower it and happens. The fork forces the activation
+ * (FR-010b), which Forge's AI makes only to raise its life.
  */
 public final class CantGainLifeExchange {
 
@@ -44,7 +46,9 @@ public final class CantGainLifeExchange {
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, CantGainLifeExchange::bind, EXCHANGE_LOWERS,
-                new Application(ForkOperation.LIFE, CantGainLifeExchange::exchangeLowers));
+                new Application(ForkOperation.LIFE, CantGainLifeExchange::exchangeLowers)
+                        .forcing(ForcedPlay.activate("player", "permanent",
+                                ForcedPlay.Line.api("ExchangeLifeVariant"))));
     }
 
     static Optional<Binding> bind(Game live) {

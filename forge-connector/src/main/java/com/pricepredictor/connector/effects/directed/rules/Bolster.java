@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.RemovePermanentOperation;
 import forge.game.Game;
@@ -21,11 +22,13 @@ import java.util.Optional;
  *
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, it controls exactly one creature, and it holds a card it has the
- * lands for whose spell bolsters (Cached Defenses). It binds that creature.
+ * lands for whose spell bolsters (Cached Defenses). It binds the active
+ * player, that creature and the card.
  *
  * <p>Variant {@code no_creature} ({@code remove_permanent}): the creature is
  * not on the battlefield, so the bolster finds no creature of its controller's
- * and puts no counter anywhere.
+ * and puts no counter anywhere. The fork forces the card's cast (FR-010b),
+ * which Forge's AI does not make with no creature to bolster.
  */
 public final class Bolster {
 
@@ -39,7 +42,8 @@ public final class Bolster {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Bolster::bind, NO_CREATURE,
                 new Application(ForkOperation.REMOVE_PERMANENT,
-                        fork -> new RemovePermanentOperation(fork.card("creature"))));
+                        fork -> new RemovePermanentOperation(fork.card("creature")))
+                        .forcing(ForcedPlay.cast("player", "card")));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -48,10 +52,12 @@ public final class Bolster {
         }
         Player active = Boards.active(live);
         List<Card> creatures = List.copyOf(active.getCreaturesInPlay());
-        if (creatures.size() != 1 || Boards.castableInHand(active, Bolster::bolsters).isEmpty()) {
+        List<Card> spells = Boards.castableInHand(active, Bolster::bolsters);
+        if (creatures.size() != 1 || spells.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(Binding.empty().with("creature", creatures.get(0)));
+        return Optional.of(Binding.empty().with("player", active)
+                .with("creature", creatures.get(0)).with("card", spells.get(0)));
     }
 
     /** Whether the spell bolsters as its first act: a {@code PutCounter} root with {@code Bolster$}. */

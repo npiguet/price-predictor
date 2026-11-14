@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
@@ -23,12 +24,15 @@ import java.util.Optional;
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, it controls a creature with transfigure whose transfigure cost it
  * has the lands for, and its library holds exactly one creature card of that
- * creature's mana value. It binds the creature and that library card.
+ * creature's mana value. It binds the active player, the creature and that
+ * library card.
  *
  * <p>Variant {@code no_matching_value} ({@code move_card}): a Craw Wurm (mana
  * value 6; a Hill Giant, mana value 4, when the creature's is 6) is in the
  * library card's place, so the search finds nothing to put onto the
- * battlefield.
+ * battlefield. The fork forces the transfigure activation (FR-010b), its
+ * cost sacrificing the creature, which Forge's AI does not make with nothing
+ * to find.
  */
 public final class Transfigure {
 
@@ -45,7 +49,9 @@ public final class Transfigure {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Transfigure::bind, NO_MATCHING_VALUE,
                 new Application(ForkOperation.MOVE_CARD, fork -> MoveCardOperation.replace(fork.card("card"),
-                        fork.card("creature").getCMC() == WURM_VALUE ? GIANT : WURM)));
+                        fork.card("creature").getCMC() == WURM_VALUE ? GIANT : WURM))
+                        .forcing(ForcedPlay.activate("player", "creature",
+                                ForcedPlay.Line.keyword("TRANSFIGURE"))));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -61,7 +67,8 @@ public final class Transfigure {
                     .filter(card -> card.isCreature() && card.getCMC() == creature.getCMC())
                     .toList();
             if (matching.size() == 1) {
-                return Optional.of(Binding.empty().with("creature", creature).with("card", matching.get(0)));
+                return Optional.of(Binding.empty().with("player", active)
+                        .with("creature", creature).with("card", matching.get(0)));
             }
         }
         return Optional.empty();

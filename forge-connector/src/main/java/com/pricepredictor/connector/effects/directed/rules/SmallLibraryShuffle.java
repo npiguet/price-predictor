@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
@@ -32,6 +33,9 @@ import java.util.Optional;
  * <p>Variant {@code zero-cards} ({@code move_card}): that card is in its
  * owner's graveyard instead, so the library holds one card, which the search
  * takes, and the library shuffled after it is empty.
+ *
+ * <p>It also binds the searcher and its spell, whose cast the fork forces
+ * (FR-010b).
  */
 public final class SmallLibraryShuffle {
 
@@ -45,7 +49,8 @@ public final class SmallLibraryShuffle {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, SmallLibraryShuffle::bind, ZERO_CARDS,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.move(fork.card("card"), ZoneType.Graveyard, null)));
+                        fork -> MoveCardOperation.move(fork.card("card"), ZoneType.Graveyard, null))
+                        .forcing(ForcedPlay.cast("searcher", "spell")));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -58,8 +63,10 @@ public final class SmallLibraryShuffle {
             }
             for (Player searcher : watcher.getOpponents()) {
                 List<Card> library = List.copyOf(searcher.getCardsIn(ZoneType.Library));
-                if (library.size() == 2 && !Boards.searchersInHand(searcher).isEmpty()) {
-                    return Optional.of(Binding.empty().with("card", library.get(1)));
+                List<Card> spells = Boards.searchersInHand(searcher);
+                if (library.size() == 2 && !spells.isEmpty()) {
+                    return Optional.of(Binding.empty().with("searcher", searcher)
+                            .with("spell", spells.get(0)).with("card", library.get(1)));
                 }
             }
         }

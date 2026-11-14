@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
@@ -29,6 +30,9 @@ import java.util.stream.Stream;
  * <p>Variant {@code land_on_top} ({@code move_card}): the land card is the
  * library's one card, so the explore reveals it and puts it into the hand;
  * the explores trigger fires as before.
+ *
+ * <p>It also binds the active player and the exploring card, whose cast the
+ * fork forces (FR-010b).
  */
 public final class ExploreEmptyLibrary {
 
@@ -42,7 +46,8 @@ public final class ExploreEmptyLibrary {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, ExploreEmptyLibrary::bind, LAND_ON_TOP,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.move(fork.card("land"), ZoneType.Library, 0)));
+                        fork -> MoveCardOperation.move(fork.card("land"), ZoneType.Library, 0))
+                        .forcing(ForcedPlay.cast("player", "card")));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -50,13 +55,14 @@ public final class ExploreEmptyLibrary {
             return Optional.empty();
         }
         Player active = Boards.active(live);
+        Optional<Card> explorer = Boards.acting(active, ApiType.Explore);
         if (!active.getCardsIn(ZoneType.Library).isEmpty() || !Boards.watched(live, TriggerType.Explores)
-                || !Boards.holdsActing(active, ApiType.Explore)) {
+                || explorer.isEmpty()) {
             return Optional.empty();
         }
         return Stream.concat(active.getCardsIn(ZoneType.Graveyard).stream(), active.getCardsIn(ZoneType.Hand).stream())
                 .filter(Card::isLand)
                 .findFirst()
-                .map(land -> Binding.empty().with("land", land));
+                .map(land -> Binding.empty().with("player", active).with("card", explorer.get()).with("land", land));
     }
 }

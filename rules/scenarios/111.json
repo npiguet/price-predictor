@@ -2162,7 +2162,6 @@
         "battlefield": {
           "A": [
             "Island",
-            "Island",
             "Island"
           ],
           "B": []
@@ -2183,17 +2182,17 @@
       ],
       "variants": [
         {
-          "label": "mana_available",
-          "polarity": "fires",
-          "delta": "",
-          "expected": "The Mutagen token is a colorless artifact with the subtype Mutagen; Crustacean Commando gets a +1/+1 counter (1/4) and the token is sacrificed."
-        },
-        {
           "label": "no_mana",
           "polarity": "does_not_fire",
-          "delta": "A has only two Islands, both spent on Crustacean Commando.",
-          "expected": "The Mutagen token stays on the battlefield; its ability cannot be activated; Crustacean Commando is 0/3.",
-          "operation": "remove_permanent"
+          "delta": "",
+          "expected": "The Mutagen token stays on the battlefield; its ability cannot be activated; Crustacean Commando is 0/3."
+        },
+        {
+          "label": "mana_available",
+          "polarity": "fires",
+          "delta": "A also controls a third, untapped Island.",
+          "expected": "The Mutagen token is a colorless artifact with the subtype Mutagen; Crustacean Commando gets a +1/+1 counter (1/4) and the token is sacrificed.",
+          "operation": "add_permanent"
         }
       ],
       "cards": [

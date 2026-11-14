@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
@@ -31,6 +32,9 @@ import java.util.Optional;
  * <p>Variant {@code card_too_expensive} ({@code move_card}): the card is Hill
  * Giant, of mana value 4, so the trigger finds no card to exile and nothing
  * becomes plotted.
+ *
+ * <p>It also binds the active player; the fork forces the cast of Kellan
+ * Joins Up first (FR-010b), before the AI could cast the other card.
  */
 public final class PlottedFromHand {
 
@@ -47,7 +51,8 @@ public final class PlottedFromHand {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, PlottedFromHand::bind, CARD_TOO_EXPENSIVE,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.replace(fork.card("card"), HILL_GIANT)));
+                        fork -> MoveCardOperation.replace(fork.card("card"), HILL_GIANT))
+                        .forcing(ForcedPlay.cast("player", "spell")));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -68,6 +73,7 @@ public final class PlottedFromHand {
                 || Boards.manaSources(active).size() >= kellan.get().getCMC() + exilable.get(0).getCMC()) {
             return Optional.empty();
         }
-        return Optional.of(Binding.empty().with("card", exilable.get(0)).with("spell", kellan.get()));
+        return Optional.of(Binding.empty().with("player", active)
+                .with("card", exilable.get(0)).with("spell", kellan.get()));
     }
 }

@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.BoardEdit;
 import com.pricepredictor.connector.effects.directed.operations.PtOperation;
@@ -30,9 +31,10 @@ import java.util.Optional;
  * mana value, and an
  * opponent of that player controls a creature of toughness 1 to N, which the
  * spell would take to 0 or less. It binds the creature Forge's AI rates best
- * among those, the one its removal would most likely aim at, and the spell's
- * card. Whether anyone casts the spell is the fork's and the live game's own
- * decision: the precondition only finds the board where the rule can happen.
+ * among those, the one its removal would most likely aim at, the spell's
+ * card and its holder. Whether the live game casts the spell is its own
+ * decision; the fork forces the cast at the bound creature (FR-010b), which
+ * Forge's AI does not make at a creature the spell no longer kills.
  *
  * <p>Variant {@code tougher} ({@code pt}): the creature's base toughness rises
  * by N, so the spell leaves it at toughness 1 or more, as Drudge Skeletons is
@@ -49,7 +51,8 @@ public final class ToughnessZero {
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, ToughnessZero::bind, TOUGHER,
-                new Application(ForkOperation.PT, ToughnessZero::tougher));
+                new Application(ForkOperation.PT, ToughnessZero::tougher)
+                        .forcing(ForcedPlay.cast("holder", "spell").targeting("creature")));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -70,6 +73,7 @@ public final class ToughnessZero {
                         .toList();
                 if (!killed.isEmpty()) {
                     return Optional.of(Binding.empty()
+                            .with("holder", holder)
                             .with("creature", ComputerUtilCard.getBestCreatureAI(killed))
                             .with("spell", spell));
                 }

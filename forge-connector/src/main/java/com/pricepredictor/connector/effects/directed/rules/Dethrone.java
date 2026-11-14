@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.BoardEdit;
 import com.pricepredictor.connector.effects.directed.operations.LifeOperation;
@@ -47,8 +48,8 @@ import java.util.Set;
  * <p>The fork keeps the not-fired evaluations of the triggers the creature hosts
  * whatever the trigger-negative sampler's balance says (FR-010c): a fork's
  * recording is fresh, so the sampler holds no earlier firing of the mode
- * for a negative to repay. Whether the creature attacks is its seat's own
- * decision.
+ * for a negative to repay. The fork forces the creature's attack on that
+ * opponent (FR-010b), added to its seat's own declaration.
  */
 public final class Dethrone {
 
@@ -61,7 +62,8 @@ public final class Dethrone {
 
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Dethrone::bind, LESS_LIFE,
-                new Application(ForkOperation.LIFE, Dethrone::lessLife).keepingNegativesOf("attacker"));
+                new Application(ForkOperation.LIFE, Dethrone::lessLife).keepingNegativesOf("attacker")
+                        .forcing(ForcedPlay.attack("player", "attacker", "opponent")));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -83,6 +85,7 @@ public final class Dethrone {
             int most = Boards.mostLifeBesides(opponent);
             if (opponent.getLife() >= most && most >= 2 && most - 1 > reach) {
                 return Optional.of(Binding.empty()
+                        .with("player", active)
                         .with("attacker", attacker.get())
                         .with("opponent", opponent));
             }

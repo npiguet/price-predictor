@@ -985,8 +985,7 @@
         "battlefield": {
           "A": [
             "Goblin Bombardment",
-            "Grizzly Bears",
-            "Rest in Peace"
+            "Grizzly Bears"
           ]
         },
         "hand": {},
@@ -1001,21 +1000,21 @@
       ],
       "variants": [
         {
-          "label": "replaced_sacrifice",
-          "polarity": "fires",
-          "delta": "",
-          "expected": "Rest in Peace replaces the graveyard move: Grizzly Bears is exiled instead of put into the graveyard. The cost still counts as paid, so Goblin Bombardment's ability resolves and B takes 1 damage, ending at 19."
-        },
-        {
           "label": "no_replacement",
           "polarity": "other",
-          "delta": "Rest in Peace is not on the battlefield.",
-          "expected": "Grizzly Bears is put into A's graveyard as the cost. The ability resolves and B is at 19.",
-          "operation": "remove_permanent"
+          "delta": "",
+          "expected": "Grizzly Bears is put into A's graveyard as the cost. The ability resolves and B is at 19."
+        },
+        {
+          "label": "replaced_sacrifice",
+          "polarity": "fires",
+          "delta": "Rest in Peace is on the battlefield under A's control.",
+          "expected": "Rest in Peace replaces the graveyard move: Grizzly Bears is exiled instead of put into the graveyard. The cost still counts as paid, so Goblin Bombardment's ability resolves and B takes 1 damage, ending at 19.",
+          "operation": "add_permanent"
         },
         {
           "label": "nothing_to_sacrifice",
-          "polarity": "does_not_fire",
+          "polarity": "other",
           "delta": "Grizzly Bears is not on the battlefield.",
           "expected": "A controls no creature, so the activation is not legal (can_play is false) and B stays at 20.",
           "operation": "remove_permanent"
@@ -1264,7 +1263,7 @@
         "params": {
           "event": "phase_skipped",
           "api": "ChangeZone",
-          "script_param": {
+          "chain_param": {
             "Origin": "Library"
           }
         },

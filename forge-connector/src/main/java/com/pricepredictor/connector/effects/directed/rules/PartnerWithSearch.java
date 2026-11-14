@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
@@ -26,14 +27,15 @@ import java.util.Optional;
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, it holds a card with partner with it has the lands for, and its
  * library holds no card of the partner's name, and at least one card. It
- * binds that card with partner with and the library's top card. The live
+ * binds the active player, that card with partner with and the library's
+ * top card. The live
  * game, where the search finds nothing, is the common side; the fork adds the
  * rare fact.
  *
  * <p>Variant {@code named_card_in_library} ({@code move_card}): a card of the
  * partner's name is in the top card's place, so the search finds it and
- * moves it to the hand, the move 702.124j-1's declaration reads. Whether the
- * card with partner with is cast is its seat's own decision.
+ * moves it to the hand, the move 702.124j-1's declaration reads. The fork
+ * forces the cast of the card with partner with (FR-010b).
  */
 public final class PartnerWithSearch {
 
@@ -48,7 +50,8 @@ public final class PartnerWithSearch {
         return DirectedRule.of(RULE, SCENARIO, PartnerWithSearch::bind, NAMED_CARD_IN_LIBRARY,
                 new Application(ForkOperation.MOVE_CARD, fork -> MoveCardOperation.replace(fork.card("card"),
                         partnerName(fork.card("partner with")).orElseThrow(
-                                () -> new IllegalStateException("the fork's card names no partner")))));
+                                () -> new IllegalStateException("the fork's card names no partner"))))
+                        .forcing(ForcedPlay.cast("player", "partner with")));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -66,7 +69,8 @@ public final class PartnerWithSearch {
             }
             Optional<String> partner = partnerName(card);
             if (partner.isPresent() && library.stream().noneMatch(other -> other.getName().equals(partner.get()))) {
-                return Optional.of(Binding.empty().with("partner with", card).with("card", library.get(0)));
+                return Optional.of(Binding.empty().with("player", active)
+                        .with("partner with", card).with("card", library.get(0)));
             }
         }
         return Optional.empty();

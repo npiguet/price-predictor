@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 
@@ -18,6 +19,7 @@ import com.pricepredictor.connector.effects.directed.operations.MoveCardOperatio
  *
  * <p>Variant {@code no_aura_in_hand} ({@code move_card}): a Grizzly Bears is
  * in that card's place in the hand, so there is no Aura card to exchange with.
+ * The fork forces the swap ({@link AuraSwap#swap}).
  */
 public final class AuraSwapExchange {
 
@@ -32,6 +34,7 @@ public final class AuraSwapExchange {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, live -> AuraSwap.find(live, true), NO_AURA_IN_HAND,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.replace(fork.card("card"), BEARS)));
+                        fork -> MoveCardOperation.replace(fork.card("card"), BEARS))
+                        .forcing(AuraSwap.swap()));
     }
 }

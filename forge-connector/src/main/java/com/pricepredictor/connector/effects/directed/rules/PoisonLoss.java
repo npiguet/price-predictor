@@ -3,9 +3,15 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.CountersOperation;
 import forge.game.Game;
+import forge.game.zone.ZoneType;
+import forge.game.trigger.TriggerType;
+import forge.game.player.Player;
+import forge.game.card.Card;
+import forge.game.ability.ApiType;
 import forge.game.card.CounterEnumType;
 
 import java.util.Optional;
@@ -16,14 +22,17 @@ import java.util.Optional;
  * whose enters trigger gives each player one more, and B stays in the game
  * at 9; at 9 B would lose.
  *
- * <p>The base board, read at a boundary: a main phase begins and a player has
- * eight poison counters, the common side: the turn's next poison counter
- * leaves that player at nine. It binds that player.
+ * <p>The base board, read at a boundary: a main phase begins, a player has
+ * eight poison counters, the common side, and the active player holds a card
+ * it has the lands for that gives each player a poison counter with no
+ * choice (Ichor Rats: {@link #poisonsEachPlayer}). It binds that player, the
+ * active player and the card.
  *
  * <p>Variant {@code nine} ({@code counters}): the player has nine poison
  * counters, so the turn's next poison counter given to it ends the game.
- * What gives it is the seats' own play this turn (an Ichor Rats cast, a
- * poisonous trigger); a fork in which none comes writes no poison record.
+ * The fork forces the card's cast (FR-010b), whose resolution gives the
+ * tenth counter in the record its declaration reads; an attack's poison
+ * would land in a combat record, which it does not read.
  */
 public final class PoisonLoss {
 
@@ -39,16 +48,43 @@ public final class PoisonLoss {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, PoisonLoss::bind, NINE,
                 new Application(ForkOperation.COUNTERS,
-                        fork -> new CountersOperation(fork.player("player"), CounterEnumType.POISON, ONE_SHORT)));
+                        fork -> new CountersOperation(fork.player("player"), CounterEnumType.POISON, ONE_SHORT))
+                        .forcing(ForcedPlay.cast("caster", "card")));
     }
 
     static Optional<Binding> bind(Game live) {
         if (!Boards.atMainPhase(live)) {
             return Optional.empty();
         }
+        Player active = Boards.active(live);
+        Optional<Card> source = active.getCardsIn(ZoneType.Hand).stream()
+                .filter(card -> Boards.affordable(active, card) && poisonsEachPlayer(card))
+                .findFirst();
+        if (source.isEmpty()) {
+            return Optional.empty();
+        }
         return live.getPlayers().stream()
                 .filter(player -> player.getPoisonCounters() == ONE_SHORT - 1)
                 .findFirst()
-                .map(player -> Binding.empty().with("player", player));
+                .map(player -> Binding.empty().with("player", player)
+                        .with("caster", active).with("card", source.get()));
+    }
+
+    /**
+     * Whether the card gives each player a poison counter with no choice: its
+     * spell, or the ability its enters trigger executes, is a {@code Poison}
+     * of {@code Defined$ Player} (Ichor Rats).
+     */
+    static boolean poisonsEachPlayer(Card card) {
+        boolean spell = card.getSpells().stream()
+                .anyMatch(ability -> ability.getApi() == ApiType.Poison && "Player".equals(ability.getParam("Defined")));
+        boolean entering = card.getTriggers().stream()
+                .filter(trigger -> trigger.getMode() == TriggerType.ChangesZone
+                        && "Battlefield".equals(trigger.getParam("Destination"))
+                        && "Card.Self".equals(trigger.getParam("ValidCard")))
+                .map(Boards::executed)
+                .anyMatch(script -> ApiType.Poison.name().equals(Boards.api(script))
+                        && "Player".equals(script.get("Defined")));
+        return spell || entering;
     }
 }

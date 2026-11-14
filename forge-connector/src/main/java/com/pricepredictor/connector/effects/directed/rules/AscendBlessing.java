@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
@@ -24,17 +25,17 @@ import java.util.Optional;
  * <p>The base board, read at a boundary: a main phase of the active
  * player's turn begins with the stack empty; the active player controls
  * exactly nine permanents, phased-out ones included as Forge counts its
- * battlefield zone for ascend, has no city's blessing, and holds a sorcery
- * with ascend it has the untapped lands for (an instant the AI holds for the
- * opponent's turn, after the fork has stopped). It binds the player and the
- * spell. The live game, at nine, is
+ * battlefield zone for ascend, has no city's blessing, and holds an instant
+ * or sorcery with ascend it has the untapped lands for. It binds the player
+ * and the spell. The live game, at nine, is
  * the common side; the fork adds the rare fact.
  *
  * <p>Variant {@code ten_permanents} ({@code add_permanent}): the player also
  * controls a tapped Island, its tenth permanent, which makes no mana this
  * turn and so changes nothing else the turn can play; the spell resolving
  * gives the blessing, the state flag change 702.131a-1's declaration reads.
- * Whether the spell is cast is its seat's own decision.
+ * The fork forces the spell's cast (FR-010b): Forge's AI holds an instant
+ * for the opponent's turn, after the fork has stopped.
  */
 public final class AscendBlessing {
 
@@ -50,7 +51,8 @@ public final class AscendBlessing {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, AscendBlessing::bind, TEN_PERMANENTS,
                 new Application(ForkOperation.ADD_PERMANENT, fork -> new AddPermanentOperation(
-                        ISLAND, fork.player("player"), fork.player("player"), true, false, Map.of())));
+                        ISLAND, fork.player("player"), fork.player("player"), true, false, Map.of()))
+                        .forcing(ForcedPlay.cast("player", "spell")));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -64,7 +66,7 @@ public final class AscendBlessing {
             return Optional.empty();
         }
         Optional<Card> spell = active.getCardsIn(ZoneType.Hand).stream()
-                .filter(card -> card.isSorcery() && card.hasKeyword(Keyword.ASCEND))
+                .filter(card -> (card.isSorcery() || card.isInstant()) && card.hasKeyword(Keyword.ASCEND))
                 .filter(card -> Boards.affordable(active, card))
                 .findFirst();
         return spell.map(card -> Binding.empty().with("player", active).with("spell", card));

@@ -1,17 +1,21 @@
 package com.pricepredictor.connector.effects.directed.rules;
 
+import com.pricepredictor.connector.effects.PlayabilityVerdict;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
-import com.pricepredictor.connector.effects.directed.operations.RemovePermanentOperation;
+import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.player.Player;
+import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 
 import java.util.Optional;
+import java.util.stream.Stream;
 
 /**
  * 111.10v, a Mutagen token is a colourless Mutagen artifact with "{1}, {T},
@@ -20,32 +24,31 @@ import java.util.Optional;
  * Island and puts the counter on Crustacean Commando.
  *
  * <p>The base board, read at a boundary: a main phase of the active player
- * begins, it controls an untapped Mutagen token, a creature is on the
- * battlefield for the counter, and the active player controls exactly one
- * untapped permanent that makes mana, the last mana it has for the {1}. It
- * binds the token and that mana source.
+ * begins, it controls an untapped Mutagen token whose counter ability it
+ * cannot pay for ({@link PlayabilityVerdict#affordable}), as A with two
+ * Islands spent, and a creature is on the battlefield for the counter. It
+ * binds the active player and the token.
  *
- * <p>The active player cannot add a land to its mana this turn
- * ({@link Boards#noLandToPlay}): it holds no land, or its land drop is
- * used, so the turn's land drop cannot undo the mana the variant takes.
- *
- * <p>Variant {@code no_mana} ({@code remove_permanent}): the mana source is not
- * on the battlefield, as A has two Islands, both spent, instead of three, so
- * the token's ability cannot be activated.
+ * <p>Variant {@code mana_available} ({@code add_permanent}): the active
+ * player also controls an untapped Island, the mana the {1} needs. The fork
+ * forces the token's activation (FR-010b), its target drawn among the
+ * creatures, so its resolution puts the counter.
  */
 public final class MutagenToken {
 
     public static final String RULE = "111.10v";
     static final String SCENARIO = "111.10v-1";
-    static final String NO_MANA = "no_mana";
+    static final String MANA_AVAILABLE = "mana_available";
+    static final String ISLAND = "Island";
 
     private MutagenToken() {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, MutagenToken::bind, NO_MANA,
-                new Application(ForkOperation.REMOVE_PERMANENT,
-                        fork -> new RemovePermanentOperation(fork.card("mana source"))));
+        return DirectedRule.of(RULE, SCENARIO, MutagenToken::bind, MANA_AVAILABLE,
+                new Application(ForkOperation.ADD_PERMANENT,
+                        fork -> AddPermanentOperation.of(ISLAND, fork.player("player"), false))
+                        .forcing(ForcedPlay.activate("player", "token", ForcedPlay.Line.api("PutCounter"))));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -53,22 +56,20 @@ public final class MutagenToken {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        if (!Boards.noLandToPlay(active)) {
-            return Optional.empty();
-        }
-        Optional<Card> token = active.getCardsIn(ZoneType.Battlefield).stream()
+        return active.getCardsIn(ZoneType.Battlefield).stream()
                 .filter(card -> !card.isTapped() && isMutagen(card))
-                .findFirst();
-        Optional<Card> source = Boards.soleManaSource(active);
-        if (token.isEmpty() || source.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(Binding.empty().with("token", token.get()).with("mana source", source.get()));
+                .filter(card -> counterAbility(card).noneMatch(ability ->
+                        PlayabilityVerdict.of(ability, active).affordable()))
+                .findFirst()
+                .map(token -> Binding.empty().with("player", active).with("token", token));
     }
 
     /** Whether the card is a Mutagen token with its counter ability. */
     static boolean isMutagen(Card card) {
-        return card.isToken() && card.getType().hasSubtype("Mutagen")
-                && card.getSpellAbilities().stream().anyMatch(ability -> ability.getApi() == ApiType.PutCounter);
+        return card.isToken() && card.getType().hasSubtype("Mutagen") && counterAbility(card).findAny().isPresent();
+    }
+
+    private static Stream<SpellAbility> counterAbility(Card card) {
+        return card.getSpellAbilities().stream().filter(ability -> ability.getApi() == ApiType.PutCounter);
     }
 }

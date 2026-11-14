@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.ReplaceCardOperation;
 import forge.game.Game;
@@ -31,6 +32,11 @@ import java.util.Optional;
  * <p>Variant {@code target-survives} ({@code replace_card}): Centaur Courser
  * (3/3) is in that creature's place, so the damage that would have made the
  * target illegal leaves it alive and the Aura attaches to it.
+ *
+ * <p>It also binds the active player and the card with bestow, whose
+ * bestowed cast the fork forces, its target drawn (FR-010b): the creature
+ * the edit replaced has gone, and the card in its place has a new id. The
+ * scenario's fires side, the target gone in response, is no forced play.
  */
 public final class BestowIllegalTarget {
 
@@ -47,7 +53,9 @@ public final class BestowIllegalTarget {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, BestowIllegalTarget::bind, TARGET_SURVIVES,
                 new Application(ForkOperation.REPLACE_CARD,
-                        fork -> new ReplaceCardOperation(fork.card("creature"), COURSER)));
+                        fork -> new ReplaceCardOperation(fork.card("creature"), COURSER))
+                        .forcing(ForcedPlay.cast("player", "card")
+                                .playing(new ForcedPlay.Line("bestow", ability -> ability.isSpell() && ability.isBestow()))));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -59,8 +67,10 @@ public final class BestowIllegalTarget {
         if (creatures.size() != 1 || creatures.get(0).getNetToughness() >= COURSER_TOUGHNESS) {
             return Optional.empty();
         }
-        boolean bestows = active.getCardsIn(ZoneType.Hand).stream()
-                .anyMatch(card -> Boards.canPayKeyword(active, card, Keyword.BESTOW));
-        return bestows ? Optional.of(Binding.empty().with("creature", creatures.get(0))) : Optional.empty();
+        return active.getCardsIn(ZoneType.Hand).stream()
+                .filter(card -> Boards.canPayKeyword(active, card, Keyword.BESTOW))
+                .findFirst()
+                .map(card -> Binding.empty().with("player", active).with("card", card)
+                        .with("creature", creatures.get(0)));
     }
 }

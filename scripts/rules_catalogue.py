@@ -985,6 +985,10 @@ NOT_DIRECTED = {
     "111.10n": "its lacking side is a Sorcerer Role's static contributing no boost, which the "
                "Role always gives; its variant creates no Role, so its fork writes no record "
                "of a Role's static",
+    "111.10p": "its lacking side is a Virtuous Role's static contributing no boost, which the "
+               "Role always gives; its variant leaves Ellivere's enters trigger no target, so "
+               "even with Ellivere's cast forced no Role is created and its fork writes no "
+               "record of a Role's static",
     "704.5v": "its lacking side is a battle at zero defense put into the graveyard by the "
               "state-based check, which needs its defeat trigger countered in response (Stifle "
               "after the damage); a defeated Siege's own trigger exiles it",

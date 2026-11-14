@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
@@ -32,6 +33,9 @@ import java.util.Optional;
  * the bottom of the library instead, so once the conniving card is cast the
  * hand is empty and the connive discards nothing; the connives trigger fires
  * as before.
+ *
+ * <p>It also binds the active player and the conniving card, whose cast
+ * the fork forces (FR-010b).
  */
 public final class ConniveWithoutDraw {
 
@@ -45,7 +49,8 @@ public final class ConniveWithoutDraw {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, ConniveWithoutDraw::bind, NOTHING_TO_DISCARD,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.move(fork.card("card"), ZoneType.Library, null)));
+                        fork -> MoveCardOperation.move(fork.card("card"), ZoneType.Library, null))
+                        .forcing(ForcedPlay.cast("player", "conniver")));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -54,13 +59,15 @@ public final class ConniveWithoutDraw {
         }
         Player active = Boards.active(live);
         List<Card> hand = List.copyOf(active.getCardsIn(ZoneType.Hand));
+        Optional<Card> conniver = Boards.acting(active, ApiType.Connive);
         if (active.canDraw() || hand.size() != 2 || !Boards.watched(live, TriggerType.Connives)
-                || !Boards.holdsActing(active, ApiType.Connive)) {
+                || conniver.isEmpty()) {
             return Optional.empty();
         }
         return hand.stream()
                 .filter(card -> !Boards.acts(card, ApiType.Connive))
                 .findFirst()
-                .map(card -> Binding.empty().with("card", card));
+                .map(card -> Binding.empty().with("player", active).with("conniver", conniver.get())
+                        .with("card", card));
     }
 }

@@ -293,9 +293,10 @@ def test_the_rules_always_listed_are_704_5f_and_702_98a_each_with_a_reason():
 
 
 #: The rules no single board edit yields the lacking side of (the user's
-#: decision of 2026-11-14, DF-A): each has its own reason.
+#: decision of 2026-11-14, DF-A), and 111.10p, which no forced play rescues
+#: either (DF-B): each has its own reason.
 NO_EDIT_YIELDS_THEM = [
-    "104.6", "111.10n", "119.8", "205.1a", "400.6", "701.12h", "701.23f", "701.24g",
+    "104.6", "111.10n", "111.10p", "119.8", "205.1a", "400.6", "701.12h", "701.23f", "701.24g",
     "702.102c", "702.133a", "702.154a", "702.167a", "702.35a", "702.62c", "702.70b",
     "702.85a", "704.5v", "704.7", "707.10d", "712.11d", "730.2g"]
 

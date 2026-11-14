@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
@@ -22,11 +23,13 @@ import java.util.Optional;
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, it holds a card with transmute whose transmute cost it has the lands
  * for, and its library holds exactly one card of that card's mana value. It
- * binds the transmuting card and that library card.
+ * binds the active player, the transmuting card and that library card.
  *
  * <p>Variant {@code no_match} ({@code move_card}): a Centaur Courser (mana
  * value 3; a Grizzly Bears, mana value 2, when the transmuting card's is 3) is
- * in the library card's place, so the search finds nothing.
+ * in the library card's place, so the search finds nothing. The fork forces
+ * the transmute activation (FR-010b), its cost discarding the card, which
+ * Forge's AI does not make with nothing to find.
  */
 public final class Transmute {
 
@@ -43,7 +46,9 @@ public final class Transmute {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, Transmute::bind, NO_MATCH,
                 new Application(ForkOperation.MOVE_CARD, fork -> MoveCardOperation.replace(fork.card("card"),
-                        fork.card("transmuter").getCMC() == COURSER_VALUE ? BEARS : COURSER)));
+                        fork.card("transmuter").getCMC() == COURSER_VALUE ? BEARS : COURSER))
+                        .forcing(ForcedPlay.activate("player", "transmuter",
+                                ForcedPlay.Line.keyword("TRANSMUTE"))));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -59,7 +64,8 @@ public final class Transmute {
                     .filter(card -> card.getCMC() == transmuter.getCMC())
                     .toList();
             if (matching.size() == 1) {
-                return Optional.of(Binding.empty().with("transmuter", transmuter).with("card", matching.get(0)));
+                return Optional.of(Binding.empty().with("player", active)
+                        .with("transmuter", transmuter).with("card", matching.get(0)));
             }
         }
         return Optional.empty();

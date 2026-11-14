@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
@@ -14,6 +15,7 @@ import forge.game.replacement.ReplacementType;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -27,14 +29,15 @@ import java.util.Optional;
  * player holds a spell it has the mana for that returns a card from a
  * graveyard to the battlefield, and no permanent on the battlefield has a
  * replacement effect that stops a card entering the battlefield from a
- * graveyard. It binds the active player. The live game, where the creature
+ * graveyard. It binds the active player and that spell. The live game, where the creature
  * would enter, is the common side; the fork adds the rare fact.
  *
  * <p>Variant {@code cage} ({@code add_permanent}): Grafdigger's Cage is on
  * the battlefield under the active player's control, so a creature card the
  * spell returns from the graveyard stays there: the rewrite record of the
- * prevented move is what 614.17d-1's declaration reads. Whether the spell is
- * cast is its seat's own decision.
+ * prevented move is what 614.17d-1's declaration reads. The fork forces the
+ * spell's cast, its target drawn (FR-010b): Forge's AI does not cast it
+ * under the Cage.
  */
 public final class CantEnterBattlefield {
 
@@ -49,7 +52,8 @@ public final class CantEnterBattlefield {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, CantEnterBattlefield::bind, CAGE,
                 new Application(ForkOperation.ADD_PERMANENT,
-                        fork -> AddPermanentOperation.of(GRAFDIGGERS_CAGE, fork.player("player"), false)));
+                        fork -> AddPermanentOperation.of(GRAFDIGGERS_CAGE, fork.player("player"), false))
+                        .forcing(ForcedPlay.cast("player", "card")));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -57,12 +61,12 @@ public final class CantEnterBattlefield {
             return Optional.empty();
         }
         Player active = Boards.active(live);
-        if (active.getCardsIn(ZoneType.Graveyard).stream().noneMatch(Card::isCreature)
-                || Boards.castableInHand(active, CantEnterBattlefield::reanimates).isEmpty()
+        List<Card> spells = Boards.castableInHand(active, CantEnterBattlefield::reanimates);
+        if (active.getCardsIn(ZoneType.Graveyard).stream().noneMatch(Card::isCreature) || spells.isEmpty()
                 || live.getCardsIn(ZoneType.Battlefield).stream().anyMatch(CantEnterBattlefield::stopsEntering)) {
             return Optional.empty();
         }
-        return Optional.of(Binding.empty().with("player", active));
+        return Optional.of(Binding.empty().with("player", active).with("card", spells.get(0)));
     }
 
     /** Whether one of the permanent's replacement effects stops a card entering the battlefield from a graveyard. */

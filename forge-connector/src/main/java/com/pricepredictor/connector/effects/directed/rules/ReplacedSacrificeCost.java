@@ -1,10 +1,12 @@
 package com.pricepredictor.connector.effects.directed.rules;
 
+import com.pricepredictor.connector.effects.PlayabilityVerdict;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
-import com.pricepredictor.connector.effects.directed.operations.RemovePermanentOperation;
+import com.pricepredictor.connector.effects.directed.operations.AddPermanentOperation;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.card.CardLists;
@@ -25,29 +27,37 @@ import java.util.Optional;
  *
  * <p>The base board, read at a boundary: a main phase of the active player
  * begins, the active player controls a permanent with an activated ability
- * whose cost sacrifices one other permanent, for which it controls exactly
- * one candidate, a creature, and a permanent on the battlefield replaces
- * that creature's move to a graveyard ({@link Boards#replacesGraveyardMoveOf}:
- * Rest in Peace does, an opponent's Leyline of the Void does, one's own does
- * not). It binds that creature and the ability's permanent.
+ * whose cost sacrifices one other permanent, which the rules let it activate
+ * now ({@link PlayabilityVerdict}), and a creature that cost could sacrifice,
+ * whose move to a graveyard no permanent on the battlefield replaces
+ * ({@link Boards#replacesGraveyardMoveOf}). It binds the active player, the
+ * first such creature and the ability's permanent.
  *
- * <p>Variant {@code nothing_to_sacrifice} ({@code remove_permanent}): the
- * creature is not on the battlefield, so nothing can be sacrificed and the
- * ability cannot be activated.
+ * <p>Variant {@code replaced_sacrifice} ({@code add_permanent}): Rest in
+ * Peace is on the battlefield under the active player's control, so the
+ * sacrificed creature is exiled instead. The fork forces the activation, its
+ * cost sacrificing the bound creature (FR-010b), whose replaced move is the
+ * point; Forge's AI rarely sacrifices a creature to an outlet. The
+ * replacement's rewrite record is written as the cost is paid, with the
+ * stack empty.
  */
 public final class ReplacedSacrificeCost {
 
     public static final String RULE = "118.11";
     static final String SCENARIO = "118.11-1";
-    static final String NOTHING_TO_SACRIFICE = "nothing_to_sacrifice";
+    static final String REPLACED_SACRIFICE = "replaced_sacrifice";
+    static final String REST_IN_PEACE = "Rest in Peace";
 
     private ReplacedSacrificeCost() {
     }
 
     public static DirectedRule rule() {
-        return DirectedRule.of(RULE, SCENARIO, ReplacedSacrificeCost::bind, NOTHING_TO_SACRIFICE,
-                new Application(ForkOperation.REMOVE_PERMANENT,
-                        fork -> new RemovePermanentOperation(fork.card("creature"))));
+        return DirectedRule.of(RULE, SCENARIO, ReplacedSacrificeCost::bind, REPLACED_SACRIFICE,
+                new Application(ForkOperation.ADD_PERMANENT,
+                        fork -> AddPermanentOperation.of(REST_IN_PEACE, fork.player("player"), false))
+                        .forcing(ForcedPlay.activate("player", "permanent",
+                                new ForcedPlay.Line("sacrifice outlet", ReplacedSacrificeCost::sacrificesAnother))
+                                .paying("creature")));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -57,36 +67,45 @@ public final class ReplacedSacrificeCost {
         Player active = Boards.active(live);
         for (Card permanent : active.getCardsIn(ZoneType.Battlefield)) {
             for (SpellAbility ability : permanent.getSpellAbilities()) {
-                Optional<Card> only = soleSacrifice(ability, active);
-                if (only.isPresent() && live.getCardsIn(ZoneType.Battlefield).stream()
-                        .anyMatch(replacer -> Boards.replacesGraveyardMoveOf(replacer, only.get()))) {
-                    return Optional.of(Binding.empty().with("creature", only.get()).with("permanent", permanent));
+                if (!sacrificesAnother(ability)) {
+                    continue;
+                }
+                Optional<Card> creature = sacrificeable(ability, active).stream()
+                        .filter(candidate -> live.getCardsIn(ZoneType.Battlefield).stream()
+                                .noneMatch(replacer -> Boards.replacesGraveyardMoveOf(replacer, candidate)))
+                        .findFirst();
+                if (creature.isPresent() && PlayabilityVerdict.of(ability, active).playable()) {
+                    return Optional.of(Binding.empty().with("player", active)
+                            .with("creature", creature.get()).with("permanent", permanent));
                 }
             }
         }
         return Optional.empty();
     }
 
-    /**
-     * The one creature the activated ability's cost could sacrifice, when its
-     * cost sacrifices one permanent other than its own and the activator
-     * controls exactly one that qualifies.
-     */
-    static Optional<Card> soleSacrifice(SpellAbility ability, Player activator) {
+    /** Whether the ability is an activated ability whose cost sacrifices one permanent other than its own. */
+    static boolean sacrificesAnother(SpellAbility ability) {
+        return sacrifice(ability).isPresent();
+    }
+
+    private static Optional<CostSacrifice> sacrifice(SpellAbility ability) {
         if (!ability.isActivatedAbility() || ability.getPayCosts() == null) {
             return Optional.empty();
         }
         for (CostPart part : ability.getPayCosts().getCostParts()) {
-            if (!(part instanceof CostSacrifice sacrifice) || sacrifice.payCostFromSource()
-                    || !Integer.valueOf(1).equals(sacrifice.convertAmount())) {
-                continue;
-            }
-            List<Card> candidates = CardLists.getValidCards(activator.getCardsIn(ZoneType.Battlefield),
-                    sacrifice.getType().split(";"), activator, ability.getHostCard(), ability);
-            if (candidates.size() == 1 && candidates.get(0).isCreature()) {
-                return Optional.of(candidates.get(0));
+            if (part instanceof CostSacrifice sacrifice && !sacrifice.payCostFromSource()
+                    && Integer.valueOf(1).equals(sacrifice.convertAmount())) {
+                return Optional.of(sacrifice);
             }
         }
         return Optional.empty();
+    }
+
+    /** The creatures the activated ability's sacrifice cost could take from {@code activator}. */
+    static List<Card> sacrificeable(SpellAbility ability, Player activator) {
+        return sacrifice(ability).map(sacrifice -> CardLists.getValidCards(
+                        activator.getCardsIn(ZoneType.Battlefield), sacrifice.getType().split(";"),
+                        activator, ability.getHostCard(), ability).stream().filter(Card::isCreature).toList())
+                .orElse(List.of());
     }
 }

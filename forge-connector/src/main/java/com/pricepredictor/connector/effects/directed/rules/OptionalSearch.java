@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects.directed.rules;
 import com.pricepredictor.connector.effects.directed.Application;
 import com.pricepredictor.connector.effects.directed.Binding;
 import com.pricepredictor.connector.effects.directed.DirectedRule;
+import com.pricepredictor.connector.effects.directed.ForcedPlay;
 import com.pricepredictor.connector.effects.directed.ForkOperation;
 import com.pricepredictor.connector.effects.directed.operations.MoveCardOperation;
 import forge.game.Game;
@@ -29,11 +30,13 @@ import java.util.Optional;
  * controls a permanent whose optional beginning-of-upkeep trigger searches
  * its library and then, if it does, skips a phase (Elfhame Sanctuary), and
  * exactly one card in its library is of the type the search finds. It binds
- * that card.
+ * the active player, the permanent and that card.
  *
  * <p>Variant {@code search_finds_nothing} ({@code move_card}): a Lightning
  * Bolt is in that card's place in the library, so the search finds nothing,
- * and the phase is still skipped if the player chose to search.
+ * and the phase is still skipped if the player chose to search. The fork
+ * answers the "you may search" yes (FR-010b), which Forge's AI may decline
+ * with nothing to find.
  */
 public final class OptionalSearch {
 
@@ -48,7 +51,8 @@ public final class OptionalSearch {
     public static DirectedRule rule() {
         return DirectedRule.of(RULE, SCENARIO, OptionalSearch::bind, SEARCH_FINDS_NOTHING,
                 new Application(ForkOperation.MOVE_CARD,
-                        fork -> MoveCardOperation.replace(fork.card("card"), BOLT)));
+                        fork -> MoveCardOperation.replace(fork.card("card"), BOLT))
+                        .forcing(ForcedPlay.answer("player", "permanent", true)));
     }
 
     static Optional<Binding> bind(Game live) {
@@ -65,7 +69,8 @@ public final class OptionalSearch {
                 List<Card> matching = CardLists.getValidCards(active.getCardsIn(ZoneType.Library),
                         found.get().split(","), active, permanent, null);
                 if (matching.size() == 1) {
-                    return Optional.of(Binding.empty().with("card", matching.get(0)));
+                    return Optional.of(Binding.empty().with("player", active)
+                            .with("permanent", permanent).with("card", matching.get(0)));
                 }
             }
         }

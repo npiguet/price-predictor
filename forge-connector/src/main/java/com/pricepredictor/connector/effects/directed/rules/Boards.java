@@ -373,10 +373,11 @@ final class Boards {
                 || card.getTriggers().stream().anyMatch(trigger -> api.name().equals(api(executed(trigger))));
     }
 
-    /** Whether {@code player} holds a card it has the lands for ({@link #affordable}) that {@link #acts} with {@code api}. */
-    static boolean holdsActing(Player player, ApiType api) {
+    /** The first card {@code player} holds and has the lands for ({@link #affordable}) that {@link #acts} with {@code api}. */
+    static Optional<Card> acting(Player player, ApiType api) {
         return player.getCardsIn(ZoneType.Hand).stream()
-                .anyMatch(card -> affordable(player, card) && acts(card, api));
+                .filter(card -> affordable(player, card) && acts(card, api))
+                .findFirst();
     }
 
     /** Whether a permanent on the battlefield has a trigger of {@code mode} (Explores, Connives, Discover). */
