@@ -313,8 +313,13 @@ final class ClauseOutcomeRouter {
      */
     private static EffectEvent outcomeEvent(EventType type, Map<?, ?> params) {
         EffectEvent event = new EffectEvent(type);
-        for (Map.Entry<?, ?> entry : params.entrySet()) {
-            String key = String.valueOf(entry.getKey());
+        // In key order: Forge builds most outcomes' params with Map.of, whose
+        // iteration order changes from one JVM to the next, and the event's
+        // parameters are written in the order they are put.
+        Map<String, Object> ordered = new TreeMap<>();
+        params.forEach((key, value) -> ordered.put(String.valueOf(key), value));
+        for (Map.Entry<String, Object> entry : ordered.entrySet()) {
+            String key = entry.getKey();
             Object value = entry.getValue();
             switch (key) {
                 case "subjects" -> addOutcomeSubjects(event, value);
