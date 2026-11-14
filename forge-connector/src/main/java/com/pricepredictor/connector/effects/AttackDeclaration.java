@@ -211,7 +211,8 @@ public final class AttackDeclaration {
 
         /**
          * The candidates that may attack no defender, each with the first
-         * static, in defender order, that keeps it from one; none where the
+         * static, in defender order, that keeps it from one, else its own
+         * keyword line that keeps it from attacking at all; none where the
          * rules themselves do.
          */
         String forbiddenJson(BiFunction<Card, GameEntity, StaticAbility> cantAttackStatic) {
@@ -229,7 +230,9 @@ public final class AttackDeclaration {
                         break;
                     }
                 }
-                forbidden.add(PlayabilityChannel.forbiddenJson(card, responsible));
+                forbidden.add(PlayabilityChannel.forbiddenJson(card,
+                        PlayabilityChannel.Responsible.of(card,
+                                responsible, PlayabilityChannel.ownAttackingKeyword(card))));
             }
             return Json.array(forbidden, Function.identity());
         }

@@ -324,6 +324,172 @@ class PlayabilityChannelTest {
     }
 
     /**
+     * The blockers record Forge's own verdict gives: the candidates
+     * {@code CombatUtil.canBlock(anchor, candidate, combat)} admits are
+     * legal, as the engine's declaration has them.
+     */
+    private int declarations;
+
+    private String blockersRecord(Game game, Player attacking, Player blocking, Card anchor,
+            List<Card> attackers, List<Card> candidates) throws Throwable {
+        Combat combat = new Combat(attacking);
+        for (Card attacker : attackers) {
+            combat.addAttacker(attacker, blocking);
+        }
+        game.getPhaseHandler().setCombat(combat);
+        List<Card> legal = candidates.stream()
+                .filter(c -> forge.game.combat.CombatUtil.canBlock(anchor, c, combat)).toList();
+        List<String> lines = ShardRun.records(
+                tempDir.resolve("declaration-" + declarations++), game,
+                (bracket, collectors) -> collectors.playability().legalityHandler().invoke(
+                        null, ON_BLOCKERS_DECLARABLE,
+                        new Object[]{blocking, anchor, candidates, legal, 1}));
+        return recordsOf(lines).get(0);
+    }
+
+    /**
+     * Another attacker that "must be blocked if able", "by exactly one
+     * creature" or "by two or more creatures" while that is unmet makes
+     * Forge hold every able blocker to it, so a creature free to block the
+     * anchor otherwise is refused: a requirement elsewhere, not a
+     * prohibition.
+     */
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "CARDNAME must be blocked if able.",
+            "CARDNAME must be blocked by exactly one creature if able.",
+            "CARDNAME must be blocked by two or more creatures if able."})
+    void aMustBeBlockedAttackerElsewhereMakesTheBlockerRequiredElsewhere(String keyword)
+            throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_BLOCKERS);
+        Player attacking = game.getPlayers().get(0);
+        Player blocking = game.getPlayers().get(1);
+        Card bears = TestBoard.inPlay(game, attacking, "Grizzly Bears");
+        // Canopy Stalker, Nacatl War Pride, Gorm the Great print these.
+        Card required = TestBoard.inPlay(game, attacking, "Runeclaw Bear");
+        required.addChangedCardKeywords(
+                List.of(keyword), null, false, game.getNextTimestamp(), null);
+        Card blocker = TestBoard.inPlay(game, blocking, "Hill Giant");
+
+        String record = blockersRecord(
+                game, attacking, blocking, bears, List.of(bears, required), List.of(blocker));
+
+        assertTrue(record.contains("\"legal_blockers\":[]"), "Forge refuses the block: " + record);
+        assertTrue(record.contains("\"forbidden\":[{\"entity\":\"" + Refs.of(blocker)
+                + "\",\"responsible_static\":[],\"required_elsewhere\":true}]"), record);
+    }
+
+    /** A creature printing "can't attack or block" names that keyword line, its own. */
+    @Test
+    void aBlockerItsOwnKeywordKeepsOutNamesThatLineAsItsOwn() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_BLOCKERS);
+        Player attacking = game.getPlayers().get(0);
+        Player blocking = game.getPlayers().get(1);
+        Card bears = TestBoard.inPlay(game, attacking, "Grizzly Bears");
+        Card grakk = TestBoard.inPlay(game, blocking, "Grakk the Pacifist");
+
+        String record = blockersRecord(
+                game, attacking, blocking, bears, List.of(bears), List.of(grakk));
+
+        assertTrue(record.contains("\"forbidden\":[{\"entity\":\"" + Refs.of(grakk)
+                + "\",\"responsible_static\":[{\"script_file\":\"cardsfolder/g/grakk_the_pacifist.txt\""
+                + ",\"face\":0,\"trait_kind\":\"keyword\",\"index_within_kind\":0}]"
+                + ",\"responsible_own\":true}]"), record);
+    }
+
+    /**
+     * "Can't attack or block alone" keeps a creature out while its
+     * controller has no other creature, naming its own line; with another
+     * creature beside it, it may block.
+     */
+    @Test
+    void aBlockerAloneItsOwnKeywordKeepsOutNamesThatLine() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_BLOCKERS);
+        Player attacking = game.getPlayers().get(0);
+        Player blocking = game.getPlayers().get(1);
+        Card bears = TestBoard.inPlay(game, attacking, "Grizzly Bears");
+        Card flunkies = TestBoard.inPlay(game, blocking, "Mogg Flunkies");
+
+        String alone = blockersRecord(
+                game, attacking, blocking, bears, List.of(bears), List.of(flunkies));
+        assertTrue(alone.contains("\"responsible_static\":[{\"script_file\":"
+                + "\"cardsfolder/m/mogg_flunkies.txt\""), alone);
+        assertTrue(alone.contains("\"responsible_own\":true"), alone);
+
+        Card friend = TestBoard.inPlay(game, blocking, "Hill Giant");
+        String together = blockersRecord(
+                game, attacking, blocking, bears, List.of(bears), List.of(flunkies, friend));
+        assertTrue(together.contains("\"forbidden\":[]"), together);
+    }
+
+    /** Pacifism is another card's static: the entry names it and is not the creature's own. */
+    @Test
+    void aStaticElsewhereIsNotTheCreaturesOwn() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_BLOCKERS);
+        Player attacking = game.getPlayers().get(0);
+        Player blocking = game.getPlayers().get(1);
+        Card bears = TestBoard.inPlay(game, attacking, "Grizzly Bears");
+        Card blocker = TestBoard.inPlay(game, blocking, "Hill Giant");
+        TestBoard.inPlay(game, attacking, "Pacifism").attachToEntity(blocker, null);
+
+        String record = blockersRecord(
+                game, attacking, blocking, bears, List.of(bears), List.of(blocker));
+
+        assertTrue(record.contains("cardsfolder/p/pacifism.txt"), record);
+        assertFalse(record.contains("responsible_own"), record);
+        assertFalse(record.contains("responsible_unresolved"), record);
+    }
+
+    /**
+     * A static the resolver cannot key (an engine-built effect card's, no
+     * script and no ability that made it) still explains the forbidden
+     * blocker: no key, and the reason there is none. An effect a resolved
+     * spell left (Ember Gale's) keys to that spell's line.
+     */
+    @Test
+    void aBlockerAnUnkeyableStaticKeepsOutSaysWhyItHasNoKey() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_BLOCKERS);
+        Player attacking = game.getPlayers().get(0);
+        Player blocking = game.getPlayers().get(1);
+        Card bears = TestBoard.inPlay(game, attacking, "Grizzly Bears");
+        Card blocker = TestBoard.inPlay(game, blocking, "Hill Giant");
+        Card effect = new Card(game.nextCardId(), game);
+        effect.setName("Engine Effect");
+        effect.setOwner(attacking);
+        effect.setGamePieceType(forge.card.GamePieceType.EFFECT);
+        effect.addStaticAbility("Mode$ CantBlock | ValidCard$ Creature.OppCtrl | EffectZone$ Command"
+                + " | Description$ Creatures your opponents control can't block.");
+        game.getAction().moveTo(forge.game.zone.ZoneType.Command, effect, null, null);
+        assertTrue(forge.game.staticability.StaticAbilityCantAttackBlock.cantBlockStatic(blocker)
+                != null, "the effect's static keeps the blocker out");
+
+        String record = blockersRecord(
+                game, attacking, blocking, bears, List.of(bears), List.of(blocker));
+
+        assertTrue(record.contains("\"responsible_static\":[],\"responsible_unresolved\":\"engine_effect\""),
+                record);
+    }
+
+    /** An attacker printing "can't attack or block" names that keyword line too. */
+    @Test
+    void anAttackerItsOwnKeywordKeepsOutNamesThatLine() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.COMBAT_DECLARE_ATTACKERS);
+        Player active = game.getPlayers().get(0);
+        Player other = game.getPlayers().get(1);
+        Card grakk = TestBoard.inPlay(game, active, "Grakk the Pacifist");
+
+        List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) ->
+                collectors.playability().legalityHandler().invoke(null, ON_ATTACKERS_DECLARABLE,
+                        new Object[]{active, other, List.of(grakk), List.of()}));
+
+        String record = recordsOf(lines).get(0);
+        assertTrue(record.contains("\"forbidden\":[{\"entity\":\"" + Refs.of(grakk)
+                + "\",\"responsible_static\":[{\"script_file\":\"cardsfolder/g/grakk_the_pacifist.txt\""),
+                record);
+        assertTrue(record.contains("\"responsible_own\":true"), record);
+    }
+
+    /**
      * Every declaration on a board that moved is written, and the same
      * declaration on an unchanged board is written once (FR-028). A defender
      * asked about a second time is a new declaration.
