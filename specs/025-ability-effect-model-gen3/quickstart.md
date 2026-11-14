@@ -110,6 +110,15 @@ directory passes each earlier run's directory as `--count-from`, so their covera
 interrupted `collect-variants` restarts into the same directory with the same `--seed` and
 `--continues <run id>`, the run id its `run.json` records.
 
+A collector's round end lets every worker finish the game it is playing (at most
+`--stop-timeout`, 600 s, before a kill), and workers recycle themselves at a game end
+(`--recycle-seconds`, 600 s), so a run's games are cut only by a crash, a kill past the timeout
+or Ctrl-C. A console Ctrl-C reaches every worker JVM, which closes its shard and exits at once,
+its game cut; the supervisor waits for none of them, and a worker still running is asked to
+stop and given `--stop-timeout`, a second Ctrl-C killing it at once. Each round's report and
+`run.json` say how the workers ended (`worker_stops`) and how many cut games the counts left out
+(`cut_games`).
+
 ## Stage 6 — curate and freeze (story 6, story 8)
 
 ```bash

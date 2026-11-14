@@ -66,7 +66,10 @@ with what they are counted under. The counts file lists a rule no record tags un
 and `carriers`: per rule, the script files of the cards whose lines are its tags' condition
 entities, each with the line keys its tags act through and its record count, read by the steered
 variant round (FR-058f), as `rule -> [{script_file, records, lines: [{key, records}]}]`, a key
-spelled as a sidecar spells it (without `script_file`). Exit 1 when the directory holds no shard, holds a
+spelled as a sidecar spells it (without `script_file`). A gen-3 game whose shard holds no
+game-end marker (a cut game, which `build-corpus` drops) counts toward no rule, review entry or
+carrier; its records are still read and in `records`, and the file's `cut_games` and a printed
+line say how many games were left out. Exit 1 when the directory holds no shard, holds a
 gen-1 shard, or mixes generations.
 
 ## `python -m effects validate-corpus` (existing)
@@ -148,11 +151,17 @@ the same three rates (FR-059a).
 
 `--workers N` is 1 to 12 (exit 2, usage). With `--effect-records DIR`, `DIR` is the run directory:
 the shards at its top level, every worker log under `DIR/logs/` (`<run id>.<slot>.log`, never
-beside the shards). At every status line and at the end the supervisor scans what the logs gained
-for failure lines (`price_predictor.domain.worker_failures`, as on the collectors) and prints them
-by kind; at the end it prints the run's totals and records in its `run.json` entry `run_id`,
-`matches`, `worker_failures`,
-`worker_failure_examples` and `worker_survivors`. A run that completed matches and wrote no effect
+beside the shards), each worker's stop file beside its log and the run's progress file
+(`logs/<run id>.progress.txt`, a line per match played to its end, random-seat matches
+included). The workers honour the stop protocol (§ Match worker stop protocol, with
+`--stop-timeout` and `--recycle-seconds`, both refused without `--effect-records`, exit 2). At
+every status line and at the end the supervisor scans what the logs gained for failure lines
+(`price_predictor.domain.worker_failures`, as on the collectors) and prints them by kind; at the
+end it prints the run's totals, the hook-failure counts and how the workers ended, and records in
+its `run.json` entry `run_id`, `matches` (outcome rows), `matches_played` (progress lines),
+`worker_failures`, `worker_failure_examples`, `hook_failures`, `worker_survivors`, `worker_stops`,
+`stop_timeout` and `recycle_seconds`. A run that played matches (outcome rows, progress lines or
+random-seat match errors, so a run of random-seat matches alone counts) and wrote no effect
 record exits 1. `match-outcomes.txt` and `cards-played.txt` stay at `output/sealed/`.
 
 ## `python -m effects collect-coverage` (existing)
@@ -187,6 +196,8 @@ and 1 when units remain that no deck could hold.
 | `--workers N` | 1 to 12 | 2 (usage) |
 | `--decks-per-round`, `--target-records`, `--no-progress-rounds`, `--min-text-games`, `--variant-games`, `--steer-floor`, `--steer-variants`, `--steer-iterations` | at least 1 | 2 (usage) |
 | `--steer-min-gain`, and on every collecting command `--mana-cap`, `--interventions-per-game`, `--probes-per-game`, `--directed-forks-per-game` | at least 0 | 2 (usage) |
+| `--stop-timeout` (default 600) | 1 to 3600 | 2 (usage) |
+| `--recycle-seconds` (default 600) | 60 to 86400 | 2 (usage) |
 
 A missing `--exclude-cards`, `--only-cards`, `--split-from` or `--wording-cards` file exits 1
 naming it, before any worker starts.
@@ -196,14 +207,22 @@ level, `run.json`, every worker log and each round's progress file under `logs/`
 (`logs/<run id>.<slot>.log`, `logs/<run id>.round-NNNN.progress.txt`), and the decks file the
 workers read under `decks/` (`decks/coverage-decks.<run id>.txt`, `decks/variant-decks.<run id>.txt`).
 After each round the collector scans the round's additions to the worker logs for failure lines
-(`price_predictor.domain.worker_failures`: unresolved deck, match error, worker gave up, hook,
-emitter, boundary step, withheld records, fork score mismatch, fork fidelity, staging, JVM error
-and the rest, each found anywhere in a line, since a worker's stdout and stderr interleave
-mid-line), prints them by kind, and names any worker the kill could not end and still running.
-A log rotated twice between two scans counts as `log_unread`. The running command's entry in
-`run.json`'s `invocations` records `run_id` (the supervisor's), `caps` (every `CollectionCaps`
-field, resolved), `rounds`, `worker_failures` (kind to line count), `worker_failure_examples`
-(kind to its first line) and `worker_survivors` (PIDs). The castability consult and the sidecar
+(`price_predictor.domain.worker_failures`: unresolved deck, random-seat match error, match
+error, worker gave up, hook, emitter, boundary step, unwritten game-end marker, withheld
+records, fork score mismatch, fork fidelity, staging, JVM error and the rest, each found
+anywhere in a line, since a worker's stdout and stderr interleave mid-line), prints them by kind,
+prints the workers' hook-failure counts and how the round's workers ended (§ Match worker stop
+protocol), and names any worker the kill could not end and still running. A log rotated twice
+between two scans counts as `log_unread`. After counting a round's shards it prints how many
+gen-3 games they hold without a game-end marker: a cut game credits no coverage card, held-out
+text or variant, as `build-corpus` drops it (the counters read the markers in the pass that
+reads each shard; a damaged shard's game past the damage counts as cut; the cards a cut game
+showed still count as shown). The running command's entry in `run.json`'s `invocations` records
+`run_id` (the supervisor's), `caps` (every `CollectionCaps` field, resolved), `stop_timeout`,
+`recycle_seconds`, `rounds`, `worker_failures` (kind to line count), `worker_failure_examples`
+(kind to its first line), `hook_failures`, `worker_stops`, `worker_survivors` (PIDs) and
+`cut_games` (`{"before_rounds": n, "by_round": [n, …], "total": n}`, the games the counts left
+out, the shards read before the first round apart). The castability consult and the sidecar
 pass are one-shot JVMs killed after `max(3600, 600 + 0.1 × scripts handed over)` seconds: the
 consult then ranks every card castable, the sidecar pass exits 1.
 
@@ -246,18 +265,53 @@ game-end marker, and its shard is closed whole. The request is a file, not a con
   within the supervisor's timeout after the request is killed (`taskkill /F /T`) as before, and the
   game it was playing has no marker.
 
-What the supervisor does:
+What the supervisor does (`ForgeWorkerPool` under a `GracefulStop`, `price_predictor.infrastructure.forge_jvm`;
+`collect-coverage`, `collect-variants`, and `match-outcomes` with `--effect-records`):
 
-- Give each worker its own stop-file path (for example `logs/<run id>.<slot>.stop`), deleted
-  before the worker is spawned.
-- To stop a worker (the run's end, recycling, a round's end): create the file, then wait for the
-  process to exit; after the timeout, kill it.
-- To recycle without killing: pass `worker.recycle.seconds` and restart a worker that exited 0
-  after printing the stop line while the run continues; keep the hard kill only as the backstop for
-  a worker past its recycle time by more than the timeout.
-- Read exit 0 with the stop line as a normal end, never as a failure or a crash.
-- Finish every graceful stop before the supervisor exits: the job object kills the workers when
-  the supervisor's process ends.
+| Flag | Default | Bound | Meaning |
+|---|---|---|---|
+| `--stop-timeout SECONDS` | 600 | 1 to 3600 (exit 2) | how long a worker asked to stop may take to end its game before it is killed |
+| `--recycle-seconds SECONDS` | 600 | 60 to 86400 (exit 2) | `worker.recycle.seconds` |
+
+- Each worker gets its own stop file, `logs/<run id>.<slot>.stop` in the run directory, deleted
+  before each worker of the slot is spawned, and `worker.recycle.seconds`.
+- To stop the workers (a round's end, the run's end, a shutdown, Ctrl-C) the supervisor creates
+  every running worker's stop file and waits for each to exit. A worker still running past its
+  deadline is killed (`taskkill /F /T`): the deadline is the request plus `--stop-timeout`, or,
+  for a worker whose log holds no startup line since its spawn (still starting Forge), its spawn
+  plus 600 s (`FORGE_INIT_SECONDS`) when that is later. A worker already gone (a console Ctrl-C
+  reaches every JVM, whose shutdown hook closes its shard) is not waited for. A second interrupt
+  kills every worker still finishing its game at once.
+- A worker that exits 0 with the stop line while the run continues recycled itself and is
+  restarted at once; one that did so having generated no match failed to start (its recycle time
+  is shorter than a Forge start) and counts toward the failed-start rule. A worker still running
+  `--recycle-seconds` + `--stop-timeout` seconds after its start is killed, checked at every status
+  line, and restarted.
+- Exit 0 with the stop line is a normal end, never a failure line or a crash. Exit 0 without it,
+  or any other code, is a crash: the worker is restarted as before.
+- The pool returns, and a round is counted, only once every worker has exited or been killed;
+  the supervisor never exits before (the job object would kill the workers).
+- The workers' ends are counted by how: `stopped` (asked, stop line), `recycled` (unasked, stop
+  line), `killed` (by the timeout or the recycle backstop), `ended_otherwise` (asked, no stop
+  line: a crash in the last game, a Ctrl-C), `crashed` (unasked, no stop line), and `survived`
+  (the kill could not end it). The round report prints them; `run.json`'s entry records them as
+  `worker_stops`, beside the resolved `stop_timeout` and `recycle_seconds`.
+- What a kill still loses: the game in progress. Its records already written in complete
+  256-record blocks stay in the shard, the last ≤255 are lost, and its end-of-game records (fired
+  triggers, mana reservoirs, the outcome, the game-end marker) never come, so `build-corpus` drops
+  the game whole and the collectors' counters credit nothing from it.
+- `match-outcomes` without `--effect-records` keeps no worker log, so a stop line cannot be read:
+  its pool kills the longest-running worker every status interval and every worker at the end, as
+  before, and `--stop-timeout` or `--recycle-seconds` without `--effect-records` exits 2.
+  `draft play-draft-games`' workers have no stop protocol and are killed the same way.
+
+A round of a collector ends this way: once the round's progress file counts `--decks-per-round`
+matches (polled every 2 s), every worker is asked to stop and finishes the game it is playing (a
+best-of-one match, which writes its progress line), so the round plays at most one game per
+worker more than the polling lets through, and ends at most one game's length (bounded by
+`--stop-timeout`) after its budget. A best-of-N match stopped after a game (match-outcomes) is
+abandoned: it writes no outcome row and no progress line, while its finished games keep their
+records and markers.
 
 A match that threw prints `Error generating match: <message>` with its stack trace, as before;
 when the match had a random seat, `<message>` starts with `[random-seat match] `, whatever failed
@@ -270,6 +324,14 @@ A game whose marker could not be written prints, once per worker,
 `Effect records: the game-end marker of game <game id> could not be written, so the game reads as cut (later failures are counted, not printed): <exception>`;
 every such failure is counted under `game-end marker` in the worker's failure report
 (`effect-record hook failures so far, listener calls that threw and lost their records: {…}; contained by Forge, per slot: {…}`).
+
+The supervisor's log scan reads these: `Error generating match: [random-seat match] ` is the
+failure kind `random_seat_match_error`, counted apart from `match_error`; the marker line is
+`game_end_marker_unwritten`. The failure report is a running count per worker JVM, not a failure
+line: the scan keeps each JVM lifetime's latest report (a lifetime starts at its
+`Effect records: <shard> [mode=…]` line), sums them over lifetimes and slots, prints them in the
+round report (collectors) or at the run's end (`match-outcomes`), and records them in `run.json`
+as `hook_failures`: `{"connector": {hook: calls}, "forge": {slot: calls}}`.
 
 ## `python -m effects collect-variants` (existing)
 

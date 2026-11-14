@@ -607,9 +607,9 @@ class WorkerLogFiles:
     worker index, every time a slot is (re)spawned.
 
     One file per worker slot, not per JVM lifetime: the pool restarts a slot
-    many times over a long run (roughly 530 JVM lifetimes across 6 slots
-    over an eight-hour collection run -- see
-    ``ForgeWorkerPool._kill_oldest_worker``), and a reporter line from any one
+    many times over a long run (hundreds of JVM lifetimes over an
+    eight-hour collection run, each recycled after ``--recycle-seconds`` --
+    see ``ForgeWorkerPool``), and a reporter line from any one
     of them has to survive to the end of the run, so the file is opened once
     and reused across every restart of that slot rather than reopened per
     JVM -- the same "open once, reuse across restarts" shape

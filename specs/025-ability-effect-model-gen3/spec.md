@@ -656,7 +656,9 @@ and that the reporting half never enters the control score.
   record carries no `aimed_at` and counts as natural. Beside the counts it MUST list the rules a
   taggable declaration speaks for that no record tags (`declared_zero`), the untaggable scenarios
   with their reasons (FR-002c) and the `same_as` scenarios with the scenarios and rules they are
-  counted under (FR-002b): no declared rule is left out silently.
+  counted under (FR-002b): no declared rule is left out silently. A gen-3 game whose shard holds no
+  game-end marker (a cut game, which `build-corpus` drops, FR-060b) MUST count toward no rule, and
+  the counts file and the report MUST say how many such games were left out (`cut_games`).
 - **FR-009**: Records from directed forks and from collection aimed at a rule MUST be identifiable
   as such in every downstream reader, from the record alone, so they never become rule-test records
   wherever their game is placed. A record is aimed when it carries the envelope field `aimed_at`
@@ -1128,6 +1130,30 @@ and that the reporting half never enters the control score.
   out of the coverage unit and the decks, and MUST report their count and share of the consulted
   pool and record both in `run.json`; no share stops the run. This is distinct from the castability
   verdict, which only ranks a card and never drops one.
+- **FR-058i**: Every collecting command whose workers write effect records (`collect-coverage`,
+  `collect-variants`, `match-outcomes --effect-records`) MUST stop its match workers through the
+  stop protocol (contracts/cli.md § Match worker stop protocol): a round's end, the run's end and
+  Ctrl-C ask each worker to stop at its game's end and wait for it, killing (`taskkill /F /T`) only
+  a worker still running `--stop-timeout` seconds after the request (default 600, 1 to 3600), or,
+  for one still starting Forge, `FORGE_INIT_SECONDS` (600) after its start when that is later; a
+  second interrupt kills at once. A worker MUST recycle itself at the first game end after
+  `--recycle-seconds` of its JVM's life (default 600, 60 to 86400) and be restarted; one still
+  running `--recycle-seconds` + `--stop-timeout` seconds after its start MUST be killed. Exit 0
+  with the stop line is a normal end, never a failure; exit 0 without it, or any other code, is a
+  crash. A round MUST be counted only after every worker of its pool has ended or been killed,
+  and the command MUST NOT exit before. `run.json` MUST record the resolved `stop_timeout` and
+  `recycle_seconds` and how the workers ended (`worker_stops`). `match-outcomes` without
+  `--effect-records` keeps no worker log, MUST refuse either flag (exit 2) and kills its workers
+  as before.
+- **FR-058j**: The collectors' coverage and variant counters MUST credit no unit from a gen-3 game
+  whose shard holds no game-end marker, reading the markers in the pass that already reads each
+  shard (a damaged shard's game past the damage counts as cut), and MUST report the cut games each
+  round and in `run.json` (`cut_games`). The worker-log scan MUST count a random-seat match error
+  (`Error generating match: [random-seat match] `) apart from other match errors and an unwritten
+  game-end marker as a kind of its own, and MUST record the latest counts of the workers'
+  hook-failure report (`hook_failures`); `match-outcomes` MUST count every match played to its end
+  (random-seat ones, which write no outcome row, included) and its random-seat match errors when
+  deciding that a run collected nothing.
 - **FR-059**: The game-disjoint stratum MUST keep only games between two Forge AIs; the card-disjoint
   stratum MUST keep every game naming a held-out card, random-seat games included. A permanent spell's
   resolution record MUST survive `build-corpus`, keyed to the permanent's card. A decision record
