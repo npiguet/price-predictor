@@ -2235,6 +2235,15 @@ class TestGen3FieldPresence:
         assert "payload.conditions_met 1" in finding.detail[0]
         assert finding.detail[1] == f"{half['record_id']}: no payload.conditions_met"
 
+    def test_a_game_end_marker_without_its_withheld_count_is_short(self, tmp_path):
+        """WP7: the marker says how many of its game's records the cap withheld."""
+        rows = self._golden()
+        marker = next(row for row in rows if row.get("subkind") == "game_end")
+        del marker["payload"]["records_withheld"]
+        finding = _named(self._findings(tmp_path, rows), "gen-3 fields")
+        assert not finding.ok
+        assert finding.detail[1] == f"{marker['record_id']}: no payload.records_withheld"
+
     @pytest.mark.parametrize(("site", "edit"), [
         ("state.links", lambda row: row["state"].pop("links")),
         ("state.global.day_night", lambda row: row["state"]["global"].pop("day_night")),
@@ -2365,3 +2374,84 @@ class TestACopyKeysItsLinesIntoTheCopiedCard:
         record = self._board("cardsfolder/c/clone.txt")
         finding = _named(validate_corpus([*_healthy(), record]), "copied card")
         assert "1/1" in finding.measured and any("E2" in line for line in finding.detail)
+
+
+class TestGameEndMarkers:
+    """WP7: a gen-3 game that ended with every end-of-game write done ends
+    with a ``turn_action`` / ``game_end`` marker; one without was cut or is
+    still running, which a window read mid-collection cannot tell apart."""
+
+    @staticmethod
+    def _record(game_id: str, index: int, **overrides):
+        return _resolution(f"{game_id}.r{index}", game_id=game_id, generation=3, **overrides)
+
+    @staticmethod
+    def _marker(game_id: str, withheld: int = 0):
+        from tests.unit.effects.builders import game_end_marker
+
+        return game_end_marker(TestGameEndMarkers._record(game_id, 0, state=_snapshot(turn=40)),
+                               records_withheld=withheld)
+
+    def test_games_without_a_marker_are_counted_and_watched(self):
+        records = [self._record("run.0-L1.0", 1), self._marker("run.0-L1.0"),
+                   self._record("run.0-L1.1", 1)]
+        finding = _named(validate_corpus(records), "game-end marker")
+        assert finding.ok and finding.watched
+        assert "1 of 2 gen-3 game(s) have no game-end marker (50.0%)" in finding.measured
+
+    def test_no_marker_at_all_fails_once_a_later_game_closed_an_earlier_one(self):
+        """A JVM plays its games one after another: an earlier game of a
+        lifetime holding a later one finished or was cut, so a window none of
+        whose games wrote a marker is a collection that writes none."""
+        running = [self._record("run.0-L1.0", 1)]
+        assert _named(validate_corpus(running), "game-end marker").ok
+        closed = [*running, self._record("run.0-L1.1", 1)]
+        finding = _named(validate_corpus(closed), "game-end marker")
+        assert not finding.ok and not finding.watched
+
+    def test_an_older_generation_owes_no_marker(self):
+        finding = _named(validate_corpus(_healthy()), "game-end marker")
+        assert finding.ok and "0 gen-3 game(s)" in finding.measured
+
+    def test_the_records_the_cap_withheld_are_summed(self):
+        records = [self._marker("run.0-L1.0", 3), self._marker("run.0-L1.1", 4)]
+        finding = _named(validate_corpus(records), "withheld")
+        assert finding.watched and "7 record(s) withheld over 2 game-end marker(s)" in (
+            finding.measured)
+
+    def test_the_marker_is_no_kind_presence_misses(self):
+        finding = _named(validate_corpus([self._record("run.0-L1.0", 1)]), "record kind")
+        assert not any("game_end" in line for line in finding.detail)
+
+    def test_a_gen3_game_has_ended_only_with_its_marker(self):
+        """The trigger floor's finished games: a gen-3 record holding the
+        outcome is no longer read as the game's end; the marker is."""
+        game = "run.0-L1.0"
+        negatives = [_trigger(f"{game}.t{index}", fired=False, game_id=game, generation=3,
+                              state=_snapshot(turn=7)) for index in range(60)]
+        won = Event(type=EventType.PLAYER_WON, subjects=("P0",), attributed_to="unresolved")
+        outcome = _combat(f"{game}.999", game_id=game, generation=3, state=_snapshot(turn=30),
+                          payload=CombatPayload(events=(won,)))
+        unfinished = _named(validate_corpus([*negatives, outcome]),
+                            "trigger records hold positives")
+        assert unfinished.watched
+        finished = _named(validate_corpus([*negatives, outcome, self._marker(game)]),
+                          "trigger records hold positives")
+        assert not finished.ok and "0:60" in finished.measured
+
+    def test_a_pain_land_s_mana_record_is_deferred_whatever_it_did(self):
+        """Its damage and life loss are its own events (WP7): still the mana
+        reservoir's record, written at the game's end with an earlier board."""
+        from effects.infrastructure.record_codec import record_from_dict
+        from tests.unit.effects.builders import java_golden_records
+
+        raw = next(r for r in java_golden_records() if r.get("moment") == "resolution"
+                   and any(e["type"] == "damage_dealt" for e in r["payload"]["events"])
+                   and any(e["type"] == "mana_produced" for e in r["payload"]["events"]))
+        mana = record_from_dict(raw)
+        game = mana.game_id
+        later = self._record(game, 5, state=_snapshot(turn=9))
+        early = replace(mana, record_id=f"{game}.r6",
+                        state=replace(mana.state, global_=_snapshot(turn=2).global_))
+        finding = _named(validate_corpus([later, early, self._marker(game)]), "one game")
+        assert finding.ok, finding.measured

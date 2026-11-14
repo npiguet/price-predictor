@@ -29,6 +29,7 @@ from effects.domain.records import (
     RewritePayload,
     RewriteResult,
     TriggerPayload,
+    is_game_end,
 )
 
 #: The six cost channels, in the order the schema lists them.
@@ -153,12 +154,14 @@ class Triggers:
         self.modes: dict[str, Share] = defaultdict(Share)
         #: Per game: how often its trigger records fired, of how many.
         self.games: dict[str, Share] = defaultdict(Share)
-        #: Games a record of which holds the game's end.
+        #: Games that ended in the window: a gen-3 game by its game-end marker,
+        #: an older one by a record holding the game's outcome.
         self.ended: set[str] = set()
 
     def add(self, record: EffectRecord) -> None:
         payload = record.payload
-        if any(event.type in _GAME_END for event in payload.listed_events()):
+        if is_game_end(record) or (record.generation != 3 and any(
+                event.type in _GAME_END for event in payload.listed_events())):
             self.ended.add(record.game_id)
         if not isinstance(payload, TriggerPayload):
             return
@@ -194,9 +197,10 @@ class Triggers:
         """The floor over the games that ended in the window. A fired trigger
         record is written when its game ends (the per-line reservoir), an
         unfired one as drawn, so a game still running holds its negatives
-        alone. A game's end is a record holding ``player_won`` or
-        ``player_lost`` (the game-end record, a lethal combat, a game-ending
-        ability); the collector's game-end marker will name it outright."""
+        alone. A gen-3 game has ended when its game-end marker is read, which
+        the collector writes after every fired trigger record of the game; an
+        older one when a record holds ``player_won`` or ``player_lost`` (the
+        game-end record, a lethal combat, a game-ending ability)."""
         finished = Share.total(share for game, share in self.games.items()
                                if game in self.ended)
         name = "trigger records hold positives"

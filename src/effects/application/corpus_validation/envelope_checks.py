@@ -33,7 +33,10 @@ from effects.domain.records import (
     RecordKind,
     ResolutionPayload,
     TriggerPayload,
+    TurnActionPayload,
+    TurnActionSubkind,
     UnresolvedReason,
+    is_game_end,
 )
 
 #: Envelope fields that say when a record was written rather than what it says,
@@ -79,18 +82,21 @@ def _is_deferred_mana_record(record: EffectRecord) -> bool:
 
     Its snapshot is from when the mana ability was activated, so it lands
     after later turns and would read as a backward turn jump. Recognised by
-    the payload (a ``mana_produced``, and otherwise only the ``tapped`` events
-    of the permanents its cost tapped, FR-042c) rather than the acting card;
-    nothing defers an activation half, so a jump on one is still a game
-    boundary.
+    the payload rather than the acting card: a ``mana_produced`` in an effect
+    half that resolved no stack item (a gen-3 ``outcome`` written null, which
+    only a mana record and the rescue record write), whatever else the mana
+    ability's payment and sub-abilities did (a pain land's damage, WP7);
+    before gen-3's outcome, a ``mana_produced`` and otherwise only the
+    ``tapped`` events of the permanents its cost tapped (FR-042c). Nothing
+    defers an activation half, so a jump on one is still a game boundary.
     """
     payload = record.payload
-    return (
-        record.moment is Moment.RESOLUTION
-        and isinstance(payload, ResolutionPayload)
-        and any(event.type is EventType.MANA_PRODUCED for event in payload.events)
-        and all(event.type in _MANA_RECORD_EVENTS for event in payload.events)
-    )
+    if not (record.moment is Moment.RESOLUTION and isinstance(payload, ResolutionPayload)
+            and any(event.type is EventType.MANA_PRODUCED for event in payload.events)):
+        return False
+    if payload.outcome_written:
+        return payload.outcome is None
+    return all(event.type in _MANA_RECORD_EVENTS for event in payload.events)
 
 
 def _is_deferred_trigger_record(record: EffectRecord) -> bool:
@@ -239,7 +245,8 @@ class KindPresence:
                     or (self.playability_rate is not None and self.playability_rate > 0)]
         missing = [label for label in expected if not self.labels[label]]
         judged = self.gen3 >= limits.min_presence_records
-        others = sorted(set(_all_labels()) - set(expected) - set(self.labels))
+        # The game-end marker has a check of its own (GameEnds).
+        others = sorted(set(_all_labels()) - set(expected) - set(self.labels) - {_GAME_END})
         if not missing:
             measured = f"every kind a game writes is present over {self.gen3} gen-3 records"
         else:
@@ -252,6 +259,70 @@ class KindPresence:
             measured=measured,
             detail=(f"watched, absent: {', '.join(others)}",) if others else (),
         )
+
+
+_GAME_END = f"{RecordKind.TURN_ACTION.value}/{TurnActionSubkind.GAME_END.value}"
+
+
+class GameEnds:
+    """WP7: which gen-3 games ended with their ``turn_action`` / ``game_end``
+    marker, and what the per-game cap withheld from them.
+
+    A game without one was cut (a killed worker, a game or an end-of-game
+    write that threw) or is still running, which a window read
+    mid-collection cannot tell apart: watched, as cut games are expected
+    beside a kill backstop. A JVM lifetime plays its games one after another
+    (the ``game_id``'s last segment counts them), so a game a later game of
+    its lifetime follows has stopped; a window holding such a game and no
+    marker at all is a collection that writes none, and fails.
+    """
+
+    def __init__(self) -> None:
+        self.games: set[str] = set()
+        self.ended: set[str] = set()
+        self.withheld = 0
+        self.markers = 0
+
+    def add(self, record: EffectRecord) -> None:
+        if record.generation != 3:
+            return
+        self.games.add(record.game_id)
+        if is_game_end(record):
+            self.ended.add(record.game_id)
+            self.markers += 1
+            payload = record.payload
+            if isinstance(payload, TurnActionPayload) and payload.records_withheld:
+                self.withheld += payload.records_withheld
+
+    def _closed(self) -> set[str]:
+        """Games a later game of their JVM lifetime follows."""
+        latest: dict[str, int] = {}
+        counted: dict[str, tuple[str, int]] = {}
+        for game in self.games:
+            lifetime, _, counter = game.rpartition(".")
+            if lifetime and counter.isdigit():
+                counted[game] = (lifetime, int(counter))
+                latest[lifetime] = max(latest.get(lifetime, -1), int(counter))
+        return {game for game, (lifetime, counter) in counted.items()
+                if counter < latest[lifetime]}
+
+    def findings(self, limits: Thresholds) -> Iterator[Finding]:
+        name = "gen-3 games end with their game-end marker"
+        games, without = len(self.games), self.games - self.ended
+        share = len(without) / games if games else 0.0
+        measured = (f"{len(without)} of {games} gen-3 game(s) have no game-end marker "
+                    f"({share:.1%}): cut, or still running at the window's end")
+        closed = self._closed()
+        if games and not self.ended and closed:
+            yield Finding(name=name, ok=False, measured=measured, detail=(
+                f"{len(closed)} game(s) a later game of their JVM lifetime follows ended "
+                "or were cut, and no game of the window wrote a marker: the collection "
+                "writes none (a connector built before the marker?)",))
+        else:
+            yield Finding.watch(name, measured)
+        yield Finding.watch(
+            "records the per-game cap withheld",
+            f"{self.withheld} record(s) withheld over {self.markers} game-end marker(s)")
 
 
 def _all_labels() -> tuple[str, ...]:
