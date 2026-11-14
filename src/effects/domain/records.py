@@ -568,7 +568,9 @@ class CombatPayload(_PayloadQueries):
 
 @dataclass(frozen=True, slots=True)
 class TriggerPayload(_PayloadQueries):
-    """``trigger``: an evaluated trigger condition and whether it fired.
+    """``trigger``: an evaluated trigger condition and whether it fired: on
+    gen-3, ``fired`` is a trigger Forge ran (its condition held and it went on
+    the stack), and an evaluation that held and never ran writes no record.
 
     Non-fired negatives are drawn from same-event-type evaluations at roughly
     1:1, so the model learns the condition rather than the base rate.

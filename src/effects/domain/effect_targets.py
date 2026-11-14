@@ -51,6 +51,7 @@ from effects.domain.records import (
     PlayabilityDecisionPayload,
     TriggerPayload,
     events_of,
+    is_game_end,
 )
 from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.state_snapshot import COLORS, Zone, normalize_counter_type
@@ -213,7 +214,10 @@ def unsupervised_kind(event: Event) -> str | None:
 
 
 def derive_targets(record: EffectRecord) -> RecordTargets:
-    """``entity or player id -> EntityTargets`` for one record."""
+    """``entity or player id -> EntityTargets`` for one record; none for the
+    game-end marker, which names nobody and trains no gate."""
+    if is_game_end(record):
+        return RecordTargets(gated=False)
     record_class = sampling_class(record)
     targets = RecordTargets(gated=not _is_playability(record))
     players = {player.id for player in record.state.players}

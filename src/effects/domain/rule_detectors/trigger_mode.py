@@ -1,8 +1,10 @@
 """Detector family ``trigger_mode``: a trigger evaluated, fired or not.
 
-A ``trigger`` record is written whenever Forge evaluates a trigger against an
-event, so the record itself says which side of a triggering rule it is on:
-``fired`` true is the rule's ``fires`` side, false its near miss. The trigger
+A ``trigger`` record says which side of a triggering rule it is on:
+``fired`` true is the rule's ``fires`` side, a trigger Forge ran (gen-3: its
+condition held and it went on the stack, ``onTriggerRun``; an evaluation that
+held and never ran writes no record), false its near miss, an evaluation
+whose condition did not hold. The trigger
 line's script, read through the sidecar, says which trigger it was.
 
 Parameters, each a condition of the rule rather than of a card:
