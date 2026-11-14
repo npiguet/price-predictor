@@ -323,9 +323,17 @@ class TestDamagePrevented:
         assert derive_targets(copy.record)["B1"].fields == {HeadField.DAMAGE_PREVENTED: 4.0}
 
     def test_forks_and_synthetic_records_are_never_copied(self):
+        """Every kind of fork (plain, intervention, directed) and a synthetic
+        record, on a record that qualifies as it is."""
+        from effects.domain.records import DirectedTag
+
         record = _sweeper(_creature("E1"))
-        assert qualify(replace(record, synthetic=True)) == ()
-        assert qualify(replace(record, fork=True)) == ()
+        assert qualify(record) != ()
+        directed = DirectedTag(variant="v", operation="script_edit")
+        for flags in ({"synthetic": True}, {"fork": True},
+                      {"fork": True, "interventional": True},
+                      {"fork": True, "directed": directed, "aimed_at": ("702.16e",)}):
+            assert qualify(replace(record, **flags)) == (), flags
 
 
 # ── a target made illegal (702.16b) ──────────────────────────────────────
@@ -516,9 +524,11 @@ class TestDraw:
         assert found.qualities == () and rules_offered((found,)) == (EVERYTHING_RULE,)
 
     def test_the_same_seed_draws_the_same_copy(self):
+        """And the seed is what decides: some other seed draws another copy."""
         record = _sweeper(_creature("E1", subtypes=("goblin", "elf")), _creature("E2"))
         first, again = _copy(record, "702.16e", seed=7), _copy(record, "702.16e", seed=7)
         assert first == again
+        assert any(_copy(record, "702.16e", seed=seed) != first for seed in range(8))
 
     def test_a_copy_writes_and_reads_back(self):
         copy = _copy(_sweeper(_creature("E1")), "702.16e")

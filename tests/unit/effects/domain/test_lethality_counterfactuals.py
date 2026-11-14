@@ -12,10 +12,13 @@ import random
 from dataclasses import replace
 from types import SimpleNamespace
 
+import pytest
+
 from effects.domain.effect_head_layout import ZONE_OUTCOMES
 from effects.domain.effect_targets import derive_targets
 from effects.domain.event_schema import Event, EventType
 from effects.domain.lethality_counterfactuals import (
+    SOURCE_EXCLUSIONS,
     EffectKind,
     counterfactual,
     edit_text,
@@ -147,11 +150,50 @@ class TestQualify:
         assert _qualify(record, keywords_of=source_deathtouch) is None
 
     def test_an_indestructible_or_enchanted_creature_is_not_copied(self):
-        record = _record([_damage("E1", 3)], [_creature("E1", 2)])
-        assert _qualify(record, keywords_of=lambda e: {"indestructible"}) is None
+        """Each on a record that qualifies without the one difference."""
+        survivor = _record([_damage("E1", 3)], [_creature("E1", 5)])
+        assert _qualify(survivor) is not None
+        assert _qualify(survivor, keywords_of=lambda e: (
+            {"indestructible"} if e.id == "E1" else set())) is None
         aura = make_entity("A1", "aura", attached_to="E1")
         record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2), aura])
+        assert _qualify(_record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)]))
         assert _qualify(record) is None
+
+    @pytest.mark.parametrize("keyword", sorted(SOURCE_EXCLUSIONS))
+    def test_a_source_whose_keyword_changes_what_damage_does_is_not_copied(self, keyword):
+        """Deathtouch, wither, infect and lifelink each change what the hit
+        does or what else happens beside it."""
+        record = _record([_damage("E1", 3)], [_creature("E1", 5)])
+        assert _qualify(record) is not None
+        assert _qualify(record, keywords_of=lambda e: (
+            {keyword} if e.id == "S1" else set())) is None
+
+    def test_a_shield_counter_on_the_hit_creature_is_not_copied(self):
+        """The counter is spent instead of the damage, so no lethality rule holds."""
+        shielded = _creature("E1", 5, counters={"SHIELD": 1})
+        assert _qualify(_record([_damage("E1", 3)], [shielded])) is None
+
+    def test_a_hit_that_is_no_creature_is_not_copied(self):
+        walker = make_entity("E1", "E1", controller="P1", types=("planeswalker",))
+        assert _qualify(_record([_damage("E1", 3)], [walker])) is None
+
+    def test_a_cost_half_is_not_copied(self):
+        from effects.domain.records import ActivationPayload, Costs, Moment
+
+        effect = _record([_damage("E1", 3)], [_creature("E1", 5)])
+        cost = replace(effect, moment=Moment.ACTIVATION,
+                       payload=ActivationPayload(costs=Costs(), events=()))
+        assert _qualify(cost) is None
+
+    @pytest.mark.parametrize("text", [
+        BOLT + " | SubAbility$ SV1 [SEG] SV1: DB$ DealDamage | NumDmg$ 1 | Defined$ Remembered",
+        BOLT + " | DamageSource$ Targeted",
+        BOLT + " | DividedAsYouChoose$ 3",
+    ])
+    def test_a_chain_of_two_hits_or_a_blocked_parameter_is_not_copied(self, text):
+        record = _record([_damage("E1", 3)], [_creature("E1", 5)])
+        assert _qualify(record, text) is None
 
     def test_a_death_a_shield_or_a_replacement_may_turn_is_not_copied(self):
         """P3a #14: a regeneration shield (a floating effect from a Regenerate
