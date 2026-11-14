@@ -390,6 +390,7 @@ class TestTheGen3Fields:
         coverage = field_coverage(record_from_dict(raw) for raw in java_golden_records())
         varying = [
             "record.payload<ResolutionPayload>.outcome", "record.copy_dropped",
+            "record.payload<TurnActionPayload>.events",
             *(f"record.payload<RewritePayload>.{name}" for name in (
                 "incoming_unknown", "buffered", "buffered_ran", "buffered_events")),
             *(f"record.payload<PlayabilityBlockersPayload>.forbidden[].{name}"
@@ -411,9 +412,9 @@ class TestTheGen3Fields:
             status[rest.split()[0]] = tag.strip()
         assert list(status) == list(GEN3_FIELDS)
         assert status["record.state.entities[].owner"] == "varies"
-        # The goldens' one turn action is the game-end marker, whose events are
-        # always empty.
-        assert status["record.payload<TurnActionPayload>.events"] == "const"
+        # The goldens' turn actions: the game-end markers, whose events are
+        # always empty, and a turn wrap's six actions, each with its own.
+        assert status["record.payload<TurnActionPayload>.events"] == "varies"
         assert status["record.payload<RewritePayload>.buffered_events"] == "varies"
         assert status[
             "record.payload<PlayabilityBlockersPayload>.forbidden[].required_elsewhere"] == "varies"

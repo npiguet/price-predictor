@@ -410,6 +410,58 @@ class TestJavaWrittenShards:
             RecordKind.RESOLUTION, RecordKind.RESOLUTION, RecordKind.COMBAT]
         assert ended_games(shard) == frozenset()
 
+    @staticmethod
+    def _gzip_shard(tmp_path: Path) -> tuple[Path, bytes]:
+        """``shard-two-games.jsonl.gz``, byte for byte: Java's gzip members,
+        one a game, as ``RecordShardWriter`` flushes them at each game end."""
+        from tests.unit.effects.builders import JAVA_GOLDENS
+
+        data = (JAVA_GOLDENS / "shard-two-games.jsonl.gz").read_bytes()
+        shard = tmp_path / "run.0-l1.jsonl.gz"
+        shard.write_bytes(data)
+        return shard, data
+
+    @staticmethod
+    def _first_member_length(data: bytes) -> int:
+        import zlib
+
+        inflater = zlib.decompressobj(wbits=31)
+        inflater.decompress(data)
+        return len(data) - len(inflater.unused_data)
+
+    def test_a_java_written_shard_reads_game_by_game_each_ended_by_its_marker(self, tmp_path):
+        from effects.domain.records import TurnActionSubkind
+        from effects.infrastructure.shard_io import ended_games, read_shard
+
+        shard, data = self._gzip_shard(tmp_path)
+        records = list(read_shard(shard))
+
+        games = list(dict.fromkeys(r.game_id for r in records))
+        assert games == ["run.0-l1.0", "run.0-l1.1"]
+        assert [r.record_id for r in records] == [f"run.0-l1.{i}" for i in range(len(records))]
+        for game in games:
+            own = [r for r in records if r.game_id == game]
+            assert [r.subkind for r in own].count(TurnActionSubkind.GAME_END) == 1
+            assert own[-1].subkind is TurnActionSubkind.GAME_END
+            assert own[-1].payload.records_withheld == 0
+        assert ended_games(shard) == {"run.0-l1.0", "run.0-l1.1"}
+        # One member a game: the first ends exactly where game 0's marker does.
+        first = gzip.decompress(data[:self._first_member_length(data)]).decode("utf-8")
+        assert [json.loads(line)["game_id"] for line in first.splitlines()] == [
+            "run.0-l1.0"] * sum(r.game_id == "run.0-l1.0" for r in records)
+
+    def test_a_java_written_shard_cut_in_its_second_game_keeps_the_first_whole(self, tmp_path):
+        """A worker killed while its second game's block was being appended:
+        the first game, flushed whole at its end, still reads as ended."""
+        from effects.infrastructure.shard_io import ended_games, read_shard
+
+        shard, data = self._gzip_shard(tmp_path)
+        first = self._first_member_length(data)
+        shard.write_bytes(data[:first + (len(data) - first) // 2])
+
+        assert ended_games(shard) == {"run.0-l1.0"}
+        assert {r.game_id for r in read_shard(shard)} == {"run.0-l1.0"}
+
 
 def test_write_shard_round_trips_through_the_reader(tmp_path):
     from effects.infrastructure.shard_io import read_shard, write_shard

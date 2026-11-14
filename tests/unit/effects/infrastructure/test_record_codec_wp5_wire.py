@@ -125,3 +125,69 @@ class TestTheForkShapesPythonReads:
         assert record.fork and not record.interventional
         assert record.payload.probed_keyword == "trample"
         assert EventType.DAMAGE_PREVENTED in [event.type for event in record.payload.events]
+
+
+class TestTheBoardExtrasPythonReads:
+    """What a board holds beside front faces and permanents, read off the Java
+    golden ``record-back-face-and-delayed-trigger.jsonl``: Graceful Reprieve's
+    pending delayed trigger and a transformed Delver of Secrets, around a
+    Lightning Bolt."""
+
+    def test_a_pending_delayed_trigger_reads_with_its_line_and_remembered_card(self):
+        from effects.domain.records import ProvenanceKey
+
+        records = _golden("record-back-face-and-delayed-trigger.jsonl")
+        pending = [record for record in records if record.state.global_.delayed_triggers]
+        # Both of the bolt's halves; the reprieve's own were read before it.
+        assert len(pending) == 2
+        for record in pending:
+            (trigger,) = record.state.global_.delayed_triggers
+            assert trigger.id.startswith("D")
+            assert trigger.source_lines == (
+                ProvenanceKey("cardsfolder/g/graceful_reprieve.txt", 0, "spell", 0),)
+            bears = next(e for e in record.state.entities if e.name == "Grizzly Bears")
+            assert trigger.remembered == (bears.id,)
+            assert trigger.duration == "end_of_turn"
+
+    def test_a_permanent_on_its_back_face_reads_as_that_face(self):
+        from effects.domain.state_snapshot import FaceState
+
+        for record in _golden("record-back-face-and-delayed-trigger.jsonl"):
+            (delver,) = [e for e in record.state.entities if e.name == "Insectile Aberration"]
+            assert (delver.zone, delver.face_state) == ("battlefield", FaceState.BACK)
+            assert delver.face == 1
+
+
+class TestTheTurnActionsPythonReads:
+    """A turn wrap's six turn-based actions, read off the Java golden
+    ``record-turn-actions.jsonl``: each its own record, no acting line, the
+    events it is made of."""
+
+    def test_each_turn_action_reads_its_subkind_and_its_events(self):
+        from effects.domain.records import RecordKind, TurnActionSubkind
+
+        records = _golden("record-turn-actions.jsonl")
+        assert [record.kind for record in records] == [RecordKind.TURN_ACTION] * 6
+        assert [(record.subkind, tuple(event.type for event in record.payload.events))
+                for record in records] == [
+            (TurnActionSubkind.CLEANUP_DISCARD, (EventType.ZONE_CHANGE, EventType.CARD_DISCARDED)),
+            (TurnActionSubkind.PHASING, (EventType.PHASED,)),
+            (TurnActionSubkind.DAY_NIGHT, (EventType.DAY_NIGHT_CHANGED,)),
+            (TurnActionSubkind.UNTAP, (EventType.UNTAPPED,)),
+            (TurnActionSubkind.DRAW, (EventType.ZONE_CHANGE, EventType.CARD_DRAWN)),
+            (TurnActionSubkind.LORE_COUNTER, (EventType.COUNTER_CHANGE,)),
+        ]
+        for record in records:
+            assert record.ability is None and record.moment is None
+            assert record.payload.records_withheld is None
+
+    def test_the_draw_and_the_discard_name_who_acted(self):
+        from effects.domain.records import TurnActionSubkind
+
+        records = {record.subkind: record for record in _golden("record-turn-actions.jsonl")}
+        draw = records[TurnActionSubkind.DRAW]
+        discard = records[TurnActionSubkind.CLEANUP_DISCARD]
+        assert draw.actor_player != discard.actor_player
+        assert draw.payload.events[1].subjects == (draw.actor_player,)
+        assert draw.payload.events[0].params["from_zone"] == "library"
+        assert discard.payload.events[0].params["from_zone"] == "hand"

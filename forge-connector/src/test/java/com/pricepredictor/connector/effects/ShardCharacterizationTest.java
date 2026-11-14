@@ -11,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -86,5 +87,51 @@ class ShardCharacterizationTest {
         assertTrue(board.game.isGameOver(), "the bolt ended the game");
         Characterization.assertMatches(
                 "shard-game-end.jsonl", Characterization.recordLines(records));
+    }
+
+    /**
+     * A worker lifetime's shard as the worker lays it out: one writer, two
+     * games recorded one after the other the way {@code GamePlayer} records
+     * them (a {@link GameRecording} per game, game ids from the writer), each
+     * ended by Lightning Bolt to an opponent at 3 life. Each game is flushed
+     * as a gzip member of its own at its end, its game-end marker last; the
+     * expected gzip is what Python's shard reader is tested on.
+     */
+    @Test
+    void aWorkersShardOfTwoGames() throws Throwable {
+        Assumptions.assumeTrue(AttributionMode.detect() == AttributionMode.PATCHED,
+                "the expected shard was captured against the patched ../forge");
+        CollectionCaps caps = TestCaps.caps().interventions(0).probes(0).build();
+        RecordShardWriter writer = ShardRun.writer(tempDir);
+        try {
+            for (int game = 0; game < 2; game++) {
+                CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+                board.opponent.setLife(3, null);
+                try (GameRecording recording = new GameRecording(
+                        board.game, writer, writer.nextGameId(), caps, 1L, null)) {
+                    recording.open();
+                    TestBoard.cast(board.game, board.card("Lightning Bolt", board.you),
+                            board.you, board.opponent);
+                    board.game.getStack().resolveStack();
+                    board.game.getAction().checkStateEffects(false);
+                    board.game.fireEvent(new forge.game.event.GameEventGameFinished());
+                }
+                assertTrue(board.game.isGameOver(), "game " + game + " ended");
+            }
+        } finally {
+            writer.close();
+        }
+
+        List<String> members = Characterization.gzipMembers(
+                java.nio.file.Files.readAllBytes(writer.path()));
+        assertEquals(2, members.size(), "one member a game: " + members);
+        for (int game = 0; game < 2; game++) {
+            List<String> lines = members.get(game).lines().toList();
+            String id = "\"game_id\":\"run.0-l1." + game + "\"";
+            assertTrue(lines.stream().allMatch(line -> line.contains(id)), members.get(game));
+            String last = lines.get(lines.size() - 1);
+            assertTrue(last.contains("\"subkind\":\"game_end\""), "the marker last: " + last);
+        }
+        Characterization.assertShardMatches("shard-two-games", members);
     }
 }

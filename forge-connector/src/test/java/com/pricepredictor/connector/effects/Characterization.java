@@ -132,6 +132,86 @@ final class Characterization {
         }
     }
 
+    /**
+     * The gzip members of a shard's bytes, each decompressed to its text: the
+     * blocks the writer flushed, in order. A cut member throws.
+     */
+    static List<String> gzipMembers(byte[] shard) {
+        List<String> members = new java.util.ArrayList<>();
+        int at = 0;
+        while (at < shard.length) {
+            // RecordShardWriter's members carry java.util.zip's fixed ten-byte
+            // header (no name, no extra field) and an eight-byte trailer.
+            if (shard.length - at < 18 || (shard[at] & 0xff) != 0x1f || (shard[at + 1] & 0xff) != 0x8b
+                    || shard[at + 3] != 0) {
+                fail("no plain gzip member header at offset " + at);
+            }
+            java.util.zip.Inflater inflater = new java.util.zip.Inflater(true);
+            inflater.setInput(shard, at + 10, shard.length - at - 10);
+            java.io.ByteArrayOutputStream text = new java.io.ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            try {
+                while (!inflater.finished()) {
+                    int n = inflater.inflate(buffer);
+                    if (n == 0 && (inflater.needsInput() || inflater.needsDictionary())) {
+                        fail("a cut gzip member at offset " + at);
+                    }
+                    text.write(buffer, 0, n);
+                }
+            } catch (java.util.zip.DataFormatException e) {
+                fail("a corrupt gzip member at offset " + at + ": " + e.getMessage());
+            }
+            at = shard.length - inflater.getRemaining() + 8;
+            inflater.end();
+            members.add(text.toString(StandardCharsets.UTF_8));
+        }
+        return members;
+    }
+
+    /**
+     * A whole shard against two expected files: {@code <name>.txt}, each
+     * member's records with their timestamps fixed under a {@code # member
+     * <n>} line, compared byte for byte (the reviewable one); and
+     * {@code <name>.jsonl.gz}, the same members gzipped one member a block as
+     * {@link RecordShardWriter} writes them, for readers of the real format
+     * (Python's shard reader), checked to hold exactly those members.
+     */
+    static void assertShardMatches(String name, List<String> members) {
+        List<String> fixed = new java.util.ArrayList<>();
+        StringBuilder text = new StringBuilder();
+        for (int i = 0; i < members.size(); i++) {
+            String member = recordLines(members.get(i).lines().toList());
+            fixed.add(member);
+            text.append("# member ").append(i + 1).append('\n').append(member);
+        }
+        assertMatches(name + ".txt", text.toString());
+        Path gzip = DIR.resolve(name + ".jsonl.gz");
+        try {
+            if (Boolean.getBoolean(UPDATE_PROPERTY)) {
+                java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+                for (String member : fixed) {
+                    try (java.util.zip.GZIPOutputStream out =
+                                 new java.util.zip.GZIPOutputStream(bytes)) {
+                        out.write(member.getBytes(StandardCharsets.UTF_8));
+                    }
+                }
+                Files.write(gzip, bytes.toByteArray());
+            }
+            if (!Files.exists(gzip)) {
+                fail("no expected file " + gzip.toAbsolutePath()
+                        + "; run with -D" + UPDATE_PROPERTY + "=true to capture it");
+            }
+            List<String> expected = gzipMembers(Files.readAllBytes(gzip));
+            if (!expected.equals(fixed)) {
+                fail(name + ".jsonl.gz holds other members than the shard written: "
+                        + describeMismatch(name, String.join("# member\n", expected),
+                        String.join("# member\n", fixed)));
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     /** Where the two texts first part, with the characters around it from each. */
     private static String describeMismatch(String name, String expected, String actual) {
         int at = 0;

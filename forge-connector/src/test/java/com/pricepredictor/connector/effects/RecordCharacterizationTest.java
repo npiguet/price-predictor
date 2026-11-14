@@ -33,6 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -147,6 +148,98 @@ class RecordCharacterizationTest {
 
         Characterization.assertMatches(
                 "record-resolution.jsonl", Characterization.recordLines(records));
+    }
+
+    /**
+     * What a board holds beside its permanents' front faces, through the
+     * engine with every hook installed: Graceful Reprieve leaves a pending
+     * delayed trigger on Grizzly Bears, and a transformed Delver of Secrets
+     * (Insectile Aberration) is on the battlefield on its back face, when
+     * Lightning Bolt is cast at the opponent and resolves. Both moments of
+     * both spells.
+     */
+    @Test
+    void aBackFaceAndAPendingDelayedTrigger() throws Throwable {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Player you = board.you;
+        Player opponent = board.opponent;
+        Card bears = board.battlefield("Grizzly Bears", you);
+        Card delver = board.battlefield("Delver of Secrets", you);
+        delver.setState(forge.card.CardStateName.Backside, true);
+
+        RecordShardWriter writer = ShardRun.recordedWithClauseHook(tempDir, board.game, CAPS,
+                "for the resolution hook", () -> {
+            board.cast(board.card("Graceful Reprieve", you), you, bears);
+            board.game.getStack().resolveStack();
+            TestBoard.cast(board.game, board.card("Lightning Bolt", you), you, opponent);
+            board.game.getStack().resolveStack();
+            board.game.getAction().checkStateEffects(false);
+            board.nextStep();
+        });
+        List<String> records = ShardRun.readShard(writer.path()).stream()
+                .filter(record -> "resolution".equals(RecordLines.parse(record).get("kind")))
+                .toList();
+        assertEquals(4, records.size(), records.toString());
+        String bolt = RecordLines.only(records, "activation", "cardsfolder/l/lightning_bolt.txt");
+        assertTrue(bolt.contains("\"delayed_triggers\":[{"), "the reprieve pending: " + bolt);
+        assertTrue(bolt.contains("\"name\":\"Insectile Aberration\"")
+                && bolt.contains("\"face_state\":\"back\""), "the delver's back face: " + bolt);
+
+        Characterization.assertMatches(
+                "record-back-face-and-delayed-trigger.jsonl", Characterization.recordLines(records));
+    }
+
+    /**
+     * Every turn-based action a turn wrap performs, each a {@code turn_action}
+     * record of its own, through the engine's real loop with every hook
+     * installed: the ending player's cleanup discard to hand size, then the
+     * next player's phasing (Breezekeeper), day becoming night, untap (a
+     * tapped Forest), draw and a lore counter on History of Benalia.
+     */
+    @Test
+    void theTurnActionsOfATurnWrap() throws Throwable {
+        forge.game.Game game = TestBoard.twoPlayerGame(PhaseType.END_OF_TURN);
+        CharacterizationBoard board = CharacterizationBoard.on(game);
+        Player next = game.getPlayers().get(0);
+        Player ending = game.getPlayers().get(1);
+        // Turn 1 is the ending player's, so the next one's draw is not skipped.
+        game.getPhaseHandler().devModeSet(PhaseType.END_OF_TURN, ending, 1);
+        game.setAge(forge.game.GameStage.Play);
+        for (int i = 0; i < 8; i++) {
+            game.getAction().moveTo(ZoneType.Hand, board.card("Craw Wurm", ending), null, null);
+        }
+        for (Player player : List.of(ending, next)) {
+            for (int i = 0; i < 2; i++) {
+                game.getAction().moveTo(ZoneType.Library, board.card("Craw Wurm", player), null, null);
+            }
+        }
+        board.battlefield("Forest", next).setTapped(true);
+        board.battlefield("Breezekeeper", next);
+        board.battlefield("History of Benalia", next);
+        game.getTriggerHandler().clearWaitingTriggers();
+        game.setDayTime(false);
+
+        forge.game.phase.PhaseHandler phases = game.getPhaseHandler();
+        RecordShardWriter writer = ShardRun.recordedWithClauseHook(tempDir, game, CAPS,
+                "for the hooks a worker installs", () -> {
+            for (int step = 0; step < 100
+                    && !(phases.is(PhaseType.MAIN1) && phases.getPlayerTurn() == next); step++) {
+                phases.mainLoopStep();
+            }
+            assertTrue(phases.is(PhaseType.MAIN1) && phases.getPlayerTurn() == next,
+                    "the game reached the next player's main phase");
+            game.fireEvent(new forge.game.event.GameEventPlayerPriority(
+                    forge.game.player.PlayerView.get(next), PhaseType.MAIN1,
+                    forge.game.player.PlayerView.get(next)));
+        });
+        List<String> records = ShardRun.readShard(writer.path()).stream()
+                .filter(record -> "turn_action".equals(RecordLines.parse(record).get("kind")))
+                .toList();
+        assertEquals(List.of("cleanup_discard", "phasing", "day_night", "untap", "draw", "lore_counter"),
+                records.stream().map(record -> RecordLines.parse(record).get("subkind")).toList());
+
+        Characterization.assertMatches(
+                "record-turn-actions.jsonl", Characterization.recordLines(records));
     }
 
     /**
