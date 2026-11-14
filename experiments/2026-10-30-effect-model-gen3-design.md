@@ -2014,7 +2014,7 @@ as connive 0 firing the "connives" trigger. `rules/FINDINGS.md` lists ten to tes
   the list shows a Grizzly Bears beside Standard Bearer as a legal target. The scenarios of both
   parts have no detector. A third part of the rule, that one instance of "target" cannot name
   the same object twice, has one.
-- Twenty-one rules have no directed fork, because no single change to a board makes a game record
+- Twenty-two rules have no directed fork, because no single change to a board makes a game record
   the side of the rule that self-play leaves short. They are left off the list of rules directed
   forks are aimed at, each with its reason in `NOT_DIRECTED` (`scripts/rules_catalogue.py`), and
   their scenarios keep their detectors. They fall into four groups.
@@ -2024,11 +2024,14 @@ as connive 0 firing the "connives" trigger. `rules/FINDINGS.md` lists ten to tes
     (704.7) or madness (702.35a) met an event and left it alone. A restart (104.6, Karn
     Liberated's ultimate) is refused in every fork, because it resets a counter the live game's
     triggers take their ids from.
-  - The short side of five rules is out of reach of any edit. Four need a play made in response
+  - The short side of six rules is out of reach of any edit. Four need a play made in response
     or a sequence of plays: a battle's defeat trigger countered (704.5v), a spell copied for each
     target while another is on the stack (707.10d), a craft that finds its card gone (702.167a),
-    and a face-down merged permanent built in four casts (730.2g). The short side of 111.10n no
-    game shows at all: a Sorcerer Role always gives its +1/+1.
+    and a face-down merged permanent built in four casts (730.2g). The short side of 111.10n and
+    111.10p no game shows at all: a Sorcerer Role always gives its +1/+1, and a Virtuous Role
+    always counts itself among the enchantments it gives +1/+1 for. Making the fork cast
+    Ellivere of the Wild Court does not help 111.10p either, because its variant leaves the
+    enters trigger no creature to put the Role on.
   - Six rules have no variant whose fork the detector can read on the short side. Four have
     only variants the catalogue marks as making no contrast: removing Aven Mindcensor leaves
     Archivist of Oghma's search trigger firing as before (701.23f), and 205.1a, 701.12h and

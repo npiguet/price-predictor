@@ -720,18 +720,25 @@ and that the reporting half never enters the control score.
   `--directed-forks-per-game`, and no rule is tried once the budget is spent.
 - **FR-010b**: A directed rule's variant MAY name one play its fork forces, made by a seat the
   binding names, at the fork's own step or a later step of the same turn: a cast or activation of a
-  line of a bound source (chosen by API type or keyword), its targets named by binding role clause
-  by clause (a clause left unnamed drawn from its legal targets by the fork's own random stream),
-  X and modes fixed or drawn, its cost paid through the engine's own payment (what a cost
-  sacrifices, discards or exiles named by role, else the seat's choice); a "you may" of a bound
+  line of a bound source (chosen by API type, keyword or a test of the rule's own: the card's spell,
+  its bestow cast, an activated ability whose cost sacrifices another permanent), at the actor's
+  first priority in that step where the rules let it be played with its named targets, its
+  targets named by binding role clause by clause (a clause left unnamed drawn from its legal
+  targets by the fork's own random stream), X fixed or drawn, modes drawn, its cost paid through
+  the engine's own payment (what a cost sacrifices, discards or exiles named by role, else the
+  seat's choice; a named card the cost cannot take leaves it unpaid); a "you may" of a bound
   source answered yes or no; or an attack by a bound creature at a bound player or permanent,
   added to the seat's own declaration. The forcing seat is attached in the fork's copy only.
   Every other decision in the fork stays the seat's own (FR-010). A forced play is recorded as a
   live play is, by the fork's own recorders, with no record member marking it forced: a directed
   fork's records may hold a play its seat was made to make, and which variants force what is
   fixed per rule in the registry (FR-014a). A fork whose forced play has no legal line or target
-  after the edit, is not made by the end of the turn, or whose cost is not paid ends as a counted
-  refusal and writes nothing.
+  after the edit, is not made by the end of its step (an answer: of the turn), or whose cost is not
+  paid ends as a counted refusal (`forced play has no legal line`, `forced play not made`,
+  `forced play cost not paid`) and writes nothing. A forced play whose source, line, named target
+  or attack the live board lacks is refused before the fork is taken, spending none of
+  `--directed-forks-per-game` and leaving the rule's one fork of the game untaken; the refusal is
+  counted at each boundary it is found at.
 - **FR-010c**: A directed rule's variant MAY ask that the records of its bound cards be kept. In
   its fork, every decision candidate of a card the variant names (a spell, an activated ability,
   a special action or a land play it hosts) is written whatever `--playability-rate`,
@@ -786,7 +793,10 @@ and that the reporting half never enters the control score.
   A rule's registered variant makes the side its counts lack (FR-014b). Where that side needs a
   rare fact, the registered scenario's base is the common board and its variant adds the fact
   (Felidar Sovereign's controller below 40 life, set to 40); a variant taking the rare fact away
-  would record the side the live games already show.
+  would record the side the live games already show. Where the rare side also needs a play Forge's
+  AI does not make, the variant forces it (FR-010b): 118.11 adds Rest in Peace and forces the
+  sacrifice outlet's activation, its cost the bound creature; 111.10v adds a land and forces the
+  Mutagen token's activation.
 - **FR-014b**: Board preconditions MUST be registered for 704.5f and 702.98a, listed whatever their
   counts (702.98a's few `does_not_fire` records being one creature in one game), and for every rule that gen-2's
   per-rule counts (`output/effects/rule-counts-gen2.json`) show with fewer than 100 `fires` records
@@ -802,12 +812,12 @@ and that the reporting half never enters the control score.
   boundary; 712.16, whose point no sealed pool holds the cards for; and the rules no single board
   edit yields the lacking side of: 104.6 (a game restart, which every fork refuses, FR-010d),
   400.6, 704.7 and 702.35a (a replacement met and not applied, which no hook reports), 701.24g
-  (no near miss declared), 702.167a (a craft returning nothing), 111.10n (a Role's static giving
-  no boost), 704.5v and 707.10d (a play made in response), 730.2g (a sequence of plays), 712.11d
+  (no near miss declared), 702.167a (a craft returning nothing), 111.10n and 111.10p (a Role's
+  static giving no boost, which no forced play makes either), 704.5v and 707.10d (a play made in response), 730.2g (a sequence of plays), 712.11d
   (its variant removes the candidate read), 205.1a, 701.12h, 701.23f and 702.70b (variants of
   polarity `other` alone), and 119.8, 702.62c, 702.85a, 702.102c, 702.133a and 702.154a (a fact
   the record cannot show) (`directed-rules` names each with its reason). The list is checked in
-  as `rules/directed-fork-rules.txt`, one rule id per line, 50 rules in unit order, and is what
+  as `rules/directed-fork-rules.txt`, one rule id per line, 49 rules in unit order, and is what
   the full collection passes to
   `--directed-fork-rules`; `directed-rules` over the gen-2 counts writes it unchanged. Every
   listed rule passes the startup check (FR-014).

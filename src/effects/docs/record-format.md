@@ -73,7 +73,7 @@ The envelope is frozen within a generation: a later capability makes new `kind` 
 | Interventional resolution | true | true | effect half alone, no `link_id` |
 | Damage-step probe | true | false | `mirror_of`; payload `probed_keyword`, `probed_entity` |
 | Protection fork | true | true | any kind; cost halves linked as live ones |
-| Directed fork | true | false | `directed` set, `aimed_at = [rule]`; `mirror_of` null, since a phase boundary leaves no live record open |
+| Directed fork | true | false | `directed` set, `aimed_at = [rule]`; `mirror_of` null, since a phase boundary leaves no live record open; its records may hold the one play its variant forced (FR-010b), unmarked |
 
 A protection copy written by `build-corpus` is a synthetic record `<record_id>~pc<i>`.
 

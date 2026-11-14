@@ -43,6 +43,13 @@ or without `link_id`.
 which no live record stays open across. Directed-fork records are paired with the live turn by
 `game_id`, turn and `directed`.
 
+A directed fork's records may hold the one play its variant forced its seat to make (FR-010b): a
+cast or activation paid for through the engine's own payment, an answer to a "you may", or an
+attack. No member marks it, and the stamps stay `fork: true`, `interventional: false`,
+`aimed_at: [rule]`, `directed: {variant, operation}`; which variants force what is fixed per rule
+in the directed-rule registry. A reader that must tell a seat's own decision from a forced one
+reads the variant there.
+
 `copy_dropped` kinds, the values of Forge's `GameCopier.NoCounterpart` lower-cased:
 
 | Kind | What the copy left out |
