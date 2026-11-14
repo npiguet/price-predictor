@@ -183,7 +183,9 @@ class CollectorSupervisor:
         playing (a best-of-one match) or been killed past the stop timeout:
         each worker plays at most one game more, so a round ends at most one
         game's length (bounded by the timeout) after its budget, the progress
-        file overshooting it by at most the worker count, and the round's
+        file overshooting it by the matches that ended between two polls
+        (``ForgeWorkerPool.STOP_POLL_INTERVAL``) plus at most one per
+        worker, and the round's
         shards are closed whole before the caller counts them.
 
         No deck raises before any worker spawns: every worker is decks-only,
