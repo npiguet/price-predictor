@@ -2014,16 +2014,18 @@ as connive 0 firing the "connives" trigger. `rules/FINDINGS.md` lists ten to tes
   the list shows a Grizzly Bears beside Standard Bearer as a legal target. The scenarios of both
   parts have no detector. A third part of the rule, that one instance of "target" cannot name
   the same object twice, has one.
-- Twenty-two rules have no directed fork, because no single change to a board makes a game record
+- Twenty-three rules have no directed fork, because no single change to a board makes a game record
   the side of the rule that self-play leaves short. They are left off the list of rules directed
   forks are aimed at, each with its reason in `NOT_DIRECTED` (`scripts/rules_catalogue.py`), and
   their scenarios keep their detectors. They fall into four groups.
-  - The short side of four rules is an event that a replacement effect meets without changing
+  - The short side of five rules is an event that a replacement effect meets without changing
     it, or a game restart. Forge reports a replacement to the collector only when it changes the
     event, so no board makes it write the record that Rest in Peace (400.6), Lich's Mirror
-    (704.7) or madness (702.35a) met an event and left it alone. A restart (104.6, Karn
-    Liberated's ultimate) is refused in every fork, because it resets a counter the live game's
-    triggers take their ids from.
+    (704.7) or madness (702.35a) met an event and left it alone. The same holds for a creature
+    sacrificed as a cost whose move a replacement meets and leaves alone (118.11). A board with
+    Rest in Peace added records only the replaced sacrifice, which self-play already records
+    more than twenty thousand times. A restart (104.6, Karn Liberated's ultimate) is refused in
+    every fork, because it resets a counter the live game's triggers take their ids from.
   - The short side of six rules is out of reach of any edit. Four need a play made in response
     or a sequence of plays: a battle's defeat trigger countered (704.5v), a spell copied for each
     target while another is on the stack (707.10d), a craft that finds its card gone (702.167a),

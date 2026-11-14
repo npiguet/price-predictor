@@ -794,9 +794,10 @@ and that the reporting half never enters the control score.
   rare fact, the registered scenario's base is the common board and its variant adds the fact
   (Felidar Sovereign's controller below 40 life, set to 40); a variant taking the rare fact away
   would record the side the live games already show. Where the rare side also needs a play Forge's
-  AI does not make, the variant forces it (FR-010b): 118.11 adds Rest in Peace and forces the
-  sacrifice outlet's activation, its cost the bound creature; 111.10v adds a land and forces the
-  Mutagen token's activation.
+  AI does not make, the variant forces it (FR-010b): 119.7 adds Leyline of Punishment and forces
+  Tree of Redemption's activation; 111.10v adds a land and forces the Mutagen token's activation;
+  702.103e puts Skulking Ghost in the place of the battlefield's one creature and forces the
+  bestowed cast, which the Ghost's sacrifice leaves with an illegal target.
 - **FR-014b**: Board preconditions MUST be registered for 704.5f and 702.98a, listed whatever their
   counts (702.98a's few `does_not_fire` records being one creature in one game), and for every rule that gen-2's
   per-rule counts (`output/effects/rule-counts-gen2.json`) show with fewer than 100 `fires` records
@@ -811,13 +812,14 @@ and that the reporting half never enters the control score.
   permanent, which `replace_card` refuses; 115.7a, whose point needs a spell cast after the
   boundary; 712.16, whose point no sealed pool holds the cards for; and the rules no single board
   edit yields the lacking side of: 104.6 (a game restart, which every fork refuses, FR-010d),
-  400.6, 704.7 and 702.35a (a replacement met and not applied, which no hook reports), 701.24g
+  400.6, 704.7, 702.35a and 118.11 (a replacement met and not applied, which no hook reports;
+  118.11's variant records the side its counts hold), 701.24g
   (no near miss declared), 702.167a (a craft returning nothing), 111.10n and 111.10p (a Role's
   static giving no boost, which no forced play makes either), 704.5v and 707.10d (a play made in response), 730.2g (a sequence of plays), 712.11d
   (its variant removes the candidate read), 205.1a, 701.12h, 701.23f and 702.70b (variants of
   polarity `other` alone), and 119.8, 702.62c, 702.85a, 702.102c, 702.133a and 702.154a (a fact
   the record cannot show) (`directed-rules` names each with its reason). The list is checked in
-  as `rules/directed-fork-rules.txt`, one rule id per line, 49 rules in unit order, and is what
+  as `rules/directed-fork-rules.txt`, one rule id per line, 48 rules in unit order, and is what
   the full collection passes to
   `--directed-fork-rules`; `directed-rules` over the gen-2 counts writes it unchanged. Every
   listed rule passes the startup check (FR-014).
